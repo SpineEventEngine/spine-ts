@@ -7,9 +7,10 @@ Baseline commit: `04bb4e0`
 Implementation commit: `cc4d0b7`
 Prior reviewed HEAD: `8999cbf`
 Round-3 reviewed content state: `62c3a08`
-Active reviewed state convention: this evidence-only cleanup commit follows `62c3a08`; future recovery verifies the current branch tip with `git rev-parse --short HEAD` and reruns the recorded verification commands against `main...HEAD`.
+Round-4 reviewed tip: `55f53b6`
+Active reviewed state convention: this final evidence-log successor follows `55f53b6`; because a commit cannot embed its own hash before it exists, recovery verifies the current branch tip with `git rev-parse --short HEAD` and reruns the recorded verification commands against `main...HEAD`.
 Expected worktree state for review: clean
-Status: Ready for review round 4
+Status: Ready for review round 5
 
 ## Reviewer Intake
 
@@ -67,18 +68,25 @@ Required reviewer perspectives are inherited from `build-protocol/BUILD_PROTOCOL
 | Actual verification results against `62c3a08` were missing. | The round-3 evidence table records clean status, diff-check pass, name-status scope, diff stat, and no runtime/tooling files for `62c3a08`. |
 | Evidence-only cleanup commit needed a durable convention. | Logs state that this cleanup commit follows `62c3a08`; future recovery verifies the current branch tip with `git rev-parse --short HEAD` and reruns the same checks against `main...HEAD`. |
 
-## Evidence For Review Round 4
+## Round 4 Comments Addressed
+
+| Comment | Fix |
+| --- | --- |
+| Durable logs needed explicit `55f53b6` reviewed-tip evidence. | Task, work, and review-readiness logs now name `55f53b6` and record clean status, diff-check pass, name-status scope, diff stat, and runtime/tooling scan result. |
+| Evidence-log successor convention needed to follow `55f53b6`. | Logs state that this final evidence-log successor follows `55f53b6`; recovery verifies the actual branch tip with `git rev-parse --short HEAD` and reruns the checks against `main...HEAD`. |
+
+## Evidence For Review Round 5
 
 | Evidence | Expected Value |
 | --- | --- |
-| Reviewed commit/diff basis | Evidence-only cleanup commit following round-3 reviewed content state `62c3a08`; use `git diff main...HEAD` for the active branch tip. |
+| Reviewed commit/diff basis | Final evidence-log successor commit following round-4 reviewed tip `55f53b6`; use `git diff main...HEAD` for the active branch tip. |
 | Baseline | `04bb4e0`. |
 | Worktree path | `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0001-governance`. |
-| Dirty status/untracked files | Clean expected; `62c3a08` status result was `## task/T-0001-governance`. |
-| Diff check evidence | `git diff --check main...62c3a08` passed; rerun `git diff --check main...HEAD` for the evidence-only cleanup commit. |
-| Diff scope evidence | `git diff --name-status main...62c3a08` listed the 12 expected governance docs/templates/log files. |
-| Diff stat evidence | `git diff --stat main...62c3a08` reported 12 files changed, 681 insertions, 1 deletion. |
-| Runtime/tooling scan | No `*.ts`, `package.json`, lockfiles, `tsconfig*.json`, or lint/test/build config files were added at `62c3a08`; rerun the scan for active branch tip. |
+| Dirty status/untracked files | Clean expected; `55f53b6` status result was `## task/T-0001-governance`. |
+| Diff check evidence | `git diff --check main...55f53b6` passed; rerun `git diff --check main...HEAD` for the final evidence-log successor commit. |
+| Diff scope evidence | `git diff --name-status main...55f53b6` listed the 12 expected governance docs/templates/log files. |
+| Diff stat evidence | `git diff --stat main...55f53b6` reported 12 files changed, 711 insertions(+), 1 deletion(-). |
+| Runtime/tooling scan | No added `*.ts`, package manifests/locks, `tsconfig*.json`, or lint/test/build config files were found at `55f53b6`; rerun the scan for active branch tip. |
 | Public export/API diff reviewed | N/A; no TypeScript/package files should exist. |
 | TypeDoc/reference generation | N/A; no public APIs or docs tooling added. |
 | Package README impact | N/A; no packages exist yet. |
@@ -102,4 +110,4 @@ Required reviewer perspectives are inherited from `build-protocol/BUILD_PROTOCOL
 
 ## Current Outcome
 
-Review rounds 1, 2, and 3 produced actionable comments. Authoring sub-agent applied the requested evidence-only cleanup. Review round 4 should inspect the evidence-only cleanup commit following `62c3a08` and the final verification evidence against `main...HEAD`.
+Review rounds 1, 2, 3, and 4 produced actionable comments. Authoring sub-agent applied the requested final evidence-log cleanup. Review round 5 inspects the final evidence-log successor commit following `55f53b6` and the verification evidence against `main...HEAD`.
