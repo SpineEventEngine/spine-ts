@@ -4,9 +4,9 @@ Task log: `build-protocol/tasks/T-0001-governance-logging-scaffold/TASK.md`
 Branch: `task/T-0001-governance`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0001-governance`
 Baseline commit: `04bb4e0`
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
-Status: Ready for review round 2 after commit verification
+Implementation commit: `cc4d0b7`
+Final branch HEAD: See final handoff response; the final commit is created after this log records `cc4d0b7`.
+Status: Ready for review round 2 after final log-update commit
 
 ## Reviewer Intake
 
@@ -39,7 +39,7 @@ Required reviewer perspectives are inherited from `build-protocol/BUILD_PROTOCOL
 
 | Comment | Fix |
 | --- | --- |
-| Scaffold files were uncommitted and unavailable to `git diff main...HEAD`. | Branch will be staged and committed before handoff; committed diff verification is recorded in task/work/review logs. |
+| Scaffold files were uncommitted and unavailable to `git diff main...HEAD`. | Branch scaffold was staged and committed as `cc4d0b7`; committed diff verification is recorded in task/work/review logs. |
 | Task-log path convention could drift from existing bootstrap records. | T-0001 moved to `build-protocol/tasks/T-0001-governance-logging-scaffold/TASK.md`; template now uses `build-protocol/tasks/<task-slug>/TASK.md`. |
 | Unresolved-question path alias ambiguity. | Canonical path is `build-protocol/questions/UNRESOLVED.md` everywhere. |
 | Task template missed tests, coverage, documentation, public API, and N/A fields. | Template and T-0001 task log now include explicit fields and N/A explanations. |
@@ -51,7 +51,7 @@ Required reviewer perspectives are inherited from `build-protocol/BUILD_PROTOCOL
 
 | Evidence | Expected Value |
 | --- | --- |
-| Reviewed commit/diff basis | `git diff main...HEAD` from the committed T-0001 branch. |
+| Reviewed commit/diff basis | `git diff main...HEAD` from the committed T-0001 branch; implementation scaffold commit `cc4d0b7`. |
 | Baseline | `04bb4e0`. |
 | Worktree path | `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0001-governance`. |
 | Dirty status/untracked files | Reviewers should record `git status --short --branch`; expected clean after commit. |
@@ -78,4 +78,4 @@ Required reviewer perspectives are inherited from `build-protocol/BUILD_PROTOCOL
 
 ## Current Outcome
 
-Review round 1 produced actionable comments. Authoring sub-agent applied the requested scaffold fixes. Pending final branch commit and verification results before review round 2.
+Review round 1 produced actionable comments. Authoring sub-agent applied the requested scaffold fixes, committed the implementation scaffold as `cc4d0b7`, and verified `git diff --check main...HEAD`. Pending final log-update commit before review round 2.

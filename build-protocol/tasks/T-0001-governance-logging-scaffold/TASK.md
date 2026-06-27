@@ -9,8 +9,8 @@ Branch: `task/T-0001-governance`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0001-governance`
 Authoring sub-agent: implementation sub-agent for T-0001, senior platform engineer specializing in durable development governance
 Reviewer sub-agents: Pending
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
+Implementation commit: `cc4d0b7`
+Final branch HEAD: See final handoff response; the final commit is created after this log records `cc4d0b7`.
 
 ## Objective
 
@@ -55,6 +55,8 @@ Out of scope:
 - 2026-06-27 16:38:32 WEST: Received consolidated review round 1 comments and began fixes before further scaffold edits.
 - 2026-06-27 16:45:54 WEST: Migrated T-0001 to the canonical directory-style task log path, expanded templates with tests/coverage/documentation/API/security/follow-up fields, strengthened review evidence requirements, and kept unresolved questions canonical at `build-protocol/questions/UNRESOLVED.md`.
 - 2026-06-27 16:45:54 WEST: Ran pre-commit verification covering tracked and untracked scaffold files.
+- 2026-06-27 16:45:54 WEST: Staged and committed the T-0001 scaffold as `cc4d0b7` (`docs: add governance logging scaffold`) so reviewers can inspect `git diff main...HEAD`.
+- 2026-06-27 16:45:54 WEST: Ran committed-diff verification against `main...HEAD`; working tree was clean immediately after implementation commit `cc4d0b7`.
 
 ## Decisions
 
@@ -122,7 +124,10 @@ None.
 - `rg --files build-protocol | sort` - passed; scaffold paths are visible under `build-protocol/templates/`, `build-protocol/work-logs/`, `build-protocol/reviews/`, `build-protocol/tasks/`, and `build-protocol/questions/`.
 - `find . -maxdepth 3 -type f \( -name 'package.json' -o -name 'tsconfig*.json' -o -name '*.ts' \) -print` - passed with no output; no TypeScript runtime or package tooling was added.
 - `rg -n "tasks/T-0001\.md|questions/unresolved\.md|<TASK-ID>\.md|tasks/<TASK-ID>\.md" build-protocol` - passed with no matches; stale flat task-log and case-ambiguous unresolved-question references were removed.
-- Pending after staging/commit: `git diff --check main...HEAD`.
+- `git diff --check main...HEAD` - passed after implementation commit `cc4d0b7`.
+- `git status --short --branch` - passed after implementation commit `cc4d0b7`; branch had no uncommitted files at that point.
+- `git diff --name-status main...HEAD` - passed; committed diff includes the 12 expected governance documentation files.
+- `git diff --stat main...HEAD` - passed; committed diff showed 12 files changed, 649 insertions, 1 deletion after implementation commit `cc4d0b7`.
 
 ## Open Risks And Follow-Up Routing
 
@@ -135,7 +140,7 @@ None.
 ## Review Rounds
 
 - Round 1: Changes requested. Consolidated comments require committing scaffold history, standardizing task-log paths, expanding task/review/documentation/security/coverage fields, adding redaction and follow-up routing rules, broadening verification to committed files, and updating review readiness for round 2.
-- Round 2: Ready to request after branch commit and committed-diff verification.
+- Round 2: Ready to request after final log-update commit.
 
 ## Integration Result
 
