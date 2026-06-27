@@ -1,6 +1,6 @@
 # T-0003: Installed Skill Use Protocol
 
-Status: Ready for review round 3
+Status: Ready for review round 4
 Start: `2026-06-27 18:10 WEST`
 End: `2026-06-27 18:37 WEST`
 Baseline commit: `0566998`
@@ -8,13 +8,16 @@ Task log path: `build-protocol/tasks/T-0003-skill-use-protocol/TASK.md`
 Branch: `task/T-0003-skill-use-protocol`
 Worktree: `.worktrees/T-0003-skill-use-protocol`
 Authoring sub-agent: Codex implementation sub-agent, senior agentic-workflow engineer
-Reviewer sub-agents: Consolidated review rounds 1 and 2
+Reviewer sub-agents: Consolidated review rounds 1, 2, and 3
 Implementation commit: `be866f5`
-Reviewed HEAD: `40fe4af`
+Reviewed HEAD: `6cd258a`
 Round 2 cleanup commit: `bba4ade`
 Round 2 verification log commit: `40fe4af`
 Round 3 cleanup commit: `3fbc304`
-Final branch HEAD: Current branch tip after round 3 verification log commit.
+Round 3 verification log commit: `6cd258a`
+Final branch HEAD: This cleanup commit is a log-state successor to reviewed tip
+`6cd258a`; recover by running `git rev-parse --short HEAD` and the current-tip
+verification commands recorded below.
 
 ## Objective
 
@@ -111,6 +114,7 @@ Out of scope:
 - `2026-06-27 18:39 WEST`: Authoring sub-agent recorded post-commit verification for cleanup commit `bba4ade`.
 - `2026-06-27 18:44 WEST`: Authoring sub-agent recorded review round 2 findings, reviewed HEAD `40fe4af`, and current-tip verification for `40fe4af` before cleanup edits.
 - `2026-06-27 18:45 WEST`: Authoring sub-agent recorded post-commit verification for round 3 cleanup commit `3fbc304`.
+- `2026-06-27 18:50 WEST`: Authoring sub-agent recorded review round 3 finding, reviewed HEAD `6cd258a`, and current-tip verification for `6cd258a` before log-state successor cleanup.
 
 ## Decisions
 
@@ -154,6 +158,10 @@ Out of scope:
 - `git diff --name-status main...HEAD` at round 3 cleanup commit `3fbc304` - only `build-protocol` files changed.
 - Runtime/toolchain-file scan at round 3 cleanup commit `3fbc304` - passed; no runtime/toolchain package paths matched.
 - Clean status at round 3 cleanup commit `3fbc304` - passed; worktree was clean.
+- Clean status at reviewed HEAD `6cd258a` - passed; worktree was clean.
+- `git diff --check main...6cd258a` - passed.
+- `git diff --name-status main...6cd258a` - only `build-protocol` files changed.
+- Runtime/toolchain-file scan at reviewed HEAD `6cd258a` - passed; no runtime/toolchain package paths matched.
 
 ## Coverage Result
 
@@ -201,6 +209,14 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 - Round 3 cleanup commit `3fbc304` passed clean status,
   `git diff --check main...HEAD`, docs-only changed paths under
   `build-protocol`, and no runtime/toolchain-file matches.
+- Current-tip verification for reviewed HEAD `6cd258a` passed with clean status,
+  `git diff --check main...6cd258a`, docs-only changed paths under
+  `build-protocol`, and no runtime/toolchain-file matches.
+- Evidence-successor convention: the next commit is only a log-state successor
+  to reviewed tip `6cd258a`, because a commit cannot contain its own hash before
+  creation. Recovery must identify the actual branch tip with
+  `git rev-parse --short HEAD` and rerun `git diff --check main...HEAD`,
+  `git diff --name-status main...HEAD`, and the runtime/toolchain-file scan.
 
 ## Open Risks And Follow-Up Routing
 
@@ -215,6 +231,7 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 - Round 2: ready after cleanup verification, cleanup commit, and verification log update.
 - Round 2 at `40fe4af`: narrow findings received; cleanup prepared for review round 3.
 - Round 3: ready after path-normalization cleanup and `3fbc304` verification.
+- Round 3 at `6cd258a`: durable-state finding addressed; ready for review round 4.
 
 ## Integration Result
 
