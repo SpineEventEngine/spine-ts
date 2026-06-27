@@ -1,6 +1,6 @@
 # T-0002: Workspace And Toolchain Bootstrap
 
-Status: Ready for review round 3
+Status: Ready for review round 4
 Start: `2026-06-27 17:27 WEST`
 End: `2026-06-27 19:45 WEST`
 Baseline commit: `0566998`
@@ -12,7 +12,8 @@ Reviewer sub-agents: Review rounds 1 and 2 recorded in `build-protocol/reviews/T
 Implementation commit: `a937649`
 Review round 1 fix commit: `a0638218ec2b5caa786f958333a00af6a9fcbf4c`
 Review round 1 handoff evidence commit: `ee611a203ee40387b4ffb09451489d25c98cb01b`
-Active reviewed state convention: the review round 2 fix/evidence-log successor follows `ee611a203ee40387b4ffb09451489d25c98cb01b`; because a commit cannot embed its own hash before it exists, recovery must verify the actual branch tip with `git rev-parse HEAD` and rerun recorded checks against `main...HEAD`.
+Review round 2 fix/evidence commit: `39f60d031d805e4a112bbf9a8f12660edf186107`
+Active reviewed state convention: the review round 3 documentation fix/evidence-log successor follows `39f60d031d805e4a112bbf9a8f12660edf186107`; because a commit cannot embed its own hash before it exists, recovery must verify the actual branch tip with `git rev-parse HEAD` and rerun recorded checks against `main...HEAD`.
 
 ## Objective
 
@@ -117,6 +118,8 @@ Out of scope:
 - `2026-06-27 19:58 WEST`: Ran review-fix verification: full verify, whitespace check, engine-strict check, absolute-local-path search, and repo-default freshness-bypass search all passed.
 - `2026-06-27 20:11 WEST`: Verified T-0002 review round 2 findings, reproduced the missing tooling/test TS typecheck, added durable review evidence, adopted the evidence-log successor wording, and fixed no-emit typechecking for tests/config/tooling TS.
 - `2026-06-27 20:14 WEST`: Ran round 2 fix verification: `CI=true pnpm verify`, standalone tooling TS typecheck, diff whitespace check, reviewer-state search, review-evidence link search, and recovery-wording search all passed.
+- `2026-06-27 20:24 WEST`: Verified T-0002 review round 3 documentation finding and added concise reviewer skill-gate evidence with selected/skipped skill records and honest unknowns for earlier rounds where reviewer skill logs were not committed.
+- `2026-06-27 20:25 WEST`: Ran round 3 documentation-fix verification: `CI=true pnpm verify`, diff whitespace check, status check, and review skill-gate evidence search all passed or produced the expected pre-commit modified-file list.
 
 ## Decisions
 
@@ -228,6 +231,7 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 - Reviewer state search - passed; task log no longer says reviewer sub-agents are pending.
 - Review evidence link search - passed; task log links `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`.
 - Recovery wording search - passed; no stale moving-head wording remains in T-0002 task/work/review logs.
+- Round 3 documentation fix search - passed; review evidence now contains `Reviewer Skill-Gate Evidence`, selected/skipped skill columns, and honest unknown/N/A notes where earlier reviewer logs were not committed.
 - `pnpm config get engine-strict` - returned `true`.
 - Search for absolute local paths in T-0002 changed docs/logs - passed; no sensitive home-directory paths remain.
 - Search for repo-default `minimum-release-age=0` / `minimumReleaseAge: 0` - passed; no freshness bypass remains in repo default package manager config.
@@ -250,8 +254,8 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 
 ## Review Rounds
 
-- Review rounds 1 and 2 returned important findings; dispositions are recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`.
+- Review rounds 1, 2, and 3 returned important findings; dispositions and reviewer skill-gate evidence are recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`.
 
 ## Integration Result
 
-Not integrated. Branch is ready for review round 3 only.
+Not integrated. Branch is ready for review round 4 only.

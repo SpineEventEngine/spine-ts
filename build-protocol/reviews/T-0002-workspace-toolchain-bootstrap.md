@@ -8,15 +8,27 @@ Baseline commit: `0566998`
 Implementation commit: `a937649`
 Review round 1 fix commit: `a0638218ec2b5caa786f958333a00af6a9fcbf4c`
 Review round 1 handoff evidence commit: `ee611a203ee40387b4ffb09451489d25c98cb01b`
-Active reviewed state convention: the review round 2 fix/evidence-log successor follows `ee611a203ee40387b4ffb09451489d25c98cb01b`; recovery must verify the actual branch tip with `git rev-parse HEAD` and rerun recorded checks against `main...HEAD`.
-Status: Round 2 findings accepted, fixed, and verified; ready for review round 3 from the evidence-log successor branch tip.
+Review round 2 fix/evidence commit: `39f60d031d805e4a112bbf9a8f12660edf186107`
+Active reviewed state convention: the review round 3 documentation fix/evidence-log successor follows `39f60d031d805e4a112bbf9a8f12660edf186107`; recovery must verify the actual branch tip with `git rev-parse HEAD` and rerun recorded checks against `main...HEAD`.
+Status: Round 3 documentation finding accepted and fixed; ready for review round 4 from the evidence-log successor branch tip.
 
 ## Reviewer Rounds
 
 | Round | Reviewer ID             | Role                                            | Reviewed Basis                                          | Outcome                                                                                |
 | ----- | ----------------------- | ----------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | 1     | `T-0002-review-round-1` | Protocol/toolchain/governance review            | `d26b016670ae6729d52739d4765977a7bfbbec83` before fixes | Five findings accepted and fixed in `a063821`; handoff evidence recorded in `ee611a2`. |
-| 2     | `T-0002-review-round-2` | Protocol evidence and TypeScript/tooling review | `ee611a203ee40387b4ffb09451489d25c98cb01b`              | Three findings accepted and fixed in the evidence-log successor to `ee611a2`.          |
+| 2     | `T-0002-review-round-2` | Protocol evidence and TypeScript/tooling review | `ee611a203ee40387b4ffb09451489d25c98cb01b`              | Three findings accepted and fixed in `39f60d0`.                                        |
+| 3     | `T-0002-review-round-3` | Documentation review                            | `39f60d031d805e4a112bbf9a8f12660edf186107`              | One documentation finding accepted and fixed; other round-3 reviewer roles were clean. |
+
+## Reviewer Skill-Gate Evidence
+
+Review-skill evidence is reconstructed from committed logs and review handoff text where available. Unknown means no separate durable reviewer prompt/log with that detail was committed; the gap is recorded rather than inferred.
+
+| Round | Reviewer ID             | Role                                            | Skill Sources Checked/Available                                                                                                                                                                                                        | Selected Skills And Sources                                                                                                                                                                                                                                                                                                           | Skipped Relevant-Looking Skills                                                                                                                                                                                                                                                                                         | Read/Applied Evidence                                                                                                                                                               |
+| ----- | ----------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | `T-0002-review-round-1` | Protocol/toolchain/governance review            | Protocol required `BUILD_PROTOCOL.md#skills-and-tooling`; task log passed `EXPECTED_SKILLS.md` and selected implementer skill paths to reviewers. No separate round-1 reviewer skill log was committed.                                | Unknown from durable evidence. Likely applicable review skills were `requesting-code-review`, `verification-before-completion`, `architecture-decision-records`, `monorepo-management`, `nodejs-backend-patterns`, `typescript-advanced-types`, and `javascript-testing-patterns`; not recorded as selected by the reviewer.          | Unknown from durable evidence. Runtime/domain skills such as `architecture-patterns`, `api-design-principles`, CQRS/projection/event-store/saga skills, security-specific skills, and TDD were relevant-looking but no reviewer skip list was committed.                                                                | Unknown. Round-1 findings show protocol/toolchain review was performed, but selected/read skill bodies were not durably recorded before this evidence update.                       |
+| 2     | `T-0002-review-round-2` | Protocol evidence and TypeScript/tooling review | Protocol required `BUILD_PROTOCOL.md#skills-and-tooling`; task log passed `EXPECTED_SKILLS.md` and selected implementer skill paths to reviewers. No separate round-2 reviewer skill log was committed.                                | Unknown from durable evidence. Likely applicable review skills were `requesting-code-review`, `verification-before-completion`, `architecture-decision-records`, `typescript-advanced-types`, `javascript-testing-patterns`, and `monorepo-management`; not recorded as selected by the reviewer.                                     | Unknown from durable evidence. Runtime/domain, security-specific, planning, and TDD skills were relevant-looking but no reviewer skip list was committed.                                                                                                                                                               | Unknown. Round-2 findings show protocol evidence and TypeScript/tooling review was performed, but selected/read skill bodies were not durably recorded before this evidence update. |
+| 3     | `T-0002-review-round-3` | Documentation review                            | Round-3 review finding explicitly applied the merged protocol requirement that each review role record canonical skill applicability evidence. The current durable record does not expose a separate reviewer skill inventory command. | `doc-coauthoring` would be applicable to documentation review when available; `architecture-decision-records` is relevant to durable decision/evidence docs; `requesting-code-review` and `verification-before-completion` are relevant to review handoff/verification. The reviewer did not provide a committed selected-skill list. | Runtime/domain skills (`architecture-patterns`, `api-design-principles`, CQRS/projection/event-store/saga skills), `security-best-practices`, `security-threat-model`, and TDD/testing skills are skipped for this documentation-only finding because no runtime/security/test behavior change was reviewed in round 3. | Partially known. The reviewer applied the protocol skill-gate requirement in the finding; no durable evidence says the reviewer read specific `SKILL.md` bodies.                    |
 
 ## Round 1 Findings
 
@@ -36,15 +48,18 @@ Status: Round 2 findings accepted, fixed, and verified; ready for review round 3
 | Durable T-0002 review evidence was missing and reviewer state was stale.                                                        | Accepted/fixed. | This review evidence log records rounds 1 and 2 with reviewer IDs, roles, findings, and dispositions; task log links it instead of `Pending`.                                  |
 | Tests/config/tooling TS was not typechecked.                                                                                    | Accepted/fixed. | Added `typecheck:tooling`, `@types/node@24.13.2`, Node/Vitest/Web ambient types, and removed invalid `coverage.all` from `vitest.config.ts`.                                   |
 
-## Verification Requested For Round 3
+## Round 3 Findings
+
+| Finding                                                                                    | Disposition     | Fix Evidence                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------ | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Review evidence lacked mandatory reviewer skill-gate evidence for completed review rounds. | Accepted/fixed. | Added `Reviewer Skill-Gate Evidence` with sources, selected/skipped skill evidence, and honest unknown/N/A notes where earlier reviewer skill logs were not committed. |
+
+## Verification Requested For Round 4
 
 - `CI=true pnpm verify`
-- `pnpm exec tsc --noEmit -p tsconfig.eslint.json`
 - `git diff --check main...HEAD`
 - `git status --short --branch`
-- Search proof that reviewer state is not `Pending`.
-- Search proof that this review evidence file is linked from the task log.
-- Search proof that recovery wording no longer treats the prior fix commit as current/final branch head.
+- Search/check showing review evidence now contains reviewer skill-gate evidence and no longer has a bare claim without selected/skipped skill evidence.
 
 ## Known Residual Warning
 
