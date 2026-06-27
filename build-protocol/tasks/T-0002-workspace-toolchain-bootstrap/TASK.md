@@ -10,6 +10,7 @@ Worktree: `.worktrees/T-0002-toolchain`
 Authoring sub-agent: Codex implementation sub-agent, senior TypeScript/Node platform engineer persona
 Reviewer sub-agents: Pending
 Implementation commit: `a937649`
+Review round 1 fix commit: `a0638218ec2b5caa786f958333a00af6a9fcbf4c`
 Final branch HEAD: current tip of `task/T-0002-toolchain`; pre-review-fix tip was `d26b016670ae6729d52739d4765977a7bfbbec83`.
 
 ## Objective
