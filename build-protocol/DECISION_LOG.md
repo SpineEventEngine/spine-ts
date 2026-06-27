@@ -176,7 +176,7 @@ Date: 2026-06-27
 
 Context: T-0002 initializes the implementation workspace without runtime behavior. Advisory tooling notes were available for package management, TypeScript, lint/format, test/coverage, docs, Buf/Protobuf-ES, validation, gRPC, and ZeroMQ dependency timing.
 
-Decision: Use pnpm workspaces with `packageManager: pnpm@11.9.0`, TypeScript project references, and no Nx/Turbo layer initially. Use Node 24 LTS as the minimum engine. Keep packages private while the framework API is skeletal. Add repo-local pnpm workspace settings for non-interactive agent verification: `confirmModulesPurge: false` and `minimumReleaseAge: 0`.
+Decision: Use pnpm workspaces with `packageManager: pnpm@11.9.0`, TypeScript project references, and no Nx/Turbo layer initially. Use Node 24 LTS as the minimum engine. Keep packages private while the framework API is skeletal. Add `engine-strict=true`, pnpm `engineStrict: true`, `.node-version`, and a `check:node` verification script so local and CI verification fail under unsupported Node versions. Keep `confirmModulesPurge: false` for non-interactive recovery after interrupted installs and `verifyDepsBeforeRun: false` so script execution trusts an already-established lockfile instead of performing script-time auto-installs.
 
 Alternatives considered:
 
@@ -186,8 +186,10 @@ Alternatives considered:
 Consequences:
 
 - Root scripts call the standard pnpm workspace toolchain directly.
-- The release-age policy exception is accepted for T-0002 because the task explicitly pins fresh packages, including `prettier@3.9.0`; reviewers should revisit removing `minimumReleaseAge: 0` once those pins age past local supply-chain cutoffs.
+- A one-time release-age policy exception was used while creating the lockfile because the task explicitly pinned fresh packages, including `prettier@3.9.0`; the bypass is not retained as a repo default.
 - Non-interactive runs avoid TTY purge prompts after interrupted installs.
+- Normal installs remain subject to the active host freshness policy; scripts skip pnpm's auto-install/dependency-status preflight to avoid rechecking a trusted lockfile on every `pnpm run`.
+- Verification explicitly checks Node major version before TypeScript, lint, tests, docs, or proto stubs run.
 - Reviewers should revisit task-runner adoption only after package graph complexity or CI time makes it useful.
 
 ## D-0021: T-0002 TypeScript and module target
@@ -214,7 +216,7 @@ Date: 2026-06-27
 
 Context: The repository needs quality gates from the start without duplicating `CODE_QUALITY.md`. Advisory notes recommended ESLint flat config, `typescript-eslint@8.62.0`, Prettier 3.9.0, Vitest 4.1.9, V8 coverage, and TypeDoc 0.28.19.
 
-Decision: Use ESLint flat config with `typescript-eslint@8.62.0`, `eslint-config-prettier`, Prettier 3.9.0, Vitest 4.1.9 with `@vitest/coverage-v8@4.1.9`, and TypeDoc 0.28.19 native HTML output. Configure 90% coverage thresholds for the current skeleton exports and future meaningful source. Defer `typedoc-plugin-markdown`. Scope the initial Prettier scripts to T-0002-owned scaffold/config/docs/log files so the bootstrap does not reformat unrelated prior protocol or research documents.
+Decision: Use ESLint flat config with `typescript-eslint@8.62.0`, `eslint-config-prettier`, Prettier 3.9.0, Vitest 4.1.9 with `@vitest/coverage-v8@4.1.9`, and TypeDoc 0.28.19 native HTML output. Configure 90% coverage thresholds for the current skeleton exports and future meaningful source. Defer `typedoc-plugin-markdown`. Format durable repository areas, including future `build-protocol/**/*.md` task/review/log files, while ignoring pre-existing unformatted protocol files until a dedicated formatting cleanup owns that churn.
 
 Alternatives considered:
 

@@ -2,7 +2,8 @@ packages:
   - "packages/*"
   - "examples/*"
 confirmModulesPurge: false
-minimumReleaseAge: 0
+engineStrict: true
+verifyDepsBeforeRun: false
 onlyBuiltDependencies:
   - "@bufbuild/buf"
 allowBuilds:

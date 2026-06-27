@@ -1,16 +1,16 @@
 # T-0002: Workspace And Toolchain Bootstrap
 
-Status: Ready for review round 1
+Status: Ready for review round 2
 Start: `2026-06-27 17:27 WEST`
 End: `2026-06-27 19:45 WEST`
 Baseline commit: `0566998`
 Task log path: `build-protocol/tasks/T-0002-workspace-toolchain-bootstrap/TASK.md`
 Branch: `task/T-0002-toolchain`
-Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0002-toolchain`
+Worktree: `.worktrees/T-0002-toolchain`
 Authoring sub-agent: Codex implementation sub-agent, senior TypeScript/Node platform engineer persona
 Reviewer sub-agents: Pending
 Implementation commit: `a937649`
-Final branch HEAD: Final handoff commit follows implementation commit; see final handoff response for exact HEAD.
+Final branch HEAD: current tip of `task/T-0002-toolchain`; pre-review-fix tip was `d26b016670ae6729d52739d4765977a7bfbbec83`.
 
 ## Objective
 
@@ -111,6 +111,8 @@ Out of scope:
 - `2026-06-27 19:20 WEST`: Installed dependencies with pnpm 11.9.0 after recording a release-age policy exception for explicit fresh pins and approving only `@bufbuild/buf` build scripts.
 - `2026-06-27 19:35 WEST`: Ran full verification successfully: typecheck, lint, format check, tests, coverage, TypeDoc, proto lint stub, and proto generate stub.
 - `2026-06-27 19:45 WEST`: Committed implementation as `a937649`, dropped temporary pre-merge stash, and prepared branch for review round 1.
+- `2026-06-27 19:55 WEST`: Verified T-0002 review round 1 findings against the repo and applied focused fixes for durable HEAD/current-state logging, pnpm freshness policy removal, local path redaction, durable formatting globs, and Node baseline enforcement.
+- `2026-06-27 19:58 WEST`: Ran review-fix verification: full verify, whitespace check, engine-strict check, absolute-local-path search, and repo-default freshness-bypass search all passed.
 
 ## Decisions
 
@@ -130,6 +132,7 @@ Out of scope:
 
 - `.gitignore`
 - `.npmrc`
+- `.node-version`
 - `.prettierignore`
 - `.prettierrc.json`
 - `README.md`
@@ -145,6 +148,7 @@ Out of scope:
 - `typedoc.json`
 - `vitest.config.ts`
 - `scripts/proto-workflow.mjs`
+- `scripts/check-node-version.mjs`
 - `proto/README.md`
 - `docs/USER_GUIDE.md`
 - `docs/api/README.md`
@@ -164,13 +168,14 @@ Out of scope:
 
 - `pnpm install` - initially failed because pnpm refused to purge an interrupted `node_modules` directory without a TTY.
 - `CI=true pnpm install` - initially failed active minimum-release-age policy for explicit fresh pins `prettier@3.9.0` and transient `js-yaml@4.3.0`.
-- `CI=true pnpm install --config.minimum-release-age=0` - resolved dependencies, then failed until `@bufbuild/buf` build script was explicitly approved.
+- `CI=true pnpm install --config.minimum-release-age=0` - one-time lockfile creation exception; resolved dependencies, then failed until `@bufbuild/buf` build script was explicitly approved.
 - `pnpm approve-builds @bufbuild/buf` - passed; only Buf's postinstall was approved.
 - `CI=true pnpm install` - passed after moving pnpm settings into `pnpm-workspace.yaml`.
 - `CI=true pnpm lint` - passed after scoping type-aware TypeScript ESLint rules to `.ts` files.
 - `CI=true pnpm proto:lint` - passed; no `.proto` files found, Buf lint deferred until proto intake.
 - `CI=true pnpm proto:generate` - passed; no `.proto` files found, Buf generation deferred until proto intake.
 - `CI=true pnpm verify` - passed.
+- Review round 1 fix verification: `CI=true pnpm verify` - passed with `check:node` running first.
 
 ## Coverage Result
 
@@ -194,15 +199,15 @@ Initial implementation note: package/example exports are metadata-only skeleton 
 
 ## Security Impact
 
-| Area                    | Impact                                                                                                                                                     |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Dependencies            | Added dev/runtime package pins and lockfile; recorded release-age policy exception for explicit fresh pins and approved only `@bufbuild/buf` build script. |
-| Secrets and credentials | N/A; no secrets introduced.                                                                                                                                |
-| IPC                     | Deferred; ZeroMQ runtime code and dependency installation are out of scope.                                                                                |
-| Validation              | Deferred; `@spine-event-engine/validation-ts` intentionally not installed in T-0002.                                                                       |
-| Tenant boundaries       | Deferred; no runtime tenant implementation.                                                                                                                |
-| `Any`/deserialization   | Deferred; no Protobuf runtime behavior implemented.                                                                                                        |
-| Logging                 | N/A; no runtime logging implementation.                                                                                                                    |
+| Area                    | Impact                                                                                                                                                             |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Dependencies            | Added dev/runtime package pins and lockfile; used a one-time release-age install exception for explicit fresh pins and approved only `@bufbuild/buf` build script. |
+| Secrets and credentials | N/A; no secrets introduced.                                                                                                                                        |
+| IPC                     | Deferred; ZeroMQ runtime code and dependency installation are out of scope.                                                                                        |
+| Validation              | Deferred; `@spine-event-engine/validation-ts` intentionally not installed in T-0002.                                                                               |
+| Tenant boundaries       | Deferred; no runtime tenant implementation.                                                                                                                        |
+| `Any`/deserialization   | Deferred; no Protobuf runtime behavior implemented.                                                                                                                |
+| Logging                 | N/A; no runtime logging implementation.                                                                                                                            |
 
 Redaction rule: record enough context for auditability, but never commit tokens, credentials, auth headers, secret environment variables, sensitive local paths, or sensitive payloads.
 
@@ -211,25 +216,29 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 - Host toolchain checked: Node `v24.18.0`, corepack `0.35.0`, pnpm `11.9.0`.
 - `CI=true pnpm verify` - passed.
 - `git diff --check main...HEAD` - passed after commit.
+- `pnpm config get engine-strict` - returned `true`.
+- Search for absolute local paths in T-0002 changed docs/logs - passed; no sensitive home-directory paths remain.
+- Search for repo-default `minimum-release-age=0` / `minimumReleaseAge: 0` - passed; no freshness bypass remains in repo default package manager config.
 - TypeDoc warning reviewed: invalid local `origin` remote means source links are broken, but docs generation reports 0 errors and writes `docs/api/reference` (ignored).
 - Proto commands reviewed: both pass with explicit deferred behavior while `proto/` has no `.proto` files.
 
 ## Open Risks And Follow-Up Routing
 
-| Risk/Follow-Up                                                                                    | Owner                   | Linked Task/Decision | Disposition                                                                            | Next Review Point                      |
-| ------------------------------------------------------------------------------------------------- | ----------------------- | -------------------- | -------------------------------------------------------------------------------------- | -------------------------------------- |
-| Tooling choices may need current registry/network checks.                                         | T-0002 author           | T-0002 decisions     | Addressed by pnpm install and lockfile                                                 | T-0002 review round 1                  |
-| Coverage may be N/A or minimal for skeleton-only package setup.                                   | T-0002 author           | T-0002 task log      | Addressed for skeleton exports; runtime coverage deferred                              | T-0002 review round 1                  |
-| Earlier local environment reported Node `v22.2.0`, below the configured Node 24 LTS minimum.      | T-0002 author           | D-0020               | Resolved by host update to Node `v24.18.0`                                             | Verification and T-0002 review round 1 |
-| Earlier local shell lacked Corepack while the package manager decision targets pnpm via Corepack. | T-0002 author           | D-0020               | Resolved by host update to corepack `0.35.0` and pnpm `11.9.0`                         | Verification and T-0002 review round 1 |
-| Repo-local `minimumReleaseAge: 0` weakens pnpm's freshness delay for explicit fresh pins.         | Future tooling owner    | D-0020               | Accepted for T-0002 due explicit requested versions; revisit once pins age past cutoff | T-0002 review round 1                  |
-| TypeDoc source links are broken because the local `origin` remote is invalid.                     | Future repository owner | D-0022               | Accepted warning for bootstrap; docs generation has 0 errors                           | T-0002 review round 1                  |
-| Git kept the pre-merge stash after conflict resolution.                                           | T-0002 author           | T-0002 work log      | Resolved; dropped temporary stash after implementation commit                          | T-0002 review round 1                  |
+| Risk/Follow-Up                                                                                    | Owner                   | Linked Task/Decision | Disposition                                                                              | Next Review Point                      |
+| ------------------------------------------------------------------------------------------------- | ----------------------- | -------------------- | ---------------------------------------------------------------------------------------- | -------------------------------------- |
+| Tooling choices may need current registry/network checks.                                         | T-0002 author           | T-0002 decisions     | Addressed by pnpm install and lockfile                                                   | T-0002 review round 1                  |
+| Coverage may be N/A or minimal for skeleton-only package setup.                                   | T-0002 author           | T-0002 task log      | Addressed for skeleton exports; runtime coverage deferred                                | T-0002 review round 1                  |
+| Earlier local environment reported Node `v22.2.0`, below the configured Node 24 LTS minimum.      | T-0002 author           | D-0020               | Resolved by host update to Node `v24.18.0`                                               | Verification and T-0002 review round 1 |
+| Earlier local shell lacked Corepack while the package manager decision targets pnpm via Corepack. | T-0002 author           | D-0020               | Resolved by host update to corepack `0.35.0` and pnpm `11.9.0`                           | Verification and T-0002 review round 1 |
+| A repo-local freshness bypass would weaken pnpm's supply-chain delay for future installs.         | T-0002 author           | D-0020               | Addressed in review round 1 by removing checked-in `minimumReleaseAge: 0` defaults       | T-0002 review round 2                  |
+| TypeDoc source links are broken because the local `origin` remote is invalid.                     | Future repository owner | D-0022               | Accepted warning for bootstrap; docs generation has 0 errors                             | T-0002 review round 1                  |
+| Git kept the pre-merge stash after conflict resolution.                                           | T-0002 author           | T-0002 work log      | Resolved; dropped temporary stash after implementation commit                            | T-0002 review round 1                  |
+| Future verification should fail under Node 22 rather than warn only.                              | T-0002 author           | D-0020               | Addressed in review round 1 with `engine-strict=true`, `.node-version`, and `check:node` | T-0002 review round 2                  |
 
 ## Review Rounds
 
-- Ready for review round 1; reviewers pending. Required reviewer perspectives remain code style/maintainability, documentation completeness, TypeScript/API docs, security, and performance/reliability.
+- Review round 1 returned important findings; focused fixes applied and verified for review round 2.
 
 ## Integration Result
 
-Not integrated. Branch is ready for review round 1 only.
+Not integrated. Branch is ready for review round 2 only.
