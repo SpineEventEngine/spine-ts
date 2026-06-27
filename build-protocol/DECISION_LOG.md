@@ -139,13 +139,14 @@ usable again.
 Decision: Every orchestrator, implementer, adviser, and reviewer prompt/log must
 run the canonical skill applicability check in
 `BUILD_PROTOCOL.md#skills-and-tooling` before task actions. The check must
-enumerate the session skill inventory, task-provided skills, the repo-local
-expected-skill manifest, reachable user-installed skill entrypoints under
-`~/.agents/skills`, and reachable installed-skill lock/manifest evidence such
-as `~/.agents/.skill-lock.json`. Agents triage by metadata/name/path first and
-fully read only selected applicable `SKILL.md` files before actions governed by
-those skills. Relevant-looking skills that are skipped require a recorded
-reason without implying the full skill body was consumed.
+capture bounded, task-relevant evidence from the session skill inventory and
+record task-provided skills, the repo-local expected-skill manifest, reachable
+user-installed skill entrypoints under `~/.agents/skills`, and reachable
+installed-skill lock/manifest evidence such as `~/.agents/.skill-lock.json`.
+Agents triage by metadata/name/path first and fully read only selected
+applicable `SKILL.md` files before actions governed by those skills.
+Relevant-looking skills that are skipped require a recorded reason without
+implying the full skill body was consumed.
 
 The review skill gate is mandatory for every reviewer. Individual skill sources
 or specific skills may be N/A with reasons, but the review gate itself is not

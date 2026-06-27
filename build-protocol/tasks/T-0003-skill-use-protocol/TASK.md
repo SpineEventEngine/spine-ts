@@ -8,16 +8,19 @@ Task log path: `build-protocol/tasks/T-0003-skill-use-protocol/TASK.md`
 Branch: `task/T-0003-skill-use-protocol`
 Worktree: `.worktrees/T-0003-skill-use-protocol`
 Authoring sub-agent: Codex implementation sub-agent, senior agentic-workflow engineer
-Reviewer sub-agents: Consolidated review rounds 1, 2, and 3
+Reviewer sub-agents: Consolidated review rounds 1 through 5
 Implementation commit: `be866f5`
-Reviewed HEAD: `6cd258a`
+Reviewed HEAD: `7826e7c`
 Round 2 cleanup commit: `bba4ade`
 Round 2 verification log commit: `40fe4af`
 Round 3 cleanup commit: `3fbc304`
 Round 3 verification log commit: `6cd258a`
-Final branch HEAD: This cleanup commit is a log-state successor to reviewed tip
-`6cd258a`; recover by running `git rev-parse --short HEAD` and the current-tip
-verification commands recorded below.
+Round 4 recovery-state commit: `57454a2`
+Round 5 pending-state/skill-evidence commit: `53972f0`
+Round 5 history-extension commit: `7826e7c`
+Final branch HEAD: Current recovery basis is the actual branch tip; recover by
+running `git rev-parse --short HEAD` and the current-tip verification commands
+recorded below.
 
 ## Objective
 
@@ -116,6 +119,7 @@ Out of scope:
 - `2026-06-27 18:45 WEST`: Authoring sub-agent recorded post-commit verification for round 3 cleanup commit `3fbc304`.
 - `2026-06-27 18:50 WEST`: Authoring sub-agent recorded review round 3 finding, reviewed HEAD `6cd258a`, and current-tip verification for `6cd258a` before log-state successor cleanup.
 - `2026-06-27 19:04 WEST`: Authoring sub-agent addressed round 4 findings for recovery-safe current state, pending task end state, and bounded skill inventory evidence.
+- `2026-06-27 19:15 WEST`: Authoring sub-agent addressed final metadata/state findings for D-0019 bounded inventory wording and T-0003 recovery metadata.
 
 ## Decisions
 
@@ -213,11 +217,10 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 - Current-tip verification for reviewed HEAD `6cd258a` passed with clean status,
   `git diff --check main...6cd258a`, docs-only changed paths under
   `build-protocol`, and no runtime/toolchain-file matches.
-- Evidence-successor convention: the next commit is only a log-state successor
-  to reviewed tip `6cd258a`, because a commit cannot contain its own hash before
-  creation. Recovery must identify the actual branch tip with
-  `git rev-parse --short HEAD` and rerun `git diff --check main...HEAD`,
-  `git diff --name-status main...HEAD`, and the runtime/toolchain-file scan.
+- Recovery convention: use the actual branch tip from
+  `git rev-parse --short HEAD` as the current recovery basis, then rerun
+  `git diff --check main...HEAD`, `git diff --name-status main...HEAD`, and the
+  runtime/toolchain-file scan.
 - Round 4 log-state cleanup commit `57454a2` passed clean status,
   `git diff --check main...HEAD`, and stale successor wording search.
 - Round 5 pending-state and bounded skill evidence cleanup commit `53972f0`
@@ -240,6 +243,7 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 - Round 3 at `6cd258a`: durable-state finding addressed; ready for review round 4.
 - Round 4 at `57454a2`: recovery-state finding addressed; ready for final review.
 - Final review at `53972f0`: pending end-state and bounded skill evidence findings addressed; ready for review round 5.
+- Round 5 at `7826e7c`: review history extended through round-5 handoff; final metadata/state cleanup prepared.
 
 ## Integration Result
 
