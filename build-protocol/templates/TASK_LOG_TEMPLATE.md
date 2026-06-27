@@ -22,6 +22,37 @@ State the outcome this task must produce.
 - `build-protocol/CODE_QUALITY.md`
 - `<task-specific input>`
 
+## Skill Applicability
+
+Installed skills checked:
+
+- Built-in/session-available skills: `<checked source or N/A with reason>`.
+- User-installed skills under `~/.agents/skills`: `<checked source or unreachable with reason>`.
+- Task-provided skill paths or names: `<checked source or N/A with reason>`.
+
+Skills read before task actions:
+
+| Skill | Source | Applicability | Instructions Applied |
+| --- | --- | --- | --- |
+| `<skill name>` | `<path or session source>` | `<why applicable>` | `<concise summary or file reference>` |
+
+Skills passed to sub-agents/reviewers:
+
+| Recipient | Skills/Instructions Passed | Notes |
+| --- | --- | --- |
+| `<agent or reviewer role>` | `<skill names and references>` | `<notes>` |
+
+Skipped relevant-looking skills:
+
+| Skill | Source | Reason Skipped |
+| --- | --- | --- |
+| `<skill name>` | `<path or session source>` | `<specific reason>` |
+
+Conflict resolution: if an installed skill conflicts with `BUILD_PROTOCOL.md`,
+`CODE_QUALITY.md`, or the task specification, the project protocol, quality
+rules, and task spec are authoritative. Record the conflict and chosen rule in
+this task log.
+
 ## Scope
 
 In scope:

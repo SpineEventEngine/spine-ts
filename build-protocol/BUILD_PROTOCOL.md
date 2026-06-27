@@ -87,10 +87,34 @@ Non-blocking questions:
 
 ## Skills and Tooling
 
-Before implementing a typical task, the orchestrator must:
+Before any orchestrator, implementer, adviser, or reviewer starts task actions,
+their prompt and durable log must perform a skill applicability check. The check
+must cover:
 
-- search available Codex/agentic skills in well-known locations;
-- install required skills when they are available and proven;
+- built-in or currently available Codex/agentic skills exposed in the session;
+- user-installed skills under `~/.agents/skills` when that directory is
+  reachable;
+- task-provided skill paths or skill names;
+- libraries and tools relevant to the task.
+
+The agent must then:
+
+- read each selected skill's `SKILL.md` before taking task actions;
+- reference the selected skill names and sources in prompts and logs;
+- pass any task-relevant skill instructions to sub-agents and reviewers, using
+  concise summaries or file references instead of duplicating full skill text;
+- record relevant-looking skills that were skipped, with the reason;
+- record when a skill source was expected but unreachable;
+- install required skills only when they are available, proven, and authorized
+  for the task.
+
+Installed skills guide workflow and domain practice; they do not replace this
+repository's governing documents. If a skill conflicts with
+`BUILD_PROTOCOL.md`, `CODE_QUALITY.md`, or the task specification, those project
+documents win and the conflict resolution must be recorded in the task log.
+
+Before implementing a typical task, the orchestrator must also:
+
 - search existing GitHub libraries before implementing common infrastructure;
 - prefer current stable TS libraries and dev dependencies;
 - document library selection criteria and final choices.
@@ -148,4 +172,3 @@ The implementation roadmap must include a standalone to-do list server-side appl
 ## Agent Closure
 
 Once a sub-agent completes its role, the orchestrator must close it. This applies to splitters, implementers, reviewers, fixers, and advisory sub-agents.
-

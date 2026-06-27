@@ -9,8 +9,14 @@ These notes help implementation and reviewer agents apply the autonomous build p
 1. Work only in the task worktree assigned by the orchestrator.
 2. Read the task brief, `BUILD_PROTOCOL.md`, `CODE_QUALITY.md`, relevant specification docs, and the current task log before editing.
 3. Confirm baseline commit, branch, worktree, and ownership boundaries.
-4. Create or update the task log before or in the same atomic step as any other change. New task logs use `build-protocol/tasks/<task-slug>/TASK.md`.
-5. Record any skill, library, or tooling investigation attempts, including failures and the decision not to install or adopt a tool.
+4. Run the skill gate before task actions:
+   - list built-in/available skills, task-provided skills, and reachable user-installed skills under `~/.agents/skills` that might apply;
+   - read selected `SKILL.md` files before implementation, review, or advice work;
+   - record selected skills, skipped relevant-looking skills, and skip reasons in the task log;
+   - pass task-relevant skill instructions or file references to any sub-agents or reviewers;
+   - record conflict resolution when a skill conflicts with `BUILD_PROTOCOL.md`, `CODE_QUALITY.md`, or the task spec.
+5. Create or update the task log before or in the same atomic step as any other change. New task logs use `build-protocol/tasks/<task-slug>/TASK.md`.
+6. Record any skill, library, or tooling investigation attempts, including failures and the decision not to install or adopt a tool.
 
 ## While Working
 
@@ -36,6 +42,12 @@ Each task must keep a review log per reviewer round. The required reviewer persp
 Reviewer findings must be actionable and tied to files or protocol requirements. The authoring agent records accepted fixes, explicit exceptions, verification commands, and the next review request in the task log.
 
 Reviewers should record the commit or diff basis, baseline, worktree path, dirty status, relevant documentation/API impact evidence, tests, coverage, and per-role coverage notes. Security reviewers must link or apply `CODE_QUALITY.md#security-standards` and state which areas are applicable or not applicable for the task.
+
+Before reviewing, each reviewer must run the same skill gate for their review
+role. Review logs must state the applicable skills checked, which `SKILL.md`
+files were read, which skills were N/A, and any skipped relevant-looking skills
+with reasons. Reviewers should verify that the authoring agent recorded skill
+use and skip decisions in the task log.
 
 ## Handoff And Resumption
 

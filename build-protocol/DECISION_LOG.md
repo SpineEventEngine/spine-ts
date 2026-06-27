@@ -120,3 +120,39 @@ Consequences:
 - Future tasks have one obvious task-log location.
 - Reviewers can check unresolved questions in a single canonical file.
 - Logs should preserve decisions, command names, and outcomes, but redact sensitive values before commit.
+
+## D-0019: User-installed skills are governed inputs, not optional memory
+
+Date: 2026-06-27
+
+Context: T-0003 exists because future agentic work must use relevant installed
+skills instead of relying on an agent's memory of best practices. The
+`skills.sh` installation batch identified user-installed skill sources under
+`~/.agents/skills`, including `subagent-driven-development`,
+`using-git-worktrees`, `requesting-code-review`,
+`verification-before-completion`, `planning-with-files`,
+`architecture-decision-records`, `typescript-advanced-types`, and
+`nodejs-backend-patterns`. Node tooling was also repaired before this task:
+Node `v24.18.0`, corepack `0.35.0`, and pnpm `11.9.0` made skill installation
+usable again.
+
+Decision: Every orchestrator, implementer, adviser, and reviewer prompt/log must
+run a skill applicability check before task actions. The check must include
+built-in/session-available skills, task-provided skills, and reachable
+user-installed skills under `~/.agents/skills`. Relevant skills must be read
+before task actions and referenced in prompts/logs. Relevant-looking skills that
+are skipped require a recorded reason.
+
+Conflict rule: Installed skills guide workflow and domain practice, but
+`BUILD_PROTOCOL.md`, `CODE_QUALITY.md`, and the task specification remain
+authoritative when conflicts exist. Agents must record the conflict and the
+chosen project rule rather than silently following the skill.
+
+Consequences:
+
+- Future work has an auditable gate showing which skills were considered,
+  selected, passed to sub-agents or reviewers, and skipped.
+- Skill contents are referenced by name/path and summarized for applicability;
+  they are not duplicated into repository governance files.
+- Reviewer logs must include evidence that skill applicability was checked/read
+  or explicitly N/A for the review role.

@@ -22,6 +22,7 @@ For any N/A entry, explain why the evidence does not apply to the reviewed task.
 
 | Evidence | Reviewed | Notes |
 | --- | --- | --- |
+| Skill applicability check | `<yes/no/N/A>` | `<skills checked; SKILL.md files read; skipped skills with reasons; or explicit N/A rationale>` |
 | Committed diff basis (`git diff main...HEAD`) | `<yes/no/N/A>` | `<notes>` |
 | Public export/API diff | `<yes/no/N/A>` | `<notes; if N/A, explain why no public export/API diff applies>` |
 | TypeDoc/reference generation | `<yes/no/N/A>` | `<notes; if N/A, explain why TypeDoc/reference generation does not apply>` |
