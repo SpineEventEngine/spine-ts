@@ -1,18 +1,19 @@
 # T-0003: Installed Skill Use Protocol
 
-Status: Ready for review round 2
+Status: Ready for review round 3
 Start: `2026-06-27 18:10 WEST`
 End: `2026-06-27 18:37 WEST`
 Baseline commit: `0566998`
 Task log path: `build-protocol/tasks/T-0003-skill-use-protocol/TASK.md`
 Branch: `task/T-0003-skill-use-protocol`
-Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0003-skill-use-protocol`
+Worktree: `.worktrees/T-0003-skill-use-protocol`
 Authoring sub-agent: Codex implementation sub-agent, senior agentic-workflow engineer
-Reviewer sub-agents: Consolidated review round 1
+Reviewer sub-agents: Consolidated review rounds 1 and 2
 Implementation commit: `be866f5`
-Reviewed HEAD: `be866f5`
+Reviewed HEAD: `40fe4af`
 Round 2 cleanup commit: `bba4ade`
-Final branch HEAD: Current branch tip after round 2 verification log commit.
+Round 2 verification log commit: `40fe4af`
+Final branch HEAD: Current branch tip after round 3 cleanup commit.
 
 ## Objective
 
@@ -107,6 +108,7 @@ Out of scope:
 - `2026-06-27 18:32 WEST`: Authoring sub-agent recorded review round 1 feedback, reviewed HEAD `be866f5`, and post-commit verification for `be866f5` before cleanup edits.
 - `2026-06-27 18:37 WEST`: Authoring sub-agent ran current-tip cleanup verification, updated logs, and prepared branch for review round 2.
 - `2026-06-27 18:39 WEST`: Authoring sub-agent recorded post-commit verification for cleanup commit `bba4ade`.
+- `2026-06-27 18:44 WEST`: Authoring sub-agent recorded review round 2 findings, reviewed HEAD `40fe4af`, and current-tip verification for `40fe4af` before cleanup edits.
 
 ## Decisions
 
@@ -142,6 +144,10 @@ Out of scope:
 - `git diff --check main...HEAD` at cleanup commit `bba4ade` - passed post-commit.
 - `git diff --name-status main...HEAD` at cleanup commit `bba4ade` - only `build-protocol` files changed.
 - Runtime/toolchain-file scan at cleanup commit `bba4ade` - passed; no runtime/toolchain package paths matched.
+- Clean status at reviewed HEAD `40fe4af` - passed; worktree was clean.
+- `git diff --check main...40fe4af` - passed.
+- `git diff --name-status main...40fe4af` - only `build-protocol` files changed.
+- Runtime/toolchain-file scan at reviewed HEAD `40fe4af` - passed; no runtime/toolchain package paths matched.
 
 ## Coverage Result
 
@@ -169,7 +175,7 @@ Out of scope:
 | Validation | N/A: no validation behavior. |
 | Tenant boundaries | N/A: no runtime behavior. |
 | `Any`/deserialization | N/A: no Protobuf behavior. |
-| Logging | Process logs mention installed skill names and redacted `~/.agents` paths only. |
+| Logging | Process logs mention installed skill names, redacted `~/.agents` paths, and normalized worktree paths only. |
 
 Redaction rule: record enough context for auditability, but never commit tokens, credentials, auth headers, secret environment variables, sensitive local paths, or sensitive payloads.
 
@@ -180,8 +186,12 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 - Current-tip verification convention for round 2: verify `main...HEAD` with
   `git diff --check`, changed-file scope, and no runtime/toolchain-file scan.
   These checks passed before cleanup commit `bba4ade` and again after
-  `bba4ade`. Final handoff repeats them against the current branch tip after
-  this verification log commit.
+  `bba4ade`.
+- Current-tip verification for reviewed HEAD `40fe4af` passed with clean status,
+  `git diff --check main...40fe4af`, docs-only changed paths under
+  `build-protocol`, and no runtime/toolchain-file matches.
+- Round 3 cleanup verification uses the same current-tip convention against the
+  cleanup commit before review round 3 handoff.
 
 ## Open Risks And Follow-Up Routing
 
@@ -194,7 +204,8 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 
 - Round 1 at `be866f5`: comments addressed in round 2 cleanup.
 - Round 2: ready after cleanup verification, cleanup commit, and verification log update.
+- Round 2 at `40fe4af`: narrow findings received; cleanup prepared for review round 3.
 
 ## Integration Result
 
-Pending.
+Not integrated.
