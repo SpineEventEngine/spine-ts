@@ -3,6 +3,7 @@ packages:
   - "examples/*"
 confirmModulesPurge: false
 engineStrict: true
+minimumReleaseAge: 1440
 minimumReleaseAgeExclude:
   - js-yaml@4.3.0
   - prettier@3.9.0

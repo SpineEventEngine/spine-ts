@@ -8,12 +8,12 @@ Task log path: `build-protocol/tasks/T-0002-workspace-toolchain-bootstrap/TASK.m
 Branch: `task/T-0002-toolchain`
 Worktree: `.worktrees/T-0002-toolchain`
 Authoring sub-agent: Codex implementation sub-agent, senior TypeScript/Node platform engineer persona
-Reviewer sub-agents: Review rounds 1, 2, and 3 recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`
+Reviewer sub-agents: Review rounds 1, 2, 3, and final-clearance findings recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`
 Implementation commit: `a937649`
 Review round 1 fix commit: `a0638218ec2b5caa786f958333a00af6a9fcbf4c`
 Review round 1 handoff evidence commit: `ee611a203ee40387b4ffb09451489d25c98cb01b`
 Review round 2 fix/evidence commit: `39f60d031d805e4a112bbf9a8f12660edf186107`
-Active reviewed state convention: the final clearance fix/evidence-log successor follows `5b3e79c113621346db3c40f2c19db64108339d64`; because a commit cannot embed its own hash before it exists, recovery must verify the actual branch tip with `git rev-parse HEAD` and rerun recorded checks against `main...HEAD`.
+Active reviewed state convention: the final focused-clearance fix/evidence-log successor follows `4ec192eaf9d0995e7bc07659d329338be2b63a9d`; because a commit cannot embed its own hash before it exists, recovery must verify the actual branch tip with `git rev-parse HEAD` and rerun recorded checks against `main...HEAD`.
 
 ## Objective
 
@@ -122,6 +122,8 @@ Out of scope:
 - `2026-06-27 20:25 WEST`: Ran round 3 documentation-fix verification: `CI=true pnpm verify`, diff whitespace check, status check, and review skill-gate evidence search all passed or produced the expected pre-commit modified-file list.
 - `2026-06-27 20:40 WEST`: Verified final clearance findings, removed stale no-reviewer-findings wording, and changed pnpm dependency-state pre-run verification from disabled to `error`.
 - `2026-06-27 20:50 WEST`: Ran final clearance verification: `CI=true pnpm verify`, effective pnpm dependency-state check, diff whitespace checks, status check, and stale-wording search passed or produced the expected pre-commit modified-file list.
+- `2026-06-27 21:05 WEST`: Verified final focused-clearance findings, updated task/work/review recovery state after successor `4ec192e`, and made pnpm release-age protection explicit with narrow reviewed exclusions.
+- `2026-06-27 21:08 WEST`: Refreshed pnpm dependency-state metadata after package-policy config changed and ran final focused-clearance verification with explicit release-age checks.
 
 ## Decisions
 
@@ -235,6 +237,9 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 - Recovery wording search - passed; no stale moving-head wording remains in T-0002 task/work/review logs.
 - Round 3 documentation fix search - passed; review evidence now contains `Reviewer Skill-Gate Evidence`, selected/skipped skill columns, and honest unknown/N/A notes where earlier reviewer logs were not committed.
 - `pnpm config get engine-strict` - returned `true`.
+- `pnpm config get verify-deps-before-run` - returned `error`.
+- `pnpm config get minimum-release-age` and `pnpm config get minimumReleaseAge` - both returned `1440`.
+- `pnpm config get minimumReleaseAgeExclude` - returned `js-yaml@4.3.0` and `prettier@3.9.0`.
 - Search for absolute local paths in T-0002 changed docs/logs - passed; no sensitive home-directory paths remain.
 - Search for repo-default `minimum-release-age=0` / `minimumReleaseAge: 0` - passed; no freshness bypass remains in repo default package manager config.
 - TypeDoc warning reviewed: invalid local `origin` remote means source links are broken, but docs generation reports 0 errors and writes `docs/api/reference` (ignored).
@@ -256,8 +261,8 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 
 ## Review Rounds
 
-- Review rounds 1, 2, and 3 returned important findings; dispositions and reviewer skill-gate evidence are recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`.
+- Review rounds 1, 2, 3, and final clearance returned important findings; dispositions and reviewer skill-gate evidence are recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`.
 
 ## Integration Result
 
-Not integrated. Branch is ready for review round 4 only.
+Not integrated. Branch is ready for final re-check and integration review from the actual branch tip.
