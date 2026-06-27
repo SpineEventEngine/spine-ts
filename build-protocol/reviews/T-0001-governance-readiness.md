@@ -6,9 +6,10 @@ Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0001-gove
 Baseline commit: `04bb4e0`
 Implementation commit: `cc4d0b7`
 Prior reviewed HEAD: `8999cbf`
-Active reviewed state: post-cleanup branch HEAD containing this readiness update
-Expected worktree state for review: clean after cleanup commit and final verification
-Status: Ready for review round 3 after cleanup commit and final verification
+Round-3 reviewed content state: `62c3a08`
+Active reviewed state convention: this evidence-only cleanup commit follows `62c3a08`; future recovery verifies the current branch tip with `git rev-parse --short HEAD` and reruns the recorded verification commands against `main...HEAD`.
+Expected worktree state for review: clean
+Status: Ready for review round 4
 
 ## Reviewer Intake
 
@@ -53,19 +54,31 @@ Required reviewer perspectives are inherited from `build-protocol/BUILD_PROTOCOL
 
 | Comment | Fix |
 | --- | --- |
-| Durable state still depended on final handoff wording. | Task, work, and review-readiness logs now record prior reviewed HEAD `8999cbf`, active reviewed state as the post-cleanup branch HEAD, and expected clean worktree state. |
-| Verification evidence needed to apply to the post-cleanup HEAD. | Logs list the required post-cleanup commands to run against current branch HEAD: `git status --short --branch`, `git diff --check main...HEAD`, `git diff --name-status main...HEAD`, and `git diff --stat main...HEAD`. |
+| Durable state still depended on final handoff wording. | Task, work, and review-readiness logs now record prior reviewed HEAD `8999cbf`, active reviewed state convention, and expected clean worktree state. |
+| Verification evidence needed to apply to the active reviewed branch state. | Logs record the verification commands and results for reviewed content state `62c3a08`. |
 | Review evidence checklist allowed generic N/A notes. | `REVIEW_LOG_TEMPLATE.md` now requires explicit N/A reasons for public export/API diff, TypeDoc/reference generation, package README impact, `USER_GUIDE.md` impact, API examples, and compatibility notes. |
 | Review-readiness log needed round 2 findings and fixes. | This section records round 2 findings and cleanup disposition for review round 3. |
 
-## Evidence To Capture In Round 3
+## Round 3 Comments Addressed
+
+| Comment | Fix |
+| --- | --- |
+| Durable evidence text still used vague active-state wording. | This readiness log and the task/work logs explicitly name `62c3a08` as the round-3 reviewed content state. |
+| Actual verification results against `62c3a08` were missing. | The round-3 evidence table records clean status, diff-check pass, name-status scope, diff stat, and no runtime/tooling files for `62c3a08`. |
+| Evidence-only cleanup commit needed a durable convention. | Logs state that this cleanup commit follows `62c3a08`; future recovery verifies the current branch tip with `git rev-parse --short HEAD` and reruns the same checks against `main...HEAD`. |
+
+## Evidence For Review Round 4
 
 | Evidence | Expected Value |
 | --- | --- |
-| Reviewed commit/diff basis | `git diff main...HEAD` from the committed T-0001 branch; prior reviewed HEAD `8999cbf`; active reviewed state is current post-cleanup branch HEAD. |
+| Reviewed commit/diff basis | Evidence-only cleanup commit following round-3 reviewed content state `62c3a08`; use `git diff main...HEAD` for the active branch tip. |
 | Baseline | `04bb4e0`. |
 | Worktree path | `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0001-governance`. |
-| Dirty status/untracked files | Reviewers should record `git status --short --branch`; expected clean after cleanup commit and final verification. |
+| Dirty status/untracked files | Clean expected; `62c3a08` status result was `## task/T-0001-governance`. |
+| Diff check evidence | `git diff --check main...62c3a08` passed; rerun `git diff --check main...HEAD` for the evidence-only cleanup commit. |
+| Diff scope evidence | `git diff --name-status main...62c3a08` listed the 12 expected governance docs/templates/log files. |
+| Diff stat evidence | `git diff --stat main...62c3a08` reported 12 files changed, 681 insertions, 1 deletion. |
+| Runtime/tooling scan | No `*.ts`, `package.json`, lockfiles, `tsconfig*.json`, or lint/test/build config files were added at `62c3a08`; rerun the scan for active branch tip. |
 | Public export/API diff reviewed | N/A; no TypeScript/package files should exist. |
 | TypeDoc/reference generation | N/A; no public APIs or docs tooling added. |
 | Package README impact | N/A; no packages exist yet. |
@@ -89,4 +102,4 @@ Required reviewer perspectives are inherited from `build-protocol/BUILD_PROTOCOL
 
 ## Current Outcome
 
-Review rounds 1 and 2 produced actionable comments. Authoring sub-agent applied the requested cleanup. Review round 3 should inspect the committed post-cleanup branch HEAD and final verification evidence.
+Review rounds 1, 2, and 3 produced actionable comments. Authoring sub-agent applied the requested evidence-only cleanup. Review round 4 should inspect the evidence-only cleanup commit following `62c3a08` and the final verification evidence against `main...HEAD`.

@@ -1,6 +1,6 @@
 # T-0001: Governance/Logging Scaffold
 
-Status: Ready for review round 3
+Status: Ready for review round 4
 Start: 2026-06-27 16:38:32 WEST
 End: Pending
 Baseline commit: `04bb4e0`
@@ -11,8 +11,9 @@ Authoring sub-agent: implementation sub-agent for T-0001, senior platform engine
 Reviewer sub-agents: Pending
 Implementation commit: `cc4d0b7`
 Prior reviewed HEAD: `8999cbf`
-Active reviewed state: post-cleanup branch HEAD containing this task log update
-Expected worktree state for review: clean after cleanup commit and final verification
+Round-3 reviewed content state: `62c3a08`
+Active reviewed state convention: this evidence-only cleanup commit follows `62c3a08`; future recovery verifies the current branch tip with `git rev-parse --short HEAD` and reruns the recorded verification commands against `main...HEAD`.
+Expected worktree state for review: clean
 
 ## Objective
 
@@ -59,7 +60,8 @@ Out of scope:
 - 2026-06-27 16:45:54 WEST: Ran pre-commit verification covering tracked and untracked scaffold files.
 - 2026-06-27 16:45:54 WEST: Staged and committed the T-0001 scaffold as `cc4d0b7` (`docs: add governance logging scaffold`) so reviewers can inspect `git diff main...HEAD`.
 - 2026-06-27 16:45:54 WEST: Ran committed-diff verification against `main...HEAD`; working tree was clean immediately after implementation commit `cc4d0b7`.
-- 2026-06-27 16:45:54 WEST: Review round 2 found final cleanup items: replace stale handoff wording with durable branch state, require explicit N/A reasons in review evidence rows, record prior reviewed HEAD `8999cbf`, and make final verification repeatable against the post-cleanup HEAD.
+- 2026-06-27 16:45:54 WEST: Review round 2 found final cleanup items: replace stale handoff wording with durable branch state, require explicit N/A reasons in review evidence rows, record prior reviewed HEAD `8999cbf`, and make final verification repeatable against the active reviewed branch state.
+- 2026-06-27 16:45:54 WEST: Review round 3 found that durable evidence text still needed concrete `62c3a08` results instead of generic current-HEAD wording; updated this task log before the evidence-only cleanup commit.
 
 ## Decisions
 
@@ -131,25 +133,28 @@ None.
 - `git status --short --branch` - passed after implementation commit `cc4d0b7`; branch had no uncommitted files at that point.
 - `git diff --name-status main...HEAD` - passed; committed diff includes the 12 expected governance documentation files.
 - `git diff --stat main...HEAD` - passed; committed diff showed 12 files changed, 649 insertions, 1 deletion after implementation commit `cc4d0b7`.
-- Post-cleanup verification for the active reviewed state must be run against the current branch HEAD after this cleanup commit:
-  - `git status --short --branch`
-  - `git diff --check main...HEAD`
-  - `git diff --name-status main...HEAD`
-  - `git diff --stat main...HEAD`
+- Round-3 reviewed content state `62c3a08` verification:
+  - `git status --short --branch` output was clean: `## task/T-0001-governance`.
+  - `git diff --check main...62c3a08` passed with no whitespace errors.
+  - `git diff --name-status main...62c3a08` listed the 12 expected governance docs/templates/log files: `build-protocol/CONTRIBUTOR_WORKFLOW.md`, `build-protocol/DECISION_LOG.md`, `build-protocol/README.md`, `build-protocol/questions/UNRESOLVED.md`, `build-protocol/reviews/T-0001-governance-readiness.md`, `build-protocol/tasks/T-0001-governance-logging-scaffold/TASK.md`, `build-protocol/templates/DECISION_RECORD_TEMPLATE.md`, `build-protocol/templates/REVIEW_LOG_TEMPLATE.md`, `build-protocol/templates/TASK_LOG_TEMPLATE.md`, `build-protocol/templates/UNRESOLVED_QUESTIONS_TEMPLATE.md`, `build-protocol/templates/WORK_LOG_TEMPLATE.md`, and `build-protocol/work-logs/T-0001.md`.
+  - `git diff --stat main...62c3a08` reported 12 files changed, 681 insertions, 1 deletion.
+  - Runtime/tooling-file scan found no `*.ts`, `package.json`, lockfiles, `tsconfig*.json`, or lint/test/build config files added by T-0001.
+- Evidence-only cleanup commit convention: the commit containing this line intentionally follows reviewed content state `62c3a08`; because a commit cannot embed its own hash before it exists, future recovery verifies the actual branch tip with `git rev-parse --short HEAD` and reruns `git status --short --branch`, `git diff --check main...HEAD`, `git diff --name-status main...HEAD`, `git diff --stat main...HEAD`, and the runtime/tooling-file scan.
 
 ## Open Risks And Follow-Up Routing
 
 | Risk/Follow-Up | Owner | Linked Task/Decision | Disposition | Next Review Point |
 | --- | --- | --- | --- | --- |
 | Skill-installer listing fails with GitHub HTTP 401. | Orchestrator | T-0001 work log | Deferred; no skill installed in this round. | Recheck before a future task requires installing external skills. |
-| Coverage target cannot be measured for documentation-only governance scaffold. | Reviewers | This task log | N/A exception for T-0001 only. | Review round 3 verifies no runtime/tooling files exist. |
+| Coverage target cannot be measured for documentation-only governance scaffold. | Reviewers | This task log | N/A exception for T-0001 only. | Review round 4 verifies no runtime/tooling files exist. |
 | Future security/performance/reliability findings need routing without copying quality rules. | Future task authors and reviewers | `build-protocol/CODE_QUALITY.md` | Templates include routing fields that link back to the authoritative rules. | Each future task review round. |
 
 ## Review Rounds
 
 - Round 1: Changes requested. Consolidated comments require committing scaffold history, standardizing task-log paths, expanding task/review/documentation/security/coverage fields, adding redaction and follow-up routing rules, broadening verification to committed files, and updating review readiness for round 2.
-- Round 2: Changes requested. Consolidated comments require durable self-contained branch state in logs, final verification evidence against the post-cleanup HEAD, explicit N/A evidence reasons in the review template, and review-readiness updates for round 3.
-- Round 3: Ready after cleanup commit and final post-cleanup verification.
+- Round 2: Changes requested. Consolidated comments require durable self-contained branch state in logs, final verification evidence against the active reviewed branch state, explicit N/A evidence reasons in the review template, and review-readiness updates for round 3.
+- Round 3: Changes requested. Consolidated comments require explicit `62c3a08` evidence results, a convention for the evidence-only cleanup commit, and removal of stale next-step wording.
+- Round 4: Ready after evidence-only cleanup commit.
 
 ## Integration Result
 
