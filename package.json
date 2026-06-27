@@ -9,7 +9,9 @@
   },
   "scripts": {
     "check:node": "node scripts/check-node-version.mjs",
-    "typecheck": "tsc -b",
+    "typecheck": "pnpm typecheck:build && pnpm typecheck:tooling",
+    "typecheck:build": "tsc -b",
+    "typecheck:tooling": "tsc --noEmit -p tsconfig.eslint.json",
     "lint": "eslint .",
     "format:check": "prettier --check \"*.{json,md,yaml,yml,mjs,ts}\" \".*.json\" \"docs/**/*.md\" \"packages/**/*.{json,md,ts}\" \"examples/**/*.{json,md,ts}\" \"proto/**/*.md\" \"scripts/**/*.mjs\" \"build-protocol/**/*.md\"",
     "format": "prettier --write \"*.{json,md,yaml,yml,mjs,ts}\" \".*.json\" \"docs/**/*.md\" \"packages/**/*.{json,md,ts}\" \"examples/**/*.{json,md,ts}\" \"proto/**/*.md\" \"scripts/**/*.mjs\" \"build-protocol/**/*.md\"",
@@ -25,6 +27,7 @@
     "@bufbuild/buf": "1.71.0",
     "@bufbuild/protoc-gen-es": "2.12.1",
     "@eslint/js": "9.39.1",
+    "@types/node": "24.13.2",
     "@vitest/coverage-v8": "4.1.9",
     "eslint": "9.39.1",
     "eslint-config-prettier": "10.1.8",

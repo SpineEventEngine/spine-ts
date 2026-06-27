@@ -1,6 +1,6 @@
 # T-0002: Workspace And Toolchain Bootstrap
 
-Status: Ready for review round 2
+Status: Ready for review round 3
 Start: `2026-06-27 17:27 WEST`
 End: `2026-06-27 19:45 WEST`
 Baseline commit: `0566998`
@@ -8,10 +8,11 @@ Task log path: `build-protocol/tasks/T-0002-workspace-toolchain-bootstrap/TASK.m
 Branch: `task/T-0002-toolchain`
 Worktree: `.worktrees/T-0002-toolchain`
 Authoring sub-agent: Codex implementation sub-agent, senior TypeScript/Node platform engineer persona
-Reviewer sub-agents: Pending
+Reviewer sub-agents: Review rounds 1 and 2 recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`
 Implementation commit: `a937649`
 Review round 1 fix commit: `a0638218ec2b5caa786f958333a00af6a9fcbf4c`
-Final branch HEAD: current tip of `task/T-0002-toolchain`; pre-review-fix tip was `d26b016670ae6729d52739d4765977a7bfbbec83`.
+Review round 1 handoff evidence commit: `ee611a203ee40387b4ffb09451489d25c98cb01b`
+Active reviewed state convention: the review round 2 fix/evidence-log successor follows `ee611a203ee40387b4ffb09451489d25c98cb01b`; because a commit cannot embed its own hash before it exists, recovery must verify the actual branch tip with `git rev-parse HEAD` and rerun recorded checks against `main...HEAD`.
 
 ## Objective
 
@@ -114,6 +115,8 @@ Out of scope:
 - `2026-06-27 19:45 WEST`: Committed implementation as `a937649`, dropped temporary pre-merge stash, and prepared branch for review round 1.
 - `2026-06-27 19:55 WEST`: Verified T-0002 review round 1 findings against the repo and applied focused fixes for durable HEAD/current-state logging, pnpm freshness policy removal, local path redaction, durable formatting globs, and Node baseline enforcement.
 - `2026-06-27 19:58 WEST`: Ran review-fix verification: full verify, whitespace check, engine-strict check, absolute-local-path search, and repo-default freshness-bypass search all passed.
+- `2026-06-27 20:11 WEST`: Verified T-0002 review round 2 findings, reproduced the missing tooling/test TS typecheck, added durable review evidence, adopted the evidence-log successor wording, and fixed no-emit typechecking for tests/config/tooling TS.
+- `2026-06-27 20:14 WEST`: Ran round 2 fix verification: `CI=true pnpm verify`, standalone tooling TS typecheck, diff whitespace check, reviewer-state search, review-evidence link search, and recovery-wording search all passed.
 
 ## Decisions
 
@@ -147,6 +150,7 @@ Out of scope:
 - `tsconfig.eslint.json`
 - `tsconfig.json`
 - `typedoc.json`
+- `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`
 - `vitest.config.ts`
 - `scripts/proto-workflow.mjs`
 - `scripts/check-node-version.mjs`
@@ -177,6 +181,9 @@ Out of scope:
 - `CI=true pnpm proto:generate` - passed; no `.proto` files found, Buf generation deferred until proto intake.
 - `CI=true pnpm verify` - passed.
 - Review round 1 fix verification: `CI=true pnpm verify` - passed with `check:node` running first.
+- `pnpm exec tsc --noEmit -p tsconfig.eslint.json` - initially failed on missing ambient types and invalid `coverage.all`; passed after round 2 fixes.
+- `pnpm add -Dw @types/node@24.13.2 --config.minimum-release-age=0` - one-time lockfile update exception; repo defaults still do not carry a freshness bypass.
+- Review round 2 fix verification: `CI=true pnpm verify` - passed with `typecheck:tooling` included in `pnpm typecheck`.
 
 ## Coverage Result
 
@@ -200,15 +207,15 @@ Initial implementation note: package/example exports are metadata-only skeleton 
 
 ## Security Impact
 
-| Area                    | Impact                                                                                                                                                             |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Dependencies            | Added dev/runtime package pins and lockfile; used a one-time release-age install exception for explicit fresh pins and approved only `@bufbuild/buf` build script. |
-| Secrets and credentials | N/A; no secrets introduced.                                                                                                                                        |
-| IPC                     | Deferred; ZeroMQ runtime code and dependency installation are out of scope.                                                                                        |
-| Validation              | Deferred; `@spine-event-engine/validation-ts` intentionally not installed in T-0002.                                                                               |
-| Tenant boundaries       | Deferred; no runtime tenant implementation.                                                                                                                        |
-| `Any`/deserialization   | Deferred; no Protobuf runtime behavior implemented.                                                                                                                |
-| Logging                 | N/A; no runtime logging implementation.                                                                                                                            |
+| Area                    | Impact                                                                                                                                                            |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dependencies            | Added dev/runtime package pins and lockfile; used one-time release-age install exceptions for explicit fresh pins and approved only `@bufbuild/buf` build script. |
+| Secrets and credentials | N/A; no secrets introduced.                                                                                                                                       |
+| IPC                     | Deferred; ZeroMQ runtime code and dependency installation are out of scope.                                                                                       |
+| Validation              | Deferred; `@spine-event-engine/validation-ts` intentionally not installed in T-0002.                                                                              |
+| Tenant boundaries       | Deferred; no runtime tenant implementation.                                                                                                                       |
+| `Any`/deserialization   | Deferred; no Protobuf runtime behavior implemented.                                                                                                               |
+| Logging                 | N/A; no runtime logging implementation.                                                                                                                           |
 
 Redaction rule: record enough context for auditability, but never commit tokens, credentials, auth headers, secret environment variables, sensitive local paths, or sensitive payloads.
 
@@ -216,7 +223,11 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 
 - Host toolchain checked: Node `v24.18.0`, corepack `0.35.0`, pnpm `11.9.0`.
 - `CI=true pnpm verify` - passed.
+- `pnpm exec tsc --noEmit -p tsconfig.eslint.json` - passed after round 2 fixes; covers tests/config/tooling TS.
 - `git diff --check main...HEAD` - passed after commit.
+- Reviewer state search - passed; task log no longer says reviewer sub-agents are pending.
+- Review evidence link search - passed; task log links `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`.
+- Recovery wording search - passed; no stale moving-head wording remains in T-0002 task/work/review logs.
 - `pnpm config get engine-strict` - returned `true`.
 - Search for absolute local paths in T-0002 changed docs/logs - passed; no sensitive home-directory paths remain.
 - Search for repo-default `minimum-release-age=0` / `minimumReleaseAge: 0` - passed; no freshness bypass remains in repo default package manager config.
@@ -232,14 +243,15 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 | Earlier local environment reported Node `v22.2.0`, below the configured Node 24 LTS minimum.      | T-0002 author           | D-0020               | Resolved by host update to Node `v24.18.0`                                               | Verification and T-0002 review round 1 |
 | Earlier local shell lacked Corepack while the package manager decision targets pnpm via Corepack. | T-0002 author           | D-0020               | Resolved by host update to corepack `0.35.0` and pnpm `11.9.0`                           | Verification and T-0002 review round 1 |
 | A repo-local freshness bypass would weaken pnpm's supply-chain delay for future installs.         | T-0002 author           | D-0020               | Addressed in review round 1 by removing checked-in `minimumReleaseAge: 0` defaults       | T-0002 review round 2                  |
+| Tests/config/tooling TypeScript could drift outside package project references.                   | T-0002 author           | D-0022               | Addressed in review round 2 with `typecheck:tooling` and Node/Vitest/Web ambient types   | T-0002 review round 3                  |
 | TypeDoc source links are broken because the local `origin` remote is invalid.                     | Future repository owner | D-0022               | Accepted warning for bootstrap; docs generation has 0 errors                             | T-0002 review round 1                  |
 | Git kept the pre-merge stash after conflict resolution.                                           | T-0002 author           | T-0002 work log      | Resolved; dropped temporary stash after implementation commit                            | T-0002 review round 1                  |
 | Future verification should fail under Node 22 rather than warn only.                              | T-0002 author           | D-0020               | Addressed in review round 1 with `engine-strict=true`, `.node-version`, and `check:node` | T-0002 review round 2                  |
 
 ## Review Rounds
 
-- Review round 1 returned important findings; focused fixes applied and verified for review round 2.
+- Review rounds 1 and 2 returned important findings; dispositions are recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`.
 
 ## Integration Result
 
-Not integrated. Branch is ready for review round 2 only.
+Not integrated. Branch is ready for review round 3 only.

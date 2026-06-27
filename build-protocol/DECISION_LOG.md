@@ -186,7 +186,7 @@ Alternatives considered:
 Consequences:
 
 - Root scripts call the standard pnpm workspace toolchain directly.
-- A one-time release-age policy exception was used while creating the lockfile because the task explicitly pinned fresh packages, including `prettier@3.9.0`; the bypass is not retained as a repo default.
+- One-time release-age policy exceptions were used while creating/updating the lockfile because the task explicitly pinned fresh packages, including `prettier@3.9.0`; the bypass is not retained as a repo default.
 - Non-interactive runs avoid TTY purge prompts after interrupted installs.
 - Normal installs remain subject to the active host freshness policy; scripts skip pnpm's auto-install/dependency-status preflight to avoid rechecking a trusted lockfile on every `pnpm run`.
 - Verification explicitly checks Node major version before TypeScript, lint, tests, docs, or proto stubs run.
@@ -216,7 +216,7 @@ Date: 2026-06-27
 
 Context: The repository needs quality gates from the start without duplicating `CODE_QUALITY.md`. Advisory notes recommended ESLint flat config, `typescript-eslint@8.62.0`, Prettier 3.9.0, Vitest 4.1.9, V8 coverage, and TypeDoc 0.28.19.
 
-Decision: Use ESLint flat config with `typescript-eslint@8.62.0`, `eslint-config-prettier`, Prettier 3.9.0, Vitest 4.1.9 with `@vitest/coverage-v8@4.1.9`, and TypeDoc 0.28.19 native HTML output. Configure 90% coverage thresholds for the current skeleton exports and future meaningful source. Defer `typedoc-plugin-markdown`. Format durable repository areas, including future `build-protocol/**/*.md` task/review/log files, while ignoring pre-existing unformatted protocol files until a dedicated formatting cleanup owns that churn.
+Decision: Use ESLint flat config with `typescript-eslint@8.62.0`, `eslint-config-prettier`, Prettier 3.9.0, Vitest 4.1.9 with `@vitest/coverage-v8@4.1.9`, and TypeDoc 0.28.19 native HTML output. Configure 90% coverage thresholds for the current skeleton exports and future meaningful source. Defer `typedoc-plugin-markdown`. Format durable repository areas, including future `build-protocol/**/*.md` task/review/log files, while ignoring pre-existing unformatted protocol files until a dedicated formatting cleanup owns that churn. Add `@types/node@24.13.2` and a no-emit tooling/test/config TypeScript check so Vitest config and test files are typechecked in addition to package project references.
 
 Alternatives considered:
 
@@ -227,6 +227,7 @@ Consequences:
 
 - Generated docs output lives under `docs/api/reference` and is ignored by Git.
 - The current coverage gate is satisfied by metadata-only skeleton tests; future tasks must add behavior-level tests as runtime code appears.
+- `pnpm typecheck` runs both `tsc -b` for package source builds and `tsc --noEmit -p tsconfig.eslint.json` for tests/config/tooling TS.
 - TypeDoc currently emits one warning because the local `origin` remote is not valid for source links; HTML generation still succeeds with zero errors.
 
 ## D-0023: T-0002 Buf and Protobuf-ES bootstrap
