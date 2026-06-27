@@ -115,6 +115,7 @@ Out of scope:
 - `2026-06-27 18:44 WEST`: Authoring sub-agent recorded review round 2 findings, reviewed HEAD `40fe4af`, and current-tip verification for `40fe4af` before cleanup edits.
 - `2026-06-27 18:45 WEST`: Authoring sub-agent recorded post-commit verification for round 3 cleanup commit `3fbc304`.
 - `2026-06-27 18:50 WEST`: Authoring sub-agent recorded review round 3 finding, reviewed HEAD `6cd258a`, and current-tip verification for `6cd258a` before log-state successor cleanup.
+- `2026-06-27 19:04 WEST`: Authoring sub-agent addressed round 4 findings for recovery-safe current state, pending task end state, and bounded skill inventory evidence.
 
 ## Decisions
 
@@ -217,6 +218,11 @@ Redaction rule: record enough context for auditability, but never commit tokens,
   creation. Recovery must identify the actual branch tip with
   `git rev-parse --short HEAD` and rerun `git diff --check main...HEAD`,
   `git diff --name-status main...HEAD`, and the runtime/toolchain-file scan.
+- Round 4 log-state cleanup commit `57454a2` passed clean status,
+  `git diff --check main...HEAD`, and stale successor wording search.
+- Round 5 pending-state and bounded skill evidence cleanup commit `53972f0`
+  passed clean status, `git diff --check main...HEAD`, stale end-date search,
+  and bounded skill evidence consistency search.
 
 ## Open Risks And Follow-Up Routing
 
@@ -232,6 +238,8 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 - Round 2 at `40fe4af`: narrow findings received; cleanup prepared for review round 3.
 - Round 3: ready after path-normalization cleanup and `3fbc304` verification.
 - Round 3 at `6cd258a`: durable-state finding addressed; ready for review round 4.
+- Round 4 at `57454a2`: recovery-state finding addressed; ready for final review.
+- Final review at `53972f0`: pending end-state and bounded skill evidence findings addressed; ready for review round 5.
 
 ## Integration Result
 
