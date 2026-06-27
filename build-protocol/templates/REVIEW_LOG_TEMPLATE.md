@@ -18,16 +18,18 @@ Status: Pending | Comments | No remaining comments
 
 ## Evidence Checklist
 
+For any N/A entry, explain why the evidence does not apply to the reviewed task. Do not leave generic placeholders in completed review logs.
+
 | Evidence | Reviewed | Notes |
 | --- | --- | --- |
 | Committed diff basis (`git diff main...HEAD`) | `<yes/no/N/A>` | `<notes>` |
-| Public export/API diff | `<yes/no/N/A>` | `<notes>` |
-| TypeDoc/reference generation | `<yes/no/N/A>` | `<notes>` |
-| Package README impact | `<yes/no/N/A>` | `<notes>` |
-| Framework `USER_GUIDE.md` impact | `<yes/no/N/A>` | `<notes>` |
-| Example `USER_GUIDE.md` impact | `<yes/no/N/A>` | `<notes>` |
-| API examples | `<yes/no/N/A>` | `<notes>` |
-| Compatibility notes | `<yes/no/N/A>` | `<notes>` |
+| Public export/API diff | `<yes/no/N/A>` | `<notes; if N/A, explain why no public export/API diff applies>` |
+| TypeDoc/reference generation | `<yes/no/N/A>` | `<notes; if N/A, explain why TypeDoc/reference generation does not apply>` |
+| Package README impact | `<yes/no/N/A>` | `<notes; if N/A, explain why no package README impact applies>` |
+| Framework `USER_GUIDE.md` impact | `<yes/no/N/A>` | `<notes; if N/A, explain why no framework user-guide impact applies>` |
+| Example `USER_GUIDE.md` impact | `<yes/no/N/A>` | `<notes; if N/A, explain why no example user-guide impact applies>` |
+| API examples | `<yes/no/N/A>` | `<notes; if N/A, explain why no API example impact applies>` |
+| Compatibility notes | `<yes/no/N/A>` | `<notes; if N/A, explain why no compatibility impact applies>` |
 | Tests run | `<yes/no/N/A>` | `<notes>` |
 | Coverage result or exception | `<yes/no/N/A>` | `<notes>` |
 

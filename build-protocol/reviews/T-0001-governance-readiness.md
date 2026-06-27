@@ -5,8 +5,10 @@ Branch: `task/T-0001-governance`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0001-governance`
 Baseline commit: `04bb4e0`
 Implementation commit: `cc4d0b7`
-Final branch HEAD: See final handoff response; the final commit is created after this log records `cc4d0b7`.
-Status: Ready for review round 2 after final log-update commit
+Prior reviewed HEAD: `8999cbf`
+Active reviewed state: post-cleanup branch HEAD containing this readiness update
+Expected worktree state for review: clean after cleanup commit and final verification
+Status: Ready for review round 3 after cleanup commit and final verification
 
 ## Reviewer Intake
 
@@ -47,14 +49,23 @@ Required reviewer perspectives are inherited from `build-protocol/BUILD_PROTOCOL
 | Security/redaction fields were missing. | Task/decision templates and contributor workflow now include security impact and redaction requirements. |
 | Deferrals needed routing. | Task/work templates and T-0001 logs now include Open Risks And Follow-Up Routing tables. |
 
-## Evidence To Capture In Round 2
+## Round 2 Comments Addressed
+
+| Comment | Fix |
+| --- | --- |
+| Durable state still depended on final handoff wording. | Task, work, and review-readiness logs now record prior reviewed HEAD `8999cbf`, active reviewed state as the post-cleanup branch HEAD, and expected clean worktree state. |
+| Verification evidence needed to apply to the post-cleanup HEAD. | Logs list the required post-cleanup commands to run against current branch HEAD: `git status --short --branch`, `git diff --check main...HEAD`, `git diff --name-status main...HEAD`, and `git diff --stat main...HEAD`. |
+| Review evidence checklist allowed generic N/A notes. | `REVIEW_LOG_TEMPLATE.md` now requires explicit N/A reasons for public export/API diff, TypeDoc/reference generation, package README impact, `USER_GUIDE.md` impact, API examples, and compatibility notes. |
+| Review-readiness log needed round 2 findings and fixes. | This section records round 2 findings and cleanup disposition for review round 3. |
+
+## Evidence To Capture In Round 3
 
 | Evidence | Expected Value |
 | --- | --- |
-| Reviewed commit/diff basis | `git diff main...HEAD` from the committed T-0001 branch; implementation scaffold commit `cc4d0b7`. |
+| Reviewed commit/diff basis | `git diff main...HEAD` from the committed T-0001 branch; prior reviewed HEAD `8999cbf`; active reviewed state is current post-cleanup branch HEAD. |
 | Baseline | `04bb4e0`. |
 | Worktree path | `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0001-governance`. |
-| Dirty status/untracked files | Reviewers should record `git status --short --branch`; expected clean after commit. |
+| Dirty status/untracked files | Reviewers should record `git status --short --branch`; expected clean after cleanup commit and final verification. |
 | Public export/API diff reviewed | N/A; no TypeScript/package files should exist. |
 | TypeDoc/reference generation | N/A; no public APIs or docs tooling added. |
 | Package README impact | N/A; no packages exist yet. |
@@ -78,4 +89,4 @@ Required reviewer perspectives are inherited from `build-protocol/BUILD_PROTOCOL
 
 ## Current Outcome
 
-Review round 1 produced actionable comments. Authoring sub-agent applied the requested scaffold fixes, committed the implementation scaffold as `cc4d0b7`, and verified `git diff --check main...HEAD`. Pending final log-update commit before review round 2.
+Review rounds 1 and 2 produced actionable comments. Authoring sub-agent applied the requested cleanup. Review round 3 should inspect the committed post-cleanup branch HEAD and final verification evidence.
