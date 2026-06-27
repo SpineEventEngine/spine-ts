@@ -169,3 +169,98 @@ Consequences:
   they are not duplicated into repository governance files.
 - Reviewer logs must include evidence that skill applicability was checked/read
   for the review role, with N/A limited to individual sources or skills.
+
+## D-0020: T-0002 workspace and package toolchain
+
+Date: 2026-06-27
+
+Context: T-0002 initializes the implementation workspace without runtime behavior. Advisory tooling notes were available for package management, TypeScript, lint/format, test/coverage, docs, Buf/Protobuf-ES, validation, gRPC, and ZeroMQ dependency timing.
+
+Decision: Use pnpm workspaces with `packageManager: pnpm@11.9.0`, TypeScript project references, and no Nx/Turbo layer initially. Use Node 24 LTS as the minimum engine. Keep packages private while the framework API is skeletal. Add repo-local pnpm workspace settings for non-interactive agent verification: `confirmModulesPurge: false` and `minimumReleaseAge: 0`.
+
+Alternatives considered:
+
+- Nx or Turbo for orchestration. Deferred because the skeleton has simple project references and workspace scripts; a task runner can be added once build graph cost justifies it.
+- npm or Yarn as the canonical package manager. Rejected for now in favor of pnpm's workspace ergonomics and deterministic lockfile behavior.
+
+Consequences:
+
+- Root scripts call the standard pnpm workspace toolchain directly.
+- The release-age policy exception is accepted for T-0002 because the task explicitly pins fresh packages, including `prettier@3.9.0`; reviewers should revisit removing `minimumReleaseAge: 0` once those pins age past local supply-chain cutoffs.
+- Non-interactive runs avoid TTY purge prompts after interrupted installs.
+- Reviewers should revisit task-runner adoption only after package graph complexity or CI time makes it useful.
+
+## D-0021: T-0002 TypeScript and module target
+
+Date: 2026-06-27
+
+Context: The framework is ESM-first and targets modern Node.js. Advisory notes recommended TypeScript 6.0.3 with NodeNext and strict settings.
+
+Decision: Pin `typescript@6.0.3`, configure ESM-first `NodeNext`, and enable modern strict compiler settings in `tsconfig.base.json`. Keep a documented fallback to TypeScript 5.9 if compatibility with released dependencies fails in a later verification or review task.
+
+Alternatives considered:
+
+- TypeScript 5.9 immediately. Deferred because advisory guidance selected 6.0.3 and the task should start from the intended current compiler.
+- CommonJS output. Rejected because the framework and selected ecosystem are ESM-first.
+
+Consequences:
+
+- Package source imports use NodeNext-compatible `.js` specifiers.
+- Later runtime tasks must preserve explicit public API types and TypeDoc comments.
+
+## D-0022: T-0002 linting, formatting, testing, coverage, and API docs
+
+Date: 2026-06-27
+
+Context: The repository needs quality gates from the start without duplicating `CODE_QUALITY.md`. Advisory notes recommended ESLint flat config, `typescript-eslint@8.62.0`, Prettier 3.9.0, Vitest 4.1.9, V8 coverage, and TypeDoc 0.28.19.
+
+Decision: Use ESLint flat config with `typescript-eslint@8.62.0`, `eslint-config-prettier`, Prettier 3.9.0, Vitest 4.1.9 with `@vitest/coverage-v8@4.1.9`, and TypeDoc 0.28.19 native HTML output. Configure 90% coverage thresholds for the current skeleton exports and future meaningful source. Defer `typedoc-plugin-markdown`. Scope the initial Prettier scripts to T-0002-owned scaffold/config/docs/log files so the bootstrap does not reformat unrelated prior protocol or research documents.
+
+Alternatives considered:
+
+- Biome or Oxlint as primary lint/format tooling. Rejected/deferred because ESLint plus typescript-eslint gives mature type-aware rules for this bootstrap.
+- TypeDoc Markdown output. Deferred because native HTML is canonical for now and avoids another plugin dependency.
+
+Consequences:
+
+- Generated docs output lives under `docs/api/reference` and is ignored by Git.
+- The current coverage gate is satisfied by metadata-only skeleton tests; future tasks must add behavior-level tests as runtime code appears.
+- TypeDoc currently emits one warning because the local `origin` remote is not valid for source links; HTML generation still succeeds with zero errors.
+
+## D-0023: T-0002 Buf and Protobuf-ES bootstrap
+
+Date: 2026-06-27
+
+Context: The technical spec requires Buf and Protobuf-ES, but T-0002 must not copy Spine proto files. Advisory notes recommended current Buf/Protobuf-ES package versions and v2 config stubs.
+
+Decision: Install `@bufbuild/buf@1.71.0`, `@bufbuild/protobuf@2.12.1`, and `@bufbuild/protoc-gen-es@2.12.1`. Add `buf.yaml` and `buf.gen.yaml` v2 stubs with `target=ts`, `import_extension=js`, and local `protoc-gen-es`. Add a proto workflow script that exits successfully with an explicit deferred message while `proto/` contains no `.proto` files. Approve only `@bufbuild/buf` in pnpm `onlyBuiltDependencies`, because pnpm flagged its postinstall build script during verification.
+
+Alternatives considered:
+
+- Copy Spine proto files during T-0002. Rejected because proto intake is out of scope for this task.
+- Use `ts-proto`, `protobuf.js`, or hand-written bindings. Rejected by the Protobuf contract.
+
+Consequences:
+
+- `pnpm proto:lint` and `pnpm proto:generate` are realistic commands now and become real Buf invocations after proto intake.
+- Generated Protobuf-ES output is expected under `packages/proto/src/generated` and is excluded from lint, coverage, and docs.
+
+## D-0024: T-0002 deferred runtime dependencies and skill-install attempt
+
+Date: 2026-06-27
+
+Context: Advisory notes covered validation, gRPC, ZeroMQ, and Codex skills. T-0002 owns tooling only and must not implement runtime adapters or services.
+
+Decision: Do not install `@spine-event-engine/validation-ts`, Connect/gRPC packages, or `zeromq` in T-0002. Record validation-ts as mandatory but deferred to the validation/proto task; current advisory note: latest `2.0.0-snapshot.1`, snapshot `2.0.0-snapshot.4`, peer `@bufbuild/protobuf ^2.10.2`. Prefer Connect-ES v2 candidates in the future server service-contract task, with `grpc-js` fallback only. Prefer `zeromq@6` in the future transport adapter task, deferred because it introduces native addon/runtime scope.
+
+Also record that skills listing was repeated via `skill-installer` and failed with GitHub HTTP 401; no skill was installed and the failure is non-blocking for T-0002.
+
+Alternatives considered:
+
+- Install validation, gRPC, and ZeroMQ dependencies immediately. Rejected because that would widen T-0002 into runtime scope and make native/runtime verification premature.
+- Treat the skills-listing failure as blocking. Rejected because the task has enough explicit advisory input and no required skill was available.
+
+Consequences:
+
+- Runtime dependency selection remains auditable without adding unused packages.
+- Later validation, service-contract, and transport tasks must pin and smoke test their own dependencies when they enter scope.

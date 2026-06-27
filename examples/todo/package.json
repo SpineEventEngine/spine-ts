@@ -1,0 +1,18 @@
+{
+  "name": "@spine-ts/example-todo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Placeholder to-do example for Spine TS.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "USER_GUIDE.md"
+  ]
+}

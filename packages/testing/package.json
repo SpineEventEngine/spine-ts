@@ -1,0 +1,17 @@
+{
+  "name": "@spine-ts/testing",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Spine TS testing utilities package skeleton.",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

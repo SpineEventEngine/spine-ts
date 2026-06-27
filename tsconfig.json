@@ -1,0 +1,12 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/proto" },
+    { "path": "./packages/core" },
+    { "path": "./packages/server" },
+    { "path": "./packages/transport" },
+    { "path": "./packages/storage" },
+    { "path": "./packages/testing" },
+    { "path": "./examples/todo" }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "name": "spine-ts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.9.0",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -b",
+    "lint": "eslint .",
+    "format:check": "prettier --check \"*.{json,md,yaml,yml,mjs,ts}\" \".*.json\" \"docs/**/*.md\" \"packages/**/*.{json,md,ts}\" \"examples/**/*.{json,md,ts}\" \"proto/**/*.md\" \"scripts/**/*.mjs\" \"build-protocol/DECISION_LOG.md\" \"build-protocol/tasks/T-0002-workspace-toolchain-bootstrap/TASK.md\" \"build-protocol/work-logs/T-0002.md\"",
+    "format": "prettier --write \"*.{json,md,yaml,yml,mjs,ts}\" \".*.json\" \"docs/**/*.md\" \"packages/**/*.{json,md,ts}\" \"examples/**/*.{json,md,ts}\" \"proto/**/*.md\" \"scripts/**/*.mjs\" \"build-protocol/DECISION_LOG.md\" \"build-protocol/tasks/T-0002-workspace-toolchain-bootstrap/TASK.md\" \"build-protocol/work-logs/T-0002.md\"",
+    "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --coverage --passWithNoTests",
+    "docs:api": "typedoc --options typedoc.json",
+    "docs:check": "typedoc --options typedoc.json",
+    "proto:lint": "node scripts/proto-workflow.mjs lint",
+    "proto:generate": "node scripts/proto-workflow.mjs generate",
+    "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm test:coverage && pnpm docs:check && pnpm proto:lint && pnpm proto:generate"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "1.71.0",
+    "@bufbuild/protoc-gen-es": "2.12.1",
+    "@eslint/js": "9.39.1",
+    "@vitest/coverage-v8": "4.1.9",
+    "eslint": "9.39.1",
+    "eslint-config-prettier": "10.1.8",
+    "prettier": "3.9.0",
+    "typedoc": "0.28.19",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.62.0",
+    "vitest": "4.1.9"
+  }
+}

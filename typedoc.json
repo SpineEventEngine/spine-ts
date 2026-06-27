@@ -1,0 +1,17 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "packages/proto/src/index.ts",
+    "packages/core/src/index.ts",
+    "packages/server/src/index.ts",
+    "packages/transport/src/index.ts",
+    "packages/storage/src/index.ts",
+    "packages/testing/src/index.ts",
+    "examples/todo/src/index.ts"
+  ],
+  "out": "docs/api/reference",
+  "readme": "docs/api/README.md",
+  "exclude": ["**/dist/**", "**/coverage/**", "**/*.test.ts", "packages/proto/src/generated/**"],
+  "cleanOutputDir": true,
+  "includeVersion": true
+}

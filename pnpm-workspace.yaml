@@ -1,0 +1,9 @@
+packages:
+  - "packages/*"
+  - "examples/*"
+confirmModulesPurge: false
+minimumReleaseAge: 0
+onlyBuiltDependencies:
+  - "@bufbuild/buf"
+allowBuilds:
+  "@bufbuild/buf": true
