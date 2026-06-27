@@ -7,6 +7,7 @@ export default tseslint.config(
     ignores: [
       "**/dist/**",
       "**/coverage/**",
+      ".worktrees/**",
       "docs/api/reference/**",
       "packages/proto/src/generated/**",
       "eslint.config.mjs",

@@ -1,6 +1,6 @@
 # T-0002: Workspace And Toolchain Bootstrap
 
-Status: Ready for final clearance re-check
+Status: Ready for post-merge verification re-check
 Start: `2026-06-27 17:27 WEST`
 End: `2026-06-27 19:45 WEST`
 Baseline commit: `0566998`
@@ -8,12 +8,12 @@ Task log path: `build-protocol/tasks/T-0002-workspace-toolchain-bootstrap/TASK.m
 Branch: `task/T-0002-toolchain`
 Worktree: `.worktrees/T-0002-toolchain`
 Authoring sub-agent: Codex implementation sub-agent, senior TypeScript/Node platform engineer persona
-Reviewer sub-agents: Review rounds 1, 2, 3, and final-clearance findings recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`
+Reviewer sub-agents: Review rounds 1, 2, 3, final-clearance findings, and post-merge verification findings recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`
 Implementation commit: `a937649`
 Review round 1 fix commit: `a0638218ec2b5caa786f958333a00af6a9fcbf4c`
 Review round 1 handoff evidence commit: `ee611a203ee40387b4ffb09451489d25c98cb01b`
 Review round 2 fix/evidence commit: `39f60d031d805e4a112bbf9a8f12660edf186107`
-Active reviewed state convention: the final focused-clearance fix/evidence-log successor follows `4ec192eaf9d0995e7bc07659d329338be2b63a9d`; because a commit cannot embed its own hash before it exists, recovery must verify the actual branch tip with `git rev-parse HEAD` and rerun recorded checks against `main...HEAD`.
+Active reviewed state convention: the post-merge verification fix/evidence-log successor follows `96593628ecf6082e9162923f359130dcadd23911`; because a commit cannot embed its own hash before it exists, recovery must verify the actual branch tip with `git rev-parse HEAD` and rerun recorded checks against `main...HEAD`.
 
 ## Objective
 
@@ -124,6 +124,8 @@ Out of scope:
 - `2026-06-27 20:50 WEST`: Ran final clearance verification: `CI=true pnpm verify`, effective pnpm dependency-state check, diff whitespace checks, status check, and stale-wording search passed or produced the expected pre-commit modified-file list.
 - `2026-06-27 21:05 WEST`: Verified final focused-clearance findings, updated task/work/review recovery state after successor `4ec192e`, and made pnpm release-age protection explicit with narrow reviewed exclusions.
 - `2026-06-27 21:08 WEST`: Refreshed pnpm dependency-state metadata after package-policy config changed and ran final focused-clearance verification with explicit release-age checks.
+- `2026-06-27 21:10 WEST`: Reproduced post-merge verification failure from the repository root containing `.worktrees/`, then added `.worktrees/**` to ESLint flat-config ignores.
+- `2026-06-27 21:12 WEST`: Ran post-merge verification-fix checks: worktree `CI=true pnpm verify`, root ESLint probe with equivalent `.worktrees/**` ignore pattern, diff whitespace check, status check, and ESLint-ignore search.
 
 ## Decisions
 
@@ -184,6 +186,8 @@ Out of scope:
 - `pnpm approve-builds @bufbuild/buf` - passed; only Buf's postinstall was approved.
 - `CI=true pnpm install` - passed after moving pnpm settings into `pnpm-workspace.yaml`.
 - `CI=true pnpm lint` - passed after scoping type-aware TypeScript ESLint rules to `.ts` files.
+- Post-merge root ESLint probe: `CI=true pnpm exec eslint .` from the repository root containing `.worktrees/` failed before this fix because ESLint linted `.worktrees/T-0002-toolchain/**`.
+- Post-merge root ESLint probe with equivalent ignore: `CI=true pnpm exec eslint . --ignore-pattern '.worktrees/**'` from the repository root containing `.worktrees/` passed; branch config must be rechecked on main after this fix is merged.
 - `CI=true pnpm proto:lint` - passed; no `.proto` files found, Buf lint deferred until proto intake.
 - `CI=true pnpm proto:generate` - passed; no `.proto` files found, Buf generation deferred until proto intake.
 - `CI=true pnpm verify` - passed.
@@ -235,6 +239,7 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 - Reviewer state search - passed; task log no longer says reviewer sub-agents are pending.
 - Review evidence link search - passed; task log links `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`.
 - Recovery wording search - passed; no stale moving-head wording remains in T-0002 task/work/review logs.
+- Post-merge root ESLint probe with equivalent ignore - passed; the main orchestrator must rerun `CI=true pnpm verify` on main after this fix is merged so the branch config is active at the root.
 - Round 3 documentation fix search - passed; review evidence now contains `Reviewer Skill-Gate Evidence`, selected/skipped skill columns, and honest unknown/N/A notes where earlier reviewer logs were not committed.
 - `pnpm config get engine-strict` - returned `true`.
 - `pnpm config get verify-deps-before-run` - returned `error`.
@@ -261,8 +266,8 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 
 ## Review Rounds
 
-- Review rounds 1, 2, 3, and final clearance returned important findings; dispositions and reviewer skill-gate evidence are recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`.
+- Review rounds 1, 2, 3, final clearance, and post-merge verification returned important findings; dispositions and reviewer skill-gate evidence are recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`.
 
 ## Integration Result
 
-Not integrated. Branch is ready for final re-check and integration review from the actual branch tip.
+Not integrated. Branch is ready for post-merge verification re-check after this fix is merged.

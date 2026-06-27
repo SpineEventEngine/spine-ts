@@ -10,8 +10,9 @@ Review round 1 fix commit: `a0638218ec2b5caa786f958333a00af6a9fcbf4c`
 Review round 1 handoff evidence commit: `ee611a203ee40387b4ffb09451489d25c98cb01b`
 Review round 2 fix/evidence commit: `39f60d031d805e4a112bbf9a8f12660edf186107`
 Final clearance successor commit before this fix: `4ec192eaf9d0995e7bc07659d329338be2b63a9d`
-Active reviewed state convention: the final focused-clearance fix/evidence-log successor follows `4ec192eaf9d0995e7bc07659d329338be2b63a9d`; recovery must verify the actual branch tip with `git rev-parse HEAD` and rerun recorded checks against `main...HEAD`.
-Status: Final focused-clearance findings accepted and fixed in the successor after `4ec192e`; ready for final re-check and integration review from the actual branch tip. Not integrated.
+Final focused-clearance successor commit before this fix: `96593628ecf6082e9162923f359130dcadd23911`
+Active reviewed state convention: the post-merge verification fix/evidence-log successor follows `96593628ecf6082e9162923f359130dcadd23911`; recovery must verify the actual branch tip with `git rev-parse HEAD` and rerun recorded checks against `main...HEAD`.
+Status: Post-merge verification finding accepted and fixed in the successor after `9659362`; ready for post-merge verification re-check after this fix is merged. Not integrated.
 
 ## Reviewer Rounds
 
@@ -21,6 +22,7 @@ Status: Final focused-clearance findings accepted and fixed in the successor aft
 | 2     | `T-0002-review-round-2`  | Protocol evidence and TypeScript/tooling review | `ee611a203ee40387b4ffb09451489d25c98cb01b`              | Three findings accepted and fixed in `39f60d0`.                                        |
 | 3     | `T-0002-review-round-3`  | Documentation review                            | `39f60d031d805e4a112bbf9a8f12660edf186107`              | One documentation finding accepted and fixed.                                          |
 | Final | `T-0002-final-clearance` | Durable recovery and package-policy review      | `4ec192eaf9d0995e7bc07659d329338be2b63a9d`              | Two findings accepted and fixed in the successor after `4ec192e`.                      |
+| Post  | `T-0002-post-merge`      | Post-merge verification review                  | `96593628ecf6082e9162923f359130dcadd23911`              | Main verification failure accepted and fixed in the successor after `9659362`.         |
 
 ## Reviewer Skill-Gate Evidence
 
@@ -32,6 +34,7 @@ Review-skill evidence is reconstructed from committed logs and review handoff te
 | 2     | `T-0002-review-round-2`  | Protocol evidence and TypeScript/tooling review | Protocol required `BUILD_PROTOCOL.md#skills-and-tooling`; task log passed `EXPECTED_SKILLS.md` and selected implementer skill paths to reviewers. No separate round-2 reviewer skill log was committed.                                | Unknown from durable evidence. Likely applicable review skills were `requesting-code-review`, `verification-before-completion`, `architecture-decision-records`, `typescript-advanced-types`, `javascript-testing-patterns`, and `monorepo-management`; not recorded as selected by the reviewer.                                     | Unknown from durable evidence. Runtime/domain, security-specific, planning, and TDD skills were relevant-looking but no reviewer skip list was committed.                                                                                                                                                               | Unknown. Round-2 findings show protocol evidence and TypeScript/tooling review was performed, but selected/read skill bodies were not durably recorded before this evidence update. |
 | 3     | `T-0002-review-round-3`  | Documentation review                            | Round-3 review finding explicitly applied the merged protocol requirement that each review role record canonical skill applicability evidence. The current durable record does not expose a separate reviewer skill inventory command. | `doc-coauthoring` would be applicable to documentation review when available; `architecture-decision-records` is relevant to durable decision/evidence docs; `requesting-code-review` and `verification-before-completion` are relevant to review handoff/verification. The reviewer did not provide a committed selected-skill list. | Runtime/domain skills (`architecture-patterns`, `api-design-principles`, CQRS/projection/event-store/saga skills), `security-best-practices`, `security-threat-model`, and TDD/testing skills are skipped for this documentation-only finding because no runtime/security/test behavior change was reviewed in round 3. | Partially known. The reviewer applied the protocol skill-gate requirement in the finding; no durable evidence says the reviewer read specific `SKILL.md` bodies.                    |
 | Final | `T-0002-final-clearance` | Durable recovery and package-policy review      | Final focused-clearance prompt required receiving-code-review discipline for the implementer; no separate reviewer skill inventory or skill-read log was committed with the findings.                                                  | Unknown from durable reviewer evidence. Applicable reviewer skills likely included `verification-before-completion`, `architecture-decision-records`, `monorepo-management`, and package/security review skills for pnpm policy, but the reviewer did not provide a committed selected-skill list.                                    | Unknown from durable reviewer evidence. Runtime/domain, API-design, transport, storage, and TDD skills were relevant-looking but not implicated by the documentation/package-policy findings.                                                                                                                           | Unknown. Findings show durable recovery and pnpm policy review was performed; selected/read reviewer skill bodies were not durably recorded.                                        |
+| Post  | `T-0002-post-merge`      | Post-merge verification review                  | Post-merge failure evidence came from main verification plus a local root ESLint probe; no separate reviewer skill inventory or skill-read log was committed with the finding.                                                         | Unknown from durable reviewer evidence. Applicable skills likely included `verification-before-completion` and JavaScript/TypeScript tooling review skills; the reviewer did not provide a committed selected-skill list.                                                                                                             | Unknown from durable reviewer evidence. Runtime/domain, API-design, transport, storage, and TDD skills were not implicated by this generated/local-workspace lint traversal finding.                                                                                                                                    | Unknown. Findings and local probe show post-merge verification review was performed; selected/read reviewer skill bodies were not durably recorded.                                 |
 
 ## Round 1 Findings
 
@@ -64,7 +67,13 @@ Review-skill evidence is reconstructed from committed logs and review handoff te
 | Durable review/recovery state was stale after final-clearance successor `4ec192e`.            | Accepted/fixed. | Task, work, and review logs now use the final focused-clearance successor convention after `4ec192e` and avoid round-4-only handoff wording.           |
 | `minimumReleaseAgeExclude` entries were inert because no project `minimumReleaseAge` existed. | Accepted/fixed. | Added repo-local `minimumReleaseAge: 1440` and kept only the two reviewed package/version exclusions; decision and logs now describe repo enforcement. |
 
-## Verification Requested For Final Re-Check
+## Post-Merge Verification Finding
+
+| Finding                                                                                                                       | Disposition     | Fix Evidence                                                                                                                                                  |
+| ----------------------------------------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| After fast-forward merge, `CI=true pnpm verify` on main failed because ESLint walked project-local `.worktrees/` directories. | Accepted/fixed. | Added `.worktrees/**` to `eslint.config.mjs` ignores and recorded root-level ESLint probes that reproduced the failure and passed with the equivalent ignore. |
+
+## Verification Requested For Post-Merge Re-Check
 
 - `CI=true pnpm verify`
 - `pnpm config get verify-deps-before-run`
@@ -72,7 +81,9 @@ Review-skill evidence is reconstructed from committed logs and review handoff te
 - `pnpm config get minimumReleaseAgeExclude`
 - `git diff --check main...HEAD`
 - `git status --short --branch`
-- Search/check showing no stale round-4-only or pre-successor recovery wording remains.
+- Search/check showing `.worktrees` is ignored by ESLint config.
+- Root ESLint probe with equivalent ignore passed; branch config must be rechecked by running `CI=true pnpm verify` on main after this fix is merged.
+- Main orchestrator should rerun full `CI=true pnpm verify` on main after merging this fix.
 
 ## Known Residual Warning
 
