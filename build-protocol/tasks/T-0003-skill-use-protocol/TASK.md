@@ -1,8 +1,8 @@
 # T-0003: Installed Skill Use Protocol
 
-Status: Ready for review round 4
+Status: Ready for review round 5
 Start: `2026-06-27 18:10 WEST`
-End: `2026-06-27 18:37 WEST`
+End: Pending
 Baseline commit: `0566998`
 Task log path: `build-protocol/tasks/T-0003-skill-use-protocol/TASK.md`
 Branch: `task/T-0003-skill-use-protocol`
@@ -49,7 +49,7 @@ Canonical checklist evidence:
 
 | Source | Scope Checked | Evidence |
 | --- | --- | --- |
-| Session skill inventory | Task-relevant subset from session-provided skills. | T-0003 prompt named eight installed skills; round 2 additionally used `receiving-code-review` and `verification-before-completion`. |
+| Session skill inventory | Bounded task-relevant subset from session-provided skills. | T-0003 prompt named eight installed skills; round 2 additionally used `receiving-code-review` and `verification-before-completion`; full inventory dump not required. |
 | Task-provided skill names/paths | Checked task-provided names/paths. | Orchestrator instructions for T-0003. |
 | `build-protocol/skills/EXPECTED_SKILLS.md` | Added and checked. | Manifest lists expected installed skills and source repos. |
 | `~/.agents/skills/*/SKILL.md` | Full user skill directory entrypoint enumeration checked in round 2. | `find ~/.agents/skills -maxdepth 2 -type f -name SKILL.md -print` listed available user-installed skill entrypoints. |

@@ -30,7 +30,7 @@ Skill sources checked:
 
 | Source | Scope Checked | Evidence |
 | --- | --- | --- |
-| Session skill inventory | `<full session list, task-relevant subset, or unavailable>` | `<source or failure>` |
+| Session skill inventory | `<bounded task-relevant subset, or unavailable>` | `<source/provenance or failure; full inventory dump not required>` |
 | Task-provided skill names/paths | `<checked paths/names or N/A>` | `<prompt/task source>` |
 | `build-protocol/skills/EXPECTED_SKILLS.md` | `<checked or N/A>` | `<result>` |
 | `~/.agents/skills/*/SKILL.md` | `<full directory, task-provided paths only, or unreachable>` | `<command/source/failure>` |

@@ -95,9 +95,11 @@ Canonical skill applicability checklist:
 
 1. Create or update the task/review log in the same initial atomic step as this
    check, before other task work.
-2. Capture the session skill inventory exposed to the agent, including built-in
-   and currently available skills. Record the source of that inventory, or
-   record that no session inventory was exposed.
+2. Capture bounded, task-relevant evidence from the session skill inventory
+   exposed to the agent, including applicable built-in and currently available
+   skills. A full inventory dump is not required when the source/provenance and
+   task-relevant subset are recorded. Record that no session inventory was
+   exposed when applicable.
 3. Capture task-provided skill names or paths from the orchestrator prompt,
    task brief, or review assignment.
 4. Check the repo-local expected-skill manifest at
