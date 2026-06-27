@@ -176,7 +176,7 @@ Date: 2026-06-27
 
 Context: T-0002 initializes the implementation workspace without runtime behavior. Advisory tooling notes were available for package management, TypeScript, lint/format, test/coverage, docs, Buf/Protobuf-ES, validation, gRPC, and ZeroMQ dependency timing.
 
-Decision: Use pnpm workspaces with `packageManager: pnpm@11.9.0`, TypeScript project references, and no Nx/Turbo layer initially. Use Node 24 LTS as the minimum engine. Keep packages private while the framework API is skeletal. Add `engine-strict=true`, pnpm `engineStrict: true`, `.node-version`, and a `check:node` verification script so local and CI verification fail under unsupported Node versions. Keep `confirmModulesPurge: false` for non-interactive recovery after interrupted installs and `verifyDepsBeforeRun: false` so script execution trusts an already-established lockfile instead of performing script-time auto-installs.
+Decision: Use pnpm workspaces with `packageManager: pnpm@11.9.0`, TypeScript project references, and no Nx/Turbo layer initially. Use Node 24 LTS as the minimum engine. Keep packages private while the framework API is skeletal. Add `engine-strict=true`, pnpm `engineStrict: true`, `.node-version`, and a `check:node` verification script so local and CI verification fail under unsupported Node versions. Keep `confirmModulesPurge: false` for non-interactive recovery after interrupted installs. Set pnpm `verifyDepsBeforeRun: error` so script execution fails instead of silently continuing or auto-installing when dependency state is stale. Add narrow `minimumReleaseAgeExclude` entries for the already reviewed fresh lockfile pins `prettier@3.9.0` and `js-yaml@4.3.0` instead of a global freshness bypass.
 
 Alternatives considered:
 
@@ -186,9 +186,9 @@ Alternatives considered:
 Consequences:
 
 - Root scripts call the standard pnpm workspace toolchain directly.
-- One-time release-age policy exceptions were used while creating/updating the lockfile because the task explicitly pinned fresh packages, including `prettier@3.9.0`; the bypass is not retained as a repo default.
+- One-time release-age policy exceptions were used while creating/updating the lockfile because the task explicitly pinned fresh packages, including `prettier@3.9.0`; the broad bypass is not retained as a repo default, and remaining fresh entries use explicit package/version exclusions.
 - Non-interactive runs avoid TTY purge prompts after interrupted installs.
-- Normal installs remain subject to the active host freshness policy; scripts skip pnpm's auto-install/dependency-status preflight to avoid rechecking a trusted lockfile on every `pnpm run`.
+- Normal installs remain subject to the active host freshness policy; scripts also keep pnpm's dependency-state pre-run verification enabled in fail-fast mode.
 - Verification explicitly checks Node major version before TypeScript, lint, tests, docs, or proto stubs run.
 - Reviewers should revisit task-runner adoption only after package graph complexity or CI time makes it useful.
 

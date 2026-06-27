@@ -3,7 +3,10 @@ packages:
   - "examples/*"
 confirmModulesPurge: false
 engineStrict: true
-verifyDepsBeforeRun: false
+minimumReleaseAgeExclude:
+  - js-yaml@4.3.0
+  - prettier@3.9.0
+verifyDepsBeforeRun: error
 onlyBuiltDependencies:
   - "@bufbuild/buf"
 allowBuilds:

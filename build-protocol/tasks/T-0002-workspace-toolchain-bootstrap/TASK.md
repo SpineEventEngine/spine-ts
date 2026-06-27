@@ -1,6 +1,6 @@
 # T-0002: Workspace And Toolchain Bootstrap
 
-Status: Ready for review round 4
+Status: Ready for final clearance re-check
 Start: `2026-06-27 17:27 WEST`
 End: `2026-06-27 19:45 WEST`
 Baseline commit: `0566998`
@@ -13,7 +13,7 @@ Implementation commit: `a937649`
 Review round 1 fix commit: `a0638218ec2b5caa786f958333a00af6a9fcbf4c`
 Review round 1 handoff evidence commit: `ee611a203ee40387b4ffb09451489d25c98cb01b`
 Review round 2 fix/evidence commit: `39f60d031d805e4a112bbf9a8f12660edf186107`
-Active reviewed state convention: the review round 3 documentation fix/evidence-log successor follows `39f60d031d805e4a112bbf9a8f12660edf186107`; because a commit cannot embed its own hash before it exists, recovery must verify the actual branch tip with `git rev-parse HEAD` and rerun recorded checks against `main...HEAD`.
+Active reviewed state convention: the final clearance fix/evidence-log successor follows `5b3e79c113621346db3c40f2c19db64108339d64`; because a commit cannot embed its own hash before it exists, recovery must verify the actual branch tip with `git rev-parse HEAD` and rerun recorded checks against `main...HEAD`.
 
 ## Objective
 
@@ -63,7 +63,7 @@ Selected skills read before governed actions:
 | `verification-before-completion` | `~/.agents/skills/verification-before-completion/SKILL.md` | Required before claiming or committing passing work.                             | Will run fresh install and verification commands before commit/final status.                                                     |
 | `subagent-driven-development`    | `~/.agents/skills/subagent-driven-development/SKILL.md`    | T-0002 is executed by an implementation sub-agent under the repo review loop.    | Applied durable progress logging and review-loop awareness; no new sub-subagents spawned from this implementation role.          |
 | `requesting-code-review`         | `~/.agents/skills/requesting-code-review/SKILL.md`         | Branch must be handed off ready for review round 1.                              | Final handoff will report commit/diff basis and verification for reviewer dispatch.                                              |
-| `receiving-code-review`          | `~/.agents/skills/receiving-code-review/SKILL.md`          | Future review feedback must be evaluated rigorously.                             | Recorded for review loop readiness; no reviewer findings have been received yet.                                                 |
+| `receiving-code-review`          | `~/.agents/skills/receiving-code-review/SKILL.md`          | Review feedback must be evaluated rigorously before fixes.                       | Applied in review rounds 1 through final clearance to verify findings before focused fixes.                                      |
 
 Skills passed to sub-agents/reviewers:
 
@@ -120,6 +120,8 @@ Out of scope:
 - `2026-06-27 20:14 WEST`: Ran round 2 fix verification: `CI=true pnpm verify`, standalone tooling TS typecheck, diff whitespace check, reviewer-state search, review-evidence link search, and recovery-wording search all passed.
 - `2026-06-27 20:24 WEST`: Verified T-0002 review round 3 documentation finding and added concise reviewer skill-gate evidence with selected/skipped skill records and honest unknowns for earlier rounds where reviewer skill logs were not committed.
 - `2026-06-27 20:25 WEST`: Ran round 3 documentation-fix verification: `CI=true pnpm verify`, diff whitespace check, status check, and review skill-gate evidence search all passed or produced the expected pre-commit modified-file list.
+- `2026-06-27 20:40 WEST`: Verified final clearance findings, removed stale no-reviewer-findings wording, and changed pnpm dependency-state pre-run verification from disabled to `error`.
+- `2026-06-27 20:50 WEST`: Ran final clearance verification: `CI=true pnpm verify`, effective pnpm dependency-state check, diff whitespace checks, status check, and stale-wording search passed or produced the expected pre-commit modified-file list.
 
 ## Decisions
 
