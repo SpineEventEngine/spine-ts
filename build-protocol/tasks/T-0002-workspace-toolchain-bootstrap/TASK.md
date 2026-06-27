@@ -8,7 +8,7 @@ Task log path: `build-protocol/tasks/T-0002-workspace-toolchain-bootstrap/TASK.m
 Branch: `task/T-0002-toolchain`
 Worktree: `.worktrees/T-0002-toolchain`
 Authoring sub-agent: Codex implementation sub-agent, senior TypeScript/Node platform engineer persona
-Reviewer sub-agents: Review rounds 1 and 2 recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`
+Reviewer sub-agents: Review rounds 1, 2, and 3 recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`
 Implementation commit: `a937649`
 Review round 1 fix commit: `a0638218ec2b5caa786f958333a00af6a9fcbf4c`
 Review round 1 handoff evidence commit: `ee611a203ee40387b4ffb09451489d25c98cb01b`

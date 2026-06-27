@@ -18,7 +18,7 @@ Status: Round 3 documentation finding accepted and fixed; ready for review round
 | ----- | ----------------------- | ----------------------------------------------- | ------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | 1     | `T-0002-review-round-1` | Protocol/toolchain/governance review            | `d26b016670ae6729d52739d4765977a7bfbbec83` before fixes | Five findings accepted and fixed in `a063821`; handoff evidence recorded in `ee611a2`. |
 | 2     | `T-0002-review-round-2` | Protocol evidence and TypeScript/tooling review | `ee611a203ee40387b4ffb09451489d25c98cb01b`              | Three findings accepted and fixed in `39f60d0`.                                        |
-| 3     | `T-0002-review-round-3` | Documentation review                            | `39f60d031d805e4a112bbf9a8f12660edf186107`              | One documentation finding accepted and fixed; other round-3 reviewer roles were clean. |
+| 3     | `T-0002-review-round-3` | Documentation review                            | `39f60d031d805e4a112bbf9a8f12660edf186107`              | One documentation finding accepted and fixed.                                          |
 
 ## Reviewer Skill-Gate Evidence
 
