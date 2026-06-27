@@ -1,16 +1,16 @@
 # T-0002: Workspace And Toolchain Bootstrap
 
-Status: In progress
+Status: Ready for review round 1
 Start: `2026-06-27 17:27 WEST`
-End: Pending
+End: `2026-06-27 19:45 WEST`
 Baseline commit: `0566998`
 Task log path: `build-protocol/tasks/T-0002-workspace-toolchain-bootstrap/TASK.md`
 Branch: `task/T-0002-toolchain`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0002-toolchain`
 Authoring sub-agent: Codex implementation sub-agent, senior TypeScript/Node platform engineer persona
 Reviewer sub-agents: Pending
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
+Implementation commit: `a937649`
+Final branch HEAD: Final handoff commit follows implementation commit; see final handoff response for exact HEAD.
 
 ## Objective
 
@@ -110,6 +110,7 @@ Out of scope:
 - `2026-06-27 19:05 WEST`: Ran and recorded the T-0003 canonical skill applicability gate for T-0002.
 - `2026-06-27 19:20 WEST`: Installed dependencies with pnpm 11.9.0 after recording a release-age policy exception for explicit fresh pins and approving only `@bufbuild/buf` build scripts.
 - `2026-06-27 19:35 WEST`: Ran full verification successfully: typecheck, lint, format check, tests, coverage, TypeDoc, proto lint stub, and proto generate stub.
+- `2026-06-27 19:45 WEST`: Committed implementation as `a937649`, dropped temporary pre-merge stash, and prepared branch for review round 1.
 
 ## Decisions
 
@@ -222,12 +223,12 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 | Earlier local shell lacked Corepack while the package manager decision targets pnpm via Corepack. | T-0002 author           | D-0020               | Resolved by host update to corepack `0.35.0` and pnpm `11.9.0`                         | Verification and T-0002 review round 1 |
 | Repo-local `minimumReleaseAge: 0` weakens pnpm's freshness delay for explicit fresh pins.         | Future tooling owner    | D-0020               | Accepted for T-0002 due explicit requested versions; revisit once pins age past cutoff | T-0002 review round 1                  |
 | TypeDoc source links are broken because the local `origin` remote is invalid.                     | Future repository owner | D-0022               | Accepted warning for bootstrap; docs generation has 0 errors                           | T-0002 review round 1                  |
-| Git kept the pre-merge stash after conflict resolution.                                           | T-0002 author           | T-0002 work log      | To be dropped after commit confirms all edits are preserved                            | Before final handoff                   |
+| Git kept the pre-merge stash after conflict resolution.                                           | T-0002 author           | T-0002 work log      | Resolved; dropped temporary stash after implementation commit                          | T-0002 review round 1                  |
 
 ## Review Rounds
 
-- Pending.
+- Ready for review round 1; reviewers pending. Required reviewer perspectives remain code style/maintainability, documentation completeness, TypeScript/API docs, security, and performance/reliability.
 
 ## Integration Result
 
-Pending.
+Not integrated. Branch is ready for review round 1 only.
