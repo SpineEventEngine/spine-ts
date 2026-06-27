@@ -81,3 +81,42 @@ Consequences:
 
 - The initial repository history starts from the provided specification corpus plus the autonomous-process bootstrap logs.
 - Task implementation branches are traceable from the first durable baseline commit.
+
+## D-0017: Reusable governance templates without duplicated quality rules
+
+Date: 2026-06-27
+
+Context: T-0001 creates durable task, work-log, review-log, question-log, and decision templates before runtime implementation begins. Future agents need consistent files for resumability, but the repository already has `build-protocol/CODE_QUALITY.md` as the seed for authoritative quality rules.
+
+Decision: Add reusable governance templates under `build-protocol/templates/` and contributor workflow notes in `build-protocol/CONTRIBUTOR_WORKFLOW.md`. Templates must link to `BUILD_PROTOCOL.md` and `CODE_QUALITY.md` for gates, quality rules, and reviewer expectations instead of copying those rules into each template.
+
+Alternatives considered:
+
+- Copy quality gates into every template. Rejected because copied rules drift and violate the non-duplication rule.
+- Defer templates until implementation code exists. Rejected because the build protocol requires durable logs before or alongside changes and reviewer loops need a stable scaffold.
+
+Consequences:
+
+- Future task agents can start from a consistent logging shape.
+- Reviewers can verify resumability and protocol compliance without comparing several duplicated quality-rule files.
+- Any future rule changes should be made in the authoritative protocol or quality documents, then referenced from templates as needed.
+
+## D-0018: Canonical governance paths and redacted logs
+
+Date: 2026-06-27
+
+Context: Review round 1 for T-0001 found that task logs could drift into parallel path shapes and unresolved-question references could imply lowercase/uppercase aliases. The same review asked for audit-friendly governance logs that do not commit sensitive values.
+
+Decision: Use `build-protocol/tasks/<task-slug>/TASK.md` as the canonical task-log path for new tasks, matching the existing bootstrap records. Use only `build-protocol/questions/UNRESOLVED.md` for unresolved questions. Governance logs and templates must record enough evidence for auditability while redacting tokens, credentials, auth headers, secret environment variables, sensitive local paths, and sensitive payloads.
+
+Alternatives considered:
+
+- Allow both flat task files and directory-style task records. Rejected because it creates parallel shapes for future agents.
+- Treat a case-only unresolved-questions path variant as an alias. Rejected because case-only ambiguity is fragile on macOS.
+- Log raw command outputs and payloads for maximum evidence. Rejected because audit logs must not commit secrets or sensitive local data.
+
+Consequences:
+
+- Future tasks have one obvious task-log location.
+- Reviewers can check unresolved questions in a single canonical file.
+- Logs should preserve decisions, command names, and outcomes, but redact sensitive values before commit.

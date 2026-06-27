@@ -14,6 +14,21 @@ The JVM research corpus lives in `../spine-jvm-docs`. This specification treats 
 6. [BUILD_PROTOCOL.md](BUILD_PROTOCOL.md) - autonomous Codex-on-macOS development protocol, sub-agent orchestration, worktrees, reviews, logs, quality gates, and interruption recovery.
 7. [CODE_QUALITY.md](CODE_QUALITY.md) - code quality, testing, documentation, TS documentation, security, performance, and tooling selection criteria used by all future coding/review agents.
 8. [DECISION_LOG.md](DECISION_LOG.md) - initial decisions captured while preparing this specification. Future development must append to this file for every decision.
+9. [CONTRIBUTOR_WORKFLOW.md](CONTRIBUTOR_WORKFLOW.md) - contributor workflow notes for task agents, reviewers, logs, handoff, and resumability.
+
+## Governance Templates
+
+Reusable templates live in `templates/`:
+
+- `TASK_LOG_TEMPLATE.md` for task and sub-task logs.
+- `WORK_LOG_TEMPLATE.md` for per-branch work logs.
+- `REVIEW_LOG_TEMPLATE.md` for reviewer rounds.
+- `UNRESOLVED_QUESTIONS_TEMPLATE.md` for blocking and non-blocking question logs.
+- `DECISION_RECORD_TEMPLATE.md` for ADR-style decision records.
+
+Templates link to `BUILD_PROTOCOL.md` and `CODE_QUALITY.md` instead of duplicating their rules. If a template appears to conflict with those documents, the protocol and quality docs win until a decision log entry changes the rule.
+
+New task logs use the canonical directory-style path `build-protocol/tasks/<task-slug>/TASK.md`, matching the existing bootstrap records. The canonical unresolved-questions log is `build-protocol/questions/UNRESOLVED.md`.
 
 ## Source Baseline
 
@@ -22,4 +37,3 @@ The JVM research corpus lives in `../spine-jvm-docs`. This specification treats 
 - Validation runtime: `SpineEventEngine/validation-ts`, observed at `2.0.0-snapshot.4` in the cloned research source.
 - Decorator baseline: TypeScript 5+ standard decorators. Legacy `experimentalDecorators` semantics and `emitDecoratorMetadata` must not be assumed unless explicitly isolated behind a compatibility adapter.
 - Local IPC baseline: ZeroMQ over local IPC only, hidden behind framework transport abstractions.
-
