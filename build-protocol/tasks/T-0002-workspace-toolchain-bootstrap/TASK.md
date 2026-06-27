@@ -210,6 +210,7 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 
 - Host toolchain checked: Node `v24.18.0`, corepack `0.35.0`, pnpm `11.9.0`.
 - `CI=true pnpm verify` - passed.
+- `git diff --check main...HEAD` - passed after commit.
 - TypeDoc warning reviewed: invalid local `origin` remote means source links are broken, but docs generation reports 0 errors and writes `docs/api/reference` (ignored).
 - Proto commands reviewed: both pass with explicit deferred behavior while `proto/` has no `.proto` files.
 
