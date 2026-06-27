@@ -1,16 +1,17 @@
 # T-0003: Installed Skill Use Protocol
 
-Status: Ready for review round 1
+Status: Ready for review round 2
 Start: `2026-06-27 18:10 WEST`
-End: `2026-06-27 18:26 WEST`
+End: `2026-06-27 18:37 WEST`
 Baseline commit: `0566998`
 Task log path: `build-protocol/tasks/T-0003-skill-use-protocol/TASK.md`
 Branch: `task/T-0003-skill-use-protocol`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0003-skill-use-protocol`
 Authoring sub-agent: Codex implementation sub-agent, senior agentic-workflow engineer
-Reviewer sub-agents: Pending
-Implementation commit: Branch commit created after this log update; see final handoff.
-Final branch HEAD: Branch commit created after this log update; see final handoff.
+Reviewer sub-agents: Consolidated review round 1
+Implementation commit: `be866f5`
+Reviewed HEAD: `be866f5`
+Final branch HEAD: Current branch tip after round 2 cleanup commit.
 
 ## Objective
 
@@ -26,35 +27,39 @@ Make installed skills an explicit, auditable part of autonomous agentic work so 
 - `build-protocol/work-logs/T-0003.md`
 - `build-protocol/CODE_QUALITY.md`
 - Installed skills:
-  - `/Users/armiol/.agents/skills/subagent-driven-development/SKILL.md`
-  - `/Users/armiol/.agents/skills/using-git-worktrees/SKILL.md`
-  - `/Users/armiol/.agents/skills/requesting-code-review/SKILL.md`
-  - `/Users/armiol/.agents/skills/verification-before-completion/SKILL.md`
-  - `/Users/armiol/.agents/skills/planning-with-files/SKILL.md`
-  - `/Users/armiol/.agents/skills/architecture-decision-records/SKILL.md`
-  - `/Users/armiol/.agents/skills/typescript-advanced-types/SKILL.md`
-  - `/Users/armiol/.agents/skills/nodejs-backend-patterns/SKILL.md`
+  - `~/.agents/skills/subagent-driven-development/SKILL.md`
+  - `~/.agents/skills/using-git-worktrees/SKILL.md`
+  - `~/.agents/skills/requesting-code-review/SKILL.md`
+  - `~/.agents/skills/verification-before-completion/SKILL.md`
+  - `~/.agents/skills/planning-with-files/SKILL.md`
+  - `~/.agents/skills/architecture-decision-records/SKILL.md`
+  - `~/.agents/skills/typescript-advanced-types/SKILL.md`
+  - `~/.agents/skills/nodejs-backend-patterns/SKILL.md`
+  - `~/.agents/skills/receiving-code-review/SKILL.md`
 
 ## Skill Applicability
 
-Installed skills checked:
+Canonical checklist evidence:
 
-- Built-in/session-available skills: checked from the session skill list.
-- User-installed skills under `~/.agents/skills`: checked for the task-provided installed skill paths.
-- Task-provided skill paths or names: checked from the orchestrator instructions for T-0003.
+| Source | Scope Checked | Evidence |
+| --- | --- | --- |
+| Session skill inventory | Task-relevant subset from session-provided skills. | T-0003 prompt named eight installed skills; round 2 additionally used `receiving-code-review` and `verification-before-completion`. |
+| Task-provided skill names/paths | Checked task-provided names/paths. | Orchestrator instructions for T-0003. |
+| `build-protocol/skills/EXPECTED_SKILLS.md` | Added and checked. | Manifest lists expected installed skills and source repos. |
+| `~/.agents/skills/*/SKILL.md` | Full user skill directory entrypoint enumeration checked in round 2. | `find ~/.agents/skills -maxdepth 2 -type f -name SKILL.md -print` listed available user-installed skill entrypoints. |
+| `~/.agents/.skill-lock.json` | Checked expected skill source repos and local relative paths. | Local lock manifest identified `obra/superpowers`, `othmanadi/planning-with-files`, and `wshobson/agents` sources. |
 
-Skills read before task actions:
+Selected skills applied before task actions:
 
 | Skill | Source | Applicability | Instructions Applied |
 | --- | --- | --- | --- |
-| `subagent-driven-development` | `/Users/armiol/.agents/skills/subagent-driven-development/SKILL.md` | Applicable to future orchestrator/sub-agent protocol. | Require precise sub-agent prompts, reviewer handoffs, durable progress, and review loops. |
-| `using-git-worktrees` | `/Users/armiol/.agents/skills/using-git-worktrees/SKILL.md` | Applicable to isolated task work. | Confirmed this session is already in the assigned linked worktree; no new worktree created. |
-| `requesting-code-review` | `/Users/armiol/.agents/skills/requesting-code-review/SKILL.md` | Applicable to review-ready handoff. | Reinforced review-before-merge and reviewer context requirements. |
-| `verification-before-completion` | `/Users/armiol/.agents/skills/verification-before-completion/SKILL.md` | Applicable before any completion claim or commit. | Verification results must be fresh and recorded before ready-for-review status. |
-| `planning-with-files` | `/Users/armiol/.agents/skills/planning-with-files/SKILL.md` | Applicable to durable multi-step planning. | Used existing task/work logs as persistent planning records; no extra plan files needed for this scoped governance task. |
-| `architecture-decision-records` | `/Users/armiol/.agents/skills/architecture-decision-records/SKILL.md` | Applicable because T-0003 creates a durable governance decision. | Added a concise `DECISION_LOG.md` entry rather than a separate ADR directory. |
-| `typescript-advanced-types` | `/Users/armiol/.agents/skills/typescript-advanced-types/SKILL.md` | Relevant-looking to the repository domain but not to this docs-only governance edit. | Read for applicability; no TypeScript type guidance applied because no runtime code changed. |
-| `nodejs-backend-patterns` | `/Users/armiol/.agents/skills/nodejs-backend-patterns/SKILL.md` | Relevant-looking to future backend tasks but not to this docs-only governance edit. | Read for applicability; no backend implementation guidance applied because no runtime code changed. |
+| `subagent-driven-development` | `~/.agents/skills/subagent-driven-development/SKILL.md` | Applicable to future orchestrator/sub-agent protocol. | Require precise sub-agent prompts, reviewer handoffs, durable progress, and review loops. |
+| `using-git-worktrees` | `~/.agents/skills/using-git-worktrees/SKILL.md` | Applicable to isolated task work. | Confirmed this session is already in the assigned linked worktree; no new worktree created. |
+| `requesting-code-review` | `~/.agents/skills/requesting-code-review/SKILL.md` | Applicable to review-ready handoff. | Reinforced review-before-merge and reviewer context requirements. |
+| `verification-before-completion` | `~/.agents/skills/verification-before-completion/SKILL.md` | Applicable before any completion claim or commit. | Verification results must be fresh and recorded before ready-for-review status. |
+| `planning-with-files` | `~/.agents/skills/planning-with-files/SKILL.md` | Applicable to durable multi-step planning. | Used existing task/work logs as persistent planning records; no extra plan files needed for this scoped governance task. |
+| `architecture-decision-records` | `~/.agents/skills/architecture-decision-records/SKILL.md` | Applicable because T-0003 creates a durable governance decision. | Added and revised a concise `DECISION_LOG.md` entry rather than a separate ADR directory. |
+| `receiving-code-review` | `~/.agents/skills/receiving-code-review/SKILL.md` | Applicable to round 1 feedback handling. | Evaluated comments against codebase state before cleanup edits. |
 
 Skills passed to sub-agents/reviewers:
 
@@ -67,12 +72,13 @@ Skipped relevant-looking skills:
 
 | Skill | Source | Reason Skipped |
 | --- | --- | --- |
-| `typescript-advanced-types` | `/Users/armiol/.agents/skills/typescript-advanced-types/SKILL.md` | Not task-applicable because T-0003 changes governance docs only and no TypeScript code or public API types. |
-| `nodejs-backend-patterns` | `/Users/armiol/.agents/skills/nodejs-backend-patterns/SKILL.md` | Not task-applicable because T-0003 changes governance docs only and no Node backend runtime. |
+| `typescript-advanced-types` | Session inventory and `~/.agents/.skill-lock.json` metadata. | Triaged as repository-domain relevant but not selected for application because T-0003 changes governance docs only and no TypeScript code or public API types. |
+| `nodejs-backend-patterns` | Session inventory and `~/.agents/.skill-lock.json` metadata. | Triaged as future-backend relevant but not selected for application because T-0003 changes governance docs only and no Node backend runtime. |
 
 Conflict resolution: no direct skill conflict required an exception. The new
-policy records that `BUILD_PROTOCOL.md`, `CODE_QUALITY.md`, and the task spec
-override installed skills when conflicts exist.
+policy records that `BUILD_PROTOCOL.md`, `CODE_QUALITY.md`, task scope,
+sandbox/approval rules, and explicit human/orchestrator authorization override
+installed skills when conflicts exist.
 
 ## Scope
 
@@ -97,6 +103,8 @@ Out of scope:
 - `2026-06-27 18:21 WEST`: Authoring sub-agent read required protocol docs, task logs, `CODE_QUALITY.md`, and installed skill instructions before edits.
 - `2026-06-27 18:21 WEST`: Authoring sub-agent confirmed existing linked worktree isolation and began docs-only governance edits.
 - `2026-06-27 18:26 WEST`: Authoring sub-agent ran verification, updated logs, and prepared branch for review round 1.
+- `2026-06-27 18:32 WEST`: Authoring sub-agent recorded review round 1 feedback, reviewed HEAD `be866f5`, and post-commit verification for `be866f5` before cleanup edits.
+- `2026-06-27 18:37 WEST`: Authoring sub-agent ran current-tip cleanup verification, updated logs, and prepared branch for review round 2.
 
 ## Decisions
 
@@ -112,6 +120,7 @@ Out of scope:
 - `build-protocol/BUILD_PROTOCOL.md`
 - `build-protocol/CONTRIBUTOR_WORKFLOW.md`
 - `build-protocol/DECISION_LOG.md`
+- `build-protocol/skills/EXPECTED_SKILLS.md`
 - `build-protocol/templates/TASK_LOG_TEMPLATE.md`
 - `build-protocol/templates/REVIEW_LOG_TEMPLATE.md`
 - `build-protocol/work-logs/T-0003.md`
@@ -123,6 +132,11 @@ Out of scope:
 - Stale-placeholder wording search over changed non-template governance files - passed after log update; no stale vague wording in task-specific/protocol decision files.
 - `git status --short --porcelain=v1` - passed; changed paths are under `build-protocol/`.
 - `git diff --name-only` plus untracked-file check - passed; no runtime/toolchain package files were added.
+- `git diff --check main...HEAD` at `be866f5` - passed post-commit.
+- `git diff --name-status main...HEAD` at `be866f5` - only `build-protocol` files changed.
+- `git diff --check main...HEAD` after round 1 cleanup edits - passed.
+- `git diff --name-status main...HEAD` plus untracked-file check after cleanup edits - only `build-protocol` files changed or were newly added.
+- No runtime/toolchain-file scan after cleanup edits - passed; no changed or untracked runtime/toolchain package paths matched.
 
 ## Coverage Result
 
@@ -150,14 +164,18 @@ Out of scope:
 | Validation | N/A: no validation behavior. |
 | Tenant boundaries | N/A: no runtime behavior. |
 | `Any`/deserialization | N/A: no Protobuf behavior. |
-| Logging | Process logs mention installed skill names only; no sensitive paths beyond already local user-level skill locations. |
+| Logging | Process logs mention installed skill names and redacted `~/.agents` paths only. |
 
 Redaction rule: record enough context for auditability, but never commit tokens, credentials, auth headers, secret environment variables, sensitive local paths, or sensitive payloads.
 
 ## Verification
 
 - Pre-commit verification passed with the commands in Tests Run.
-- Post-commit verification must include `git diff --check main...HEAD`.
+- Post-commit verification for reviewed HEAD `be866f5` passed with `git diff --check main...HEAD`.
+- Current-tip verification convention for round 2: verify `main...HEAD` with
+  `git diff --check`, changed-file scope, and no runtime/toolchain-file scan.
+  These checks passed before the cleanup commit and must be repeated after the
+  commit as final handoff evidence.
 
 ## Open Risks And Follow-Up Routing
 
@@ -168,7 +186,8 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 
 ## Review Rounds
 
-- Ready for review round 1.
+- Round 1 at `be866f5`: comments addressed in round 2 cleanup.
+- Round 2: ready after cleanup verification and commit.
 
 ## Integration Result
 

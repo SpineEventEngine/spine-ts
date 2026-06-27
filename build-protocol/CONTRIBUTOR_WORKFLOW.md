@@ -7,15 +7,12 @@ These notes help implementation and reviewer agents apply the autonomous build p
 ## Starting A Task
 
 1. Work only in the task worktree assigned by the orchestrator.
-2. Read the task brief, `BUILD_PROTOCOL.md`, `CODE_QUALITY.md`, relevant specification docs, and the current task log before editing.
-3. Confirm baseline commit, branch, worktree, and ownership boundaries.
-4. Run the skill gate before task actions:
-   - list built-in/available skills, task-provided skills, and reachable user-installed skills under `~/.agents/skills` that might apply;
-   - read selected `SKILL.md` files before implementation, review, or advice work;
-   - record selected skills, skipped relevant-looking skills, and skip reasons in the task log;
-   - pass task-relevant skill instructions or file references to any sub-agents or reviewers;
-   - record conflict resolution when a skill conflicts with `BUILD_PROTOCOL.md`, `CODE_QUALITY.md`, or the task spec.
-5. Create or update the task log before or in the same atomic step as any other change. New task logs use `build-protocol/tasks/<task-slug>/TASK.md`.
+2. Create or update the task log as the first bootstrap action, or record the
+   skill gate in the task log in the same atomic initial step before any other
+   task work. New task logs use `build-protocol/tasks/<task-slug>/TASK.md`.
+3. Read the task brief, `BUILD_PROTOCOL.md`, `CODE_QUALITY.md`, relevant specification docs, and the current task log before editing.
+4. Confirm baseline commit, branch, worktree, and ownership boundaries.
+5. Run and record the canonical skill applicability checklist from `BUILD_PROTOCOL.md#skills-and-tooling`.
 6. Record any skill, library, or tooling investigation attempts, including failures and the decision not to install or adopt a tool.
 
 ## While Working
@@ -43,11 +40,11 @@ Reviewer findings must be actionable and tied to files or protocol requirements.
 
 Reviewers should record the commit or diff basis, baseline, worktree path, dirty status, relevant documentation/API impact evidence, tests, coverage, and per-role coverage notes. Security reviewers must link or apply `CODE_QUALITY.md#security-standards` and state which areas are applicable or not applicable for the task.
 
-Before reviewing, each reviewer must run the same skill gate for their review
-role. Review logs must state the applicable skills checked, which `SKILL.md`
-files were read, which skills were N/A, and any skipped relevant-looking skills
-with reasons. Reviewers should verify that the authoring agent recorded skill
-use and skip decisions in the task log.
+Before reviewing, each reviewer must run and record the canonical skill
+applicability checklist from `BUILD_PROTOCOL.md#skills-and-tooling` for their
+review role. The review gate itself is mandatory; only individual skill sources
+or specific skills can be N/A with reasons. Reviewers should verify that the
+authoring agent recorded skill use and skip decisions in the task log.
 
 ## Handoff And Resumption
 

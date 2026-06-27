@@ -24,17 +24,23 @@ State the outcome this task must produce.
 
 ## Skill Applicability
 
-Installed skills checked:
+Canonical checklist: record evidence for `build-protocol/BUILD_PROTOCOL.md#skills-and-tooling`.
 
-- Built-in/session-available skills: `<checked source or N/A with reason>`.
-- User-installed skills under `~/.agents/skills`: `<checked source or unreachable with reason>`.
-- Task-provided skill paths or names: `<checked source or N/A with reason>`.
+Skill sources checked:
 
-Skills read before task actions:
+| Source | Scope Checked | Evidence |
+| --- | --- | --- |
+| Session skill inventory | `<full session list, task-relevant subset, or unavailable>` | `<source or failure>` |
+| Task-provided skill names/paths | `<checked paths/names or N/A>` | `<prompt/task source>` |
+| `build-protocol/skills/EXPECTED_SKILLS.md` | `<checked or N/A>` | `<result>` |
+| `~/.agents/skills/*/SKILL.md` | `<full directory, task-provided paths only, or unreachable>` | `<command/source/failure>` |
+| `~/.agents/.skill-lock.json` or equivalent manifest | `<checked or unreachable>` | `<source repos/local relative paths/failure>` |
+
+Selected skills read before task actions:
 
 | Skill | Source | Applicability | Instructions Applied |
 | --- | --- | --- | --- |
-| `<skill name>` | `<path or session source>` | `<why applicable>` | `<concise summary or file reference>` |
+| `<skill name>` | `<session source, repo manifest entry, or redacted path such as ~/.agents/skills/<skill>/SKILL.md>` | `<why applicable>` | `<concise summary or file reference>` |
 
 Skills passed to sub-agents/reviewers:
 
@@ -46,12 +52,16 @@ Skipped relevant-looking skills:
 
 | Skill | Source | Reason Skipped |
 | --- | --- | --- |
-| `<skill name>` | `<path or session source>` | `<specific reason>` |
+| `<skill name>` | `<metadata source or redacted path>` | `<specific reason; do not imply SKILL.md was fully read unless it was selected/read>` |
 
 Conflict resolution: if an installed skill conflicts with `BUILD_PROTOCOL.md`,
-`CODE_QUALITY.md`, or the task specification, the project protocol, quality
-rules, and task spec are authoritative. Record the conflict and chosen rule in
-this task log.
+`CODE_QUALITY.md`, the task specification, sandbox/approval rules, or explicit
+human/orchestrator authorization, the project and authorization sources are
+authoritative. Record the conflict and chosen rule in this task log.
+
+Redaction: do not commit absolute user-level skill paths. Prefer
+`~/.agents/skills/<skill>/SKILL.md`, `<user-skill-dir>/<skill>/SKILL.md`, or a
+repo manifest reference.
 
 ## Scope
 
