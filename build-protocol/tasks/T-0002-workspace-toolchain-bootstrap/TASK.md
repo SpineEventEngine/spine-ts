@@ -2,13 +2,15 @@
 
 Status: Ready for post-merge verification re-check
 Start: `2026-06-27 17:27 WEST`
-End: `2026-06-27 19:45 WEST`
+End: Pending post-merge verification re-check.
+Original implementation handoff: `2026-06-27 19:45 WEST`
+Latest handoff evidence: `2026-06-27 21:12 WEST`
 Baseline commit: `0566998`
 Task log path: `build-protocol/tasks/T-0002-workspace-toolchain-bootstrap/TASK.md`
 Branch: `task/T-0002-toolchain`
 Worktree: `.worktrees/T-0002-toolchain`
 Authoring sub-agent: Codex implementation sub-agent, senior TypeScript/Node platform engineer persona
-Reviewer sub-agents: Review rounds 1, 2, 3, final-clearance findings, and post-merge verification findings recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`
+Reviewer sub-agents: Review rounds 1, 2, 3, and final-clearance findings recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`; post-merge verification failure/fix evidence recorded there separately.
 Implementation commit: `a937649`
 Review round 1 fix commit: `a0638218ec2b5caa786f958333a00af6a9fcbf4c`
 Review round 1 handoff evidence commit: `ee611a203ee40387b4ffb09451489d25c98cb01b`
@@ -126,6 +128,7 @@ Out of scope:
 - `2026-06-27 21:08 WEST`: Refreshed pnpm dependency-state metadata after package-policy config changed and ran final focused-clearance verification with explicit release-age checks.
 - `2026-06-27 21:10 WEST`: Reproduced post-merge verification failure from the repository root containing `.worktrees/`, then added `.worktrees/**` to ESLint flat-config ignores.
 - `2026-06-27 21:12 WEST`: Ran post-merge verification-fix checks: worktree `CI=true pnpm verify`, root ESLint probe with equivalent `.worktrees/**` ignore pattern, diff whitespace check, status check, and ESLint-ignore search.
+- `2026-06-27 21:18 WEST`: Reclassified post-merge verification failure/fix evidence so it is not represented as a formal reviewer round without reviewer skill-gate evidence; replaced stale task end timestamp with pending post-merge verification status.
 
 ## Decisions
 
@@ -266,7 +269,7 @@ Redaction rule: record enough context for auditability, but never commit tokens,
 
 ## Review Rounds
 
-- Review rounds 1, 2, 3, final clearance, and post-merge verification returned important findings; dispositions and reviewer skill-gate evidence are recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`.
+- Review rounds 1, 2, 3, and final clearance returned important findings; dispositions and reviewer skill-gate evidence are recorded in `build-protocol/reviews/T-0002-workspace-toolchain-bootstrap.md`. Post-merge verification failure/fix evidence is recorded separately in the same file.
 
 ## Integration Result
 
