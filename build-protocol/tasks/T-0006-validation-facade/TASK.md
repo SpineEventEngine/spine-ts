@@ -1,6 +1,6 @@
 # T-0006: Validation Facade
 
-Status: Round-3 security fix committed
+Status: Round-4 log fix in progress
 Start: `2026-06-28 17:22 WEST`
 End: Pending
 Setup baseline commit: `62ffc33`
@@ -9,7 +9,7 @@ Task log path: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Authoring sub-agent: T-0006a implementation sub-agent (Codex)
-Reviewer sub-agents: Round 3 completed
+Reviewer sub-agents: Round 4 completed
 Implementation commit: `4726985e1786929f5222707dc7abf77c448e8fa3`
 Review-finding log HEAD: `7d519d1f4555ffab058d1642065947355c0acf9e`
 Review-fix commit: `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`
@@ -22,7 +22,9 @@ Round-3 dispatch log commit: `9b51b43dac2db509c428fcc849411bbbf170948d`
 Round-3 findings log HEAD: `86aa522e31a692b49abb2de4aae7d41c8224f0ed`
 Current branch HEAD before round-3 security fix: `86aa522e31a692b49abb2de4aae7d41c8224f0ed`
 Round-3 security fix commit: `76cbe19beeef0703dded45b3aee66e6b95b0da93`
-Final branch HEAD: Pending round-3 log handoff
+Round-3 security log handoff commit: `876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3`
+Current branch HEAD before round-4 log fix: `876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3`
+Final branch HEAD: Pending round-4 log fix
 
 ## Objective
 
@@ -720,4 +722,18 @@ packages/core/src/validation-facade-boundary.test.ts` passed with 2 test files
 ## Integration Result
 
 Round-3 security finding fixed in
-`76cbe19beeef0703dded45b3aee66e6b95b0da93`; final log handoff commit pending.
+`76cbe19beeef0703dded45b3aee66e6b95b0da93`; security log handoff committed in
+`876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3`.
+
+Round 4 reviewed focused fix basis
+`86aa522...876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3`:
+
+- Maintainability `019f0f6d-9998-7053-b653-9a3e0ddf9423`: no comments.
+- Documentation `019f0f6d-9a0a-78d0-b2f8-d4f0cd4c8c11`: requested recording
+  `876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3` as the completed log handoff
+  and current head, plus distinguishing it from the code-fix commit.
+- TypeScript/API docs `019f0f6d-9a74-77a1-af84-2fcb5307252e`: no comments.
+- Security `019f0f6d-9aee-7600-97b5-8a87437c05f2`: no comments.
+- Performance/reliability `019f0f6d-9b7d-76b0-9c7a-c74a00af01e0`: no runtime
+  comments; also requested correcting the pending handoff/current-state
+  metadata.

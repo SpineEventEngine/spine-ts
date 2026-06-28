@@ -8,8 +8,8 @@ Implementation baseline commit: `e953662`
 Reviewed commit/diff basis: Round 3 completed against
 `e953662...9560d2e330cf76c9af910ab5c59d26aac278a9a5`.
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
-Reviewer sub-agents: Round 3 completed
-Status: Round-3 security fix committed
+Reviewer sub-agents: Round 4 completed
+Status: Round-4 log fix in progress
 
 ## Reviewer IDs
 
@@ -147,6 +147,8 @@ Started from round-3 findings log head
 
 Fix commit: `76cbe19beeef0703dded45b3aee66e6b95b0da93`.
 
+Log handoff commit: `876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3`.
+
 Disposition: the accepted security finding is addressed in the working tree by
 sanitizing transition-rule returned violations through the same facade-owned
 conversion path used for upstream single-message validation. The sanitizer
@@ -172,4 +174,35 @@ generated-output cleanliness passed.
 ## Closure
 
 Round-3 security finding fixed in
-`76cbe19beeef0703dded45b3aee66e6b95b0da93`; final log handoff commit pending.
+`76cbe19beeef0703dded45b3aee66e6b95b0da93`; security log handoff committed in
+`876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3`.
+
+## Round 4
+
+Reviewed basis:
+`86aa522...876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3`.
+
+Reviewer IDs:
+
+- Code style/maintainability:
+  `019f0f6d-9998-7053-b653-9a3e0ddf9423`.
+- Documentation: `019f0f6d-9a0a-78d0-b2f8-d4f0cd4c8c11`.
+- TypeScript/API docs: `019f0f6d-9a74-77a1-af84-2fcb5307252e`.
+- Security: `019f0f6d-9aee-7600-97b5-8a87437c05f2`.
+- Performance/reliability:
+  `019f0f6d-9b7d-76b0-9c7a-c74a00af01e0`.
+
+Findings:
+
+- Code style/maintainability
+  `019f0f6d-9998-7053-b653-9a3e0ddf9423`: no comments.
+- Documentation `019f0f6d-9a0a-78d0-b2f8-d4f0cd4c8c11`: requested recording
+  `876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3` as the completed log handoff
+  and current head, plus distinguishing it from the code-fix commit.
+- TypeScript/API docs `019f0f6d-9a74-77a1-af84-2fcb5307252e`: no comments.
+- Security `019f0f6d-9aee-7600-97b5-8a87437c05f2`: no comments.
+- Performance/reliability
+  `019f0f6d-9b7d-76b0-9c7a-c74a00af01e0`: no runtime comments; requested
+  correcting the pending handoff/current-state metadata.
+
+Disposition: correct durable log metadata and re-review.
