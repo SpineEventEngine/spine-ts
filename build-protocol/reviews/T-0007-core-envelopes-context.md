@@ -11,6 +11,7 @@ that commit were re-reviewed through `44af7bc`.
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007a-core-signal-proto-intake`
 Reviewer sub-agents: Maintainability/style `019f0faa-6983-7690-9e46-bc50a6d72920`; documentation `019f0faa-6a10-7c91-b914-1a57f2c5f526`; TypeScript/API docs `019f0faa-6a76-7093-bb54-d0239d1646d2`; security `019f0faa-6aed-7230-ba0c-c385f62ba7ce`; performance/reliability `019f0faa-6b97-7ee2-bc36-cbb0500fd302`.
 Status: Round 1 complete; no open findings
+Main integration merge commit: `6c53e6e90bc9794f0dbb6ce3f068cad7889280bc`
 
 ## Reviewer IDs
 
@@ -112,4 +113,7 @@ functions 100%, lines 99.41%.
 
 Round 1 is closed with no open findings. Remaining known risk is limited to the
 recorded D-0031 provenance decision for legacy `spine/net/*` and
-`spine/ui/language.proto` support protos.
+`spine/ui/language.proto` support protos. T-0007a was merged to `main` as
+`6c53e6e90bc9794f0dbb6ce3f068cad7889280bc`; integrated
+`CI=true corepack pnpm verify` passed on `main` with 9 Vitest files / 35 tests
+and generated proto output clean.
