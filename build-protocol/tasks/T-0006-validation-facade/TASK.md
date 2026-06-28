@@ -1,8 +1,8 @@
 # T-0006: Validation Facade
 
-Status: Final verification passed; integration pending
+Status: Integrated into main
 Start: `2026-06-28 17:22 WEST`
-End: Pending
+End: `2026-06-28 19:35 WEST`
 Setup baseline commit: `62ffc33`
 Implementation baseline commit: `e953662`
 Task log path: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
@@ -32,7 +32,8 @@ Round-6 findings/log-fix commit: `38bb610538834a4de74c68b813cd67af941bc2c1`
 Latest completed review basis:
 `52e0a26...38bb610538834a4de74c68b813cd67af941bc2c1`
 Round-7 findings/log-fix commit: `5f215e3`
-Final branch HEAD: pending final verification and integration closure
+Final branch HEAD: `9b9b2ea`
+Main integration commit: `a012b644bc43addb6e4c3facc26f09dc2b895be8`
 
 ## Objective
 
@@ -796,6 +797,16 @@ Final task verification passed on `2026-06-28 19:31 WEST` with
 `CI=true corepack pnpm verify`: typecheck, lint, format, tests, coverage,
 docs/API check, proto lint/generate, and generated-output cleanliness all
 passed. Vitest ran 9 test files and 33 tests. Coverage: statements 99.19%,
+branches 90.9%, functions 100%, lines 99.19%. TypeDoc emitted the known invalid
+`origin` source-link warning and confirmed 13 proto exports plus 21 core
+exports.
+
+Integrated into main with merge commit
+`a012b644bc43addb6e4c3facc26f09dc2b895be8`. Main verification passed on
+`2026-06-28 19:34 WEST` with `CI=true corepack pnpm verify` after refreshing
+main `node_modules` via `corepack pnpm install`: typecheck, lint, format, tests,
+coverage, docs/API check, proto lint/generate, and generated-output cleanliness
+all passed. Vitest ran 9 test files and 33 tests. Coverage: statements 99.19%,
 branches 90.9%, functions 100%, lines 99.19%. TypeDoc emitted the known invalid
 `origin` source-link warning and confirmed 13 proto exports plus 21 core
 exports.

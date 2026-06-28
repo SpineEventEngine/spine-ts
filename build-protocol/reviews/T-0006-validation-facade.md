@@ -8,7 +8,7 @@ Implementation baseline commit: `e953662`
 Reviewed commit/diff basis: Round 8 completed against `38bb610...5f215e3`.
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Reviewer sub-agents: Round 8 completed
-Status: Round-8 clean; final verification passed
+Status: Integrated into main
 
 ## Reviewer IDs
 
@@ -339,10 +339,20 @@ Findings:
 - Performance/reliability
   `019f0f7d-3a10-76d2-8e57-f1a589bc36b3`: no comments.
 
-Disposition: final verification passed; integration pending.
+Disposition: integrated into main and verified.
 
 Final verification: `CI=true corepack pnpm verify` passed on
 `2026-06-28 19:31 WEST` with 9 test files and 33 tests; coverage statements
 99.19%, branches 90.9%, functions 100%, lines 99.19%; docs/API check confirmed
 13 proto exports and 21 core exports with the known invalid `origin` TypeDoc
 warning; proto lint/generate and generated-output cleanliness passed.
+
+Main integration: merged with
+`a012b644bc43addb6e4c3facc26f09dc2b895be8`. Main `CI=true corepack pnpm
+verify` passed on `2026-06-28 19:34 WEST` after `corepack pnpm install`
+refreshed dependencies for the merged lockfile. The initial main verify stopped
+before tests because `node_modules` was stale. Final verification ran 9 test
+files and 33 tests; coverage statements 99.19%, branches 90.9%, functions 100%,
+lines 99.19%; docs/API check confirmed 13 proto exports and 21 core exports
+with the known invalid `origin` TypeDoc warning; proto lint/generate and
+generated-output cleanliness passed.
