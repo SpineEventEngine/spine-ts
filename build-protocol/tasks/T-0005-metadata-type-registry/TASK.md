@@ -163,6 +163,8 @@ Out of scope:
 - `2026-06-28 16:06 WEST`: Orchestrator created isolated branch/worktree
   `task/T-0005-registry-core` at `.worktrees/T-0005-registry-core` from
   baseline `80714f3`.
+- `2026-06-28 16:09 WEST`: Orchestrator ran baseline verification in the
+  T-0005 worktree before implementation handoff.
 
 ## Decisions
 
@@ -219,6 +221,10 @@ Out of scope:
 
 - `git worktree add .worktrees/T-0005-registry-core -b task/T-0005-registry-core main`
   created the implementation worktree at baseline `80714f3`.
+- Baseline `CI=true corepack pnpm verify` passed in the T-0005 worktree: 8 test
+  files and 13 tests passed, coverage 100%, docs check passed with the known
+  TypeDoc invalid `origin` warning, proto lint/generate passed, and generated
+  output was clean.
 
 ## Open Risks And Follow-Up Routing
 
