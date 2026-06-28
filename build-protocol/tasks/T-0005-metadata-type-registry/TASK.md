@@ -8,7 +8,7 @@ Task log path: `build-protocol/tasks/T-0005-metadata-type-registry/TASK.md`
 Branch: `task/T-0005-registry-core`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0005-registry-core`
 Authoring sub-agent: T-0005 implementation sub-agent
-Reviewer sub-agents: Review round 1 completed; fix pass ready for re-review
+Reviewer sub-agents: Round 2 completed with documentation log cleanup fixed
 Implementation commit: `5705890eb5cdedaa2044375c6d5cccc304bdf283`
 Review round 1 fix commit: `a8ad2fad6070479f156cb54211b14f6bfdb80117`
 Review round 1 log cleanup commits: `a46a95a2efb8c75a613bda7390d0fa008931d3aa`,

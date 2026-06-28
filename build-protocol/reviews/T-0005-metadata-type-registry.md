@@ -5,7 +5,7 @@ Work log: `build-protocol/work-logs/T-0005.md`
 Branch: `task/T-0005-registry-core`
 Baseline commit: `80714f3`
 Reviewed commit/diff basis: `80714f3`...latest branch HEAD after
-review-round-1 fix and log cleanup
+review-round-2 log cleanup
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0005-registry-core`
 Reviewer sub-agents: Review round 2 completed; log-only documentation finding fixed
 Status: Latest branch HEAD ready for re-review after review-round-2 log cleanup
