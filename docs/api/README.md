@@ -2,7 +2,10 @@
 
 TypeDoc is the canonical API documentation generator for this repository.
 
-Current status: the generated reference contains package skeleton exports only. Runtime APIs will be documented as they are implemented in later tasks.
+Current status: the generated reference contains package skeleton exports plus
+the public generated schema exports from `@spine-ts/proto`. The generated
+Protobuf-ES source files themselves remain excluded from TypeDoc output to keep
+the API reference focused on package entry points.
 
 Run:
 

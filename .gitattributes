@@ -1,0 +1,2 @@
+proto/**/*.proto -whitespace
+packages/proto/src/generated/**/*.ts -whitespace

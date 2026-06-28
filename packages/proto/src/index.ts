@@ -1,15 +1,10 @@
 /**
- * Static package metadata for the proto package while Spine Protobuf intake is pending.
+ * Generated Protobuf-ES schemas for the first Spine proto intake set.
+ *
+ * Runtime metadata registries, validation facades, and `Any` packing helpers are
+ * intentionally deferred to later framework tasks.
  */
-export interface PackageSkeleton {
-  /** Current implementation state for this package boundary. */
-  readonly implementationStatus: "skeleton";
-  /** Published package name reserved for this workspace package. */
-  readonly packageName: string;
-}
-
-/** Metadata-only export used by TypeDoc and bootstrap verification. */
-export const packageSkeleton: PackageSkeleton = {
-  implementationStatus: "skeleton",
-  packageName: "@spine-ts/proto",
-};
+export * from "./generated/spine/options_pb.js";
+export * from "./generated/spine/base/field_path_pb.js";
+export * from "./generated/spine/string/template_string_pb.js";
+export * from "./generated/spine/validation/validation_error_pb.js";

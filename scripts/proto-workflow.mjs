@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const command = process.argv[2];
 
@@ -29,6 +29,19 @@ const protoFiles = findProtoFiles(protoRoot);
 if (protoFiles.length === 0) {
   console.log(`No .proto files found under proto; buf ${command} is deferred until proto intake.`);
   process.exit(0);
+}
+
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const verifyResult = spawnSync(
+  process.execPath,
+  [join(repoRoot, "scripts/verify-proto-sources.mjs")],
+  {
+    stdio: "inherit",
+  },
+);
+
+if (verifyResult.status !== 0) {
+  process.exit(verifyResult.status ?? 1);
 }
 
 const bufArgs = command === "lint" ? ["lint"] : ["generate"];

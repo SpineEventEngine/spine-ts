@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "description": "Pinned upstream provenance for verbatim Spine proto files copied into this repository.",
+  "sources": [
+    {
+      "localPath": "proto/spine/options.proto",
+      "repository": "SpineEventEngine/base",
+      "commit": "43b55858c410",
+      "upstreamPath": "base/src/main/proto/spine/options.proto",
+      "sha256": "6ac1e484d88c8ae0160436a9ca76e0d618f48a23c1343696d40b6aa0118d3793"
+    },
+    {
+      "localPath": "proto/spine/base/field_path.proto",
+      "repository": "SpineEventEngine/base",
+      "commit": "43b55858c410",
+      "upstreamPath": "base/src/main/proto/spine/base/field_path.proto",
+      "sha256": "c4483fcf828a6aa9b0b4a73f290df0e8be669ed681316b4f4040a9c4fbbe8407"
+    },
+    {
+      "localPath": "proto/spine/string/template_string.proto",
+      "repository": "SpineEventEngine/base",
+      "commit": "43b55858c410",
+      "upstreamPath": "base/src/main/proto/spine/string/template_string.proto",
+      "sha256": "39a78ec2e712c990c4f3efc2c839ef50a870a76a8d2e6ef01bd89b61c6653073"
+    },
+    {
+      "localPath": "proto/spine/validation/validation_error.proto",
+      "repository": "SpineEventEngine/validation",
+      "commit": "6aec69016818",
+      "upstreamPath": "jvm-runtime/src/main/proto/spine/validation/validation_error.proto",
+      "sha256": "0ee2bddfb0c540e0f248cb091eced211e9830863fac2a7063901269c8dd62110"
+    }
+  ]
+}
