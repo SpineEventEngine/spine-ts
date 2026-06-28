@@ -1,6 +1,6 @@
 # T-0006: Validation Facade
 
-Status: Round-2 focused fix complete; ready for round 3
+Status: Round-3 security fix needed
 Start: `2026-06-28 17:22 WEST`
 End: Pending
 Setup baseline commit: `62ffc33`
@@ -9,7 +9,7 @@ Task log path: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Authoring sub-agent: T-0006a implementation sub-agent (Codex)
-Reviewer sub-agents: Round 2 completed; round 3 pending dispatch
+Reviewer sub-agents: Round 3 completed
 Implementation commit: `4726985e1786929f5222707dc7abf77c448e8fa3`
 Review-finding log HEAD: `7d519d1f4555ffab058d1642065947355c0acf9e`
 Review-fix commit: `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`
@@ -17,7 +17,9 @@ Round-2 findings log HEAD: `15b7933216b038888e10ab3cbbefc93c7a79d78d`
 Current branch HEAD before round-2 fix: `15b7933216b038888e10ab3cbbefc93c7a79d78d`
 Round-2 code-fix commit: `74d56ab798eb3fad09759d69e480985320af363a`
 Round-2 log handoff commit: `76f6b017c55e51f5af639a837b2b529a469d47ac`
-Current branch HEAD: `76f6b017c55e51f5af639a837b2b529a469d47ac`
+Round-3 review readiness commit: `9560d2e330cf76c9af910ab5c59d26aac278a9a5`
+Round-3 dispatch log commit: `9b51b43dac2db509c428fcc849411bbbf170948d`
+Current branch HEAD: `9b51b43dac2db509c428fcc849411bbbf170948d`
 Final branch HEAD: Pending round-3 review closure
 
 ## Objective
@@ -627,6 +629,17 @@ pnpm docs:check` passed and confirmed 13 expected `@spine-ts/proto` exports
     `019f0f5e-9b45-7c12-b26b-6263831be036`.
   - Performance/reliability reviewer:
     `019f0f5e-e6ee-7143-988f-e52dd54649a6`.
+- Round 3 completed:
+  - Maintainability reported no comments.
+  - Documentation reported stale round-3 header metadata; this is addressed by
+    the round-3 findings/log update.
+  - TypeScript/API docs reported no comments.
+  - Security requested sanitizing transition-rule returned violations before
+    aggregation so rule-provided `fieldValue` and arbitrary placeholder values
+    cannot expose previous/proposed state.
+  - Performance/reliability reported no runtime regressions, but also requested
+    stale task-header metadata correction; this is addressed by the round-3
+    findings/log update.
 
 ## Integration Result
 

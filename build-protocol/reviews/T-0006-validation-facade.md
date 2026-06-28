@@ -8,8 +8,8 @@ Implementation baseline commit: `e953662`
 Reviewed commit/diff basis: Round 3 pending against
 `e953662...9560d2e330cf76c9af910ab5c59d26aac278a9a5`.
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
-Reviewer sub-agents: Round 3 dispatched
-Status: Round 3 in progress
+Reviewer sub-agents: Round 3 completed
+Status: Round-3 security fix needed
 
 ## Reviewer IDs
 
@@ -121,7 +121,24 @@ Reviewer IDs:
 - Performance/reliability:
   `019f0f5e-e6ee-7143-988f-e52dd54649a6`.
 
-Disposition: in progress.
+Findings:
+
+- Code style/maintainability
+  `019f0f5e-99da-7453-a3d6-b026fe155a9d`: no comments.
+- Documentation `019f0f5e-9a45-7661-99c1-b2d1b4dddfa7`: requested stale
+  round-3 durable-log metadata be corrected in the task header and related logs.
+- TypeScript/API docs `019f0f5e-9ac6-75d1-b202-25c78da7a65d`: no comments.
+- Security `019f0f5e-9b45-7c12-b26b-6263831be036`: requested sanitizing
+  transition-rule returned `ConstraintViolation` values before aggregation so
+  rule-provided `fieldValue` and arbitrary `message.placeholderValue` entries
+  cannot expose sensitive previous/proposed state.
+- Performance/reliability
+  `019f0f5e-e6ee-7143-988f-e52dd54649a6`: no runtime comments; requested stale
+  task-header metadata be corrected for restart-safe traceability.
+
+Disposition: feed the transition-violation sanitization finding to a focused
+fix sub-agent. The stale metadata findings are addressed by this round-3
+findings/log update.
 
 ## Closure
 
