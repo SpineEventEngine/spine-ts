@@ -1,6 +1,6 @@
 # T-0004: Spine Proto Intake And Protobuf-ES Generation
 
-Status: Final focused log-state cleanup ready for re-check
+Status: Final focused re-check passed; ready for orchestrator integration
 Start: `2026-06-28 12:40 WEST`
 End: `2026-06-28 12:54 WEST`
 Baseline commit: `6ce0b65`
@@ -8,7 +8,7 @@ Task log path: `build-protocol/tasks/T-0004-proto-intake/TASK.md`
 Branch: `task/T-0004-proto-intake`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0004-proto-intake`
 Authoring sub-agent: T-0004 implementation sub-agent
-Reviewer sub-agents: Final focused re-check requested after latest log-state cleanup
+Reviewer sub-agents: Final focused re-check passed with no remaining comments
 Implementation commit: `b66f2db2c2d98d41f3f5c6da53ed81a7fd73d6ad`
 Focused re-check basis: latest branch state after log-state cleanup
 
@@ -373,7 +373,9 @@ Out of scope:
   reference to the round-3 log-only fix commit; this Markdown-only fix updates
   that line. Final focused re-check basis is `main...HEAD` after the focused
   current-state wording commit.
+- Final focused re-check passed after stable log-state cleanup; no remaining
+  reviewer comments are open.
 
 ## Integration Result
 
-Pending final focused log-state re-check and orchestrator integration if clean.
+Final focused re-check passed. Orchestrator integration is the next step.

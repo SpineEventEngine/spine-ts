@@ -7,9 +7,8 @@ Baseline commit: `6ce0b65`
 Reviewed commit/diff basis: `main...task/T-0004-proto-intake` after the T-0004
 implementation commit from baseline `6ce0b65`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0004-proto-intake`
-Reviewer sub-agents: Final focused re-check requested after latest log-state
-cleanup
-Status: Final focused log-state cleanup ready for re-check
+Reviewer sub-agents: Final focused re-check passed with no remaining comments
+Status: Final focused re-check passed; ready for orchestrator integration
 
 ## Required Review Roles
 
@@ -404,3 +403,24 @@ Stable log-state verification:
 
 Final re-check should review `main...HEAD` after the moving-basis top metadata
 cleanup commit, then proceed to orchestrator integration if clean.
+
+## Final Focused Re-check
+
+Reviewed basis: `main...HEAD` after stable top-metadata cleanup.
+
+Reviewer outcome:
+
+- Final stable top-metadata re-check reported no remaining comments.
+
+Final disposition:
+
+| Finding | Roles | Disposition | Author response |
+| --- | --- | --- | --- |
+| Top metadata, Current State, and Integration Result should not contain prior focused cleanup SHAs or stale cleanup-phase wording. | Documentation, maintainability | Clean | Scoped metadata, Current State, and Integration Result contain stable wording; historical entries retain exact SHAs where appropriate. |
+
+Final verification:
+
+- `git diff --check main...HEAD` exited 0.
+- Targeted stale metadata search returned no matches.
+- `git status --short --branch` showed a clean branch before this closure-log
+  update.
