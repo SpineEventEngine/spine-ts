@@ -1,8 +1,8 @@
 # T-0007b: Core Envelope Construction Helpers
 
-Status: Round-1 review in progress
+Status: Integrated into `main`
 Start: `2026-06-28 20:45 WEST`
-End: Pending
+End: `2026-06-28 21:30 WEST`
 Setup baseline commit: `c313086`
 Task log path: `build-protocol/tasks/T-0007b-envelope-construction/TASK.md`
 Branch: `task/T-0007b-envelope-construction`
@@ -14,8 +14,9 @@ documentation `019f0fcc-a511-78b0-a79a-eb2f4740ab52`; TypeScript/API docs
 `019f0fcc-fa19-7632-9b24-e2f678ad60c6`; performance/reliability
 `019f0fcd-2d90-7481-963d-7571d880095d`.
 Implementation baseline commit: `57fc257`
-Final branch checkpoint before integration: Pending
-Main integration merge commit: Pending
+Final branch checkpoint before integration:
+`9be22957fb2ce59169ca36ee4ee921ba40346581`
+Main integration merge commit: `4656a1e077d983bf8832a936905d38b6c20f7beb`
 
 ## Branch Setup
 
@@ -45,13 +46,27 @@ transport, entity transactions, and runtime ID/context factories.
 Round 1 dispatched on `2026-06-28 20:55 WEST` against review basis
 `7d80347...2fe6850be59a78e6331b0b8cd84fa8fb0641b281`.
 
-| Role                    | Reviewer ID                            | Status      |
-| ----------------------- | -------------------------------------- | ----------- |
-| Maintainability/style   | `019f0fcc-6b78-71a3-a363-688a5be1d662` | In progress |
-| Documentation           | `019f0fcc-a511-78b0-a79a-eb2f4740ab52` | In progress |
-| TypeScript/API docs     | `019f0fcc-d16b-7c31-8a02-81a07c880947` | In progress |
-| Security                | `019f0fcc-fa19-7632-9b24-e2f678ad60c6` | In progress |
-| Performance/reliability | `019f0fcd-2d90-7481-963d-7571d880095d` | In progress |
+| Role                    | Reviewer ID                            | Status            |
+| ----------------------- | -------------------------------------- | ----------------- |
+| Maintainability/style   | `019f0fcc-6b78-71a3-a363-688a5be1d662` | Comments resolved |
+| Documentation           | `019f0fcc-a511-78b0-a79a-eb2f4740ab52` | Comments resolved |
+| TypeScript/API docs     | `019f0fcc-d16b-7c31-8a02-81a07c880947` | Comments resolved |
+| Security                | `019f0fcc-fa19-7632-9b24-e2f678ad60c6` | No comments       |
+| Performance/reliability | `019f0fcd-2d90-7481-963d-7571d880095d` | Comments resolved |
+
+Final log-fix re-review of
+`8097a93a1074837b21586e83df3b0a66bdda99f4..77f9c2d4a94b5f7b9336c410d47ec847143e5231`
+reported no comments in all five required reviewer roles. Branch checkpoint
+`9be22957fb2ce59169ca36ee4ee921ba40346581` passed
+`CI=true corepack pnpm verify` before integration.
+
+## Integration
+
+Merged into `main` as `4656a1e077d983bf8832a936905d38b6c20f7beb` on
+`2026-06-28 21:30 WEST`. Post-merge `CI=true corepack pnpm verify` passed with
+9 test files / 41 tests, coverage 99.44% statements / 91.83% branches / 100%
+functions / 99.44% lines, docs/API check confirming 85 proto exports and 28
+core exports, proto lint/generate, and generated-output cleanliness.
 
 ## Objective
 

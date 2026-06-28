@@ -21,7 +21,7 @@ documentation `019f0fcc-a511-78b0-a79a-eb2f4740ab52`; TypeScript/API docs
 `019f0fcc-d16b-7c31-8a02-81a07c880947`; security
 `019f0fcc-fa19-7632-9b24-e2f678ad60c6`; performance/reliability
 `019f0fcd-2d90-7481-963d-7571d880095d`.
-Status: Final log-fix re-review clean; branch verification pending
+Status: Integrated into `main`
 Implementation sub-agent: `019f0fc3-b699-76c2-a02f-a174936c045d` (Bacon)
 
 ## Reviewer IDs
@@ -158,8 +158,12 @@ Original implementation evidence:
 
 ## Closure
 
-Round 1 is not closed by this review-log update. The focused fix has been
+Round 1 and all follow-up review rounds are closed. The focused fix was
 committed, the log-only follow-up commit
 `8097a93a1074837b21586e83df3b0a66bdda99f4` is recorded, and the final log-fix
 re-review of `77f9c2d4a94b5f7b9336c410d47ec847143e5231` reported no comments.
-Branch verification and orchestrator-owned integration remain pending.
+Branch checkpoint `9be22957fb2ce59169ca36ee4ee921ba40346581` passed
+`CI=true corepack pnpm verify`, then merged into `main` as
+`4656a1e077d983bf8832a936905d38b6c20f7beb`. Post-merge
+`CI=true corepack pnpm verify` passed with 9 test files / 41 tests and coverage
+above the 90% target.
