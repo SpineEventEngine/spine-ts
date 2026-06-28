@@ -9,7 +9,7 @@ implementation commit from baseline `6ce0b65`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0004-proto-intake`
 Reviewer sub-agents: Round 4 focused re-check complete; metadata wording fix
 applied
-Status: Round 4 metadata wording fix ready for Round 5 focused re-check
+Status: Round 5 current-state wording fix ready for final focused re-check
 
 ## Required Review Roles
 
@@ -239,3 +239,36 @@ Round-4 verification:
 
 Round 5 focused re-check should review `main...HEAD` after the focused round-4
 metadata wording commit, then proceed to orchestrator integration if clean.
+
+### Round 5 Focused Re-check
+
+Reviewed basis: `main...HEAD` at
+`cb775d48268b1fe801b6362a77277ff4ee3f37b8`.
+
+Reviewer outcome:
+
+- Focused current-state re-check found one remaining work-log `Last completed
+step` line still pointing to the round-3 log-only fix commit
+  `7c1f8d9cd98024df7f2c43d7f65a4e52f843aff8`.
+
+Round-5 disposition:
+
+| Finding                                                                                                                           | Roles                          | Disposition | Author response                                                                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Work-log current state still named the round-3 log-only fix as the last completed step after the round-4 metadata wording commit. | Documentation, maintainability | Fixed       | Updated the work-log current state to name the round-4 metadata wording fix commit `cb775d48268b1fe801b6362a77277ff4ee3f37b8`; recorded this round-5 fix evidence. |
+
+Round-5 verification:
+
+- Full `pnpm verify` is intentionally skipped because this pass changes only
+  durable Markdown logs and does not affect package code, generated output, or
+  build configuration.
+- `git diff --check main...HEAD` exited 0.
+- `git status --short --branch` showed only the expected modified durable log
+  files before commit.
+- Targeted stale current-state search found no `Last completed step` reference
+  to `7c1f8d9cd98024df7f2c43d7f65a4e52f843aff8`.
+
+## Final Focused Re-check Basis
+
+Final focused re-check should review `main...HEAD` after the focused round-5
+current-state wording commit, then proceed to orchestrator integration if clean.

@@ -1,6 +1,6 @@
 # T-0004: Spine Proto Intake And Protobuf-ES Generation
 
-Status: Round 4 metadata wording fix ready for Round 5 focused re-check
+Status: Round 5 current-state wording fix ready for final focused re-check
 Start: `2026-06-28 12:40 WEST`
 End: `2026-06-28 12:54 WEST`
 Baseline commit: `6ce0b65`
@@ -10,7 +10,7 @@ Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0004-prot
 Authoring sub-agent: T-0004 implementation sub-agent
 Reviewer sub-agents: Round 4 focused re-check complete; stale metadata wording fix applied
 Implementation commit: `b66f2db2c2d98d41f3f5c6da53ed81a7fd73d6ad`
-Round 4 reviewed basis: `7c1f8d9cd98024df7f2c43d7f65a4e52f843aff8`
+Round 5 reviewed basis: `cb775d48268b1fe801b6362a77277ff4ee3f37b8`
 
 ## Objective
 
@@ -369,8 +369,12 @@ Out of scope:
 - Round 4 focused re-check found one remaining stale top-level reviewer
   metadata line; this metadata-only fix updates that line. Round 5 focused
   re-check basis is `main...HEAD` after the focused metadata wording commit.
+- Round 5 focused re-check found one remaining stale work-log current-state
+  reference to the round-3 log-only fix commit; this Markdown-only fix updates
+  that line. Final focused re-check basis is `main...HEAD` after the focused
+  current-state wording commit.
 
 ## Integration Result
 
-After the focused round-4 metadata wording commit, pending Round 5 focused
+After the focused round-5 current-state wording commit, pending final focused
 re-check of durable log wording and orchestrator integration if clean.
