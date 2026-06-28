@@ -1,6 +1,6 @@
 # T-0004: Spine Proto Intake And Protobuf-ES Generation
 
-Status: Round 3 log-only fix ready for Round 4/re-check
+Status: Round 4 metadata wording fix ready for Round 5 focused re-check
 Start: `2026-06-28 12:40 WEST`
 End: `2026-06-28 12:54 WEST`
 Baseline commit: `6ce0b65`
@@ -8,9 +8,9 @@ Task log path: `build-protocol/tasks/T-0004-proto-intake/TASK.md`
 Branch: `task/T-0004-proto-intake`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0004-proto-intake`
 Authoring sub-agent: T-0004 implementation sub-agent
-Reviewer sub-agents: Round 3 complete; only stale durable-log wording remains
+Reviewer sub-agents: Round 4 focused re-check complete; stale metadata wording fix applied
 Implementation commit: `b66f2db2c2d98d41f3f5c6da53ed81a7fd73d6ad`
-Round 3 reviewed basis: `feee5c06cd2748f1570bb8432a2c6d84e45bf3e5`
+Round 4 reviewed basis: `7c1f8d9cd98024df7f2c43d7f65a4e52f843aff8`
 
 ## Objective
 
@@ -366,8 +366,11 @@ Out of scope:
   durable-log wording.
 - Round 3 log-only fix updates durable status wording only. Round 4/re-check
   basis is `main...HEAD` after the focused log-only fix commit.
+- Round 4 focused re-check found one remaining stale top-level reviewer
+  metadata line; this metadata-only fix updates that line. Round 5 focused
+  re-check basis is `main...HEAD` after the focused metadata wording commit.
 
 ## Integration Result
 
-After the focused round-3 log-only fix commit, pending Round 4/re-check of
-durable log wording and orchestrator integration if clean.
+After the focused round-4 metadata wording commit, pending Round 5 focused
+re-check of durable log wording and orchestrator integration if clean.

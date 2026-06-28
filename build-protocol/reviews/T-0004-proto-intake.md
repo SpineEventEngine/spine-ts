@@ -7,9 +7,9 @@ Baseline commit: `6ce0b65`
 Reviewed commit/diff basis: `main...task/T-0004-proto-intake` after the T-0004
 implementation commit from baseline `6ce0b65`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0004-proto-intake`
-Reviewer sub-agents: Round 3 complete; clean TypeScript/API docs, security, and
-performance/reliability reviews
-Status: Round 3 log-only fix ready for Round 4/re-check
+Reviewer sub-agents: Round 4 focused re-check complete; metadata wording fix
+applied
+Status: Round 4 metadata wording fix ready for Round 5 focused re-check
 
 ## Required Review Roles
 
@@ -206,3 +206,36 @@ Round-3 verification plan:
 
 Round 4/re-check should review `main...HEAD` after the focused round-3 log-only
 fix commit, then proceed to orchestrator integration if clean.
+
+### Round 4 Focused Re-check
+
+Reviewed basis: `main...HEAD` at
+`7c1f8d9cd98024df7f2c43d7f65a4e52f843aff8`.
+
+Reviewer outcome:
+
+- Focused stale-wording re-check found one remaining top-level task metadata
+  line: `Reviewer sub-agents:` still said Round 3 had only stale durable-log
+  wording remaining.
+
+Round-4 disposition:
+
+| Finding                                                                                                                 | Roles                          | Disposition | Author response                                                                                                                                                        |
+| ----------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Top-level task reviewer metadata still described stale durable-log wording as remaining after the round-3 log-only fix. | Documentation, maintainability | Fixed       | Updated task metadata to state the stale metadata wording fix is applied and pending focused Round 5 re-check; updated work/review logs with the round-4 fix evidence. |
+
+Round-4 verification:
+
+- Full `pnpm verify` is intentionally skipped because this pass changes only
+  durable Markdown logs and does not affect package code, generated output, or
+  build configuration.
+- `git diff --check main...HEAD` exited 0.
+- `git status --short --branch` showed only the three expected modified
+  durable log files before commit.
+- Targeted stale-wording search for the old top-level reviewer metadata phrase
+  and old round-2 pending phrases returned no matches.
+
+## Round 5 Focused Re-check Basis
+
+Round 5 focused re-check should review `main...HEAD` after the focused round-4
+metadata wording commit, then proceed to orchestrator integration if clean.
