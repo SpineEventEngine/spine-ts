@@ -4,10 +4,11 @@ Task log: `build-protocol/tasks/T-0005-metadata-type-registry/TASK.md`
 Work log: `build-protocol/work-logs/T-0005.md`
 Branch: `task/T-0005-registry-core`
 Baseline commit: `80714f3`
-Reviewed commit/diff basis: Pending branch diff
+Reviewed commit/diff basis: Implementation working tree before commit; formal
+reviewers pending
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0005-registry-core`
-Reviewer sub-agents: Pending
-Status: Pending
+Reviewer sub-agents: Pending orchestrator review loop
+Status: Implementation self-review complete; formal review pending
 
 ## Required Review Roles
 
@@ -29,8 +30,22 @@ Status: Pending
 
 ## Review Rounds
 
-- Pending.
+- Implementation self-review, `2026-06-28 16:28 WEST`:
+  - Scope check: registry remains in `@spine-ts/core`, consumes curated
+    `@spine-ts/proto` exports, and does not add validation, `Any`
+    pack/unpack, buses, storage, decorators, handlers, or transport behavior.
+  - Tests check: RED/GREEN focused Vitest evidence recorded; final
+    `CI=true corepack pnpm verify` passed.
+  - Docs/API check: package README, framework guide, API notes/check, and
+    architecture notes updated.
+  - Deferral check: semantic tag lookup is API-shaped but intentionally empty
+    because the current copied proto closure has no provable `(is)` or
+    `(every_is)` consumers.
+
+Formal code style, documentation, TypeScript/API docs, security, and
+performance/reliability reviewer sub-agents remain pending for the orchestrator
+handoff.
 
 ## Outcome
 
-Pending.
+Implementation ready for formal review.

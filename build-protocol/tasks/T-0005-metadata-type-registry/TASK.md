@@ -1,14 +1,14 @@
 # T-0005: Metadata And Type Registry
 
-Status: Implementation branch created
+Status: Implementation complete; formal review pending
 Start: `2026-06-28 15:58 WEST`
 End: Pending
 Baseline commit: `80714f3`
 Task log path: `build-protocol/tasks/T-0005-metadata-type-registry/TASK.md`
 Branch: `task/T-0005-registry-core`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0005-registry-core`
-Authoring sub-agent: Pending
-Reviewer sub-agents: Pending
+Authoring sub-agent: T-0005 implementation sub-agent
+Reviewer sub-agents: Pending orchestrator review loop
 Implementation commit: Pending branch commit
 Final branch HEAD: Pending branch commit
 
@@ -165,13 +165,49 @@ Out of scope:
   baseline `80714f3`.
 - `2026-06-28 16:09 WEST`: Orchestrator ran baseline verification in the
   T-0005 worktree before implementation handoff.
+- `2026-06-28 16:14 WEST`: T-0005 implementer performed the required
+  implementer skill applicability check, confirmed the existing linked
+  worktree/branch, and added the first failing registry behavior tests before
+  production registry code.
+- `2026-06-28 16:19 WEST`: Focused RED run
+  `CI=true corepack pnpm vitest run packages/core/src/index.test.ts` executed
+  and failed 8/8 tests because the registry exports/behavior did not exist yet;
+  workspace package links were refreshed with escalated `corepack pnpm install`
+  after the sandboxed install hit npm DNS failures.
+- `2026-06-28 16:21 WEST`: Implemented the registry core in `@spine-ts/core`
+  and reran the focused test; GREEN run passed 8/8 tests. Semantic tag lookup
+  remains API-shaped but intentionally empty for the current copied proto
+  closure because no registered `(is)`/`(every_is)` consumers are present.
+- `2026-06-28 16:22 WEST`: First `CI=true corepack pnpm typecheck` failed
+  because file option helper generics allowed arbitrary descriptor extensions;
+  narrowed the public helper type to file-option extensions before rerunning.
+- `2026-06-28 16:23 WEST`: Second `CI=true corepack pnpm typecheck` still
+  failed because TypeScript did not reduce the conditional descriptor type for
+  `Extension extends FileOptionExtension`; changed helpers to generic over the
+  file option value shape instead.
+- `2026-06-28 16:24 WEST`: Focused verification after docs/API updates:
+  typecheck, lint, docs check, and focused registry test passed; format check
+  failed only for `packages/core/src/index.ts` and the T-0005 work log, so
+  targeted Prettier cleanup follows.
+- `2026-06-28 16:25 WEST`: Ran targeted Prettier cleanup for the two files
+  reported by format check.
+- `2026-06-28 16:27 WEST`: Full `CI=true corepack pnpm verify` passed on the
+  registry implementation; while reviewing public exports, added
+  `FileOptionExtension` to the TypeDoc expected core export assertions before
+  final verification rerun.
+- `2026-06-28 16:28 WEST`: Final `CI=true corepack pnpm verify` passed on the
+  final implementation tree: 8 test files, 20 tests, coverage above the 90%
+  gate, docs check, proto lint/generate, and generated output clean.
 
 ## Decisions
 
 - `D-0027`: Put the first runtime type registry in `@spine-ts/core`.
 - `D-0028`: T-0005 registry lookup and type URL policy.
-- Still pending during implementation: whether Protobuf-ES descriptors are
-  sufficient for first-field/declaration-order and rich Spine option metadata.
+- Protobuf-ES descriptors are sufficient for this slice's full name, file,
+  first-field, type URL prefix, and file-option metadata.
+- Semantic tag extraction from `(is)` and `(every_is)` consumers is deferred:
+  the current copied proto closure defines options but has no registered
+  message consumers that make runtime tag metadata provable.
 
 ## Human Questions And Answers
 
@@ -183,15 +219,46 @@ Out of scope:
 - `build-protocol/tasks/T-0005-metadata-type-registry/TASK.md`
 - `build-protocol/work-logs/T-0005.md`
 - `build-protocol/reviews/T-0005-metadata-type-registry.md`
-- `build-protocol/DECISION_LOG.md`
+- `pnpm-lock.yaml`
+- `docs/USER_GUIDE.md`
+- `docs/api/README.md`
+- `docs/architecture/README.md`
+- `scripts/check-api-docs.mjs`
+- `packages/core/package.json`
+- `packages/core/README.md`
+- `packages/core/src/index.test.ts`
+- `packages/core/src/index.ts`
+- `packages/core/tsconfig.json`
 
 ## Tests Run
 
-- Pending.
+- RED: `CI=true corepack pnpm vitest run packages/core/src/index.test.ts`
+  failed 8/8 tests before production registry implementation because
+  `deriveTypeUrl`, `TypeRegistry`, and `createSpineCoreRegistry` were missing.
+- GREEN: `CI=true corepack pnpm vitest run packages/core/src/index.test.ts`
+  passed 8/8 tests after the registry implementation.
+- Typecheck attempt 1: `CI=true corepack pnpm typecheck` failed on
+  `packages/core/src/index.ts` file option helper generic bounds; fix applied.
+- Typecheck attempt 2: `CI=true corepack pnpm typecheck` failed on the same
+  helper conditional type reduction; helper generic shape changed.
+- Typecheck attempt 3: `CI=true corepack pnpm typecheck` passed.
+- Focused checks: `CI=true corepack pnpm lint`, `CI=true corepack pnpm docs:check`,
+  and `CI=true corepack pnpm vitest run packages/core/src/index.test.ts` passed.
+- Format check attempt 1: `CI=true corepack pnpm format:check` failed for
+  `packages/core/src/index.ts` and `build-protocol/work-logs/T-0005.md`.
+- Targeted formatting: `corepack pnpm prettier --write packages/core/src/index.ts build-protocol/work-logs/T-0005.md`.
+- Full verify attempt 1: `CI=true corepack pnpm verify` passed with 8 test
+  files, 20 tests, coverage above 90%, docs check, proto lint/generate, and
+  generated-output cleanliness. A final rerun is required after the log/API
+  assertion update.
+- Full verify final: `CI=true corepack pnpm verify` passed with 8 test files,
+  20 tests, coverage above 90%, docs check, proto lint/generate, and
+  generated-output cleanliness.
 
 ## Coverage Result
 
-- Pending.
+- Final coverage from `CI=true corepack pnpm verify`: statements 94.52%,
+  branches 92%, functions 93.75%, lines 94.52%.
 
 ## Documentation And Public API Impact
 
@@ -204,6 +271,10 @@ Out of scope:
 | Example `USER_GUIDE.md`       | Not expected unless splitter expands scope into to-do example code.                       |
 | API examples                  | Expected package README and docs examples for registering/looking up generated schemas.   |
 | Compatibility notes           | Expected note on descriptor-sufficient metadata and deferred custom generation questions. |
+
+Documentation updates completed for package README, framework user guide, API
+reference notes/checks, and architecture notes. TypeDoc checks assert the new
+public `@spine-ts/core` exports.
 
 ## Security Impact
 
@@ -225,17 +296,24 @@ Out of scope:
   files and 13 tests passed, coverage 100%, docs check passed with the known
   TypeDoc invalid `origin` warning, proto lint/generate passed, and generated
   output was clean.
+- Final `CI=true corepack pnpm verify` passed after implementation: 8 test
+  files and 20 tests passed; coverage statements 94.52%, branches 92%,
+  functions 93.75%, lines 94.52%; docs check passed with the known TypeDoc
+  invalid `origin` warning; proto lint/generate passed; generated output was
+  clean.
 
 ## Open Risks And Follow-Up Routing
 
-| Risk/Follow-Up                                                     | Owner              | Linked Task/Decision | Disposition | Next Review Point               |
-| ------------------------------------------------------------------ | ------------------ | -------------------- | ----------- | ------------------------------- |
-| Descriptor data may not expose all Spine custom options uniformly. | T-0005 implementer | Pending decision     | Open        | Requirements splitter and tests |
-| Semantic tags may be limited by the current four-file proto set.   | T-0005 implementer | T-0004               | Open        | T-0005 implementation review    |
+| Risk/Follow-Up                                                     | Owner              | Linked Task/Decision | Disposition                                                                                              | Next Review Point                 |
+| ------------------------------------------------------------------ | ------------------ | -------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| Descriptor data may not expose all Spine custom options uniformly. | T-0005 implementer | D-0028               | Resolved for T-0005 file/first-field metadata; richer validation/entity options deferred to later tasks. | Validation/entity metadata tasks  |
+| Semantic tags may be limited by the current four-file proto set.   | T-0005 implementer | T-0004, D-0028       | Deferred with future-compatible lookup API; no provable current consumers.                               | Validation/routing metadata tasks |
 
 ## Review Rounds
 
-- Pending.
+- Formal reviewer sub-agent loop is pending orchestrator handoff. The
+  implementation sub-agent performed a local self-review against T-0005 scope
+  before commit and found no code changes required after final verification.
 
 ## Integration Result
 

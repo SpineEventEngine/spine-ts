@@ -13,14 +13,35 @@ The framework does not yet expose runnable Spine-compatible behavior. This guide
   `proto/spine-sources.json`.
 - Curated Protobuf-ES schemas, descriptors, message types, and Spine custom
   options exported from `@spine-ts/proto` for the first intake set.
+- A core type registry in `@spine-ts/core` that derives Spine type URLs,
+  registers the current curated schemas, and looks up descriptor-backed
+  metadata by full type name, type URL, or schema.
 - A placeholder to-do example workspace.
 
 ## What Is Deferred
 
 - Message validation through `@spine-event-engine/validation-ts`.
-- Runtime metadata registries and `Any` type URL helpers.
+- `Any` pack/unpack helpers.
+- Semantic tag registration from `(is)` and `(every_is)` consumers; the lookup
+  API exists, but the current copied proto closure has no provable registered
+  tag consumers.
 - gRPC service implementations.
 - Entity, bus, transport, storage, and to-do domain runtime behavior.
+
+## Type Registry
+
+```ts
+import { FieldPathSchema } from "@spine-ts/proto";
+import { deriveTypeUrl, spineCoreRegistry } from "@spine-ts/core";
+
+const typeUrl = deriveTypeUrl(FieldPathSchema);
+const metadata = spineCoreRegistry.getByFullName("spine.base.FieldPath");
+```
+
+Spine files normally declare `option (type_url_prefix) = "type.spine.io"`.
+`deriveTypeUrl()` composes that prefix with the schema's full Protobuf type
+name. For files without the Spine option, the core registry uses the documented
+fallback prefix `type.googleapis.com`.
 
 ## First Commands
 
