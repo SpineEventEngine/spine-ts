@@ -11,7 +11,7 @@ documentation `019f1004-8374-7f33-a643-13e86daebd3a`; TypeScript/API docs
 `019f1004-af48-7563-889e-dde078c55143`; security
 `019f1004-de72-7b40-9915-5ecef92ba29e`; performance/reliability
 `019f1005-0746-7353-bcda-e6bb1ee956c9`.
-Status: Round 1 follow-up re-review pending
+Status: Follow-up fixes in progress
 Implementation sub-agent: `019f0ff4-becd-7c73-9f34-9120294e9083` (Darwin)
 
 ## Reviewer IDs
@@ -101,4 +101,39 @@ lint`, and `corepack pnpm format:check` passed.
 ## Closure
 
 Round-1 fix committed as `264c4a5fe6a0e4315a5df1cedae2fb436579e9bc`.
-Orchestrator-owned follow-up review loop is pending.
+
+## Follow-Up Re-Review
+
+Review basis:
+`9613f84517b1b339a299339c83ba827735bbe4fe`.
+
+Clean reports:
+
+- Maintainability/style: no comments.
+- TypeScript/API docs: no comments.
+- Performance/reliability: no comments.
+
+Findings to fix:
+
+- Security P2: wrap structured-clone failures in a storage-specific safe error
+  message that does not include payload contents.
+- Documentation P3: top-level `README.md` should say production storage
+  adapters/repository runtime are deferred while the non-durable in-memory
+  adapter exists.
+
+Follow-up fix evidence so far:
+
+- RED: `corepack pnpm vitest run packages/storage/src/index.test.ts` failed
+  with 1 failing test because non-cloneable payloads still surfaced
+  `DataCloneError`.
+- GREEN focused so far: `corepack pnpm vitest run
+packages/storage/src/index.test.ts` passed with 1 file / 13 tests;
+  `corepack pnpm typecheck` passed; `node scripts/check-api-docs.mjs` passed
+  with 85 proto exports, 28 core exports, and 26 storage exports.
+- Full follow-up fix gate: `CI=true corepack pnpm verify` passed on
+  `2026-06-28 22:18 WEST` with 9 test files / 53 tests, coverage statements
+  99.62%, branches 93.33%, functions 100%, lines 99.61%, docs/API check with 85
+  proto exports, 28 core exports, and 26 storage exports, plus proto
+  lint/generate/check-generated.
+
+Closure pending follow-up fix commit.

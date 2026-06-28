@@ -31,6 +31,10 @@ version, `"absent"` for create-only writes, or `"any"` when the caller
 intentionally bypasses the version check. Failed checks throw
 `StorageVersionConflictError` with only key/version metadata.
 
+Payloads that cannot be cloned safely throw `StoragePayloadCloneError` with a
+fixed message. The error does not include payload contents or the original
+structured-clone failure text.
+
 ## In-Memory Adapter
 
 ```ts

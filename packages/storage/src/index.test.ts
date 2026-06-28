@@ -162,6 +162,29 @@ describe("@spine-ts/storage", () => {
     expect([...(readEventValue ?? [])]).toEqual([4, 5, 6]);
   });
 
+  it("reports non-cloneable payloads without leaking payload contents", async () => {
+    const storage = createInMemoryStorageAdapter<{ readonly action: () => string }>();
+    const leakedSecret = "token_live_do_not_log";
+
+    let thrown: unknown;
+    try {
+      await storage.writeEntities.put({
+        key: "Task:unsafe",
+        payload: {
+          action: () => leakedSecret,
+        },
+        expectedVersion: "absent",
+      });
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect((thrown as Error).name).toBe("StoragePayloadCloneError");
+    expect((thrown as Error).message).toContain("structured-clone-compatible");
+    expect((thrown as Error).message).not.toContain(leakedSecret);
+  });
+
   it("validates empty aggregate appends without retaining an empty stream", async () => {
     const storage = createInMemoryStorageAdapter<unknown, DomainEvent>();
 

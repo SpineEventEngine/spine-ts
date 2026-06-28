@@ -1,6 +1,6 @@
 # T-0008a: Storage Contracts And In-Memory Adapter
 
-Status: Round 1 follow-up re-review pending
+Status: Follow-up fixes in progress
 Start: `2026-06-28 21:35 WEST`
 End: Pending
 Setup baseline commit: `db7130e`
@@ -189,6 +189,28 @@ pnpm typecheck`, `corepack pnpm lint`, `corepack pnpm format:check`, and
   branches 93.33%, functions 100%, lines 99.6%; docs/API check confirmed 85
   proto exports, 28 core exports, and 25 storage exports; proto
   lint/generate/check-generated passed.
+- Follow-up re-review completed at HEAD
+  `9613f84517b1b339a299339c83ba827735bbe4fe`: maintainability/style,
+  TypeScript/API docs, and performance/reliability reported no comments.
+  Remaining findings: Security P2 safe clone failure messages for non-cloneable
+  payloads; Documentation P3 top-level README storage status.
+- Follow-up RED evidence on `2026-06-28 22:16 WEST`: after adding a focused
+  non-cloneable payload regression with a sensitive-looking string in function
+  source, `corepack pnpm vitest run packages/storage/src/index.test.ts` failed
+  with 1 failing test because the error name was still `DataCloneError`.
+- Follow-up fix in progress on `2026-06-28 22:17 WEST`: clone failures are
+  wrapped in `StoragePayloadCloneError` with a fixed structured-clone
+  compatibility message, API docs/checks include 26 storage exports, and the
+  top-level README now states that only production storage adapters/repository
+  runtime are deferred while the non-durable in-memory adapter exists.
+- Follow-up GREEN/full evidence: `corepack pnpm vitest run
+packages/storage/src/index.test.ts` passed with 1 file / 13 tests; `corepack
+pnpm typecheck`, `corepack pnpm lint`, `corepack pnpm format:check`, and
+  `corepack pnpm docs:check` passed. `CI=true corepack pnpm verify` passed on
+  `2026-06-28 22:18 WEST`: 9 test files / 53 tests, coverage statements 99.62%,
+  branches 93.33%, functions 100%, lines 99.61%; docs/API check confirmed 85
+  proto exports, 28 core exports, and 26 storage exports; proto
+  lint/generate/check-generated passed.
 - No blocking questions known.
-- Next step: run the orchestrator-owned follow-up review loop on the round-1
-  fix.
+- Next step: commit follow-up fixes, then hand back to the orchestrator-owned
+  review loop.

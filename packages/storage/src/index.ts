@@ -225,6 +225,14 @@ export class StorageVersionConflictError extends Error {
   }
 }
 
+/** Error thrown when a payload cannot be safely cloned into storage. */
+export class StoragePayloadCloneError extends Error {
+  constructor() {
+    super("Storage payload is not structured-clone-compatible.");
+    this.name = "StoragePayloadCloneError";
+  }
+}
+
 /** Creates an isolated, non-durable in-memory storage adapter. */
 export function createInMemoryStorageAdapter<
   EntityPayload = unknown,
@@ -447,7 +455,11 @@ function assertExpectedVersion(
 }
 
 function cloneValue<T>(value: T): T {
-  return structuredClone(value);
+  try {
+    return structuredClone(value);
+  } catch {
+    throw new StoragePayloadCloneError();
+  }
 }
 
 function asyncResult<T>(operation: () => T): Promise<T> {

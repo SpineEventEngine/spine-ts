@@ -23,9 +23,10 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 Storage exports include `StorageAdapter`, `StorageRecord`,
 `WriteSideRecordStore`, `ReadSideRecordStore`, aggregate event history
 contracts, tenant/diagnostic stores, `StorageVersionConflictError`,
-`InMemoryStorageAdapter`, and `createInMemoryStorageAdapter()`. These APIs
-document optimistic version checks, write-side/read-side segregation,
-deterministic in-memory behavior, and non-durability.
+`StoragePayloadCloneError`, `InMemoryStorageAdapter`, and
+`createInMemoryStorageAdapter()`. These APIs document optimistic version
+checks, safe structured-clone failure reporting, write-side/read-side
+segregation, deterministic in-memory behavior, and non-durability.
 
 The generated Protobuf-ES implementation files themselves remain excluded from
 TypeDoc output and are not broadly re-exported from the package root.

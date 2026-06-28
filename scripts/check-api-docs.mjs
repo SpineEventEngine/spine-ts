@@ -144,6 +144,7 @@ const expectedStorageExports = [
   "DiagnosticRecordStore",
   "StorageAdapter",
   "StorageVersionConflictError",
+  "StoragePayloadCloneError",
   "createInMemoryStorageAdapter",
   "InMemoryStorageAdapter",
 ];
