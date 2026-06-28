@@ -1,6 +1,6 @@
 # T-0008a: Storage Contracts And In-Memory Adapter
 
-Status: Implementation in progress
+Status: Implementation complete; awaiting orchestrator review loop
 Start: `2026-06-28 21:35 WEST`
 End: Pending
 Setup baseline commit: `db7130e`
@@ -9,8 +9,8 @@ Branch: `task/T-0008a-storage-contracts`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0008a-storage-contracts`
 Authoring sub-agent: `019f0ff4-becd-7c73-9f34-9120294e9083` (Darwin)
 Reviewer sub-agents: Pending
-Implementation baseline commit: `f1911d7`
-Final branch checkpoint before integration: Pending
+Implementation baseline commit: `0a6908e` (handoff), `f1911d7` recorded by setup logs
+Final branch checkpoint before integration: Pending implementation commit
 Main integration merge commit: Pending
 
 ## Objective
@@ -134,6 +134,28 @@ reviewers report no comments.
   spawned on `2026-06-28 21:38 WEST` with ownership of the T-0008a storage
   contracts, in-memory adapter, docs/API updates, durable logs, and verification
   evidence.
+- Implementation completed on `2026-06-28 21:51 WEST`: replaced the
+  metadata-only storage skeleton with async record-oriented storage contracts,
+  `StorageVersionConflictError`, and `InMemoryStorageAdapter`; added focused
+  Vitest coverage for empty reads, optimistic version conflicts, snapshot
+  isolation, stream ordering, scans/deletes, tenant indexes, diagnostics, and
+  instance isolation; updated package/user/architecture/API docs and API export
+  checks for 25 storage exports.
+- RED evidence: `corepack pnpm vitest run packages/storage/src/index.test.ts`
+  failed before implementation with 6/6 tests failing because
+  `createInMemoryStorageAdapter` and `InMemoryStorageAdapter` were not exported
+  by the skeleton.
+- GREEN/focused evidence: `corepack pnpm vitest run
+packages/storage/src/index.test.ts` passed with 1 file / 9 tests;
+  `corepack pnpm typecheck`, `corepack pnpm lint`, `corepack pnpm
+format:check`, and `corepack pnpm docs:check` passed. Docs check retained the
+  known invalid `origin` TypeDoc warning and confirmed 85 proto exports, 28 core
+  exports, and 25 storage exports.
+- Full verification evidence: `CI=true corepack pnpm verify` passed on
+  `2026-06-28 21:53 WEST`: node check, typecheck, lint, format, tests, coverage,
+  docs/API check, proto lint/generate, and generated-output cleanliness all
+  passed. Vitest ran 9 files / 49 tests. Coverage: statements 99.63%, branches
+  93.67%, functions 100%, lines 99.62%.
 - No blocking questions known.
-- Next step: wait for implementation commit, then run the required five-role
-  review loop.
+- Next step: commit implementation, then hand off to the orchestrator-owned
+  five-role review loop.

@@ -1,14 +1,17 @@
 # Spine TS User Guide
 
 Current status: early framework guide for the descriptor registry,
-single-message validation facade, and core envelope construction helpers.
+single-message validation facade, core envelope construction helpers, and the
+first storage contracts with an in-memory adapter.
 
 This guide covers the runnable behavior available now: Spine proto descriptors
 are exposed through curated packages, `@spine-ts/core` can derive and look up
 type metadata, framework users can validate one Protobuf message at a time, and
 callers can pack already-built domain messages into generated Spine
-`Command`/`Event` envelopes. Entity runtime, transport, storage, and the to-do
-application remain later slices.
+`Command`/`Event` envelopes. `@spine-ts/storage` also exposes asynchronous
+record-oriented storage contracts and a deterministic in-memory adapter for
+tests/development. Entity runtime, transport, durable production storage, and
+the to-do application remain later slices.
 
 ## What Exists Now
 
@@ -33,6 +36,12 @@ application remain later slices.
 - Core `packAny()`, `unpackAny()`, `packCommand()`, and `packEvent()` helpers
   for Spine-aware payload packing and generated command/event envelope
   construction.
+- Storage contracts in `@spine-ts/storage` for write-side entity records,
+  aggregate event histories/snapshots, read-side projection records, delivery
+  records, tenant indexes, and safe diagnostics.
+- `InMemoryStorageAdapter` for deterministic tests and local development. It is
+  isolated per instance, snapshots stored values, supports optimistic version
+  checks, and is not durable across process restarts.
 - A placeholder to-do example workspace.
 
 ## What Is Deferred
@@ -44,7 +53,8 @@ application remain later slices.
   API exists, but the current copied proto closure has no provable registered
   tag consumers.
 - gRPC service implementations.
-- Entity, bus, transport, storage, and to-do domain runtime behavior.
+- Entity, bus, transport, durable production storage, and to-do domain runtime
+  behavior.
 
 ## Type Registry
 
@@ -182,6 +192,49 @@ Validation errors are structured through `ValidationException` and do not expose
 packed bytes or payload contents. `unpackAny()` returns `undefined` for type URL
 mismatches or malformed payload bytes. Command and event envelopes snapshot the
 supplied generated IDs and contexts before returning.
+
+## Storage
+
+Use `@spine-ts/storage` when a test or later runtime slice needs framework-owned
+record stores without a repository or database adapter:
+
+```ts
+import { createInMemoryStorageAdapter, StorageVersionConflictError } from "@spine-ts/storage";
+
+const storage = createInMemoryStorageAdapter();
+
+const created = await storage.writeEntities.put({
+  key: "Task:1",
+  payload: { title: "Draft" },
+  expectedVersion: "absent",
+});
+
+await storage.aggregateEvents.append({
+  streamId: "Task:1",
+  expectedVersion: 0,
+  events: [{ id: "event-1", typeUrl: "type.spine.io/tasks.TaskCreated" }],
+});
+
+try {
+  await storage.writeEntities.put({
+    key: "Task:1",
+    payload: { title: "Stale write" },
+    expectedVersion: created.version - 1,
+  });
+} catch (error) {
+  if (error instanceof StorageVersionConflictError) {
+    console.warn(`Retry record ${error.key} at version ${error.actualVersion}.`);
+  }
+}
+```
+
+The storage surface keeps write-side stores (`writeEntities`,
+`aggregateEvents`, `aggregateSnapshots`, and `deliveryRecords`) distinct from
+the read-side projection store (`readProjections`). Command-side runtime code
+must not query read-side projections inside write transactions. The in-memory
+adapter does not log payloads and diagnostic records should contain only safe
+labels, not credentials, auth headers, packed bytes, or sensitive payload
+contents.
 
 ## First Commands
 

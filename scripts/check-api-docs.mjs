@@ -120,6 +120,33 @@ const expectedCoreExports = [
   "packCommand",
   "packEvent",
 ];
+const expectedStorageExports = [
+  "ExpectedStorageVersion",
+  "StorageRecordKey",
+  "StorageRecordKind",
+  "StorageDurability",
+  "StorageRecord",
+  "PutStorageRecordInput",
+  "DeleteStorageRecordInput",
+  "WriteSideRecordStore",
+  "ReadSideRecordStore",
+  "EntityRecord",
+  "AggregateSnapshotRecord",
+  "ProjectionRecord",
+  "DeliveryRecord",
+  "AggregateEventRecord",
+  "AppendAggregateEventsInput",
+  "AggregateEventStore",
+  "TenantIndexStore",
+  "DiagnosticSeverity",
+  "AppendDiagnosticInput",
+  "DiagnosticRecord",
+  "DiagnosticRecordStore",
+  "StorageAdapter",
+  "StorageVersionConflictError",
+  "createInMemoryStorageAdapter",
+  "InMemoryStorageAdapter",
+];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 
 const typedocExecutable = process.platform === "win32" ? "typedoc.cmd" : "typedoc";
@@ -178,6 +205,7 @@ collectNames(apiDocs);
 
 const missingExports = expectedProtoExports.filter((name) => !documentedNames.has(name));
 const missingCoreExports = expectedCoreExports.filter((name) => !documentedNames.has(name));
+const missingStorageExports = expectedStorageExports.filter((name) => !documentedNames.has(name));
 
 if (missingExports.length > 0) {
   console.error(
@@ -193,6 +221,13 @@ if (missingCoreExports.length > 0) {
   process.exit(1);
 }
 
+if (missingStorageExports.length > 0) {
+  console.error(
+    `TypeDoc JSON is missing expected @spine-ts/storage exports: ${missingStorageExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
 const protoIndexSource = readFileSync(protoIndexPath, "utf8");
 
 if (/export\s+\*\s+from\s+["']\.\/generated\//.test(protoIndexSource)) {
@@ -203,5 +238,5 @@ if (/export\s+\*\s+from\s+["']\.\/generated\//.test(protoIndexSource)) {
 }
 
 console.log(
-  `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-ts/proto exports and ${expectedCoreExports.length} expected @spine-ts/core exports.`,
+  `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-ts/proto exports, ${expectedCoreExports.length} expected @spine-ts/core exports, and ${expectedStorageExports.length} expected @spine-ts/storage exports.`,
 );

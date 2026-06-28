@@ -16,8 +16,8 @@ values, and custom options. This boundary is intentionally contract-only:
 - canonical `Command`, `Event`, `ActorContext`, `TenantId`, `UserId`,
   `Version`, diagnostics, enrichment, and transitive time/net/UI support
   contracts are available without hand-written TypeScript shapes; and
-- buses, storage, transport, entity runtime behavior, and runtime metadata
-  generation remain out of scope until later tasks.
+- buses, transport, entity runtime behavior, and runtime metadata generation
+  remain out of scope until later tasks.
 
 ## Core Metadata Registry
 
@@ -111,3 +111,29 @@ timestamps, actor or tenant context, event producer IDs, entity versions,
 origins, command system properties, storage records, acknowledgements, delivery
 state, bus dispatch, handler registration, or transport metadata. Those
 responsibilities remain with later runtime slices.
+
+## Storage Boundary
+
+`@spine-ts/storage` now owns the first framework storage seam. The package
+exports asynchronous, record-oriented contracts and an in-memory adapter, but it
+does not implement repositories, transactions, buses, delivery workers, service
+APIs, ZeroMQ transport, or production database adapters.
+
+The adapter surface is deliberately split by runtime role:
+
+- write-side stores: `writeEntities`, `aggregateEvents`,
+  `aggregateSnapshots`, and `deliveryRecords`;
+- read-side stores: `readProjections`;
+- shared framework support stores: `tenantIndex` and `diagnostics`.
+
+Entity, snapshot, projection, and delivery stores use versioned records with
+optimistic `expectedVersion` checks. Aggregate event histories append ordered
+stream records with expected stream versions and adapter-local global
+positions. These metadata fields provide the future repository seam without
+introducing repository classes in this slice.
+
+`InMemoryStorageAdapter` is a test/development adapter. Each instance is
+isolated, keeps deterministic counters, snapshots values on write/read, and
+advertises `durability.durable === false`. Diagnostics are intended for safe
+framework metadata only; storage errors and diagnostics must not include
+credentials, auth headers, packed bytes, or sensitive payload contents.
