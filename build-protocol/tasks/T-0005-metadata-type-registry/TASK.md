@@ -1,9 +1,9 @@
 # T-0005: Metadata And Type Registry
 
-Status: Ready for implementation branch
+Status: Implementation branch created
 Start: `2026-06-28 15:58 WEST`
 End: Pending
-Baseline commit: `8a051f6`
+Baseline commit: `80714f3`
 Task log path: `build-protocol/tasks/T-0005-metadata-type-registry/TASK.md`
 Branch: `task/T-0005-registry-core`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0005-registry-core`
@@ -160,6 +160,9 @@ Out of scope:
   produced the staged breakdown, and recommended the first implementable slice
   as `task/T-0005-registry-core` in `packages/core`. Orchestrator closed the
   splitter and recorded `D-0027`/`D-0028`.
+- `2026-06-28 16:06 WEST`: Orchestrator created isolated branch/worktree
+  `task/T-0005-registry-core` at `.worktrees/T-0005-registry-core` from
+  baseline `80714f3`.
 
 ## Decisions
 
@@ -214,7 +217,8 @@ Out of scope:
 
 ## Verification
 
-- Pending.
+- `git worktree add .worktrees/T-0005-registry-core -b task/T-0005-registry-core main`
+  created the implementation worktree at baseline `80714f3`.
 
 ## Open Risks And Follow-Up Routing
 

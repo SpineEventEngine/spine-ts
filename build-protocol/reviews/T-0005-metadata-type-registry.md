@@ -3,7 +3,7 @@
 Task log: `build-protocol/tasks/T-0005-metadata-type-registry/TASK.md`
 Work log: `build-protocol/work-logs/T-0005.md`
 Branch: `task/T-0005-registry-core`
-Baseline commit: `8a051f6`
+Baseline commit: `80714f3`
 Reviewed commit/diff basis: Pending branch diff
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0005-registry-core`
 Reviewer sub-agents: Pending
