@@ -5,12 +5,11 @@ Work log: `build-protocol/work-logs/T-0006.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Setup baseline commit: `62ffc33`
 Implementation baseline commit: `e953662`
-Reviewed commit/diff basis: Round 2 reviewed code through
-`0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`; round-2 findings log head is
-`15b7933216b038888e10ab3cbbefc93c7a79d78d`.
+Reviewed commit/diff basis: Round 3 pending against
+`e953662...76f6b017c55e51f5af639a837b2b529a469d47ac`.
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
-Reviewer sub-agents: Round 2 completed; changes requested
-Status: Round-2 code-fix committed; log handoff active
+Reviewer sub-agents: Round 2 completed; round 3 pending dispatch
+Status: Round-2 focused fix complete; ready for round 3
 
 ## Reviewer IDs
 
@@ -95,6 +94,9 @@ Started from round-2 findings log head
 
 Code-fix commit:
 `74d56ab798eb3fad09759d69e480985320af363a`.
+
+Round-2 log handoff commit:
+`76f6b017c55e51f5af639a837b2b529a469d47ac`.
 
 Focused fix basis:
 `15b7933216b038888e10ab3cbbefc93c7a79d78d...74d56ab798eb3fad09759d69e480985320af363a`.
