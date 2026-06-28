@@ -1,6 +1,6 @@
 # T-0009b: Handler Metadata Contract And Explicit Registration API
 
-Status: Baseline verified; ready for implementation
+Status: Implementation in progress
 Start: `2026-06-29 00:40 WEST`
 End: Pending
 Baseline commit: `11a6c70`
@@ -8,10 +8,10 @@ Task log path: `build-protocol/tasks/T-0009b-handler-metadata/TASK.md`
 Branch: `task/T-0009b-handler-metadata`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b-handler-metadata`
 Requirements splitter: `019f1097-55bb-7b73-a9f8-706db486721e` (Kierkegaard the 2nd)
-Authoring sub-agent: Pending
+Authoring sub-agent: `019f109d-ce8b-7b42-94d3-cc93b9ead054` (Russell the 2nd)
 Reviewer sub-agents: Pending
-Branch setup commit: Pending
-Implementation baseline commit: Pending
+Branch setup commit: `2b03b6b`
+Implementation baseline commit: `b1d158e`
 Implementation commit: Pending branch commit
 Final branch HEAD: Pending branch commit
 
@@ -183,7 +183,9 @@ Out of scope:
 
 ## Review Rounds
 
-- Pending.
+- Authoring sub-agent dispatched on `2026-06-29 00:43 WEST` with ownership of
+  the first T-0009b slice: handler metadata contract plus explicit
+  registration API.
 
 ## Integration Result
 
