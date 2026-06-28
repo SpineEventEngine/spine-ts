@@ -1,6 +1,6 @@
 # T-0008a: Storage Contracts And In-Memory Adapter
 
-Status: Setup on `main`; branch/worktree pending
+Status: Branch/worktree created; baseline verification pending
 Start: `2026-06-28 21:35 WEST`
 End: Pending
 Setup baseline commit: `db7130e`
@@ -9,7 +9,7 @@ Branch: `task/T-0008a-storage-contracts`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0008a-storage-contracts`
 Authoring sub-agent: Pending
 Reviewer sub-agents: Pending
-Implementation baseline commit: Pending
+Implementation baseline commit: Pending baseline verification
 Final branch checkpoint before integration: Pending
 Main integration merge commit: Pending
 
@@ -122,6 +122,8 @@ reviewers report no comments.
 ## Durable State
 
 - Setup logs created on `main` after T-0007b integration commit `db7130e`.
+- Branch/worktree created from setup commit
+  `d1ff2d96e1e67eeb072d8ac3868ec9fb2c54b475`.
 - No blocking questions known.
-- Next step: create branch/worktree, run baseline verification, and dispatch the
-  implementation sub-agent.
+- Next step: run baseline verification and dispatch the implementation
+  sub-agent.

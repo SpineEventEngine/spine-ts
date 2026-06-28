@@ -7,7 +7,7 @@ Setup baseline commit: `db7130e`
 Implementation baseline commit: Pending
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0008a-storage-contracts`
 Reviewer sub-agents: Pending
-Status: Setup on `main`; implementation pending
+Status: Branch/worktree created; baseline verification pending
 Implementation sub-agent: Pending
 
 ## Reviewer IDs
