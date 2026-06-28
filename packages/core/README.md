@@ -76,15 +76,16 @@ try {
 message data from `@spine-ts/proto`. `checkValid()` uses the same validation
 path and throws `ValidationException` when violations are present.
 Validation details are safe by default: the facade omits raw invalid
-`fieldValue` data, redacts every upstream placeholder value while preserving
-placeholder keys, and converts upstream validation runtime failures into
+`fieldValue` data, redacts every upstream or transition-rule placeholder value
+while preserving placeholder keys, and converts upstream validation runtime failures into
 structured repo-local violations.
 
 Stateful checks such as Spine `(set_once)` require previous and proposed state.
 They are intentionally separate from single-message validation and use the
 framework-owned `validateTransition()` seam. Full entity transaction enforcement
-will attach transition rules in a later runtime task. Throwing transition rules
-are isolated into structured violations so later rules still run in order.
+will attach transition rules in a later runtime task. Rule-returned violations
+are sanitized before aggregation, and throwing transition rules are isolated
+into structured violations so later rules still run in order.
 
 This package does not yet implement `Any` packing/unpacking, runtime buses,
 entity repositories, storage, decorators, handlers, or transport behavior.

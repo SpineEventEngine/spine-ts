@@ -336,6 +336,67 @@ describe("@spine-ts/core validation facade", () => {
     expect(transitionResult.error?.constraintViolation).toEqual([violation]);
   });
 
+  it("sanitizes transition-rule returned violation details before aggregation", () => {
+    const previous = create(RequiredNameSchema, { name: "previous-secret" });
+    const next = create(RequiredNameSchema, { name: "next-secret" });
+    const leakingViolation = create(ConstraintViolationSchema, {
+      typeName: "example.validation.RequiredName",
+      fieldPath: create(FieldPathSchema, { fieldName: ["name"] }),
+      fieldValue: create(AnySchema, {
+        typeUrl: "type.example.test/example.SecretState",
+        value: new Uint8Array([115, 101, 99, 114, 101, 116]),
+      }),
+      message: create(TemplateStringSchema, {
+        withPlaceholders: "Name changed from `${previous}` to `${next}`.",
+        placeholderValue: {
+          previous: "previous-secret",
+          next: "next-secret",
+          arbitrary: "rule-owned-secret",
+        },
+      }),
+    });
+
+    const result = validateTransition({ schema: RequiredNameSchema, previous, next }, [
+      {
+        validateTransition() {
+          return [leakingViolation];
+        },
+      },
+    ]);
+
+    expect(result.valid).toBe(false);
+    if (result.valid) {
+      throw new Error("Expected transition validation to fail.");
+    }
+    const [violation] = result.violations;
+
+    expect(violation.typeName).toBe("example.validation.RequiredName");
+    expect(violation.fieldPath?.fieldName).toEqual(["name"]);
+    expect(violation.fieldValue).toBeUndefined();
+    expect(violation.message?.withPlaceholders).toBe(
+      "Name changed from `${previous}` to `${next}`.",
+    );
+    expect(violation.message?.placeholderValue).toEqual({
+      previous: "[redacted]",
+      next: "[redacted]",
+      arbitrary: "[redacted]",
+    });
+    expect(result.error.constraintViolation).toEqual(result.violations);
+    expect(JSON.stringify(result.violations)).not.toContain("previous-secret");
+    expect(JSON.stringify(result.error)).not.toContain("next-secret");
+    expect(JSON.stringify(result.error)).not.toContain("rule-owned-secret");
+
+    try {
+      throw new ValidationException(result.error);
+    } catch (error) {
+      const validationError = (error as ValidationException).asMessage();
+
+      expect(JSON.stringify(validationError)).not.toContain("previous-secret");
+      expect(JSON.stringify(validationError)).not.toContain("next-secret");
+      expect(JSON.stringify(validationError)).not.toContain("rule-owned-secret");
+    }
+  });
+
   it("isolates throwing transition rules and preserves deterministic rule order", () => {
     const previous = create(RequiredNameSchema, { name: "first" });
     const next = create(RequiredNameSchema, { name: "second" });

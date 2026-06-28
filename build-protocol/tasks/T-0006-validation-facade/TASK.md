@@ -19,7 +19,9 @@ Round-2 code-fix commit: `74d56ab798eb3fad09759d69e480985320af363a`
 Round-2 log handoff commit: `76f6b017c55e51f5af639a837b2b529a469d47ac`
 Round-3 review readiness commit: `9560d2e330cf76c9af910ab5c59d26aac278a9a5`
 Round-3 dispatch log commit: `9b51b43dac2db509c428fcc849411bbbf170948d`
-Current branch HEAD: `9b51b43dac2db509c428fcc849411bbbf170948d`
+Round-3 findings log HEAD: `86aa522e31a692b49abb2de4aae7d41c8224f0ed`
+Current branch HEAD before round-3 security fix: `86aa522e31a692b49abb2de4aae7d41c8224f0ed`
+Round-3 security fix commit: Pending
 Final branch HEAD: Pending round-3 review closure
 
 ## Objective
@@ -258,6 +260,40 @@ Round-2 TDD plan:
    `CI=true corepack pnpm verify`, then commit the code fix and a final log
    handoff if needed to record exact commit metadata.
 
+### Round-3 Focused Security Fix Skill Applicability Check
+
+Timestamp: `2026-06-28 19:00 WEST`
+
+Canonical checklist performed before round-3 fix implementation actions:
+
+- Session and prompt-supplied skills read fully before task actions:
+  `receiving-code-review`, `test-driven-development`,
+  `security-best-practices`, and `verification-before-completion`.
+- Human round-3 feedback requires sanitizing transition-rule returned
+  `ConstraintViolation` values before aggregation, using TDD, recording RED
+  evidence in the work log, running focused validation tests and full
+  `CI=true corepack pnpm verify`, and committing the result.
+- Security reference check found no TypeScript library-specific reference in
+  the available security skill bundle; this pass applies the general
+  secure-default rule of minimizing exposed payload data.
+- Worktree check confirmed branch
+  `task/T-0006a-validation-facade-contract` at
+  `86aa522e31a692b49abb2de4aae7d41c8224f0ed` before edits.
+- Conflict resolution: the round-3 security finding is technically correct.
+  `validateMessage()` already rebuilds violations through the redaction helper,
+  while `validateTransition()` appended rule-returned violations directly.
+
+Round-3 TDD plan:
+
+1. Add RED regression coverage proving transition-rule returned `fieldValue`
+   and arbitrary placeholder values leak through `result.violations`,
+   `result.error.constraintViolation`, and `ValidationException.asMessage()`.
+2. Reuse the existing violation sanitizer for transition-rule returned
+   violations while preserving type name, field path, and template text.
+3. Update docs/logs for transition-rule returned violation sanitization.
+4. Run focused validation tests, full `CI=true corepack pnpm verify`, then
+   commit the focused fix.
+
 ## Scope
 
 In scope:
@@ -418,6 +454,33 @@ Out of scope:
 
 ## Tests Run
 
+- Round-3 RED focused test:
+  `corepack pnpm test packages/core/src/index.test.ts` failed as expected.
+  Vitest ran 19 tests: 18 passed and 1 failed because
+  `validateTransition()` returned the rule-provided `fieldValue` unchanged as a
+  `google.protobuf.Any` payload.
+- Round-3 GREEN focused core test:
+  `corepack pnpm test packages/core/src/index.test.ts` passed with 1 test file
+  and 19 tests.
+- Round-3 focused validation tests:
+  `corepack pnpm test packages/core/src/index.test.ts
+packages/core/src/validation-facade-boundary.test.ts` passed with 2 test files
+  and 21 tests.
+- Round-3 focused typecheck: `corepack pnpm typecheck` passed after making the
+  sanitizer type compatible with generated `ConstraintViolation` messages and
+  upstream validator-shaped data.
+- Round-3 focused quality checks: `corepack pnpm typecheck`,
+  `corepack pnpm test packages/core/src/index.test.ts
+packages/core/src/validation-facade-boundary.test.ts`, `corepack pnpm lint`,
+  `corepack pnpm docs:check`, and `corepack pnpm format:check` all passed.
+  Docs check confirmed 13 expected `@spine-ts/proto` exports and 21 expected
+  `@spine-ts/core` exports with the known invalid `origin` TypeDoc warning.
+- Round-3 full verification before fix commit:
+  `CI=true corepack pnpm verify` passed. Vitest ran 9 test files and 33 tests;
+  coverage statements 99.19%, branches 90.9%, functions 100%, lines 99.19%;
+  docs check confirmed 13 proto exports and 21 core exports with the known
+  invalid `origin` TypeDoc warning; proto lint/generate and generated-output
+  cleanliness passed.
 - Round-2 RED focused tests:
   `corepack pnpm test packages/core/src/index.test.ts
 packages/core/src/validation-facade-boundary.test.ts` failed as expected.
@@ -537,6 +600,16 @@ pnpm docs:check` passed and confirmed 13 expected `@spine-ts/proto` exports
 
 ## Verification
 
+- Round-3 focused verification passed: `corepack pnpm typecheck` passed and
+  `corepack pnpm test packages/core/src/index.test.ts
+packages/core/src/validation-facade-boundary.test.ts` passed with 2 test files
+  and 21 tests.
+- Round-3 full verification before fix commit passed:
+  `CI=true corepack pnpm verify` passed typecheck, lint, format, tests,
+  coverage, docs check, proto lint/generate, and generated-output cleanliness.
+  Vitest ran 9 test files and 33 tests; coverage statements 99.19%, branches
+  90.9%, functions 100%, lines 99.19%; docs check confirmed 13 proto exports
+  and 21 core exports with the known invalid `origin` warning.
 - Baseline `CI=true corepack pnpm verify` passed before implementation: 8 test
   files and 23 tests passed; coverage statements 98.91%, branches 96.96%,
   functions 100%, lines 98.91%; docs check passed with the known TypeDoc

@@ -3,7 +3,6 @@ import type { DescField, Message, MessageShape } from "@bufbuild/protobuf";
 import type { GenExtension, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { FileOptions } from "@bufbuild/protobuf/wkt";
 import { validate as validateWithSpine } from "@spine-event-engine/validation-ts";
-import type { ConstraintViolation as UpstreamConstraintViolation } from "@spine-event-engine/validation-ts";
 import {
   ConstraintViolationSchema,
   FieldPathSchema,
@@ -128,7 +127,7 @@ export function validateTransition<Schema extends MessageSchema>(
 
   for (const rule of rules) {
     try {
-      violations.push(...rule.validateTransition(request));
+      violations.push(...rule.validateTransition(request).map(toConstraintViolation));
     } catch {
       violations.push(
         createFacadeFailureViolation(request.schema.typeName, TRANSITION_RULE_FAILURE_MESSAGE),
@@ -479,7 +478,22 @@ function createFacadeFailureViolation(typeName: string, message: string): Constr
   });
 }
 
-function toConstraintViolation(violation: UpstreamConstraintViolation): ConstraintViolation {
+interface SanitizableConstraintViolation {
+  readonly typeName: string;
+  readonly fieldPath?:
+    | {
+        readonly fieldName: readonly string[];
+      }
+    | undefined;
+  readonly message?:
+    | {
+        readonly withPlaceholders: string;
+        readonly placeholderValue: Record<string, string> | undefined;
+      }
+    | undefined;
+}
+
+function toConstraintViolation(violation: SanitizableConstraintViolation): ConstraintViolation {
   return create(ConstraintViolationSchema, {
     message:
       violation.message === undefined
@@ -492,10 +506,14 @@ function toConstraintViolation(violation: UpstreamConstraintViolation): Constrai
     fieldPath:
       violation.fieldPath === undefined
         ? undefined
-        : create(FieldPathSchema, { fieldName: violation.fieldPath.fieldName }),
+        : create(FieldPathSchema, { fieldName: [...violation.fieldPath.fieldName] }),
   });
 }
 
-function redactPlaceholderValues(values: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(Object.keys(values).map((key) => [key, REDACTED_VALIDATION_DETAIL]));
+function redactPlaceholderValues(
+  values: Record<string, string> | undefined,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.keys(values ?? {}).map((key) => [key, REDACTED_VALIDATION_DETAIL]),
+  );
 }

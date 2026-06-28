@@ -88,11 +88,11 @@ try {
 `validateMessage()` is for single-message Spine validation options such as
 `(required)`, `(pattern)`, and `(validate)`. Returned
 `ConstraintViolation`/`ValidationError` data is safe by default: raw invalid
-field values are omitted, all upstream placeholder values are redacted, and
-upstream validation runtime failures are converted into repo-local structured
-violations instead of leaking raw exceptions. Placeholder keys may remain so
-callers can understand the template shape, but values do not expose payload
-data.
+field values are omitted, upstream and transition-rule placeholder values are
+redacted, and upstream validation runtime failures are converted into repo-local
+structured violations instead of leaking raw exceptions. Placeholder keys may
+remain so callers can understand the template shape, but values do not expose
+payload data.
 
 Transition-only rules such as `(set_once)` need previous state and proposed
 state, so they use the separate framework seam:
@@ -105,8 +105,9 @@ const result = validateTransition({ schema: TaskSchema, previous, next }, rules)
 
 The first seam is intentionally minimal. Later entity/runtime tasks will provide
 the built-in transition rules and call this seam from framework-controlled
-transactions. If a transition rule throws, the seam records a structured
-transition-rule failure and continues later rules in order.
+transactions. Rule-returned violations are sanitized before aggregation. If a
+transition rule throws, the seam records a structured transition-rule failure
+and continues later rules in order.
 
 ## First Commands
 

@@ -5,11 +5,11 @@ Work log: `build-protocol/work-logs/T-0006.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Setup baseline commit: `62ffc33`
 Implementation baseline commit: `e953662`
-Reviewed commit/diff basis: Round 3 pending against
+Reviewed commit/diff basis: Round 3 completed against
 `e953662...9560d2e330cf76c9af910ab5c59d26aac278a9a5`.
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Reviewer sub-agents: Round 3 completed
-Status: Round-3 security fix needed
+Status: Round-3 security fix in progress
 
 ## Reviewer IDs
 
@@ -139,6 +139,35 @@ Findings:
 Disposition: feed the transition-violation sanitization finding to a focused
 fix sub-agent. The stale metadata findings are addressed by this round-3
 findings/log update.
+
+## Round-3 Focused Security Fix
+
+Started from round-3 findings log head
+`86aa522e31a692b49abb2de4aae7d41c8224f0ed`.
+
+Fix commit: Pending.
+
+Disposition: the accepted security finding is addressed in the working tree by
+sanitizing transition-rule returned violations through the same facade-owned
+conversion path used for upstream single-message validation. The sanitizer
+preserves `typeName`, `fieldPath`, and template text, omits raw `fieldValue`,
+and redacts every placeholder value before aggregation into
+`MessageValidationResult` and `ValidationError`.
+
+RED evidence: `corepack pnpm test packages/core/src/index.test.ts` failed with
+19 tests run, 18 passed, and 1 failed because the transition result exposed the
+rule-provided `google.protobuf.Any` `fieldValue` instead of omitting it.
+
+Focused verification: `corepack pnpm typecheck` passed, and
+`corepack pnpm test packages/core/src/index.test.ts
+packages/core/src/validation-facade-boundary.test.ts` passed with 2 test files
+and 21 tests.
+
+Full verification before fix commit: `CI=true corepack pnpm verify` passed with
+9 test files and 33 tests; coverage statements 99.19%, branches 90.9%,
+functions 100%, lines 99.19%; docs check confirmed 13 proto exports and 21 core
+exports with the known invalid `origin` TypeDoc warning; proto lint/generate and
+generated-output cleanliness passed.
 
 ## Closure
 
