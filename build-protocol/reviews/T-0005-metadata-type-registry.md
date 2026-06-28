@@ -8,7 +8,8 @@ Reviewed commit/diff basis: Implementation working tree before commit; formal
 reviewers pending
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0005-registry-core`
 Reviewer sub-agents: Review round 1 completed; fix pass ready for re-review
-Status: Review round 1 fixes verified; ready for re-review after fix commit
+Status: Review round 1 fix commit `a8ad2fad6070479f156cb54211b14f6bfdb80117`
+ready for re-review
 
 ## Reviewer IDs
 
@@ -65,10 +66,10 @@ handoff.
   `019f0edc-4344-7bf1-a173-b5003e4855c2`, TypeScript/API docs
   `019f0edc-756c-7101-9d1e-81c7709dfab7`, security
   `019f0edc-a25e-7e03-87fe-482060e40d9d`, and performance/reliability
-  `019f0edc-c7e1-7ff1-89f3-fcc97abb8f1f` findings. Next review step after
-  the fix commit is formal re-review of this branch.
+  `019f0edc-c7e1-7ff1-89f3-fcc97abb8f1f` findings. Next review step is formal
+  re-review of fix commit `a8ad2fad6070479f156cb54211b14f6bfdb80117`.
 
 ## Outcome
 
-Review round 1 fix pass verified and ready for formal re-review after the fix
-commit.
+Review round 1 fix pass verified at
+`a8ad2fad6070479f156cb54211b14f6bfdb80117` and ready for formal re-review.
