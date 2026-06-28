@@ -7,9 +7,9 @@ Baseline commit: `6ce0b65`
 Reviewed commit/diff basis: `main...task/T-0004-proto-intake` after the T-0004
 implementation commit from baseline `6ce0b65`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0004-proto-intake`
-Reviewer sub-agents: Round 4 focused re-check complete; metadata wording fix
+Reviewer sub-agents: Final focused re-check in progress; metadata cleanup
 applied
-Status: Round 5 current-state wording fix ready for final focused re-check
+Status: Final focused metadata cleanup ready for final re-check
 
 ## Required Review Roles
 
@@ -272,3 +272,35 @@ Round-5 verification:
 
 Final focused re-check should review `main...HEAD` after the focused round-5
 current-state wording commit, then proceed to orchestrator integration if clean.
+
+### Final Focused Log-State Re-check
+
+Reviewed basis: `main...HEAD` at
+`0f8dd65ae5fc5cc1944fc985bfc796267ad567ba`.
+
+Reviewer outcome:
+
+- Final focused log-state re-check found two stale top-level reviewer metadata
+  lines in the task and review logs still describing the Round 4 metadata fix.
+
+Final focused disposition:
+
+| Finding                                                                                                          | Roles                          | Disposition | Author response                                                                                                                               |
+| ---------------------------------------------------------------------------------------------------------------- | ------------------------------ | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Top-level task and review metadata still described Round 4 metadata wording after the Round 5 current-state fix. | Documentation, maintainability | Fixed       | Updated both top-level reviewer metadata lines to final focused cleanup wording and recorded this final metadata cleanup in the durable logs. |
+
+Final focused verification:
+
+- Full `pnpm verify` is intentionally skipped because this pass changes only
+  durable Markdown logs and does not affect package code, generated output, or
+  build configuration.
+- `git diff --check main...HEAD` exited 0.
+- `git status --short --branch` showed only the expected modified durable log
+  files before commit.
+- Targeted search for the stale Round 4 reviewer metadata phrase returned no
+  matches.
+
+## Final Re-check Basis
+
+Final re-check should review `main...HEAD` after the focused final metadata
+cleanup commit, then proceed to orchestrator integration if clean.

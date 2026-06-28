@@ -1,6 +1,6 @@
 # T-0004: Spine Proto Intake And Protobuf-ES Generation
 
-Status: Round 5 current-state wording fix ready for final focused re-check
+Status: Final focused metadata cleanup ready for final re-check
 Start: `2026-06-28 12:40 WEST`
 End: `2026-06-28 12:54 WEST`
 Baseline commit: `6ce0b65`
@@ -8,7 +8,7 @@ Task log path: `build-protocol/tasks/T-0004-proto-intake/TASK.md`
 Branch: `task/T-0004-proto-intake`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0004-proto-intake`
 Authoring sub-agent: T-0004 implementation sub-agent
-Reviewer sub-agents: Round 4 focused re-check complete; stale metadata wording fix applied
+Reviewer sub-agents: Final focused re-check in progress; metadata cleanup applied
 Implementation commit: `b66f2db2c2d98d41f3f5c6da53ed81a7fd73d6ad`
 Round 5 reviewed basis: `cb775d48268b1fe801b6362a77277ff4ee3f37b8`
 
