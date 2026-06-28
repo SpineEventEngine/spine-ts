@@ -1,6 +1,6 @@
 # T-0005: Metadata And Type Registry
 
-Status: Review round 1 fix commit ready for re-review
+Status: Current branch HEAD ready for re-review
 Start: `2026-06-28 15:58 WEST`
 End: Pending
 Baseline commit: `80714f3`
@@ -11,7 +11,8 @@ Authoring sub-agent: T-0005 implementation sub-agent
 Reviewer sub-agents: Review round 1 completed; fix pass ready for re-review
 Implementation commit: `5705890eb5cdedaa2044375c6d5cccc304bdf283`
 Review round 1 fix commit: `a8ad2fad6070479f156cb54211b14f6bfdb80117`
-Re-review target commit: `a8ad2fad6070479f156cb54211b14f6bfdb80117`
+Current branch HEAD: `a46a95a2efb8c75a613bda7390d0fa008931d3aa`
+Re-review target commit: `a46a95a2efb8c75a613bda7390d0fa008931d3aa`
 
 ## Objective
 
@@ -349,8 +350,8 @@ mutate the process-wide curated registry.
   default registry exposure, unvalidated explicit type URLs, erased concrete
   schema type on schema lookup methods, stale durable log fields, and D-0028's
   missing fallback prefix value.
-- Next step: formal re-review of `task/T-0005-registry-core` at review round 1
-  fix commit `a8ad2fad6070479f156cb54211b14f6bfdb80117`.
+- Next step: formal re-review of `task/T-0005-registry-core` at current branch
+  HEAD `a46a95a2efb8c75a613bda7390d0fa008931d3aa`.
 
 ## Integration Result
 
