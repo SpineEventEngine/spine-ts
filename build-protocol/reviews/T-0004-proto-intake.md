@@ -7,9 +7,9 @@ Baseline commit: `6ce0b65`
 Reviewed commit/diff basis: `main...task/T-0004-proto-intake` after the T-0004
 implementation commit from baseline `6ce0b65`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0004-proto-intake`
-Reviewer sub-agents: Final focused re-check in progress; metadata cleanup
-applied
-Status: Final focused metadata cleanup ready for final re-check
+Reviewer sub-agents: Final focused re-check requested after latest log-state
+cleanup
+Status: Final focused log-state cleanup ready for re-check
 
 ## Required Review Roles
 
@@ -336,3 +336,38 @@ Final-final verification:
 Final re-check should review `main...HEAD` after the focused final-final
 integration-result wording commit, then proceed to orchestrator integration if
 clean.
+
+### Final Integration-Result Re-check
+
+Reviewed basis: `main...HEAD` at
+`605e325cfa45597250d33324f8d0033b79a76ef9`.
+
+Reviewer outcome:
+
+- Final integration-result re-check found that current-state metadata kept
+  becoming stale because it named the previous focused cleanup commit. The work
+  log current state still named `0f8dd65ae5fc5cc1944fc985bfc796267ad567ba`,
+  while task/review top metadata still described the prior metadata-cleanup
+  phase.
+
+Final integration-result disposition:
+
+| Finding                                                                                                | Roles                          | Disposition | Author response                                                                                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------ | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Current-state and top-level metadata used wording that became stale after each focused cleanup commit. | Documentation, maintainability | Fixed       | Replaced volatile prose with stable wording: latest focused log-state cleanup on this branch, final focused log-state re-check pending, and orchestrator integration if clean. Historical SHAs remain only in chronological evidence. |
+
+Final integration-result verification:
+
+- Full `pnpm verify` is intentionally skipped because this pass changes only
+  durable Markdown logs and does not affect package code, generated output, or
+  build configuration.
+- `git diff --check main...HEAD` exited 0.
+- `git status --short --branch` showed only the expected modified durable log
+  files before commit.
+- Targeted search found no prior cleanup SHAs or stale cleanup-phase phrases in
+  top metadata, Current State, or Integration Result prose.
+
+## Stable Final Re-check Basis
+
+Final re-check should review `main...HEAD` after the stable log-state cleanup
+commit, then proceed to orchestrator integration if clean.
