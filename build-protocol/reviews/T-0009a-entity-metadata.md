@@ -11,7 +11,7 @@ documentation `019f1056-4fbe-7eb1-8ef2-dc5c901887b8`; TypeScript/API docs
 `019f1056-502b-74f1-8cc5-24587c5ea99d`; security
 `019f1056-509e-7853-bafd-246d91c21fa8`; performance/reliability
 `019f1056-5133-73c1-9e09-756c7e49b061`.
-Status: Final follow-up review results received
+Status: Durable-log correction committed after final follow-up review
 Implementation sub-agent: `019f103e-52ca-7722-88f0-49c49b017dbf` (Dalton)
 
 ## Review Focus
@@ -170,13 +170,17 @@ Reports received:
   committed durable-log wording remains in the reviewed scope
   `3a1e851..b19a9dc`.
 
-Authoring stale-log correction scope:
+Authoring stale-log correction status:
 
-- Preserve the orchestrator's uncommitted final-follow-up review dispatch edits
-  already present in the task/review/work logs.
-- Replace stale "in progress" and "next step: apply/commit the final
+- Preserved the orchestrator's uncommitted final-follow-up review dispatch
+  edits already present in the task/review/work logs.
+- Replaced stale "in progress" and "next step: apply/commit the final
   follow-up fix" wording with the actual post-commit state.
-- Record that this new authoring fix addresses only those stale-log review
-  findings.
-- Hand the branch back for orchestrator re-review/final verification after this
-  durable-log correction commit.
+- Recorded that the durable-log correction committed as
+  `a27ed0aae001f544c64957eb71ef7c39eb3d3cf2`.
+- Fresh verification for that correction is recorded:
+  `corepack pnpm prettier --write` on the three durable logs,
+  `corepack pnpm prettier --check` on the same files, and
+  `corepack pnpm docs:check`.
+- The branch handoff after this commit is orchestrator re-review/final
+  verification.

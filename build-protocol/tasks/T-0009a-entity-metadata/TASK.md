@@ -225,6 +225,11 @@ pnpm verify` passed after one formatting retry (`10` files / `65` tests;
 - This authoring correction addresses only those stale-log findings while
   preserving the orchestrator's uncommitted dispatch edits already present in
   the worktree.
+- Durable-log correction committed as
+  `a27ed0aae001f544c64957eb71ef7c39eb3d3cf2` with fresh verification:
+  `corepack pnpm prettier --write` on the three durable logs,
+  `corepack pnpm prettier --check` on the same files, and
+  `corepack pnpm docs:check`.
 - D-0034 records that entity metadata belongs in `@spine-ts/server` and
   `@spine-ts/proto` should add only narrow curated option exports.
 - No blocking questions known.
