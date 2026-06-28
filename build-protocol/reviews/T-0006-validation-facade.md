@@ -10,7 +10,7 @@ Reviewed commit/diff basis: Round 2 reviewed code through
 `15b7933216b038888e10ab3cbbefc93c7a79d78d`.
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Reviewer sub-agents: Round 2 completed; changes requested
-Status: Round-2 focused fix active
+Status: Round-2 code-fix committed; log handoff active
 
 ## Reviewer IDs
 
@@ -91,7 +91,18 @@ comments back to the authoring sub-agent for a focused review-fix pass.
 ## Round-2 Focused Fix
 
 Started from round-2 findings log head
-`15b7933216b038888e10ab3cbbefc93c7a79d78d`. Code-fix commit is pending.
+`15b7933216b038888e10ab3cbbefc93c7a79d78d`.
+
+Code-fix commit:
+`74d56ab798eb3fad09759d69e480985320af363a`.
+
+Focused fix basis:
+`15b7933216b038888e10ab3cbbefc93c7a79d78d...74d56ab798eb3fad09759d69e480985320af363a`.
+
+Verification before code-fix commit: `CI=true corepack pnpm verify` passed with
+9 test files and 32 tests; coverage statements 99.19%, branches 92.85%,
+functions 100%, lines 99.18%; docs check confirmed 13 proto exports and 21
+core exports with the known invalid `origin` TypeDoc warning.
 
 ## Closure
 

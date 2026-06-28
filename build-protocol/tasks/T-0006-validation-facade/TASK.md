@@ -1,6 +1,6 @@
 # T-0006: Validation Facade
 
-Status: Round-2 focused fix active
+Status: Round-2 code-fix committed; log handoff active
 Start: `2026-06-28 17:22 WEST`
 End: Pending
 Setup baseline commit: `62ffc33`
@@ -15,8 +15,9 @@ Review-finding log HEAD: `7d519d1f4555ffab058d1642065947355c0acf9e`
 Review-fix commit: `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`
 Round-2 findings log HEAD: `15b7933216b038888e10ab3cbbefc93c7a79d78d`
 Current branch HEAD before round-2 fix: `15b7933216b038888e10ab3cbbefc93c7a79d78d`
-Round-2 code-fix commit: Pending
-Final branch HEAD: Pending round-2 fix handoff
+Round-2 code-fix commit: `74d56ab798eb3fad09759d69e480985320af363a`
+Current branch HEAD after round-2 code-fix commit: `74d56ab798eb3fad09759d69e480985320af363a`
+Final branch HEAD: recorded in the round-2 fix handoff after log-finalization commit creation
 
 ## Objective
 
@@ -315,6 +316,9 @@ Out of scope:
   captured focused quality check evidence before full verification.
 - `2026-06-28 18:45 WEST`: Full round-2 verification passed before the
   round-2 code-fix commit.
+- `2026-06-28 18:47 WEST`: Committed round-2 code fix as
+  `74d56ab798eb3fad09759d69e480985320af363a`; recording exact commit metadata
+  in durable logs before log-finalization commit.
 - `2026-06-28 18:30 WEST`: Recorded review-fix commit
   `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89` and prepared round-2 review
   dispatch.
@@ -433,6 +437,9 @@ packages/core/src/validation-facade-boundary.test.ts`, `corepack pnpm lint`,
   docs check confirmed 13 proto exports and 21 core exports with the known
   invalid `origin` TypeDoc warning; proto lint/generate and generated-output
   cleanliness passed.
+- Round-2 code-fix commit:
+  `74d56ab798eb3fad09759d69e480985320af363a` created with message
+  `fix(core): redact validation placeholders strictly`.
 - RED cycle 1: `corepack pnpm test packages/core/src/index.test.ts` failed as
   expected. Vitest ran 12 tests; 11 passed and the new
   `validateMessage()` test failed with `TypeError: validateMessage is not a
