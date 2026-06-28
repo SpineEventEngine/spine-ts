@@ -1,6 +1,6 @@
 # T-0008a: Storage Contracts And In-Memory Adapter
 
-Status: Second follow-up review clean; pending final verification and integration
+Status: Final branch verification passed; pending integration
 Start: `2026-06-28 21:35 WEST`
 End: Pending
 Setup baseline commit: `db7130e`
@@ -14,7 +14,7 @@ documentation `019f1004-8374-7f33-a643-13e86daebd3a`; TypeScript/API docs
 `019f1004-de72-7b40-9915-5ecef92ba29e`; performance/reliability
 `019f1005-0746-7353-bcda-e6bb1ee956c9`.
 Implementation baseline commit: `0a6908e` (handoff), `f1911d7` recorded by setup logs
-Final branch checkpoint before integration: Pending final verification
+Final branch checkpoint before integration: Pending final checkpoint commit
 Main integration merge commit: Pending
 
 ## Objective
@@ -256,5 +256,15 @@ packages/storage/src/index.test.ts` passed with 1 file / 15 tests.
   storage tests; TypeScript/API reran focused storage tests, typecheck, docs
   check, and diff check; maintainability, documentation, and reliability reran
   focused storage tests or diff checks and reviewed the durable logs.
+- Final branch verification attempt on `2026-06-28 22:41 WEST` failed at
+  `format:check` because `build-protocol/work-logs/T-0008a.md` needed Prettier
+  formatting; the work log was formatted and this retry was recorded.
+- Final branch verification passed on `2026-06-28 22:42 WEST` with
+  `CI=true corepack pnpm verify`: node check, typecheck, lint, format, tests,
+  coverage, docs/API check, proto lint/generate, and generated-output
+  cleanliness all passed. Vitest ran 9 test files / 55 tests. Coverage:
+  statements 99.63%, branches 93.5%, functions 100%, lines 99.61%. Docs/API
+  check confirmed 85 proto exports, 28 core exports, and 26 storage exports.
 - No blocking questions known.
-- Next step: run final branch verification, then integrate T-0008a into `main`.
+- Next step: commit final branch checkpoint, then integrate T-0008a into
+  `main`.
