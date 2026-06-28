@@ -4,7 +4,7 @@ Task log: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
 Work log: `build-protocol/work-logs/T-0006.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Setup baseline commit: `62ffc33`
-Implementation baseline commit: `e4450aa`
+Implementation baseline commit: `296b784`
 Reviewed commit/diff basis: Pending
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Reviewer sub-agents: Pending

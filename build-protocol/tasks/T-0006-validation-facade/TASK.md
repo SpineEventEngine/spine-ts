@@ -4,7 +4,7 @@ Status: Split complete; ready for implementation worktree
 Start: `2026-06-28 17:22 WEST`
 End: Pending
 Setup baseline commit: `62ffc33`
-Implementation baseline commit: `e4450aa`
+Implementation baseline commit: `296b784`
 Task log path: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
