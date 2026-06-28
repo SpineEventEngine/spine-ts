@@ -371,3 +371,36 @@ Final integration-result verification:
 
 Final re-check should review `main...HEAD` after the stable log-state cleanup
 commit, then proceed to orchestrator integration if clean.
+
+### Stable Log-State Re-check
+
+Reviewed basis: `main...HEAD` at
+`269384bcea1eb745864734257b85dfcc78232aaf`.
+
+Reviewer outcome:
+
+- Stable log-state re-check found two remaining top metadata lines that still
+  named prior focused cleanup SHAs: task `Round 5 reviewed basis` and work-log
+  `Round 4 reviewed basis`.
+
+Stable log-state disposition:
+
+| Finding                                                                                           | Roles                          | Disposition | Author response                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------- | ------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Top metadata still contained moving-basis reviewed commit SHAs from prior focused cleanup rounds. | Documentation, maintainability | Fixed       | Replaced those top metadata fields with stable focused re-check basis wording; exact prior SHAs remain only in chronological work-log and review-history entries. |
+
+Stable log-state verification:
+
+- Full `pnpm verify` is intentionally skipped because this pass changes only
+  durable Markdown logs and does not affect package code, generated output, or
+  build configuration.
+- `git diff --check main...HEAD` exited 0.
+- `git status --short --branch` showed only the expected modified durable log
+  files before commit.
+- Targeted search over top metadata, Current State, and Integration Result
+  found no prior focused cleanup SHAs or stale cleanup-phase phrases.
+
+## Stable Re-check Basis
+
+Final re-check should review `main...HEAD` after the moving-basis top metadata
+cleanup commit, then proceed to orchestrator integration if clean.

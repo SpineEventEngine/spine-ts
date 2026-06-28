@@ -10,7 +10,7 @@ Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0004-prot
 Authoring sub-agent: T-0004 implementation sub-agent
 Reviewer sub-agents: Final focused re-check requested after latest log-state cleanup
 Implementation commit: `b66f2db2c2d98d41f3f5c6da53ed81a7fd73d6ad`
-Round 5 reviewed basis: `cb775d48268b1fe801b6362a77277ff4ee3f37b8`
+Focused re-check basis: latest branch state after log-state cleanup
 
 ## Objective
 
