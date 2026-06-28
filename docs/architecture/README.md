@@ -127,13 +127,19 @@ The adapter surface is deliberately split by runtime role:
 - shared framework support stores: `tenantIndex` and `diagnostics`.
 
 Entity, snapshot, projection, and delivery stores use versioned records with
-optimistic `expectedVersion` checks. Aggregate event histories append ordered
-stream records with expected stream versions and adapter-local global
-positions. These metadata fields provide the future repository seam without
-introducing repository classes in this slice.
+optimistic `expectedVersion` checks. Their payload type is bound to the store
+interface rather than to each read call, so package-level storage defaults to
+`unknown` while caller-owned seams can declare a typed store. Aggregate event
+histories append ordered stream records with expected stream versions and
+adapter-local global positions. Empty appends validate the expected stream
+version but do not retain an empty stream. These metadata fields provide the
+future repository seam without introducing repository classes in this slice.
 
 `InMemoryStorageAdapter` is a test/development adapter. Each instance is
-isolated, keeps deterministic counters, snapshots values on write/read, and
-advertises `durability.durable === false`. Diagnostics are intended for safe
-framework metadata only; storage errors and diagnostics must not include
-credentials, auth headers, packed bytes, or sensitive payload contents.
+isolated, keeps deterministic counters, snapshots values on write/read with
+Node's `structuredClone()`, and advertises `durability.durable === false`.
+Payloads stored in this adapter must be structured-clone compatible, which
+preserves byte arrays used by packed Protobuf `Any` payloads. Diagnostics are
+intended for safe framework metadata only; storage errors and diagnostics must
+not include credentials, auth headers, packed bytes, or sensitive payload
+contents.

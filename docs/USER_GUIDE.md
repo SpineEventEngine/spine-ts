@@ -201,7 +201,7 @@ record stores without a repository or database adapter:
 ```ts
 import { createInMemoryStorageAdapter, StorageVersionConflictError } from "@spine-ts/storage";
 
-const storage = createInMemoryStorageAdapter();
+const storage = createInMemoryStorageAdapter<{ title: string }>();
 
 const created = await storage.writeEntities.put({
   key: "Task:1",
@@ -232,9 +232,11 @@ The storage surface keeps write-side stores (`writeEntities`,
 `aggregateEvents`, `aggregateSnapshots`, and `deliveryRecords`) distinct from
 the read-side projection store (`readProjections`). Command-side runtime code
 must not query read-side projections inside write transactions. The in-memory
-adapter does not log payloads and diagnostic records should contain only safe
-labels, not credentials, auth headers, packed bytes, or sensitive payload
-contents.
+adapter binds payload types to stores, snapshots values with
+`structuredClone()`, and preserves structured-clone-compatible byte payloads
+such as packed `Any.value` data. It does not log payloads, and diagnostic
+records should contain only safe labels, not credentials, auth headers, packed
+bytes, or sensitive payload contents.
 
 ## First Commands
 

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   InMemoryStorageAdapter,
+  type StorageAdapter,
+  type WriteSideRecordStore,
   StorageVersionConflictError,
   createInMemoryStorageAdapter,
 } from "./index.js";
@@ -14,10 +16,17 @@ interface TaskState {
 interface DomainEvent {
   readonly id: string;
   readonly typeUrl: string;
-  readonly payload: { readonly title?: string };
+  readonly payload: { readonly title?: string; readonly value?: Uint8Array };
 }
 
 describe("@spine-ts/storage", () => {
+  it("binds payload types to stores instead of read calls", () => {
+    const storage: StorageAdapter<TaskState> = createInMemoryStorageAdapter<TaskState>();
+    const entityStore: WriteSideRecordStore<TaskState, "entity"> = storage.writeEntities;
+
+    expect(entityStore).toBe(storage.writeEntities);
+  });
+
   it("returns empty reads for all record-oriented stores", async () => {
     const storage = createInMemoryStorageAdapter();
 
@@ -31,9 +40,9 @@ describe("@spine-ts/storage", () => {
   });
 
   it("writes entity records with optimistic version checks", async () => {
-    const storage = createInMemoryStorageAdapter();
+    const storage = createInMemoryStorageAdapter<TaskState>();
 
-    const created = await storage.writeEntities.put<TaskState>({
+    const created = await storage.writeEntities.put({
       key: "Task:1",
       payload: { title: "draft" },
       expectedVersion: "absent",
@@ -41,13 +50,13 @@ describe("@spine-ts/storage", () => {
 
     expect(created.version).toBe(1);
     expect(created.recordKind).toBe("entity");
-    await expect(storage.writeEntities.get<TaskState>("Task:1")).resolves.toMatchObject({
+    await expect(storage.writeEntities.get("Task:1")).resolves.toMatchObject({
       key: "Task:1",
       payload: { title: "draft" },
       version: 1,
     });
 
-    const updated = await storage.writeEntities.put<TaskState>({
+    const updated = await storage.writeEntities.put({
       key: "Task:1",
       payload: { title: "done", done: true },
       expectedVersion: created.version,
@@ -55,7 +64,7 @@ describe("@spine-ts/storage", () => {
 
     expect(updated.version).toBe(2);
     await expect(
-      storage.writeEntities.put<TaskState>({
+      storage.writeEntities.put({
         key: "Task:1",
         payload: { title: "stale" },
         expectedVersion: created.version,
@@ -64,7 +73,12 @@ describe("@spine-ts/storage", () => {
   });
 
   it("snapshots stored records so callers cannot mutate adapter state", async () => {
-    const storage = createInMemoryStorageAdapter();
+    const storage = createInMemoryStorageAdapter<
+      unknown,
+      unknown,
+      unknown,
+      { title: string; labels: string[] }
+    >();
     const payload: { title: string; labels: string[] } = {
       title: "original",
       labels: ["one"],
@@ -79,19 +93,19 @@ describe("@spine-ts/storage", () => {
     payload.labels.push("two");
     written.payload.labels.push("three");
 
-    const read = await storage.readProjections.get<typeof payload>("TaskView:1");
+    const read = await storage.readProjections.get("TaskView:1");
 
     expect(read?.payload).toEqual({ title: "original", labels: ["one"] });
     read?.payload.labels.push("four");
-    await expect(storage.readProjections.get<typeof payload>("TaskView:1")).resolves.toMatchObject({
+    await expect(storage.readProjections.get("TaskView:1")).resolves.toMatchObject({
       payload: { title: "original", labels: ["one"] },
     });
   });
 
   it("appends aggregate events in deterministic stream order with expected versions", async () => {
-    const storage = createInMemoryStorageAdapter();
+    const storage = createInMemoryStorageAdapter<unknown, DomainEvent>();
 
-    const appended = await storage.aggregateEvents.append<DomainEvent>({
+    const appended = await storage.aggregateEvents.append({
       streamId: "Task:1",
       expectedVersion: 0,
       events: [
@@ -102,15 +116,69 @@ describe("@spine-ts/storage", () => {
 
     expect(appended.map((event) => event.streamVersion)).toEqual([1, 2]);
     expect(appended.map((event) => event.globalPosition)).toEqual([1, 2]);
-    await expect(storage.aggregateEvents.readStream<DomainEvent>("Task:1")).resolves.toEqual(
-      appended,
-    );
+    await expect(storage.aggregateEvents.readStream("Task:1")).resolves.toEqual(appended);
 
     await expect(
-      storage.aggregateEvents.append<DomainEvent>({
+      storage.aggregateEvents.append({
         streamId: "Task:1",
         expectedVersion: 1,
         events: [{ id: "event-3", typeUrl: "type.spine.io/tasks.TaskClosed", payload: {} }],
+      }),
+    ).rejects.toBeInstanceOf(StorageVersionConflictError);
+  });
+
+  it("preserves byte payloads without caller mutation corrupting stored records", async () => {
+    const storage = createInMemoryStorageAdapter<
+      { value: Uint8Array },
+      { id: string; value: Uint8Array }
+    >();
+    const entityPayload = { value: new Uint8Array([1, 2, 3]) };
+    const eventPayload = { id: "event-with-bytes", value: new Uint8Array([4, 5, 6]) };
+
+    const written = await storage.writeEntities.put({
+      key: "Task:bytes",
+      payload: entityPayload,
+      expectedVersion: "absent",
+    });
+    const appended = await storage.aggregateEvents.append({
+      streamId: "Task:bytes",
+      expectedVersion: 0,
+      events: [eventPayload],
+    });
+
+    entityPayload.value[0] = 9;
+    eventPayload.value[0] = 9;
+    written.payload.value[1] = 9;
+    appended[0]?.payload.value.set([9, 9, 9]);
+
+    const readEntity = await storage.writeEntities.get("Task:bytes");
+    const readEvents = await storage.aggregateEvents.readStream("Task:bytes");
+    const readEntityValue = readEntity?.payload.value;
+    const readEventValue = readEvents[0]?.payload.value;
+
+    expect(readEntityValue).toBeInstanceOf(Uint8Array);
+    expect([...(readEntityValue ?? [])]).toEqual([1, 2, 3]);
+    expect(readEventValue).toBeInstanceOf(Uint8Array);
+    expect([...(readEventValue ?? [])]).toEqual([4, 5, 6]);
+  });
+
+  it("validates empty aggregate appends without retaining an empty stream", async () => {
+    const storage = createInMemoryStorageAdapter<unknown, DomainEvent>();
+
+    await expect(
+      storage.aggregateEvents.append({
+        streamId: "Task:empty",
+        expectedVersion: 0,
+        events: [],
+      }),
+    ).resolves.toEqual([]);
+    await expect(storage.aggregateEvents.readStream("Task:empty")).resolves.toEqual([]);
+    await expect(storage.aggregateEvents.scan()).resolves.toEqual([]);
+    await expect(
+      storage.aggregateEvents.append({
+        streamId: "Task:empty",
+        expectedVersion: 1,
+        events: [],
       }),
     ).rejects.toBeInstanceOf(StorageVersionConflictError);
   });

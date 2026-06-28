@@ -11,7 +11,7 @@ documentation `019f1004-8374-7f33-a643-13e86daebd3a`; TypeScript/API docs
 `019f1004-af48-7563-889e-dde078c55143`; security
 `019f1004-de72-7b40-9915-5ecef92ba29e`; performance/reliability
 `019f1005-0746-7353-bcda-e6bb1ee956c9`.
-Status: Review round 1 in progress
+Status: Round 1 fixes in progress
 Implementation sub-agent: `019f0ff4-becd-7c73-9f34-9120294e9083` (Darwin)
 
 ## Reviewer IDs
@@ -29,6 +29,9 @@ Dispatched on `2026-06-28 21:50 WEST`.
 Review basis:
 `baee5ae..f82c2487cbfe99d22596e4bb9ccb2e246ae784d5`.
 
+Dispatch log commit:
+`d0d204984ba51675337c6551a2ba0f72b438ef06`.
+
 Required reviewer roles:
 
 - maintainability/style;
@@ -36,6 +39,17 @@ Required reviewer roles:
 - TypeScript/API docs;
 - security;
 - performance/reliability.
+
+Findings to fix:
+
+- P1 TypeScript/API + reliability + maintainability: clone strategy corrupted
+  non-plain and byte-bearing payloads.
+- P1 TypeScript/API: record stores exposed method-level payload generics.
+- P2 reliability: empty aggregate appends retained empty stream entries.
+- P2/P3 documentation/logs: durable logs still described pre-review restart
+  state.
+- P3 docs/API: API README omitted storage exports from `docs:check` wording.
+- Security: no comments.
 
 ## Review Focus
 
@@ -67,6 +81,23 @@ pnpm format:check`, and `corepack pnpm docs:check` passed. Docs check
   lint, format, tests, coverage, docs/API check, proto lint/generate, and
   generated-output cleanliness.
 
+Round-1 fix evidence:
+
+- RED: after adding review-regression tests,
+  `corepack pnpm vitest run packages/storage/src/index.test.ts` failed with 1
+  failing test because byte payloads were no longer `Uint8Array` instances after
+  storage round-trip. `corepack pnpm typecheck` failed because the public
+  storage adapter/store types were not payload-generic.
+- GREEN focused so far: `corepack pnpm vitest run
+packages/storage/src/index.test.ts` passed with 1 file / 12 tests;
+  `corepack pnpm typecheck`, `node scripts/check-api-docs.mjs`, `corepack pnpm
+lint`, and `corepack pnpm format:check` passed.
+- Full round-1 fix gate: `CI=true corepack pnpm verify` passed on
+  `2026-06-28 22:07 WEST` with 9 test files / 52 tests, coverage statements
+  99.62%, branches 93.33%, functions 100%, lines 99.6%, docs/API check with 85
+  proto exports, 28 core exports, and 25 storage exports, plus proto
+  lint/generate/check-generated.
+
 ## Closure
 
-Pending five-role review loop.
+Pending round-1 fix commit and orchestrator-owned follow-up review loop.

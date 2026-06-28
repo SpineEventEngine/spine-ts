@@ -58,31 +58,33 @@ export interface DeleteStorageRecordInput {
 }
 
 /** Async write-side record store used for entity-like framework records. */
-export interface WriteSideRecordStore<Kind extends StorageRecordKind = StorageRecordKind> {
+export interface WriteSideRecordStore<
+  Payload = unknown,
+  Kind extends StorageRecordKind = StorageRecordKind,
+> {
   /** Reads a single write-side record snapshot. */
-  get<Payload = unknown>(key: StorageRecordKey): Promise<StorageRecord<Payload, Kind> | undefined>;
+  get(key: StorageRecordKey): Promise<StorageRecord<Payload, Kind> | undefined>;
   /** Conditionally writes a write-side record. */
-  put<Payload = unknown>(
-    input: PutStorageRecordInput<Payload>,
-  ): Promise<StorageRecord<Payload, Kind>>;
+  put(input: PutStorageRecordInput<Payload>): Promise<StorageRecord<Payload, Kind>>;
   /** Conditionally deletes a write-side record. */
   delete(input: DeleteStorageRecordInput): Promise<boolean>;
   /** Scans write-side records in deterministic revision order. */
-  scan<Payload = unknown>(): Promise<readonly StorageRecord<Payload, Kind>[]>;
+  scan(): Promise<readonly StorageRecord<Payload, Kind>[]>;
 }
 
 /** Async read-side record store used for projection/query-model records. */
-export interface ReadSideRecordStore<Kind extends StorageRecordKind = StorageRecordKind> {
+export interface ReadSideRecordStore<
+  Payload = unknown,
+  Kind extends StorageRecordKind = StorageRecordKind,
+> {
   /** Reads a single read-side record snapshot. */
-  get<Payload = unknown>(key: StorageRecordKey): Promise<StorageRecord<Payload, Kind> | undefined>;
+  get(key: StorageRecordKey): Promise<StorageRecord<Payload, Kind> | undefined>;
   /** Conditionally writes a read-side record. */
-  put<Payload = unknown>(
-    input: PutStorageRecordInput<Payload>,
-  ): Promise<StorageRecord<Payload, Kind>>;
+  put(input: PutStorageRecordInput<Payload>): Promise<StorageRecord<Payload, Kind>>;
   /** Conditionally deletes a read-side record. */
   delete(input: DeleteStorageRecordInput): Promise<boolean>;
   /** Scans read-side records in deterministic revision order. */
-  scan<Payload = unknown>(): Promise<readonly StorageRecord<Payload, Kind>[]>;
+  scan(): Promise<readonly StorageRecord<Payload, Kind>[]>;
 }
 
 /** Entity state record for future write-side repositories. */
@@ -123,17 +125,15 @@ export interface AppendAggregateEventsInput<Payload = unknown> {
 }
 
 /** Async aggregate event history store. */
-export interface AggregateEventStore {
+export interface AggregateEventStore<Payload = unknown> {
   /** Appends events to one aggregate stream with optimistic concurrency. */
-  append<Payload = unknown>(
+  append(
     input: AppendAggregateEventsInput<Payload>,
   ): Promise<readonly AggregateEventRecord<Payload>[]>;
   /** Reads an aggregate stream in stream-version order. */
-  readStream<Payload = unknown>(
-    streamId: string,
-  ): Promise<readonly AggregateEventRecord<Payload>[]>;
+  readStream(streamId: string): Promise<readonly AggregateEventRecord<Payload>[]>;
   /** Scans all aggregate events in global append order. */
-  scan<Payload = unknown>(): Promise<readonly AggregateEventRecord<Payload>[]>;
+  scan(): Promise<readonly AggregateEventRecord<Payload>[]>;
 }
 
 /** Async tenant index store for future multi-tenant runtime discovery. */
@@ -174,19 +174,25 @@ export interface DiagnosticRecordStore {
 }
 
 /** Storage adapter surface split by future write-side/read-side consumers. */
-export interface StorageAdapter {
+export interface StorageAdapter<
+  EntityPayload = unknown,
+  AggregateEventPayload = unknown,
+  AggregateSnapshotPayload = unknown,
+  ProjectionPayload = unknown,
+  DeliveryPayload = unknown,
+> {
   /** Durability characteristics of this adapter. */
   readonly durability: StorageDurability;
   /** Write-side entity state records. */
-  readonly writeEntities: WriteSideRecordStore<"entity">;
+  readonly writeEntities: WriteSideRecordStore<EntityPayload, "entity">;
   /** Write-side aggregate event histories. */
-  readonly aggregateEvents: AggregateEventStore;
+  readonly aggregateEvents: AggregateEventStore<AggregateEventPayload>;
   /** Write-side aggregate snapshots. */
-  readonly aggregateSnapshots: WriteSideRecordStore<"aggregate-snapshot">;
+  readonly aggregateSnapshots: WriteSideRecordStore<AggregateSnapshotPayload, "aggregate-snapshot">;
   /** Read-side projection/query-model records. */
-  readonly readProjections: ReadSideRecordStore<"projection">;
+  readonly readProjections: ReadSideRecordStore<ProjectionPayload, "projection">;
   /** Write-side delivery retry records. */
-  readonly deliveryRecords: WriteSideRecordStore<"delivery">;
+  readonly deliveryRecords: WriteSideRecordStore<DeliveryPayload, "delivery">;
   /** Tenant index records. */
   readonly tenantIndex: TenantIndexStore;
   /** Safe framework diagnostics. */
@@ -220,33 +226,61 @@ export class StorageVersionConflictError extends Error {
 }
 
 /** Creates an isolated, non-durable in-memory storage adapter. */
-export function createInMemoryStorageAdapter(): InMemoryStorageAdapter {
-  return new InMemoryStorageAdapter();
+export function createInMemoryStorageAdapter<
+  EntityPayload = unknown,
+  AggregateEventPayload = unknown,
+  AggregateSnapshotPayload = unknown,
+  ProjectionPayload = unknown,
+  DeliveryPayload = unknown,
+>(): InMemoryStorageAdapter<
+  EntityPayload,
+  AggregateEventPayload,
+  AggregateSnapshotPayload,
+  ProjectionPayload,
+  DeliveryPayload
+> {
+  return new InMemoryStorageAdapter<
+    EntityPayload,
+    AggregateEventPayload,
+    AggregateSnapshotPayload,
+    ProjectionPayload,
+    DeliveryPayload
+  >();
 }
 
 /** In-memory adapter intended only for tests and local development. */
-export class InMemoryStorageAdapter implements StorageAdapter {
+export class InMemoryStorageAdapter<
+  EntityPayload = unknown,
+  AggregateEventPayload = unknown,
+  AggregateSnapshotPayload = unknown,
+  ProjectionPayload = unknown,
+  DeliveryPayload = unknown,
+> implements StorageAdapter<
+  EntityPayload,
+  AggregateEventPayload,
+  AggregateSnapshotPayload,
+  ProjectionPayload,
+  DeliveryPayload
+> {
   readonly durability: StorageDurability = {
     durable: false,
     description: "In-memory storage is process-local and not durable across restarts.",
   };
 
-  readonly writeEntities: WriteSideRecordStore<"entity"> = new InMemoryRecordStore("entity", () =>
-    this.nextRevision(),
-  );
-  readonly aggregateEvents: AggregateEventStore = new InMemoryAggregateEventStore();
-  readonly aggregateSnapshots: WriteSideRecordStore<"aggregate-snapshot"> = new InMemoryRecordStore(
-    "aggregate-snapshot",
+  readonly writeEntities: WriteSideRecordStore<EntityPayload, "entity"> = new InMemoryRecordStore(
+    "entity",
     () => this.nextRevision(),
   );
-  readonly readProjections: ReadSideRecordStore<"projection"> = new InMemoryRecordStore(
-    "projection",
-    () => this.nextRevision(),
-  );
-  readonly deliveryRecords: WriteSideRecordStore<"delivery"> = new InMemoryRecordStore(
-    "delivery",
-    () => this.nextRevision(),
-  );
+  readonly aggregateEvents: AggregateEventStore<AggregateEventPayload> =
+    new InMemoryAggregateEventStore();
+  readonly aggregateSnapshots: WriteSideRecordStore<
+    AggregateSnapshotPayload,
+    "aggregate-snapshot"
+  > = new InMemoryRecordStore("aggregate-snapshot", () => this.nextRevision());
+  readonly readProjections: ReadSideRecordStore<ProjectionPayload, "projection"> =
+    new InMemoryRecordStore("projection", () => this.nextRevision());
+  readonly deliveryRecords: WriteSideRecordStore<DeliveryPayload, "delivery"> =
+    new InMemoryRecordStore("delivery", () => this.nextRevision());
   readonly tenantIndex: TenantIndexStore = new InMemoryTenantIndexStore();
   readonly diagnostics: DiagnosticRecordStore = new InMemoryDiagnosticRecordStore();
 
@@ -258,28 +292,24 @@ export class InMemoryStorageAdapter implements StorageAdapter {
   }
 }
 
-class InMemoryRecordStore<Kind extends StorageRecordKind>
-  implements WriteSideRecordStore<Kind>, ReadSideRecordStore<Kind>
+class InMemoryRecordStore<Payload, Kind extends StorageRecordKind>
+  implements WriteSideRecordStore<Payload, Kind>, ReadSideRecordStore<Payload, Kind>
 {
-  readonly #records = new Map<StorageRecordKey, StorageRecord<unknown, Kind>>();
+  readonly #records = new Map<StorageRecordKey, StorageRecord<Payload, Kind>>();
 
   constructor(
     private readonly recordKind: Kind,
     private readonly nextRevision: () => number,
   ) {}
 
-  get<Payload = unknown>(key: StorageRecordKey): Promise<StorageRecord<Payload, Kind> | undefined> {
+  get(key: StorageRecordKey): Promise<StorageRecord<Payload, Kind> | undefined> {
     return asyncResult(() => {
       const record = this.#records.get(key);
-      return record === undefined
-        ? undefined
-        : (cloneValue(record) as StorageRecord<Payload, Kind>);
+      return record === undefined ? undefined : cloneValue(record);
     });
   }
 
-  put<Payload = unknown>(
-    input: PutStorageRecordInput<Payload>,
-  ): Promise<StorageRecord<Payload, Kind>> {
+  put(input: PutStorageRecordInput<Payload>): Promise<StorageRecord<Payload, Kind>> {
     return asyncResult(() => {
       const current = this.#records.get(input.key);
       assertExpectedVersion(input.key, current?.version ?? 0, input.expectedVersion ?? "any");
@@ -304,25 +334,29 @@ class InMemoryRecordStore<Kind extends StorageRecordKind>
     });
   }
 
-  scan<Payload = unknown>(): Promise<readonly StorageRecord<Payload, Kind>[]> {
+  scan(): Promise<readonly StorageRecord<Payload, Kind>[]> {
     return asyncResult(() =>
       [...this.#records.values()]
         .sort((left, right) => left.revision - right.revision)
-        .map((record) => cloneValue(record) as StorageRecord<Payload, Kind>),
+        .map((record) => cloneValue(record)),
     );
   }
 }
 
-class InMemoryAggregateEventStore implements AggregateEventStore {
-  readonly #streams = new Map<string, readonly AggregateEventRecord[]>();
+class InMemoryAggregateEventStore<Payload> implements AggregateEventStore<Payload> {
+  readonly #streams = new Map<string, readonly AggregateEventRecord<Payload>[]>();
   #globalPosition = 0;
 
-  append<Payload = unknown>(
+  append(
     input: AppendAggregateEventsInput<Payload>,
   ): Promise<readonly AggregateEventRecord<Payload>[]> {
     return asyncResult(() => {
       const current = this.#streams.get(input.streamId) ?? [];
       assertExpectedVersion(input.streamId, current.length, input.expectedVersion);
+
+      if (input.events.length === 0) {
+        return [];
+      }
 
       const appended: AggregateEventRecord<Payload>[] = [];
       for (const event of input.events) {
@@ -343,22 +377,16 @@ class InMemoryAggregateEventStore implements AggregateEventStore {
     });
   }
 
-  readStream<Payload = unknown>(
-    streamId: string,
-  ): Promise<readonly AggregateEventRecord<Payload>[]> {
-    return asyncResult(() =>
-      (this.#streams.get(streamId) ?? []).map(
-        (event) => cloneValue(event) as AggregateEventRecord<Payload>,
-      ),
-    );
+  readStream(streamId: string): Promise<readonly AggregateEventRecord<Payload>[]> {
+    return asyncResult(() => (this.#streams.get(streamId) ?? []).map((event) => cloneValue(event)));
   }
 
-  scan<Payload = unknown>(): Promise<readonly AggregateEventRecord<Payload>[]> {
+  scan(): Promise<readonly AggregateEventRecord<Payload>[]> {
     return asyncResult(() =>
       [...this.#streams.values()]
         .flat()
         .sort((left, right) => left.globalPosition - right.globalPosition)
-        .map((event) => cloneValue(event) as AggregateEventRecord<Payload>),
+        .map((event) => cloneValue(event)),
     );
   }
 }
@@ -419,23 +447,11 @@ function assertExpectedVersion(
 }
 
 function cloneValue<T>(value: T): T {
-  if (value === null || typeof value !== "object") {
-    return value;
-  }
-
-  if (Array.isArray(value)) {
-    const clonedItems: unknown[] = value.map((item: unknown) => cloneValue(item));
-    return clonedItems as T;
-  }
-
-  const source = value as Readonly<Record<string, unknown>>;
-  const cloned: Record<string, unknown> = {};
-  for (const [key, nestedValue] of Object.entries(source)) {
-    cloned[key] = cloneValue(nestedValue);
-  }
-  return cloned as T;
+  return structuredClone(value);
 }
 
 function asyncResult<T>(operation: () => T): Promise<T> {
   return Promise.resolve().then(operation);
 }
+
+declare function structuredClone<T>(value: T): T;

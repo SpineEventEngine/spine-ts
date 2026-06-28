@@ -21,6 +21,11 @@ use the same seam that future durable adapters will implement.
 - `diagnostics` stores safe framework diagnostics without payload bytes or
   secret values.
 
+Payload types bind to stores, not individual read calls. Package boundaries
+default to `unknown`, and callers that own a typed seam can declare it through
+`StorageAdapter<EntityPayload, AggregateEventPayload, AggregateSnapshotPayload,
+ProjectionPayload, DeliveryPayload>` or the corresponding store interface.
+
 Record writes use `expectedVersion` for optimistic concurrency. Pass a numeric
 version, `"absent"` for create-only writes, or `"any"` when the caller
 intentionally bypasses the version check. Failed checks throw
@@ -31,7 +36,7 @@ intentionally bypasses the version check. Failed checks throw
 ```ts
 import { createInMemoryStorageAdapter } from "@spine-ts/storage";
 
-const storage = createInMemoryStorageAdapter();
+const storage = createInMemoryStorageAdapter<{ title: string }>();
 
 const record = await storage.writeEntities.put({
   key: "Task:1",
@@ -47,6 +52,7 @@ await storage.writeEntities.put({
 ```
 
 `InMemoryStorageAdapter` is deterministic and isolated per instance. It snapshots
-stored values on write and read so caller-side mutation does not mutate adapter
-state. It is explicitly non-durable: data is process-local and is lost on
-restart.
+stored values on write and read with Node's `structuredClone()`, preserving
+framework payload shapes such as byte arrays. Payloads must be structured-clone
+compatible. The adapter is explicitly non-durable: data is process-local and is
+lost on restart.

@@ -40,6 +40,6 @@ pnpm docs:check
 Generated output is written to `docs/api/reference`.
 
 `docs:check` also emits temporary TypeDoc JSON, verifies that expected
-`@spine-ts/proto` and `@spine-ts/core` entry-point exports are present in the
-API model, and rejects broad generated wildcard re-exports from the proto
-package root.
+`@spine-ts/proto`, `@spine-ts/core`, and `@spine-ts/storage` entry-point exports
+are present in the API model, and rejects broad generated wildcard re-exports
+from the proto package root.
