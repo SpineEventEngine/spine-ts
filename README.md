@@ -2,10 +2,11 @@
 
 This repository is the TypeScript/Node.js implementation workspace for a Spine-inspired server-side framework.
 
-Current status: workspace/toolchain bootstrap plus the first copied Spine
-Protobuf contract intake. Runtime behavior, validation integration, gRPC
-services, ZeroMQ transport, storage adapters, and the to-do domain are
-intentionally deferred to later tasks.
+Current status: workspace/toolchain bootstrap, the first copied Spine Protobuf
+contract intake, and a non-durable in-memory storage adapter. Runtime behavior,
+validation integration, gRPC services, ZeroMQ transport, production storage
+adapters/repository runtime, and the to-do domain are intentionally deferred to
+later tasks.
 
 ## Workspace
 

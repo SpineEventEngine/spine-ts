@@ -1,16 +1,20 @@
 # T-0008a: Storage Contracts And In-Memory Adapter
 
-Status: Setup on `main`; branch/worktree pending
+Status: Final branch verification passed; pending integration
 Start: `2026-06-28 21:35 WEST`
 End: Pending
 Setup baseline commit: `db7130e`
 Task log path: `build-protocol/tasks/T-0008a-storage-contracts/TASK.md`
 Branch: `task/T-0008a-storage-contracts`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0008a-storage-contracts`
-Authoring sub-agent: Pending
-Reviewer sub-agents: Pending
-Implementation baseline commit: Pending
-Final branch checkpoint before integration: Pending
+Authoring sub-agent: `019f0ff4-becd-7c73-9f34-9120294e9083` (Darwin)
+Reviewer sub-agents: Maintainability/style `019f1004-5be9-77c2-9191-4a71a8fea916`;
+documentation `019f1004-8374-7f33-a643-13e86daebd3a`; TypeScript/API docs
+`019f1004-af48-7563-889e-dde078c55143`; security
+`019f1004-de72-7b40-9915-5ecef92ba29e`; performance/reliability
+`019f1005-0746-7353-bcda-e6bb1ee956c9`.
+Implementation baseline commit: `0a6908e` (handoff), `f1911d7` recorded by setup logs
+Final branch checkpoint before integration: Pending final checkpoint commit
 Main integration merge commit: Pending
 
 ## Objective
@@ -122,6 +126,145 @@ reviewers report no comments.
 ## Durable State
 
 - Setup logs created on `main` after T-0007b integration commit `db7130e`.
+- Branch/worktree created from setup commit
+  `d1ff2d96e1e67eeb072d8ac3868ec9fb2c54b475`.
+- Baseline verification passed on `2026-06-28 21:37 WEST` with
+  `CI=true corepack pnpm verify`: typecheck, lint, format, tests, coverage,
+  docs/API check, proto lint/generate, and generated-output cleanliness all
+  passed. Vitest ran 9 test files and 41 tests. Coverage: statements 99.44%,
+  branches 91.83%, functions 100%, lines 99.44%. TypeDoc emitted the known
+  invalid `origin` warning and confirmed 85 proto exports plus 28 core exports.
+- Implementation sub-agent `019f0ff4-becd-7c73-9f34-9120294e9083` (Darwin) was
+  spawned on `2026-06-28 21:38 WEST` with ownership of the T-0008a storage
+  contracts, in-memory adapter, docs/API updates, durable logs, and verification
+  evidence.
+- Implementation completed on `2026-06-28 21:51 WEST`: replaced the
+  metadata-only storage skeleton with async record-oriented storage contracts,
+  `StorageVersionConflictError`, and `InMemoryStorageAdapter`; added focused
+  Vitest coverage for empty reads, optimistic version conflicts, snapshot
+  isolation, stream ordering, scans/deletes, tenant indexes, diagnostics, and
+  instance isolation; updated package/user/architecture/API docs and API export
+  checks for 25 storage exports.
+- RED evidence: `corepack pnpm vitest run packages/storage/src/index.test.ts`
+  failed before implementation with 6/6 tests failing because
+  `createInMemoryStorageAdapter` and `InMemoryStorageAdapter` were not exported
+  by the skeleton.
+- GREEN/focused evidence: `corepack pnpm vitest run
+packages/storage/src/index.test.ts` passed with 1 file / 9 tests;
+  `corepack pnpm typecheck`, `corepack pnpm lint`, `corepack pnpm
+format:check`, and `corepack pnpm docs:check` passed. Docs check retained the
+  known invalid `origin` TypeDoc warning and confirmed 85 proto exports, 28 core
+  exports, and 25 storage exports.
+- Full verification evidence: `CI=true corepack pnpm verify` passed on
+  `2026-06-28 21:53 WEST`: node check, typecheck, lint, format, tests, coverage,
+  docs/API check, proto lint/generate, and generated-output cleanliness all
+  passed. Vitest ran 9 files / 49 tests. Coverage: statements 99.63%, branches
+  93.67%, functions 100%, lines 99.62%.
+- Review round 1 was dispatched on `2026-06-28 21:50 WEST` with diff basis
+  `baee5ae..f82c2487cbfe99d22596e4bb9ccb2e246ae784d5`.
+- Review dispatch log commit `d0d204984ba51675337c6551a2ba0f72b438ef06`
+  records round-1 reviewer dispatch state.
+- Round-1 findings received on `2026-06-28 22:00 WEST`: P1 clone preservation
+  for byte-bearing/framework payloads, P1 store-bound payload generics, P2 empty
+  aggregate appends must not retain streams, P2/P3 durable log restart-state
+  cleanup, and P3 API landing-page storage export-check wording. Security
+  reviewer reported no comments.
+- Round-1 RED evidence: after adding regression tests,
+  `corepack pnpm vitest run packages/storage/src/index.test.ts` failed with 1
+  failing test because byte payloads were corrupted into non-`Uint8Array`
+  shapes; `corepack pnpm typecheck` failed because `StorageAdapter`,
+  `WriteSideRecordStore`, and `createInMemoryStorageAdapter` were not yet
+  payload-generic.
+- Round-1 fix committed as `264c4a5fe6a0e4315a5df1cedae2fb436579e9bc` on
+  `2026-06-28 22:07 WEST`: `cloneValue()` now uses Node 24
+  `structuredClone()`, storage/read-side stores bind payload types at the
+  store/adapter level, empty aggregate appends validate expected stream version
+  and return `[]` without retaining a stream, and docs describe
+  structured-clone-compatible payloads and storage export checks.
+- Round-1 GREEN/full evidence: `corepack pnpm vitest run
+packages/storage/src/index.test.ts` passed with 1 file / 12 tests; `corepack
+pnpm typecheck`, `corepack pnpm lint`, `corepack pnpm format:check`, and
+  `corepack pnpm docs:check` passed. `CI=true corepack pnpm verify` passed on
+  `2026-06-28 22:07 WEST`: 9 test files / 52 tests, coverage statements 99.62%,
+  branches 93.33%, functions 100%, lines 99.6%; docs/API check confirmed 85
+  proto exports, 28 core exports, and 25 storage exports; proto
+  lint/generate/check-generated passed.
+- Follow-up re-review completed at HEAD
+  `9613f84517b1b339a299339c83ba827735bbe4fe`: maintainability/style,
+  TypeScript/API docs, and performance/reliability reported no comments.
+  Remaining findings: Security P2 safe clone failure messages for non-cloneable
+  payloads; Documentation P3 top-level README storage status.
+- Follow-up RED evidence on `2026-06-28 22:16 WEST`: after adding a focused
+  non-cloneable payload regression with a sensitive-looking string in function
+  source, `corepack pnpm vitest run packages/storage/src/index.test.ts` failed
+  with 1 failing test because the error name was still `DataCloneError`.
+- Follow-up fix in progress on `2026-06-28 22:17 WEST`: clone failures are
+  wrapped in `StoragePayloadCloneError` with a fixed structured-clone
+  compatibility message, API docs/checks include 26 storage exports, and the
+  top-level README now states that only production storage adapters/repository
+  runtime are deferred while the non-durable in-memory adapter exists.
+- Follow-up fix committed as `7b489418c58b2c11171baf70d04db1d009aa5501` on
+  `2026-06-28 22:18 WEST`.
+- Follow-up GREEN/full evidence: `corepack pnpm vitest run
+packages/storage/src/index.test.ts` passed with 1 file / 13 tests; `corepack
+pnpm typecheck`, `corepack pnpm lint`, `corepack pnpm format:check`, and
+  `corepack pnpm docs:check` passed. `CI=true corepack pnpm verify` passed on
+  `2026-06-28 22:18 WEST`: 9 test files / 53 tests, coverage statements 99.62%,
+  branches 93.33%, functions 100%, lines 99.61%; docs/API check confirmed 85
+  proto exports, 28 core exports, and 26 storage exports; proto
+  lint/generate/check-generated passed.
+- Second follow-up re-review completed at HEAD
+  `fa94e24bb19d6518311dc4470a404ece3853ac31`: maintainability/style,
+  TypeScript/API docs, and performance/reliability reported no comments.
+  Remaining findings: aggregate event append clone failures must not store
+  partial events or skip global positions; diagnostics must clone attributes
+  before advancing sequences; the clone error regression must also assert that
+  error name/message do not include function-source identifiers, function
+  syntax, or native structured-clone text; task/review log status must reflect
+  the second follow-up state.
+- Second follow-up RED evidence on `2026-06-28 22:31 WEST`: after adding
+  focused regressions, `corepack pnpm vitest run
+packages/storage/src/index.test.ts` failed with 2 failing tests. The aggregate
+  retry received `globalPosition: 3` instead of `1`, and the diagnostic retry
+  received `diagnostic-2`/sequence `2` instead of `diagnostic-1`/sequence `1`.
+- Second follow-up fix completed on `2026-06-28 22:31 WEST`: aggregate
+  appends now clone all event payloads before assigning global positions or
+  storing records, diagnostics clone attributes before advancing sequence, and
+  the safe clone-error regression checks for absence of `leakedSecret`, `() =>`,
+  and `could not be cloned` in both error name and message.
+- Second follow-up focused GREEN evidence: `corepack pnpm vitest run
+packages/storage/src/index.test.ts` passed with 1 file / 15 tests.
+- Second follow-up verification evidence on `2026-06-28 22:33 WEST`:
+  `corepack pnpm typecheck` passed; `corepack pnpm docs:check` passed with the
+  known TypeDoc invalid `origin` warning and confirmed 85 proto exports, 28 core
+  exports, and 26 storage exports; `CI=true corepack pnpm verify` passed with 9
+  test files / 55 tests, coverage statements 99.63%, branches 93.5%, functions
+  100%, lines 99.61%, docs/API check, proto lint/generate, and generated-output
+  cleanliness.
+- Second follow-up fix committed as
+  `981e0c32ab83cdfaa6acfb467354286177a11267` on
+  `2026-06-28 22:35 WEST`.
+- Second follow-up re-review dispatched on `2026-06-28 22:37 WEST` with diff
+  package `.superpowers/sdd/review-fa94e24..981e0c3.diff`: maintainability/style
+  `019f102a-477a-7371-964b-af2ac0ab0d03`, documentation
+  `019f102a-480a-7633-a941-740b8d1dfb2d`, TypeScript/API docs
+  `019f102a-4880-7570-a38f-dee1e90af241`, security
+  `019f102a-4902-7ba0-8450-67abd0923979`, and performance/reliability
+  `019f102a-497c-7450-ba7a-6f03c8c4d43d`.
+- Second follow-up re-review completed clean on `2026-06-28 22:40 WEST`:
+  all five required reviewers reported no comments. Security reran focused
+  storage tests; TypeScript/API reran focused storage tests, typecheck, docs
+  check, and diff check; maintainability, documentation, and reliability reran
+  focused storage tests or diff checks and reviewed the durable logs.
+- Final branch verification attempt on `2026-06-28 22:41 WEST` failed at
+  `format:check` because `build-protocol/work-logs/T-0008a.md` needed Prettier
+  formatting; the work log was formatted and this retry was recorded.
+- Final branch verification passed on `2026-06-28 22:42 WEST` with
+  `CI=true corepack pnpm verify`: node check, typecheck, lint, format, tests,
+  coverage, docs/API check, proto lint/generate, and generated-output
+  cleanliness all passed. Vitest ran 9 test files / 55 tests. Coverage:
+  statements 99.63%, branches 93.5%, functions 100%, lines 99.61%. Docs/API
+  check confirmed 85 proto exports, 28 core exports, and 26 storage exports.
 - No blocking questions known.
-- Next step: create branch/worktree, run baseline verification, and dispatch the
-  implementation sub-agent.
+- Next step: commit final branch checkpoint, then integrate T-0008a into
+  `main`.
