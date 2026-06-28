@@ -2,21 +2,39 @@
 
 Task log: `build-protocol/tasks/T-0007b-envelope-construction/TASK.md`
 Work log: `build-protocol/work-logs/T-0007b.md`
-Branch: Pending
+Branch: `task/T-0007b-envelope-construction`
 Setup baseline commit: `c313086`
-Implementation baseline commit: Pending
-Reviewed commit/diff basis: Pending
-Worktree: Pending
-Reviewer sub-agents: Pending
-Status: Setup complete; implementation pending
+Implementation baseline commit: `57fc257`
+Round-1 reviewed commit/diff basis:
+`7d80347...2fe6850be59a78e6331b0b8cd84fa8fb0641b281`
+Implementation commit: `2fe6850be59a78e6331b0b8cd84fa8fb0641b281`
+Current branch tip before focused fix: `dfdf21e`
+Round-1 focused fix commit:
+`0353f8a2f877d082ea9d51bf8b09b5c9af55bdbf`
+Log-only follow-up commit reviewed by final lightweight pass:
+`8097a93a1074837b21586e83df3b0a66bdda99f4`
+Final log-fix commit reviewed after the final lightweight pass:
+`77f9c2d4a94b5f7b9336c410d47ec847143e5231`
+Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007b-envelope-construction`
+Reviewer sub-agents: Maintainability/style `019f0fcc-6b78-71a3-a363-688a5be1d662`;
+documentation `019f0fcc-a511-78b0-a79a-eb2f4740ab52`; TypeScript/API docs
+`019f0fcc-d16b-7c31-8a02-81a07c880947`; security
+`019f0fcc-fa19-7632-9b24-e2f678ad60c6`; performance/reliability
+`019f0fcd-2d90-7481-963d-7571d880095d`.
+Status: Final log-fix re-review clean; branch verification pending
+Implementation sub-agent: `019f0fc3-b699-76c2-a02f-a174936c045d` (Bacon)
 
 ## Reviewer IDs
 
-Pending.
+- Maintainability/style: `019f0fcc-6b78-71a3-a363-688a5be1d662`
+- Documentation: `019f0fcc-a511-78b0-a79a-eb2f4740ab52`
+- TypeScript/API docs: `019f0fcc-d16b-7c31-8a02-81a07c880947`
+- Security: `019f0fcc-fa19-7632-9b24-e2f678ad60c6`
+- Performance/reliability: `019f0fcd-2d90-7481-963d-7571d880095d`
 
 ## Round 1
 
-Pending implementation.
+Dispatched on `2026-06-28 20:55 WEST`.
 
 Required reviewer roles:
 
@@ -26,10 +44,122 @@ Required reviewer roles:
 - security;
 - performance/reliability.
 
+Findings being addressed:
+
+- Stale durable process logs must name implementation commit
+  `2fe6850be59a78e6331b0b8cd84fa8fb0641b281`, the round-1 review basis, and
+  this focused fix state without closing round 1.
+- `docs/api/README.md` must mention new envelope helper functions and input
+  option types.
+- Tests should use the public `packAny()` helper instead of hand-building test
+  `Any` values with duplicated type URL and binary policy.
+- `packAny()` should avoid retaining unknown fields by default for stable
+  framework packing; full map-order canonicalization remains unclaimed unless
+  separately tested.
+- `unpackAny()` should return `undefined` on malformed bytes with a matching
+  type URL.
+- `packCommand()` and `packEvent()` should snapshot caller-supplied generated
+  IDs and contexts before embedding them in envelopes.
+
+Focused fix committed as `0353f8a2f877d082ea9d51bf8b09b5c9af55bdbf`.
+
+## Follow-Up Re-Review
+
+Follow-up re-review reported:
+
+- Maintainability: no comments; verified `eventContext()` now uses `packAny()`.
+- Security: no comments.
+- TypeScript/API docs: no comments.
+- Documentation/API landing page: no comments besides stale durable log restart
+  state.
+- Runtime reliability helpers: no comments besides stale durable log restart
+  state.
+
+Remaining finding: update this review log, the task log, and the work log to
+record focused fix commit `0353f8a2f877d082ea9d51bf8b09b5c9af55bdbf`, the
+follow-up reports, and final verification/closure as the next step. This
+log-only fix itself requires final lightweight re-review/final verification.
+
+## Final Lightweight Re-Review
+
+Final lightweight review basis:
+`0353f8a2f877d082ea9d51bf8b09b5c9af55bdbf..8097a93a1074837b21586e83df3b0a66bdda99f4`.
+
+Clean reports:
+
+- TypeScript/API docs: no comments.
+- Security: no comments.
+- Performance/reliability: no comments.
+
+Remaining log-only findings:
+
+- Durable restart state did not record log-only follow-up commit
+  `8097a93a1074837b21586e83df3b0a66bdda99f4`.
+- The task log still said round 1 remained open until reviewers were re-run
+  after the focused fix commit, even though follow-up re-review already ran and
+  only final lightweight log-fix re-review/final verification remains pending.
+
+## Final Log-Fix Re-Review
+
+Final log-fix review basis:
+`8097a93a1074837b21586e83df3b0a66bdda99f4..77f9c2d4a94b5f7b9336c410d47ec847143e5231`.
+
+Clean reports:
+
+- Maintainability/style: no comments.
+- Documentation: no comments.
+- TypeScript/API docs: no comments.
+- Security: no comments.
+- Performance/reliability: no comments.
+
+The reviewed range touched only the three T-0007b durable log files, recorded
+the prior log-only follow-up commit
+`8097a93a1074837b21586e83df3b0a66bdda99f4`, removed the stale task-log sentence
+about re-running reviewers after the focused fix, and left branch
+verification/integration pending.
+
 ## Verification Evidence
 
-Pending implementation.
+Round-1 focused fix evidence:
+
+- RED: `corepack pnpm test packages/core/src/index.test.ts` failed on
+  `2026-06-28 21:01 WEST` with 4 expected failures: retained unknown fields,
+  malformed matching `Any` bytes throwing `RangeError: premature EOF`, and
+  command/event envelopes reflecting later caller mutations to IDs/contexts.
+- Focused GREEN: `corepack pnpm test packages/core/src/index.test.ts` passed on
+  `2026-06-28 21:02 WEST` with 26 tests.
+- Focused typecheck: `corepack pnpm typecheck` passed on
+  `2026-06-28 21:03 WEST`.
+- API docs: `node scripts/check-api-docs.mjs` passed on
+  `2026-06-28 21:03 WEST`, with the known TypeDoc invalid `origin` warning and
+  85 proto / 28 core expected exports.
+- Full verification: `CI=true corepack pnpm verify` passed on
+  `2026-06-28 21:03 WEST`; 9 test files / 41 tests, coverage 99.44%
+  statements, 91.83% branches, 100% functions, 99.44% lines, docs/API check,
+  proto lint/generate, and generated-output cleanliness all passed.
+
+Original implementation evidence:
+
+- RED: `corepack pnpm test packages/core/src/index.test.ts` failed on
+  `2026-06-28 20:48 WEST` with 4 expected failures because `packAny`,
+  `unpackAny`, `packCommand`, and `packEvent` did not exist yet; 20 existing
+  tests passed.
+- Focused GREEN: `corepack pnpm test packages/core/src/index.test.ts` passed on
+  `2026-06-28 20:49 WEST` with 24 tests.
+- Focused typecheck: `corepack pnpm typecheck` passed on
+  `2026-06-28 20:49 WEST`.
+- API docs: `node scripts/check-api-docs.mjs` passed on
+  `2026-06-28 20:50 WEST`, with the known TypeDoc invalid `origin` warning and
+  85 proto / 28 core expected exports.
+- Full verification: `CI=true corepack pnpm verify` passed on
+  `2026-06-28 20:51 WEST`; 9 test files / 39 tests, coverage 99.44%
+  statements, 91.83% branches, 100% functions, 99.44% lines, docs/API check,
+  proto lint/generate, and generated-output cleanliness all passed.
 
 ## Closure
 
-Pending implementation and required clean review loop.
+Round 1 is not closed by this review-log update. The focused fix has been
+committed, the log-only follow-up commit
+`8097a93a1074837b21586e83df3b0a66bdda99f4` is recorded, and the final log-fix
+re-review of `77f9c2d4a94b5f7b9336c410d47ec847143e5231` reported no comments.
+Branch verification and orchestrator-owned integration remain pending.

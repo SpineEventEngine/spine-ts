@@ -2,8 +2,9 @@
 
 Core runtime metadata APIs for Spine TS.
 
-The package currently provides descriptor-backed type registry APIs and the
-first validation facade over `@spine-event-engine/validation-ts`.
+The package currently provides descriptor-backed type registry APIs, the first
+validation facade over `@spine-event-engine/validation-ts`, and helpers for
+packing already-built domain messages into Spine command/event envelopes.
 
 The type registry slice includes:
 
@@ -89,5 +90,58 @@ will attach transition rules in a later runtime task. Rule-returned violations
 are sanitized before aggregation, and throwing transition rules are isolated
 into structured violations so later rules still run in order.
 
-This package does not yet implement `Any` packing/unpacking, runtime buses,
-entity repositories, storage, decorators, handlers, or transport behavior.
+## Envelope Packing
+
+Use `packAny()` when a caller needs Spine-aware `google.protobuf.Any` values.
+It derives the type URL through `deriveTypeUrl(schema)` and serializes with the
+Protobuf-ES binary writer, so Spine payloads use `type.spine.io/...` instead of
+the default `type.googleapis.com/...` prefix.
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { packAny, unpackAny } from "@spine-ts/core";
+import { CreateTaskSchema } from "./generated/task_commands_pb.js";
+
+const payload = create(CreateTaskSchema, { title: "Ship the thin slice" });
+const any = packAny(CreateTaskSchema, payload);
+const unpacked = unpackAny(any, CreateTaskSchema);
+```
+
+`packAny()` validates the enclosed message through the core validation facade by
+default and throws `ValidationException` for structured validation failures. Set
+`{ validate: false }` only when the caller has already validated a trusted
+message. Framework-packed payloads omit unknown fields for stable binary output
+inside this helper seam. Protobuf-ES 2.12.1 does not expose deterministic
+map-key ordering, so this package does not claim fully canonical map ordering in
+T-0007b. The helpers do not include packed bytes or payload contents in their
+validation errors, and `unpackAny()` returns `undefined` for type URL mismatches
+or malformed payload bytes.
+
+Use `packCommand()` and `packEvent()` to create generated Spine envelopes:
+
+```ts
+import { packCommand, packEvent } from "@spine-ts/core";
+
+const command = packCommand({
+  id: commandId,
+  context: commandContext,
+  schema: CreateTaskSchema,
+  message: payload,
+});
+
+const event = packEvent({
+  id: eventId,
+  context: eventContext,
+  schema: TaskCreatedSchema,
+  message: taskCreated,
+});
+```
+
+The caller supplies generated IDs and generated contexts. These helpers do not
+generate UUIDs, timestamps, actor or tenant context, producer IDs, versions,
+origins, system properties, storage records, bus deliveries, or transport
+metadata. The helpers snapshot supplied IDs and contexts before embedding them
+in the returned envelope.
+
+This package does not yet implement runtime buses, entity repositories, storage,
+decorators, handlers, or transport behavior.

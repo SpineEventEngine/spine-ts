@@ -1,17 +1,57 @@
 # T-0007b: Core Envelope Construction Helpers
 
-Status: Setup complete; branch/worktree pending
+Status: Round-1 review in progress
 Start: `2026-06-28 20:45 WEST`
 End: Pending
 Setup baseline commit: `c313086`
 Task log path: `build-protocol/tasks/T-0007b-envelope-construction/TASK.md`
-Branch: Pending
-Worktree: Pending
-Authoring sub-agent: Pending
-Reviewer sub-agents: Pending
-Implementation baseline commit: Pending
+Branch: `task/T-0007b-envelope-construction`
+Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007b-envelope-construction`
+Authoring sub-agent: `019f0fc3-b699-76c2-a02f-a174936c045d` (Bacon)
+Reviewer sub-agents: Maintainability/style `019f0fcc-6b78-71a3-a363-688a5be1d662`;
+documentation `019f0fcc-a511-78b0-a79a-eb2f4740ab52`; TypeScript/API docs
+`019f0fcc-d16b-7c31-8a02-81a07c880947`; security
+`019f0fcc-fa19-7632-9b24-e2f678ad60c6`; performance/reliability
+`019f0fcd-2d90-7481-963d-7571d880095d`.
+Implementation baseline commit: `57fc257`
 Final branch checkpoint before integration: Pending
 Main integration merge commit: Pending
+
+## Branch Setup
+
+Created `task/T-0007b-envelope-construction` from setup commit
+`66cd115bf4adbd34db0a3718ff6bd36dfbf8a074` in isolated worktree
+`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007b-envelope-construction`.
+Baseline verification is next before implementation handoff.
+
+## Baseline Verification
+
+Baseline verification passed on `2026-06-28 20:43 WEST` with
+`CI=true corepack pnpm verify`: typecheck, lint, format, tests, coverage,
+docs/API check, proto lint/generate, and generated-output cleanliness all
+passed. Vitest ran 9 test files and 35 tests. Coverage: statements 99.41%,
+branches 90.9%, functions 100%, lines 99.41%. TypeDoc emitted the known invalid
+`origin` warning and confirmed 85 proto exports plus 21 core exports.
+
+## Implementation Handoff
+
+Implementation sub-agent `019f0fc3-b699-76c2-a02f-a174936c045d` (Bacon) was
+spawned on `2026-06-28 20:44 WEST` with ownership of the T-0007b helper slice,
+TDD/logging requirements, and explicit scope exclusions for buses, storage,
+transport, entity transactions, and runtime ID/context factories.
+
+## Review Rounds
+
+Round 1 dispatched on `2026-06-28 20:55 WEST` against review basis
+`7d80347...2fe6850be59a78e6331b0b8cd84fa8fb0641b281`.
+
+| Role                    | Reviewer ID                            | Status      |
+| ----------------------- | -------------------------------------- | ----------- |
+| Maintainability/style   | `019f0fcc-6b78-71a3-a363-688a5be1d662` | In progress |
+| Documentation           | `019f0fcc-a511-78b0-a79a-eb2f4740ab52` | In progress |
+| TypeScript/API docs     | `019f0fcc-d16b-7c31-8a02-81a07c880947` | In progress |
+| Security                | `019f0fcc-fa19-7632-9b24-e2f678ad60c6` | In progress |
+| Performance/reliability | `019f0fcd-2d90-7481-963d-7571d880095d` | In progress |
 
 ## Objective
 
@@ -115,6 +155,54 @@ Selected skills for setup/orchestration:
 
 Implementation sub-agent must run its own skill gate before edits and record
 selected skills in this log.
+
+Implementation sub-agent skill gate recorded on `2026-06-28 20:47 WEST`:
+
+- `implement` applies to scoped delivery and final commit.
+- `test-driven-development` applies to focused RED/GREEN helper tests.
+- `verification-before-completion` applies to focused, docs/API, and full
+  verification evidence before handoff.
+- `architecture-decision-records` applies to preserving D-0030 through D-0032;
+  no new ADR is needed for this implementation because the accepted decision is
+  already D-0032.
+- `typescript-advanced-types` applies to the generic public helper inputs.
+- `javascript-testing-patterns` applies to the focused Vitest unit tests.
+- `codebase-design` applies to keeping Spine-aware `Any` packing as a deep core
+  module interface rather than scattering type URL policy.
+- `receiving-code-review` applies to evaluating existing review/task constraints
+  before changing code.
+
+Round-1 fix context recorded on `2026-06-28 21:00 WEST`:
+
+- Implementation commit under review:
+  `2fe6850be59a78e6331b0b8cd84fa8fb0641b281`.
+- Round-1 review basis:
+  `7d80347...2fe6850be59a78e6331b0b8cd84fa8fb0641b281`.
+- Dispatch-log commit `dfdf21e` is preserved on the branch.
+- Findings under focused fix: stale durable logs, API landing page omission,
+  test packing-policy duplication, unknown-field retention during packing,
+  unsafe malformed `Any` unpacking, and mutable caller-supplied ID/context
+  references in generated envelopes.
+- The focused fix has been re-reviewed. Only final lightweight log-fix
+  re-review/final verification remains pending.
+
+Round-1 focused fix follow-up recorded on `2026-06-28 21:13 WEST`:
+
+- Focused fix commit:
+  `0353f8a2f877d082ea9d51bf8b09b5c9af55bdbf`.
+- Log-only follow-up commit reviewed in the final lightweight pass:
+  `8097a93a1074837b21586e83df3b0a66bdda99f4`.
+- Final log-fix commit reviewed after the final lightweight pass:
+  `77f9c2d4a94b5f7b9336c410d47ec847143e5231`.
+- Follow-up re-review reports were clean for maintainability, security,
+  TypeScript/API docs, documentation/API landing page, and runtime reliability
+  helper behavior.
+- Remaining follow-up finding is log-only stale restart state in this task log,
+  the work log, and the review log.
+- The final log-fix re-review reported no comments in maintainability/style,
+  documentation, TypeScript/API docs, security, and performance/reliability.
+- Branch verification and orchestrator-owned integration remain pending; round 1
+  is not closed by this note.
 
 ## Public API Shape
 

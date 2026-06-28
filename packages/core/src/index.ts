@@ -1,11 +1,14 @@
-import { create, getOption, hasOption } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, getOption, hasOption, toBinary } from "@bufbuild/protobuf";
 import type { DescField, Message, MessageShape } from "@bufbuild/protobuf";
 import type { GenExtension, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
-import type { FileOptions } from "@bufbuild/protobuf/wkt";
+import { AnySchema, type Any, type FileOptions } from "@bufbuild/protobuf/wkt";
 import { validate as validateWithSpine } from "@spine-event-engine/validation-ts";
 import {
   ActorContextSchema,
+  type Command,
+  type CommandContext,
   CommandContextSchema,
+  type CommandId,
   CommandIdSchema,
   CommandSchema,
   CommandContext_ScheduleSchema,
@@ -14,7 +17,10 @@ import {
   EmailAddressSchema,
   EnrichmentSchema,
   Enrichment_ContainerSchema,
+  type Event,
+  type EventContext,
   EventContextSchema,
+  type EventId,
   EventIdSchema,
   EventSchema,
   FieldPathSchema,
@@ -233,11 +239,107 @@ export interface DeriveTypeUrlOptions {
   readonly fallbackPrefix?: string;
 }
 
+/** Options for Spine-aware `google.protobuf.Any` payload packing. */
+export interface PackAnyOptions {
+  /**
+   * Validate the enclosed domain message before serialization.
+   *
+   * Validation is enabled by default. Set this to `false` only for messages
+   * already validated by a trusted caller.
+   */
+  readonly validate?: boolean;
+}
+
+/** Input for creating a generated Spine `Command` envelope from a domain message. */
+export interface PackCommandInput<
+  Schema extends MessageSchema = MessageSchema,
+> extends PackAnyOptions {
+  /** Caller-supplied generated command ID. */
+  readonly id: CommandId;
+  /** Caller-supplied generated command context. */
+  readonly context: CommandContext;
+  /** Schema of the enclosed domain command message. */
+  readonly schema: Schema;
+  /** Already-built domain command message to validate and pack. */
+  readonly message: MessageShape<Schema>;
+}
+
+/** Input for creating a generated Spine `Event` envelope from a domain message. */
+export interface PackEventInput<
+  Schema extends MessageSchema = MessageSchema,
+> extends PackAnyOptions {
+  /** Caller-supplied generated event ID. */
+  readonly id: EventId;
+  /** Caller-supplied generated event context. */
+  readonly context: EventContext;
+  /** Schema of the enclosed domain event message. */
+  readonly schema: Schema;
+  /** Already-built domain event message to validate and pack. */
+  readonly message: MessageShape<Schema>;
+}
+
 /** Derive the deterministic type URL for a Protobuf-ES message schema. */
 export function deriveTypeUrl(schema: MessageSchema, options: DeriveTypeUrlOptions = {}): string {
   const typeUrlPrefix = getTypeUrlPrefix(schema, options.fallbackPrefix);
 
   return `${typeUrlPrefix.replace(/\/+$/u, "")}/${schema.typeName}`;
+}
+
+/**
+ * Pack a Protobuf-ES message into `Any` using Spine type URL derivation.
+ *
+ * Unknown fields are omitted from the serialized payload for stable framework
+ * packing. Protobuf-ES 2.12.1 does not expose deterministic map-key ordering.
+ */
+export function packAny<Schema extends MessageSchema>(
+  schema: Schema,
+  message: MessageShape<Schema>,
+  options: PackAnyOptions = {},
+): Any {
+  if (options.validate !== false) {
+    checkValid(schema, message);
+  }
+
+  return create(AnySchema, {
+    typeUrl: deriveTypeUrl(schema),
+    value: toBinary(schema, message, { writeUnknownFields: false }),
+  });
+}
+
+/** Unpack an `Any` only when its type URL exactly matches the requested schema. */
+export function unpackAny<Schema extends MessageSchema>(
+  packed: Any,
+  schema: Schema,
+): MessageShape<Schema> | undefined {
+  if (packed.typeUrl !== deriveTypeUrl(schema)) {
+    return undefined;
+  }
+
+  try {
+    return fromBinary(schema, packed.value);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Create a generated Spine `Command` envelope from a caller-supplied payload, ID, and context. */
+export function packCommand<Schema extends MessageSchema>(
+  input: PackCommandInput<Schema>,
+): Command {
+  return create(CommandSchema, {
+    id: clone(CommandIdSchema, input.id),
+    message: packAny(input.schema, input.message, input),
+    context: clone(CommandContextSchema, input.context),
+  });
+}
+
+/** Create a generated Spine `Event` envelope from a caller-supplied payload, ID, and context. */
+export function packEvent<Schema extends MessageSchema>(input: PackEventInput<Schema>): Event {
+  return create(EventSchema, {
+    id: clone(EventIdSchema, input.id),
+    message: packAny(input.schema, input.message, input),
+    context: clone(EventContextSchema, input.context),
+  });
 }
 
 /** Return the type URL prefix that applies to the given schema. */

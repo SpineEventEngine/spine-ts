@@ -112,6 +112,13 @@ const expectedCoreExports = [
   "TransitionValidationRule",
   "TransitionValidationResult",
   "validateTransition",
+  "PackAnyOptions",
+  "PackCommandInput",
+  "PackEventInput",
+  "packAny",
+  "unpackAny",
+  "packCommand",
+  "packEvent",
 ];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 

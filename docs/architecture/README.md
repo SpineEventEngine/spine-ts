@@ -16,8 +16,8 @@ values, and custom options. This boundary is intentionally contract-only:
 - canonical `Command`, `Event`, `ActorContext`, `TenantId`, `UserId`,
   `Version`, diagnostics, enrichment, and transitive time/net/UI support
   contracts are available without hand-written TypeScript shapes; and
-- high-level `Any` packing/unpacking, command/event factory helpers, buses,
-  storage, and transport remain out of scope until later tasks.
+- buses, storage, transport, entity runtime behavior, and runtime metadata
+  generation remain out of scope until later tasks.
 
 ## Core Metadata Registry
 
@@ -78,3 +78,36 @@ same structured result shape; built-in entity transaction enforcement remains a
 later runtime responsibility. Rule-returned violations are sanitized before
 aggregation, and throwing transition rules are isolated into structured
 transition-rule failures so later rules still run deterministically.
+
+## Core Envelope Construction
+
+`@spine-ts/core` owns the Spine-aware `Any` packing seam. `packAny()` derives
+the canonical type URL with `deriveTypeUrl(schema)` and serializes the payload
+with Protobuf-ES `toBinary()`. The implementation intentionally does not call
+Buf `anyPack()` directly for Spine domain payloads because that helper emits the
+standard `type.googleapis.com/...` prefix rather than the Spine
+`type.spine.io/...` prefix required for routing.
+
+Framework-packed payloads pass `writeUnknownFields: false` to the Protobuf-ES
+binary writer. This gives the helper stable behavior for messages that carry
+retained unknown fields. Protobuf-ES 2.12.1 does not expose deterministic
+map-key ordering, so T-0007b does not claim fully canonical map ordering and
+leaves any broader canonical serialization policy to a later task.
+
+`unpackAny()` performs exact type URL matching against the requested schema
+before binary decoding and returns `undefined` on decode failure, keeping type
+URL comparison and malformed payload handling inside the core module interface.
+Callers should not parse or concatenate type URL strings in their own code.
+
+`packCommand()` and `packEvent()` construct generated `spine.core.Command` and
+`spine.core.Event` messages from caller-supplied generated IDs, generated
+contexts, schemas, and already-built domain messages. They validate the enclosed
+domain message through the core validation facade by default, then pack it as
+Spine-aware `Any`. Supplied IDs and contexts are cloned before embedding so
+later caller-side mutation does not mutate returned envelopes.
+
+The helpers deliberately do not own runtime policy. They do not generate UUIDs,
+timestamps, actor or tenant context, event producer IDs, entity versions,
+origins, command system properties, storage records, acknowledgements, delivery
+state, bus dispatch, handler registration, or transport metadata. Those
+responsibilities remain with later runtime slices.
