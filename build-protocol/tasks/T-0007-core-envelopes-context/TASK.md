@@ -1,14 +1,15 @@
 # T-0007: Core Envelopes And Context
 
-Status: Setup in progress
+Status: Baseline verified; implementation handoff pending
 Start: `2026-06-28 19:35 WEST`
 End: Pending
 Setup baseline commit: `f380744`
 Task log path: `build-protocol/tasks/T-0007-core-envelopes-context/TASK.md`
-Branch: Pending
-Worktree: Pending
+Branch: `task/T-0007a-core-signal-proto-intake`
+Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007a-core-signal-proto-intake`
 Authoring sub-agent: Pending
 Reviewer sub-agents: Pending
+Implementation baseline commit: `d62fe14`
 Final branch HEAD: Pending
 
 ## Objective
@@ -135,6 +136,15 @@ record selected skills in this log.
 - Focused package tests for proto exports and core registry entries.
 - Full `CI=true corepack pnpm verify` before review handoff.
 - Five reviewer roles after implementation and after each fix round until clean.
+
+## Baseline Verification
+
+Baseline verification passed on `2026-06-28 19:47 WEST` with
+`CI=true corepack pnpm verify`: typecheck, lint, format, tests, coverage,
+docs/API check, proto lint/generate, and generated-output cleanliness all
+passed. Vitest ran 9 test files and 33 tests. Coverage: statements 99.19%,
+branches 90.9%, functions 100%, lines 99.19%. TypeDoc emitted the known invalid
+`origin` warning and confirmed 13 proto exports plus 21 core exports.
 
 ## Review Rounds
 
