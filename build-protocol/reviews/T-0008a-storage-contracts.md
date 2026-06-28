@@ -136,4 +136,5 @@ packages/storage/src/index.test.ts` passed with 1 file / 13 tests;
   proto exports, 28 core exports, and 26 storage exports, plus proto
   lint/generate/check-generated.
 
-Closure pending follow-up fix commit.
+Follow-up fix committed as `7b489418c58b2c11171baf70d04db1d009aa5501`.
+Orchestrator-owned follow-up re-review is pending.

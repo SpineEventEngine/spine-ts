@@ -203,6 +203,8 @@ pnpm typecheck`, `corepack pnpm lint`, `corepack pnpm format:check`, and
   compatibility message, API docs/checks include 26 storage exports, and the
   top-level README now states that only production storage adapters/repository
   runtime are deferred while the non-durable in-memory adapter exists.
+- Follow-up fix committed as `7b489418c58b2c11171baf70d04db1d009aa5501` on
+  `2026-06-28 22:18 WEST`.
 - Follow-up GREEN/full evidence: `corepack pnpm vitest run
 packages/storage/src/index.test.ts` passed with 1 file / 13 tests; `corepack
 pnpm typecheck`, `corepack pnpm lint`, `corepack pnpm format:check`, and
@@ -212,5 +214,4 @@ pnpm typecheck`, `corepack pnpm lint`, `corepack pnpm format:check`, and
   proto exports, 28 core exports, and 26 storage exports; proto
   lint/generate/check-generated passed.
 - No blocking questions known.
-- Next step: commit follow-up fixes, then hand back to the orchestrator-owned
-  review loop.
+- Next step: run the orchestrator-owned follow-up re-review on the latest fix.
