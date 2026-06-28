@@ -474,3 +474,41 @@ Consequences:
   internals.
 - Future dependency updates must re-check the npm dist-tags, peer dependency,
   and exported declarations before changing the exact package version.
+
+## D-0030: Core Signal Proto Intake Before Envelope Helpers
+
+Status: Accepted
+
+Date: 2026-06-28
+
+Context: T-0007 needs command/event envelope and actor/tenant/version context
+support. The current repository only contains the earlier proto intake set for
+options, field paths, template strings, and validation errors. High-level
+TypeScript envelope helpers would otherwise need to invent local shapes or
+partial hand-written contracts.
+
+Decision: Implement T-0007 as a proto-first sequence. T-0007a copies and
+generates the minimal transitive Spine proto set for command/event envelopes and
+actor/tenant/version context before adding higher-level TS envelope construction
+helpers in later slices.
+
+Alternatives considered:
+
+- Implement TS-only envelope interfaces first. Rejected because it would violate
+  the preserved Protobuf contract requirement and risk source-level drift from
+  Spine message definitions.
+- Copy every remaining Spine core/server/client proto now. Deferred because the
+  task should keep scope reviewable and avoid pulling storage/service contracts
+  before the envelope/context surface is needed.
+- Generate from external imports without copying transitive support protos.
+  Rejected because the repository must preserve copied Spine contracts and make
+  Buf generation reproducible from pinned sources.
+
+Consequences:
+
+- T-0007a will add more curated `@spine-ts/proto` exports and default core
+  registry entries.
+- High-level `packCommand`, `packEvent`, origin-chain helpers, and validation
+  policy can use generated contracts instead of hand-written message shapes.
+- Runtime command/event bus tasks can rely on canonical type URLs and generated
+  schemas.
