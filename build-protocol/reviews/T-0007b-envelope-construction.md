@@ -5,19 +5,28 @@ Work log: `build-protocol/work-logs/T-0007b.md`
 Branch: `task/T-0007b-envelope-construction`
 Setup baseline commit: `c313086`
 Implementation baseline commit: `57fc257`
-Reviewed commit/diff basis: T-0007b implementation diff before final commit
+Reviewed commit/diff basis:
+`7d80347...2fe6850be59a78e6331b0b8cd84fa8fb0641b281`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007b-envelope-construction`
-Reviewer sub-agents: Pending
-Status: Implementation complete; required reviewer roles pending
+Reviewer sub-agents: Maintainability/style `019f0fcc-6b78-71a3-a363-688a5be1d662`;
+documentation `019f0fcc-a511-78b0-a79a-eb2f4740ab52`; TypeScript/API docs
+`019f0fcc-d16b-7c31-8a02-81a07c880947`; security
+`019f0fcc-fa19-7632-9b24-e2f678ad60c6`; performance/reliability
+`019f0fcd-2d90-7481-963d-7571d880095d`.
+Status: Round 1 in progress
 Implementation sub-agent: `019f0fc3-b699-76c2-a02f-a174936c045d` (Bacon)
 
 ## Reviewer IDs
 
-Pending.
+- Maintainability/style: `019f0fcc-6b78-71a3-a363-688a5be1d662`
+- Documentation: `019f0fcc-a511-78b0-a79a-eb2f4740ab52`
+- TypeScript/API docs: `019f0fcc-d16b-7c31-8a02-81a07c880947`
+- Security: `019f0fcc-fa19-7632-9b24-e2f678ad60c6`
+- Performance/reliability: `019f0fcd-2d90-7481-963d-7571d880095d`
 
 ## Round 1
 
-Pending orchestrator-run reviewers after implementation handoff.
+Dispatched on `2026-06-28 20:55 WEST`.
 
 Required reviewer roles:
 

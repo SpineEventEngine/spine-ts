@@ -1,6 +1,6 @@
 # T-0007b: Core Envelope Construction Helpers
 
-Status: Implementation in progress
+Status: Round-1 review in progress
 Start: `2026-06-28 20:45 WEST`
 End: Pending
 Setup baseline commit: `c313086`
@@ -8,7 +8,11 @@ Task log path: `build-protocol/tasks/T-0007b-envelope-construction/TASK.md`
 Branch: `task/T-0007b-envelope-construction`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007b-envelope-construction`
 Authoring sub-agent: `019f0fc3-b699-76c2-a02f-a174936c045d` (Bacon)
-Reviewer sub-agents: Pending
+Reviewer sub-agents: Maintainability/style `019f0fcc-6b78-71a3-a363-688a5be1d662`;
+documentation `019f0fcc-a511-78b0-a79a-eb2f4740ab52`; TypeScript/API docs
+`019f0fcc-d16b-7c31-8a02-81a07c880947`; security
+`019f0fcc-fa19-7632-9b24-e2f678ad60c6`; performance/reliability
+`019f0fcd-2d90-7481-963d-7571d880095d`.
 Implementation baseline commit: `57fc257`
 Final branch checkpoint before integration: Pending
 Main integration merge commit: Pending
@@ -35,6 +39,19 @@ Implementation sub-agent `019f0fc3-b699-76c2-a02f-a174936c045d` (Bacon) was
 spawned on `2026-06-28 20:44 WEST` with ownership of the T-0007b helper slice,
 TDD/logging requirements, and explicit scope exclusions for buses, storage,
 transport, entity transactions, and runtime ID/context factories.
+
+## Review Rounds
+
+Round 1 dispatched on `2026-06-28 20:55 WEST` against review basis
+`7d80347...2fe6850be59a78e6331b0b8cd84fa8fb0641b281`.
+
+| Role                    | Reviewer ID                            | Status      |
+| ----------------------- | -------------------------------------- | ----------- |
+| Maintainability/style   | `019f0fcc-6b78-71a3-a363-688a5be1d662` | In progress |
+| Documentation           | `019f0fcc-a511-78b0-a79a-eb2f4740ab52` | In progress |
+| TypeScript/API docs     | `019f0fcc-d16b-7c31-8a02-81a07c880947` | In progress |
+| Security                | `019f0fcc-fa19-7632-9b24-e2f678ad60c6` | In progress |
+| Performance/reliability | `019f0fcd-2d90-7481-963d-7571d880095d` | In progress |
 
 ## Objective
 
