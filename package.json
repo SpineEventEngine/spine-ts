@@ -18,10 +18,12 @@
     "test": "vitest run --passWithNoTests",
     "test:coverage": "vitest run --coverage --passWithNoTests",
     "docs:api": "typedoc --options typedoc.json",
-    "docs:check": "typedoc --options typedoc.json",
+    "docs:check": "typedoc --options typedoc.json && node scripts/check-api-docs.mjs",
+    "proto:verify": "node scripts/verify-proto-sources.mjs",
     "proto:lint": "node scripts/proto-workflow.mjs lint",
     "proto:generate": "node scripts/proto-workflow.mjs generate",
-    "verify": "pnpm check:node && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm test:coverage && pnpm docs:check && pnpm proto:lint && pnpm proto:generate"
+    "proto:check-generated": "node scripts/check-generated-clean.mjs",
+    "verify": "pnpm check:node && pnpm typecheck && pnpm lint && pnpm format:check && pnpm test && pnpm test:coverage && pnpm docs:check && pnpm proto:lint && pnpm proto:generate && pnpm proto:check-generated"
   },
   "devDependencies": {
     "@bufbuild/buf": "1.71.0",

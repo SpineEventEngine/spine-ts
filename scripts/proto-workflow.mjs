@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { readdirSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const command = process.argv[2];
 
@@ -11,6 +11,33 @@ if (command !== "lint" && command !== "generate") {
 }
 
 const protoRoot = fileURLToPath(new URL("../proto", import.meta.url));
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+
+function runCommand(label, executable, args) {
+  const result = spawnSync(executable, args, {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
+
+  if (result.error !== undefined) {
+    console.error(`Failed to start ${label}: ${result.error.message}`);
+    return 1;
+  }
+
+  if (result.signal !== null) {
+    console.error(`${label} terminated by signal ${result.signal}.`);
+    return 1;
+  }
+
+  return result.status ?? 1;
+}
+
+function resolveBufExecutable() {
+  const executable = process.platform === "win32" ? "buf.cmd" : "buf";
+  const localBuf = join(repoRoot, "node_modules", ".bin", executable);
+
+  return existsSync(localBuf) ? localBuf : executable;
+}
 
 function findProtoFiles(directory) {
   return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -31,7 +58,15 @@ if (protoFiles.length === 0) {
   process.exit(0);
 }
 
-const bufArgs = command === "lint" ? ["lint"] : ["generate"];
-const result = spawnSync("buf", bufArgs, { stdio: "inherit" });
+const verifyStatus = runCommand("proto source verification", process.execPath, [
+  join(repoRoot, "scripts/verify-proto-sources.mjs"),
+]);
 
-process.exit(result.status ?? 1);
+if (verifyStatus !== 0) {
+  process.exit(verifyStatus);
+}
+
+const bufArgs = command === "lint" ? ["lint"] : ["generate"];
+const bufStatus = runCommand(`buf ${command}`, resolveBufExecutable(), bufArgs);
+
+process.exit(bufStatus);

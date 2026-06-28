@@ -2,7 +2,10 @@
 
 This repository is the TypeScript/Node.js implementation workspace for a Spine-inspired server-side framework.
 
-Current status: workspace and toolchain bootstrap only. Runtime behavior, copied Spine Protobuf files, validation integration, gRPC services, ZeroMQ transport, storage adapters, and the to-do domain are intentionally deferred to later tasks.
+Current status: workspace/toolchain bootstrap plus the first copied Spine
+Protobuf contract intake. Runtime behavior, validation integration, gRPC
+services, ZeroMQ transport, storage adapters, and the to-do domain are
+intentionally deferred to later tasks.
 
 ## Workspace
 
@@ -11,6 +14,10 @@ Current status: workspace and toolchain bootstrap only. Runtime behavior, copied
 - TypeScript module target: ESM-first `NodeNext`.
 - Package boundaries: `packages/proto`, `packages/core`, `packages/server`, `packages/transport`, `packages/storage`, and `packages/testing`.
 - Example boundary: `examples/todo`.
+- Copied Spine proto contracts live under `proto/`, with source provenance in
+  `proto/spine-sources.json`.
+- `@spine-ts/proto` exposes curated Protobuf-ES schemas, descriptors, message
+  types, and Spine custom options for the first intake set.
 
 ## Useful Commands
 

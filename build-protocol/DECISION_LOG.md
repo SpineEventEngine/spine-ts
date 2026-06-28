@@ -267,3 +267,54 @@ Consequences:
 
 - Runtime dependency selection remains auditable without adding unused packages.
 - Later validation, service-contract, and transport tasks must pin and smoke test their own dependencies when they enter scope.
+
+## D-0025: T-0004 proto intake uses exact researched Spine source commits
+
+Status: Accepted
+
+Context: `PROTOBUF_CONTRACT.md` requires copied Spine JVM `.proto` files to be
+preserved as canonical contracts, beginning with `spine/options.proto`, while
+T-0002 intentionally deferred proto intake. The JVM research corpus records the
+source baseline and commit IDs used for Spine 2.0.0-series behavior. The actual
+proto files are not present in this repository, so T-0004 needs reproducible
+upstream provenance before copying or generating any contracts.
+
+Decision: T-0004 will copy proto files verbatim from exact GitHub raw URLs at
+the researched commits recorded in `spine-jvm-docs/README.md`, starting with:
+
+- `SpineEventEngine/base` commit
+  `43b55858c410eaf79fc594ca6f3f3eab0daca027` for `spine/options.proto`
+  and base/string transitive dependencies.
+- `SpineEventEngine/validation` commit
+  `6aec690168182866876584dab7c5a0b220b9b493` for
+  `spine/validation/validation_error.proto`.
+- `SpineEventEngine/time` commit
+  `0d0251c1495f4dc5a383ef2d6b8b2a0e405a327d` only if the T-0004 minimal
+  intake includes `spine/time_options.proto` or time message dependencies.
+
+T-0004 must add a manifest or verification mechanism that records source
+repository, full commit, upstream path, canonical source/raw URLs, local path,
+and a checksum for each copied file. The default verification remains
+network-free: it validates the manifest shape, copied file set, safe local
+paths, and local SHA-256 checksums rather than fetching upstream on every run.
+Buf and Protobuf-ES generation remain the only supported TypeScript generation
+path.
+
+Alternatives considered:
+
+- Copy from local `/private/tmp/spine-research` clones. Rejected because those
+  clones are not present in this workspace and would weaken reproducibility for
+  interruption recovery.
+- Track upstream default branches. Rejected because that could silently change
+  Protobuf contracts and break compatibility with the researched JVM baseline.
+- Rewrite a smaller local `options.proto`. Rejected by the Protobuf contract and
+  the user instruction to preserve Spine definitions.
+
+Consequences:
+
+- Proto compatibility is tied to a stable, reviewable JVM research baseline.
+- Network is required for the first intake or future drift checks unless files
+  are already vendored locally.
+- Future tasks may add more Spine proto sources from `core-jvm`, `time`,
+  `change`, or other baseline repos, but each addition must extend the manifest
+  rather than editing copied definitions by hand.

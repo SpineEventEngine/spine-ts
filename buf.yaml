@@ -4,6 +4,15 @@ modules:
 lint:
   use:
     - STANDARD
+  except:
+    # Spine upstream protos are copied verbatim. These exceptions preserve
+    # compatibility choices such as package-less options and legacy enum names.
+    - PACKAGE_DEFINED
+    - PACKAGE_VERSION_SUFFIX
+    - FIELD_LOWER_SNAKE_CASE
+    - ENUM_NO_ALLOW_ALIAS
+    - ENUM_VALUE_PREFIX
+    - ENUM_ZERO_VALUE_SUFFIX
 breaking:
   use:
     - FILE
