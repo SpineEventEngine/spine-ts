@@ -13,14 +13,15 @@ Round-1 focused fix commit:
 `0353f8a2f877d082ea9d51bf8b09b5c9af55bdbf`
 Log-only follow-up commit reviewed by final lightweight pass:
 `8097a93a1074837b21586e83df3b0a66bdda99f4`
+Final log-fix commit reviewed after the final lightweight pass:
+`77f9c2d4a94b5f7b9336c410d47ec847143e5231`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007b-envelope-construction`
 Reviewer sub-agents: Maintainability/style `019f0fcc-6b78-71a3-a363-688a5be1d662`;
 documentation `019f0fcc-a511-78b0-a79a-eb2f4740ab52`; TypeScript/API docs
 `019f0fcc-d16b-7c31-8a02-81a07c880947`; security
 `019f0fcc-fa19-7632-9b24-e2f678ad60c6`; performance/reliability
 `019f0fcd-2d90-7481-963d-7571d880095d`.
-Status: Follow-up re-review clean except log-only restart-state fix; final
-lightweight re-review/final verification pending
+Status: Final log-fix re-review clean; branch verification pending
 Implementation sub-agent: `019f0fc3-b699-76c2-a02f-a174936c045d` (Bacon)
 
 ## Reviewer IDs
@@ -98,6 +99,25 @@ Remaining log-only findings:
   after the focused fix commit, even though follow-up re-review already ran and
   only final lightweight log-fix re-review/final verification remains pending.
 
+## Final Log-Fix Re-Review
+
+Final log-fix review basis:
+`8097a93a1074837b21586e83df3b0a66bdda99f4..77f9c2d4a94b5f7b9336c410d47ec847143e5231`.
+
+Clean reports:
+
+- Maintainability/style: no comments.
+- Documentation: no comments.
+- TypeScript/API docs: no comments.
+- Security: no comments.
+- Performance/reliability: no comments.
+
+The reviewed range touched only the three T-0007b durable log files, recorded
+the prior log-only follow-up commit
+`8097a93a1074837b21586e83df3b0a66bdda99f4`, removed the stale task-log sentence
+about re-running reviewers after the focused fix, and left branch
+verification/integration pending.
+
 ## Verification Evidence
 
 Round-1 focused fix evidence:
@@ -138,9 +158,8 @@ Original implementation evidence:
 
 ## Closure
 
-Round 1 is not closed by this log-only update. The focused fix has been
-committed and follow-up re-review was clean except for stale durable restart
-text. The log-only follow-up commit
-`8097a93a1074837b21586e83df3b0a66bdda99f4` has now also been recorded in this
-review log. Final lightweight re-review/final verification remains pending
-after this stale-state log-only fix commit.
+Round 1 is not closed by this review-log update. The focused fix has been
+committed, the log-only follow-up commit
+`8097a93a1074837b21586e83df3b0a66bdda99f4` is recorded, and the final log-fix
+re-review of `77f9c2d4a94b5f7b9336c410d47ec847143e5231` reported no comments.
+Branch verification and orchestrator-owned integration remain pending.
