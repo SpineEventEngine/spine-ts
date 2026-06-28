@@ -1,6 +1,6 @@
 # T-0008a: Storage Contracts And In-Memory Adapter
 
-Status: Round 1 fixes in progress
+Status: Round 1 follow-up re-review pending
 Start: `2026-06-28 21:35 WEST`
 End: Pending
 Setup baseline commit: `db7130e`
@@ -14,7 +14,7 @@ documentation `019f1004-8374-7f33-a643-13e86daebd3a`; TypeScript/API docs
 `019f1004-de72-7b40-9915-5ecef92ba29e`; performance/reliability
 `019f1005-0746-7353-bcda-e6bb1ee956c9`.
 Implementation baseline commit: `0a6908e` (handoff), `f1911d7` recorded by setup logs
-Final branch checkpoint before integration: Pending round-1 fix commit
+Final branch checkpoint before integration: Pending follow-up review
 Main integration merge commit: Pending
 
 ## Objective
@@ -175,10 +175,11 @@ format:check`, and `corepack pnpm docs:check` passed. Docs check retained the
   shapes; `corepack pnpm typecheck` failed because `StorageAdapter`,
   `WriteSideRecordStore`, and `createInMemoryStorageAdapter` were not yet
   payload-generic.
-- Round-1 fix in progress on `2026-06-28 22:05 WEST`: `cloneValue()` now uses
-  Node 24 `structuredClone()`, storage/read-side stores bind payload types at
-  the store/adapter level, empty aggregate appends validate expected stream
-  version and return `[]` without retaining a stream, and docs describe
+- Round-1 fix committed as `264c4a5fe6a0e4315a5df1cedae2fb436579e9bc` on
+  `2026-06-28 22:07 WEST`: `cloneValue()` now uses Node 24
+  `structuredClone()`, storage/read-side stores bind payload types at the
+  store/adapter level, empty aggregate appends validate expected stream version
+  and return `[]` without retaining a stream, and docs describe
   structured-clone-compatible payloads and storage export checks.
 - Round-1 GREEN/full evidence: `corepack pnpm vitest run
 packages/storage/src/index.test.ts` passed with 1 file / 12 tests; `corepack
@@ -189,5 +190,5 @@ pnpm typecheck`, `corepack pnpm lint`, `corepack pnpm format:check`, and
   proto exports, 28 core exports, and 25 storage exports; proto
   lint/generate/check-generated passed.
 - No blocking questions known.
-- Next step: commit round-1 fixes, then hand back to the orchestrator-owned
-  review loop.
+- Next step: run the orchestrator-owned follow-up review loop on the round-1
+  fix.
