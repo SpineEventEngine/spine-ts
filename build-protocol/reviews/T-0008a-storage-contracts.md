@@ -4,10 +4,10 @@ Task log: `build-protocol/tasks/T-0008a-storage-contracts/TASK.md`
 Work log: `build-protocol/work-logs/T-0008a.md`
 Branch: `task/T-0008a-storage-contracts`
 Setup baseline commit: `db7130e`
-Implementation baseline commit: Pending
+Implementation baseline commit: `f1911d7`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0008a-storage-contracts`
 Reviewer sub-agents: Pending
-Status: Branch/worktree created; baseline verification pending
+Status: Baseline verified; implementation pending
 Implementation sub-agent: Pending
 
 ## Reviewer IDs

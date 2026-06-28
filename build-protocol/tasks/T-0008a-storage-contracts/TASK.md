@@ -1,6 +1,6 @@
 # T-0008a: Storage Contracts And In-Memory Adapter
 
-Status: Branch/worktree created; baseline verification pending
+Status: Baseline verified; implementation handoff pending
 Start: `2026-06-28 21:35 WEST`
 End: Pending
 Setup baseline commit: `db7130e`
@@ -9,7 +9,7 @@ Branch: `task/T-0008a-storage-contracts`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0008a-storage-contracts`
 Authoring sub-agent: Pending
 Reviewer sub-agents: Pending
-Implementation baseline commit: Pending baseline verification
+Implementation baseline commit: `f1911d7`
 Final branch checkpoint before integration: Pending
 Main integration merge commit: Pending
 
@@ -124,6 +124,11 @@ reviewers report no comments.
 - Setup logs created on `main` after T-0007b integration commit `db7130e`.
 - Branch/worktree created from setup commit
   `d1ff2d96e1e67eeb072d8ac3868ec9fb2c54b475`.
+- Baseline verification passed on `2026-06-28 21:37 WEST` with
+  `CI=true corepack pnpm verify`: typecheck, lint, format, tests, coverage,
+  docs/API check, proto lint/generate, and generated-output cleanliness all
+  passed. Vitest ran 9 test files and 41 tests. Coverage: statements 99.44%,
+  branches 91.83%, functions 100%, lines 99.44%. TypeDoc emitted the known
+  invalid `origin` warning and confirmed 85 proto exports plus 28 core exports.
 - No blocking questions known.
-- Next step: run baseline verification and dispatch the implementation
-  sub-agent.
+- Next step: dispatch the implementation sub-agent.
