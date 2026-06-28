@@ -7,8 +7,8 @@ Setup baseline commit: `62ffc33`
 Implementation baseline commit: `e953662`
 Reviewed commit/diff basis: Pending
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
-Reviewer sub-agents: Round 1 dispatched
-Status: Review round 1 in progress
+Reviewer sub-agents: Round 1 completed; changes requested
+Status: Changes requested after review round 1
 
 ## Reviewer IDs
 
@@ -20,7 +20,31 @@ Status: Review round 1 in progress
 
 ## Round 1
 
-Dispatched against `e953662...4726985e1786929f5222707dc7abf77c448e8fa3`.
+Reviewed basis: `e953662...4726985e1786929f5222707dc7abf77c448e8fa3`.
+
+Findings:
+
+- Code style/maintainability
+  `019f0f30-4ef2-7ee2-8b19-54ad5366c628`: requested a discriminated
+  validation result type so failure results guarantee an error, suggested
+  localizing the validation adapter, and requested a fixture comment for the
+  base64 validation descriptor.
+- Documentation `019f0f30-9cfa-7ca2-b41b-c9019b1ae269`: requested stale
+  task/work/review placeholders be replaced with exact SHAs/status, the task
+  `Files Changed` section list changed files, the framework guide status be
+  updated from bootstrap placeholder, and architecture notes use the
+  `spine.validation.*` namespace.
+- TypeScript/API docs `019f0f30-dd38-77b0-b091-6380a29bfb4d`: no comments.
+- Security `019f0f31-0a64-7280-b14c-e3800de65dbb`: requested safe-by-default
+  redaction of invalid field values copied from upstream validation placeholders
+  and field values, plus tests/docs.
+- Performance/reliability `019f0f31-36e2-7463-a065-d6122c248bb7`: requested a
+  core-owned structured failure path for upstream validator or transition-rule
+  exceptions, tests for throwing validation/rules and multiple-rule
+  ordering/isolation, and exact SHA traceability in logs.
+
+Disposition: Feed all actionable comments back to the authoring sub-agent for a
+review-fix pass.
 
 ## Round 2
 

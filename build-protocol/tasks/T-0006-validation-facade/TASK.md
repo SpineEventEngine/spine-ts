@@ -9,9 +9,10 @@ Task log path: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Authoring sub-agent: T-0006a implementation sub-agent (Codex)
-Reviewer sub-agents: Round 1 dispatched
-Implementation commit: Branch HEAD after implementation commit
-Final branch HEAD: Branch HEAD after implementation commit
+Reviewer sub-agents: Round 1 completed; changes requested
+Implementation commit: `4726985e1786929f5222707dc7abf77c448e8fa3`
+Current branch HEAD: `291a9b14b045f602cf56712c1f006a050d291b50`
+Final branch HEAD: Pending review-fix pass
 
 ## Objective
 
@@ -197,6 +198,8 @@ Out of scope:
 - `2026-06-28 18:11 WEST`: Dispatched round-1 reviewer sub-agents for
   maintainability, documentation, TypeScript/API docs, security, and
   performance/reliability.
+- `2026-06-28 18:18 WEST`: Recorded round-1 reviewer findings; changes are
+  required before re-review.
 - `2026-06-28 17:36 WEST`: T-0006a implementation sub-agent performed the
   canonical skill applicability check, confirmed the assigned isolated
   worktree, and recorded selected/skipped skills before implementation edits.
@@ -372,7 +375,15 @@ pnpm docs:check` passed and confirmed 13 expected `@spine-ts/proto` exports
 
 ## Review Rounds
 
-- Pending.
+- Round 1 completed:
+  - Maintainability requested a discriminated validation result type, validation
+    adapter locality cleanup, and descriptor-fixture comments.
+  - Documentation requested stale log/status/SHA fixes, changed-file inventory,
+    guide status cleanup, and namespace correction.
+  - TypeScript/API docs reported no comments.
+  - Security requested safe-by-default redaction of invalid field values.
+  - Performance/reliability requested structured handling for upstream/rule
+    exceptions and SHA traceability.
 
 ## Integration Result
 
