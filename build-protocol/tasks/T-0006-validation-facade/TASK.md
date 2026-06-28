@@ -615,6 +615,18 @@ pnpm docs:check` passed and confirmed 13 expected `@spine-ts/proto` exports
     placeholder values, because placeholder keys are unrestricted.
   - Performance/reliability requested stale branch-head and reviewed-basis
     metadata be corrected.
+- Round 3 dispatched against reviewed basis
+  `e953662...9560d2e330cf76c9af910ab5c59d26aac278a9a5`:
+  - Maintainability reviewer:
+    `019f0f5e-99da-7453-a3d6-b026fe155a9d`.
+  - Documentation reviewer:
+    `019f0f5e-9a45-7661-99c1-b2d1b4dddfa7`.
+  - TypeScript/API docs reviewer:
+    `019f0f5e-9ac6-75d1-b202-25c78da7a65d`.
+  - Security reviewer:
+    `019f0f5e-9b45-7c12-b26b-6263831be036`.
+  - Performance/reliability reviewer:
+    `019f0f5e-e6ee-7143-988f-e52dd54649a6`.
 
 ## Integration Result
 

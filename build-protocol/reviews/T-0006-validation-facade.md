@@ -6,10 +6,10 @@ Branch: `task/T-0006a-validation-facade-contract`
 Setup baseline commit: `62ffc33`
 Implementation baseline commit: `e953662`
 Reviewed commit/diff basis: Round 3 pending against
-`e953662...76f6b017c55e51f5af639a837b2b529a469d47ac`.
+`e953662...9560d2e330cf76c9af910ab5c59d26aac278a9a5`.
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
-Reviewer sub-agents: Round 2 completed; round 3 pending dispatch
-Status: Round-2 focused fix complete; ready for round 3
+Reviewer sub-agents: Round 3 dispatched
+Status: Round 3 in progress
 
 ## Reviewer IDs
 
@@ -105,6 +105,23 @@ Verification before code-fix commit: `CI=true corepack pnpm verify` passed with
 9 test files and 32 tests; coverage statements 99.19%, branches 92.85%,
 functions 100%, lines 99.18%; docs check confirmed 13 proto exports and 21
 core exports with the known invalid `origin` TypeDoc warning.
+
+## Round 3
+
+Reviewed basis:
+`e953662...9560d2e330cf76c9af910ab5c59d26aac278a9a5`.
+
+Reviewer IDs:
+
+- Code style/maintainability:
+  `019f0f5e-99da-7453-a3d6-b026fe155a9d`.
+- Documentation: `019f0f5e-9a45-7661-99c1-b2d1b4dddfa7`.
+- TypeScript/API docs: `019f0f5e-9ac6-75d1-b202-25c78da7a65d`.
+- Security: `019f0f5e-9b45-7c12-b26b-6263831be036`.
+- Performance/reliability:
+  `019f0f5e-e6ee-7143-988f-e52dd54649a6`.
+
+Disposition: in progress.
 
 ## Closure
 
