@@ -8,8 +8,8 @@ Reviewed commit/diff basis: Implementation working tree before commit; formal
 reviewers pending
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0005-registry-core`
 Reviewer sub-agents: Review round 1 completed; fix pass ready for re-review
-Status: Current branch HEAD `a46a95a2efb8c75a613bda7390d0fa008931d3aa`
-ready for re-review
+Status: Latest branch HEAD ready for re-review after review-round-1 fix and log
+cleanup
 
 ## Reviewer IDs
 
@@ -67,11 +67,14 @@ handoff.
   `019f0edc-756c-7101-9d1e-81c7709dfab7`, security
   `019f0edc-a25e-7e03-87fe-482060e40d9d`, and performance/reliability
   `019f0edc-c7e1-7ff1-89f3-fcc97abb8f1f` findings. The review round 1 code
-  fix commit is `a8ad2fad6070479f156cb54211b14f6bfdb80117`; the current
-  re-review target is branch HEAD `a46a95a2efb8c75a613bda7390d0fa008931d3aa`.
+  fix commit is `a8ad2fad6070479f156cb54211b14f6bfdb80117`; subsequent
+  pre-re-review log cleanup commits are
+  `a46a95a2efb8c75a613bda7390d0fa008931d3aa` and
+  `9e234fd083d2f4d1773acfc1526bbd0e120b2bcd`. The re-review target is the
+  latest branch HEAD after review-round-1 fix and log cleanup.
 
 ## Outcome
 
 Review round 1 fix pass verified at
-`a8ad2fad6070479f156cb54211b14f6bfdb80117`; current branch HEAD
-`a46a95a2efb8c75a613bda7390d0fa008931d3aa` is ready for formal re-review.
+`a8ad2fad6070479f156cb54211b14f6bfdb80117`; the latest branch HEAD after
+review-round-1 fix and log cleanup is ready for formal re-review.
