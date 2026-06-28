@@ -1,6 +1,6 @@
 # T-0009a: Descriptor Option Surface And Entity Metadata
 
-Status: Review round 1 in progress
+Status: Follow-up review in progress
 Start: `2026-06-28 22:48 WEST`
 End: Pending
 Setup baseline commit: `dd4a365`
@@ -188,8 +188,22 @@ reviewers report no comments.
   test files / 65 tests, coverage statements 99.41%, branches 94.11%,
   functions 100%, lines 99.39%; docs/API check again confirmed 100 proto
   exports, 28 core exports, 11 server exports, and 26 storage exports.
+- Round-1 fix committed as `3a1e85150c838f7b03401ccdd0420717fbee7622`.
+- Follow-up review dispatched on `2026-06-28 23:43 WEST` with diff package
+  `.superpowers/sdd/review-3723eeb..3a1e851.diff`: maintainability/style
+  `019f1067-9084-7b32-9965-5f7b209d354b`, documentation
+  `019f1067-90ed-79f2-adfb-f82c25bde3ec`, TypeScript/API docs
+  `019f1067-9162-75a3-af82-59caf4d38545`, security
+  `019f1067-91e3-7fa0-9109-81e59194cf72`, and performance/reliability
+  `019f1067-926b-72a3-b256-735fde237f1f`.
+- Follow-up review results received: maintainability/style, security, and
+  performance/reliability reported clean. Documentation reported one remaining
+  stale log-state wording issue, and TypeScript/API docs reported one remaining
+  JSDoc wording issue for `EntityMetadata.columns`.
+- Final follow-up fix is in progress in the authoring worktree after commit
+  `3a1e85150c838f7b03401ccdd0420717fbee7622`.
 - D-0034 records that entity metadata belongs in `@spine-ts/server` and
   `@spine-ts/proto` should add only narrow curated option exports.
 - No blocking questions known.
-- Next step: commit the review-fix patch and hand the branch back to the
-  orchestrator for follow-up.
+- Next step: apply the final follow-up log/JSDoc fixes, rerun verification, and
+  commit the result for orchestrator follow-up.

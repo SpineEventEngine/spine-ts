@@ -79,7 +79,11 @@ export interface EntityMetadata<Schema extends DescriptorMessageSchema = Descrip
   readonly idField: DescriptorFieldMetadata;
   /** Descriptor hint for later first-field routing. */
   readonly firstFieldRoutingHint: FirstFieldRoutingHint;
-  /** Fields marked `(column) = true`, in descriptor declaration order. */
+  /**
+   * Fields marked `(column) = true`, in descriptor declaration order, for
+   * column-eligible entity kinds only. Aggregate and generic entity column
+   * declarations are ignored in this slice.
+   */
   readonly columns: readonly DescriptorFieldMetadata[];
   /** Fields marked `(set_once) = true`, in descriptor declaration order. */
   readonly setOnceFields: readonly DescriptorFieldMetadata[];

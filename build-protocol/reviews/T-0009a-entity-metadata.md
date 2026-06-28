@@ -11,7 +11,7 @@ documentation `019f1056-4fbe-7eb1-8ef2-dc5c901887b8`; TypeScript/API docs
 `019f1056-502b-74f1-8cc5-24587c5ea99d`; security
 `019f1056-509e-7853-bafd-246d91c21fa8`; performance/reliability
 `019f1056-5133-73c1-9e09-756c7e49b061`.
-Status: Review round 1 in progress
+Status: Follow-up review in progress
 Implementation sub-agent: `019f103e-52ca-7722-88f0-49c49b017dbf` (Dalton)
 
 ## Review Focus
@@ -54,7 +54,21 @@ Required reviewer roles:
 - security;
 - performance/reliability.
 
-Reports are pending.
+Clean reports:
+
+- Documentation: no comments.
+- Security: no comments.
+- Performance/reliability: no comments.
+
+Findings to fix:
+
+- Maintainability/style: server metadata tests use opaque `fileDesc(...)`
+  base64 descriptor blobs without checked-in readable `.proto` fixture sources
+  or a regeneration path.
+- TypeScript/API docs: `columns` currently exposes `(column)` fields for every
+  entity kind, but `proto/spine/options.proto` limits columns to projections and
+  process managers. Aggregate/generic entity column declarations should be
+  ignored in T-0009a.
 
 Findings received by the authoring implementer:
 
@@ -85,3 +99,38 @@ Authoring fix status:
   and full `CI=true corepack pnpm verify` (`10` test files / `65` tests,
   coverage statements `99.41%`, branches `94.11%`, functions `100%`, lines
   `99.39%`).
+
+Round-1 fix committed as `3a1e85150c838f7b03401ccdd0420717fbee7622`.
+
+### Follow-Up Review
+
+Dispatched on `2026-06-28 23:43 WEST`.
+
+Review basis: `3723eeb..3a1e85150c838f7b03401ccdd0420717fbee7622`.
+
+Review package: `.superpowers/sdd/review-3723eeb..3a1e851.diff`.
+
+Required reviewer roles:
+
+- maintainability/style;
+- documentation;
+- TypeScript/API docs;
+- security;
+- performance/reliability.
+
+Reports received:
+
+- Maintainability/style: clean.
+- Security: clean.
+- Performance/reliability: clean.
+- Documentation: one remaining log-state/stale-wording comment.
+- TypeScript/API docs: one remaining JSDoc comment for
+  `EntityMetadata.columns`.
+
+Authoring follow-up fix status:
+
+- Final follow-up fix is in progress in the authoring worktree.
+- Remaining scope is limited to durable log/task state cleanup plus the
+  `EntityMetadata.columns` JSDoc clarification that columns are exposed only
+  for projection/process-manager entity kinds and ignored for aggregate/generic
+  entities.
