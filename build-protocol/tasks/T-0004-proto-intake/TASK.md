@@ -1,6 +1,6 @@
 # T-0004: Spine Proto Intake And Protobuf-ES Generation
 
-Status: Round 2 fixes verified; ready for Round 3 review
+Status: Round 3 log-only fix ready for Round 4/re-check
 Start: `2026-06-28 12:40 WEST`
 End: `2026-06-28 12:54 WEST`
 Baseline commit: `6ce0b65`
@@ -8,9 +8,9 @@ Task log path: `build-protocol/tasks/T-0004-proto-intake/TASK.md`
 Branch: `task/T-0004-proto-intake`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0004-proto-intake`
 Authoring sub-agent: T-0004 implementation sub-agent
-Reviewer sub-agents: Round 2 complete; security and reliability clean
+Reviewer sub-agents: Round 3 complete; only stale durable-log wording remains
 Implementation commit: `b66f2db2c2d98d41f3f5c6da53ed81a7fd73d6ad`
-Round 2 reviewed basis: `3f82056cc1f5bacc004046ada5d753b08f18cb85`
+Round 3 reviewed basis: `feee5c06cd2748f1570bb8432a2c6d84e45bf3e5`
 
 ## Objective
 
@@ -361,10 +361,13 @@ Out of scope:
   `b66f2db2c2d98d41f3f5c6da53ed81a7fd73d6ad`; changes requested.
 - Round 1 fix pass committed at
   `3f82056cc1f5bacc004046ada5d753b08f18cb85`; Round 2 changes requested.
-- Round 2 fix pass verified. Round 3 reviewer handoff basis is `main...HEAD`
-  after the focused fix commit.
+- Round 2 fix pass committed at
+  `feee5c06cd2748f1570bb8432a2c6d84e45bf3e5`; Round 3 found only stale
+  durable-log wording.
+- Round 3 log-only fix updates durable status wording only. Round 4/re-check
+  basis is `main...HEAD` after the focused log-only fix commit.
 
 ## Integration Result
 
-Pending focused round-2 fix commit, Round 3 review, and orchestrator
-integration.
+After the focused round-3 log-only fix commit, pending Round 4/re-check of
+durable log wording and orchestrator integration if clean.
