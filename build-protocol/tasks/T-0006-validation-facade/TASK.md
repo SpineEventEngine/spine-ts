@@ -9,7 +9,7 @@ Task log path: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Authoring sub-agent: T-0006a implementation sub-agent (Codex)
-Reviewer sub-agents: Round 1 completed; round 2 pending dispatch
+Reviewer sub-agents: Round 2 dispatched
 Implementation commit: `4726985e1786929f5222707dc7abf77c448e8fa3`
 Review-finding log HEAD: `7d519d1f4555ffab058d1642065947355c0acf9e`
 Review-fix commit: `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`
@@ -264,6 +264,9 @@ Out of scope:
 - `2026-06-28 18:30 WEST`: Recorded review-fix commit
   `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89` and prepared round-2 review
   dispatch.
+- `2026-06-28 18:31 WEST`: Dispatched round-2 reviewer sub-agents for
+  maintainability, documentation, TypeScript/API docs, security, and
+  performance/reliability.
 - `2026-06-28 17:36 WEST`: T-0006a implementation sub-agent performed the
   canonical skill applicability check, confirmed the assigned isolated
   worktree, and recorded selected/skipped skills before implementation edits.
@@ -510,7 +513,7 @@ pnpm docs:check` passed and confirmed 13 expected `@spine-ts/proto` exports
     exceptions and SHA traceability.
 - Review-fix pass completed in
   `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`; round-2 reviewer dispatch is
-  next.
+  in progress.
 
 ## Integration Result
 

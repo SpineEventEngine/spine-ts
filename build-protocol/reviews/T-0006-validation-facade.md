@@ -7,8 +7,8 @@ Setup baseline commit: `62ffc33`
 Implementation baseline commit: `e953662`
 Reviewed commit/diff basis: `e953662...0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
-Reviewer sub-agents: Round 1 completed; round 2 pending dispatch
-Status: Review-fix pass complete; ready for round 2
+Reviewer sub-agents: Round 2 dispatched
+Status: Review round 2 in progress
 
 ## Reviewer IDs
 
@@ -55,7 +55,17 @@ request round 2 after tests, docs, logs, verification, and commit are complete.
 Review-fix commit: `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`.
 
 Current disposition: review-fix implementation and final verification are
-complete; round-2 reviewer dispatch is pending.
+complete; round-2 reviewer dispatch is in progress.
+
+Round 2 reviewer IDs:
+
+- Code style/maintainability: `019f0f49-b902-7dc0-89ee-e488ba2be193`
+- Documentation: `019f0f49-f2cf-7da3-8b04-64d7c0039d38`
+- TypeScript/API docs: `019f0f4a-25f3-7a63-9634-58737bb105c0`
+- Security: `019f0f4a-5a13-75e3-9221-16a7d342d42a`
+- Performance/reliability: `019f0f4a-9613-7cc3-99b2-beb74fc488e9`
+
+Reviewed basis: `e953662...34927dd`.
 
 ## Closure
 
