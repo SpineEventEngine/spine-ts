@@ -9,7 +9,7 @@ Task log path: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Authoring sub-agent: T-0006a implementation sub-agent (Codex)
-Reviewer sub-agents: Pending
+Reviewer sub-agents: Round 1 dispatched
 Implementation commit: Branch HEAD after implementation commit
 Final branch HEAD: Branch HEAD after implementation commit
 
@@ -194,6 +194,9 @@ Out of scope:
   `.worktrees/T-0006a-validation-facade-contract` at base `e953662`.
 - `2026-06-28 17:33 WEST`: Baseline `CI=true corepack pnpm verify` passed in
   the T-0006a worktree.
+- `2026-06-28 18:11 WEST`: Dispatched round-1 reviewer sub-agents for
+  maintainability, documentation, TypeScript/API docs, security, and
+  performance/reliability.
 - `2026-06-28 17:36 WEST`: T-0006a implementation sub-agent performed the
   canonical skill applicability check, confirmed the assigned isolated
   worktree, and recorded selected/skipped skills before implementation edits.
