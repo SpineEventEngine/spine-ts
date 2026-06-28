@@ -1,8 +1,8 @@
 # T-0005: Metadata And Type Registry
 
-Status: Review clean; ready for orchestrator integration
+Status: Complete; integrated into `main`
 Start: `2026-06-28 15:58 WEST`
-End: Pending
+End: `2026-06-28 17:19 WEST`
 Baseline commit: `80714f3`
 Task log path: `build-protocol/tasks/T-0005-metadata-type-registry/TASK.md`
 Branch: `task/T-0005-registry-core`
@@ -15,6 +15,7 @@ Review round 1 log cleanup commits: `a46a95a2efb8c75a613bda7390d0fa008931d3aa`,
 `9e234fd083d2f4d1773acfc1526bbd0e120b2bcd`,
 `350fc318e114b99061484c99d70d062a47a971d6`
 Final review basis: latest branch HEAD after focused docs re-check cleanup
+Merge commit: `2fcec21`
 
 ## Objective
 
@@ -367,8 +368,9 @@ mutate the process-wide curated registry.
     comments.
 - Focused docs re-check `019f0f01-6329-7750-8d07-86e907acec1c` reported no
   comments after the review-round-2 log cleanup.
-- Next step: orchestrator integration of `task/T-0005-registry-core`.
+- Integrated into `main` with merge commit `2fcec21`.
 
 ## Integration Result
 
-Ready for orchestrator integration; not yet merged into `main`.
+Merged into `main` as `2fcec21`; post-merge verification passed on the main
+checkout with the integration record included.

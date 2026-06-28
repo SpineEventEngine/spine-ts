@@ -8,7 +8,8 @@ Reviewed commit/diff basis: `80714f3`...latest branch HEAD after focused docs
 re-check cleanup
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0005-registry-core`
 Reviewer sub-agents: Review round 2 plus focused docs re-check completed with no remaining comments
-Status: Review clean; ready for orchestrator integration
+Status: Review clean; integrated into `main`
+Merge commit: `2fcec21`
 
 ## Reviewer IDs
 
@@ -88,3 +89,6 @@ Review round 1 fix pass verified at
 focused docs re-check cleanup has no remaining reviewer comments. Final branch
 verification passed with `CI=true corepack pnpm verify`; the branch is ready for
 orchestrator integration.
+
+The branch was integrated into `main` with merge commit `2fcec21`; post-merge
+verification passed on the main checkout with this integration record included.
