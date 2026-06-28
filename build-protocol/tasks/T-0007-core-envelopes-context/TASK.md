@@ -11,7 +11,9 @@ Authoring sub-agent: T-0007a implementation sub-agent
 Reviewer sub-agents: Maintainability/style `019f0faa-6983-7690-9e46-bc50a6d72920`; documentation `019f0faa-6a10-7c91-b914-1a57f2c5f526`; TypeScript/API docs `019f0faa-6a76-7093-bb54-d0239d1646d2`; security `019f0faa-6aed-7230-ba0c-c385f62ba7ce`; performance/reliability `019f0faa-6b97-7ee2-bc36-cbb0500fd302`.
 Implementation baseline commit: `9d35f3e`
 Implementation commit reviewed in round 1: `6cb1c125290a4514b8b6aec1ba9567499c1dcfa8`
-Final branch HEAD: `c7fae8545b8877380d098bc4c776a26e1bb548ac`
+Final branch HEAD: Pending final re-review/closure. Restart from the live
+branch tip reported by `git rev-parse HEAD`; the latest recorded log-fix
+checkpoint before this note was `f66a6f2f6add98e7b2c0c0d48ea80e4a22de2e63`.
 
 ## Objective
 
@@ -215,7 +217,7 @@ not be considered cleanly closed until the follow-up commit is re-reviewed.
 
 Implementation commit `6cb1c125290a4514b8b6aec1ba9567499c1dcfa8` is present on
 `task/T-0007a-core-signal-proto-intake`. Full verification passed before that
-commit. Current restart state after this log-only follow-up: request re-review
-of the process-log fix before closing T-0007a. Do not recommit or alter the
+commit. Current restart state after the log-only follow-up checkpoints: request
+re-review of the process-log fixes before closing T-0007a. Do not alter the
 already-committed proto/code implementation unless a later review explicitly
 asks for it.

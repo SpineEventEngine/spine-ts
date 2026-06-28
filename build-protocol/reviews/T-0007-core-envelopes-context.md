@@ -5,7 +5,9 @@ Work log: `build-protocol/work-logs/T-0007.md`
 Branch: `task/T-0007a-core-signal-proto-intake`
 Setup baseline commit: `f380744`
 Implementation baseline commit: `9d35f3e`
-Reviewed commit/diff basis: `6cb1c125290a4514b8b6aec1ba9567499c1dcfa8`
+Reviewed commit/diff basis: implementation commit
+`6cb1c125290a4514b8b6aec1ba9567499c1dcfa8`; follow-up process-log fixes after
+that commit are pending re-review.
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007a-core-signal-proto-intake`
 Reviewer sub-agents: Maintainability/style `019f0faa-6983-7690-9e46-bc50a6d72920`; documentation `019f0faa-6a10-7c91-b914-1a57f2c5f526`; TypeScript/API docs `019f0faa-6a76-7093-bb54-d0239d1646d2`; security `019f0faa-6aed-7230-ba0c-c385f62ba7ce`; performance/reliability `019f0faa-6b97-7ee2-bc36-cbb0500fd302`.
 Status: Round 1 process-log findings fixed in follow-up commit; re-review pending
@@ -53,6 +55,11 @@ follow-up commit and must be re-reviewed before T-0007a closes.
 
 Scope: update durable task/work/review logs only. No proto, generated source, or
 runtime code behavior should change.
+
+Follow-up checkpoint: authoring log fix commit
+`c7fae8545b8877380d098bc4c776a26e1bb548ac`, branch-head wording correction
+commit `f66a6f2f6add98e7b2c0c0d48ea80e4a22de2e63`, and the subsequent
+orchestrator log-only checkpoint should be re-reviewed together.
 
 Expected verification:
 
