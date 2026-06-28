@@ -1,13 +1,13 @@
 # T-0009a: Descriptor Option Surface And Entity Metadata
 
-Status: Baseline verified; implementation pending
+Status: Implementation in progress
 Start: `2026-06-28 22:48 WEST`
 End: Pending
 Setup baseline commit: `dd4a365`
 Task log path: `build-protocol/tasks/T-0009a-entity-metadata/TASK.md`
 Branch: `task/T-0009a-entity-metadata`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009a-entity-metadata`
-Authoring sub-agent: Pending
+Authoring sub-agent: `019f103e-52ca-7722-88f0-49c49b017dbf` (Dalton)
 Reviewer sub-agents: Pending
 Implementation baseline commit: `5b41111`
 Final branch checkpoint before integration: Pending
@@ -159,7 +159,12 @@ reviewers report no comments.
   check confirmed 85 proto exports, 28 core exports, and 26 storage exports.
 - Branch setup/baseline logs committed as `5b41111` on
   `2026-06-28 22:57 WEST`.
+- Implementation sub-agent `019f103e-52ca-7722-88f0-49c49b017dbf` (Dalton)
+  was spawned on `2026-06-28 22:58 WEST` with ownership of T-0009a code,
+  tests, docs, API checks, durable logs, verification, and implementation
+  commit.
 - D-0034 records that entity metadata belongs in `@spine-ts/server` and
   `@spine-ts/proto` should add only narrow curated option exports.
 - No blocking questions known.
-- Next step: spawn the implementation sub-agent.
+- Next step: await implementation result, then run the required five-reviewer
+  loop.

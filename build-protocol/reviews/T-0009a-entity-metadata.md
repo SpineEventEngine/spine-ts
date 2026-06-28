@@ -7,8 +7,8 @@ Setup baseline commit: `dd4a365`
 Implementation baseline commit: `5b41111`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009a-entity-metadata`
 Reviewer sub-agents: Pending
-Status: Baseline verified; implementation pending
-Implementation sub-agent: Pending
+Status: Implementation in progress
+Implementation sub-agent: `019f103e-52ca-7722-88f0-49c49b017dbf` (Dalton)
 
 ## Review Focus
 
