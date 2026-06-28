@@ -353,3 +353,75 @@ Consequences:
   executable to respect `packageManager`.
 - If the project later adopts pnpm's global virtual store intentionally, that
   decision must update this record and rerun install plus full verification.
+
+## D-0027: Put the first runtime type registry in `@spine-ts/core`
+
+Status: Accepted
+
+Date: 2026-06-28
+
+Context: T-0005 introduces the metadata and type registry layer over
+Protobuf-ES schemas. The registry is runtime behavior: it owns lookup semantics,
+duplicate registration policy, type URL derivation, and later metadata access
+for validation and routing. The `@spine-ts/proto` package currently owns copied
+Spine contracts, generated Protobuf-ES output, and curated generated exports.
+
+Decision: Implement the first registry slice in `packages/core` and consume
+curated exports from `@spine-ts/proto`. Keep `@spine-ts/proto` focused on
+canonical generated contracts and generated-schema availability. Use explicit
+manual registration for the current curated Spine schemas in this first slice.
+
+Alternatives considered:
+
+- Put the registry in `@spine-ts/proto`. Rejected because that would mix
+  generated-contract ownership with runtime lookup policy and make later
+  validation/runtime dependencies leak into the proto package.
+- Create a new package only for metadata. Deferred because the current
+  workspace already has `@spine-ts/core` for core runtime concepts and the
+  first registry surface is small enough to belong there.
+
+Consequences:
+
+- Runtime users import registry APIs from `@spine-ts/core`.
+- `@spine-ts/core` may depend on `@spine-ts/proto`, but generated packages do
+  not depend on runtime packages.
+- If the registry grows into a large independent compatibility layer, a future
+  decision may split it into a dedicated package without changing the
+  generated-contract boundary.
+
+## D-0028: T-0005 registry lookup and type URL policy
+
+Status: Accepted
+
+Date: 2026-06-28
+
+Context: T-0005 needs deterministic lookup semantics before runtime envelopes,
+validation, or `Any` unpacking exist. The Protobuf contract requires mappings
+between full names, type URLs, schemas, and semantic tags. Current copied Spine
+proto files expose type URL prefixes and option definitions but only a small
+message closure.
+
+Decision: The first registry will derive canonical type URLs as
+`<file type_url_prefix>/<schema.typeName>` when a file option supplies a prefix,
+with a documented fallback prefix used only for files without the option.
+Registration fails fast on duplicate full names, duplicate type URLs, or
+conflicting schema identities. Public lookup APIs include throwing `get*`
+methods and non-throwing `find*` methods, so callers can choose fail-fast or
+optional control flow explicitly.
+
+Alternatives considered:
+
+- Overwrite duplicates like a plain map. Rejected because silent replacement can
+  corrupt routing and validation decisions.
+- Return only `undefined` for misses. Rejected because framework internals need
+  descriptive failures when required message types are missing.
+- Implement `Any` pack/unpack helpers immediately. Deferred to later envelope
+  and validation tasks; T-0005 only supplies the registry lookup foundation.
+
+Consequences:
+
+- Runtime code can use fail-fast lookups while tests and optional flows can use
+  `find*` methods.
+- Duplicate registration tests become part of the compatibility guard.
+- A later task must revisit semantic tag registration once copied proto fixtures
+  include real `(is)` or `(every_is)` consumers.

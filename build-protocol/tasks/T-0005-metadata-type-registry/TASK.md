@@ -1,12 +1,12 @@
 # T-0005: Metadata And Type Registry
 
-Status: Draft; requirements splitter pending
+Status: Ready for implementation branch
 Start: `2026-06-28 15:58 WEST`
 End: Pending
 Baseline commit: `8a051f6`
 Task log path: `build-protocol/tasks/T-0005-metadata-type-registry/TASK.md`
-Branch: `task/T-0005-metadata-type-registry`
-Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0005-metadata-type-registry`
+Branch: `task/T-0005-registry-core`
+Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0005-registry-core`
 Authoring sub-agent: Pending
 Reviewer sub-agents: Pending
 Implementation commit: Pending branch commit
@@ -34,7 +34,7 @@ runtime tasks, and document the public API.
 
 ## Requirements Splitter Output
 
-Requirements splitter: pending.
+Requirements splitter: `019f0ebf-55fa-7c73-9790-387d2b3b9b13`.
 
 Current roadmap source: T-0004 selected the following post-proto sequence:
 
@@ -46,7 +46,29 @@ Current roadmap source: T-0004 selected the following post-proto sequence:
 6. `T-0010 Single-Process Async Runtime`
 7. `T-0011 Read Side And Todo Thin Slice`
 
-Blocking questions: none known at task creation.
+Blocking questions: none known at task creation; the splitter reported no
+blocking questions.
+
+Splitter output:
+
+1. Registry seam and ownership: choose `@spine-ts/core` for runtime registry
+   APIs and keep `@spine-ts/proto` focused on generated contracts.
+2. Core type registry slice: derive deterministic type URLs, register current
+   curated schemas, lookup by full name/type URL/schema, reject duplicates, and
+   expose unknown lookup behavior.
+3. Descriptor-backed metadata extraction: expose file name, file descriptor,
+   first field, declaration order where reliable, and option access helpers
+   from Protobuf-ES descriptors.
+4. Rich Spine option and semantic metadata: expose entity, column, `(is)`,
+   `(every_is)`, and validation option metadata only where current descriptors
+   and copied protos make it provable; use fixtures or defer with a recorded
+   decision if needed.
+5. Integration docs and review closure: update decision logs, package docs,
+   TypeDoc/API docs, architecture notes, user guide, task/work/review logs, and
+   run the five-reviewer loop.
+
+First non-blocked implementable slice: core registry in `packages/core`, branch
+`task/T-0005-registry-core`, worktree `.worktrees/T-0005-registry-core`.
 
 ## Skill Applicability
 
@@ -133,11 +155,18 @@ Out of scope:
   roadmap, read the governing protocol/spec sections, performed the initial
   skill applicability check, and created the initial task/work/review logs
   before splitter delegation.
+- `2026-06-28 16:02 WEST`: Requirements splitter
+  `019f0ebf-55fa-7c73-9790-387d2b3b9b13` returned no blocking questions,
+  produced the staged breakdown, and recommended the first implementable slice
+  as `task/T-0005-registry-core` in `packages/core`. Orchestrator closed the
+  splitter and recorded `D-0027`/`D-0028`.
 
 ## Decisions
 
-- Pending. Expected topics include type URL derivation, duplicate registration
-  semantics, and whether Protobuf-ES descriptors are enough for this slice.
+- `D-0027`: Put the first runtime type registry in `@spine-ts/core`.
+- `D-0028`: T-0005 registry lookup and type URL policy.
+- Still pending during implementation: whether Protobuf-ES descriptors are
+  sufficient for first-field/declaration-order and rich Spine option metadata.
 
 ## Human Questions And Answers
 
@@ -149,6 +178,7 @@ Out of scope:
 - `build-protocol/tasks/T-0005-metadata-type-registry/TASK.md`
 - `build-protocol/work-logs/T-0005.md`
 - `build-protocol/reviews/T-0005-metadata-type-registry.md`
+- `build-protocol/DECISION_LOG.md`
 
 ## Tests Run
 
