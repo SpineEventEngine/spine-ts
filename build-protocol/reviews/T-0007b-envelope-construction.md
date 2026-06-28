@@ -11,6 +11,8 @@ Implementation commit: `2fe6850be59a78e6331b0b8cd84fa8fb0641b281`
 Current branch tip before focused fix: `dfdf21e`
 Round-1 focused fix commit:
 `0353f8a2f877d082ea9d51bf8b09b5c9af55bdbf`
+Log-only follow-up commit reviewed by final lightweight pass:
+`8097a93a1074837b21586e83df3b0a66bdda99f4`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007b-envelope-construction`
 Reviewer sub-agents: Maintainability/style `019f0fcc-6b78-71a3-a363-688a5be1d662`;
 documentation `019f0fcc-a511-78b0-a79a-eb2f4740ab52`; TypeScript/API docs
@@ -77,6 +79,25 @@ record focused fix commit `0353f8a2f877d082ea9d51bf8b09b5c9af55bdbf`, the
 follow-up reports, and final verification/closure as the next step. This
 log-only fix itself requires final lightweight re-review/final verification.
 
+## Final Lightweight Re-Review
+
+Final lightweight review basis:
+`0353f8a2f877d082ea9d51bf8b09b5c9af55bdbf..8097a93a1074837b21586e83df3b0a66bdda99f4`.
+
+Clean reports:
+
+- TypeScript/API docs: no comments.
+- Security: no comments.
+- Performance/reliability: no comments.
+
+Remaining log-only findings:
+
+- Durable restart state did not record log-only follow-up commit
+  `8097a93a1074837b21586e83df3b0a66bdda99f4`.
+- The task log still said round 1 remained open until reviewers were re-run
+  after the focused fix commit, even though follow-up re-review already ran and
+  only final lightweight log-fix re-review/final verification remains pending.
+
 ## Verification Evidence
 
 Round-1 focused fix evidence:
@@ -119,5 +140,7 @@ Original implementation evidence:
 
 Round 1 is not closed by this log-only update. The focused fix has been
 committed and follow-up re-review was clean except for stale durable restart
-text; final lightweight re-review/final verification remains pending after this
-log-only fix commit.
+text. The log-only follow-up commit
+`8097a93a1074837b21586e83df3b0a66bdda99f4` has now also been recorded in this
+review log. Final lightweight re-review/final verification remains pending
+after this stale-state log-only fix commit.

@@ -183,12 +183,15 @@ Round-1 fix context recorded on `2026-06-28 21:00 WEST`:
   test packing-policy duplication, unknown-field retention during packing,
   unsafe malformed `Any` unpacking, and mutable caller-supplied ID/context
   references in generated envelopes.
-- Round 1 remains open until reviewers are re-run after the focused fix commit.
+- The focused fix has been re-reviewed. Only final lightweight log-fix
+  re-review/final verification remains pending.
 
 Round-1 focused fix follow-up recorded on `2026-06-28 21:13 WEST`:
 
 - Focused fix commit:
   `0353f8a2f877d082ea9d51bf8b09b5c9af55bdbf`.
+- Log-only follow-up commit reviewed in the final lightweight pass:
+  `8097a93a1074837b21586e83df3b0a66bdda99f4`.
 - Follow-up re-review reports were clean for maintainability, security,
   TypeScript/API docs, documentation/API landing page, and runtime reliability
   helper behavior.
