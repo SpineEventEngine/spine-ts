@@ -1,6 +1,6 @@
 # T-0006: Validation Facade
 
-Status: Round-4 log fix in progress
+Status: Round-5 log fix in progress
 Start: `2026-06-28 17:22 WEST`
 End: Pending
 Setup baseline commit: `62ffc33`
@@ -9,7 +9,7 @@ Task log path: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Authoring sub-agent: T-0006a implementation sub-agent (Codex)
-Reviewer sub-agents: Round 4 completed
+Reviewer sub-agents: Round 5 completed
 Implementation commit: `4726985e1786929f5222707dc7abf77c448e8fa3`
 Review-finding log HEAD: `7d519d1f4555ffab058d1642065947355c0acf9e`
 Review-fix commit: `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`
@@ -24,7 +24,9 @@ Current branch HEAD before round-3 security fix: `86aa522e31a692b49abb2de4aae7d4
 Round-3 security fix commit: `76cbe19beeef0703dded45b3aee66e6b95b0da93`
 Round-3 security log handoff commit: `876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3`
 Current branch HEAD before round-4 log fix: `876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3`
-Final branch HEAD: Pending round-4 log fix
+Round-4 findings/log-fix commit: `2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616`
+Current branch HEAD before round-5 log fix: `2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616`
+Final branch HEAD: Pending round-5 log fix
 
 ## Objective
 
@@ -737,3 +739,15 @@ Round 4 reviewed focused fix basis
 - Performance/reliability `019f0f6d-9b7d-76b0-9c7a-c74a00af01e0`: no runtime
   comments; also requested correcting the pending handoff/current-state
   metadata.
+
+Round 5 reviewed focused log-fix basis
+`876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3...2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616`:
+
+- Maintainability `019f0f71-95fd-7102-afdb-01ca75bd2998`: requested the
+  top-level review basis be updated from the older round-3 basis.
+- Documentation `019f0f71-9665-7c03-b068-8c73c2fd97bf`: no comments.
+- TypeScript/API docs `019f0f71-96e8-7c83-90b3-8588345f5cab`: no comments.
+- Security `019f0f71-975c-7b63-a232-8d8f9919c042`: no comments.
+- Performance/reliability `019f0f71-97f9-7673-8369-64ced20328d8`: requested
+  restart metadata record
+  `2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616` as the latest reviewed head.

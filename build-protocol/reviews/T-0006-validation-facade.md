@@ -5,11 +5,11 @@ Work log: `build-protocol/work-logs/T-0006.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Setup baseline commit: `62ffc33`
 Implementation baseline commit: `e953662`
-Reviewed commit/diff basis: Round 3 completed against
-`e953662...9560d2e330cf76c9af910ab5c59d26aac278a9a5`.
+Reviewed commit/diff basis: Round 5 completed against
+`876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3...2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616`.
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
-Reviewer sub-agents: Round 4 completed
-Status: Round-4 log fix in progress
+Reviewer sub-agents: Round 5 completed
+Status: Round-5 log fix in progress
 
 ## Reviewer IDs
 
@@ -206,3 +206,39 @@ Findings:
   correcting the pending handoff/current-state metadata.
 
 Disposition: correct durable log metadata and re-review.
+
+## Round-4 Log Fix
+
+Log-fix commit: `2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616`.
+
+## Round 5
+
+Reviewed basis:
+`876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3...2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616`.
+
+Reviewer IDs:
+
+- Code style/maintainability:
+  `019f0f71-95fd-7102-afdb-01ca75bd2998`.
+- Documentation: `019f0f71-9665-7c03-b068-8c73c2fd97bf`.
+- TypeScript/API docs: `019f0f71-96e8-7c83-90b3-8588345f5cab`.
+- Security: `019f0f71-975c-7b63-a232-8d8f9919c042`.
+- Performance/reliability:
+  `019f0f71-97f9-7673-8369-64ced20328d8`.
+
+Findings:
+
+- Code style/maintainability
+  `019f0f71-95fd-7102-afdb-01ca75bd2998`: requested the top-level review
+  basis be updated from the older round-3 basis so restart readers do not see
+  competing current-review signals.
+- Documentation `019f0f71-9665-7c03-b068-8c73c2fd97bf`: no comments.
+- TypeScript/API docs `019f0f71-96e8-7c83-90b3-8588345f5cab`: no comments.
+- Security `019f0f71-975c-7b63-a232-8d8f9919c042`: no comments.
+- Performance/reliability
+  `019f0f71-97f9-7673-8369-64ced20328d8`: requested the durable task/work
+  restart metadata record
+  `2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616` as the latest reviewed head
+  before the round-5 log fix, instead of pointing only at `876a5586`.
+
+Disposition: correct the review header and restart metadata, then re-review.
