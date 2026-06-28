@@ -1,5 +1,5 @@
 import type { GenEnum, GenExtension, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
-import type { FileOptions } from "@bufbuild/protobuf/wkt";
+import type { FieldOptions, FileOptions, MessageOptions } from "@bufbuild/protobuf/wkt";
 import {
   FieldPathSchema as generatedFieldPathSchema,
   file_spine_base_field_path as generatedFileSpineBaseFieldPath,
@@ -82,9 +82,22 @@ import {
 } from "./generated/spine/net/internet_domain_pb.js";
 import type { InternetDomain } from "./generated/spine/net/internet_domain_pb.js";
 import {
+  EntityOptionSchema as generatedEntityOptionSchema,
+  EntityOption_Kind as generatedEntityOptionKind,
+  EntityOption_KindSchema as generatedEntityOptionKindSchema,
+  EntityOption_Visibility as generatedEntityOptionVisibility,
+  EntityOption_VisibilitySchema as generatedEntityOptionVisibilitySchema,
+  EveryIsOptionSchema as generatedEveryIsOptionSchema,
   file_spine_options as generatedFileSpineOptions,
+  column as generatedColumn,
+  entity as generatedEntity,
+  every_is as generatedEveryIs,
+  is as generatedIs,
+  IsOptionSchema as generatedIsOptionSchema,
+  set_once as generatedSetOnce,
   type_url_prefix as generatedTypeUrlPrefix,
 } from "./generated/spine/options_pb.js";
+import type { EntityOption, EveryIsOption, IsOption } from "./generated/spine/options_pb.js";
 import {
   TemplateStringSchema as generatedTemplateStringSchema,
   file_spine_string_template_string as generatedFileSpineStringTemplateString,
@@ -145,13 +158,16 @@ export type {
   Command_SystemProperties,
   ConstraintViolation,
   EmailAddress,
+  EntityOption,
   Enrichment,
   Enrichment_Container,
+  EveryIsOption,
   Event,
   EventContext,
   EventId,
   FieldPath,
   InternetDomain,
+  IsOption,
   LocalDate,
   LocalDateTime,
   LocalTime,
@@ -226,6 +242,21 @@ export const file_spine_validation_validation_error: GenFile =
 /** Spine custom file option that stores the type URL prefix for file messages. */
 export const type_url_prefix: GenExtension<FileOptions, string> = generatedTypeUrlPrefix;
 
+/** Spine custom message option that marks entity state metadata. */
+export const entity: GenExtension<MessageOptions, EntityOption> = generatedEntity;
+
+/** Spine custom field option that marks queryable entity columns. */
+export const column: GenExtension<FieldOptions, boolean> = generatedColumn;
+
+/** Spine custom field option that marks state fields enforced once per entity lifecycle. */
+export const set_once: GenExtension<FieldOptions, boolean> = generatedSetOnce;
+
+/** Spine custom message option that carries semantic marker tags for one message type. */
+export const is: GenExtension<MessageOptions, IsOption> = generatedIs;
+
+/** Spine custom file option that carries semantic marker tags shared by all file messages. */
+export const every_is: GenExtension<FileOptions, EveryIsOption> = generatedEveryIs;
+
 /** Enum for `spine.core.CommandValidationError`. */
 export const CommandValidationError: typeof generatedCommandValidationError =
   generatedCommandValidationError;
@@ -259,6 +290,21 @@ export const Language: typeof generatedLanguage = generatedLanguage;
 
 /** Enum descriptor for `spine.ui.Language`. */
 export const LanguageSchema: GenEnum<LanguageType> = generatedLanguageSchema;
+
+/** Enum for `EntityOption.Kind`. */
+export const EntityOption_Kind: typeof generatedEntityOptionKind = generatedEntityOptionKind;
+
+/** Enum descriptor for `EntityOption.Kind`. */
+export const EntityOption_KindSchema: GenEnum<EntityOption["kind"]> =
+  generatedEntityOptionKindSchema;
+
+/** Enum for `EntityOption.Visibility`. */
+export const EntityOption_Visibility: typeof generatedEntityOptionVisibility =
+  generatedEntityOptionVisibility;
+
+/** Enum descriptor for `EntityOption.Visibility`. */
+export const EntityOption_VisibilitySchema: GenEnum<EntityOption["visibility"]> =
+  generatedEntityOptionVisibilitySchema;
 
 /** Schema for `spine.base.FieldPath`. */
 export const FieldPathSchema: GenMessage<FieldPath> = generatedFieldPathSchema;
@@ -320,6 +366,15 @@ export const VersionSchema: GenMessage<Version> = generatedVersionSchema;
 
 /** Schema for `spine.net.EmailAddress`. */
 export const EmailAddressSchema: GenMessage<EmailAddress> = generatedEmailAddressSchema;
+
+/** Schema for `EntityOption`. */
+export const EntityOptionSchema: GenMessage<EntityOption> = generatedEntityOptionSchema;
+
+/** Schema for `EveryIsOption`. */
+export const EveryIsOptionSchema: GenMessage<EveryIsOption> = generatedEveryIsOptionSchema;
+
+/** Schema for `IsOption`. */
+export const IsOptionSchema: GenMessage<IsOption> = generatedIsOptionSchema;
 
 /** Schema for `spine.net.InternetDomain`. */
 export const InternetDomainSchema: GenMessage<InternetDomain> = generatedInternetDomainSchema;

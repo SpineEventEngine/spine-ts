@@ -112,6 +112,31 @@ origins, command system properties, storage records, acknowledgements, delivery
 state, bus dispatch, handler registration, or transport metadata. Those
 responsibilities remain with later runtime slices.
 
+## Server Entity Metadata
+
+`@spine-ts/server` now owns the first descriptor-derived entity metadata layer,
+following D-0034. The package consumes only curated option exports from
+`@spine-ts/proto` and keeps generic schema/type-URL lookup in `@spine-ts/core`.
+
+Current server metadata is pure and deterministic:
+
+- `(entity).kind` is normalized to server-facing entity kinds;
+- `(entity).visibility` preserves explicit values and applies Spine defaults
+  (`full` for projections, `none` for aggregates/process managers/generic
+  entities);
+- the first declared field becomes both the canonical entity ID field and the
+  first-field routing hint for later handler/repository tasks;
+- fields marked `(column) = true` and `(set_once) = true` are surfaced in
+  descriptor order; and
+- semantic tags from message `(is)` and file `(every_is)` options are
+  preserved in deterministic sorted order.
+
+The extractor throws typed `DescriptorMetadataError` failures for non-entity
+schemas, unknown entity kinds, repeated/map column declarations, empty semantic
+tag values, and other unsupported combinations in this slice. It does not
+register handlers, execute routes, validate transactions, assemble
+repositories, or write storage records.
+
 ## Storage Boundary
 
 `@spine-ts/storage` now owns the first framework storage seam. The package

@@ -65,7 +65,14 @@ importers:
         specifier: 2.12.1
         version: 2.12.1
 
-  packages/server: {}
+  packages/server:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-ts/proto':
+        specifier: workspace:*
+        version: link:../proto
 
   packages/storage: {}
 

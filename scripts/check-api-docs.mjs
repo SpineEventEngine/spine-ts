@@ -18,6 +18,17 @@ const expectedProtoExports = [
   "CommandValidationErrorSchema",
   "Command_SystemProperties",
   "Command_SystemPropertiesSchema",
+  "column",
+  "entity",
+  "EntityOption",
+  "EntityOptionSchema",
+  "EntityOption_Kind",
+  "EntityOption_KindSchema",
+  "EntityOption_Visibility",
+  "EntityOption_VisibilitySchema",
+  "every_is",
+  "EveryIsOption",
+  "EveryIsOptionSchema",
   "FieldPath",
   "TemplateString",
   "ValidationError",
@@ -38,8 +49,11 @@ const expectedProtoExports = [
   "EventSchema",
   "EventValidationError",
   "EventValidationErrorSchema",
+  "IsOption",
+  "IsOptionSchema",
   "InternetDomain",
   "InternetDomainSchema",
+  "is",
   "Language",
   "LanguageSchema",
   "LocalDate",
@@ -84,6 +98,7 @@ const expectedProtoExports = [
   "file_spine_time_time",
   "file_spine_ui_language",
   "file_spine_validation_validation_error",
+  "set_once",
   "type_url_prefix",
   "FieldPathSchema",
   "TemplateStringSchema",
@@ -148,6 +163,19 @@ const expectedStorageExports = [
   "createInMemoryStorageAdapter",
   "InMemoryStorageAdapter",
 ];
+const expectedServerExports = [
+  "DeclaredEntityVisibility",
+  "DescriptorFieldMetadata",
+  "DescriptorMessageSchema",
+  "DescriptorMetadataErrorCode",
+  "DescriptorMetadataError",
+  "FirstFieldRoutingHint",
+  "EntityKind",
+  "EntityMetadata",
+  "EntityVisibility",
+  "isEntitySchema",
+  "describeEntityMetadata",
+];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 
 const typedocExecutable = process.platform === "win32" ? "typedoc.cmd" : "typedoc";
@@ -206,6 +234,7 @@ collectNames(apiDocs);
 
 const missingExports = expectedProtoExports.filter((name) => !documentedNames.has(name));
 const missingCoreExports = expectedCoreExports.filter((name) => !documentedNames.has(name));
+const missingServerExports = expectedServerExports.filter((name) => !documentedNames.has(name));
 const missingStorageExports = expectedStorageExports.filter((name) => !documentedNames.has(name));
 
 if (missingExports.length > 0) {
@@ -218,6 +247,13 @@ if (missingExports.length > 0) {
 if (missingCoreExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-ts/core exports: ${missingCoreExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingServerExports.length > 0) {
+  console.error(
+    `TypeDoc JSON is missing expected @spine-ts/server exports: ${missingServerExports.join(", ")}`,
   );
   process.exit(1);
 }
@@ -239,5 +275,5 @@ if (/export\s+\*\s+from\s+["']\.\/generated\//.test(protoIndexSource)) {
 }
 
 console.log(
-  `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-ts/proto exports, ${expectedCoreExports.length} expected @spine-ts/core exports, and ${expectedStorageExports.length} expected @spine-ts/storage exports.`,
+  `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-ts/proto exports, ${expectedCoreExports.length} expected @spine-ts/core exports, ${expectedServerExports.length} expected @spine-ts/server exports, and ${expectedStorageExports.length} expected @spine-ts/storage exports.`,
 );

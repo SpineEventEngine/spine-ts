@@ -1,17 +1,21 @@
 # Spine TS User Guide
 
 Current status: early framework guide for the descriptor registry,
-single-message validation facade, core envelope construction helpers, and the
-first storage contracts with an in-memory adapter.
+single-message validation facade, core envelope construction helpers, the first
+server entity metadata layer, and the first storage contracts with an in-memory
+adapter.
 
 This guide covers the runnable behavior available now: Spine proto descriptors
 are exposed through curated packages, `@spine-ts/core` can derive and look up
 type metadata, framework users can validate one Protobuf message at a time, and
 callers can pack already-built domain messages into generated Spine
-`Command`/`Event` envelopes. `@spine-ts/storage` also exposes asynchronous
-record-oriented storage contracts and a deterministic in-memory adapter for
-tests/development. Entity runtime, transport, durable production storage, and
-the to-do application remain later slices.
+`Command`/`Event` envelopes. `@spine-ts/server` now derives descriptor-backed
+entity metadata from `(entity)`, `(column)`, `(set_once)`, `(is)`, and
+`(every_is)` options without registering handlers or mutating global runtime
+state. `@spine-ts/storage` also exposes asynchronous record-oriented storage
+contracts and a deterministic in-memory adapter for tests/development. Entity
+runtime, transport, durable production storage, and the to-do application
+remain later slices.
 
 ## What Exists Now
 
@@ -36,6 +40,9 @@ the to-do application remain later slices.
 - Core `packAny()`, `unpackAny()`, `packCommand()`, and `packEvent()` helpers
   for Spine-aware payload packing and generated command/event envelope
   construction.
+- Server entity metadata helpers in `@spine-ts/server` that normalize entity
+  kind and visibility, expose first-field routing hints, surface `(column)` and
+  `(set_once)` fields, and preserve semantic tags from `(is)` and `(every_is)`.
 - Storage contracts in `@spine-ts/storage` for write-side entity records,
   aggregate event histories/snapshots, read-side projection records, delivery
   records, tenant indexes, and safe diagnostics.
@@ -49,9 +56,9 @@ the to-do application remain later slices.
 - Runtime ID generation, timestamp factories, actor/tenant context factories,
   event producer/version/origin policy, command system properties, and runtime
   metadata generation.
-- Semantic tag registration from `(is)` and `(every_is)` consumers; the lookup
-  API exists, but the current copied proto closure has no provable registered
-  tag consumers.
+- Semantic tag registration from `(is)` and `(every_is)` into handler/routing
+  registries. The server metadata API preserves the tags now, but no handler
+  registry consumes them yet.
 - gRPC service implementations.
 - Entity, bus, transport, durable production storage, and to-do domain runtime
   behavior.
@@ -192,6 +199,31 @@ Validation errors are structured through `ValidationException` and do not expose
 packed bytes or payload contents. `unpackAny()` returns `undefined` for type URL
 mismatches or malformed payload bytes. Command and event envelopes snapshot the
 supplied generated IDs and contexts before returning.
+
+## Entity Metadata
+
+Use `@spine-ts/server` when later runtime code needs deterministic metadata for
+entity schemas:
+
+```ts
+import { describeEntityMetadata } from "@spine-ts/server";
+
+const metadata = describeEntityMetadata(TaskProjectionStateSchema);
+
+metadata.kind; // "projection"
+metadata.visibility; // "full" when `(entity).visibility` is omitted on projections
+metadata.idField.name; // "id"
+metadata.firstFieldRoutingHint.field.name; // "id"
+metadata.columns.map((field) => field.name);
+metadata.setOnceFields.map((field) => field.name);
+metadata.semanticTags;
+```
+
+`describeEntityMetadata()` is pure and descriptor-backed. It does not register
+handlers, perform routing, enforce `(set_once)`, touch storage, or mutate a
+global registry. It throws `DescriptorMetadataError` when a caller requires
+entity metadata from a non-entity schema or when the descriptor uses
+unsupported combinations such as repeated/map `(column)` fields.
 
 ## Storage
 
