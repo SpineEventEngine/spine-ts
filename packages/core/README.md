@@ -17,8 +17,9 @@ The type registry slice includes:
   identity conflicts;
 - descriptor metadata for the registered schema, declaring file, first field,
   and file option access; and
-- a read-only default `spineCoreRegistry` lookup view containing the current
-  curated Spine schemas exported by `@spine-ts/proto`.
+- a read-only default `spineCoreRegistry` lookup view containing the curated
+  Spine schemas exported by `@spine-ts/proto`, including the core
+  command/event envelope and actor/tenant/user/version context contracts.
 
 ```ts
 import { FieldPathSchema } from "@spine-ts/proto";
@@ -36,8 +37,9 @@ application code cannot mutate the process-wide curated registry.
 
 Semantic tag lookup is intentionally empty for the current copied proto closure
 because no registered schema currently proves `(is)` or `(every_is)` consumer
-metadata. The lookup API is present so later validation/routing tasks can add
-descriptor-backed tags without changing callers.
+metadata in a TypeScript-friendly form. The lookup API is present so later
+validation/routing tasks can add descriptor-backed tags without changing
+callers.
 
 ## Validation
 

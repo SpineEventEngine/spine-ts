@@ -1,0 +1,221 @@
+/*
+ * Copyright 2023, TeamDev. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Redistribution and use in source and/or binary forms, with or without
+ * modification, must retain the above copyright notice and the following
+ * disclaimer.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+syntax = "proto3";
+
+package spine.time;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option java_multiple_files = true;
+option java_outer_classname = "TimeProto";
+option java_package = "io.spine.time";
+
+// Enum representing the 12 months of the year.
+enum Month {
+    MONTH_UNDEFINED = 0;
+    JANUARY = 1;
+    FEBRUARY = 2;
+    MARCH = 3;
+    APRIL = 4;
+    MAY = 5;
+    JUNE = 6;
+    JULY = 7;
+    AUGUST = 8;
+    SEPTEMBER = 9;
+    OCTOBER = 10;
+    NOVEMBER = 11;
+    DECEMBER = 12;
+}
+
+// A combination of year and month in the ISO-8601 calendar system, such as `2018-06`.
+//
+// The purpose of this type is to store values like "June 2018".
+//
+// Instances of `YearMonth` can be ordered chronologically.
+//
+message YearMonth {
+    option (is).java_type = "YearMonthTemporal";
+    option (compare_by) = {
+        field: "year"
+        field: "month"
+    };
+
+    // A year with `1` being year 1 CE and `-1` being 1 BC.
+    int32 year = 1 [(min).value = "-999999999", (max).value = "999999999"];
+
+    // One of 12 Gregorian calendar months specified by `Month`.
+    Month month = 2 [(required) = true];
+}
+
+// A day of week.
+//
+// The int value follows the ISO-8601 standard, from 1 (Monday) to 7 (Sunday).
+//
+enum DayOfWeek {
+    DOW_UNDEFINED = 0;
+    MONDAY = 1;
+    TUESDAY = 2;
+    WEDNESDAY = 3;
+    THURSDAY = 4;
+    FRIDAY = 5;
+    SATURDAY = 6;
+    SUNDAY = 7;
+}
+
+// A date without a time-zone.
+//
+// Use this message for describing a date (e.g. a birthday).
+//
+// Instances of `LocalDate` can be ordered chronologically.
+//
+message LocalDate {
+    option (is).java_type = "LocalDateTemporal";
+    option (compare_by) = {
+        field: "year"
+        field: "month"
+        field: "day"
+    };
+
+    // A year with `1` being year 1 CE and `-1` being 1 BC.
+    int32 year = 1 [(min).value = "-999999999", (max).value = "999999999"];
+
+    // One of 12 Gregorian calendar months specified by `Month`.
+    Month month = 2 [(required) = true];
+
+    // A day which must be from 1 to 31 and valid for the year and month.
+    //
+    // In generated code for Kotlin/Java this is checked by
+    // `io.spine.time.validation.LocalDateValidator`.
+    //
+    int32 day = 3 [(min).value = "1", (max).value = "31"];
+}
+
+// A time without a time-zone.
+//
+// It is a description of a time, not an instant on a time-line.
+//
+// Instances of `LocalTime` can be ordered chronologically.
+//
+message LocalTime {
+    option (is).java_type = "LocalTimeMixin";
+    option (compare_by) = {
+        field: "hour"
+        field: "minute"
+        field: "second"
+        field: "nano"
+    };
+
+    // An hour from 0 to 23.
+    int32 hour = 1 [(min).value = "0", (max).value = "23"];
+
+    // Minutes of an hour from 0 to 59.
+    int32 minute = 2 [(min).value = "0", (max).value = "59"];
+
+    // Seconds of a minute, specified from 0 to 59.
+    int32 second = 3 [(min).value = "0", (max).value = "59"];
+
+    // Fractions of a second from 0 to 999,999,999.
+    int32 nano = 4 [(min).value = "0", (max).value = "999999999"];
+}
+
+// A date-time without a time-zone.
+//
+// Instances of `LocalDateTime` can be ordered chronologically.
+//
+message LocalDateTime {
+    option (is).java_type = "LocalDateTimeTemporal";
+    option (compare_by) = {
+        field: "date"
+        field: "time"
+    };
+
+    LocalDate date = 1 [(required) = true];
+    LocalTime time = 2;
+}
+
+// A time-zone offset from UTC, such as `+02:00`.
+message ZoneOffset {
+
+    // Please use [ZoneId] instead.
+    option deprecated = true;
+
+    // The total offset in seconds.
+    int32 amount_seconds = 1;
+}
+
+// A time with an offset from UTC.
+message OffsetTime {
+
+    // Please use [LocalTime] in combination with [ZoneId] instead.
+    option deprecated = true;
+
+    // The local time.
+    LocalTime time = 1;
+
+    // The offset of the time-zone from UTC.
+    ZoneOffset offset = 2;
+}
+
+// A date-time with an offset from UTC.
+message OffsetDateTime {
+
+    // Usage history shown that this type cause much confusion.
+    // Please use [ZonedDateTime] instead.
+    option deprecated = true;
+
+    option (is).java_type = "OffsetDateTimeTemporal";
+
+    // The local date-time.
+    LocalDateTime date_time = 1 [(required) = true];
+
+    // The offset of the time-zone from UTC.
+    ZoneOffset offset = 2;
+}
+
+// An ID of a time-zone, such as `Europe/Amsterdam`.
+message ZoneId {
+    option (is).java_type = "ZoneIdMixin";
+
+    string value = 1;
+}
+
+// A date-time with a time-zone in the ISO-8601 calendar system,
+// such as `2018-06-25T19:22:45+01:00 Europe/Amsterdam`.
+//
+// Instances of `ZonedDateTime` cannot be ordered by field values, since the chronological order
+// depends on interpretation of time in different time zones.
+//
+message ZonedDateTime {
+    option (is).java_type = "ZonedDateTimeTemporal";
+
+    // The local date-time.
+    LocalDateTime date_time = 1 [(required) = true];
+
+    // The time-zone.
+    ZoneId zone = 2 [(required) = true];
+}

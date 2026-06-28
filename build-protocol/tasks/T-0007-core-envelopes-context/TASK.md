@@ -1,15 +1,15 @@
 # T-0007: Core Envelopes And Context
 
-Status: Baseline verified; implementation handoff pending
+Status: Implementation verified
 Start: `2026-06-28 19:35 WEST`
 End: Pending
 Setup baseline commit: `f380744`
 Task log path: `build-protocol/tasks/T-0007-core-envelopes-context/TASK.md`
 Branch: `task/T-0007a-core-signal-proto-intake`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007a-core-signal-proto-intake`
-Authoring sub-agent: Pending
-Reviewer sub-agents: Pending
-Implementation baseline commit: `d62fe14`
+Authoring sub-agent: T-0007a implementation sub-agent
+Reviewer sub-agents: Standards reviewer via standalone Codex; spec review completed locally after sandbox escalation was rejected.
+Implementation baseline commit: `9d35f3e`
 Final branch HEAD: Pending
 
 ## Objective
@@ -146,10 +146,51 @@ passed. Vitest ran 9 test files and 33 tests. Coverage: statements 99.19%,
 branches 90.9%, functions 100%, lines 99.19%. TypeDoc emitted the known invalid
 `origin` warning and confirmed 13 proto exports plus 21 core exports.
 
+## Implementation Skill Gate
+
+T-0007a implementation sub-agent selected and fully read these supplied skill
+files before governed actions:
+
+- `implement`
+- `test-driven-development`
+- `verification-before-completion`
+- `architecture-decision-records`
+- `monorepo-management`
+- `typescript-advanced-types`
+- `javascript-testing-patterns`
+- `codebase-design`
+
+Applied scope:
+
+- TDD for focused `@spine-ts/proto` export and `@spine-ts/core` registry tests.
+- Verification-before-completion for all passing/complete claims.
+- Architecture-decision-records for D-0031 provenance decision.
+- Monorepo, TypeScript, testing, and codebase-design guidance for package
+  boundaries, curated exports, and registry behavior.
+
+## Implementation Progress
+
+As of `2026-06-28 20:14 WEST`, T-0007a has copied the minimal core signal proto
+closure, pinned manifest provenance, generated Protobuf-ES output, added curated
+proto exports, and registered the core signal schemas in
+`createSpineCoreRegistry()`. Focused red/green tests, proto workflow checks, and
+full `CI=true corepack pnpm verify` passed.
+
 ## Review Rounds
 
-Pending.
+Round 1:
+
+- Standards review: standalone Codex review of the staged diff against
+  `build-protocol/PROTOBUF_CONTRACT.md` and package export conventions reported
+  no findings.
+- Spec review: local staged-diff review against this task log, the work/review
+  logs, `DECISION_LOG.md`, and `PROTOBUF_CONTRACT.md` found no missing
+  T-0007a requirements, no scope creep beyond the proto-intake slice, and no
+  wrong-looking implementation. The attempted external standalone spec reviewer
+  was rejected by sandbox escalation policy because it would send private staged
+  repository content to an external Codex service.
 
 ## Integration Result
 
-Pending.
+Ready for final commit. Full verification passed before commit handoff; final
+branch HEAD is recorded in the implementation agent's completion report.

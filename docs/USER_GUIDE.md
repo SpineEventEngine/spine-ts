@@ -21,6 +21,11 @@ slices.
 - A core type registry in `@spine-ts/core` that derives Spine type URLs,
   exposes a read-only default lookup view for the current curated schemas, and
   looks up descriptor-backed metadata by full type name, type URL, or schema.
+- Canonical Spine core command/event envelope and context contracts are
+  available from `@spine-ts/proto` and pre-registered in
+  `spineCoreRegistry`, including `CommandSchema`, `EventSchema`,
+  `ActorContextSchema`, `TenantIdSchema`, `UserIdSchema`, and
+  `VersionSchema`.
 - A core validation facade that validates single Protobuf messages through
   `@spine-event-engine/validation-ts` while returning repo-local Spine
   `ValidationError` and `ConstraintViolation` data.
@@ -29,6 +34,7 @@ slices.
 ## What Is Deferred
 
 - `Any` pack/unpack helpers.
+- High-level `packCommand()` and `packEvent()` construction helpers.
 - Semantic tag registration from `(is)` and `(every_is)` consumers; the lookup
   API exists, but the current copied proto closure has no provable registered
   tag consumers.
@@ -52,6 +58,16 @@ Spine files normally declare `option (type_url_prefix) = "type.spine.io"`.
 `deriveTypeUrl()` composes that prefix with the schema's full Protobuf type
 name. For files without the Spine option, the core registry uses the documented
 fallback prefix `type.googleapis.com`.
+
+The shared registry also contains the canonical core signal contracts:
+
+```ts
+import { CommandSchema, EventSchema } from "@spine-ts/proto";
+import { spineCoreRegistry } from "@spine-ts/core";
+
+const commandTypeUrl = spineCoreRegistry.getBySchema(CommandSchema).typeUrl;
+const eventTypeUrl = spineCoreRegistry.getBySchema(EventSchema).typeUrl;
+```
 
 ## Validation
 
