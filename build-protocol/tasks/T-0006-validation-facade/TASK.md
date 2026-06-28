@@ -1,10 +1,10 @@
 # T-0006: Validation Facade
 
-Status: Split complete; ready for implementation worktree
+Status: Implementation worktree created; baseline verification pending
 Start: `2026-06-28 17:22 WEST`
 End: Pending
 Setup baseline commit: `62ffc33`
-Implementation baseline commit: `296b784`
+Implementation baseline commit: `e953662`
 Task log path: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
@@ -146,6 +146,9 @@ Out of scope:
   before splitter work.
 - `2026-06-28 17:27 WEST`: Recorded splitter output, current dependency
   inspection, and D-0029 before creating the implementation worktree.
+- `2026-06-28 17:31 WEST`: Created branch
+  `task/T-0006a-validation-facade-contract` and worktree
+  `.worktrees/T-0006a-validation-facade-contract` at base `e953662`.
 
 ## Decisions
 
