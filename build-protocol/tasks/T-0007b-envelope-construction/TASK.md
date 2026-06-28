@@ -139,6 +139,22 @@ Selected skills for setup/orchestration:
 Implementation sub-agent must run its own skill gate before edits and record
 selected skills in this log.
 
+Implementation sub-agent skill gate recorded on `2026-06-28 20:47 WEST`:
+
+- `implement` applies to scoped delivery and final commit.
+- `test-driven-development` applies to focused RED/GREEN helper tests.
+- `verification-before-completion` applies to focused, docs/API, and full
+  verification evidence before handoff.
+- `architecture-decision-records` applies to preserving D-0030 through D-0032;
+  no new ADR is needed for this implementation because the accepted decision is
+  already D-0032.
+- `typescript-advanced-types` applies to the generic public helper inputs.
+- `javascript-testing-patterns` applies to the focused Vitest unit tests.
+- `codebase-design` applies to keeping Spine-aware `Any` packing as a deep core
+  module interface rather than scattering type URL policy.
+- `receiving-code-review` applies to evaluating existing review/task constraints
+  before changing code.
+
 ## Public API Shape
 
 Expected public `@spine-ts/core` additions:

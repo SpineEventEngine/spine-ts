@@ -1,4 +1,4 @@
-import { create } from "@bufbuild/protobuf";
+import { create, toBinary } from "@bufbuild/protobuf";
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
@@ -6,9 +6,13 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import {
   ActorContextSchema,
+  CommandContextSchema,
+  CommandIdSchema,
   CommandSchema,
   type ConstraintViolation,
   ConstraintViolationSchema,
+  EventContextSchema,
+  EventIdSchema,
   EventSchema,
   FieldPathSchema,
   TemplateStringSchema,
@@ -31,7 +35,11 @@ import {
   createValidationError,
   createSpineCoreRegistry,
   deriveTypeUrl,
+  packAny,
+  packCommand,
+  packEvent,
   spineCoreRegistry,
+  unpackAny,
   validateTransition,
   validateMessage,
 } from "./index.js";
@@ -56,6 +64,26 @@ function transitionViolation(message: string): ConstraintViolation {
     message: create(TemplateStringSchema, {
       withPlaceholders: message,
     }),
+  });
+}
+
+function commandContext() {
+  return create(CommandContextSchema, {
+    actorContext: create(ActorContextSchema, {
+      actor: create(UserIdSchema, { value: "user-1" }),
+    }),
+  });
+}
+
+function eventContext() {
+  const producerId = create(UserIdSchema, { value: "aggregate-1" });
+
+  return create(EventContextSchema, {
+    producerId: create(AnySchema, {
+      typeUrl: deriveTypeUrl(UserIdSchema),
+      value: toBinary(UserIdSchema, producerId),
+    }),
+    version: create(VersionSchema, { number: 1 }),
   });
 }
 
@@ -455,5 +483,72 @@ describe("@spine-ts/core validation facade", () => {
     ]);
     expect(result.violations[1]?.typeName).toBe("example.validation.RequiredName");
     expect(JSON.stringify(result.error)).not.toContain("raw transition payload secret");
+  });
+});
+
+describe("@spine-ts/core envelope packing", () => {
+  it("packs Any values with Spine type URLs and Protobuf-ES binary payloads", () => {
+    const message = create(FieldPathSchema, { fieldName: ["task", "id"] });
+
+    const packed = packAny(FieldPathSchema, message);
+
+    expect(packed.typeUrl).toBe("type.spine.io/spine.base.FieldPath");
+    expect(packed.typeUrl).toBe(deriveTypeUrl(FieldPathSchema));
+    expect(packed.typeUrl).not.toBe("type.googleapis.com/spine.base.FieldPath");
+    expect(packed.value).toEqual(toBinary(FieldPathSchema, message));
+    expect(unpackAny(packed, FieldPathSchema)).toEqual(message);
+    expect(unpackAny(packed, ValidationErrorSchema)).toBeUndefined();
+  });
+
+  it("lets callers opt out of payload validation when packing already-trusted messages", () => {
+    const invalidMessage = create(RequiredNameSchema, { name: "" });
+
+    expect(() => packAny(RequiredNameSchema, invalidMessage)).toThrow(ValidationException);
+
+    const packed = packAny(RequiredNameSchema, invalidMessage, { validate: false });
+
+    expect(packed.typeUrl).toBe(deriveTypeUrl(RequiredNameSchema));
+    expect(unpackAny(packed, RequiredNameSchema)).toEqual(invalidMessage);
+  });
+
+  it("packs caller-supplied command IDs and contexts without generating runtime metadata", () => {
+    const id = create(CommandIdSchema, { uuid: "command-id-from-caller" });
+    const context = commandContext();
+    const message = create(FieldPathSchema, { fieldName: ["task"] });
+
+    const command = packCommand({
+      id,
+      context,
+      schema: FieldPathSchema,
+      message,
+    });
+
+    expect(command.$typeName).toBe("spine.core.Command");
+    expect(command.id).toEqual(id);
+    expect(command.context).toEqual(context);
+    expect(command.systemProperties).toBeUndefined();
+    expect(command.message?.typeUrl).toBe(deriveTypeUrl(FieldPathSchema));
+    expect(command.message?.value).toEqual(toBinary(FieldPathSchema, message));
+    expect(unpackAny(command.message ?? create(AnySchema), FieldPathSchema)).toEqual(message);
+  });
+
+  it("packs caller-supplied event IDs and contexts without generating producer policy", () => {
+    const id = create(EventIdSchema, { value: "event-id-from-caller" });
+    const context = eventContext();
+    const message = create(FieldPathSchema, { fieldName: ["task", "created"] });
+
+    const event = packEvent({
+      id,
+      context,
+      schema: FieldPathSchema,
+      message,
+    });
+
+    expect(event.$typeName).toBe("spine.core.Event");
+    expect(event.id).toEqual(id);
+    expect(event.context).toEqual(context);
+    expect(event.message?.typeUrl).toBe(deriveTypeUrl(FieldPathSchema));
+    expect(event.message?.value).toEqual(toBinary(FieldPathSchema, message));
+    expect(unpackAny(event.message ?? create(AnySchema), FieldPathSchema)).toEqual(message);
   });
 });

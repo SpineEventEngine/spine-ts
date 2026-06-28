@@ -1,13 +1,14 @@
 # Spine TS User Guide
 
-Current status: early framework guide for the descriptor registry and
-single-message validation facade.
+Current status: early framework guide for the descriptor registry,
+single-message validation facade, and core envelope construction helpers.
 
 This guide covers the runnable behavior available now: Spine proto descriptors
 are exposed through curated packages, `@spine-ts/core` can derive and look up
-type metadata, and framework users can validate one Protobuf message at a time.
-Entity runtime, transport, storage, and the to-do application remain later
-slices.
+type metadata, framework users can validate one Protobuf message at a time, and
+callers can pack already-built domain messages into generated Spine
+`Command`/`Event` envelopes. Entity runtime, transport, storage, and the to-do
+application remain later slices.
 
 ## What Exists Now
 
@@ -29,12 +30,16 @@ slices.
 - A core validation facade that validates single Protobuf messages through
   `@spine-event-engine/validation-ts` while returning repo-local Spine
   `ValidationError` and `ConstraintViolation` data.
+- Core `packAny()`, `unpackAny()`, `packCommand()`, and `packEvent()` helpers
+  for Spine-aware payload packing and generated command/event envelope
+  construction.
 - A placeholder to-do example workspace.
 
 ## What Is Deferred
 
-- `Any` pack/unpack helpers.
-- High-level `packCommand()` and `packEvent()` construction helpers.
+- Runtime ID generation, timestamp factories, actor/tenant context factories,
+  event producer/version/origin policy, command system properties, and runtime
+  metadata generation.
 - Semantic tag registration from `(is)` and `(every_is)` consumers; the lookup
   API exists, but the current copied proto closure has no provable registered
   tag consumers.
@@ -124,6 +129,54 @@ the built-in transition rules and call this seam from framework-controlled
 transactions. Rule-returned violations are sanitized before aggregation. If a
 transition rule throws, the seam records a structured transition-rule failure
 and continues later rules in order.
+
+## Envelope Packing
+
+Use `packAny()` when a domain message must be packed into
+`google.protobuf.Any` with Spine routing semantics:
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { packAny, unpackAny } from "@spine-ts/core";
+import { CreateTaskSchema } from "./generated/task_commands_pb.js";
+
+const payload = create(CreateTaskSchema, { title: "Ship the thin slice" });
+const any = packAny(CreateTaskSchema, payload);
+const unpacked = unpackAny(any, CreateTaskSchema);
+```
+
+`packAny()` derives the type URL through the core registry policy, so Spine
+messages use `type.spine.io/...` when their `.proto` file declares the Spine
+`type_url_prefix` option. The helper serializes with Protobuf-ES binary
+serialization and validates the enclosed message by default. Pass
+`{ validate: false }` only for already-trusted messages.
+
+Command and event helpers wrap the same packing behavior in generated Spine
+envelopes:
+
+```ts
+import { packCommand, packEvent } from "@spine-ts/core";
+
+const command = packCommand({
+  id: commandId,
+  context: commandContext,
+  schema: CreateTaskSchema,
+  message: payload,
+});
+
+const event = packEvent({
+  id: eventId,
+  context: eventContext,
+  schema: TaskCreatedSchema,
+  message: taskCreated,
+});
+```
+
+The caller supplies generated IDs and contexts. The core helpers do not create
+UUIDs, timestamps, actor/tenant contexts, producer IDs, versions, origins,
+system properties, bus deliveries, storage records, or transport metadata.
+Validation errors are structured through `ValidationException` and do not expose
+packed bytes or payload contents.
 
 ## First Commands
 
