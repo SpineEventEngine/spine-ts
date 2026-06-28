@@ -1,8 +1,8 @@
 # T-0009b: Handler Metadata Contract And Explicit Registration API
 
-Status: Implementation in progress
+Status: Implementation verified; ready for review
 Start: `2026-06-29 00:40 WEST`
-End: Pending
+End: `2026-06-29 00:53 WEST`
 Baseline commit: `11a6c70`
 Task log path: `build-protocol/tasks/T-0009b-handler-metadata/TASK.md`
 Branch: `task/T-0009b-handler-metadata`
@@ -125,27 +125,60 @@ Out of scope:
 
 ## Files Changed
 
-- Pending.
+- `packages/server/src/handler-metadata.ts`
+- `packages/server/src/handler-metadata.test.ts`
+- `packages/server/src/index.ts`
+- `packages/server/src/index.test.ts`
+- `packages/server/README.md`
+- `docs/USER_GUIDE.md`
+- `docs/architecture/README.md`
+- `docs/api/README.md`
+- `scripts/check-api-docs.mjs`
+- `build-protocol/tasks/T-0009b-handler-metadata/TASK.md`
+- `build-protocol/work-logs/T-0009b.md`
+- `build-protocol/reviews/T-0009b-handler-metadata.md`
 
 ## Tests Run
 
-- Pending.
+- RED: `corepack pnpm test packages/server/src/handler-metadata.test.ts`
+  failed because `defineEntityHandlers` was not a function.
+- GREEN: `corepack pnpm test packages/server/src/handler-metadata.test.ts`
+  passed after adding the first explicit handler metadata implementation.
+- RED: `corepack pnpm test packages/server/src/handler-metadata.test.ts`
+  failed because missing prototype methods were not rejected.
+- GREEN: `corepack pnpm test packages/server/src/handler-metadata.test.ts`
+  passed after adding `HandlerMetadataError` and prototype method validation.
+- RED: `corepack pnpm test packages/server/src/index.test.ts packages/server/src/handler-metadata.test.ts`
+  failed because the root export expectation still described the old server
+  runtime surface.
+- GREEN: `corepack pnpm test packages/server/src/index.test.ts packages/server/src/handler-metadata.test.ts`
+  passed after updating the root export expectation.
+- `corepack pnpm typecheck:build` passed.
+- `corepack pnpm lint` initially failed on test placeholder methods and
+  unbound builder destructuring; passed after test cleanup.
+- `corepack pnpm typecheck:tooling` passed.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid remote
+  source-link warning and confirmed 27 expected server exports.
+- `corepack pnpm test packages/server/src/index.test.ts packages/server/src/handler-metadata.test.ts`
+  passed after formatting.
+- `CI=true corepack pnpm verify` passed.
 
 ## Coverage Result
 
-- Pending.
+- Final `CI=true corepack pnpm verify` coverage: statements 99.44%, branches
+  93.54%, functions 100%, lines 99.43%.
 
 ## Documentation And Public API Impact
 
-| Area                             | Impact                                                                        |
-| -------------------------------- | ----------------------------------------------------------------------------- |
-| Package README impact            | Expected: explicit registration examples and non-scope notes.                 |
-| TypeDoc/API docs impact          | Expected: new public server exports and `scripts/check-api-docs.mjs` updates. |
-| Public API additions/removals    | Expected: handler metadata and explicit registration builders.                |
-| Framework `USER_GUIDE.md` impact | Expected: brief user-facing explicit registration workflow.                   |
-| Example `USER_GUIDE.md` impact   | N/A for this slice; to-do example is not implemented yet.                     |
-| API examples                     | Expected in server README and API docs overview.                              |
-| Compatibility notes              | Expected: explicit registration is the stable target for later decorators.    |
+| Area                             | Impact                                                                     |
+| -------------------------------- | -------------------------------------------------------------------------- |
+| Package README impact            | Added explicit registration example and non-scope notes.                   |
+| TypeDoc/API docs impact          | Added handler metadata exports to API overview and docs check.             |
+| Public API additions/removals    | Added handler metadata contracts, builder, and registration error.         |
+| Framework `USER_GUIDE.md` impact | Added explicit handler metadata workflow and deferred-runtime notes.       |
+| Example `USER_GUIDE.md` impact   | N/A for this slice; to-do example is not implemented yet.                  |
+| API examples                     | Expected in server README and API docs overview.                           |
+| Compatibility notes              | Expected: explicit registration is the stable target for later decorators. |
 
 ## Security Impact
 
@@ -171,6 +204,12 @@ Out of scope:
   core exports, 11 server exports, and 26 storage exports; proto
   lint/generate/check-generated passed; known non-blocking TypeDoc
   invalid-origin source-link warning remains.
+- Implementation `CI=true corepack pnpm verify` passed on
+  `2026-06-29 00:53 WEST`: 11 test files / 67 tests passed; coverage statements
+  99.44%, branches 93.54%, functions 100%, lines 99.43%; docs/API check
+  confirmed 100 proto exports, 28 core exports, 27 server exports, and 26
+  storage exports; proto lint/generate/check-generated passed; the known
+  TypeDoc invalid-origin source-link warning remains.
 
 ## Open Risks And Follow-Up Routing
 
@@ -186,6 +225,8 @@ Out of scope:
 - Authoring sub-agent dispatched on `2026-06-29 00:43 WEST` with ownership of
   the first T-0009b slice: handler metadata contract plus explicit
   registration API.
+- Authoring sub-agent finished implementation verification on
+  `2026-06-29 00:53 WEST`. The diff is ready for reviewer sub-agents.
 
 ## Integration Result
 

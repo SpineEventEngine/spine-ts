@@ -11,3 +11,22 @@ export {
   type FirstFieldRoutingHint,
   isEntitySchema,
 } from "./entity-metadata.js";
+
+export {
+  type BaseHandlerMetadata,
+  type CommandAssignmentHandlerMetadata,
+  type CommandReactionHandlerMetadata,
+  type EntityClass,
+  type EntityHandlersMetadata,
+  type EventApplicationHandlerMetadata,
+  type EventApplicationOptions,
+  type EventReactionHandlerMetadata,
+  type EventSubscriptionHandlerMetadata,
+  type HandlerKind,
+  type HandlerMetadata,
+  HandlerMetadataError,
+  type HandlerMetadataErrorCode,
+  type HandlerMethodName,
+  type HandlerRegistrationBuilder,
+  defineEntityHandlers,
+} from "./handler-metadata.js";

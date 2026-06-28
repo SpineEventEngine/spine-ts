@@ -4,12 +4,12 @@ Task log: `build-protocol/tasks/T-0009b-handler-metadata/TASK.md`
 Work log: `build-protocol/work-logs/T-0009b.md`
 Branch: `task/T-0009b-handler-metadata`
 Baseline commit: `11a6c70`
-Reviewed commit/diff basis: Pending
+Reviewed commit/diff basis: Pending implementation commit
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b-handler-metadata`
 Reviewer roles: code style/maintainability; documentation; TypeScript/API docs; security; performance/reliability
 Reviewer sub-agents: Pending
-Review timestamp: Pending
-Status: Pending
+Review timestamp: Pending reviewer dispatch
+Status: Ready for reviewer sub-agents
 
 ## Scope To Review
 
@@ -31,4 +31,5 @@ Status: Pending
 
 ## Review Rounds
 
-- Pending.
+- Authoring implementation verified on `2026-06-29 00:53 WEST`; reviewer
+  sub-agents have not been dispatched yet.
