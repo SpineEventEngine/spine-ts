@@ -5,11 +5,11 @@ Work log: `build-protocol/work-logs/T-0006.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Setup baseline commit: `62ffc33`
 Implementation baseline commit: `e953662`
-Reviewed commit/diff basis: Round 5 completed against
-`876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3...2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616`.
+Reviewed commit/diff basis: Round 7 completed against
+`52e0a26...38bb610538834a4de74c68b813cd67af941bc2c1`.
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
-Reviewer sub-agents: Round 6 completed
-Status: Round-6 log fix in progress
+Reviewer sub-agents: Round 7 completed
+Status: Round-7 log fix ready for re-review
 
 ## Reviewer IDs
 
@@ -276,3 +276,38 @@ Findings:
   `Current State` correction for restart reliability.
 
 Disposition: correct the work-log `Current State` section and re-review.
+
+## Round-6 Log Fix
+
+Log-fix commit: `38bb610538834a4de74c68b813cd67af941bc2c1`.
+
+## Round 7
+
+Reviewed basis:
+`52e0a26...38bb610538834a4de74c68b813cd67af941bc2c1`.
+
+Reviewer IDs:
+
+- Code style/maintainability:
+  `019f0f79-627e-7c01-9485-9a92768b4c52`.
+- Documentation: `019f0f79-62f6-7462-abcf-dadb744bfcd3`.
+- TypeScript/API docs: `019f0f79-6374-7280-8938-3be2369b09e1`.
+- Security: `019f0f79-63eb-7f51-917c-381d6fddb5f6`.
+- Performance/reliability:
+  `019f0f79-64cd-7803-b8db-558867e02d4d`.
+
+Findings:
+
+- Code style/maintainability
+  `019f0f79-627e-7c01-9485-9a92768b4c52`: requested the task header and
+  review-log header be updated from the stale round-6/round-5 state.
+- Documentation `019f0f79-62f6-7462-abcf-dadb744bfcd3`: requested the same
+  top-level task/review/work metadata correction.
+- TypeScript/API docs `019f0f79-6374-7280-8938-3be2369b09e1`: no comments.
+- Security `019f0f79-63eb-7f51-917c-381d6fddb5f6`: no comments.
+- Performance/reliability
+  `019f0f79-64cd-7803-b8db-558867e02d4d`: requested the same restart metadata
+  correction for the `38bb610` head.
+
+Disposition: correct top-level restart metadata and re-review this log-only
+change.

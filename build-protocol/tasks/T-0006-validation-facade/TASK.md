@@ -1,6 +1,6 @@
 # T-0006: Validation Facade
 
-Status: Round-6 review in progress
+Status: Round-7 log fix ready for re-review
 Start: `2026-06-28 17:22 WEST`
 End: Pending
 Setup baseline commit: `62ffc33`
@@ -9,7 +9,7 @@ Task log path: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Authoring sub-agent: T-0006a implementation sub-agent (Codex)
-Reviewer sub-agents: Round 6 dispatched
+Reviewer sub-agents: Round 7 completed
 Implementation commit: `4726985e1786929f5222707dc7abf77c448e8fa3`
 Review-finding log HEAD: `7d519d1f4555ffab058d1642065947355c0acf9e`
 Review-fix commit: `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`
@@ -28,7 +28,10 @@ Round-4 findings/log-fix commit: `2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616`
 Current branch HEAD before round-5 log fix: `2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616`
 Round-5 findings/log-fix commit: `2df2abf`
 Current branch HEAD before round-6 dispatch log: `2df2abf`
-Final branch HEAD: Pending round-6 review closure
+Round-6 findings/log-fix commit: `38bb610538834a4de74c68b813cd67af941bc2c1`
+Latest completed review basis:
+`52e0a26...38bb610538834a4de74c68b813cd67af941bc2c1`
+Final branch HEAD: reserved for integration closure
 
 ## Objective
 
@@ -765,3 +768,16 @@ Round 6 reviewed focused log-fix basis
 - Security `019f0f75-9fab-73e2-92c5-747cad2e932c`: no comments.
 - Performance/reliability `019f0f75-a037-7813-8bb0-b525dce797d1`: requested
   the same work-log `Current State` correction for restart reliability.
+
+Round 7 reviewed focused log-fix basis
+`52e0a26...38bb610538834a4de74c68b813cd67af941bc2c1`:
+
+- Maintainability `019f0f79-627e-7c01-9485-9a92768b4c52`: requested the
+  stale task header and review-log header be updated from the round-6/round-5
+  state.
+- Documentation `019f0f79-62f6-7462-abcf-dadb744bfcd3`: requested the same
+  stale task/review/work top-level metadata correction.
+- TypeScript/API docs `019f0f79-6374-7280-8938-3be2369b09e1`: no comments.
+- Security `019f0f79-63eb-7f51-917c-381d6fddb5f6`: no comments.
+- Performance/reliability `019f0f79-64cd-7803-b8db-558867e02d4d`: requested
+  the same restart metadata correction for the `38bb610` head.
