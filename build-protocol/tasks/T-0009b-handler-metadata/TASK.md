@@ -1,6 +1,6 @@
 # T-0009b: Handler Metadata Contract And Explicit Registration API
 
-Status: Setup in progress
+Status: Baseline verified; ready for implementation
 Start: `2026-06-29 00:40 WEST`
 End: Pending
 Baseline commit: `11a6c70`
@@ -10,6 +10,8 @@ Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b-han
 Requirements splitter: `019f1097-55bb-7b73-a9f8-706db486721e` (Kierkegaard the 2nd)
 Authoring sub-agent: Pending
 Reviewer sub-agents: Pending
+Branch setup commit: Pending
+Implementation baseline commit: Pending
 Implementation commit: Pending branch commit
 Final branch HEAD: Pending branch commit
 
@@ -159,7 +161,16 @@ Out of scope:
 
 ## Verification
 
-- Pending baseline verification.
+- `corepack pnpm install --offline` failed because
+  `@bufbuild/protoc-gen-es@2.12.1` was missing from the local pnpm store.
+- `corepack pnpm install` passed with the existing lockfile and hydrated the
+  worktree dependency metadata.
+- Baseline `CI=true corepack pnpm verify` passed on `2026-06-29 00:41 WEST`:
+  10 test files / 65 tests passed; coverage statements 99.41%, branches 94.11%,
+  functions 100%, lines 99.39%; docs/API check confirmed 100 proto exports, 28
+  core exports, 11 server exports, and 26 storage exports; proto
+  lint/generate/check-generated passed; known non-blocking TypeDoc
+  invalid-origin source-link warning remains.
 
 ## Open Risks And Follow-Up Routing
 
