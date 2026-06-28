@@ -137,7 +137,8 @@ packages/storage/src/index.test.ts` passed with 1 file / 13 tests;
   lint/generate/check-generated.
 
 Follow-up fix committed as `7b489418c58b2c11171baf70d04db1d009aa5501`.
-Orchestrator-owned follow-up re-review is pending.
+Orchestrator-owned follow-up re-review completed and produced the second
+follow-up findings below.
 
 ## Second Follow-Up Re-Review
 
@@ -180,4 +181,23 @@ packages/storage/src/index.test.ts` passed with 1 file / 15 tests after
   proto exports, 28 core exports, and 26 storage exports, plus proto
   lint/generate/check-generated.
 
-Second follow-up fix commit is pending.
+Second follow-up fix committed as
+`981e0c32ab83cdfaa6acfb467354286177a11267`.
+
+Second follow-up re-review dispatched on `2026-06-28 22:37 WEST`.
+
+Review basis:
+`fa94e24bb19d6518311dc4470a404ece3853ac31..981e0c32ab83cdfaa6acfb467354286177a11267`.
+
+Review package:
+`.superpowers/sdd/review-fa94e24..981e0c3.diff`.
+
+Reviewer sub-agents:
+
+- Maintainability/style: `019f102a-477a-7371-964b-af2ac0ab0d03`
+- Documentation: `019f102a-480a-7633-a941-740b8d1dfb2d`
+- TypeScript/API docs: `019f102a-4880-7570-a38f-dee1e90af241`
+- Security: `019f102a-4902-7ba0-8450-67abd0923979`
+- Performance/reliability: `019f102a-497c-7450-ba7a-6f03c8c4d43d`
+
+Reports are pending.

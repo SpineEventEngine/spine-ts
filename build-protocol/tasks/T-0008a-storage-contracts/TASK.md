@@ -241,5 +241,15 @@ packages/storage/src/index.test.ts` passed with 1 file / 15 tests.
   test files / 55 tests, coverage statements 99.63%, branches 93.5%, functions
   100%, lines 99.61%, docs/API check, proto lint/generate, and generated-output
   cleanliness.
+- Second follow-up fix committed as
+  `981e0c32ab83cdfaa6acfb467354286177a11267` on
+  `2026-06-28 22:35 WEST`.
+- Second follow-up re-review dispatched on `2026-06-28 22:37 WEST` with diff
+  package `.superpowers/sdd/review-fa94e24..981e0c3.diff`: maintainability/style
+  `019f102a-477a-7371-964b-af2ac0ab0d03`, documentation
+  `019f102a-480a-7633-a941-740b8d1dfb2d`, TypeScript/API docs
+  `019f102a-4880-7570-a38f-dee1e90af241`, security
+  `019f102a-4902-7ba0-8450-67abd0923979`, and performance/reliability
+  `019f102a-497c-7450-ba7a-6f03c8c4d43d`.
 - No blocking questions known.
-- Next step: commit the second follow-up fix for orchestrator-owned re-review.
+- Next step: collect second follow-up re-review reports.
