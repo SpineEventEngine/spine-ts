@@ -641,3 +641,48 @@ Consequences:
   tested storage seam without importing ZeroMQ or service concerns.
 - T-0008a must document that in-memory storage is for tests/development and is
   not durable across process restarts.
+
+## D-0034: Keep entity metadata in server with narrow proto option exports
+
+Status: Accepted
+
+Date: 2026-06-28
+
+Context: The next roadmap slice is `T-0009 Entity And Handler Model`. The first
+implementable sub-task needs descriptor-derived entity metadata: entity
+kind/visibility, query columns, `(set_once)` fields, first-field routing hints,
+and semantic tags from `(is)`/`(every_is)`. The generated `spine/options.proto`
+file already contains the required Protobuf-ES extension descriptors, but the
+`@spine-ts/proto` package root intentionally exposes only curated contracts.
+The current `@spine-ts/server` package is still a skeleton and should own
+server/runtime entity semantics rather than pushing repository-specific metadata
+into `@spine-ts/core`.
+
+Decision: Implement `T-0009a` by keeping entity metadata extraction in
+`@spine-ts/server` and adding only narrow curated `@spine-ts/proto` root exports
+for the Spine option descriptors and enum/message types required by that
+extractor. Generic schema/type URL lookup remains in `@spine-ts/core`.
+Decorators, handler registration, transactions, repositories, buses, storage
+writes, and ZeroMQ remain out of scope for `T-0009a`.
+
+Alternatives considered:
+
+- Broadly re-export generated `spine/options_pb.ts`. Rejected because the proto
+  package has an explicit curated-export policy and API docs check guarding
+  against broad generated re-exports.
+- Put entity metadata extraction in `@spine-ts/core`. Rejected because entity
+  kind, visibility, columns, and routing hints are server/runtime model
+  concerns, while `core` should stay focused on type registry, validation, and
+  envelope helpers.
+- Delay option exports until handler decorators. Rejected because transaction
+  validation and handler metadata need the same descriptor surface, and
+  `T-0009a` can test it without import-time side effects.
+
+Consequences:
+
+- `@spine-ts/proto` grows a small explicit public option surface.
+- `@spine-ts/server` becomes the owner of entity metadata extraction and can use
+  it later for handler registration, transaction validation, and repository
+  assembly.
+- Reviewers must verify that `T-0009a` does not introduce runtime registration,
+  decorators, storage writes, buses, transport, or repository behavior.
