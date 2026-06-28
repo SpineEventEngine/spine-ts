@@ -754,11 +754,14 @@ Round 5 reviewed focused log-fix basis
   restart metadata record
   `2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616` as the latest reviewed head.
 
-Round 6 dispatched against focused log-fix basis
+Round 6 reviewed focused log-fix basis
 `2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616...2df2abf`:
 
-- Maintainability: `019f0f75-9e5a-7ab3-b49d-dc31cb431a67`.
-- Documentation: `019f0f75-9ec3-7d72-a65c-7e163b25a345`.
-- TypeScript/API docs: `019f0f75-9f33-7493-9ac0-e9946c8054c7`.
-- Security: `019f0f75-9fab-73e2-92c5-747cad2e932c`.
-- Performance/reliability: `019f0f75-a037-7813-8bb0-b525dce797d1`.
+- Maintainability `019f0f75-9e5a-7ab3-b49d-dc31cb431a67`: no comments.
+- Documentation `019f0f75-9ec3-7d72-a65c-7e163b25a345`: requested updating
+  the work-log `Current State` section because it still named the round-3
+  security fix/log handoff as the last completed step.
+- TypeScript/API docs `019f0f75-9f33-7493-9ac0-e9946c8054c7`: no comments.
+- Security `019f0f75-9fab-73e2-92c5-747cad2e932c`: no comments.
+- Performance/reliability `019f0f75-a037-7813-8bb0-b525dce797d1`: requested
+  the same work-log `Current State` correction for restart reliability.
