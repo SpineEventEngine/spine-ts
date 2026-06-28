@@ -16,11 +16,13 @@ The framework does not yet expose runnable Spine-compatible behavior. This guide
 - A core type registry in `@spine-ts/core` that derives Spine type URLs,
   exposes a read-only default lookup view for the current curated schemas, and
   looks up descriptor-backed metadata by full type name, type URL, or schema.
+- A core validation facade that validates single Protobuf messages through
+  `@spine-event-engine/validation-ts` while returning repo-local Spine
+  `ValidationError` and `ConstraintViolation` data.
 - A placeholder to-do example workspace.
 
 ## What Is Deferred
 
-- Message validation through `@spine-event-engine/validation-ts`.
 - `Any` pack/unpack helpers.
 - Semantic tag registration from `(is)` and `(every_is)` consumers; the lookup
   API exists, but the current copied proto closure has no provable registered
@@ -45,6 +47,47 @@ Spine files normally declare `option (type_url_prefix) = "type.spine.io"`.
 `deriveTypeUrl()` composes that prefix with the schema's full Protobuf type
 name. For files without the Spine option, the core registry uses the documented
 fallback prefix `type.googleapis.com`.
+
+## Validation
+
+Use `@spine-ts/core` for validation. Application code does not import
+`@spine-event-engine/validation-ts` directly.
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { checkValid, validateMessage, ValidationException } from "@spine-ts/core";
+import { CreateTaskSchema } from "./generated/task_commands_pb.js";
+
+const command = create(CreateTaskSchema, {});
+const result = validateMessage(CreateTaskSchema, command);
+
+if (!result.valid) {
+  console.log(result.error?.constraintViolation);
+}
+
+try {
+  checkValid(CreateTaskSchema, command);
+} catch (error) {
+  if (error instanceof ValidationException) {
+    console.log(error.asMessage());
+  }
+}
+```
+
+`validateMessage()` is for single-message Spine validation options such as
+`(required)`, `(pattern)`, and `(validate)`. Transition-only rules such as
+`(set_once)` need previous state and proposed state, so they use the separate
+framework seam:
+
+```ts
+import { validateTransition } from "@spine-ts/core";
+
+const result = validateTransition({ schema: TaskSchema, previous, next }, rules);
+```
+
+The first seam is intentionally minimal. Later entity/runtime tasks will provide
+the built-in transition rules and call this seam from framework-controlled
+transactions.
 
 ## First Commands
 

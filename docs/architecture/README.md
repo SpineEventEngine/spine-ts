@@ -45,3 +45,24 @@ Semantic tag lookup is available as an API shape, but no tags are registered in
 this slice. The current copied proto set defines the Spine `(is)` and
 `(every_is)` options but does not include registered message consumers that make
 tag extraction provable.
+
+## Core Validation Facade
+
+`@spine-ts/core` owns the validation interface exposed to framework users.
+Single-message validation is delegated to
+`@spine-event-engine/validation-ts@2.0.0-snapshot.4`, pinned by D-0029, but
+callers use `validateMessage()` and `checkValid()` from core. This keeps the
+experimental upstream API and generated `spine.validate.*` error types behind a
+framework seam.
+
+The facade converts upstream violations into repo-local
+`spine.validation.ConstraintViolation` messages and builds
+`spine.validation.ValidationError` data through `createValidationError()`.
+`ValidationException.asMessage()` returns that structured message data for
+throwing validation paths.
+
+State-transition validation is a separate framework-owned seam because rules
+such as `(set_once)` need both previous and proposed state. The current
+`validateTransition()` API only aggregates transition rule violations into the
+same structured result shape; built-in entity transaction enforcement remains a
+later runtime responsibility.

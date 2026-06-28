@@ -4,14 +4,16 @@ TypeDoc is the canonical API documentation generator for this repository.
 
 Current status: the generated reference contains the curated `@spine-ts/proto`
 root API for the first intake and the `@spine-ts/core` metadata/type registry
-API. Proto exports include message types, generated schemas, file descriptors,
-and the `type_url_prefix` custom option. Core exports include deterministic type
-URL derivation, registry and metadata types, and the default registry for the
-current curated Spine schema set. The default registry is documented as a
-read-only lookup view; callers that need mutable registration use
-`createSpineCoreRegistry()` or `TypeRegistry`. The generated Protobuf-ES
-implementation files themselves remain excluded from TypeDoc output and are not
-broadly re-exported from the package root.
+and validation facade APIs. Proto exports include message types, generated
+schemas, file descriptors, and the `type_url_prefix` custom option. Core exports
+include deterministic type URL derivation, registry and metadata types, the
+default registry for the current curated Spine schema set, single-message
+validation result/check helpers, `ValidationException`, structured
+`ValidationError` creation, and the initial transition-validation seam. The
+default registry is documented as a read-only lookup view; callers that need
+mutable registration use `createSpineCoreRegistry()` or `TypeRegistry`. The
+generated Protobuf-ES implementation files themselves remain excluded from
+TypeDoc output and are not broadly re-exported from the package root.
 
 Run:
 

@@ -52,6 +52,9 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.12.1
         version: 2.12.1
+      '@spine-event-engine/validation-ts':
+        specifier: 2.0.0-snapshot.4
+        version: 2.0.0-snapshot.4(@bufbuild/protobuf@2.12.1)
       '@spine-ts/proto':
         specifier: workspace:*
         version: link:../proto
@@ -357,6 +360,11 @@ packages:
 
   '@shikijs/vscode-textmate@10.0.2':
     resolution: {integrity: sha512-83yeghZ2xxin3Nj8z1NMd/NCuca+gsYXswywDy5bHvwlWL8tpTQmzGeUuHd9FC3E/SBEMvzJRwWEOz5gGes9Qg==}
+
+  '@spine-event-engine/validation-ts@2.0.0-snapshot.4':
+    resolution: {integrity: sha512-JCwS6mESUjCsTfbuKDTFtaM3Bz+qX1x3S4AOD6D/ybQtWt7xPO3Xd3rIEkLo3SSJBNSvWH5XV1lW8bv6W1iHJA==}
+    peerDependencies:
+      '@bufbuild/protobuf': ^2.10.2
 
   '@standard-schema/spec@1.1.0':
     resolution: {integrity: sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w==}
@@ -1390,6 +1398,10 @@ snapshots:
       '@types/hast': 3.0.4
 
   '@shikijs/vscode-textmate@10.0.2': {}
+
+  '@spine-event-engine/validation-ts@2.0.0-snapshot.4(@bufbuild/protobuf@2.12.1)':
+    dependencies:
+      '@bufbuild/protobuf': 2.12.1
 
   '@standard-schema/spec@1.1.0': {}
 

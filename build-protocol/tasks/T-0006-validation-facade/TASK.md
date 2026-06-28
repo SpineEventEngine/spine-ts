@@ -1,6 +1,6 @@
 # T-0006: Validation Facade
 
-Status: Baseline verified; implementation sub-agent pending
+Status: Implementation sub-agent active
 Start: `2026-06-28 17:22 WEST`
 End: Pending
 Setup baseline commit: `62ffc33`
@@ -8,10 +8,10 @@ Implementation baseline commit: `e953662`
 Task log path: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
-Authoring sub-agent: Pending
+Authoring sub-agent: T-0006a implementation sub-agent (Codex)
 Reviewer sub-agents: Pending
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
+Implementation commit: Branch HEAD after implementation commit
+Final branch HEAD: Branch HEAD after implementation commit
 
 ## Objective
 
@@ -118,6 +118,49 @@ Skipped relevant-looking skills:
 Conflict resolution: project protocol, task scope, sandbox/approval rules, and
 explicit human/orchestrator authorization override advisory skill content.
 
+### Implementation Sub-Agent Skill Applicability Check
+
+Timestamp: `2026-06-28 17:36 WEST`
+
+Canonical checklist performed before implementation actions:
+
+- Session skill inventory exposed in this conversation includes the
+  task-selected skills `implement`, `test-driven-development`, `tdd`,
+  `verification-before-completion`, `receiving-code-review`,
+  `architecture-decision-records`, `typescript-advanced-types`,
+  `javascript-testing-patterns`, `nodejs-backend-patterns`,
+  `codebase-design`, and `using-git-worktrees`, plus related review/security
+  skills reserved for later reviewer roles.
+- Task-provided selected skills were read from the implementation brief and
+  matched against the session inventory.
+- Repo-local manifest `build-protocol/skills/EXPECTED_SKILLS.md` was read.
+- User-installed skill entrypoints were enumerated with
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`.
+- Installed-skill lock evidence was sampled from
+  `/Users/armiol/.agents/.skill-lock.json`; expected sources include
+  `mattpocock/skills`, `obra/superpowers`, and `wshobson/agents`.
+- Selected `SKILL.md` files were fully read before governed actions:
+  `implement`, `test-driven-development`, `tdd`,
+  `verification-before-completion`, `receiving-code-review`,
+  `architecture-decision-records`, `typescript-advanced-types`,
+  `javascript-testing-patterns`, `nodejs-backend-patterns`,
+  `codebase-design`, and `using-git-worktrees`.
+- Worktree detection per `using-git-worktrees` found
+  `git rev-parse --git-dir` at
+  `/Users/armiol/development/experiments/spine-ts/.git/worktrees/T-0006a-validation-facade-contract`,
+  `git rev-parse --git-common-dir` at
+  `/Users/armiol/development/experiments/spine-ts/.git`, no superproject, and
+  branch `task/T-0006a-validation-facade-contract`; this is already an isolated
+  worktree, so no new worktree was created.
+- Skipped relevant-looking skills: `requesting-code-review` is reserved for the
+  later review request loop; `code-review-excellence`, `security-best-practices`,
+  `performance`, and `api-design-principles` are more appropriate for dedicated
+  reviewer/advisory roles than this implementation slice; `planning-with-files`
+  is superseded by the project build-protocol logs.
+- Conflict resolution: installed skills are advisory only. `BUILD_PROTOCOL.md`,
+  `CODE_QUALITY.md`, task scope, sandbox/approval rules, and explicit
+  human/orchestrator authorization govern this implementation.
+
 ## Scope
 
 In scope:
@@ -151,6 +194,56 @@ Out of scope:
   `.worktrees/T-0006a-validation-facade-contract` at base `e953662`.
 - `2026-06-28 17:33 WEST`: Baseline `CI=true corepack pnpm verify` passed in
   the T-0006a worktree.
+- `2026-06-28 17:36 WEST`: T-0006a implementation sub-agent performed the
+  canonical skill applicability check, confirmed the assigned isolated
+  worktree, and recorded selected/skipped skills before implementation edits.
+- `2026-06-28 17:40 WEST`: Began TDD RED cycle 1 by adding a public
+  `validateMessage()` facade test for a valid `ValidationError` message using
+  only `@spine-ts/core` imports.
+- `2026-06-28 17:43 WEST`: Installed exact
+  `@spine-event-engine/validation-ts@2.0.0-snapshot.4` dependency in
+  `@spine-ts/core`, inspected its declarations, and added the minimal
+  dependency-backed `validateMessage()` implementation with repo-local
+  validation error types.
+- `2026-06-28 17:46 WEST`: GREEN cycle 1 focused test passed, then RED cycle 2
+  added a deterministic descriptor fixture with `(required) = true` and a
+  `checkValid()`/`ValidationException.asMessage()` test.
+- `2026-06-28 17:47 WEST`: RED cycle 2 failed on the missing exception
+  constructor; added `ValidationException` and `checkValid()` on top of the
+  shared `validateMessage()` adapter path.
+- `2026-06-28 17:48 WEST`: GREEN cycle 2 focused test passed, then RED cycle 3
+  added non-throwing invalid-result assertions and a missing
+  `createValidationError()` public helper test.
+- `2026-06-28 17:49 WEST`: RED cycle 3 failed on the missing helper; added
+  `createValidationError()` and routed `validateMessage()` through it.
+- `2026-06-28 17:50 WEST`: GREEN cycle 3 focused test passed, then RED cycle 4
+  added a framework-owned `validateTransition()` seam test that is separate
+  from single-message validation.
+- `2026-06-28 17:51 WEST`: RED cycle 4 failed on the missing transition
+  facade; added `TransitionValidationRequest`, `TransitionValidationRule`,
+  `TransitionValidationResult`, and `validateTransition()`.
+- `2026-06-28 17:54 WEST`: GREEN cycle 4 focused test passed, then updated
+  TypeDoc export checks and package/user/API/architecture docs for the
+  validation facade and transition seam.
+- `2026-06-28 17:56 WEST`: Focused verification passed for typecheck, core
+  validation tests, and API docs/export guard.
+- `2026-06-28 17:58 WEST`: Full verification failed at lint. Fixed
+  `ValidationException` message formatting and removed deprecated
+  `ConstraintViolation` fields from the upstream-to-local conversion helper.
+- `2026-06-28 17:59 WEST`: Post-lint-fix focused core tests and lint passed.
+- `2026-06-28 18:00 WEST`: Full verification attempt 2 failed at
+  `format:check`; ran Prettier on the four touched files.
+- `2026-06-28 18:01 WEST`: Full verification attempt 3 failed at
+  `format:check` on the work log after recording attempt 2; reran Prettier on
+  the durable logs.
+- `2026-06-28 18:03 WEST`: Full verification attempt 4 reached coverage and
+  failed because branch coverage was 89.13%; added focused tests for the
+  `checkValid()` valid path and empty transition-rule path.
+- `2026-06-28 18:04 WEST`: Focused coverage passed after the coverage test
+  addition.
+- `2026-06-28 18:06 WEST`: Full verification attempt 5 passed.
+- `2026-06-28 18:08 WEST`: Final full verification pass completed on the
+  formatted tree.
 
 ## Decisions
 
@@ -174,11 +267,38 @@ Out of scope:
 
 ## Tests Run
 
-- Pending.
+- RED cycle 1: `corepack pnpm test packages/core/src/index.test.ts` failed as
+  expected. Vitest ran 12 tests; 11 passed and the new
+  `validateMessage()` test failed with `TypeError: validateMessage is not a
+function`, proving the public facade export is missing.
+- GREEN cycle 1 pending run: `corepack pnpm test packages/core/src/index.test.ts`.
+- GREEN cycle 1: `corepack pnpm test packages/core/src/index.test.ts` passed;
+  Vitest ran 12 tests and all passed.
+- RED cycle 2: `corepack pnpm test packages/core/src/index.test.ts` failed as
+  expected. Vitest ran 13 tests; 12 passed and the new throwing-path test failed
+  because `ValidationException` was still undefined.
+- GREEN cycle 2: `corepack pnpm test packages/core/src/index.test.ts` passed;
+  Vitest ran 13 tests and all passed.
+- RED cycle 3: `corepack pnpm test packages/core/src/index.test.ts` failed as
+  expected. Vitest ran 14 tests; 13 passed and the new helper test failed with
+  `TypeError: createValidationError is not a function`.
+- GREEN cycle 3: `corepack pnpm test packages/core/src/index.test.ts` passed;
+  Vitest ran 14 tests and all passed.
+- RED cycle 4: `corepack pnpm test packages/core/src/index.test.ts` failed as
+  expected. Vitest ran 15 tests; 14 passed and the transition-seam test failed
+  with `TypeError: validateTransition is not a function`.
+- GREEN cycle 4: `corepack pnpm test packages/core/src/index.test.ts` passed;
+  Vitest ran 15 tests and all passed.
+- Focused verification: `corepack pnpm typecheck` passed; `corepack pnpm test
+packages/core/src/index.test.ts` passed with 1 file and 15 tests; `corepack
+pnpm docs:check` passed and confirmed 13 expected `@spine-ts/proto` exports
+  and 21 expected `@spine-ts/core` exports, with the known invalid `origin`
+  TypeDoc warning.
 
 ## Coverage Result
 
-- Pending.
+- Focused coverage after coverage fix: statements 99.08%, branches 93.47%,
+  functions 100%, lines 99.07%.
 
 ## Documentation And Public API Impact
 
@@ -190,7 +310,7 @@ Out of scope:
 | Framework `USER_GUIDE.md` impact | Must show how framework users validate messages.                        |
 | Example `USER_GUIDE.md` impact   | N/A unless the task touches the to-do example.                          |
 | API examples                     | Add concise validation examples.                                        |
-| Compatibility notes              | Must document the single-message vs transition-validation split.        |
+| Compatibility notes              | Documented the single-message vs transition-validation split.           |
 
 ## Security Impact
 
@@ -206,7 +326,39 @@ Out of scope:
 
 ## Verification
 
-- Pending.
+- Focused checks passed.
+- Full `CI=true corepack pnpm verify` attempt 1 failed at lint:
+  `@typescript-eslint/restrict-template-expressions` on the violation count and
+  `@typescript-eslint/no-deprecated` on deprecated `msgFormat`, `param`, and
+  `violation` fields in the conversion helper.
+- Post-fix focused check: `corepack pnpm test packages/core/src/index.test.ts`
+  passed with 15 tests; `corepack pnpm lint` passed.
+- Full `CI=true corepack pnpm verify` attempt 2 failed at `format:check` on
+  `packages/core/src/index.ts`, `packages/core/src/index.test.ts`,
+  `build-protocol/tasks/T-0006-validation-facade/TASK.md`, and
+  `build-protocol/work-logs/T-0006.md`; `corepack pnpm exec prettier --write`
+  rewrote those files.
+- Full `CI=true corepack pnpm verify` attempt 3 failed at `format:check` on
+  `build-protocol/work-logs/T-0006.md` after recording attempt 2; Prettier was
+  rerun on the durable logs.
+- Full `CI=true corepack pnpm verify` attempt 4 passed typecheck, lint,
+  format, and tests, then failed at coverage: 8 test files and 27 tests passed;
+  statements 98.16%, branches 89.13%, functions 100%, lines 98.14%; branch
+  threshold requires 90%.
+- Focused `corepack pnpm test:coverage` passed after coverage test addition:
+  8 test files and 28 tests passed; statements 99.08%, branches 93.47%,
+  functions 100%, lines 99.07%.
+- Full `CI=true corepack pnpm verify` attempt 5 passed: typecheck, lint,
+  format, tests, coverage, docs check, proto lint/generate, and generated-output
+  cleanliness all passed. Vitest ran 8 test files and 28 tests; coverage
+  statements 99.08%, branches 93.47%, functions 100%, lines 99.07%. TypeDoc
+  emitted the known invalid `origin` source-link warning and confirmed 13 proto
+  exports plus 21 core exports.
+- Final `CI=true corepack pnpm verify` pass completed after final log
+  formatting with the same result: 8 test files and 28 tests passed; coverage
+  statements 99.08%, branches 93.47%, functions 100%, lines 99.07%; docs check
+  passed with the known invalid `origin` warning; proto lint/generate and
+  generated-output cleanliness passed.
 
 ## Open Risks And Follow-Up Routing
 
