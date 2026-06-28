@@ -1,6 +1,6 @@
 # T-0005: Metadata And Type Registry
 
-Status: Latest branch HEAD ready for re-review after review-round-1 fix and log cleanup
+Status: Latest branch HEAD ready for re-review after review-round-2 log cleanup
 Start: `2026-06-28 15:58 WEST`
 End: Pending
 Baseline commit: `80714f3`
@@ -12,8 +12,9 @@ Reviewer sub-agents: Review round 1 completed; fix pass ready for re-review
 Implementation commit: `5705890eb5cdedaa2044375c6d5cccc304bdf283`
 Review round 1 fix commit: `a8ad2fad6070479f156cb54211b14f6bfdb80117`
 Review round 1 log cleanup commits: `a46a95a2efb8c75a613bda7390d0fa008931d3aa`,
-`9e234fd083d2f4d1773acfc1526bbd0e120b2bcd`
-Re-review target: latest branch HEAD after review-round-1 fix and log cleanup
+`9e234fd083d2f4d1773acfc1526bbd0e120b2bcd`,
+`350fc318e114b99061484c99d70d062a47a971d6`
+Re-review target: latest branch HEAD after review-round-2 log cleanup
 
 ## Objective
 
@@ -351,8 +352,16 @@ mutate the process-wide curated registry.
   default registry exposure, unvalidated explicit type URLs, erased concrete
   schema type on schema lookup methods, stale durable log fields, and D-0028's
   missing fallback prefix value.
+- Review round 2 reviewer IDs:
+  - Maintainability: `019f0ef3-7250-7a72-a71e-69e8ca886c05`, no comments.
+  - Documentation: `019f0ef3-9fca-73f2-bbe1-f516eae40fad`, stale review-basis
+    wording fixed by the round-2 log-only correction.
+  - TypeScript/API: `019f0ef3-c703-7e41-8279-3e6d5d553a20`, no comments.
+  - Security: `019f0ef3-f963-76c0-9da2-3e9c1df57f07`, no comments.
+  - Performance/reliability: `019f0ef4-2459-7c00-8319-ef6243e032b7`, no
+    comments.
 - Next step: formal re-review of `task/T-0005-registry-core` at the latest
-  branch HEAD after review-round-1 fix and log cleanup.
+  branch HEAD after review-round-2 log cleanup.
 
 ## Integration Result
 

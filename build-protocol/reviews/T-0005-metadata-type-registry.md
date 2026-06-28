@@ -4,12 +4,11 @@ Task log: `build-protocol/tasks/T-0005-metadata-type-registry/TASK.md`
 Work log: `build-protocol/work-logs/T-0005.md`
 Branch: `task/T-0005-registry-core`
 Baseline commit: `80714f3`
-Reviewed commit/diff basis: Implementation working tree before commit; formal
-reviewers pending
+Reviewed commit/diff basis: `80714f3`...latest branch HEAD after
+review-round-1 fix and log cleanup
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0005-registry-core`
-Reviewer sub-agents: Review round 1 completed; fix pass ready for re-review
-Status: Latest branch HEAD ready for re-review after review-round-1 fix and log
-cleanup
+Reviewer sub-agents: Review round 2 completed; log-only documentation finding fixed
+Status: Latest branch HEAD ready for re-review after review-round-2 log cleanup
 
 ## Reviewer IDs
 
@@ -72,9 +71,17 @@ handoff.
   `a46a95a2efb8c75a613bda7390d0fa008931d3aa` and
   `9e234fd083d2f4d1773acfc1526bbd0e120b2bcd`. The re-review target is the
   latest branch HEAD after review-round-1 fix and log cleanup.
+- Review round 2, `2026-06-28`: reviewer outcomes received. Maintainability
+  `019f0ef3-7250-7a72-a71e-69e8ca886c05`, TypeScript/API
+  `019f0ef3-c703-7e41-8279-3e6d5d553a20`, security
+  `019f0ef3-f963-76c0-9da2-3e9c1df57f07`, and performance/reliability
+  `019f0ef4-2459-7c00-8319-ef6243e032b7` had no comments. Documentation
+  `019f0ef3-9fca-73f2-bbe1-f516eae40fad` found stale top-level review-basis
+  wording; this log-only correction replaces it with stable
+  `80714f3`...latest-branch-HEAD wording to avoid moving-target loops.
 
 ## Outcome
 
 Review round 1 fix pass verified at
 `a8ad2fad6070479f156cb54211b14f6bfdb80117`; the latest branch HEAD after
-review-round-1 fix and log cleanup is ready for formal re-review.
+review-round-2 log cleanup is ready for formal re-review.
