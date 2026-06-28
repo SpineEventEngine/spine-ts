@@ -686,3 +686,44 @@ Consequences:
   assembly.
 - Reviewers must verify that `T-0009a` does not introduce runtime registration,
   decorators, storage writes, buses, transport, or repository behavior.
+
+## D-0035: Implement explicit handler registration before decorators
+
+Status: Accepted
+
+Date: 2026-06-29
+
+Context: `T-0009b Handler Metadata Contract And Explicit Registration API`
+continues the entity/handler model after descriptor-derived entity metadata.
+The framework needs handler metadata for command assignment, command reaction,
+event subscription, event reaction, and event application before later
+transaction and runtime tasks can validate or invoke anything. TypeScript 5+
+standard decorators may be useful, but decorator behavior and metadata
+collection would add runtime/import-order questions before the core contract is
+proven.
+
+Decision: Implement an explicit OOP-style registration API first. It will bind
+generated Protobuf-ES schemas to entity class method names and produce frozen,
+deterministic handler metadata without instantiating entities or invoking
+methods. Decorator support in `T-0009c` must target the same metadata contract
+rather than inventing a parallel registration model.
+
+Alternatives considered:
+
+- Start with TypeScript decorators. Rejected because decorator metadata would
+  couple the first handler contract to import-time side effects and still need
+  an explicit fallback for users who avoid decorators.
+- Delay handler metadata until the transaction kernel. Rejected because
+  transaction validation needs a tested metadata surface and would otherwise
+  mix API design with execution semantics.
+- Build a full runtime registry immediately. Rejected because duplicate
+  registration and lookup validation can follow once the explicit definition
+  shape is stable.
+
+Consequences:
+
+- `@spine-ts/server` gets a deterministic, testable handler metadata surface
+  before runtime execution exists.
+- Later decorators can remain syntax sugar over explicit registration.
+- Reviewers must verify that `T-0009b` does not implement handler invocation,
+  transactions, repositories, buses, storage writes, or ZeroMQ transport.
