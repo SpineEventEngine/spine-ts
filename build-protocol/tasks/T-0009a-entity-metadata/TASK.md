@@ -1,6 +1,6 @@
 # T-0009a: Descriptor Option Surface And Entity Metadata
 
-Status: Final follow-up review complete; re-review handoff pending
+Status: Final branch verification passed; ready for integration handoff
 Start: `2026-06-28 22:48 WEST`
 End: Pending
 Setup baseline commit: `dd4a365`
@@ -240,7 +240,21 @@ pnpm verify` passed after one formatting retry (`10` files / `65` tests;
   `build-protocol/work-logs/T-0009a.md`, then `corepack pnpm prettier --write
 build-protocol/work-logs/T-0009a.md`, a passing rerun of
   `corepack pnpm prettier --check`, and a passing `corepack pnpm docs:check`.
+- Final one-file re-review package
+  `.superpowers/sdd/review-d4f7f7b..5b289a8.diff` reported all five reviewers
+  clean: maintainability/style `019f1083-c5ce-76a3-81a5-d07f04aef5f8`,
+  documentation `019f1083-ed62-7913-bc94-cc40bfc405bd`, TypeScript/API docs
+  `019f1084-0a62-7e33-9037-719f183f5ea7`, security
+  `019f1084-2dad-73c3-865c-aef521411eea`, and performance/reliability
+  `019f1084-4d97-71c1-a9b2-8780c769d469`.
+- Full branch verification with `CI=true corepack pnpm verify` passed on
+  `2026-06-29 00:16 WEST` in the T-0009a worktree: 10 test files / 65 tests
+  passed; coverage statements 99.41%, branches 94.11%, functions 100%, lines
+  99.39%; docs/API check confirmed 100 proto exports, 28 core exports, 11
+  server exports, and 26 storage exports; proto lint/generate/check-generated
+  passed; known non-blocking TypeDoc invalid-origin source-link warning
+  remains.
 - D-0034 records that entity metadata belongs in `@spine-ts/server` and
   `@spine-ts/proto` should add only narrow curated option exports.
 - No blocking questions known.
-- Next step: orchestrator re-review/final verification.
+- Next step: ready for orchestrator merge/integration on `main`.
