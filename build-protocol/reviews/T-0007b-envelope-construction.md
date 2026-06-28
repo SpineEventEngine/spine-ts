@@ -9,13 +9,16 @@ Round-1 reviewed commit/diff basis:
 `7d80347...2fe6850be59a78e6331b0b8cd84fa8fb0641b281`
 Implementation commit: `2fe6850be59a78e6331b0b8cd84fa8fb0641b281`
 Current branch tip before focused fix: `dfdf21e`
+Round-1 focused fix commit:
+`0353f8a2f877d082ea9d51bf8b09b5c9af55bdbf`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007b-envelope-construction`
 Reviewer sub-agents: Maintainability/style `019f0fcc-6b78-71a3-a363-688a5be1d662`;
 documentation `019f0fcc-a511-78b0-a79a-eb2f4740ab52`; TypeScript/API docs
 `019f0fcc-d16b-7c31-8a02-81a07c880947`; security
 `019f0fcc-fa19-7632-9b24-e2f678ad60c6`; performance/reliability
 `019f0fcd-2d90-7481-963d-7571d880095d`.
-Status: Round 1 findings under focused fix; re-review pending
+Status: Follow-up re-review clean except log-only restart-state fix; final
+lightweight re-review/final verification pending
 Implementation sub-agent: `019f0fc3-b699-76c2-a02f-a174936c045d` (Bacon)
 
 ## Reviewer IDs
@@ -54,6 +57,25 @@ Findings being addressed:
   type URL.
 - `packCommand()` and `packEvent()` should snapshot caller-supplied generated
   IDs and contexts before embedding them in envelopes.
+
+Focused fix committed as `0353f8a2f877d082ea9d51bf8b09b5c9af55bdbf`.
+
+## Follow-Up Re-Review
+
+Follow-up re-review reported:
+
+- Maintainability: no comments; verified `eventContext()` now uses `packAny()`.
+- Security: no comments.
+- TypeScript/API docs: no comments.
+- Documentation/API landing page: no comments besides stale durable log restart
+  state.
+- Runtime reliability helpers: no comments besides stale durable log restart
+  state.
+
+Remaining finding: update this review log, the task log, and the work log to
+record focused fix commit `0353f8a2f877d082ea9d51bf8b09b5c9af55bdbf`, the
+follow-up reports, and final verification/closure as the next step. This
+log-only fix itself requires final lightweight re-review/final verification.
 
 ## Verification Evidence
 
@@ -95,5 +117,7 @@ Original implementation evidence:
 
 ## Closure
 
-Round 1 is not closed. The focused fix will be committed and then the
-orchestrator must re-run the required reviewer roles.
+Round 1 is not closed by this log-only update. The focused fix has been
+committed and follow-up re-review was clean except for stale durable restart
+text; final lightweight re-review/final verification remains pending after this
+log-only fix commit.

@@ -185,6 +185,18 @@ Round-1 fix context recorded on `2026-06-28 21:00 WEST`:
   references in generated envelopes.
 - Round 1 remains open until reviewers are re-run after the focused fix commit.
 
+Round-1 focused fix follow-up recorded on `2026-06-28 21:13 WEST`:
+
+- Focused fix commit:
+  `0353f8a2f877d082ea9d51bf8b09b5c9af55bdbf`.
+- Follow-up re-review reports were clean for maintainability, security,
+  TypeScript/API docs, documentation/API landing page, and runtime reliability
+  helper behavior.
+- Remaining follow-up finding is log-only stale restart state in this task log,
+  the work log, and the review log.
+- This log-only edit requires final lightweight re-review/final verification;
+  round 1 is not closed by this note.
+
 ## Public API Shape
 
 Expected public `@spine-ts/core` additions:
