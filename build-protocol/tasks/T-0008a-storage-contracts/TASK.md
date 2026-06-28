@@ -1,13 +1,13 @@
 # T-0008a: Storage Contracts And In-Memory Adapter
 
-Status: Baseline verified; implementation handoff pending
+Status: Implementation in progress
 Start: `2026-06-28 21:35 WEST`
 End: Pending
 Setup baseline commit: `db7130e`
 Task log path: `build-protocol/tasks/T-0008a-storage-contracts/TASK.md`
 Branch: `task/T-0008a-storage-contracts`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0008a-storage-contracts`
-Authoring sub-agent: Pending
+Authoring sub-agent: `019f0ff4-becd-7c73-9f34-9120294e9083` (Darwin)
 Reviewer sub-agents: Pending
 Implementation baseline commit: `f1911d7`
 Final branch checkpoint before integration: Pending
@@ -130,5 +130,10 @@ reviewers report no comments.
   passed. Vitest ran 9 test files and 41 tests. Coverage: statements 99.44%,
   branches 91.83%, functions 100%, lines 99.44%. TypeDoc emitted the known
   invalid `origin` warning and confirmed 85 proto exports plus 28 core exports.
+- Implementation sub-agent `019f0ff4-becd-7c73-9f34-9120294e9083` (Darwin) was
+  spawned on `2026-06-28 21:38 WEST` with ownership of the T-0008a storage
+  contracts, in-memory adapter, docs/API updates, durable logs, and verification
+  evidence.
 - No blocking questions known.
-- Next step: dispatch the implementation sub-agent.
+- Next step: wait for implementation commit, then run the required five-role
+  review loop.
