@@ -1,6 +1,6 @@
 # T-0008a: Storage Contracts And In-Memory Adapter
 
-Status: Second follow-up fixes complete; pending re-review
+Status: Second follow-up review clean; pending final verification and integration
 Start: `2026-06-28 21:35 WEST`
 End: Pending
 Setup baseline commit: `db7130e`
@@ -14,7 +14,7 @@ documentation `019f1004-8374-7f33-a643-13e86daebd3a`; TypeScript/API docs
 `019f1004-de72-7b40-9915-5ecef92ba29e`; performance/reliability
 `019f1005-0746-7353-bcda-e6bb1ee956c9`.
 Implementation baseline commit: `0a6908e` (handoff), `f1911d7` recorded by setup logs
-Final branch checkpoint before integration: Pending second follow-up re-review
+Final branch checkpoint before integration: Pending final verification
 Main integration merge commit: Pending
 
 ## Objective
@@ -251,5 +251,10 @@ packages/storage/src/index.test.ts` passed with 1 file / 15 tests.
   `019f102a-4880-7570-a38f-dee1e90af241`, security
   `019f102a-4902-7ba0-8450-67abd0923979`, and performance/reliability
   `019f102a-497c-7450-ba7a-6f03c8c4d43d`.
+- Second follow-up re-review completed clean on `2026-06-28 22:40 WEST`:
+  all five required reviewers reported no comments. Security reran focused
+  storage tests; TypeScript/API reran focused storage tests, typecheck, docs
+  check, and diff check; maintainability, documentation, and reliability reran
+  focused storage tests or diff checks and reviewed the durable logs.
 - No blocking questions known.
-- Next step: collect second follow-up re-review reports.
+- Next step: run final branch verification, then integrate T-0008a into `main`.
