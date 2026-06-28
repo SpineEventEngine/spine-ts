@@ -1,13 +1,13 @@
 # T-0007b: Core Envelope Construction Helpers
 
-Status: Baseline verified; implementation handoff pending
+Status: Implementation in progress
 Start: `2026-06-28 20:45 WEST`
 End: Pending
 Setup baseline commit: `c313086`
 Task log path: `build-protocol/tasks/T-0007b-envelope-construction/TASK.md`
 Branch: `task/T-0007b-envelope-construction`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007b-envelope-construction`
-Authoring sub-agent: Pending
+Authoring sub-agent: `019f0fc3-b699-76c2-a02f-a174936c045d` (Bacon)
 Reviewer sub-agents: Pending
 Implementation baseline commit: `57fc257`
 Final branch checkpoint before integration: Pending
@@ -28,6 +28,13 @@ docs/API check, proto lint/generate, and generated-output cleanliness all
 passed. Vitest ran 9 test files and 35 tests. Coverage: statements 99.41%,
 branches 90.9%, functions 100%, lines 99.41%. TypeDoc emitted the known invalid
 `origin` warning and confirmed 85 proto exports plus 21 core exports.
+
+## Implementation Handoff
+
+Implementation sub-agent `019f0fc3-b699-76c2-a02f-a174936c045d` (Bacon) was
+spawned on `2026-06-28 20:44 WEST` with ownership of the T-0007b helper slice,
+TDD/logging requirements, and explicit scope exclusions for buses, storage,
+transport, entity transactions, and runtime ID/context factories.
 
 ## Objective
 
