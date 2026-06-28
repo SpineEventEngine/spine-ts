@@ -1,6 +1,6 @@
 # T-0009a: Descriptor Option Surface And Entity Metadata
 
-Status: Final follow-up review in progress
+Status: Final follow-up review complete; re-review handoff pending
 Start: `2026-06-28 22:48 WEST`
 End: Pending
 Setup baseline commit: `dd4a365`
@@ -233,5 +233,4 @@ pnpm verify` passed after one formatting retry (`10` files / `65` tests;
 - D-0034 records that entity metadata belongs in `@spine-ts/server` and
   `@spine-ts/proto` should add only narrow curated option exports.
 - No blocking questions known.
-- Next step: orchestrator re-review/final verification after this durable-log
-  correction commit.
+- Next step: orchestrator re-review/final verification.
