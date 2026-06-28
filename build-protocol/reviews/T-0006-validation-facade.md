@@ -5,11 +5,10 @@ Work log: `build-protocol/work-logs/T-0006.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Setup baseline commit: `62ffc33`
 Implementation baseline commit: `e953662`
-Reviewed commit/diff basis: Round 7 completed against
-`52e0a26...38bb610538834a4de74c68b813cd67af941bc2c1`.
+Reviewed commit/diff basis: Round 8 completed against `38bb610...5f215e3`.
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
-Reviewer sub-agents: Round 7 completed
-Status: Round-7 log fix ready for re-review
+Reviewer sub-agents: Round 8 completed
+Status: Round-8 clean; final verification pending
 
 ## Reviewer IDs
 
@@ -311,3 +310,33 @@ Findings:
 
 Disposition: correct top-level restart metadata and re-review this log-only
 change.
+
+## Round-7 Log Fix
+
+Log-fix commit: `5f215e3`.
+
+## Round 8
+
+Reviewed basis: `38bb610...5f215e3`.
+
+Reviewer IDs:
+
+- Code style/maintainability:
+  `019f0f7d-3843-7b12-9294-e594a97cd6f2`.
+- Documentation: `019f0f7d-38a6-72d2-a4f5-531b72693fca`.
+- TypeScript/API docs: `019f0f7d-3914-7023-8a9f-9ca4d068d6b4`.
+- Security: `019f0f7d-398b-7c61-8278-bdbc6a77b97a`.
+- Performance/reliability:
+  `019f0f7d-3a10-76d2-8e57-f1a589bc36b3`.
+
+Findings:
+
+- Code style/maintainability
+  `019f0f7d-3843-7b12-9294-e594a97cd6f2`: no comments.
+- Documentation `019f0f7d-38a6-72d2-a4f5-531b72693fca`: no comments.
+- TypeScript/API docs `019f0f7d-3914-7023-8a9f-9ca4d068d6b4`: no comments.
+- Security `019f0f7d-398b-7c61-8278-bdbc6a77b97a`: no comments.
+- Performance/reliability
+  `019f0f7d-3a10-76d2-8e57-f1a589bc36b3`: no comments.
+
+Disposition: final verification and integration.

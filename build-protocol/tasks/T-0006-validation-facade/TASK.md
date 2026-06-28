@@ -1,6 +1,6 @@
 # T-0006: Validation Facade
 
-Status: Round-7 log fix ready for re-review
+Status: Round-8 clean; final verification pending
 Start: `2026-06-28 17:22 WEST`
 End: Pending
 Setup baseline commit: `62ffc33`
@@ -9,7 +9,7 @@ Task log path: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Authoring sub-agent: T-0006a implementation sub-agent (Codex)
-Reviewer sub-agents: Round 7 completed
+Reviewer sub-agents: Round 8 completed
 Implementation commit: `4726985e1786929f5222707dc7abf77c448e8fa3`
 Review-finding log HEAD: `7d519d1f4555ffab058d1642065947355c0acf9e`
 Review-fix commit: `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`
@@ -31,7 +31,8 @@ Current branch HEAD before round-6 dispatch log: `2df2abf`
 Round-6 findings/log-fix commit: `38bb610538834a4de74c68b813cd67af941bc2c1`
 Latest completed review basis:
 `52e0a26...38bb610538834a4de74c68b813cd67af941bc2c1`
-Final branch HEAD: reserved for integration closure
+Round-7 findings/log-fix commit: `5f215e3`
+Final branch HEAD: pending final verification and integration closure
 
 ## Objective
 
@@ -781,3 +782,12 @@ Round 7 reviewed focused log-fix basis
 - Security `019f0f79-63eb-7f51-917c-381d6fddb5f6`: no comments.
 - Performance/reliability `019f0f79-64cd-7803-b8db-558867e02d4d`: requested
   the same restart metadata correction for the `38bb610` head.
+
+Round 8 reviewed focused log-fix basis `38bb610...5f215e3`:
+
+- Maintainability `019f0f7d-3843-7b12-9294-e594a97cd6f2`: no comments.
+- Documentation `019f0f7d-38a6-72d2-a4f5-531b72693fca`: no comments.
+- TypeScript/API docs `019f0f7d-3914-7023-8a9f-9ca4d068d6b4`: no comments.
+- Security `019f0f7d-398b-7c61-8278-bdbc6a77b97a`: no comments.
+- Performance/reliability `019f0f7d-3a10-76d2-8e57-f1a589bc36b3`: no
+  comments.
