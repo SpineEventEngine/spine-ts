@@ -149,7 +149,10 @@ const unpacked = unpackAny(any, CreateTaskSchema);
 messages use `type.spine.io/...` when their `.proto` file declares the Spine
 `type_url_prefix` option. The helper serializes with Protobuf-ES binary
 serialization and validates the enclosed message by default. Pass
-`{ validate: false }` only for already-trusted messages.
+`{ validate: false }` only for already-trusted messages. Framework packing omits
+unknown fields for stable helper output, but this slice does not claim fully
+canonical map ordering because Protobuf-ES 2.12.1 does not provide a
+deterministic map-order option.
 
 Command and event helpers wrap the same packing behavior in generated Spine
 envelopes:
@@ -176,7 +179,9 @@ The caller supplies generated IDs and contexts. The core helpers do not create
 UUIDs, timestamps, actor/tenant contexts, producer IDs, versions, origins,
 system properties, bus deliveries, storage records, or transport metadata.
 Validation errors are structured through `ValidationException` and do not expose
-packed bytes or payload contents.
+packed bytes or payload contents. `unpackAny()` returns `undefined` for type URL
+mismatches or malformed payload bytes. Command and event envelopes snapshot the
+supplied generated IDs and contexts before returning.
 
 ## First Commands
 

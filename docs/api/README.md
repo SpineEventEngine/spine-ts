@@ -17,9 +17,14 @@ use `createSpineCoreRegistry()` or `TypeRegistry`. The validation facade
 documents its safe-by-default error details, including redacted upstream and
 transition-rule placeholder values, omitted raw field values, sanitized
 rule-returned transition violations, and structured runtime/rule failure
-violations. The generated Protobuf-ES implementation files themselves remain
-excluded from TypeDoc output and are not broadly re-exported from the package
-root.
+violations. Core envelope construction exports include `packAny()`,
+`unpackAny()`, `packCommand()`, `packEvent()`, `PackAnyOptions`,
+`PackCommandInput`, and `PackEventInput`. These helpers document Spine-aware
+`Any` type URLs, validation-before-packing defaults, unknown-field elision for
+framework-packed payloads, safe `undefined` results for type URL mismatches or
+malformed payload bytes, and caller-supplied ID/context snapshot behavior. The
+generated Protobuf-ES implementation files themselves remain excluded from
+TypeDoc output and are not broadly re-exported from the package root.
 
 Run:
 

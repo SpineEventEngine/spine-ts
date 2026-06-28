@@ -172,6 +172,19 @@ Implementation sub-agent skill gate recorded on `2026-06-28 20:47 WEST`:
 - `receiving-code-review` applies to evaluating existing review/task constraints
   before changing code.
 
+Round-1 fix context recorded on `2026-06-28 21:00 WEST`:
+
+- Implementation commit under review:
+  `2fe6850be59a78e6331b0b8cd84fa8fb0641b281`.
+- Round-1 review basis:
+  `7d80347...2fe6850be59a78e6331b0b8cd84fa8fb0641b281`.
+- Dispatch-log commit `dfdf21e` is preserved on the branch.
+- Findings under focused fix: stale durable logs, API landing page omission,
+  test packing-policy duplication, unknown-field retention during packing,
+  unsafe malformed `Any` unpacking, and mutable caller-supplied ID/context
+  references in generated envelopes.
+- Round 1 remains open until reviewers are re-run after the focused fix commit.
+
 ## Public API Shape
 
 Expected public `@spine-ts/core` additions:

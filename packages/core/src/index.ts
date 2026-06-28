@@ -1,4 +1,4 @@
-import { create, fromBinary, getOption, hasOption, toBinary } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, getOption, hasOption, toBinary } from "@bufbuild/protobuf";
 import type { DescField, Message, MessageShape } from "@bufbuild/protobuf";
 import type { GenExtension, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { AnySchema, type Any, type FileOptions } from "@bufbuild/protobuf/wkt";
@@ -285,7 +285,12 @@ export function deriveTypeUrl(schema: MessageSchema, options: DeriveTypeUrlOptio
   return `${typeUrlPrefix.replace(/\/+$/u, "")}/${schema.typeName}`;
 }
 
-/** Pack a Protobuf-ES message into `Any` using Spine type URL derivation. */
+/**
+ * Pack a Protobuf-ES message into `Any` using Spine type URL derivation.
+ *
+ * Unknown fields are omitted from the serialized payload for stable framework
+ * packing. Protobuf-ES 2.12.1 does not expose deterministic map-key ordering.
+ */
 export function packAny<Schema extends MessageSchema>(
   schema: Schema,
   message: MessageShape<Schema>,
@@ -297,7 +302,7 @@ export function packAny<Schema extends MessageSchema>(
 
   return create(AnySchema, {
     typeUrl: deriveTypeUrl(schema),
-    value: toBinary(schema, message),
+    value: toBinary(schema, message, { writeUnknownFields: false }),
   });
 }
 
@@ -310,7 +315,11 @@ export function unpackAny<Schema extends MessageSchema>(
     return undefined;
   }
 
-  return fromBinary(schema, packed.value);
+  try {
+    return fromBinary(schema, packed.value);
+  } catch {
+    return undefined;
+  }
 }
 
 /** Create a generated Spine `Command` envelope from a caller-supplied payload, ID, and context. */
@@ -318,18 +327,18 @@ export function packCommand<Schema extends MessageSchema>(
   input: PackCommandInput<Schema>,
 ): Command {
   return create(CommandSchema, {
-    id: input.id,
+    id: clone(CommandIdSchema, input.id),
     message: packAny(input.schema, input.message, input),
-    context: input.context,
+    context: clone(CommandContextSchema, input.context),
   });
 }
 
 /** Create a generated Spine `Event` envelope from a caller-supplied payload, ID, and context. */
 export function packEvent<Schema extends MessageSchema>(input: PackEventInput<Schema>): Event {
   return create(EventSchema, {
-    id: input.id,
+    id: clone(EventIdSchema, input.id),
     message: packAny(input.schema, input.message, input),
-    context: input.context,
+    context: clone(EventContextSchema, input.context),
   });
 }
 

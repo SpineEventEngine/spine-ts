@@ -110,8 +110,12 @@ const unpacked = unpackAny(any, CreateTaskSchema);
 `packAny()` validates the enclosed message through the core validation facade by
 default and throws `ValidationException` for structured validation failures. Set
 `{ validate: false }` only when the caller has already validated a trusted
-message. The helpers do not include packed bytes or payload contents in their
-validation errors.
+message. Framework-packed payloads omit unknown fields for stable binary output
+inside this helper seam. Protobuf-ES 2.12.1 does not expose deterministic
+map-key ordering, so this package does not claim fully canonical map ordering in
+T-0007b. The helpers do not include packed bytes or payload contents in their
+validation errors, and `unpackAny()` returns `undefined` for type URL mismatches
+or malformed payload bytes.
 
 Use `packCommand()` and `packEvent()` to create generated Spine envelopes:
 
@@ -136,7 +140,8 @@ const event = packEvent({
 The caller supplies generated IDs and generated contexts. These helpers do not
 generate UUIDs, timestamps, actor or tenant context, producer IDs, versions,
 origins, system properties, storage records, bus deliveries, or transport
-metadata.
+metadata. The helpers snapshot supplied IDs and contexts before embedding them
+in the returned envelope.
 
 This package does not yet implement runtime buses, entity repositories, storage,
 decorators, handlers, or transport behavior.

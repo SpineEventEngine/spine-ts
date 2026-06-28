@@ -1,4 +1,4 @@
-import { create, toBinary } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
@@ -79,12 +79,16 @@ function eventContext() {
   const producerId = create(UserIdSchema, { value: "aggregate-1" });
 
   return create(EventContextSchema, {
-    producerId: create(AnySchema, {
-      typeUrl: deriveTypeUrl(UserIdSchema),
-      value: toBinary(UserIdSchema, producerId),
-    }),
+    producerId: packAny(UserIdSchema, producerId),
     version: create(VersionSchema, { number: 1 }),
   });
+}
+
+function fieldPathWithUnknownFields() {
+  const encoded = toBinary(FieldPathSchema, create(FieldPathSchema, { fieldName: ["task"] }));
+  const unknownField = new Uint8Array([0x98, 0x06, 0x7b]);
+
+  return fromBinary(FieldPathSchema, new Uint8Array([...encoded, ...unknownField]));
 }
 
 describe("@spine-ts/core type registry", () => {
@@ -500,6 +504,25 @@ describe("@spine-ts/core envelope packing", () => {
     expect(unpackAny(packed, ValidationErrorSchema)).toBeUndefined();
   });
 
+  it("omits unknown fields from framework-packed Any payloads by default", () => {
+    const message = fieldPathWithUnknownFields();
+
+    const packed = packAny(FieldPathSchema, message);
+    const stableBytes = toBinary(FieldPathSchema, message, { writeUnknownFields: false });
+
+    expect(toBinary(FieldPathSchema, message)).not.toEqual(stableBytes);
+    expect(packed.value).toEqual(stableBytes);
+  });
+
+  it("returns undefined instead of throwing when matching Any payload bytes are malformed", () => {
+    const malformed = create(AnySchema, {
+      typeUrl: deriveTypeUrl(FieldPathSchema),
+      value: new Uint8Array([0xff]),
+    });
+
+    expect(unpackAny(malformed, FieldPathSchema)).toBeUndefined();
+  });
+
   it("lets callers opt out of payload validation when packing already-trusted messages", () => {
     const invalidMessage = create(RequiredNameSchema, { name: "" });
 
@@ -530,6 +553,15 @@ describe("@spine-ts/core envelope packing", () => {
     expect(command.message?.typeUrl).toBe(deriveTypeUrl(FieldPathSchema));
     expect(command.message?.value).toEqual(toBinary(FieldPathSchema, message));
     expect(unpackAny(command.message ?? create(AnySchema), FieldPathSchema)).toEqual(message);
+
+    id.uuid = "mutated-command-id";
+    if (context.actorContext?.actor === undefined) {
+      throw new Error("Expected command context actor fixture.");
+    }
+    context.actorContext.actor.value = "mutated-user";
+
+    expect(command.id?.uuid).toBe("command-id-from-caller");
+    expect(command.context?.actorContext?.actor?.value).toBe("user-1");
   });
 
   it("packs caller-supplied event IDs and contexts without generating producer policy", () => {
@@ -550,5 +582,14 @@ describe("@spine-ts/core envelope packing", () => {
     expect(event.message?.typeUrl).toBe(deriveTypeUrl(FieldPathSchema));
     expect(event.message?.value).toEqual(toBinary(FieldPathSchema, message));
     expect(unpackAny(event.message ?? create(AnySchema), FieldPathSchema)).toEqual(message);
+
+    id.value = "mutated-event-id";
+    if (context.version === undefined) {
+      throw new Error("Expected event context version fixture.");
+    }
+    context.version.number = 99;
+
+    expect(event.id?.value).toBe("event-id-from-caller");
+    expect(event.context?.version?.number).toBe(1);
   });
 });
