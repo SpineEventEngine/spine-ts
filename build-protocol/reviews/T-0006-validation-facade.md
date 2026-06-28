@@ -5,10 +5,10 @@ Work log: `build-protocol/work-logs/T-0006.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Setup baseline commit: `62ffc33`
 Implementation baseline commit: `e953662`
-Reviewed commit/diff basis: `e953662...0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`
+Reviewed commit/diff basis: `e953662...ce710950aee9e0885aa9e2e15dced54de290b2f1`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
-Reviewer sub-agents: Round 2 dispatched
-Status: Review round 2 in progress
+Reviewer sub-agents: Round 2 completed; changes requested
+Status: Changes requested after review round 2
 
 ## Reviewer IDs
 
@@ -55,7 +55,7 @@ request round 2 after tests, docs, logs, verification, and commit are complete.
 Review-fix commit: `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`.
 
 Current disposition: review-fix implementation and final verification are
-complete; round-2 reviewer dispatch is in progress.
+complete; round-2 reviewer reports collected.
 
 Round 2 reviewer IDs:
 
@@ -65,7 +65,26 @@ Round 2 reviewer IDs:
 - Security: `019f0f4a-5a13-75e3-9221-16a7d342d42a`
 - Performance/reliability: `019f0f4a-9613-7cc3-99b2-beb74fc488e9`
 
-Reviewed basis: `e953662...34927dd`.
+Reviewed basis: `e953662...34927dd`; log-only head during review advanced to
+`ce710950aee9e0885aa9e2e15dced54de290b2f1`.
+
+Findings:
+
+- Code style/maintainability
+  `019f0f49-b902-7dc0-89ee-e488ba2be193`: no comments.
+- Documentation `019f0f49-f2cf-7da3-8b04-64d7c0039d38`: requested stale
+  durable-log headers be updated so status, current head, and reviewed basis are
+  internally consistent after round-2 dispatch.
+- TypeScript/API docs `019f0f4a-25f3-7a63-9634-58737bb105c0`: no comments.
+- Security `019f0f4a-5a13-75e3-9221-16a7d342d42a`: requested strict
+  safe-by-default placeholder redaction because upstream placeholder keys are
+  unrestricted and can carry sensitive payload values under arbitrary names.
+- Performance/reliability `019f0f4a-9613-7cc3-99b2-beb74fc488e9`: requested
+  stale branch-head and reviewed-basis metadata be corrected for restart-safe
+  traceability.
+
+Disposition: Feed the strict placeholder-redaction and durable-log consistency
+comments back to the authoring sub-agent for a focused review-fix pass.
 
 ## Closure
 

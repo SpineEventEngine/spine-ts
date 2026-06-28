@@ -1,6 +1,6 @@
 # T-0006: Validation Facade
 
-Status: Review-fix pass complete; ready for round 2
+Status: Changes requested after review round 2
 Start: `2026-06-28 17:22 WEST`
 End: Pending
 Setup baseline commit: `62ffc33`
@@ -9,12 +9,12 @@ Task log path: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Authoring sub-agent: T-0006a implementation sub-agent (Codex)
-Reviewer sub-agents: Round 2 dispatched
+Reviewer sub-agents: Round 2 completed; changes requested
 Implementation commit: `4726985e1786929f5222707dc7abf77c448e8fa3`
 Review-finding log HEAD: `7d519d1f4555ffab058d1642065947355c0acf9e`
 Review-fix commit: `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`
-Current branch HEAD: `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`
-Final branch HEAD: Pending round-2 review closure
+Current branch HEAD: `ce710950aee9e0885aa9e2e15dced54de290b2f1`
+Final branch HEAD: Pending round-2 fix pass
 
 ## Objective
 
@@ -267,6 +267,9 @@ Out of scope:
 - `2026-06-28 18:31 WEST`: Dispatched round-2 reviewer sub-agents for
   maintainability, documentation, TypeScript/API docs, security, and
   performance/reliability.
+- `2026-06-28 18:36 WEST`: Recorded round-2 reviewer findings; strict
+  placeholder redaction and durable-log metadata fixes are required before
+  re-review.
 - `2026-06-28 17:36 WEST`: T-0006a implementation sub-agent performed the
   canonical skill applicability check, confirmed the assigned isolated
   worktree, and recorded selected/skipped skills before implementation edits.
@@ -514,6 +517,15 @@ pnpm docs:check` passed and confirmed 13 expected `@spine-ts/proto` exports
 - Review-fix pass completed in
   `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`; round-2 reviewer dispatch is
   in progress.
+- Round 2 completed:
+  - Maintainability reported no comments.
+  - Documentation requested stale durable-log headers be made internally
+    consistent after round-2 dispatch.
+  - TypeScript/API docs reported no comments.
+  - Security requested strict safe-by-default redaction for all upstream
+    placeholder values, because placeholder keys are unrestricted.
+  - Performance/reliability requested stale branch-head and reviewed-basis
+    metadata be corrected.
 
 ## Integration Result
 
