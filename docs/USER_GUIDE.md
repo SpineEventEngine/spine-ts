@@ -28,6 +28,7 @@ The framework does not yet expose runnable Spine-compatible behavior. This guide
 pnpm install
 pnpm proto:verify
 pnpm proto:generate
+pnpm docs:check
 pnpm verify
 ```
 

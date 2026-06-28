@@ -282,17 +282,23 @@ upstream provenance before copying or generating any contracts.
 Decision: T-0004 will copy proto files verbatim from exact GitHub raw URLs at
 the researched commits recorded in `spine-jvm-docs/README.md`, starting with:
 
-- `SpineEventEngine/base` commit `43b55858c410` for `spine/options.proto` and
-  base/string transitive dependencies.
-- `SpineEventEngine/validation` commit `6aec69016818` for
+- `SpineEventEngine/base` commit
+  `43b55858c410eaf79fc594ca6f3f3eab0daca027` for `spine/options.proto`
+  and base/string transitive dependencies.
+- `SpineEventEngine/validation` commit
+  `6aec690168182866876584dab7c5a0b220b9b493` for
   `spine/validation/validation_error.proto`.
-- `SpineEventEngine/time` commit `0d0251c1495f` only if the T-0004 minimal
+- `SpineEventEngine/time` commit
+  `0d0251c1495f4dc5a383ef2d6b8b2a0e405a327d` only if the T-0004 minimal
   intake includes `spine/time_options.proto` or time message dependencies.
 
 T-0004 must add a manifest or verification mechanism that records source
-repository, commit, upstream path, local path, and a checksum for each copied
-file. Buf and Protobuf-ES generation remain the only supported TypeScript
-generation path.
+repository, full commit, upstream path, canonical source/raw URLs, local path,
+and a checksum for each copied file. The default verification remains
+network-free: it validates the manifest shape, copied file set, safe local
+paths, and local SHA-256 checksums rather than fetching upstream on every run.
+Buf and Protobuf-ES generation remain the only supported TypeScript generation
+path.
 
 Alternatives considered:
 

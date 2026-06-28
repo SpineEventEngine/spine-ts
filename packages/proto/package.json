@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Spine TS Protobuf contract package skeleton.",
+  "description": "Spine TS generated Protobuf-ES schema exports.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",

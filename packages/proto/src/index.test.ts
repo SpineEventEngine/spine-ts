@@ -20,6 +20,8 @@ interface ProtoSourceManifest {
     readonly repository: string;
     readonly commit: string;
     readonly upstreamPath: string;
+    readonly sourceUrl: string;
+    readonly rawUrl: string;
     readonly sha256: string;
   }[];
 }
@@ -38,8 +40,10 @@ describe("@spine-ts/proto", () => {
       const actual = createHash("sha256").update(contents).digest("hex");
 
       expect(source.repository).toMatch(/^SpineEventEngine\//);
-      expect(source.commit).toMatch(/^[0-9a-f]{12}$/);
+      expect(source.commit).toMatch(/^[0-9a-f]{40}$/);
       expect(source.upstreamPath).toMatch(/\.proto$/);
+      expect(source.sourceUrl).toContain(source.commit);
+      expect(source.rawUrl).toContain(source.commit);
       expect(actual).toBe(source.sha256);
     }
   });

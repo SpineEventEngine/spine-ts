@@ -1,6 +1,6 @@
 # T-0004: Spine Proto Intake And Protobuf-ES Generation
 
-Status: Implementation complete; pending reviewer rounds
+Status: Round 1 fixes verified; ready for Round 2 review
 Start: `2026-06-28 12:40 WEST`
 End: `2026-06-28 12:54 WEST`
 Baseline commit: `6ce0b65`
@@ -8,9 +8,9 @@ Task log path: `build-protocol/tasks/T-0004-proto-intake/TASK.md`
 Branch: `task/T-0004-proto-intake`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0004-proto-intake`
 Authoring sub-agent: T-0004 implementation sub-agent
-Reviewer sub-agents: Pending
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
+Reviewer sub-agents: Round 1 complete; agents closed by orchestrator
+Implementation commit: `b66f2db2c2d98d41f3f5c6da53ed81a7fd73d6ad`
+Round 2 handoff basis: `main...HEAD` after the round-1 fix commit
 
 ## Objective
 
@@ -177,6 +177,20 @@ Out of scope:
   Spine proto closure, added manifest checksum verification, made Buf lint and
   generation real, generated Protobuf-ES output, exported generated schemas
   from `@spine-ts/proto`, updated docs, and ran full verification.
+- `2026-06-28 13:06 WEST`: Received consolidated round-1 review findings from
+  all five reviewer roles, read `receiving-code-review`, verified each required
+  fix against the current codebase, and started the follow-up fix pass.
+- `2026-06-28 13:14 WEST`: Implemented round-1 fixes for manifest hardening,
+  full upstream SHAs/source URLs, generated-output drift detection, Buf spawn
+  diagnostics, documentation status, TypeDoc JSON evidence, and review-log
+  dispositions.
+- `2026-06-28 13:20 WEST`: Refreshed pnpm install metadata after CI-mode
+  dependency settings, tightened source/raw URL commit matching in the
+  manifest verifier, and reran focused provenance tests.
+- `2026-06-28 13:23 WEST`: Ran the final round-1 fix verification set,
+  including CI verification, explicit proto verification/lint/generation,
+  focused tests, TypeDoc JSON export check, generated-output drift check, and
+  `git diff --check main...HEAD`.
 
 ## Decisions
 
@@ -197,11 +211,13 @@ Out of scope:
 - `build-protocol/reviews/T-0004-proto-intake.md`
 - `build-protocol/tasks/T-0004-proto-intake/TASK.md`
 - `build-protocol/work-logs/T-0004.md`
+- `README.md`
 - `docs/USER_GUIDE.md`
 - `docs/api/README.md`
 - `docs/architecture/README.md`
 - `package.json`
 - `packages/proto/README.md`
+- `packages/proto/package.json`
 - `packages/proto/src/generated/spine/options_pb.ts`
 - `packages/proto/src/generated/spine/base/field_path_pb.ts`
 - `packages/proto/src/generated/spine/string/template_string_pb.ts`
@@ -215,8 +231,12 @@ Out of scope:
 - `proto/spine/base/field_path.proto`
 - `proto/spine/string/template_string.proto`
 - `proto/spine/validation/validation_error.proto`
+- `scripts/check-api-docs.mjs`
+- `scripts/check-generated-clean.mjs`
 - `scripts/proto-workflow.mjs`
 - `scripts/verify-proto-sources.mjs`
+- `scripts/verify-proto-sources.test.mjs`
+- `vitest.config.ts`
 
 ## Tests Run
 
@@ -226,6 +246,10 @@ Out of scope:
 - `pnpm proto:generate`: verified 4 checksums and ran Buf generation.
 - `CI=true pnpm verify`: exited 0 after `CI=true pnpm install` refreshed pnpm
   dependency metadata for CI mode.
+- Round-1 focused checks before full verification:
+  `pnpm test -- packages/proto/src/index.test.ts scripts/verify-proto-sources.test.mjs`
+  reported 8 test files and 12 tests passing; `pnpm docs:check` verified
+  TypeDoc JSON includes 9 expected `@spine-ts/proto` exports.
 
 ## Coverage Result
 
@@ -268,6 +292,26 @@ Out of scope:
   and 0 errors.
 - `CI=true pnpm verify`: exited 0, including node check, typecheck, lint,
   format, tests, coverage, docs, proto lint, and proto generation.
+- Round-1 final full verification completed after log updates.
+- Round-1 focused checks after fixes:
+  `pnpm test -- packages/proto/src/index.test.ts scripts/verify-proto-sources.test.mjs`
+  reported 8 test files and 12 tests passing; `pnpm proto:verify` verified 4
+  copied Spine proto source file checksums.
+- Round-1 final verification:
+  - `CI=true pnpm verify`: exited 0; included node check, typecheck, lint,
+    format, 8 test files/12 tests, coverage, docs check, proto lint,
+    proto generation, and generated-output cleanliness.
+  - `pnpm proto:verify`: exited 0; verified 4 copied Spine proto source file
+    checksums.
+  - `pnpm proto:lint`: exited 0 through `scripts/proto-workflow.mjs`.
+  - `pnpm proto:generate`: exited 0 through `scripts/proto-workflow.mjs`.
+  - `pnpm test -- packages/proto/src/index.test.ts scripts/verify-proto-sources.test.mjs`:
+    exited 0; 8 test files and 12 tests passed.
+  - `pnpm docs:check`: exited 0; TypeDoc reported the known invalid `origin`
+    warning with 0 errors, and the JSON check found 9 expected
+    `@spine-ts/proto` exports.
+  - `pnpm proto:check-generated`: exited 0; generated proto output was clean.
+  - `git diff --check main...HEAD`: exited 0.
 
 ## Open Risks And Follow-Up Routing
 
@@ -279,10 +323,11 @@ Out of scope:
 
 ## Review Rounds
 
-- Pending independent reviewer sub-agents. Author handoff basis:
-  `main...task/T-0004-proto-intake` after the implementation commit from
-  baseline `6ce0b65`.
+- Round 1 complete on `main...HEAD` at
+  `b66f2db2c2d98d41f3f5c6da53ed81a7fd73d6ad`; changes requested.
+- Round 1 fix pass implemented in this follow-up state. Round 2 reviewer
+  handoff basis is `main...HEAD` after the follow-up fix commit.
 
 ## Integration Result
 
-Pending reviewer rounds and orchestrator integration.
+Pending round 2 review and orchestrator integration.

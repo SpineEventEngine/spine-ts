@@ -21,6 +21,9 @@ Run:
 pnpm proto:verify
 pnpm proto:lint
 pnpm proto:generate
+pnpm proto:check-generated
 ```
 
-The copied source manifest is `proto/spine-sources.json`.
+The copied source manifest is `proto/spine-sources.json`. Verification is
+network-free by default: it checks manifest shape, exact copied-file set, safe
+paths, and local SHA-256 checksums against the pinned source metadata.
