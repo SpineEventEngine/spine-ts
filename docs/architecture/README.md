@@ -6,15 +6,18 @@ Architecture documentation starts from the build protocol and specification docu
 
 ## Proto Contract Boundary
 
-The `proto/` tree now contains the first verbatim copied Spine contract closure.
-`@spine-ts/proto` compiles those contracts and exposes a curated root API with
-the first-intake Protobuf-ES schemas, descriptors, message types, and custom
-options. This boundary is intentionally contract-only:
+The `proto/` tree now contains the first verbatim copied Spine contract
+closures. `@spine-ts/proto` compiles those contracts and exposes a curated root
+API with Protobuf-ES schemas, descriptors, message types, enum descriptors, enum
+values, and custom options. This boundary is intentionally contract-only:
 
 - generated schemas are available for later metadata and validation tasks;
 - copied source provenance is verified by `proto/spine-sources.json`;
-- runtime `Any` packing/unpacking, validation facade behavior, buses, storage,
-  and transport remain out of scope until later tasks.
+- canonical `Command`, `Event`, `ActorContext`, `TenantId`, `UserId`,
+  `Version`, diagnostics, enrichment, and transitive time/net/UI support
+  contracts are available without hand-written TypeScript shapes; and
+- high-level `Any` packing/unpacking, command/event factory helpers, buses,
+  storage, and transport remain out of scope until later tasks.
 
 ## Core Metadata Registry
 
@@ -24,9 +27,9 @@ URLs from descriptor file options, and exposes immutable metadata by full type
 name, type URL, and schema identity.
 
 The shared `spineCoreRegistry` export is a read-only lookup view over the
-curated schemas. Mutable registration stays on caller-owned `TypeRegistry`
-instances, including those returned by `createSpineCoreRegistry()`, to avoid
-process-wide state mutation.
+curated schemas, including the core signal envelope/context closure. Mutable
+registration stays on caller-owned `TypeRegistry` instances, including those
+returned by `createSpineCoreRegistry()`, to avoid process-wide state mutation.
 
 The registry fails fast on duplicate full names, duplicate type URLs, and
 conflicting descriptor identities. This intentionally differs from the JVM

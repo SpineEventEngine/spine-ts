@@ -1,0 +1,196 @@
+/*
+ * Copyright 2022, TeamDev. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Redistribution and use in source and/or binary forms, with or without
+ * modification, must retain the above copyright notice and the following
+ * disclaimer.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+syntax = "proto3";
+
+package spine.core;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option java_package = "io.spine.core";
+option java_multiple_files = true;
+option java_outer_classname = "EventProto";
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+
+import "spine/core/actor_context.proto";
+import "spine/core/command.proto";
+import "spine/core/diagnostics.proto";
+import "spine/core/enrichment.proto";
+import "spine/core/version.proto";
+
+// Event identifier.
+message EventId {
+    option (is).java_type = "io.spine.core.EventIdMixin";
+    option (SPI_type) = true;
+
+    // A value of the event identifier.
+    //
+    // In most cases it would be a generated UUID-based string.
+    //
+    string value = 1;
+}
+
+// `Event` is something, which happened in the past.
+//
+// An event consists of two parts: event message and its context.
+//
+// The `message` is the domain model part of the event.
+// Event messages are named in the past tense.
+//
+// The type of the event is defined by the type of the enclosed message.
+// When we speak about an 'event' as a typed thing, we refer to the message of the event.
+//
+// An event subscriber uses the type of the event message to receive events of this type.
+//
+// There can be multiple subscribers per event type.
+//
+// The event context contains attributes common for all events.
+// It can also contain additional attributes added by the code handling the event.
+//
+// There is a special case of an event - a rejection event.
+// A rejection event represents erroneous conditions in business, which do not allow to execute
+// a command. The event is a rejection event if the `EventContext.rejection` field is present.
+//
+// See `EventContext.rejection` to determine the event kind.
+//
+message Event {
+    option (is).java_type = "EventMixin";
+    option (SPI_type) = true;
+
+    // The ID of the event.
+    EventId id = 1 [(required) = true];
+
+    // The message of the event wrapped into `Any`.
+    google.protobuf.Any message = 2 [(required) = true, (validate) = true];
+
+    // The context of the event.
+    EventContext context = 3 [(required) = true];
+}
+
+// Meta-information for an event.
+message EventContext {
+    option (is).java_type = "EventContextMixin";
+    option (SPI_type) = true;
+
+    // When the event occurred.
+    google.protobuf.Timestamp timestamp = 1 [(required) = true];
+
+    oneof origin {
+        // The context of the command that generated this event.
+        CommandContext command_context = 2 [(validate) = true, deprecated = true];
+
+        // The context of the event that generated this event.
+        EventContext event_context = 6 [(validate) = true, deprecated = true];
+
+        Origin past_message = 14 [(validate) = true];
+
+        // The event was imported using this `ActorContext`.
+        ActorContext import_context = 11 [(validate) = true];
+    }
+
+    // An ID of the origin message.
+    //
+    // The case of this `oneof` is always the same as the case of `origin` (except for
+    // the `import_context`, which does not have a corresponding field in `origin_id`).
+    //
+    // The `origin` and `origin_id` groups are not merged for the reasons of binary compatibility.
+    //
+    oneof origin_id {
+
+        // The ID of the origin command.
+        CommandId command_id = 12 [deprecated = true];
+
+        // The ID of the origin event.
+        EventId event_id = 13 [deprecated = true];
+    }
+
+    // An ID of the root command, which lead to this event.
+    //
+    // If the event is a reaction to another event, then this attribute holds the identifier
+    // of the very first command in this chain.
+    //
+    // This field is not populated if the event was imported.
+    //
+    CommandId root_command_id = 9 [deprecated = true];
+
+    // The ID of the entity that generated the event.
+    //
+    // Examples of event producers are: aggregates, process managers.
+    //
+    google.protobuf.Any producer_id = 3 [(required) = true];
+
+    // The version of the entity after the event was applied.
+    Version version = 4 [(validate) = true];
+
+    // Optional enrichment of the event.
+    Enrichment enrichment = 5;
+
+    // An internal runtime attribute, which marks an event as external to the `BoundedContext`
+    // in which the event is being processed.
+    bool external = 8 [(internal) = true];
+
+    // The context of the associated rejection event.
+    //
+    // If the associated event is a rejection event, this field is present.
+    //
+    RejectionEventContext rejection = 10;
+
+    // Deleted fields.
+    reserved 7;
+    reserved "rejection_context";
+}
+
+// Meta-information about a rejection event.
+//
+message RejectionEventContext {
+    option (SPI_type) = true;
+
+    core.Command command = 3;
+
+    // A stacktrace of from the code, which generated the rejection message (if available).
+    string stacktrace = 2;
+
+    // The message of the command that caused the rejection.
+    google.protobuf.Any command_message = 1 [deprecated = true];
+}
+
+// Enumeration of possible event validation technical error reasons.
+enum EventValidationError {
+
+    // Reserved value.
+    UNKNOWN_REASON = 0;
+
+    // The event type is not supported by the server.
+    UNSUPPORTED_EVENT = 1;
+
+    // The event message is invalid according to custom Protobuf options set.
+    INVALID_EVENT = 2;
+
+    // The event was already handled before.
+    DUPLICATE_EVENT = 3;
+}

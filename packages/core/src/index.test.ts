@@ -5,12 +5,18 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import {
+  ActorContextSchema,
+  CommandSchema,
   type ConstraintViolation,
   ConstraintViolationSchema,
+  EventSchema,
   FieldPathSchema,
   TemplateStringSchema,
+  TenantIdSchema,
+  UserIdSchema,
   type ValidationError,
   ValidationErrorSchema,
+  VersionSchema,
   file_spine_options,
   type_url_prefix,
 } from "@spine-ts/proto";
@@ -180,6 +186,21 @@ describe("@spine-ts/core type registry", () => {
     expect(spineCoreRegistry.getByFullName("spine.validation.ConstraintViolation").schema).toBe(
       ConstraintViolationSchema,
     );
+  });
+
+  it("registers representative core signal envelope and context schemas", () => {
+    const registry = createSpineCoreRegistry();
+
+    expect(registry.getBySchema(CommandSchema).typeUrl).toBe("type.spine.io/spine.core.Command");
+    expect(registry.getBySchema(EventSchema).typeUrl).toBe("type.spine.io/spine.core.Event");
+    expect(registry.getBySchema(ActorContextSchema).typeUrl).toBe(
+      "type.spine.io/spine.core.ActorContext",
+    );
+    expect(registry.getBySchema(TenantIdSchema).typeUrl).toBe("type.spine.io/spine.core.TenantId");
+    expect(registry.getBySchema(UserIdSchema).typeUrl).toBe("type.spine.io/spine.core.UserId");
+    expect(registry.getBySchema(VersionSchema).typeUrl).toBe("type.spine.io/spine.core.Version");
+    expect(registry.getByFullName("spine.core.Command").schema).toBe(CommandSchema);
+    expect(registry.getByTypeUrl("type.spine.io/spine.core.Event").schema).toBe(EventSchema);
   });
 
   it("exports the shared default registry as a read-only lookup view", () => {

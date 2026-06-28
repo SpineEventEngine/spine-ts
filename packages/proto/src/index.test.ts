@@ -5,9 +5,28 @@ import { resolve } from "node:path";
 import { getOption, hasOption, create } from "@bufbuild/protobuf";
 
 import {
+  ActorContextSchema,
+  CommandContextSchema,
+  CommandIdSchema,
+  CommandSchema,
+  EmailAddressSchema,
+  EnrichmentSchema,
+  EventContextSchema,
+  EventIdSchema,
+  EventSchema,
   FieldPathSchema,
+  InternetDomainSchema,
+  MessageIdSchema,
+  OriginSchema,
   TemplateStringSchema,
+  TenantIdSchema,
+  UserIdSchema,
   ValidationErrorSchema,
+  VersionSchema,
+  ZoneIdSchema,
+  file_spine_core_actor_context,
+  file_spine_core_command,
+  file_spine_core_event,
   file_spine_options,
   file_spine_validation_validation_error,
   type_url_prefix,
@@ -34,7 +53,7 @@ describe("@spine-ts/proto", () => {
     ) as ProtoSourceManifest;
 
     expect(manifest.schemaVersion).toBe(1);
-    expect(manifest.sources).toHaveLength(4);
+    expect(manifest.sources).toHaveLength(16);
 
     for (const source of manifest.sources) {
       const contents = readFileSync(resolve(source.localPath));
@@ -60,25 +79,100 @@ describe("@spine-ts/proto", () => {
     expect(validationError.constraintViolation).toEqual([]);
   });
 
+  it("exports generated schemas for the core signal envelope closure", () => {
+    expect(CommandSchema.typeName).toBe("spine.core.Command");
+    expect(CommandIdSchema.typeName).toBe("spine.core.CommandId");
+    expect(CommandContextSchema.typeName).toBe("spine.core.CommandContext");
+    expect(EventSchema.typeName).toBe("spine.core.Event");
+    expect(EventIdSchema.typeName).toBe("spine.core.EventId");
+    expect(EventContextSchema.typeName).toBe("spine.core.EventContext");
+    expect(ActorContextSchema.typeName).toBe("spine.core.ActorContext");
+    expect(TenantIdSchema.typeName).toBe("spine.core.TenantId");
+    expect(UserIdSchema.typeName).toBe("spine.core.UserId");
+    expect(VersionSchema.typeName).toBe("spine.core.Version");
+    expect(MessageIdSchema.typeName).toBe("spine.core.MessageId");
+    expect(OriginSchema.typeName).toBe("spine.core.Origin");
+    expect(EnrichmentSchema.typeName).toBe("spine.core.Enrichment");
+    expect(EmailAddressSchema.typeName).toBe("spine.net.EmailAddress");
+    expect(InternetDomainSchema.typeName).toBe("spine.net.InternetDomain");
+    expect(ZoneIdSchema.typeName).toBe("spine.time.ZoneId");
+
+    expect(create(CommandSchema).$typeName).toBe("spine.core.Command");
+    expect(create(EventSchema).$typeName).toBe("spine.core.Event");
+    expect(create(ActorContextSchema).$typeName).toBe("spine.core.ActorContext");
+  });
+
   it("preserves the Spine type URL prefix custom option in generated descriptors", () => {
     expect(hasOption(file_spine_options, type_url_prefix)).toBe(true);
     expect(getOption(file_spine_options, type_url_prefix)).toBe("type.spine.io");
+    expect(getOption(file_spine_core_command, type_url_prefix)).toBe("type.spine.io");
+    expect(getOption(file_spine_core_event, type_url_prefix)).toBe("type.spine.io");
+    expect(getOption(file_spine_core_actor_context, type_url_prefix)).toBe("type.spine.io");
     expect(getOption(file_spine_validation_validation_error, type_url_prefix)).toBe(
       "type.spine.io",
     );
   });
 
   it("keeps the public root runtime exports curated", () => {
-    expect(Object.keys(protoRoot).sort()).toEqual([
-      "ConstraintViolationSchema",
-      "FieldPathSchema",
-      "TemplateStringSchema",
-      "ValidationErrorSchema",
-      "file_spine_base_field_path",
-      "file_spine_options",
-      "file_spine_string_template_string",
-      "file_spine_validation_validation_error",
-      "type_url_prefix",
-    ]);
+    expect(Object.keys(protoRoot).sort()).toEqual(
+      [
+        "ActorContextSchema",
+        "ConstraintViolationSchema",
+        "CommandContextSchema",
+        "CommandContext_ScheduleSchema",
+        "CommandIdSchema",
+        "CommandSchema",
+        "CommandValidationError",
+        "CommandValidationErrorSchema",
+        "Command_SystemPropertiesSchema",
+        "DayOfWeek",
+        "DayOfWeekSchema",
+        "EmailAddressSchema",
+        "EnrichmentSchema",
+        "Enrichment_ContainerSchema",
+        "EventContextSchema",
+        "EventIdSchema",
+        "EventSchema",
+        "EventValidationError",
+        "EventValidationErrorSchema",
+        "FieldPathSchema",
+        "InternetDomainSchema",
+        "Language",
+        "LanguageSchema",
+        "LocalDateSchema",
+        "LocalDateTimeSchema",
+        "LocalTimeSchema",
+        "MessageIdSchema",
+        "Month",
+        "MonthSchema",
+        "OriginSchema",
+        "RejectionEventContextSchema",
+        "TemplateStringSchema",
+        "TenantIdSchema",
+        "UserIdSchema",
+        "ValidationErrorSchema",
+        "VersionSchema",
+        "YearMonthSchema",
+        "ZoneIdSchema",
+        "ZonedDateTimeSchema",
+        "file_spine_base_field_path",
+        "file_spine_core_actor_context",
+        "file_spine_core_command",
+        "file_spine_core_diagnostics",
+        "file_spine_core_enrichment",
+        "file_spine_core_event",
+        "file_spine_core_tenant_id",
+        "file_spine_core_user_id",
+        "file_spine_core_version",
+        "file_spine_net_email_address",
+        "file_spine_net_internet_domain",
+        "file_spine_options",
+        "file_spine_string_template_string",
+        "file_spine_time_time",
+        "file_spine_ui_language",
+        "file_spine_validation_validation_error",
+        "type_url_prefix",
+      ].sort(),
+    );
   });
 });

@@ -512,3 +512,55 @@ Consequences:
   policy can use generated contracts instead of hand-written message shapes.
 - Runtime command/event bus tasks can rely on canonical type URLs and generated
   schemas.
+
+## D-0031: Pin legacy base support protos used by core signal context
+
+Status: Accepted
+
+Date: 2026-06-28
+
+Context: T-0007a copies the minimal transitive proto set for Spine
+`Command`, `Event`, and actor/tenant context. The researched 2.0-series
+`SpineEventEngine/base` commit used by T-0004 contains `spine/options.proto`,
+`spine/base/field_path.proto`, and `spine/string/template_string.proto`, but
+does not contain `spine/net/email_address.proto`,
+`spine/net/internet_domain.proto`, or `spine/ui/language.proto`. Those files
+were present only in a local extracted include-protos cache from a separate
+Spine-using project. The cache alone was not enough provenance for
+`proto/spine-sources.json`.
+
+Decision: Copy the three support protos from the local extracted include-protos
+cache only after verifying they match `SpineEventEngine/base` tag `v1.9.0`
+commit `4e5dc1e9f3f361d3ac283d366cf2b639b1f62c12` byte-for-byte. Record that
+commit, raw URL, source URL, and SHA-256 in `proto/spine-sources.json`.
+
+Evidence:
+
+- Local project dependency metadata pins `io.spine:spine-base:1.9.0`.
+- `git ls-remote --tags https://github.com/SpineEventEngine/base.git`
+  returned tag `v1.9.0` at
+  `4e5dc1e9f3f361d3ac283d366cf2b639b1f62c12`.
+- Raw GitHub checksums for the three files matched the local extracted copies:
+  `d3fde13f40d61160933184b41a6221e06933191fb493c55778ce8e5789eb1ca6` for
+  `email_address.proto`,
+  `7efff4e0cb9c0052f245565fc5ac643bb1196cd0ecbdaa98b342ebb9c8fcc092` for
+  `internet_domain.proto`, and
+  `197d6d89ba396a0e4654665af63f5dcf39061820378e8cbb71fb082a51475418` for
+  `language.proto`.
+
+Alternatives considered:
+
+- Attribute the extracted files to the 2.0-series base commit. Rejected because
+  that commit does not contain the files.
+- Omit `TenantId` or `ActorContext` transitive support. Rejected because it
+  would make the copied command/event context closure incomplete.
+- Rewrite smaller local replacements. Rejected by the Protobuf contract's
+  verbatim-copy requirement.
+
+Consequences:
+
+- The T-0007a closure mixes 2.0-series core/time/validation contracts with the
+  exact older base support protos required by those context messages.
+- Future proto refresh work should revisit whether newer Spine repositories
+  moved or renamed the net/UI support contracts before changing these manifest
+  entries.

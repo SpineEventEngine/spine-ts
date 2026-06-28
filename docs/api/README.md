@@ -3,21 +3,23 @@
 TypeDoc is the canonical API documentation generator for this repository.
 
 Current status: the generated reference contains the curated `@spine-ts/proto`
-root API for the first intake and the `@spine-ts/core` metadata/type registry
-and validation facade APIs. Proto exports include message types, generated
-schemas, file descriptors, and the `type_url_prefix` custom option. Core exports
-include deterministic type URL derivation, registry and metadata types, the
-default registry for the current curated Spine schema set, single-message
-validation result/check helpers, `ValidationException`, structured
-`ValidationError` creation, and the initial transition-validation seam. The
-default registry is documented as a read-only lookup view; callers that need
-mutable registration use `createSpineCoreRegistry()` or `TypeRegistry`. The
-validation facade documents its safe-by-default error details, including
-redacted upstream and transition-rule placeholder values, omitted raw field
-values, sanitized rule-returned transition violations, and structured
-runtime/rule failure violations. The generated Protobuf-ES implementation files
-themselves remain excluded from TypeDoc output and are not broadly re-exported
-from the package root.
+root API for copied Spine contracts and the `@spine-ts/core` metadata/type
+registry and validation facade APIs. Proto exports include message types,
+generated schemas, enum values and enum descriptors, file descriptors, and the
+`type_url_prefix` custom option for the validation, core signal envelope,
+actor/tenant/user/version context, time, net, and UI language contracts. Core
+exports include deterministic type URL derivation, registry and metadata types,
+the default registry for the curated Spine schema set, single-message validation
+result/check helpers, `ValidationException`, structured `ValidationError`
+creation, and the initial transition-validation seam. The default registry is
+documented as a read-only lookup view; callers that need mutable registration
+use `createSpineCoreRegistry()` or `TypeRegistry`. The validation facade
+documents its safe-by-default error details, including redacted upstream and
+transition-rule placeholder values, omitted raw field values, sanitized
+rule-returned transition violations, and structured runtime/rule failure
+violations. The generated Protobuf-ES implementation files themselves remain
+excluded from TypeDoc output and are not broadly re-exported from the package
+root.
 
 Run:
 
