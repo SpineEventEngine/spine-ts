@@ -1,6 +1,6 @@
 # T-0004: Spine Proto Intake And Protobuf-ES Generation
 
-Status: Final focused re-check passed; ready for orchestrator integration
+Status: Complete; integrated into main and verified
 Start: `2026-06-28 12:40 WEST`
 End: `2026-06-28 12:54 WEST`
 Baseline commit: `6ce0b65`
@@ -11,6 +11,7 @@ Authoring sub-agent: T-0004 implementation sub-agent
 Reviewer sub-agents: Final focused re-check passed with no remaining comments
 Implementation commit: `b66f2db2c2d98d41f3f5c6da53ed81a7fd73d6ad`
 Focused re-check basis: latest branch state after log-state cleanup
+Integration commit: `8c82646`
 
 ## Objective
 
@@ -378,4 +379,6 @@ Out of scope:
 
 ## Integration Result
 
-Final focused re-check passed. Orchestrator integration is the next step.
+Merged into `main` at integration commit `8c82646`. Post-merge verification is
+complete after pinning pnpm local virtual-store behavior in workspace config.
+`CI=true corepack pnpm verify` passed on `main`.

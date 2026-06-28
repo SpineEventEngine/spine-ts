@@ -318,3 +318,38 @@ Consequences:
 - Future tasks may add more Spine proto sources from `core-jvm`, `time`,
   `change`, or other baseline repos, but each addition must extend the manifest
   rather than editing copied definitions by hand.
+
+## D-0026: Pin pnpm local virtual-store behavior for reproducible verification
+
+Status: Accepted
+
+Date: 2026-06-28
+
+Context: The workspace requires `verifyDepsBeforeRun: error` so scripts do not
+run against stale dependency metadata. After Node and Corepack were repaired,
+the Codex shell initially resolved an app-bundled `pnpm@11.7.0` while the
+project pins `pnpm@11.9.0`. Reinstalling with Corepack fixed the package-manager
+metadata, but `CI=true pnpm verify` still rejected the tree unless the
+global-virtual-store setting matched the install command.
+
+Decision: Pin `enableGlobalVirtualStore: false` in `pnpm-workspace.yaml` and use
+Corepack so the project-pinned `pnpm@11.9.0` runs installs and verification.
+
+Alternatives considered:
+
+- Disable `verifyDepsBeforeRun`. Rejected because it would weaken the
+  interruption-resistant verification guard established for the workspace.
+- Require every verification command to pass
+  `--config.enable-global-virtual-store=false`. Rejected because it is easy for
+  future agents to forget and leaves the project dependent on shell history.
+- Edit `node_modules/.modules.yaml` by hand. Rejected because install metadata
+  should be owned by pnpm, not manually patched.
+
+Consequences:
+
+- `CI=true corepack pnpm verify` can compare dependency metadata against an
+  explicit workspace setting instead of an ambient pnpm default.
+- Future local installs should use Corepack or another pnpm `11.9.0`
+  executable to respect `packageManager`.
+- If the project later adopts pnpm's global virtual store intentionally, that
+  decision must update this record and rerun install plus full verification.

@@ -8,7 +8,7 @@ Reviewed commit/diff basis: `main...task/T-0004-proto-intake` after the T-0004
 implementation commit from baseline `6ce0b65`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0004-proto-intake`
 Reviewer sub-agents: Final focused re-check passed with no remaining comments
-Status: Final focused re-check passed; ready for orchestrator integration
+Status: Complete; integrated into main and verified
 
 ## Required Review Roles
 
@@ -414,9 +414,9 @@ Reviewer outcome:
 
 Final disposition:
 
-| Finding | Roles | Disposition | Author response |
-| --- | --- | --- | --- |
-| Top metadata, Current State, and Integration Result should not contain prior focused cleanup SHAs or stale cleanup-phase wording. | Documentation, maintainability | Clean | Scoped metadata, Current State, and Integration Result contain stable wording; historical entries retain exact SHAs where appropriate. |
+| Finding                                                                                                                           | Roles                          | Disposition | Author response                                                                                                                        |
+| --------------------------------------------------------------------------------------------------------------------------------- | ------------------------------ | ----------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Top metadata, Current State, and Integration Result should not contain prior focused cleanup SHAs or stale cleanup-phase wording. | Documentation, maintainability | Clean       | Scoped metadata, Current State, and Integration Result contain stable wording; historical entries retain exact SHAs where appropriate. |
 
 Final verification:
 
@@ -424,3 +424,18 @@ Final verification:
 - Targeted stale metadata search returned no matches.
 - `git status --short --branch` showed a clean branch before this closure-log
   update.
+
+## Integration Review Closure
+
+The reviewed branch was merged into `main` at integration commit `8c82646`.
+The post-merge closure/config delta was reviewed by the five required focused
+reviewer roles; all reported no comments:
+
+- Code style/maintainability: `019f0e7b-54d4-7cd0-bc52-fd2d8df62228`.
+- Documentation: `019f0e7b-7349-7bd0-9f1d-e17fa29f39e3`.
+- TypeScript/API docs: `019f0e7b-8b64-7cb2-90aa-c84cb78e541e`.
+- Security: `019f0e7b-a079-75c3-9e2d-1739118062c8`.
+- Performance/reliability: `019f0e7b-b7e9-7c70-afad-24756c164f27`.
+
+Post-merge verification is complete after pinning pnpm local virtual-store
+behavior in workspace config. `CI=true corepack pnpm verify` passed on `main`.
