@@ -1,6 +1,6 @@
 # T-0006: Validation Facade
 
-Status: Round-3 security fix needed
+Status: Round-3 security fix committed
 Start: `2026-06-28 17:22 WEST`
 End: Pending
 Setup baseline commit: `62ffc33`
@@ -21,8 +21,8 @@ Round-3 review readiness commit: `9560d2e330cf76c9af910ab5c59d26aac278a9a5`
 Round-3 dispatch log commit: `9b51b43dac2db509c428fcc849411bbbf170948d`
 Round-3 findings log HEAD: `86aa522e31a692b49abb2de4aae7d41c8224f0ed`
 Current branch HEAD before round-3 security fix: `86aa522e31a692b49abb2de4aae7d41c8224f0ed`
-Round-3 security fix commit: Pending
-Final branch HEAD: Pending round-3 review closure
+Round-3 security fix commit: `76cbe19beeef0703dded45b3aee66e6b95b0da93`
+Final branch HEAD: Pending round-3 log handoff
 
 ## Objective
 
@@ -481,6 +481,9 @@ packages/core/src/validation-facade-boundary.test.ts`, `corepack pnpm lint`,
   docs check confirmed 13 proto exports and 21 core exports with the known
   invalid `origin` TypeDoc warning; proto lint/generate and generated-output
   cleanliness passed.
+- Round-3 security fix commit:
+  `76cbe19beeef0703dded45b3aee66e6b95b0da93` created with message
+  `fix(core): sanitize transition validation violations`.
 - Round-2 RED focused tests:
   `corepack pnpm test packages/core/src/index.test.ts
 packages/core/src/validation-facade-boundary.test.ts` failed as expected.
@@ -716,4 +719,5 @@ packages/core/src/validation-facade-boundary.test.ts` passed with 2 test files
 
 ## Integration Result
 
-Pending.
+Round-3 security finding fixed in
+`76cbe19beeef0703dded45b3aee66e6b95b0da93`; final log handoff commit pending.

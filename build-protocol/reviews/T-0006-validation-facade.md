@@ -9,7 +9,7 @@ Reviewed commit/diff basis: Round 3 completed against
 `e953662...9560d2e330cf76c9af910ab5c59d26aac278a9a5`.
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Reviewer sub-agents: Round 3 completed
-Status: Round-3 security fix in progress
+Status: Round-3 security fix committed
 
 ## Reviewer IDs
 
@@ -145,7 +145,7 @@ findings/log update.
 Started from round-3 findings log head
 `86aa522e31a692b49abb2de4aae7d41c8224f0ed`.
 
-Fix commit: Pending.
+Fix commit: `76cbe19beeef0703dded45b3aee66e6b95b0da93`.
 
 Disposition: the accepted security finding is addressed in the working tree by
 sanitizing transition-rule returned violations through the same facade-owned
@@ -171,4 +171,5 @@ generated-output cleanliness passed.
 
 ## Closure
 
-Pending.
+Round-3 security finding fixed in
+`76cbe19beeef0703dded45b3aee66e6b95b0da93`; final log handoff commit pending.
