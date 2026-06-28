@@ -1,12 +1,13 @@
 # T-0006: Validation Facade
 
-Status: Draft; splitter pending
+Status: Split complete; ready for implementation worktree
 Start: `2026-06-28 17:22 WEST`
 End: Pending
-Baseline commit: `62ffc33`
+Setup baseline commit: `62ffc33`
+Implementation baseline commit: `e4450aa`
 Task log path: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
-Branch: Pending
-Worktree: Pending
+Branch: `task/T-0006a-validation-facade-contract`
+Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Authoring sub-agent: Pending
 Reviewer sub-agents: Pending
 Implementation commit: Pending branch commit
@@ -35,7 +36,37 @@ state-transition validation such as `(set_once)`.
 
 ## Requirements Splitter Output
 
-Pending dedicated splitter sub-agent.
+Requirements splitter: `019f0f0b-fb2c-7f41-a030-31329ce630dd`.
+
+Blocking questions: none.
+
+Staged roadmap:
+
+1. Dependency and contract discovery: verify current
+   `@spine-event-engine/validation-ts` package metadata, peer compatibility,
+   exported API, result/error shape, and ESM behavior; record the dependency
+   decision.
+2. Core facade public contract: expose typed validation APIs from
+   `@spine-ts/core` while hiding direct `validation-ts` imports from framework
+   users.
+3. Single-message validation adapter: call the upstream validator for valid and
+   invalid Protobuf-ES messages and provide result and throwing check paths.
+4. Spine error contract preservation: construct/expose
+   `spine.validation.ValidationError` data with repeated `ConstraintViolation`
+   values and avoid making deprecated proto fields the primary API.
+5. Transition-validation seam: define framework-owned previous/next state
+   validation interfaces for stateful rules such as `(set_once)`.
+6. Docs and API checks: update package README, framework guide, API docs,
+   architecture notes, and TypeDoc export assertions.
+7. Verification and review closure: run full verification, maintain at least
+   90% coverage, and complete all five reviewer roles with no remaining
+   comments.
+
+Selected first non-blocked implementable slice: T-0006a validation dependency
+and facade contract. Owned files include `packages/core/package.json`,
+`pnpm-lock.yaml`, `packages/core/src/index.ts`,
+`packages/core/src/index.test.ts`, `scripts/check-api-docs.mjs`, T-0006 durable
+logs, and docs needed by the public API.
 
 ## Skill Applicability
 
@@ -113,15 +144,16 @@ Out of scope:
 
 - `2026-06-28 17:22 WEST`: Created T-0006 durable task, work, and review logs
   before splitter work.
+- `2026-06-28 17:27 WEST`: Recorded splitter output, current dependency
+  inspection, and D-0029 before creating the implementation worktree.
 
 ## Decisions
 
 - Existing constraints: `PROTOBUF_CONTRACT.md` mandates
   `@spine-event-engine/validation-ts` for single-message validation and
   framework-level state-transition validation for `(set_once)`.
-- Pending decision: current `@spine-event-engine/validation-ts` package/version
-  selection must be checked before implementation and recorded in
-  `DECISION_LOG.md`.
+- `D-0029`: use exact `@spine-event-engine/validation-ts@2.0.0-snapshot.4`
+  behind a core facade, based on npm metadata checked on 2026-06-28.
 
 ## Human Questions And Answers
 
@@ -170,10 +202,10 @@ Out of scope:
 
 ## Open Risks And Follow-Up Routing
 
-| Risk/Follow-Up                                                                | Owner                    | Linked Task/Decision   | Disposition                                                                                      | Next Review Point          |
-| ----------------------------------------------------------------------------- | ------------------------ | ---------------------- | ------------------------------------------------------------------------------------------------ | -------------------------- |
-| `validation-ts` package API/version may have changed since earlier discovery. | Orchestrator/implementer | Pending decision       | Must check current package metadata before dependency selection.                                 | T-0006 dependency decision |
-| `(set_once)` requires previous and proposed state, not a single message.      | T-0006 implementer       | `PROTOBUF_CONTRACT.md` | Implement facade seam now; full entity transaction enforcement may remain in later runtime task. | Runtime/entity task        |
+| Risk/Follow-Up                                                                | Owner                    | Linked Task/Decision   | Disposition                                                                                      | Next Review Point         |
+| ----------------------------------------------------------------------------- | ------------------------ | ---------------------- | ------------------------------------------------------------------------------------------------ | ------------------------- |
+| `validation-ts` package API/version may have changed since earlier discovery. | Orchestrator/implementer | D-0029                 | Checked on 2026-06-28; exact `2.0.0-snapshot.4` selected for T-0006.                             | Dependency update reviews |
+| `(set_once)` requires previous and proposed state, not a single message.      | T-0006 implementer       | `PROTOBUF_CONTRACT.md` | Implement facade seam now; full entity transaction enforcement may remain in later runtime task. | Runtime/entity task       |
 
 ## Review Rounds
 

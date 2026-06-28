@@ -426,3 +426,51 @@ Consequences:
 - Duplicate registration tests become part of the compatibility guard.
 - A later task must revisit semantic tag registration once copied proto fixtures
   include real `(is)` or `(every_is)` consumers.
+
+## D-0029: Wrap `@spine-event-engine/validation-ts` behind the core validation facade
+
+Status: Accepted
+
+Date: 2026-06-28
+
+Context: T-0006 introduces message validation. The Protobuf contract mandates
+`@spine-event-engine/validation-ts` for single-message validation and reserves
+stateful rules such as `(set_once)` for the framework transaction/runtime layer.
+Current npm metadata checked on 2026-06-28 reports package versions
+`2.0.0-snapshot.1`, `2.0.0-snapshot.3`, and `2.0.0-snapshot.4`; dist-tags
+`latest = 2.0.0-snapshot.1` and `snapshot = 2.0.0-snapshot.4`; peer dependency
+`@bufbuild/protobuf ^2.10.2`. The project currently uses
+`@bufbuild/protobuf 2.12.1`, which satisfies the peer range. The published
+snapshot README says the package API is experimental and recommends installing
+the `snapshot` dist-tag.
+
+Decision: Add `@spine-event-engine/validation-ts` to `@spine-ts/core` as an
+exact `2.0.0-snapshot.4` dependency for T-0006, because that is the current
+snapshot dist-tag and matches the project's Buf/Protobuf-ES stack. Do not expose
+`validation-ts` imports as the framework API. Instead, wrap its public
+`validate(schema, message)` and violation helpers behind a small
+`@spine-ts/core` facade that returns structured Spine validation data and offers
+a throwing check path. Keep framework transition validation, including
+`(set_once)`, separate from single-message validation.
+
+Alternatives considered:
+
+- Use the npm `latest` dist-tag (`2.0.0-snapshot.1`). Rejected because the
+  package README directs users to the `snapshot` dist-tag and `snapshot.4` is
+  newer while remaining peer-compatible.
+- Reimplement Spine validation rules in T-0006. Rejected because it violates
+  the non-negotiable requirement to use `validation-ts` for single-message
+  validation and would duplicate a common infrastructure library.
+- Depend on a generic Protobuf validator or non-Buf generator runtime. Rejected
+  because current library search did not find a Spine-options-compatible
+  alternative, and generic protobuf stacks conflict with the Buf/Protobuf-ES
+  contract.
+
+Consequences:
+
+- The framework can absorb `validation-ts` API churn by adjusting one adapter
+  instead of changing user imports.
+- T-0006 tests must exercise the facade behavior, not the upstream package
+  internals.
+- Future dependency updates must re-check the npm dist-tags, peer dependency,
+  and exported declarations before changing the exact package version.
