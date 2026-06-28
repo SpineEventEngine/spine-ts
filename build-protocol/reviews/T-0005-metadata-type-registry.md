@@ -69,8 +69,9 @@ handoff.
   fix commit is `a8ad2fad6070479f156cb54211b14f6bfdb80117`; subsequent
   pre-re-review log cleanup commits are
   `a46a95a2efb8c75a613bda7390d0fa008931d3aa` and
-  `9e234fd083d2f4d1773acfc1526bbd0e120b2bcd`. The re-review target is the
-  latest branch HEAD after review-round-1 fix and log cleanup.
+  `9e234fd083d2f4d1773acfc1526bbd0e120b2bcd`. That round-1 fix pass was
+  subsequently re-reviewed in round 2; later log cleanup records the current
+  re-review basis.
 - Review round 2, `2026-06-28`: reviewer outcomes received. Maintainability
   `019f0ef3-7250-7a72-a71e-69e8ca886c05`, TypeScript/API
   `019f0ef3-c703-7e41-8279-3e6d5d553a20`, security

@@ -1,6 +1,6 @@
 # T-0005: Metadata And Type Registry
 
-Status: Latest branch HEAD ready for re-review after review-round-2 log cleanup
+Status: Latest branch HEAD ready for focused docs re-review after round-2 log cleanup
 Start: `2026-06-28 15:58 WEST`
 End: Pending
 Baseline commit: `80714f3`
@@ -8,7 +8,7 @@ Task log path: `build-protocol/tasks/T-0005-metadata-type-registry/TASK.md`
 Branch: `task/T-0005-registry-core`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0005-registry-core`
 Authoring sub-agent: T-0005 implementation sub-agent
-Reviewer sub-agents: Round 2 completed with documentation log cleanup fixed
+Reviewer sub-agents: Round 2 completed; focused docs cleanup fixed and ready
 Implementation commit: `5705890eb5cdedaa2044375c6d5cccc304bdf283`
 Review round 1 fix commit: `a8ad2fad6070479f156cb54211b14f6bfdb80117`
 Review round 1 log cleanup commits: `a46a95a2efb8c75a613bda7390d0fa008931d3aa`,
@@ -360,8 +360,11 @@ mutate the process-wide curated registry.
   - Security: `019f0ef3-f963-76c0-9da2-3e9c1df57f07`, no comments.
   - Performance/reliability: `019f0ef4-2459-7c00-8319-ef6243e032b7`, no
     comments.
-- Next step: formal re-review of `task/T-0005-registry-core` at the latest
-  branch HEAD after review-round-2 log cleanup.
+- Focused docs re-check fixed remaining stale round-1 re-review-basis wording,
+  nonstandard work-log timestamps, and current-state wording without recording
+  an exact moving current HEAD.
+- Next step: formal focused docs re-review of `task/T-0005-registry-core` at
+  the latest branch HEAD after review-round-2 log cleanup.
 
 ## Integration Result
 
