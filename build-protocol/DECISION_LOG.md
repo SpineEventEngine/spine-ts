@@ -564,3 +564,40 @@ Consequences:
 - Future proto refresh work should revisit whether newer Spine repositories
   moved or renamed the net/UI support contracts before changing these manifest
   entries.
+
+## D-0032: Use Spine-aware Any packing for core envelope helpers
+
+Status: Accepted
+
+Date: 2026-06-28
+
+Context: T-0007b adds the first `@spine-ts/core` helpers for packing domain
+messages into generated `spine.core.Command` and `spine.core.Event` envelopes.
+Buf Protobuf-ES provides WKT `anyPack()` and `anyUnpack()` helpers, but
+`anyPack()` currently builds type URLs with the standard
+`type.googleapis.com/<full.type.Name>` prefix. Spine contracts declare
+`option (type_url_prefix) = "type.spine.io"` and runtime routing depends on the
+canonical Spine URL produced by the existing `deriveTypeUrl()` registry helper.
+
+Decision: Implement T-0007b packing with `deriveTypeUrl(schema)` and
+Protobuf-ES binary serialization rather than direct `anyPack()` use. Keep
+unpacking/checking helpers exact-type-url aware so callers do not parse or
+compare type URLs ad hoc.
+
+Alternatives considered:
+
+- Use Buf `anyPack()` directly. Rejected because it emits
+  `type.googleapis.com/...` and would silently break Spine routing/type URL
+  compatibility.
+- Add local string concatenation at call sites. Rejected because it repeats type
+  URL policy outside the core registry seam.
+- Defer packing until runtime buses. Rejected because later command/event bus
+  and service tasks need a tested canonical envelope construction surface.
+
+Consequences:
+
+- `@spine-ts/core` owns the Spine-aware `Any` packing seam.
+- Command/event helpers can validate and pack payloads without exposing binary
+  or type URL details to framework users.
+- Future runtime tasks can consume generated `Command` and `Event` envelopes
+  without inventing a second packing policy.
