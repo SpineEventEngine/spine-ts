@@ -1,6 +1,6 @@
 # T-0009a: Descriptor Option Surface And Entity Metadata
 
-Status: Implementation in progress
+Status: Review round 1 in progress
 Start: `2026-06-28 22:48 WEST`
 End: Pending
 Setup baseline commit: `dd4a365`
@@ -8,7 +8,11 @@ Task log path: `build-protocol/tasks/T-0009a-entity-metadata/TASK.md`
 Branch: `task/T-0009a-entity-metadata`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009a-entity-metadata`
 Authoring sub-agent: `019f103e-52ca-7722-88f0-49c49b017dbf` (Dalton)
-Reviewer sub-agents: Pending
+Reviewer sub-agents: Maintainability/style `019f1056-4f3d-7192-9bec-8094ad784a03`;
+documentation `019f1056-4fbe-7eb1-8ef2-dc5c901887b8`; TypeScript/API docs
+`019f1056-502b-74f1-8cc5-24587c5ea99d`; security
+`019f1056-509e-7853-bafd-246d91c21fa8`; performance/reliability
+`019f1056-5133-73c1-9e09-756c7e49b061`.
 Implementation baseline commit: `5b41111`
 Final branch checkpoint before integration: Pending
 Main integration merge commit: Pending
@@ -163,8 +167,15 @@ reviewers report no comments.
   was spawned on `2026-06-28 22:58 WEST` with ownership of T-0009a code,
   tests, docs, API checks, durable logs, verification, and implementation
   commit.
+- Implementation committed as `a12e4f733a118441e076dc8f23ca91e6e0feff62` on
+  `2026-06-28 23:23 WEST`. Final implementation verification passed with
+  `CI=true corepack pnpm verify`: 9 test files / 62 tests; coverage statements
+  99.4%, branches 93.91%, functions 100%, lines 99.38%; docs/API check
+  confirmed 100 proto exports, 28 core exports, 11 server exports, and 26
+  storage exports.
+- Review round 1 dispatched on `2026-06-28 23:25 WEST` with diff package
+  `.superpowers/sdd/review-04d79ed..a12e4f7.diff`.
 - D-0034 records that entity metadata belongs in `@spine-ts/server` and
   `@spine-ts/proto` should add only narrow curated option exports.
 - No blocking questions known.
-- Next step: await implementation result, then run the required five-reviewer
-  loop.
+- Next step: collect round-1 reviewer reports.

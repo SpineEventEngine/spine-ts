@@ -6,8 +6,12 @@ Branch: `task/T-0009a-entity-metadata`
 Setup baseline commit: `dd4a365`
 Implementation baseline commit: `5b41111`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009a-entity-metadata`
-Reviewer sub-agents: Pending
-Status: Implementation in progress
+Reviewer sub-agents: Maintainability/style `019f1056-4f3d-7192-9bec-8094ad784a03`;
+documentation `019f1056-4fbe-7eb1-8ef2-dc5c901887b8`; TypeScript/API docs
+`019f1056-502b-74f1-8cc5-24587c5ea99d`; security
+`019f1056-509e-7853-bafd-246d91c21fa8`; performance/reliability
+`019f1056-5133-73c1-9e09-756c7e49b061`.
+Status: Review round 1 in progress
 Implementation sub-agent: `019f103e-52ca-7722-88f0-49c49b017dbf` (Dalton)
 
 ## Review Focus
@@ -34,4 +38,20 @@ Implementation sub-agent: `019f103e-52ca-7722-88f0-49c49b017dbf` (Dalton)
 
 ## Review Rounds
 
-No review rounds have been dispatched yet.
+### Round 1
+
+Dispatched on `2026-06-28 23:25 WEST`.
+
+Review basis: `04d79ed..a12e4f733a118441e076dc8f23ca91e6e0feff62`.
+
+Review package: `.superpowers/sdd/review-04d79ed..a12e4f7.diff`.
+
+Required reviewer roles:
+
+- maintainability/style;
+- documentation;
+- TypeScript/API docs;
+- security;
+- performance/reliability.
+
+Reports are pending.
