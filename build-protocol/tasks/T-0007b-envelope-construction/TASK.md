@@ -1,17 +1,24 @@
 # T-0007b: Core Envelope Construction Helpers
 
-Status: Setup complete; branch/worktree pending
+Status: Branch/worktree created; baseline verification pending
 Start: `2026-06-28 20:45 WEST`
 End: Pending
 Setup baseline commit: `c313086`
 Task log path: `build-protocol/tasks/T-0007b-envelope-construction/TASK.md`
-Branch: Pending
-Worktree: Pending
+Branch: `task/T-0007b-envelope-construction`
+Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007b-envelope-construction`
 Authoring sub-agent: Pending
 Reviewer sub-agents: Pending
 Implementation baseline commit: Pending
 Final branch checkpoint before integration: Pending
 Main integration merge commit: Pending
+
+## Branch Setup
+
+Created `task/T-0007b-envelope-construction` from setup commit
+`66cd115bf4adbd34db0a3718ff6bd36dfbf8a074` in isolated worktree
+`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007b-envelope-construction`.
+Baseline verification is next before implementation handoff.
 
 ## Objective
 

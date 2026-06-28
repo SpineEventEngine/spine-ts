@@ -2,11 +2,11 @@
 
 Task log: `build-protocol/tasks/T-0007b-envelope-construction/TASK.md`
 Work log: `build-protocol/work-logs/T-0007b.md`
-Branch: Pending
+Branch: `task/T-0007b-envelope-construction`
 Setup baseline commit: `c313086`
 Implementation baseline commit: Pending
 Reviewed commit/diff basis: Pending
-Worktree: Pending
+Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007b-envelope-construction`
 Reviewer sub-agents: Pending
 Status: Setup complete; implementation pending
 
