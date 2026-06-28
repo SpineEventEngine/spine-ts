@@ -9,7 +9,7 @@ Branch: `task/T-0009a-entity-metadata`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009a-entity-metadata`
 Authoring sub-agent: Pending
 Reviewer sub-agents: Pending
-Implementation baseline commit: Pending branch setup commit
+Implementation baseline commit: `5b41111`
 Final branch checkpoint before integration: Pending
 Main integration merge commit: Pending
 
@@ -157,8 +157,9 @@ reviewers report no comments.
   cleanliness all passed. Vitest ran 9 test files / 55 tests. Coverage:
   statements 99.63%, branches 93.5%, functions 100%, lines 99.61%. Docs/API
   check confirmed 85 proto exports, 28 core exports, and 26 storage exports.
+- Branch setup/baseline logs committed as `5b41111` on
+  `2026-06-28 22:57 WEST`.
 - D-0034 records that entity metadata belongs in `@spine-ts/server` and
   `@spine-ts/proto` should add only narrow curated option exports.
 - No blocking questions known.
-- Next step: commit branch setup/baseline logs and spawn the implementation
-  sub-agent.
+- Next step: spawn the implementation sub-agent.
