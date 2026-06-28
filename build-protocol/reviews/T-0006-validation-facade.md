@@ -8,8 +8,8 @@ Implementation baseline commit: `e953662`
 Reviewed commit/diff basis: Round 5 completed against
 `876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3...2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616`.
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
-Reviewer sub-agents: Round 5 completed
-Status: Round-5 log fix in progress
+Reviewer sub-agents: Round 6 dispatched
+Status: Round 6 in progress
 
 ## Reviewer IDs
 
@@ -242,3 +242,24 @@ Findings:
   before the round-5 log fix, instead of pointing only at `876a5586`.
 
 Disposition: correct the review header and restart metadata, then re-review.
+
+## Round-5 Log Fix
+
+Log-fix commit: `2df2abf`.
+
+## Round 6
+
+Reviewed basis:
+`2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616...2df2abf`.
+
+Reviewer IDs:
+
+- Code style/maintainability:
+  `019f0f75-9e5a-7ab3-b49d-dc31cb431a67`.
+- Documentation: `019f0f75-9ec3-7d72-a65c-7e163b25a345`.
+- TypeScript/API docs: `019f0f75-9f33-7493-9ac0-e9946c8054c7`.
+- Security: `019f0f75-9fab-73e2-92c5-747cad2e932c`.
+- Performance/reliability:
+  `019f0f75-a037-7813-8bb0-b525dce797d1`.
+
+Disposition: in progress.

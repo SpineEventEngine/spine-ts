@@ -1,6 +1,6 @@
 # T-0006: Validation Facade
 
-Status: Round-5 log fix in progress
+Status: Round-6 review in progress
 Start: `2026-06-28 17:22 WEST`
 End: Pending
 Setup baseline commit: `62ffc33`
@@ -9,7 +9,7 @@ Task log path: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Authoring sub-agent: T-0006a implementation sub-agent (Codex)
-Reviewer sub-agents: Round 5 completed
+Reviewer sub-agents: Round 6 dispatched
 Implementation commit: `4726985e1786929f5222707dc7abf77c448e8fa3`
 Review-finding log HEAD: `7d519d1f4555ffab058d1642065947355c0acf9e`
 Review-fix commit: `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`
@@ -26,7 +26,9 @@ Round-3 security log handoff commit: `876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3`
 Current branch HEAD before round-4 log fix: `876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3`
 Round-4 findings/log-fix commit: `2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616`
 Current branch HEAD before round-5 log fix: `2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616`
-Final branch HEAD: Pending round-5 log fix
+Round-5 findings/log-fix commit: `2df2abf`
+Current branch HEAD before round-6 dispatch log: `2df2abf`
+Final branch HEAD: Pending round-6 review closure
 
 ## Objective
 
@@ -751,3 +753,12 @@ Round 5 reviewed focused log-fix basis
 - Performance/reliability `019f0f71-97f9-7673-8369-64ced20328d8`: requested
   restart metadata record
   `2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616` as the latest reviewed head.
+
+Round 6 dispatched against focused log-fix basis
+`2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616...2df2abf`:
+
+- Maintainability: `019f0f75-9e5a-7ab3-b49d-dc31cb431a67`.
+- Documentation: `019f0f75-9ec3-7d72-a65c-7e163b25a345`.
+- TypeScript/API docs: `019f0f75-9f33-7493-9ac0-e9946c8054c7`.
+- Security: `019f0f75-9fab-73e2-92c5-747cad2e932c`.
+- Performance/reliability: `019f0f75-a037-7813-8bb0-b525dce797d1`.
