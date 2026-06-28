@@ -2,12 +2,12 @@
 
 Task log: `build-protocol/tasks/T-0009a-entity-metadata/TASK.md`
 Work log: `build-protocol/work-logs/T-0009a.md`
-Branch: Pending
+Branch: `task/T-0009a-entity-metadata`
 Setup baseline commit: `dd4a365`
-Implementation baseline commit: Pending
-Worktree: Pending
+Implementation baseline commit: Pending branch setup commit
+Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009a-entity-metadata`
 Reviewer sub-agents: Pending
-Status: Setup in progress
+Status: Baseline verified; implementation pending
 Implementation sub-agent: Pending
 
 ## Review Focus

@@ -1,15 +1,15 @@
 # T-0009a: Descriptor Option Surface And Entity Metadata
 
-Status: Setup in progress
+Status: Baseline verified; implementation pending
 Start: `2026-06-28 22:48 WEST`
 End: Pending
 Setup baseline commit: `dd4a365`
 Task log path: `build-protocol/tasks/T-0009a-entity-metadata/TASK.md`
-Branch: Pending
-Worktree: Pending
+Branch: `task/T-0009a-entity-metadata`
+Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009a-entity-metadata`
 Authoring sub-agent: Pending
 Reviewer sub-agents: Pending
-Implementation baseline commit: Pending
+Implementation baseline commit: Pending branch setup commit
 Final branch checkpoint before integration: Pending
 Main integration merge commit: Pending
 
@@ -144,8 +144,21 @@ reviewers report no comments.
 
 - Setup started from `main` commit `dd4a365` after T-0008a integration
   completion.
+- Setup committed on `main` as `3194b90`.
+- Branch/worktree created from setup commit `3194b90` on
+  `2026-06-28 22:49 WEST`.
+- Initial baseline command `CI=true corepack pnpm verify` could not start
+  because the new worktree lacked pnpm dependency-state metadata. The
+  orchestrator ran `corepack pnpm install --offline`, which reused the existing
+  local pnpm cache and made no dependency selection changes.
+- Baseline verification passed on `2026-06-28 22:56 WEST` with
+  `CI=true corepack pnpm verify`: node check, typecheck, lint, format, tests,
+  coverage, docs/API check, proto lint/generate, and generated-output
+  cleanliness all passed. Vitest ran 9 test files / 55 tests. Coverage:
+  statements 99.63%, branches 93.5%, functions 100%, lines 99.61%. Docs/API
+  check confirmed 85 proto exports, 28 core exports, and 26 storage exports.
 - D-0034 records that entity metadata belongs in `@spine-ts/server` and
   `@spine-ts/proto` should add only narrow curated option exports.
 - No blocking questions known.
-- Next step: commit setup logs, create the feature branch/worktree, run
-  baseline verification, and spawn the implementation sub-agent.
+- Next step: commit branch setup/baseline logs and spawn the implementation
+  sub-agent.
