@@ -1,6 +1,6 @@
 # T-0007: Core Envelopes And Context
 
-Status: Implementation verified
+Status: Implementation committed; round-1 process-log findings fixed pending re-review
 Start: `2026-06-28 19:35 WEST`
 End: Pending
 Setup baseline commit: `f380744`
@@ -8,9 +8,10 @@ Task log path: `build-protocol/tasks/T-0007-core-envelopes-context/TASK.md`
 Branch: `task/T-0007a-core-signal-proto-intake`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007a-core-signal-proto-intake`
 Authoring sub-agent: T-0007a implementation sub-agent
-Reviewer sub-agents: Standards reviewer via standalone Codex; spec review completed locally after sandbox escalation was rejected.
+Reviewer sub-agents: Maintainability/style `019f0faa-6983-7690-9e46-bc50a6d72920`; documentation `019f0faa-6a10-7c91-b914-1a57f2c5f526`; TypeScript/API docs `019f0faa-6a76-7093-bb54-d0239d1646d2`; security `019f0faa-6aed-7230-ba0c-c385f62ba7ce`; performance/reliability `019f0faa-6b97-7ee2-bc36-cbb0500fd302`.
 Implementation baseline commit: `9d35f3e`
-Final branch HEAD: Pending
+Implementation commit reviewed in round 1: `6cb1c125290a4514b8b6aec1ba9567499c1dcfa8`
+Final branch HEAD: Follow-up process-log fix commit reported by fixer; implementation commit reviewed in round 1 was `6cb1c125290a4514b8b6aec1ba9567499c1dcfa8`.
 
 ## Objective
 
@@ -176,9 +177,10 @@ proto exports, and registered the core signal schemas in
 `createSpineCoreRegistry()`. Focused red/green tests, proto workflow checks, and
 full `CI=true corepack pnpm verify` passed.
 
-## Review Rounds
+## Implementation Self-Review Evidence
 
-Round 1:
+Before the required in-session five-reviewer round, the implementer ran two
+pre-review checks:
 
 - Standards review: standalone Codex review of the staged diff against
   `build-protocol/PROTOBUF_CONTRACT.md` and package export conventions reported
@@ -190,7 +192,30 @@ Round 1:
   was rejected by sandbox escalation policy because it would send private staged
   repository content to an external Codex service.
 
+These checks are implementation self-review evidence only; they do not close the
+required five-reviewer round.
+
+## Review Rounds
+
+Round 1 required in-session reviewers:
+
+| Role                    | Reviewer ID                            | Finding                                                               |
+| ----------------------- | -------------------------------------- | --------------------------------------------------------------------- |
+| Maintainability/style   | `019f0faa-6983-7690-9e46-bc50a6d72920` | Logs pre-close round 1 and contradict the pending reviewed basis.     |
+| Documentation           | `019f0faa-6a10-7c91-b914-1a57f2c5f526` | Round 1 was closed before the reviewer loop was represented.          |
+| Documentation           | `019f0faa-6a10-7c91-b914-1a57f2c5f526` | Logs still described a pending pre-commit state after committed HEAD. |
+| TypeScript/API docs     | `019f0faa-6a76-7093-bb54-d0239d1646d2` | No comments.                                                          |
+| Security                | `019f0faa-6aed-7230-ba0c-c385f62ba7ce` | No comments.                                                          |
+| Performance/reliability | `019f0faa-6b97-7ee2-bc36-cbb0500fd302` | Work log restart state was stale.                                     |
+
+Disposition: process-log findings are fixed in a follow-up commit. Round 1 must
+not be considered cleanly closed until the follow-up commit is re-reviewed.
+
 ## Integration Result
 
-Ready for final commit. Full verification passed before commit handoff; final
-branch HEAD is recorded in the implementation agent's completion report.
+Implementation commit `6cb1c125290a4514b8b6aec1ba9567499c1dcfa8` is present on
+`task/T-0007a-core-signal-proto-intake`. Full verification passed before that
+commit. Current restart state after this log-only follow-up: request re-review
+of the process-log fix before closing T-0007a. Do not recommit or alter the
+already-committed proto/code implementation unless a later review explicitly
+asks for it.
