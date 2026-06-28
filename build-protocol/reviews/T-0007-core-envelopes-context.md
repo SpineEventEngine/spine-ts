@@ -7,10 +7,10 @@ Setup baseline commit: `f380744`
 Implementation baseline commit: `9d35f3e`
 Reviewed commit/diff basis: implementation commit
 `6cb1c125290a4514b8b6aec1ba9567499c1dcfa8`; follow-up process-log fixes after
-that commit are pending re-review.
+that commit were re-reviewed through `44af7bc`.
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007a-core-signal-proto-intake`
 Reviewer sub-agents: Maintainability/style `019f0faa-6983-7690-9e46-bc50a6d72920`; documentation `019f0faa-6a10-7c91-b914-1a57f2c5f526`; TypeScript/API docs `019f0faa-6a76-7093-bb54-d0239d1646d2`; security `019f0faa-6aed-7230-ba0c-c385f62ba7ce`; performance/reliability `019f0faa-6b97-7ee2-bc36-cbb0500fd302`.
-Status: Round 1 process-log findings fixed in follow-up commit; re-review pending
+Status: Round 1 complete; no open findings
 
 ## Reviewer IDs
 
@@ -48,8 +48,8 @@ Reviewed basis: implementation commit
 | Security                | `019f0faa-6aed-7230-ba0c-c385f62ba7ce` | No comments.                                                          | No action.                           |
 | Performance/reliability | `019f0faa-6b97-7ee2-bc36-cbb0500fd302` | Work log restart state was stale.                                     | Fixed in follow-up process-log edit. |
 
-Round 1 is not cleanly closed yet. The process-log defects are fixed in a
-follow-up commit and must be re-reviewed before T-0007a closes.
+Round 1 implementation findings were limited to process-log defects and were
+fixed in follow-up log-only commits.
 
 ## Follow-Up Process-Log Fix
 
@@ -67,6 +67,23 @@ Expected verification:
 - `git diff --check`.
 - Focused inspection showing no source/generated code changed.
 
+## Follow-Up Re-Review
+
+Reviewed basis: `6cb1c125290a4514b8b6aec1ba9567499c1dcfa8...44af7bc`.
+
+| Role                    | Reviewer ID                            | Result                                                                                                                                                  |
+| ----------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Maintainability/style   | `019f0faa-6983-7690-9e46-bc50a6d72920` | No comments; checked name-status, diff check, Prettier check on three log files, clean status, and prior misleading round-closure language.             |
+| Documentation           | `019f0faa-6a10-7c91-b914-1a57f2c5f526` | No comments; inspected the three durable log files, line-numbered contents, diff check, changed-file scope, and branch HEAD.                            |
+| TypeScript/API docs     | `019f0faa-6a76-7093-bb54-d0239d1646d2` | No comments; checked only durable logs changed, diff check passed, and `node scripts/check-api-docs.mjs` reported 85 proto exports and 21 core exports. |
+| Security                | `019f0faa-6aed-7230-ba0c-c385f62ba7ce` | No comments; checked changed-file scope, diff check, secret/auth/payload indicators, unsafe network/tooling wording, and D-0031 provenance references.  |
+| Performance/reliability | `019f0faa-6b97-7ee2-bc36-cbb0500fd302` | No comments; checked status, live HEAD, branch name, changed-file scope, log range, and diff check for the restart path.                                |
+
+Main orchestrator also verified `git status --short --branch`,
+`git diff --check 6cb1c125290a4514b8b6aec1ba9567499c1dcfa8...HEAD`, and
+`git diff --name-only 6cb1c125290a4514b8b6aec1ba9567499c1dcfa8...HEAD`; the
+range was clean and limited to the three durable log files.
+
 ## Implementation Verification Evidence
 
 - Focused red evidence: `corepack pnpm vitest run packages/proto/src/index.test.ts packages/core/src/index.test.ts`
@@ -83,8 +100,16 @@ proto:lint`, `corepack pnpm proto:generate`, and generated-output cleanliness
   `@spine-ts/proto` exports and 21 `@spine-ts/core` exports, proto lint/generate,
   and generated-output cleanliness.
 
+## Final Verification
+
+`CI=true corepack pnpm verify` passed on `2026-06-28 20:31 WEST`: typecheck,
+lint, format, 9 Vitest files / 35 tests, coverage, docs/API check with 85
+`@spine-ts/proto` exports and 21 `@spine-ts/core` exports, proto lint/generate,
+and generated-output cleanliness. Coverage: statements 99.41%, branches 90.9%,
+functions 100%, lines 99.41%.
+
 ## Closure
 
-Pending follow-up re-review. Remaining known risk is limited to the recorded
-D-0031 provenance decision for legacy `spine/net/*` and `spine/ui/language.proto`
-support protos.
+Round 1 is closed with no open findings. Remaining known risk is limited to the
+recorded D-0031 provenance decision for legacy `spine/net/*` and
+`spine/ui/language.proto` support protos.

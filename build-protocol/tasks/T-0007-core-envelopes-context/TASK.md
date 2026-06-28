@@ -1,8 +1,8 @@
 # T-0007: Core Envelopes And Context
 
-Status: Implementation committed; round-1 process-log findings fixed pending re-review
+Status: Review and final branch verification complete; ready for integration
 Start: `2026-06-28 19:35 WEST`
-End: Pending
+End: `2026-06-28 20:32 WEST`
 Setup baseline commit: `f380744`
 Task log path: `build-protocol/tasks/T-0007-core-envelopes-context/TASK.md`
 Branch: `task/T-0007a-core-signal-proto-intake`
@@ -11,9 +11,8 @@ Authoring sub-agent: T-0007a implementation sub-agent
 Reviewer sub-agents: Maintainability/style `019f0faa-6983-7690-9e46-bc50a6d72920`; documentation `019f0faa-6a10-7c91-b914-1a57f2c5f526`; TypeScript/API docs `019f0faa-6a76-7093-bb54-d0239d1646d2`; security `019f0faa-6aed-7230-ba0c-c385f62ba7ce`; performance/reliability `019f0faa-6b97-7ee2-bc36-cbb0500fd302`.
 Implementation baseline commit: `9d35f3e`
 Implementation commit reviewed in round 1: `6cb1c125290a4514b8b6aec1ba9567499c1dcfa8`
-Final branch HEAD: Pending final re-review/closure. Restart from the live
-branch tip reported by `git rev-parse HEAD`; the latest recorded log-fix
-checkpoint before this note was `f66a6f2f6add98e7b2c0c0d48ea80e4a22de2e63`.
+Final branch HEAD: Use the live branch tip reported by `git rev-parse HEAD`.
+This closure entry is the final branch checkpoint before integration.
 
 ## Objective
 
@@ -213,11 +212,27 @@ Round 1 required in-session reviewers:
 Disposition: process-log findings are fixed in a follow-up commit. Round 1 must
 not be considered cleanly closed until the follow-up commit is re-reviewed.
 
+Follow-up re-review of `6cb1c125290a4514b8b6aec1ba9567499c1dcfa8...44af7bc`
+was clean:
+
+| Role                    | Reviewer ID                            | Follow-up result |
+| ----------------------- | -------------------------------------- | ---------------- |
+| Maintainability/style   | `019f0faa-6983-7690-9e46-bc50a6d72920` | No comments.     |
+| Documentation           | `019f0faa-6a10-7c91-b914-1a57f2c5f526` | No comments.     |
+| TypeScript/API docs     | `019f0faa-6a76-7093-bb54-d0239d1646d2` | No comments.     |
+| Security                | `019f0faa-6aed-7230-ba0c-c385f62ba7ce` | No comments.     |
+| Performance/reliability | `019f0faa-6b97-7ee2-bc36-cbb0500fd302` | No comments.     |
+
+Final branch verification on `2026-06-28 20:31 WEST` passed with
+`CI=true corepack pnpm verify`: typecheck, lint, format, 9 Vitest files / 35
+tests, coverage, docs/API check with 85 `@spine-ts/proto` exports and 21
+`@spine-ts/core` exports, proto lint/generate, and generated-output cleanliness.
+Coverage: statements 99.41%, branches 90.9%, functions 100%, lines 99.41%.
+
 ## Integration Result
 
 Implementation commit `6cb1c125290a4514b8b6aec1ba9567499c1dcfa8` is present on
 `task/T-0007a-core-signal-proto-intake`. Full verification passed before that
-commit. Current restart state after the log-only follow-up checkpoints: request
-re-review of the process-log fixes before closing T-0007a. Do not alter the
-already-committed proto/code implementation unless a later review explicitly
-asks for it.
+commit. Follow-up process-log fixes were re-reviewed cleanly, and final branch
+verification passed. Current restart state: merge this branch to `main`, verify
+`main`, record integration, and continue with the next non-blocked task.
