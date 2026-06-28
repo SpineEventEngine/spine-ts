@@ -31,6 +31,15 @@ const expectedCoreExports = [
   "RegisterTypeOptions",
   "TypeMetadata",
   "DeriveTypeUrlOptions",
+  "MessageValidationResult",
+  "ValidationException",
+  "validateMessage",
+  "checkValid",
+  "createValidationError",
+  "TransitionValidationRequest",
+  "TransitionValidationRule",
+  "TransitionValidationResult",
+  "validateTransition",
 ];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 

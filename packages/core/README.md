@@ -2,7 +2,10 @@
 
 Core runtime metadata APIs for Spine TS.
 
-The package currently provides the first descriptor-backed type registry slice:
+The package currently provides descriptor-backed type registry APIs and the
+first validation facade over `@spine-event-engine/validation-ts`.
+
+The type registry slice includes:
 
 - deterministic type URL derivation from a schema file's Spine
   `type_url_prefix` option;
@@ -36,6 +39,53 @@ because no registered schema currently proves `(is)` or `(every_is)` consumer
 metadata. The lookup API is present so later validation/routing tasks can add
 descriptor-backed tags without changing callers.
 
-This package does not yet implement validation, `Any` packing/unpacking,
-runtime buses, entity repositories, storage, decorators, handlers, or transport
-behavior.
+## Validation
+
+Framework users validate single Protobuf messages through `@spine-ts/core`, not
+through the upstream validation package:
+
+```ts
+import { create } from "@bufbuild/protobuf";
+import { validateMessage, checkValid, ValidationException } from "@spine-ts/core";
+import { SomeCommandSchema } from "./generated/some_command_pb.js";
+
+const command = create(SomeCommandSchema, {});
+const result = validateMessage(SomeCommandSchema, command);
+
+if (!result.valid) {
+  const fields = result.violations.map(
+    (violation) => violation.fieldPath?.fieldName.join(".") ?? violation.typeName,
+  );
+  console.warn(`Command failed ${result.violations.length} validation rule(s).`, fields);
+}
+
+try {
+  checkValid(SomeCommandSchema, command);
+} catch (error) {
+  if (error instanceof ValidationException) {
+    const validationError = error.asMessage();
+    console.warn(
+      `Command rejected with ${validationError.constraintViolation.length} violation(s).`,
+    );
+  }
+}
+```
+
+`validateMessage()` returns a structured result with repo-local
+`spine.validation.ConstraintViolation` and `spine.validation.ValidationError`
+message data from `@spine-ts/proto`. `checkValid()` uses the same validation
+path and throws `ValidationException` when violations are present.
+Validation details are safe by default: the facade omits raw invalid
+`fieldValue` data, redacts every upstream or transition-rule placeholder value
+while preserving placeholder keys, and converts upstream validation runtime failures into
+structured repo-local violations.
+
+Stateful checks such as Spine `(set_once)` require previous and proposed state.
+They are intentionally separate from single-message validation and use the
+framework-owned `validateTransition()` seam. Full entity transaction enforcement
+will attach transition rules in a later runtime task. Rule-returned violations
+are sanitized before aggregation, and throwing transition rules are isolated
+into structured violations so later rules still run in order.
+
+This package does not yet implement `Any` packing/unpacking, runtime buses,
+entity repositories, storage, decorators, handlers, or transport behavior.

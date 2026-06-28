@@ -1,20 +1,142 @@
-import { getOption, hasOption } from "@bufbuild/protobuf";
-import type { DescField, Message } from "@bufbuild/protobuf";
+import { create, getOption, hasOption } from "@bufbuild/protobuf";
+import type { DescField, Message, MessageShape } from "@bufbuild/protobuf";
 import type { GenExtension, GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import type { FileOptions } from "@bufbuild/protobuf/wkt";
+import { validate as validateWithSpine } from "@spine-event-engine/validation-ts";
 import {
   ConstraintViolationSchema,
   FieldPathSchema,
   TemplateStringSchema,
   ValidationErrorSchema,
   type_url_prefix,
+  type ConstraintViolation,
+  type ValidationError,
 } from "@spine-ts/proto";
+
+const EMPTY_VIOLATIONS: readonly [] = Object.freeze([]);
+const REDACTED_VALIDATION_DETAIL = "[redacted]";
+const VALIDATION_RUNTIME_FAILURE_MESSAGE = "Validation runtime failed.";
+const TRANSITION_RULE_FAILURE_MESSAGE = "Transition validation rule failed.";
 
 /** Standard Protobuf `Any` prefix used when a file has no Spine type URL option. */
 export const DEFAULT_TYPE_URL_PREFIX = "type.googleapis.com";
 
 /** Protobuf-ES schema shape accepted by the Spine TS type registry. */
 export type MessageSchema = GenMessage<Message>;
+
+/** Structured result returned by {@link validateMessage}. */
+export type MessageValidationResult =
+  | {
+      /** The message satisfied all single-message validation constraints. */
+      readonly valid: true;
+      /** Successful validation has no constraint violations. */
+      readonly violations: readonly [];
+      /** Successful validation does not allocate a validation error message. */
+      readonly error: undefined;
+    }
+  | {
+      /** The message failed validation or the validation runtime failed. */
+      readonly valid: false;
+      /** Invalid validation results always carry at least one constraint violation. */
+      readonly violations: readonly [ConstraintViolation, ...ConstraintViolation[]];
+      /** Repo-local Spine validation error message for the violations. */
+      readonly error: ValidationError;
+    };
+
+/** Framework-owned state transition validation request. */
+export interface TransitionValidationRequest<Schema extends MessageSchema = MessageSchema> {
+  /** Schema shared by the previous and proposed message states. */
+  readonly schema: Schema;
+  /** Previous committed state, absent when creating a new state. */
+  readonly previous: MessageShape<Schema> | undefined;
+  /** Proposed next state to validate before commit. */
+  readonly next: MessageShape<Schema>;
+}
+
+/** Rule adapter for stateful validation such as Spine `(set_once)`. */
+export interface TransitionValidationRule<Schema extends MessageSchema = MessageSchema> {
+  /** Return transition-only constraint violations for the proposed state change. */
+  validateTransition(request: TransitionValidationRequest<Schema>): readonly ConstraintViolation[];
+}
+
+/** Structured result returned by {@link validateTransition}. */
+export type TransitionValidationResult = MessageValidationResult;
+
+/** Create a repo-local Spine `ValidationError` message from constraint violations. */
+export function createValidationError(violations: readonly ConstraintViolation[]): ValidationError {
+  return create(ValidationErrorSchema, { constraintViolation: [...violations] });
+}
+
+/** Error thrown when a Protobuf message fails Spine single-message validation. */
+export class ValidationException extends Error {
+  /** Constraint violations captured from the structured validation error. */
+  readonly violations: readonly ConstraintViolation[];
+  readonly #messageData: ValidationError;
+
+  /** Create an exception from structured Spine validation error data. */
+  constructor(messageData: ValidationError) {
+    super(
+      `Message validation failed with ${String(messageData.constraintViolation.length)} violation(s).`,
+    );
+    this.name = "ValidationException";
+    this.#messageData = messageData;
+    this.violations = messageData.constraintViolation;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+
+  /** Return the structured Spine `ValidationError` message data. */
+  asMessage(): ValidationError {
+    return this.#messageData;
+  }
+}
+
+/** Validate one Protobuf message through the Spine TS validation facade. */
+export function validateMessage<Schema extends MessageSchema>(
+  schema: Schema,
+  message: MessageShape<Schema>,
+): MessageValidationResult {
+  try {
+    return createValidationResult(validateWithSpine(schema, message).map(toConstraintViolation));
+  } catch {
+    return createValidationResult([
+      createFacadeFailureViolation(schema.typeName, VALIDATION_RUNTIME_FAILURE_MESSAGE),
+    ]);
+  }
+}
+
+/** Validate one Protobuf message and throw if it has constraint violations. */
+export function checkValid<Schema extends MessageSchema>(
+  schema: Schema,
+  message: MessageShape<Schema>,
+): MessageShape<Schema> {
+  const result = validateMessage(schema, message);
+
+  if (!result.valid) {
+    throw new ValidationException(result.error);
+  }
+
+  return message;
+}
+
+/** Run framework-owned transition validation rules for a previous/next state pair. */
+export function validateTransition<Schema extends MessageSchema>(
+  request: TransitionValidationRequest<Schema>,
+  rules: readonly TransitionValidationRule<Schema>[] = [],
+): TransitionValidationResult {
+  const violations: ConstraintViolation[] = [];
+
+  for (const rule of rules) {
+    try {
+      violations.push(...rule.validateTransition(request).map(toConstraintViolation));
+    } catch {
+      violations.push(
+        createFacadeFailureViolation(request.schema.typeName, TRANSITION_RULE_FAILURE_MESSAGE),
+      );
+    }
+  }
+
+  return createValidationResult(violations);
+}
 
 /** Options for registering a schema in a {@link TypeRegistry}. */
 export interface RegisterTypeOptions {
@@ -325,4 +447,73 @@ function createTypeMetadata<Schema extends MessageSchema>(
   };
 
   return Object.freeze(metadata);
+}
+
+function createValidationResult(
+  violations: readonly ConstraintViolation[],
+): MessageValidationResult {
+  if (violations.length === 0) {
+    return {
+      valid: true,
+      violations: EMPTY_VIOLATIONS,
+      error: undefined,
+    };
+  }
+
+  const nonEmptyViolations = violations as readonly [ConstraintViolation, ...ConstraintViolation[]];
+
+  return {
+    valid: false,
+    violations: nonEmptyViolations,
+    error: createValidationError(nonEmptyViolations),
+  };
+}
+
+function createFacadeFailureViolation(typeName: string, message: string): ConstraintViolation {
+  return create(ConstraintViolationSchema, {
+    typeName,
+    message: create(TemplateStringSchema, {
+      withPlaceholders: message,
+    }),
+  });
+}
+
+interface SanitizableConstraintViolation {
+  readonly typeName: string;
+  readonly fieldPath?:
+    | {
+        readonly fieldName: readonly string[];
+      }
+    | undefined;
+  readonly message?:
+    | {
+        readonly withPlaceholders: string;
+        readonly placeholderValue: Record<string, string> | undefined;
+      }
+    | undefined;
+}
+
+function toConstraintViolation(violation: SanitizableConstraintViolation): ConstraintViolation {
+  return create(ConstraintViolationSchema, {
+    message:
+      violation.message === undefined
+        ? undefined
+        : create(TemplateStringSchema, {
+            withPlaceholders: violation.message.withPlaceholders,
+            placeholderValue: redactPlaceholderValues(violation.message.placeholderValue),
+          }),
+    typeName: violation.typeName,
+    fieldPath:
+      violation.fieldPath === undefined
+        ? undefined
+        : create(FieldPathSchema, { fieldName: [...violation.fieldPath.fieldName] }),
+  });
+}
+
+function redactPlaceholderValues(
+  values: Record<string, string> | undefined,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.keys(values ?? {}).map((key) => [key, REDACTED_VALIDATION_DETAIL]),
+  );
 }

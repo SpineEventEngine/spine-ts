@@ -1,17 +1,38 @@
 # T-0006: Validation Facade
 
-Status: Split complete; ready for implementation worktree
+Status: Final verification passed; integration pending
 Start: `2026-06-28 17:22 WEST`
 End: Pending
 Setup baseline commit: `62ffc33`
-Implementation baseline commit: `296b784`
+Implementation baseline commit: `e953662`
 Task log path: `build-protocol/tasks/T-0006-validation-facade/TASK.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
-Authoring sub-agent: Pending
-Reviewer sub-agents: Pending
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
+Authoring sub-agent: T-0006a implementation sub-agent (Codex)
+Reviewer sub-agents: Round 8 completed
+Implementation commit: `4726985e1786929f5222707dc7abf77c448e8fa3`
+Review-finding log HEAD: `7d519d1f4555ffab058d1642065947355c0acf9e`
+Review-fix commit: `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`
+Round-2 findings log HEAD: `15b7933216b038888e10ab3cbbefc93c7a79d78d`
+Current branch HEAD before round-2 fix: `15b7933216b038888e10ab3cbbefc93c7a79d78d`
+Round-2 code-fix commit: `74d56ab798eb3fad09759d69e480985320af363a`
+Round-2 log handoff commit: `76f6b017c55e51f5af639a837b2b529a469d47ac`
+Round-3 review readiness commit: `9560d2e330cf76c9af910ab5c59d26aac278a9a5`
+Round-3 dispatch log commit: `9b51b43dac2db509c428fcc849411bbbf170948d`
+Round-3 findings log HEAD: `86aa522e31a692b49abb2de4aae7d41c8224f0ed`
+Current branch HEAD before round-3 security fix: `86aa522e31a692b49abb2de4aae7d41c8224f0ed`
+Round-3 security fix commit: `76cbe19beeef0703dded45b3aee66e6b95b0da93`
+Round-3 security log handoff commit: `876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3`
+Current branch HEAD before round-4 log fix: `876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3`
+Round-4 findings/log-fix commit: `2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616`
+Current branch HEAD before round-5 log fix: `2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616`
+Round-5 findings/log-fix commit: `2df2abf`
+Current branch HEAD before round-6 dispatch log: `2df2abf`
+Round-6 findings/log-fix commit: `38bb610538834a4de74c68b813cd67af941bc2c1`
+Latest completed review basis:
+`52e0a26...38bb610538834a4de74c68b813cd67af941bc2c1`
+Round-7 findings/log-fix commit: `5f215e3`
+Final branch HEAD: pending final verification and integration closure
 
 ## Objective
 
@@ -118,6 +139,171 @@ Skipped relevant-looking skills:
 Conflict resolution: project protocol, task scope, sandbox/approval rules, and
 explicit human/orchestrator authorization override advisory skill content.
 
+### Implementation Sub-Agent Skill Applicability Check
+
+Timestamp: `2026-06-28 17:36 WEST`
+
+Canonical checklist performed before implementation actions:
+
+- Session skill inventory exposed in this conversation includes the
+  task-selected skills `implement`, `test-driven-development`, `tdd`,
+  `verification-before-completion`, `receiving-code-review`,
+  `architecture-decision-records`, `typescript-advanced-types`,
+  `javascript-testing-patterns`, `nodejs-backend-patterns`,
+  `codebase-design`, and `using-git-worktrees`, plus related review/security
+  skills reserved for later reviewer roles.
+- Task-provided selected skills were read from the implementation brief and
+  matched against the session inventory.
+- Repo-local manifest `build-protocol/skills/EXPECTED_SKILLS.md` was read.
+- User-installed skill entrypoints were enumerated with
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`.
+- Installed-skill lock evidence was sampled from
+  `/Users/armiol/.agents/.skill-lock.json`; expected sources include
+  `mattpocock/skills`, `obra/superpowers`, and `wshobson/agents`.
+- Selected `SKILL.md` files were fully read before governed actions:
+  `implement`, `test-driven-development`, `tdd`,
+  `verification-before-completion`, `receiving-code-review`,
+  `architecture-decision-records`, `typescript-advanced-types`,
+  `javascript-testing-patterns`, `nodejs-backend-patterns`,
+  `codebase-design`, and `using-git-worktrees`.
+- Worktree detection per `using-git-worktrees` found
+  `git rev-parse --git-dir` at
+  `/Users/armiol/development/experiments/spine-ts/.git/worktrees/T-0006a-validation-facade-contract`,
+  `git rev-parse --git-common-dir` at
+  `/Users/armiol/development/experiments/spine-ts/.git`, no superproject, and
+  branch `task/T-0006a-validation-facade-contract`; this is already an isolated
+  worktree, so no new worktree was created.
+- Skipped relevant-looking skills: `requesting-code-review` is reserved for the
+  later review request loop; `code-review-excellence`, `security-best-practices`,
+  `performance`, and `api-design-principles` are more appropriate for dedicated
+  reviewer/advisory roles than this implementation slice; `planning-with-files`
+  is superseded by the project build-protocol logs.
+- Conflict resolution: installed skills are advisory only. `BUILD_PROTOCOL.md`,
+  `CODE_QUALITY.md`, task scope, sandbox/approval rules, and explicit
+  human/orchestrator authorization govern this implementation.
+
+### Review-Fix Skill Applicability Check
+
+Timestamp: `2026-06-28 18:15 WEST`
+
+Canonical checklist performed before review-fix implementation actions:
+
+- Session skill inventory exposed in this conversation includes the
+  review-fix-relevant skills `receiving-code-review`,
+  `test-driven-development`, `verification-before-completion`,
+  `security-best-practices`, plus the previously selected implementation
+  skills for TypeScript API design and test coverage.
+- The human review-fix brief explicitly requires receiving round-1 feedback,
+  using TDD for new behavior, updating durable logs, running focused checks and
+  full `CI=true corepack pnpm verify`, and committing the fix pass.
+- Repo-local protocol `build-protocol/BUILD_PROTOCOL.md` was read before
+  review-fix edits; `build-protocol/skills/EXPECTED_SKILLS.md` was already
+  recorded for this task.
+- Selected `SKILL.md` files fully read before governed actions:
+  `receiving-code-review`, `test-driven-development`,
+  `verification-before-completion`, and `security-best-practices`.
+- Security reference check found no Node library-specific reference file in
+  the available security skill bundle; the fix pass applies the general
+  secure-default rule of minimizing exposed payload data and avoiding raw
+  exception leakage.
+- Worktree check confirmed branch
+  `task/T-0006a-validation-facade-contract` at review-finding log head
+  `7d519d1f4555ffab058d1642065947355c0acf9e` with a clean status.
+- Skipped relevant-looking skills: `requesting-code-review` is reserved for
+  the next review request after fixes; `planning-with-files` remains superseded
+  by the build-protocol task/work/review logs.
+- Conflict resolution: review comments are actionable and aligned with the
+  task scope. Project protocol, task scope, sandbox/approval rules, and
+  explicit human/orchestrator authorization govern over advisory skill content.
+
+Review-fix TDD plan:
+
+1. Add RED coverage for the discriminated validation result invariant.
+2. Add RED coverage for default redaction and structured upstream validator
+   failures.
+3. Add RED coverage for transition-rule exception isolation and deterministic
+   ordering.
+4. Implement minimal facade changes, update docs/API logs, then run focused and
+   full verification.
+
+### Round-2 Focused Fix Skill Applicability Check
+
+Timestamp: `2026-06-28 18:40 WEST`
+
+Canonical checklist performed before round-2 fix implementation actions:
+
+- Session skill inventory exposed in this conversation includes
+  `receiving-code-review`, `test-driven-development`,
+  `verification-before-completion`, and `security-best-practices`, which match
+  the security and durable-log review-fix brief.
+- Human round-2 feedback requires strict safe-by-default placeholder redaction,
+  TDD RED/GREEN evidence, focused and full verification, durable log metadata
+  consistency, and commits without merging.
+- Repo-local protocol `build-protocol/BUILD_PROTOCOL.md` and manifest
+  `build-protocol/skills/EXPECTED_SKILLS.md` were read before round-2 fix
+  edits.
+- Selected `SKILL.md` files fully read before governed actions:
+  `receiving-code-review`, `test-driven-development`,
+  `verification-before-completion`, and `security-best-practices`.
+- Security reference check found no Node library-specific security reference in
+  the available security skill bundle; the fix applies the general
+  secure-default rule of exposing no raw upstream placeholder values.
+- Worktree check confirmed branch
+  `task/T-0006a-validation-facade-contract` at round-2 findings log head
+  `15b7933216b038888e10ab3cbbefc93c7a79d78d` with a clean status.
+- Skipped relevant-looking skills: `requesting-code-review` is reserved for
+  the next review request after this focused fix; `planning-with-files` remains
+  superseded by the build-protocol task/work/review logs.
+- Conflict resolution: round-2 security feedback is technically correct because
+  upstream `TemplateString.placeholderValue` keys are unrestricted. The facade
+  will redact all upstream placeholder values while preserving keys.
+
+Round-2 TDD plan:
+
+1. Add RED regression coverage proving arbitrary upstream placeholder keys do
+   not leak through `validateMessage().violations`, `validateMessage().error`,
+   or `ValidationException.asMessage()`.
+2. Implement strict value redaction for every upstream placeholder key.
+3. Update docs/logs to say all upstream placeholder values are redacted by
+   default.
+4. Run focused validation tests, relevant checks, full
+   `CI=true corepack pnpm verify`, then commit the code fix and a final log
+   handoff if needed to record exact commit metadata.
+
+### Round-3 Focused Security Fix Skill Applicability Check
+
+Timestamp: `2026-06-28 19:00 WEST`
+
+Canonical checklist performed before round-3 fix implementation actions:
+
+- Session and prompt-supplied skills read fully before task actions:
+  `receiving-code-review`, `test-driven-development`,
+  `security-best-practices`, and `verification-before-completion`.
+- Human round-3 feedback requires sanitizing transition-rule returned
+  `ConstraintViolation` values before aggregation, using TDD, recording RED
+  evidence in the work log, running focused validation tests and full
+  `CI=true corepack pnpm verify`, and committing the result.
+- Security reference check found no TypeScript library-specific reference in
+  the available security skill bundle; this pass applies the general
+  secure-default rule of minimizing exposed payload data.
+- Worktree check confirmed branch
+  `task/T-0006a-validation-facade-contract` at
+  `86aa522e31a692b49abb2de4aae7d41c8224f0ed` before edits.
+- Conflict resolution: the round-3 security finding is technically correct.
+  `validateMessage()` already rebuilds violations through the redaction helper,
+  while `validateTransition()` appended rule-returned violations directly.
+
+Round-3 TDD plan:
+
+1. Add RED regression coverage proving transition-rule returned `fieldValue`
+   and arbitrary placeholder values leak through `result.violations`,
+   `result.error.constraintViolation`, and `ValidationException.asMessage()`.
+2. Reuse the existing violation sanitizer for transition-rule returned
+   violations while preserving type name, field path, and template text.
+3. Update docs/logs for transition-rule returned violation sanitization.
+4. Run focused validation tests, full `CI=true corepack pnpm verify`, then
+   commit the focused fix.
+
 ## Scope
 
 In scope:
@@ -146,6 +332,101 @@ Out of scope:
   before splitter work.
 - `2026-06-28 17:27 WEST`: Recorded splitter output, current dependency
   inspection, and D-0029 before creating the implementation worktree.
+- `2026-06-28 17:31 WEST`: Created branch
+  `task/T-0006a-validation-facade-contract` and worktree
+  `.worktrees/T-0006a-validation-facade-contract` at base `e953662`.
+- `2026-06-28 17:33 WEST`: Baseline `CI=true corepack pnpm verify` passed in
+  the T-0006a worktree.
+- `2026-06-28 18:11 WEST`: Dispatched round-1 reviewer sub-agents for
+  maintainability, documentation, TypeScript/API docs, security, and
+  performance/reliability.
+- `2026-06-28 18:18 WEST`: Recorded round-1 reviewer findings; changes are
+  required before re-review.
+- `2026-06-28 18:15 WEST`: Review-fix sub-agent confirmed current branch head
+  `7d519d1f4555ffab058d1642065947355c0acf9e`, reread applicable skills, and
+  recorded the RED/GREEN fix plan before behavior changes.
+- `2026-06-28 18:18 WEST`: Added review-fix RED tests for result narrowing,
+  default redaction, upstream structured failures, and transition-rule
+  isolation.
+- `2026-06-28 18:19 WEST`: Implemented review-fix GREEN candidate: a
+  discriminated validation result, default upstream value redaction, structured
+  validation-runtime failures, and transition-rule exception isolation.
+- `2026-06-28 18:21 WEST`: Updated docs/logs for review-fix findings and ran
+  focused quality checks before full verification.
+- `2026-06-28 18:23 WEST`: Full review-fix verification pass 1 succeeded;
+  final log formatting and a final full verify pass remain before commit.
+- `2026-06-28 18:25 WEST`: Final review-fix verification pass succeeded on the
+  formatted tree; logs were updated with final evidence before commit.
+- `2026-06-28 18:42 WEST`: Added round-2 strict-redaction regression tests and
+  captured RED focused test evidence before implementation.
+- `2026-06-28 18:42 WEST`: Implemented strict all-placeholder-value redaction
+  and captured GREEN focused validation test evidence.
+- `2026-06-28 18:44 WEST`: Updated docs for strict placeholder redaction and
+  captured focused quality check evidence before full verification.
+- `2026-06-28 18:45 WEST`: Full round-2 verification passed before the
+  round-2 code-fix commit.
+- `2026-06-28 18:47 WEST`: Committed round-2 code fix as
+  `74d56ab798eb3fad09759d69e480985320af363a`; recording exact commit metadata
+  in durable logs before log-finalization commit.
+- `2026-06-28 18:30 WEST`: Recorded review-fix commit
+  `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89` and prepared round-2 review
+  dispatch.
+- `2026-06-28 18:31 WEST`: Dispatched round-2 reviewer sub-agents for
+  maintainability, documentation, TypeScript/API docs, security, and
+  performance/reliability.
+- `2026-06-28 18:36 WEST`: Recorded round-2 reviewer findings; strict
+  placeholder redaction and durable-log metadata fixes are required before
+  re-review.
+- `2026-06-28 17:36 WEST`: T-0006a implementation sub-agent performed the
+  canonical skill applicability check, confirmed the assigned isolated
+  worktree, and recorded selected/skipped skills before implementation edits.
+- `2026-06-28 17:40 WEST`: Began TDD RED cycle 1 by adding a public
+  `validateMessage()` facade test for a valid `ValidationError` message using
+  only `@spine-ts/core` imports.
+- `2026-06-28 17:43 WEST`: Installed exact
+  `@spine-event-engine/validation-ts@2.0.0-snapshot.4` dependency in
+  `@spine-ts/core`, inspected its declarations, and added the minimal
+  dependency-backed `validateMessage()` implementation with repo-local
+  validation error types.
+- `2026-06-28 17:46 WEST`: GREEN cycle 1 focused test passed, then RED cycle 2
+  added a deterministic descriptor fixture with `(required) = true` and a
+  `checkValid()`/`ValidationException.asMessage()` test.
+- `2026-06-28 17:47 WEST`: RED cycle 2 failed on the missing exception
+  constructor; added `ValidationException` and `checkValid()` on top of the
+  shared `validateMessage()` adapter path.
+- `2026-06-28 17:48 WEST`: GREEN cycle 2 focused test passed, then RED cycle 3
+  added non-throwing invalid-result assertions and a missing
+  `createValidationError()` public helper test.
+- `2026-06-28 17:49 WEST`: RED cycle 3 failed on the missing helper; added
+  `createValidationError()` and routed `validateMessage()` through it.
+- `2026-06-28 17:50 WEST`: GREEN cycle 3 focused test passed, then RED cycle 4
+  added a framework-owned `validateTransition()` seam test that is separate
+  from single-message validation.
+- `2026-06-28 17:51 WEST`: RED cycle 4 failed on the missing transition
+  facade; added `TransitionValidationRequest`, `TransitionValidationRule`,
+  `TransitionValidationResult`, and `validateTransition()`.
+- `2026-06-28 17:54 WEST`: GREEN cycle 4 focused test passed, then updated
+  TypeDoc export checks and package/user/API/architecture docs for the
+  validation facade and transition seam.
+- `2026-06-28 17:56 WEST`: Focused verification passed for typecheck, core
+  validation tests, and API docs/export guard.
+- `2026-06-28 17:58 WEST`: Full verification failed at lint. Fixed
+  `ValidationException` message formatting and removed deprecated
+  `ConstraintViolation` fields from the upstream-to-local conversion helper.
+- `2026-06-28 17:59 WEST`: Post-lint-fix focused core tests and lint passed.
+- `2026-06-28 18:00 WEST`: Full verification attempt 2 failed at
+  `format:check`; ran Prettier on the four touched files.
+- `2026-06-28 18:01 WEST`: Full verification attempt 3 failed at
+  `format:check` on the work log after recording attempt 2; reran Prettier on
+  the durable logs.
+- `2026-06-28 18:03 WEST`: Full verification attempt 4 reached coverage and
+  failed because branch coverage was 89.13%; added focused tests for the
+  `checkValid()` valid path and empty transition-rule path.
+- `2026-06-28 18:04 WEST`: Focused coverage passed after the coverage test
+  addition.
+- `2026-06-28 18:06 WEST`: Full verification attempt 5 passed.
+- `2026-06-28 18:08 WEST`: Final full verification pass completed on the
+  formatted tree.
 
 ## Decisions
 
@@ -154,6 +435,11 @@ Out of scope:
   framework-level state-transition validation for `(set_once)`.
 - `D-0029`: use exact `@spine-event-engine/validation-ts@2.0.0-snapshot.4`
   behind a core facade, based on npm metadata checked on 2026-06-28.
+- Review-fix adapter locality decision: keep validation adapter helpers private
+  in `packages/core/src/index.ts` for this pass because the package currently
+  exposes a single small entry-point module and the review fixes only add
+  boundary helpers for that facade. Split a dedicated validation module when
+  `@spine-ts/core` grows beyond registry plus validation facade responsibilities.
 
 ## Human Questions And Answers
 
@@ -162,15 +448,144 @@ Out of scope:
 
 ## Files Changed
 
-- Pending.
+- `packages/core/package.json`
+- `pnpm-lock.yaml`
+- `packages/core/src/index.ts`
+- `packages/core/src/index.test.ts`
+- `packages/core/src/validation-facade-boundary.test.ts`
+- `scripts/check-api-docs.mjs`
+- `packages/core/README.md`
+- `docs/USER_GUIDE.md`
+- `docs/api/README.md`
+- `docs/architecture/README.md`
+- `build-protocol/tasks/T-0006-validation-facade/TASK.md`
+- `build-protocol/work-logs/T-0006.md`
+- `build-protocol/reviews/T-0006-validation-facade.md`
 
 ## Tests Run
 
-- Pending.
+- Round-3 RED focused test:
+  `corepack pnpm test packages/core/src/index.test.ts` failed as expected.
+  Vitest ran 19 tests: 18 passed and 1 failed because
+  `validateTransition()` returned the rule-provided `fieldValue` unchanged as a
+  `google.protobuf.Any` payload.
+- Round-3 GREEN focused core test:
+  `corepack pnpm test packages/core/src/index.test.ts` passed with 1 test file
+  and 19 tests.
+- Round-3 focused validation tests:
+  `corepack pnpm test packages/core/src/index.test.ts
+packages/core/src/validation-facade-boundary.test.ts` passed with 2 test files
+  and 21 tests.
+- Round-3 focused typecheck: `corepack pnpm typecheck` passed after making the
+  sanitizer type compatible with generated `ConstraintViolation` messages and
+  upstream validator-shaped data.
+- Round-3 focused quality checks: `corepack pnpm typecheck`,
+  `corepack pnpm test packages/core/src/index.test.ts
+packages/core/src/validation-facade-boundary.test.ts`, `corepack pnpm lint`,
+  `corepack pnpm docs:check`, and `corepack pnpm format:check` all passed.
+  Docs check confirmed 13 expected `@spine-ts/proto` exports and 21 expected
+  `@spine-ts/core` exports with the known invalid `origin` TypeDoc warning.
+- Round-3 full verification before fix commit:
+  `CI=true corepack pnpm verify` passed. Vitest ran 9 test files and 33 tests;
+  coverage statements 99.19%, branches 90.9%, functions 100%, lines 99.19%;
+  docs check confirmed 13 proto exports and 21 core exports with the known
+  invalid `origin` TypeDoc warning; proto lint/generate and generated-output
+  cleanliness passed.
+- Round-3 security fix commit:
+  `76cbe19beeef0703dded45b3aee66e6b95b0da93` created with message
+  `fix(core): sanitize transition validation violations`.
+- Round-2 RED focused tests:
+  `corepack pnpm test packages/core/src/index.test.ts
+packages/core/src/validation-facade-boundary.test.ts` failed as expected.
+  Vitest ran 20 tests: 17 passed and 3 failed because the heuristic redaction
+  still preserved upstream placeholder values for unrestricted keys such as
+  `field`, `minimum`, `candidate`, and `email`.
+- Round-2 GREEN focused validation tests:
+  `corepack pnpm test packages/core/src/index.test.ts
+packages/core/src/validation-facade-boundary.test.ts` passed with 2 test files
+  and 20 tests.
+- Round-2 focused quality checks: `corepack pnpm typecheck`,
+  `corepack pnpm test packages/core/src/index.test.ts
+packages/core/src/validation-facade-boundary.test.ts`, `corepack pnpm lint`,
+  `corepack pnpm docs:check`, and `corepack pnpm format:check` all passed.
+  Docs check confirmed 13 expected `@spine-ts/proto` exports and 21 expected
+  `@spine-ts/core` exports with the known invalid `origin` TypeDoc warning.
+- Round-2 full verification before code-fix commit:
+  `CI=true corepack pnpm verify` passed. Vitest ran 9 test files and 32 tests;
+  coverage statements 99.19%, branches 92.85%, functions 100%, lines 99.18%;
+  docs check confirmed 13 proto exports and 21 core exports with the known
+  invalid `origin` TypeDoc warning; proto lint/generate and generated-output
+  cleanliness passed.
+- Round-2 code-fix commit:
+  `74d56ab798eb3fad09759d69e480985320af363a` created with message
+  `fix(core): redact validation placeholders strictly`.
+- RED cycle 1: `corepack pnpm test packages/core/src/index.test.ts` failed as
+  expected. Vitest ran 12 tests; 11 passed and the new
+  `validateMessage()` test failed with `TypeError: validateMessage is not a
+function`, proving the public facade export is missing.
+- GREEN cycle 1: `corepack pnpm test packages/core/src/index.test.ts` passed;
+  Vitest ran 12 tests and all passed.
+- Review-fix RED typecheck: `corepack pnpm typecheck` failed as expected.
+  TypeScript reported that `MessageValidationResult` did not narrow valid
+  results to empty violations/undefined error or invalid results to non-empty
+  violations/`ValidationError`.
+- Review-fix RED focused tests:
+  `corepack pnpm test packages/core/src/index.test.ts
+packages/core/src/validation-facade-boundary.test.ts` failed as expected. Vitest
+  ran 20 tests: 15 passed and 5 failed on unredacted placeholder values, copied
+  upstream `fieldValue`, raw upstream exception propagation, and transition-rule
+  exception propagation.
+- Review-fix GREEN focused checks: `corepack pnpm typecheck` passed;
+  `corepack pnpm test packages/core/src/index.test.ts
+packages/core/src/validation-facade-boundary.test.ts` passed with 2 test files
+  and 20 tests.
+- Review-fix focused quality checks: `corepack pnpm typecheck`,
+  `corepack pnpm test packages/core/src/index.test.ts
+packages/core/src/validation-facade-boundary.test.ts`, `corepack pnpm lint`,
+  `corepack pnpm docs:check`, and `corepack pnpm format:check` all passed.
+  Docs check confirmed 13 expected `@spine-ts/proto` exports and 21 expected
+  `@spine-ts/core` exports with the known invalid `origin` TypeDoc warning.
+- Review-fix full verification pass 1: `CI=true corepack pnpm verify` passed.
+  Vitest ran 9 test files and 32 tests; coverage statements 99.2%, branches
+  94.33%, functions 100%, lines 99.2%; docs check confirmed 13 proto exports
+  and 21 core exports with the known invalid `origin` TypeDoc warning; proto
+  lint/generate and generated-output cleanliness passed.
+- Final review-fix verification pass: `CI=true corepack pnpm verify` passed.
+  Vitest ran 9 test files and 32 tests; coverage statements 99.2%, branches
+  94.33%, functions 100%, lines 99.2%; docs check confirmed 13 proto exports
+  and 21 core exports with the known invalid `origin` TypeDoc warning; proto
+  lint/generate and generated-output cleanliness passed.
+- RED cycle 2: `corepack pnpm test packages/core/src/index.test.ts` failed as
+  expected. Vitest ran 13 tests; 12 passed and the new throwing-path test failed
+  because `ValidationException` was still undefined.
+- GREEN cycle 2: `corepack pnpm test packages/core/src/index.test.ts` passed;
+  Vitest ran 13 tests and all passed.
+- RED cycle 3: `corepack pnpm test packages/core/src/index.test.ts` failed as
+  expected. Vitest ran 14 tests; 13 passed and the new helper test failed with
+  `TypeError: createValidationError is not a function`.
+- GREEN cycle 3: `corepack pnpm test packages/core/src/index.test.ts` passed;
+  Vitest ran 14 tests and all passed.
+- RED cycle 4: `corepack pnpm test packages/core/src/index.test.ts` failed as
+  expected. Vitest ran 15 tests; 14 passed and the transition-seam test failed
+  with `TypeError: validateTransition is not a function`.
+- GREEN cycle 4: `corepack pnpm test packages/core/src/index.test.ts` passed;
+  Vitest ran 15 tests and all passed.
+- Focused verification: `corepack pnpm typecheck` passed; `corepack pnpm test
+packages/core/src/index.test.ts` passed with 1 file and 15 tests; `corepack
+pnpm docs:check` passed and confirmed 13 expected `@spine-ts/proto` exports
+  and 21 expected `@spine-ts/core` exports, with the known invalid `origin`
+  TypeDoc warning.
 
 ## Coverage Result
 
-- Pending.
+- Focused coverage after coverage fix: statements 99.08%, branches 93.47%,
+  functions 100%, lines 99.07%.
+- Review-fix full verification pass 1 coverage: statements 99.2%, branches
+  94.33%, functions 100%, lines 99.2%.
+- Final review-fix coverage: statements 99.2%, branches 94.33%, functions
+  100%, lines 99.2%.
+- Round-2 full verification coverage: statements 99.19%, branches 92.85%,
+  functions 100%, lines 99.18%.
 
 ## Documentation And Public API Impact
 
@@ -182,7 +597,7 @@ Out of scope:
 | Framework `USER_GUIDE.md` impact | Must show how framework users validate messages.                        |
 | Example `USER_GUIDE.md` impact   | N/A unless the task touches the to-do example.                          |
 | API examples                     | Add concise validation examples.                                        |
-| Compatibility notes              | Must document the single-message vs transition-validation split.        |
+| Compatibility notes              | Documented the single-message vs transition-validation split.           |
 
 ## Security Impact
 
@@ -198,7 +613,65 @@ Out of scope:
 
 ## Verification
 
-- Pending.
+- Round-3 focused verification passed: `corepack pnpm typecheck` passed and
+  `corepack pnpm test packages/core/src/index.test.ts
+packages/core/src/validation-facade-boundary.test.ts` passed with 2 test files
+  and 21 tests.
+- Round-3 full verification before fix commit passed:
+  `CI=true corepack pnpm verify` passed typecheck, lint, format, tests,
+  coverage, docs check, proto lint/generate, and generated-output cleanliness.
+  Vitest ran 9 test files and 33 tests; coverage statements 99.19%, branches
+  90.9%, functions 100%, lines 99.19%; docs check confirmed 13 proto exports
+  and 21 core exports with the known invalid `origin` warning.
+- Baseline `CI=true corepack pnpm verify` passed before implementation: 8 test
+  files and 23 tests passed; coverage statements 98.91%, branches 96.96%,
+  functions 100%, lines 98.91%; docs check passed with the known TypeDoc
+  invalid `origin` warning; proto lint/generate passed; generated output was
+  clean.
+- Focused checks passed.
+- Full `CI=true corepack pnpm verify` attempt 1 failed at lint:
+  `@typescript-eslint/restrict-template-expressions` on the violation count and
+  `@typescript-eslint/no-deprecated` on deprecated `msgFormat`, `param`, and
+  `violation` fields in the conversion helper.
+- Post-fix focused check: `corepack pnpm test packages/core/src/index.test.ts`
+  passed with 15 tests; `corepack pnpm lint` passed.
+- Full `CI=true corepack pnpm verify` attempt 2 failed at `format:check` on
+  `packages/core/src/index.ts`, `packages/core/src/index.test.ts`,
+  `build-protocol/tasks/T-0006-validation-facade/TASK.md`, and
+  `build-protocol/work-logs/T-0006.md`; `corepack pnpm exec prettier --write`
+  rewrote those files.
+- Full `CI=true corepack pnpm verify` attempt 3 failed at `format:check` on
+  `build-protocol/work-logs/T-0006.md` after recording attempt 2; Prettier was
+  rerun on the durable logs.
+- Full `CI=true corepack pnpm verify` attempt 4 passed typecheck, lint,
+  format, and tests, then failed at coverage: 8 test files and 27 tests passed;
+  statements 98.16%, branches 89.13%, functions 100%, lines 98.14%; branch
+  threshold requires 90%.
+- Focused `corepack pnpm test:coverage` passed after coverage test addition:
+  8 test files and 28 tests passed; statements 99.08%, branches 93.47%,
+  functions 100%, lines 99.07%.
+- Full `CI=true corepack pnpm verify` attempt 5 passed: typecheck, lint,
+  format, tests, coverage, docs check, proto lint/generate, and generated-output
+  cleanliness all passed. Vitest ran 8 test files and 28 tests; coverage
+  statements 99.08%, branches 93.47%, functions 100%, lines 99.07%. TypeDoc
+  emitted the known invalid `origin` source-link warning and confirmed 13 proto
+  exports plus 21 core exports.
+- Final `CI=true corepack pnpm verify` pass completed after final log
+  formatting with the same result: 8 test files and 28 tests passed; coverage
+  statements 99.08%, branches 93.47%, functions 100%, lines 99.07%; docs check
+  passed with the known invalid `origin` warning; proto lint/generate and
+  generated-output cleanliness passed.
+- Review-fix focused verification passed before the full gate: typecheck,
+  focused validation tests, lint, docs check, and format check.
+- Review-fix full verification pass 1 succeeded:
+  `CI=true corepack pnpm verify` passed typecheck, lint, format, tests,
+  coverage, docs check, proto lint/generate, and generated-output cleanliness.
+- Final review-fix verification succeeded on the formatted tree:
+  `CI=true corepack pnpm verify` passed typecheck, lint, format, tests,
+  coverage, docs check, proto lint/generate, and generated-output cleanliness.
+- Round-2 full verification succeeded before the code-fix commit:
+  `CI=true corepack pnpm verify` passed typecheck, lint, format, tests,
+  coverage, docs check, proto lint/generate, and generated-output cleanliness.
 
 ## Open Risks And Follow-Up Routing
 
@@ -209,8 +682,120 @@ Out of scope:
 
 ## Review Rounds
 
-- Pending.
+- Round 1 completed:
+  - Maintainability requested a discriminated validation result type, validation
+    adapter locality cleanup, and descriptor-fixture comments.
+  - Documentation requested stale log/status/SHA fixes, changed-file inventory,
+    guide status cleanup, and namespace correction.
+  - TypeScript/API docs reported no comments.
+  - Security requested safe-by-default redaction of invalid field values.
+  - Performance/reliability requested structured handling for upstream/rule
+    exceptions and SHA traceability.
+- Review-fix pass completed in
+  `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`; round-2 reviewer dispatch is
+  in progress.
+- Round 2 completed:
+  - Maintainability reported no comments.
+  - Documentation requested stale durable-log headers be made internally
+    consistent after round-2 dispatch.
+  - TypeScript/API docs reported no comments.
+  - Security requested strict safe-by-default redaction for all upstream
+    placeholder values, because placeholder keys are unrestricted.
+  - Performance/reliability requested stale branch-head and reviewed-basis
+    metadata be corrected.
+- Round 3 dispatched against reviewed basis
+  `e953662...9560d2e330cf76c9af910ab5c59d26aac278a9a5`:
+  - Maintainability reviewer:
+    `019f0f5e-99da-7453-a3d6-b026fe155a9d`.
+  - Documentation reviewer:
+    `019f0f5e-9a45-7661-99c1-b2d1b4dddfa7`.
+  - TypeScript/API docs reviewer:
+    `019f0f5e-9ac6-75d1-b202-25c78da7a65d`.
+  - Security reviewer:
+    `019f0f5e-9b45-7c12-b26b-6263831be036`.
+  - Performance/reliability reviewer:
+    `019f0f5e-e6ee-7143-988f-e52dd54649a6`.
+- Round 3 completed:
+  - Maintainability reported no comments.
+  - Documentation reported stale round-3 header metadata; this is addressed by
+    the round-3 findings/log update.
+  - TypeScript/API docs reported no comments.
+  - Security requested sanitizing transition-rule returned violations before
+    aggregation so rule-provided `fieldValue` and arbitrary placeholder values
+    cannot expose previous/proposed state.
+  - Performance/reliability reported no runtime regressions, but also requested
+    stale task-header metadata correction; this is addressed by the round-3
+    findings/log update.
 
 ## Integration Result
 
-Pending.
+Round-3 security finding fixed in
+`76cbe19beeef0703dded45b3aee66e6b95b0da93`; security log handoff committed in
+`876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3`.
+
+Round 4 reviewed focused fix basis
+`86aa522...876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3`:
+
+- Maintainability `019f0f6d-9998-7053-b653-9a3e0ddf9423`: no comments.
+- Documentation `019f0f6d-9a0a-78d0-b2f8-d4f0cd4c8c11`: requested recording
+  `876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3` as the completed log handoff
+  and current head, plus distinguishing it from the code-fix commit.
+- TypeScript/API docs `019f0f6d-9a74-77a1-af84-2fcb5307252e`: no comments.
+- Security `019f0f6d-9aee-7600-97b5-8a87437c05f2`: no comments.
+- Performance/reliability `019f0f6d-9b7d-76b0-9c7a-c74a00af01e0`: no runtime
+  comments; also requested correcting the pending handoff/current-state
+  metadata.
+
+Round 5 reviewed focused log-fix basis
+`876a5586ce20dba7e5ea2b6af50ca2b3c1ce7bb3...2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616`:
+
+- Maintainability `019f0f71-95fd-7102-afdb-01ca75bd2998`: requested the
+  top-level review basis be updated from the older round-3 basis.
+- Documentation `019f0f71-9665-7c03-b068-8c73c2fd97bf`: no comments.
+- TypeScript/API docs `019f0f71-96e8-7c83-90b3-8588345f5cab`: no comments.
+- Security `019f0f71-975c-7b63-a232-8d8f9919c042`: no comments.
+- Performance/reliability `019f0f71-97f9-7673-8369-64ced20328d8`: requested
+  restart metadata record
+  `2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616` as the latest reviewed head.
+
+Round 6 reviewed focused log-fix basis
+`2e371b61c08ab5f67ecffb90a48a5ddf4ed0b616...2df2abf`:
+
+- Maintainability `019f0f75-9e5a-7ab3-b49d-dc31cb431a67`: no comments.
+- Documentation `019f0f75-9ec3-7d72-a65c-7e163b25a345`: requested updating
+  the work-log `Current State` section because it still named the round-3
+  security fix/log handoff as the last completed step.
+- TypeScript/API docs `019f0f75-9f33-7493-9ac0-e9946c8054c7`: no comments.
+- Security `019f0f75-9fab-73e2-92c5-747cad2e932c`: no comments.
+- Performance/reliability `019f0f75-a037-7813-8bb0-b525dce797d1`: requested
+  the same work-log `Current State` correction for restart reliability.
+
+Round 7 reviewed focused log-fix basis
+`52e0a26...38bb610538834a4de74c68b813cd67af941bc2c1`:
+
+- Maintainability `019f0f79-627e-7c01-9485-9a92768b4c52`: requested the
+  stale task header and review-log header be updated from the round-6/round-5
+  state.
+- Documentation `019f0f79-62f6-7462-abcf-dadb744bfcd3`: requested the same
+  stale task/review/work top-level metadata correction.
+- TypeScript/API docs `019f0f79-6374-7280-8938-3be2369b09e1`: no comments.
+- Security `019f0f79-63eb-7f51-917c-381d6fddb5f6`: no comments.
+- Performance/reliability `019f0f79-64cd-7803-b8db-558867e02d4d`: requested
+  the same restart metadata correction for the `38bb610` head.
+
+Round 8 reviewed focused log-fix basis `38bb610...5f215e3`:
+
+- Maintainability `019f0f7d-3843-7b12-9294-e594a97cd6f2`: no comments.
+- Documentation `019f0f7d-38a6-72d2-a4f5-531b72693fca`: no comments.
+- TypeScript/API docs `019f0f7d-3914-7023-8a9f-9ca4d068d6b4`: no comments.
+- Security `019f0f7d-398b-7c61-8278-bdbc6a77b97a`: no comments.
+- Performance/reliability `019f0f7d-3a10-76d2-8e57-f1a589bc36b3`: no
+  comments.
+
+Final task verification passed on `2026-06-28 19:31 WEST` with
+`CI=true corepack pnpm verify`: typecheck, lint, format, tests, coverage,
+docs/API check, proto lint/generate, and generated-output cleanliness all
+passed. Vitest ran 9 test files and 33 tests. Coverage: statements 99.19%,
+branches 90.9%, functions 100%, lines 99.19%. TypeDoc emitted the known invalid
+`origin` source-link warning and confirmed 13 proto exports plus 21 core
+exports.
