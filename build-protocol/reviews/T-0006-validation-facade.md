@@ -5,10 +5,10 @@ Work log: `build-protocol/work-logs/T-0006.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Setup baseline commit: `62ffc33`
 Implementation baseline commit: `e953662`
-Reviewed commit/diff basis: Pending
+Reviewed commit/diff basis: `e953662...0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
-Reviewer sub-agents: Round 1 completed; changes requested
-Status: Review-fix pass active after round 1
+Reviewer sub-agents: Round 1 completed; round 2 pending dispatch
+Status: Review-fix pass complete; ready for round 2
 
 ## Reviewer IDs
 
@@ -52,8 +52,10 @@ Review-fix pass started from review-finding log head
 `7d519d1f4555ffab058d1642065947355c0acf9e`. The authoring sub-agent will
 request round 2 after tests, docs, logs, verification, and commit are complete.
 
+Review-fix commit: `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`.
+
 Current disposition: review-fix implementation and final verification are
-complete; commit is pending.
+complete; round-2 reviewer dispatch is pending.
 
 ## Closure
 
