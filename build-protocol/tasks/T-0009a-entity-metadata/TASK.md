@@ -230,6 +230,16 @@ pnpm verify` passed after one formatting retry (`10` files / `65` tests;
   `corepack pnpm prettier --write` on the three durable logs,
   `corepack pnpm prettier --check` on the same files, and
   `corepack pnpm docs:check`.
+- Durable-log history polish committed as
+  `0b5053e2b11f0a6f53fb74f8541ebca76b2ffbb3` after rerunning
+  `corepack pnpm prettier --write` on the durable logs, confirming
+  `corepack pnpm prettier --check`, and passing `corepack pnpm docs:check`.
+- Handoff de-stale wording committed as
+  `ce02f448409889157872b2dc1e2ba927c7653f48`. Verification for that checkpoint
+  recorded one initial `corepack pnpm prettier --check` failure on
+  `build-protocol/work-logs/T-0009a.md`, then `corepack pnpm prettier --write
+build-protocol/work-logs/T-0009a.md`, a passing rerun of
+  `corepack pnpm prettier --check`, and a passing `corepack pnpm docs:check`.
 - D-0034 records that entity metadata belongs in `@spine-ts/server` and
   `@spine-ts/proto` should add only narrow curated option exports.
 - No blocking questions known.

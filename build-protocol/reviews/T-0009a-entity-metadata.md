@@ -182,5 +182,17 @@ Authoring stale-log correction status:
   `corepack pnpm prettier --write` on the three durable logs,
   `corepack pnpm prettier --check` on the same files, and
   `corepack pnpm docs:check`.
+- Continued the durable-log correction sequence through
+  `0b5053e2b11f0a6f53fb74f8541ebca76b2ffbb3` and
+  `ce02f448409889157872b2dc1e2ba927c7653f48`.
+- Verification for `0b5053e2b11f0a6f53fb74f8541ebca76b2ffbb3` reran
+  `corepack pnpm prettier --write` on the durable logs, confirmed
+  `corepack pnpm prettier --check`, and passed `corepack pnpm docs:check`.
+- Verification for `ce02f448409889157872b2dc1e2ba927c7653f48` recorded one
+  initial `corepack pnpm prettier --check` failure on
+  `build-protocol/work-logs/T-0009a.md`, then
+  `corepack pnpm prettier --write build-protocol/work-logs/T-0009a.md`, a
+  passing rerun of `corepack pnpm prettier --check`, and a passing
+  `corepack pnpm docs:check`.
 - The branch handoff after this commit is orchestrator re-review/final
   verification.
