@@ -1,6 +1,6 @@
 # T-0006: Validation Facade
 
-Status: Implementation worktree created; baseline verification pending
+Status: Baseline verified; implementation sub-agent pending
 Start: `2026-06-28 17:22 WEST`
 End: Pending
 Setup baseline commit: `62ffc33`
@@ -149,6 +149,8 @@ Out of scope:
 - `2026-06-28 17:31 WEST`: Created branch
   `task/T-0006a-validation-facade-contract` and worktree
   `.worktrees/T-0006a-validation-facade-contract` at base `e953662`.
+- `2026-06-28 17:33 WEST`: Baseline `CI=true corepack pnpm verify` passed in
+  the T-0006a worktree.
 
 ## Decisions
 
@@ -165,7 +167,10 @@ Out of scope:
 
 ## Files Changed
 
-- Pending.
+- Baseline `CI=true corepack pnpm verify` passed: 8 test files and 23 tests
+  passed; coverage statements 98.91%, branches 96.96%, functions 100%, lines
+  98.91%; docs check passed with the known TypeDoc invalid `origin` warning;
+  proto lint/generate passed; generated output was clean.
 
 ## Tests Run
 
