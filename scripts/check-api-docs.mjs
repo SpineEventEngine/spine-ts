@@ -18,6 +18,20 @@ const expectedProtoExports = [
   "ValidationErrorSchema",
   "ConstraintViolationSchema",
 ];
+const expectedCoreExports = [
+  "DEFAULT_TYPE_URL_PREFIX",
+  "TypeRegistry",
+  "TypeRegistryLookup",
+  "createSpineCoreRegistry",
+  "deriveTypeUrl",
+  "getTypeUrlPrefix",
+  "spineCoreRegistry",
+  "FileOptionExtension",
+  "MessageSchema",
+  "RegisterTypeOptions",
+  "TypeMetadata",
+  "DeriveTypeUrlOptions",
+];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 
 const typedocExecutable = process.platform === "win32" ? "typedoc.cmd" : "typedoc";
@@ -75,10 +89,18 @@ function collectNames(value) {
 collectNames(apiDocs);
 
 const missingExports = expectedProtoExports.filter((name) => !documentedNames.has(name));
+const missingCoreExports = expectedCoreExports.filter((name) => !documentedNames.has(name));
 
 if (missingExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-ts/proto exports: ${missingExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingCoreExports.length > 0) {
+  console.error(
+    `TypeDoc JSON is missing expected @spine-ts/core exports: ${missingCoreExports.join(", ")}`,
   );
   process.exit(1);
 }
@@ -93,5 +115,5 @@ if (/export\s+\*\s+from\s+["']\.\/generated\//.test(protoIndexSource)) {
 }
 
 console.log(
-  `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-ts/proto exports.`,
+  `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-ts/proto exports and ${expectedCoreExports.length} expected @spine-ts/core exports.`,
 );

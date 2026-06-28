@@ -47,7 +47,14 @@ importers:
 
   examples/todo: {}
 
-  packages/core: {}
+  packages/core:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-ts/proto':
+        specifier: workspace:*
+        version: link:../proto
 
   packages/proto:
     dependencies:
