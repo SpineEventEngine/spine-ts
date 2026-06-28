@@ -88,9 +88,11 @@ try {
 `validateMessage()` is for single-message Spine validation options such as
 `(required)`, `(pattern)`, and `(validate)`. Returned
 `ConstraintViolation`/`ValidationError` data is safe by default: raw invalid
-field values are omitted, placeholder values that can contain payload data are
-redacted, and upstream validation runtime failures are converted into
-repo-local structured violations instead of leaking raw exceptions.
+field values are omitted, all upstream placeholder values are redacted, and
+upstream validation runtime failures are converted into repo-local structured
+violations instead of leaking raw exceptions. Placeholder keys may remain so
+callers can understand the template shape, but values do not expose payload
+data.
 
 Transition-only rules such as `(set_once)` need previous state and proposed
 state, so they use the separate framework seam:

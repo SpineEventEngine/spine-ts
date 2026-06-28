@@ -63,10 +63,10 @@ throwing validation paths. The public contract is the repo-local
 `spine.validation.*` namespace.
 
 Validation details are safe by default. The adapter omits raw invalid
-`fieldValue` payloads, redacts placeholder entries that can contain payload
-values, and translates upstream validator exceptions into structured
-`spine.validation.ConstraintViolation` data instead of leaking raw exception
-objects or messages.
+`fieldValue` payloads, redacts every upstream placeholder value while
+preserving placeholder keys, and translates upstream validator exceptions into
+structured `spine.validation.ConstraintViolation` data instead of leaking raw
+exception objects or messages.
 
 State-transition validation is a separate framework-owned seam because rules
 such as `(set_once)` need both previous and proposed state. The current

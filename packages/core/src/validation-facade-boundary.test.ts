@@ -9,7 +9,7 @@ describe("@spine-ts/core validation facade upstream boundary", () => {
     vi.resetModules();
   });
 
-  it("redacts raw upstream field values and sensitive placeholders by default", async () => {
+  it("redacts every upstream placeholder value by default", async () => {
     vi.resetModules();
     vi.doMock("@spine-event-engine/validation-ts", () => ({
       validate: () => [
@@ -27,13 +27,15 @@ describe("@spine-ts/core validation facade upstream boundary", () => {
               token: "secret-token",
               field: "constraint_violation",
               minimum: "3",
+              candidate: "arbitrary-secret-candidate",
+              email: "private@example.test",
             },
           },
         },
       ],
     }));
 
-    const { validateMessage } = await import("./index.js");
+    const { ValidationException, checkValid, validateMessage } = await import("./index.js");
     const result = validateMessage(ValidationErrorSchema, create(ValidationErrorSchema, {}));
 
     expect(result.valid).toBe(false);
@@ -41,11 +43,34 @@ describe("@spine-ts/core validation facade upstream boundary", () => {
     expect(result.violations[0]?.message?.placeholderValue).toEqual({
       value: "[redacted]",
       token: "[redacted]",
-      field: "constraint_violation",
-      minimum: "3",
+      field: "[redacted]",
+      minimum: "[redacted]",
+      candidate: "[redacted]",
+      email: "[redacted]",
     });
+    expect(JSON.stringify(result.violations)).not.toContain("arbitrary-secret-candidate");
     expect(JSON.stringify(result.error)).not.toContain("raw@example.test");
     expect(JSON.stringify(result.error)).not.toContain("secret-token");
+    expect(JSON.stringify(result.error)).not.toContain("private@example.test");
+
+    try {
+      checkValid(ValidationErrorSchema, create(ValidationErrorSchema, {}));
+      throw new Error("Expected checkValid() to throw.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(ValidationException);
+      const validationError = (error as InstanceType<typeof ValidationException>).asMessage();
+
+      expect(validationError.constraintViolation[0]?.message?.placeholderValue).toEqual({
+        value: "[redacted]",
+        token: "[redacted]",
+        field: "[redacted]",
+        minimum: "[redacted]",
+        candidate: "[redacted]",
+        email: "[redacted]",
+      });
+      expect(JSON.stringify(validationError)).not.toContain("arbitrary-secret-candidate");
+      expect(JSON.stringify(validationError)).not.toContain("private@example.test");
+    }
   });
 
   it("returns structured validation failures when the upstream validator throws", async () => {

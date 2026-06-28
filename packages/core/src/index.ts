@@ -497,26 +497,5 @@ function toConstraintViolation(violation: UpstreamConstraintViolation): Constrai
 }
 
 function redactPlaceholderValues(values: Record<string, string>): Record<string, string> {
-  return Object.fromEntries(
-    Object.entries(values).map(([key, value]) => [
-      key,
-      shouldRedactPlaceholderValue(key) ? REDACTED_VALIDATION_DETAIL : value,
-    ]),
-  );
-}
-
-function shouldRedactPlaceholderValue(key: string): boolean {
-  const normalized = key.toLowerCase();
-
-  return (
-    normalized === "value" ||
-    normalized === "fieldvalue" ||
-    normalized.endsWith(".value") ||
-    normalized.endsWith("_value") ||
-    normalized.includes("password") ||
-    normalized.includes("secret") ||
-    normalized.includes("token") ||
-    normalized.includes("credential") ||
-    normalized.includes("authorization")
-  );
+  return Object.fromEntries(Object.keys(values).map((key) => [key, REDACTED_VALIDATION_DETAIL]));
 }

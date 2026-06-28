@@ -76,9 +76,9 @@ try {
 message data from `@spine-ts/proto`. `checkValid()` uses the same validation
 path and throws `ValidationException` when violations are present.
 Validation details are safe by default: the facade omits raw invalid
-`fieldValue` data, redacts placeholder entries that can contain payload values,
-and converts upstream validation runtime failures into structured repo-local
-violations.
+`fieldValue` data, redacts every upstream placeholder value while preserving
+placeholder keys, and converts upstream validation runtime failures into
+structured repo-local violations.
 
 Stateful checks such as Spine `(set_once)` require previous and proposed state.
 They are intentionally separate from single-message validation and use the

@@ -5,10 +5,12 @@ Work log: `build-protocol/work-logs/T-0006.md`
 Branch: `task/T-0006a-validation-facade-contract`
 Setup baseline commit: `62ffc33`
 Implementation baseline commit: `e953662`
-Reviewed commit/diff basis: `e953662...ce710950aee9e0885aa9e2e15dced54de290b2f1`
+Reviewed commit/diff basis: Round 2 reviewed code through
+`0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`; round-2 findings log head is
+`15b7933216b038888e10ab3cbbefc93c7a79d78d`.
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Reviewer sub-agents: Round 2 completed; changes requested
-Status: Changes requested after review round 2
+Status: Round-2 focused fix active
 
 ## Reviewer IDs
 
@@ -85,6 +87,11 @@ Findings:
 
 Disposition: Feed the strict placeholder-redaction and durable-log consistency
 comments back to the authoring sub-agent for a focused review-fix pass.
+
+## Round-2 Focused Fix
+
+Started from round-2 findings log head
+`15b7933216b038888e10ab3cbbefc93c7a79d78d`. Code-fix commit is pending.
 
 ## Closure
 

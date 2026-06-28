@@ -275,7 +275,7 @@ describe("@spine-ts/core validation facade", () => {
         "A value must be set.",
       );
       expect(validationError.constraintViolation[0]?.message?.placeholderValue).toEqual({
-        field: "name",
+        field: "[redacted]",
         value: "[redacted]",
       });
     }
@@ -290,7 +290,7 @@ describe("@spine-ts/core validation facade", () => {
     expect(result.violations[0]?.fieldPath?.fieldName).toEqual(["name"]);
     expect(result.violations[0]?.fieldValue).toBeUndefined();
     expect(result.violations[0]?.message?.placeholderValue).toEqual({
-      field: "name",
+      field: "[redacted]",
       value: "[redacted]",
     });
     expect(result.error?.$typeName).toBe("spine.validation.ValidationError");

@@ -1,6 +1,6 @@
 # T-0006: Validation Facade
 
-Status: Changes requested after review round 2
+Status: Round-2 focused fix active
 Start: `2026-06-28 17:22 WEST`
 End: Pending
 Setup baseline commit: `62ffc33`
@@ -13,8 +13,10 @@ Reviewer sub-agents: Round 2 completed; changes requested
 Implementation commit: `4726985e1786929f5222707dc7abf77c448e8fa3`
 Review-finding log HEAD: `7d519d1f4555ffab058d1642065947355c0acf9e`
 Review-fix commit: `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89`
-Current branch HEAD: `ce710950aee9e0885aa9e2e15dced54de290b2f1`
-Final branch HEAD: Pending round-2 fix pass
+Round-2 findings log HEAD: `15b7933216b038888e10ab3cbbefc93c7a79d78d`
+Current branch HEAD before round-2 fix: `15b7933216b038888e10ab3cbbefc93c7a79d78d`
+Round-2 code-fix commit: Pending
+Final branch HEAD: Pending round-2 fix handoff
 
 ## Objective
 
@@ -208,6 +210,50 @@ Review-fix TDD plan:
 4. Implement minimal facade changes, update docs/API logs, then run focused and
    full verification.
 
+### Round-2 Focused Fix Skill Applicability Check
+
+Timestamp: `2026-06-28 18:40 WEST`
+
+Canonical checklist performed before round-2 fix implementation actions:
+
+- Session skill inventory exposed in this conversation includes
+  `receiving-code-review`, `test-driven-development`,
+  `verification-before-completion`, and `security-best-practices`, which match
+  the security and durable-log review-fix brief.
+- Human round-2 feedback requires strict safe-by-default placeholder redaction,
+  TDD RED/GREEN evidence, focused and full verification, durable log metadata
+  consistency, and commits without merging.
+- Repo-local protocol `build-protocol/BUILD_PROTOCOL.md` and manifest
+  `build-protocol/skills/EXPECTED_SKILLS.md` were read before round-2 fix
+  edits.
+- Selected `SKILL.md` files fully read before governed actions:
+  `receiving-code-review`, `test-driven-development`,
+  `verification-before-completion`, and `security-best-practices`.
+- Security reference check found no Node library-specific security reference in
+  the available security skill bundle; the fix applies the general
+  secure-default rule of exposing no raw upstream placeholder values.
+- Worktree check confirmed branch
+  `task/T-0006a-validation-facade-contract` at round-2 findings log head
+  `15b7933216b038888e10ab3cbbefc93c7a79d78d` with a clean status.
+- Skipped relevant-looking skills: `requesting-code-review` is reserved for
+  the next review request after this focused fix; `planning-with-files` remains
+  superseded by the build-protocol task/work/review logs.
+- Conflict resolution: round-2 security feedback is technically correct because
+  upstream `TemplateString.placeholderValue` keys are unrestricted. The facade
+  will redact all upstream placeholder values while preserving keys.
+
+Round-2 TDD plan:
+
+1. Add RED regression coverage proving arbitrary upstream placeholder keys do
+   not leak through `validateMessage().violations`, `validateMessage().error`,
+   or `ValidationException.asMessage()`.
+2. Implement strict value redaction for every upstream placeholder key.
+3. Update docs/logs to say all upstream placeholder values are redacted by
+   default.
+4. Run focused validation tests, relevant checks, full
+   `CI=true corepack pnpm verify`, then commit the code fix and a final log
+   handoff if needed to record exact commit metadata.
+
 ## Scope
 
 In scope:
@@ -261,6 +307,14 @@ Out of scope:
   final log formatting and a final full verify pass remain before commit.
 - `2026-06-28 18:25 WEST`: Final review-fix verification pass succeeded on the
   formatted tree; logs were updated with final evidence before commit.
+- `2026-06-28 18:42 WEST`: Added round-2 strict-redaction regression tests and
+  captured RED focused test evidence before implementation.
+- `2026-06-28 18:42 WEST`: Implemented strict all-placeholder-value redaction
+  and captured GREEN focused validation test evidence.
+- `2026-06-28 18:44 WEST`: Updated docs for strict placeholder redaction and
+  captured focused quality check evidence before full verification.
+- `2026-06-28 18:45 WEST`: Full round-2 verification passed before the
+  round-2 code-fix commit.
 - `2026-06-28 18:30 WEST`: Recorded review-fix commit
   `0cecc9304eaf4ba2d16b3c4b5101d1b1c4ffbc89` and prepared round-2 review
   dispatch.
@@ -357,6 +411,28 @@ Out of scope:
 
 ## Tests Run
 
+- Round-2 RED focused tests:
+  `corepack pnpm test packages/core/src/index.test.ts
+packages/core/src/validation-facade-boundary.test.ts` failed as expected.
+  Vitest ran 20 tests: 17 passed and 3 failed because the heuristic redaction
+  still preserved upstream placeholder values for unrestricted keys such as
+  `field`, `minimum`, `candidate`, and `email`.
+- Round-2 GREEN focused validation tests:
+  `corepack pnpm test packages/core/src/index.test.ts
+packages/core/src/validation-facade-boundary.test.ts` passed with 2 test files
+  and 20 tests.
+- Round-2 focused quality checks: `corepack pnpm typecheck`,
+  `corepack pnpm test packages/core/src/index.test.ts
+packages/core/src/validation-facade-boundary.test.ts`, `corepack pnpm lint`,
+  `corepack pnpm docs:check`, and `corepack pnpm format:check` all passed.
+  Docs check confirmed 13 expected `@spine-ts/proto` exports and 21 expected
+  `@spine-ts/core` exports with the known invalid `origin` TypeDoc warning.
+- Round-2 full verification before code-fix commit:
+  `CI=true corepack pnpm verify` passed. Vitest ran 9 test files and 32 tests;
+  coverage statements 99.19%, branches 92.85%, functions 100%, lines 99.18%;
+  docs check confirmed 13 proto exports and 21 core exports with the known
+  invalid `origin` TypeDoc warning; proto lint/generate and generated-output
+  cleanliness passed.
 - RED cycle 1: `corepack pnpm test packages/core/src/index.test.ts` failed as
   expected. Vitest ran 12 tests; 11 passed and the new
   `validateMessage()` test failed with `TypeError: validateMessage is not a
@@ -422,6 +498,8 @@ pnpm docs:check` passed and confirmed 13 expected `@spine-ts/proto` exports
   94.33%, functions 100%, lines 99.2%.
 - Final review-fix coverage: statements 99.2%, branches 94.33%, functions
   100%, lines 99.2%.
+- Round-2 full verification coverage: statements 99.19%, branches 92.85%,
+  functions 100%, lines 99.18%.
 
 ## Documentation And Public API Impact
 
@@ -493,6 +571,9 @@ pnpm docs:check` passed and confirmed 13 expected `@spine-ts/proto` exports
   `CI=true corepack pnpm verify` passed typecheck, lint, format, tests,
   coverage, docs check, proto lint/generate, and generated-output cleanliness.
 - Final review-fix verification succeeded on the formatted tree:
+  `CI=true corepack pnpm verify` passed typecheck, lint, format, tests,
+  coverage, docs check, proto lint/generate, and generated-output cleanliness.
+- Round-2 full verification succeeded before the code-fix commit:
   `CI=true corepack pnpm verify` passed typecheck, lint, format, tests,
   coverage, docs check, proto lint/generate, and generated-output cleanliness.
 
