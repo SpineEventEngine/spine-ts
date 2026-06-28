@@ -11,7 +11,7 @@ documentation `019f1004-8374-7f33-a643-13e86daebd3a`; TypeScript/API docs
 `019f1004-af48-7563-889e-dde078c55143`; security
 `019f1004-de72-7b40-9915-5ecef92ba29e`; performance/reliability
 `019f1005-0746-7353-bcda-e6bb1ee956c9`.
-Status: Final branch verification passed; pending integration
+Status: Complete
 Implementation sub-agent: `019f0ff4-becd-7c73-9f34-9120294e9083` (Darwin)
 
 ## Reviewer IDs
@@ -215,3 +215,15 @@ Clean reports received on `2026-06-28 22:40 WEST`:
   reran focused storage tests and diff check.
 
 No reviewer comments remain open.
+
+## Integration Verification
+
+T-0008a merged to `main` with merge commit
+`0760abf453c7ed67492ba7efed3f20e7cfa94859`.
+
+Integration verification passed on `main` on `2026-06-28 22:45 WEST` with
+`CI=true corepack pnpm verify`: node check, typecheck, lint, format, tests,
+coverage, docs/API check, proto lint/generate, and generated-output cleanliness
+all passed. Vitest ran 9 test files / 55 tests. Coverage: statements 99.63%,
+branches 93.5%, functions 100%, lines 99.61%. Docs/API check confirmed 85 proto
+exports, 28 core exports, and 26 storage exports.

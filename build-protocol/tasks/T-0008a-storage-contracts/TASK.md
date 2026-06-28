@@ -1,8 +1,8 @@
 # T-0008a: Storage Contracts And In-Memory Adapter
 
-Status: Final branch verification passed; pending integration
+Status: Complete
 Start: `2026-06-28 21:35 WEST`
-End: Pending
+End: `2026-06-28 22:45 WEST`
 Setup baseline commit: `db7130e`
 Task log path: `build-protocol/tasks/T-0008a-storage-contracts/TASK.md`
 Branch: `task/T-0008a-storage-contracts`
@@ -14,8 +14,9 @@ documentation `019f1004-8374-7f33-a643-13e86daebd3a`; TypeScript/API docs
 `019f1004-de72-7b40-9915-5ecef92ba29e`; performance/reliability
 `019f1005-0746-7353-bcda-e6bb1ee956c9`.
 Implementation baseline commit: `0a6908e` (handoff), `f1911d7` recorded by setup logs
-Final branch checkpoint before integration: Pending final checkpoint commit
-Main integration merge commit: Pending
+Final branch checkpoint before integration:
+`88e693c9e8d5f18334bda0d75ef9db29d0255490`
+Main integration merge commit: `0760abf453c7ed67492ba7efed3f20e7cfa94859`
 
 ## Objective
 
@@ -265,6 +266,14 @@ packages/storage/src/index.test.ts` passed with 1 file / 15 tests.
   cleanliness all passed. Vitest ran 9 test files / 55 tests. Coverage:
   statements 99.63%, branches 93.5%, functions 100%, lines 99.61%. Docs/API
   check confirmed 85 proto exports, 28 core exports, and 26 storage exports.
+- T-0008a merged to `main` on `2026-06-28 22:43 WEST` with merge commit
+  `0760abf453c7ed67492ba7efed3f20e7cfa94859`.
+- Integration verification passed on `main` on `2026-06-28 22:45 WEST` with
+  `CI=true corepack pnpm verify`: node check, typecheck, lint, format, tests,
+  coverage, docs/API check, proto lint/generate, and generated-output
+  cleanliness all passed. Vitest ran 9 test files / 55 tests. Coverage:
+  statements 99.63%, branches 93.5%, functions 100%, lines 99.61%. Docs/API
+  check confirmed 85 proto exports, 28 core exports, and 26 storage exports.
 - No blocking questions known.
-- Next step: commit final branch checkpoint, then integrate T-0008a into
-  `main`.
+- Next step: close the implementation sub-agent and continue to the next
+  protocol-selected task.
