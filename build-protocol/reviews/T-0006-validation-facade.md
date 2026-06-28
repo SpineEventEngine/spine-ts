@@ -8,7 +8,7 @@ Implementation baseline commit: `e953662`
 Reviewed commit/diff basis: Pending
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0006a-validation-facade-contract`
 Reviewer sub-agents: Round 1 completed; changes requested
-Status: Changes requested after review round 1
+Status: Review-fix pass active after round 1
 
 ## Reviewer IDs
 
@@ -48,7 +48,12 @@ review-fix pass.
 
 ## Round 2
 
-Pending.
+Review-fix pass started from review-finding log head
+`7d519d1f4555ffab058d1642065947355c0acf9e`. The authoring sub-agent will
+request round 2 after tests, docs, logs, verification, and commit are complete.
+
+Current disposition: review-fix implementation and final verification are
+complete; commit is pending.
 
 ## Closure
 

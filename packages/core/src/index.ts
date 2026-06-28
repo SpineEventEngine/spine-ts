@@ -14,6 +14,11 @@ import {
   type ValidationError,
 } from "@spine-ts/proto";
 
+const EMPTY_VIOLATIONS: readonly [] = Object.freeze([]);
+const REDACTED_VALIDATION_DETAIL = "[redacted]";
+const VALIDATION_RUNTIME_FAILURE_MESSAGE = "Validation runtime failed.";
+const TRANSITION_RULE_FAILURE_MESSAGE = "Transition validation rule failed.";
+
 /** Standard Protobuf `Any` prefix used when a file has no Spine type URL option. */
 export const DEFAULT_TYPE_URL_PREFIX = "type.googleapis.com";
 
@@ -21,14 +26,23 @@ export const DEFAULT_TYPE_URL_PREFIX = "type.googleapis.com";
 export type MessageSchema = GenMessage<Message>;
 
 /** Structured result returned by {@link validateMessage}. */
-export interface MessageValidationResult {
-  /** Whether the message satisfied all single-message validation constraints. */
-  readonly valid: boolean;
-  /** Repo-local Spine constraint violations produced for invalid messages. */
-  readonly violations: readonly ConstraintViolation[];
-  /** Repo-local Spine validation error message, present only when invalid. */
-  readonly error: ValidationError | undefined;
-}
+export type MessageValidationResult =
+  | {
+      /** The message satisfied all single-message validation constraints. */
+      readonly valid: true;
+      /** Successful validation has no constraint violations. */
+      readonly violations: readonly [];
+      /** Successful validation does not allocate a validation error message. */
+      readonly error: undefined;
+    }
+  | {
+      /** The message failed validation or the validation runtime failed. */
+      readonly valid: false;
+      /** Invalid validation results always carry at least one constraint violation. */
+      readonly violations: readonly [ConstraintViolation, ...ConstraintViolation[]];
+      /** Repo-local Spine validation error message for the violations. */
+      readonly error: ValidationError;
+    };
 
 /** Framework-owned state transition validation request. */
 export interface TransitionValidationRequest<Schema extends MessageSchema = MessageSchema> {
@@ -82,13 +96,13 @@ export function validateMessage<Schema extends MessageSchema>(
   schema: Schema,
   message: MessageShape<Schema>,
 ): MessageValidationResult {
-  const violations = validateWithSpine(schema, message).map(toConstraintViolation);
-
-  return {
-    valid: violations.length === 0,
-    violations,
-    error: violations.length === 0 ? undefined : createValidationError(violations),
-  };
+  try {
+    return createValidationResult(validateWithSpine(schema, message).map(toConstraintViolation));
+  } catch {
+    return createValidationResult([
+      createFacadeFailureViolation(schema.typeName, VALIDATION_RUNTIME_FAILURE_MESSAGE),
+    ]);
+  }
 }
 
 /** Validate one Protobuf message and throw if it has constraint violations. */
@@ -98,7 +112,7 @@ export function checkValid<Schema extends MessageSchema>(
 ): MessageShape<Schema> {
   const result = validateMessage(schema, message);
 
-  if (!result.valid && result.error !== undefined) {
+  if (!result.valid) {
     throw new ValidationException(result.error);
   }
 
@@ -110,13 +124,19 @@ export function validateTransition<Schema extends MessageSchema>(
   request: TransitionValidationRequest<Schema>,
   rules: readonly TransitionValidationRule<Schema>[] = [],
 ): TransitionValidationResult {
-  const violations = rules.flatMap((rule) => [...rule.validateTransition(request)]);
+  const violations: ConstraintViolation[] = [];
 
-  return {
-    valid: violations.length === 0,
-    violations,
-    error: violations.length === 0 ? undefined : createValidationError(violations),
-  };
+  for (const rule of rules) {
+    try {
+      violations.push(...rule.validateTransition(request));
+    } catch {
+      violations.push(
+        createFacadeFailureViolation(request.schema.typeName, TRANSITION_RULE_FAILURE_MESSAGE),
+      );
+    }
+  }
+
+  return createValidationResult(violations);
 }
 
 /** Options for registering a schema in a {@link TypeRegistry}. */
@@ -430,6 +450,35 @@ function createTypeMetadata<Schema extends MessageSchema>(
   return Object.freeze(metadata);
 }
 
+function createValidationResult(
+  violations: readonly ConstraintViolation[],
+): MessageValidationResult {
+  if (violations.length === 0) {
+    return {
+      valid: true,
+      violations: EMPTY_VIOLATIONS,
+      error: undefined,
+    };
+  }
+
+  const nonEmptyViolations = violations as readonly [ConstraintViolation, ...ConstraintViolation[]];
+
+  return {
+    valid: false,
+    violations: nonEmptyViolations,
+    error: createValidationError(nonEmptyViolations),
+  };
+}
+
+function createFacadeFailureViolation(typeName: string, message: string): ConstraintViolation {
+  return create(ConstraintViolationSchema, {
+    typeName,
+    message: create(TemplateStringSchema, {
+      withPlaceholders: message,
+    }),
+  });
+}
+
 function toConstraintViolation(violation: UpstreamConstraintViolation): ConstraintViolation {
   return create(ConstraintViolationSchema, {
     message:
@@ -437,13 +486,37 @@ function toConstraintViolation(violation: UpstreamConstraintViolation): Constrai
         ? undefined
         : create(TemplateStringSchema, {
             withPlaceholders: violation.message.withPlaceholders,
-            placeholderValue: violation.message.placeholderValue,
+            placeholderValue: redactPlaceholderValues(violation.message.placeholderValue),
           }),
     typeName: violation.typeName,
     fieldPath:
       violation.fieldPath === undefined
         ? undefined
         : create(FieldPathSchema, { fieldName: violation.fieldPath.fieldName }),
-    fieldValue: violation.fieldValue,
   });
+}
+
+function redactPlaceholderValues(values: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(values).map(([key, value]) => [
+      key,
+      shouldRedactPlaceholderValue(key) ? REDACTED_VALIDATION_DETAIL : value,
+    ]),
+  );
+}
+
+function shouldRedactPlaceholderValue(key: string): boolean {
+  const normalized = key.toLowerCase();
+
+  return (
+    normalized === "value" ||
+    normalized === "fieldvalue" ||
+    normalized.endsWith(".value") ||
+    normalized.endsWith("_value") ||
+    normalized.includes("password") ||
+    normalized.includes("secret") ||
+    normalized.includes("token") ||
+    normalized.includes("credential") ||
+    normalized.includes("authorization")
+  );
 }

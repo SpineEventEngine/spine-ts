@@ -12,6 +12,9 @@ validation result/check helpers, `ValidationException`, structured
 `ValidationError` creation, and the initial transition-validation seam. The
 default registry is documented as a read-only lookup view; callers that need
 mutable registration use `createSpineCoreRegistry()` or `TypeRegistry`. The
+validation facade documents its safe-by-default error details, including
+redacted upstream payload values and structured runtime/rule failure
+violations. The
 generated Protobuf-ES implementation files themselves remain excluded from
 TypeDoc output and are not broadly re-exported from the package root.
 

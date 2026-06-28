@@ -1,8 +1,13 @@
 # Spine TS User Guide
 
-Current status: bootstrap placeholder.
+Current status: early framework guide for the descriptor registry and
+single-message validation facade.
 
-The framework does not yet expose runnable Spine-compatible behavior. This guide exists from the start so later tasks have a stable place to document real user workflows.
+This guide covers the runnable behavior available now: Spine proto descriptors
+are exposed through curated packages, `@spine-ts/core` can derive and look up
+type metadata, and framework users can validate one Protobuf message at a time.
+Entity runtime, transport, storage, and the to-do application remain later
+slices.
 
 ## What Exists Now
 
@@ -62,22 +67,33 @@ const command = create(CreateTaskSchema, {});
 const result = validateMessage(CreateTaskSchema, command);
 
 if (!result.valid) {
-  console.log(result.error?.constraintViolation);
+  const fields = result.violations.map(
+    (violation) => violation.fieldPath?.fieldName.join(".") ?? violation.typeName,
+  );
+  console.warn(`Command failed ${result.violations.length} validation rule(s).`, fields);
 }
 
 try {
   checkValid(CreateTaskSchema, command);
 } catch (error) {
   if (error instanceof ValidationException) {
-    console.log(error.asMessage());
+    const validationError = error.asMessage();
+    console.warn(
+      `Command rejected with ${validationError.constraintViolation.length} violation(s).`,
+    );
   }
 }
 ```
 
 `validateMessage()` is for single-message Spine validation options such as
-`(required)`, `(pattern)`, and `(validate)`. Transition-only rules such as
-`(set_once)` need previous state and proposed state, so they use the separate
-framework seam:
+`(required)`, `(pattern)`, and `(validate)`. Returned
+`ConstraintViolation`/`ValidationError` data is safe by default: raw invalid
+field values are omitted, placeholder values that can contain payload data are
+redacted, and upstream validation runtime failures are converted into
+repo-local structured violations instead of leaking raw exceptions.
+
+Transition-only rules such as `(set_once)` need previous state and proposed
+state, so they use the separate framework seam:
 
 ```ts
 import { validateTransition } from "@spine-ts/core";
@@ -87,7 +103,8 @@ const result = validateTransition({ schema: TaskSchema, previous, next }, rules)
 
 The first seam is intentionally minimal. Later entity/runtime tasks will provide
 the built-in transition rules and call this seam from framework-controlled
-transactions.
+transactions. If a transition rule throws, the seam records a structured
+transition-rule failure and continues later rules in order.
 
 ## First Commands
 

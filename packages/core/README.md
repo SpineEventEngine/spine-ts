@@ -53,14 +53,20 @@ const command = create(SomeCommandSchema, {});
 const result = validateMessage(SomeCommandSchema, command);
 
 if (!result.valid) {
-  console.log(result.error?.constraintViolation);
+  const fields = result.violations.map(
+    (violation) => violation.fieldPath?.fieldName.join(".") ?? violation.typeName,
+  );
+  console.warn(`Command failed ${result.violations.length} validation rule(s).`, fields);
 }
 
 try {
   checkValid(SomeCommandSchema, command);
 } catch (error) {
   if (error instanceof ValidationException) {
-    console.log(error.asMessage());
+    const validationError = error.asMessage();
+    console.warn(
+      `Command rejected with ${validationError.constraintViolation.length} violation(s).`,
+    );
   }
 }
 ```
@@ -69,11 +75,16 @@ try {
 `spine.validation.ConstraintViolation` and `spine.validation.ValidationError`
 message data from `@spine-ts/proto`. `checkValid()` uses the same validation
 path and throws `ValidationException` when violations are present.
+Validation details are safe by default: the facade omits raw invalid
+`fieldValue` data, redacts placeholder entries that can contain payload values,
+and converts upstream validation runtime failures into structured repo-local
+violations.
 
 Stateful checks such as Spine `(set_once)` require previous and proposed state.
 They are intentionally separate from single-message validation and use the
 framework-owned `validateTransition()` seam. Full entity transaction enforcement
-will attach transition rules in a later runtime task.
+will attach transition rules in a later runtime task. Throwing transition rules
+are isolated into structured violations so later rules still run in order.
 
 This package does not yet implement `Any` packing/unpacking, runtime buses,
 entity repositories, storage, decorators, handlers, or transport behavior.

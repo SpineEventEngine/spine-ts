@@ -2,12 +2,14 @@ import { create } from "@bufbuild/protobuf";
 import type { Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import {
+  type ConstraintViolation,
   ConstraintViolationSchema,
   FieldPathSchema,
   TemplateStringSchema,
+  type ValidationError,
   ValidationErrorSchema,
   file_spine_options,
   type_url_prefix,
@@ -15,6 +17,7 @@ import {
 
 import {
   DEFAULT_TYPE_URL_PREFIX,
+  type MessageValidationResult,
   type TypeMetadata,
   TypeRegistry,
   ValidationException,
@@ -31,11 +34,24 @@ type RequiredName = Message<"example.validation.RequiredName"> & {
   name: string;
 };
 
+// Descriptor fixture compiled from:
+// syntax = "proto3"; package example.validation;
+// message RequiredName { string name = 1 [(required) = true]; }
 const fileExampleValidationFixture = fileDesc(
   "CiBleGFtcGxlL3ZhbGlkYXRpb25fZml4dHVyZS5wcm90bxISZXhhbXBsZS52YWxpZGF0aW9uIiIKDFJlcXVpcmVkTmFtZRISCgRuYW1lGAEgASgJQgSghSQBYgZwcm90bzM",
   [file_spine_options],
 );
 const RequiredNameSchema = messageDesc(fileExampleValidationFixture, 0) as GenMessage<RequiredName>;
+
+function transitionViolation(message: string): ConstraintViolation {
+  return create(ConstraintViolationSchema, {
+    typeName: "example.validation.RequiredName",
+    fieldPath: create(FieldPathSchema, { fieldName: ["name"] }),
+    message: create(TemplateStringSchema, {
+      withPlaceholders: message,
+    }),
+  });
+}
 
 describe("@spine-ts/core type registry", () => {
   it("derives type URLs from Spine file type_url_prefix options", () => {
@@ -195,6 +211,34 @@ describe("@spine-ts/core type registry", () => {
 });
 
 describe("@spine-ts/core validation facade", () => {
+  it("narrows result invariants for valid and invalid validation outcomes", () => {
+    const validResult: MessageValidationResult = validateMessage(ValidationErrorSchema, {
+      $typeName: "spine.validation.ValidationError",
+      constraintViolation: [],
+    });
+
+    if (validResult.valid) {
+      expectTypeOf(validResult.violations).toEqualTypeOf<readonly []>();
+      expectTypeOf(validResult.error).toEqualTypeOf<undefined>();
+      expect(validResult.violations).toEqual([]);
+      expect(validResult.error).toBeUndefined();
+    }
+
+    const invalidResult: MessageValidationResult = validateMessage(
+      RequiredNameSchema,
+      create(RequiredNameSchema, { name: "" }),
+    );
+
+    if (!invalidResult.valid) {
+      expectTypeOf(invalidResult.violations).toEqualTypeOf<
+        readonly [ConstraintViolation, ...ConstraintViolation[]]
+      >();
+      expectTypeOf(invalidResult.error).toEqualTypeOf<ValidationError>();
+      expect(invalidResult.violations.length).toBeGreaterThan(0);
+      expect(invalidResult.error.constraintViolation).toEqual(invalidResult.violations);
+    }
+  });
+
   it("returns a typed valid result for a valid Protobuf message", () => {
     const result = validateMessage(ValidationErrorSchema, {
       $typeName: "spine.validation.ValidationError",
@@ -230,6 +274,10 @@ describe("@spine-ts/core validation facade", () => {
       expect(validationError.constraintViolation[0]?.message?.withPlaceholders).toBe(
         "A value must be set.",
       );
+      expect(validationError.constraintViolation[0]?.message?.placeholderValue).toEqual({
+        field: "name",
+        value: "[redacted]",
+      });
     }
   });
 
@@ -240,6 +288,11 @@ describe("@spine-ts/core validation facade", () => {
     expect(result.violations).toHaveLength(1);
     expect(result.violations[0]?.$typeName).toBe("spine.validation.ConstraintViolation");
     expect(result.violations[0]?.fieldPath?.fieldName).toEqual(["name"]);
+    expect(result.violations[0]?.fieldValue).toBeUndefined();
+    expect(result.violations[0]?.message?.placeholderValue).toEqual({
+      field: "name",
+      value: "[redacted]",
+    });
     expect(result.error?.$typeName).toBe("spine.validation.ValidationError");
     expect(result.error?.constraintViolation).toEqual(result.violations);
 
@@ -266,28 +319,59 @@ describe("@spine-ts/core validation facade", () => {
   it("runs framework transition rules separately from single-message validation", () => {
     const previous = create(RequiredNameSchema, { name: "first" });
     const next = create(RequiredNameSchema, { name: "second" });
-    const transitionViolation = create(ConstraintViolationSchema, {
-      typeName: "example.validation.RequiredName",
-      fieldPath: create(FieldPathSchema, { fieldName: ["name"] }),
-      message: create(TemplateStringSchema, {
-        withPlaceholders: "The field `name` cannot be reassigned.",
-      }),
-      param: [],
-      violation: [],
-    });
+    const violation = transitionViolation("The field `name` cannot be reassigned.");
 
     const singleMessageResult = validateMessage(RequiredNameSchema, next);
     const transitionResult = validateTransition({ schema: RequiredNameSchema, previous, next }, [
       {
         validateTransition() {
-          return [transitionViolation];
+          return [violation];
         },
       },
     ]);
 
     expect(singleMessageResult.valid).toBe(true);
     expect(transitionResult.valid).toBe(false);
-    expect(transitionResult.violations).toEqual([transitionViolation]);
-    expect(transitionResult.error?.constraintViolation).toEqual([transitionViolation]);
+    expect(transitionResult.violations).toEqual([violation]);
+    expect(transitionResult.error?.constraintViolation).toEqual([violation]);
+  });
+
+  it("isolates throwing transition rules and preserves deterministic rule order", () => {
+    const previous = create(RequiredNameSchema, { name: "first" });
+    const next = create(RequiredNameSchema, { name: "second" });
+    const firstViolation = transitionViolation("first transition violation");
+    const lastViolation = transitionViolation("last transition violation");
+    const calls: string[] = [];
+
+    const result = validateTransition({ schema: RequiredNameSchema, previous, next }, [
+      {
+        validateTransition() {
+          calls.push("first");
+          return [firstViolation];
+        },
+      },
+      {
+        validateTransition() {
+          calls.push("throwing");
+          throw new Error("raw transition payload secret");
+        },
+      },
+      {
+        validateTransition() {
+          calls.push("last");
+          return [lastViolation];
+        },
+      },
+    ]);
+
+    expect(calls).toEqual(["first", "throwing", "last"]);
+    expect(result.valid).toBe(false);
+    expect(result.violations.map((violation) => violation.message?.withPlaceholders)).toEqual([
+      "first transition violation",
+      "Transition validation rule failed.",
+      "last transition violation",
+    ]);
+    expect(result.violations[1]?.typeName).toBe("example.validation.RequiredName");
+    expect(JSON.stringify(result.error)).not.toContain("raw transition payload secret");
   });
 });
