@@ -4,6 +4,10 @@ import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const expectedProtoExports = [
+  "FieldPath",
+  "TemplateString",
+  "ValidationError",
+  "ConstraintViolation",
   "file_spine_options",
   "file_spine_base_field_path",
   "file_spine_string_template_string",
@@ -14,6 +18,7 @@ const expectedProtoExports = [
   "ValidationErrorSchema",
   "ConstraintViolationSchema",
 ];
+const protoIndexPath = join("packages", "proto", "src", "index.ts");
 
 const typedocExecutable = process.platform === "win32" ? "typedoc.cmd" : "typedoc";
 const typedocBin = join("node_modules", ".bin", typedocExecutable);
@@ -74,6 +79,15 @@ const missingExports = expectedProtoExports.filter((name) => !documentedNames.ha
 if (missingExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-ts/proto exports: ${missingExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+const protoIndexSource = readFileSync(protoIndexPath, "utf8");
+
+if (/export\s+\*\s+from\s+["']\.\/generated\//.test(protoIndexSource)) {
+  console.error(
+    "@spine-ts/proto root must not use broad generated re-exports; expose curated aliases instead.",
   );
   process.exit(1);
 }

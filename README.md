@@ -16,8 +16,8 @@ intentionally deferred to later tasks.
 - Example boundary: `examples/todo`.
 - Copied Spine proto contracts live under `proto/`, with source provenance in
   `proto/spine-sources.json`.
-- `@spine-ts/proto` exports generated Protobuf-ES schemas for the first intake
-  set.
+- `@spine-ts/proto` exposes curated Protobuf-ES schemas, descriptors, message
+  types, and Spine custom options for the first intake set.
 
 ## Useful Commands
 

@@ -1,6 +1,6 @@
 # T-0004: Spine Proto Intake And Protobuf-ES Generation
 
-Status: Round 1 fixes verified; ready for Round 2 review
+Status: Round 2 fixes verified; ready for Round 3 review
 Start: `2026-06-28 12:40 WEST`
 End: `2026-06-28 12:54 WEST`
 Baseline commit: `6ce0b65`
@@ -8,9 +8,9 @@ Task log path: `build-protocol/tasks/T-0004-proto-intake/TASK.md`
 Branch: `task/T-0004-proto-intake`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0004-proto-intake`
 Authoring sub-agent: T-0004 implementation sub-agent
-Reviewer sub-agents: Round 1 complete; agents closed by orchestrator
+Reviewer sub-agents: Round 2 complete; security and reliability clean
 Implementation commit: `b66f2db2c2d98d41f3f5c6da53ed81a7fd73d6ad`
-Round 2 handoff basis: `main...HEAD` after the round-1 fix commit
+Round 2 reviewed basis: `3f82056cc1f5bacc004046ada5d753b08f18cb85`
 
 ## Objective
 
@@ -146,7 +146,7 @@ In scope:
 - Copy required `.proto` files verbatim into `proto/`.
 - Add source provenance and checksum verification for copied proto files.
 - Make `pnpm proto:lint` and `pnpm proto:generate` execute real Buf workflows.
-- Export generated Protobuf-ES schemas from `packages/proto`.
+- Export a curated generated Protobuf-ES root API from `packages/proto`.
 - Add focused tests for copied-file provenance, generated schema availability,
   custom option visibility, and type URL prefix preservation where supported by
   Protobuf-ES.
@@ -191,6 +191,18 @@ Out of scope:
   including CI verification, explicit proto verification/lint/generation,
   focused tests, TypeDoc JSON export check, generated-output drift check, and
   `git diff --check main...HEAD`.
+- `2026-06-28 13:34 WEST`: Received round-2 review findings. Security and
+  performance/reliability had no remaining comments; documentation and
+  maintainability requested stale durable status cleanup; TypeScript/API docs
+  requested a coherent fix for broad generated root re-exports versus curated
+  TypeDoc coverage.
+- `2026-06-28 13:37 WEST`: Removed broad generated root re-exports, preserved
+  curated schemas/descriptors/message types/options, updated docs and docs
+  checks, and ran focused checks for the root API surface.
+- `2026-06-28 13:40 WEST`: Ran round-2 final verification: CI verification,
+  docs checks, standalone API docs check, proto verification/lint/generation,
+  generated-output drift check, focused tests, diff whitespace check, and
+  status.
 
 ## Decisions
 
@@ -250,6 +262,28 @@ Out of scope:
   `pnpm test -- packages/proto/src/index.test.ts scripts/verify-proto-sources.test.mjs`
   reported 8 test files and 12 tests passing; `pnpm docs:check` verified
   TypeDoc JSON includes 9 expected `@spine-ts/proto` exports.
+- Round-2 focused checks before full verification:
+  `pnpm test -- packages/proto/src/index.test.ts` reported 8 test files and 13
+  tests passing; `pnpm typecheck:build` exited 0; `pnpm docs:check` verified
+  TypeDoc JSON includes 13 expected curated `@spine-ts/proto` exports; built
+  root inspection showed only 9 runtime exports.
+- Round-2 final verification:
+  - `CI=true pnpm verify`: exited 0; included node check, typecheck, lint,
+    format, 8 test files/13 tests, coverage, docs check, proto lint,
+    proto generation, and generated-output cleanliness.
+  - `pnpm docs:check`: exited 0; TypeDoc reported the known invalid `origin`
+    warning with 0 errors, and the JSON check found 13 expected curated
+    `@spine-ts/proto` exports.
+  - `node scripts/check-api-docs.mjs`: exited 0; found 13 expected curated
+    `@spine-ts/proto` exports and rejected broad generated wildcard re-exports.
+  - `pnpm proto:verify`: exited 0; verified 4 copied Spine proto source file
+    checksums.
+  - `pnpm proto:lint`: exited 0 through `scripts/proto-workflow.mjs`.
+  - `pnpm proto:generate`: exited 0 through `scripts/proto-workflow.mjs`.
+  - `pnpm proto:check-generated`: exited 0; generated proto output was clean.
+  - `pnpm test -- packages/proto/src/index.test.ts`: exited 0; 8 test files and
+    13 tests passed.
+  - `git diff --check main...HEAD`: exited 0.
 
 ## Coverage Result
 
@@ -262,8 +296,8 @@ Out of scope:
 | Area                             | Impact                                                                                           |
 | -------------------------------- | ------------------------------------------------------------------------------------------------ |
 | Package README impact            | `packages/proto/README.md` must describe copied contracts, generation, and provenance.           |
-| TypeDoc/API docs impact          | Generated exports and package docs must be included or intentionally excluded with reasons.      |
-| Public API additions/removals    | `@spine-ts/proto` will expose generated Protobuf-ES schemas.                                     |
+| TypeDoc/API docs impact          | Curated root exports must appear in TypeDoc; generated implementation files stay excluded.       |
+| Public API additions/removals    | `@spine-ts/proto` exposes curated Protobuf-ES schemas, descriptors, message types, and options.  |
 | Framework `USER_GUIDE.md` impact | Must mention that the framework now has first copied/generated Spine contracts.                  |
 | Example `USER_GUIDE.md` impact   | Likely N/A unless example guidance references generated proto availability.                      |
 | API examples                     | Add only minimal schema import examples if useful; avoid runtime examples before runtime exists. |
@@ -325,9 +359,12 @@ Out of scope:
 
 - Round 1 complete on `main...HEAD` at
   `b66f2db2c2d98d41f3f5c6da53ed81a7fd73d6ad`; changes requested.
-- Round 1 fix pass implemented in this follow-up state. Round 2 reviewer
-  handoff basis is `main...HEAD` after the follow-up fix commit.
+- Round 1 fix pass committed at
+  `3f82056cc1f5bacc004046ada5d753b08f18cb85`; Round 2 changes requested.
+- Round 2 fix pass verified. Round 3 reviewer handoff basis is `main...HEAD`
+  after the focused fix commit.
 
 ## Integration Result
 
-Pending round 2 review and orchestrator integration.
+Pending focused round-2 fix commit, Round 3 review, and orchestrator
+integration.

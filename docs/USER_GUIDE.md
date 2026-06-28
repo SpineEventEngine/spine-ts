@@ -11,8 +11,8 @@ The framework does not yet expose runnable Spine-compatible behavior. This guide
 - Tooling commands for type checking, linting, formatting, tests, coverage, TypeDoc, and Buf/Protobuf-ES generation.
 - A first copied Spine proto set under `proto/`, with provenance checksums in
   `proto/spine-sources.json`.
-- Generated Protobuf-ES schemas exported from `@spine-ts/proto`, including
-  Spine custom options and validation error messages.
+- Curated Protobuf-ES schemas, descriptors, message types, and Spine custom
+  options exported from `@spine-ts/proto` for the first intake set.
 - A placeholder to-do example workspace.
 
 ## What Is Deferred

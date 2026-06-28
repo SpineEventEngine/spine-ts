@@ -7,8 +7,8 @@ Baseline commit: `6ce0b65`
 Reviewed commit/diff basis: `main...task/T-0004-proto-intake` after the T-0004
 implementation commit from baseline `6ce0b65`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0004-proto-intake`
-Reviewer sub-agents: Round 1 complete; agents closed by orchestrator
-Status: Round 1 fixes ready for final verification
+Reviewer sub-agents: Round 2 complete; clean security and reliability reviews
+Status: Round 2 fixes verified; ready for Round 3 review
 
 ## Required Review Roles
 
@@ -91,3 +91,78 @@ Required fixes:
 Round 2 should review `main...HEAD` after the follow-up fix commit. The reviewed
 Round 1 implementation basis remains
 `b66f2db2c2d98d41f3f5c6da53ed81a7fd73d6ad`.
+
+### Round 2
+
+Reviewed basis: `main...HEAD` at
+`3f82056cc1f5bacc004046ada5d753b08f18cb85`.
+
+Reviewer outcomes:
+
+- Security reviewer: no remaining comments.
+- Performance/reliability reviewer: no remaining comments.
+- Documentation reviewer: stale durable status text requires correction.
+- Code style/maintainability reviewer: stale work-log next-step text requires
+  correction.
+- TypeScript/API docs reviewer: P1 mismatch between broad generated root
+  re-exports and the curated TypeDoc/API docs check.
+
+Required fixes:
+
+- Update stale durable status/next-step wording for the round-2 fix pass and
+  final handoff state.
+- Remove broad generated root re-exports from `@spine-ts/proto`, keeping a
+  curated TypeDoc-visible root API for the first intake.
+- Record author responses and post-fix verification.
+
+Round-2 author response:
+
+- Security and performance/reliability are accepted as clean with no code
+  change needed.
+- Documentation and maintainability stale-log findings are applicable and will
+  be fixed in this pass.
+- TypeScript/API P1 is applicable: the root package should not accidentally
+  expose generated implementation details that TypeDoc intentionally excludes.
+  The fix will keep generated files on disk for package-internal imports and
+  expose only curated root aliases/types.
+
+Round-2 dispositions:
+
+| Finding                                                                                                | Roles                          | Disposition | Author response                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------------------ | ------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Security review had no remaining comments.                                                             | Security                       | Clean       | No code change needed.                                                                                                                                                                                            |
+| Performance/reliability review had no remaining comments.                                              | Performance/reliability        | Clean       | No code change needed.                                                                                                                                                                                            |
+| Durable review/work logs still had stale round-1 status wording.                                       | Documentation, maintainability | Fixed       | Updated review, task, and work logs to show round-2 changes requested, fix pass evidence, and the final handoff state after verification.                                                                         |
+| Root `@spine-ts/proto` re-exported broad generated modules while TypeDoc checked only curated aliases. | TypeScript/API docs            | Fixed       | Removed generated wildcard root re-exports, kept curated descriptors/schemas/options/message types, added runtime root export regression coverage, and made `scripts/check-api-docs.mjs` reject wildcard exports. |
+
+Round-2 focused evidence:
+
+- `2026-06-28 13:37 WEST`: `pnpm test -- packages/proto/src/index.test.ts`
+  exited 0 with 8 test files and 13 tests passing.
+- `2026-06-28 13:37 WEST`: `pnpm typecheck:build` exited 0.
+- `2026-06-28 13:37 WEST`: `pnpm docs:check` exited 0; TypeDoc reported the
+  known invalid `origin` warning with 0 errors, and
+  `scripts/check-api-docs.mjs` found 13 curated `@spine-ts/proto` exports.
+- `2026-06-28 13:37 WEST`: built-root inspection showed only the 9 curated
+  runtime descriptor/schema/option exports.
+
+Round-2 final verification:
+
+- `2026-06-28 13:40 WEST`: `CI=true pnpm verify` exited 0, including node
+  check, typecheck, lint, format, 8 test files/13 tests, coverage, docs check,
+  proto lint/generation, and generated-output cleanliness.
+- `2026-06-28 13:40 WEST`: `pnpm docs:check` and
+  `node scripts/check-api-docs.mjs` exited 0; TypeDoc reported the known invalid
+  `origin` warning with 0 errors, and the API docs check found 13 curated
+  `@spine-ts/proto` exports while rejecting generated wildcard root re-exports.
+- `2026-06-28 13:40 WEST`: `pnpm proto:verify`, `pnpm proto:lint`,
+  `pnpm proto:generate`, and `pnpm proto:check-generated` each exited 0.
+- `2026-06-28 13:40 WEST`: `pnpm test -- packages/proto/src/index.test.ts`
+  exited 0 with 8 test files and 13 tests passing.
+- `2026-06-28 13:40 WEST`: `git diff --check main...HEAD` exited 0.
+
+## Round 3 Handoff Basis
+
+Round 3 should review `main...HEAD` after the focused round-2 fix commit. The
+reviewed Round 2 basis remains
+`3f82056cc1f5bacc004046ada5d753b08f18cb85`.

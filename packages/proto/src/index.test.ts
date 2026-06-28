@@ -12,6 +12,7 @@ import {
   file_spine_validation_validation_error,
   type_url_prefix,
 } from "./index.js";
+import * as protoRoot from "./index.js";
 
 interface ProtoSourceManifest {
   readonly schemaVersion: 1;
@@ -65,5 +66,19 @@ describe("@spine-ts/proto", () => {
     expect(getOption(file_spine_validation_validation_error, type_url_prefix)).toBe(
       "type.spine.io",
     );
+  });
+
+  it("keeps the public root runtime exports curated", () => {
+    expect(Object.keys(protoRoot).sort()).toEqual([
+      "ConstraintViolationSchema",
+      "FieldPathSchema",
+      "TemplateStringSchema",
+      "ValidationErrorSchema",
+      "file_spine_base_field_path",
+      "file_spine_options",
+      "file_spine_string_template_string",
+      "file_spine_validation_validation_error",
+      "type_url_prefix",
+    ]);
   });
 });
