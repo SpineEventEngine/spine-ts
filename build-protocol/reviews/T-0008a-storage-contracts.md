@@ -6,21 +6,28 @@ Branch: `task/T-0008a-storage-contracts`
 Setup baseline commit: `db7130e`
 Implementation baseline commit: `f1911d7`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0008a-storage-contracts`
-Reviewer sub-agents: Pending
-Status: Implementation complete; review pending
+Reviewer sub-agents: Maintainability/style `019f1004-5be9-77c2-9191-4a71a8fea916`;
+documentation `019f1004-8374-7f33-a643-13e86daebd3a`; TypeScript/API docs
+`019f1004-af48-7563-889e-dde078c55143`; security
+`019f1004-de72-7b40-9915-5ecef92ba29e`; performance/reliability
+`019f1005-0746-7353-bcda-e6bb1ee956c9`.
+Status: Review round 1 in progress
 Implementation sub-agent: `019f0ff4-becd-7c73-9f34-9120294e9083` (Darwin)
 
 ## Reviewer IDs
 
-- Maintainability/style: Pending
-- Documentation: Pending
-- TypeScript/API docs: Pending
-- Security: Pending
-- Performance/reliability: Pending
+- Maintainability/style: `019f1004-5be9-77c2-9191-4a71a8fea916`
+- Documentation: `019f1004-8374-7f33-a643-13e86daebd3a`
+- TypeScript/API docs: `019f1004-af48-7563-889e-dde078c55143`
+- Security: `019f1004-de72-7b40-9915-5ecef92ba29e`
+- Performance/reliability: `019f1005-0746-7353-bcda-e6bb1ee956c9`
 
 ## Round 1
 
-Pending orchestrator reviewer dispatch after implementation commit.
+Dispatched on `2026-06-28 21:50 WEST`.
+
+Review basis:
+`baee5ae..f82c2487cbfe99d22596e4bb9ccb2e246ae784d5`.
 
 Required reviewer roles:
 

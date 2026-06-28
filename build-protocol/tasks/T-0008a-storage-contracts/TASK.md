@@ -1,6 +1,6 @@
 # T-0008a: Storage Contracts And In-Memory Adapter
 
-Status: Implementation complete; awaiting orchestrator review loop
+Status: Review round 1 in progress
 Start: `2026-06-28 21:35 WEST`
 End: Pending
 Setup baseline commit: `db7130e`
@@ -8,7 +8,11 @@ Task log path: `build-protocol/tasks/T-0008a-storage-contracts/TASK.md`
 Branch: `task/T-0008a-storage-contracts`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0008a-storage-contracts`
 Authoring sub-agent: `019f0ff4-becd-7c73-9f34-9120294e9083` (Darwin)
-Reviewer sub-agents: Pending
+Reviewer sub-agents: Maintainability/style `019f1004-5be9-77c2-9191-4a71a8fea916`;
+documentation `019f1004-8374-7f33-a643-13e86daebd3a`; TypeScript/API docs
+`019f1004-af48-7563-889e-dde078c55143`; security
+`019f1004-de72-7b40-9915-5ecef92ba29e`; performance/reliability
+`019f1005-0746-7353-bcda-e6bb1ee956c9`.
 Implementation baseline commit: `0a6908e` (handoff), `f1911d7` recorded by setup logs
 Final branch checkpoint before integration: Pending implementation commit
 Main integration merge commit: Pending
@@ -156,6 +160,8 @@ format:check`, and `corepack pnpm docs:check` passed. Docs check retained the
   docs/API check, proto lint/generate, and generated-output cleanliness all
   passed. Vitest ran 9 files / 49 tests. Coverage: statements 99.63%, branches
   93.67%, functions 100%, lines 99.62%.
+- Review round 1 was dispatched on `2026-06-28 21:50 WEST` with diff basis
+  `baee5ae..f82c2487cbfe99d22596e4bb9ccb2e246ae784d5`.
 - No blocking questions known.
-- Next step: commit implementation, then hand off to the orchestrator-owned
-  five-role review loop.
+- Next step: collect review findings and feed them back to Darwin if comments
+  remain.
