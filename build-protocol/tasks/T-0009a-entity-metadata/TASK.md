@@ -1,8 +1,8 @@
 # T-0009a: Descriptor Option Surface And Entity Metadata
 
-Status: Final branch verification passed; ready for integration handoff
+Status: Complete
 Start: `2026-06-28 22:48 WEST`
-End: Pending
+End: `2026-06-29 00:28 WEST`
 Setup baseline commit: `dd4a365`
 Task log path: `build-protocol/tasks/T-0009a-entity-metadata/TASK.md`
 Branch: `task/T-0009a-entity-metadata`
@@ -14,8 +14,8 @@ documentation `019f1056-4fbe-7eb1-8ef2-dc5c901887b8`; TypeScript/API docs
 `019f1056-509e-7853-bafd-246d91c21fa8`; performance/reliability
 `019f1056-5133-73c1-9e09-756c7e49b061`.
 Implementation baseline commit: `5b41111`
-Final branch checkpoint before integration: Pending
-Main integration merge commit: Pending
+Final branch checkpoint before integration: `d24ef86`
+Main integration merge commit: `ec825a4`
 
 ## Objective
 
@@ -256,5 +256,14 @@ build-protocol/work-logs/T-0009a.md`, a passing rerun of
   remains.
 - D-0034 records that entity metadata belongs in `@spine-ts/server` and
   `@spine-ts/proto` should add only narrow curated option exports.
+- Merged into `main` with merge commit `ec825a4` (`Merge T-0009a entity
+metadata`) on `2026-06-29 00:18 WEST`.
+- Main integration verification with `CI=true corepack pnpm verify` passed on
+  `2026-06-29 00:28 WEST`: 10 test files / 65 tests passed; coverage
+  statements 99.41%, branches 94.11%, functions 100%, lines 99.39%; docs/API
+  check confirmed 100 proto exports, 28 core exports, 11 server exports, and 26
+  storage exports; proto lint/generate/check-generated passed; known
+  non-blocking TypeDoc invalid-origin source-link warning remains.
 - No blocking questions known.
-- Next step: ready for orchestrator merge/integration on `main`.
+- Next step: select the next non-blocked task under the autonomous build
+  protocol.

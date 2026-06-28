@@ -204,5 +204,14 @@ Authoring stale-log correction status:
   `019f1084-4d97-71c1-a9b2-8780c769d469`.
 - Full branch verification with `CI=true corepack pnpm verify` passed on
   `2026-06-29 00:16 WEST`.
-- The branch handoff is now ready for orchestrator merge/integration on
-  `main`.
+- The branch merged into `main` with merge commit `ec825a4` (`Merge T-0009a
+entity metadata`) on `2026-06-29 00:18 WEST`.
+- Main integration verification with `CI=true corepack pnpm verify` passed on
+  `2026-06-29 00:28 WEST`: 10 test files / 65 tests passed; coverage
+  statements `99.41%`, branches `94.11%`, functions `100%`, lines `99.39%`;
+  docs/API check confirmed `100` proto exports, `28` core exports, `11` server
+  exports, and `26` storage exports; proto lint/generate/check-generated
+  passed; known non-blocking TypeDoc invalid-origin source-link warning
+  remains.
+- T-0009a is ready to close after reviewing this integration-completion log
+  update.
