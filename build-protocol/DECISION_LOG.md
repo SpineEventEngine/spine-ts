@@ -601,3 +601,43 @@ Consequences:
   or type URL details to framework users.
 - Future runtime tasks can consume generated `Command` and `Event` envelopes
   without inventing a second packing policy.
+
+## D-0033: Start storage with package-owned contracts and in-memory adapter
+
+Status: Accepted
+
+Date: 2026-06-28
+
+Context: The roadmap after core envelope construction points to `T-0008 Storage
+Foundation`. Runtime architecture requires storage boundaries for entity
+records, aggregate event histories and snapshots, read-side projection records,
+delivery inbox records, tenant index records, and diagnostics. The repository
+already has an `@spine-ts/storage` package skeleton, while repository,
+transaction, bus, delivery, and ZeroMQ runtime behavior remain separate future
+tasks.
+
+Decision: Implement the first storage slice in `@spine-ts/storage` as
+framework-owned TypeScript contracts plus an in-memory adapter. Keep it
+record-oriented and asynchronous, with separate write/read storage concepts
+where useful, but do not couple it to repositories, buses, decorators,
+transport, or production databases yet.
+
+Alternatives considered:
+
+- Put storage contracts in `@spine-ts/core`. Rejected because storage is a
+  runtime adapter boundary and `core` already owns metadata, validation, and
+  envelope helpers.
+- Start with a production database adapter. Rejected because no repository or
+  delivery runtime exists yet and the storage seam needs tests before selecting
+  durable infrastructure.
+- Delay storage until repositories exist. Rejected because repository and
+  delivery tasks need a stable adapter seam and an in-memory test backend.
+
+Consequences:
+
+- `@spine-ts/storage` becomes the package owner for storage interfaces and the
+  first in-memory implementation.
+- Future repository, delivery, projection, and transport tasks can depend on a
+  tested storage seam without importing ZeroMQ or service concerns.
+- T-0008a must document that in-memory storage is for tests/development and is
+  not durable across process restarts.
