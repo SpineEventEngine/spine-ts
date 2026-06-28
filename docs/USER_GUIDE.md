@@ -41,8 +41,9 @@ remain later slices.
   for Spine-aware payload packing and generated command/event envelope
   construction.
 - Server entity metadata helpers in `@spine-ts/server` that normalize entity
-  kind and visibility, expose first-field routing hints, surface `(column)` and
-  `(set_once)` fields, and preserve semantic tags from `(is)` and `(every_is)`.
+  kind and visibility, expose first-field routing hints, surface `(column)`
+  fields for projections/process managers, surface `(set_once)` fields for all
+  entity kinds, and preserve semantic tags from `(is)` and `(every_is)`.
 - Storage contracts in `@spine-ts/storage` for write-side entity records,
   aggregate event histories/snapshots, read-side projection records, delivery
   records, tenant indexes, and safe diagnostics.
@@ -223,7 +224,9 @@ metadata.semanticTags;
 handlers, perform routing, enforce `(set_once)`, touch storage, or mutate a
 global registry. It throws `DescriptorMetadataError` when a caller requires
 entity metadata from a non-entity schema or when the descriptor uses
-unsupported combinations such as repeated/map `(column)` fields.
+unsupported combinations such as repeated/map `(column)` fields on projections
+or process managers. Aggregate and generic entity `(column)` declarations are
+ignored in this slice, matching the Spine option contract.
 
 ## Storage
 

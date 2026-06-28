@@ -1,43 +1,65 @@
-import type { Message } from "@bufbuild/protobuf";
+import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 import { CommandSchema, file_spine_options } from "@spine-ts/proto";
+import {
+  serverEntityMetadataFixtureGeneration,
+  serverEntityMetadataTestFixtures,
+} from "../test-fixtures/entity-metadata-fixtures.js";
 
 import * as serverRoot from "./index.js";
 import { describeEntityMetadata, DescriptorMetadataError, isEntitySchema } from "./index.js";
 
-type ProjectionState = Message<"example.entity.ProjectionState"> & {
+type ProjectionState = Message<"ProjectionState"> & {
   id: string;
   name: string;
   priority: number;
 };
 
-type AggregateState = Message<"example.entity.AggregateState"> & {
+type AggregateState = Message<"AggregateState"> & {
   id: string;
   name: string;
   archived: boolean;
 };
 
-type GenericState = Message<"example.entity.GenericState"> & {
+type GenericState = Message<"GenericState"> & {
   id: string;
+  searchable: boolean;
 };
 
-type EmptyState = Message<"example.entity.EmptyState">;
-type UnknownKindState = Message<"example.entity.UnknownKindState"> & { id: string };
-type InvalidColumnState = Message<"example.entity.InvalidColumnState"> & {
+type EmptyState = Message<"EmptyState">;
+type UnknownKindState = Message<"UnknownKindState"> & { id: string };
+type InvalidColumnState = Message<"InvalidColumnState"> & {
   id: string;
   tags: string[];
 };
-type InvalidTagState = Message<"example.entity.InvalidTagState"> & { id: string };
-type ProcessManagerState = Message<"example.entity.ProcessManagerState"> & { id: string };
-type FullVisibilityState = Message<"example.entity.FullVisibilityState"> & { id: string };
-type HiddenState = Message<"example.entity.HiddenState"> & { id: string };
+type InvalidTagState = Message<"InvalidTagState"> & { id: string };
+type ProcessManagerState = Message<"ProcessManagerState"> & { id: string; queue: string };
+type FullVisibilityState = Message<"FullVisibilityState"> & { id: string };
+type HiddenState = Message<"HiddenState"> & { id: string };
 
-// Descriptor fixtures compiled from local test-only entity option protos.
-const fileEntityMetadataFixture = fileDesc(
-  "CiVleGFtcGxlL2VudGl0eV9tZXRhZGF0YV9maXh0dXJlLnByb3RvEg5leGFtcGxlLmVudGl0eRoTc3BpbmUvb3B0aW9ucy5wcm90byKLAQoPUHJvamVjdGlvblN0YXRlEhQKAmlkGAEgASgJQgSAhiQBUgJpZBIYCgRuYW1lGAIgASgJQgTwhyQBUgRuYW1lEiAKCHByaW9yaXR5GAMgASgFQgTwhyQBUghwcmlvcml0eTom+ookAggC2oskHAoaZXhhbXBsZS50YWdzLlByb2plY3Rpb25UYWcihwEKDkFnZ3JlZ2F0ZVN0YXRlEhQKAmlkGAEgASgJQgSAhiQBUgJpZBIYCgRuYW1lGAIgASgJQgTwhyQBUgRuYW1lEhwKCGFyY2hpdmVkGAMgASgIQgBSCGFyY2hpdmVkOif6iiQECAEQA9qLJBsKGWV4YW1wbGUudGFncy5BZ2dyZWdhdGVUYWciKAoMR2VuZXJpY1N0YXRlEhAKAmlkGAEgASgJQgBSAmlkOgb6iiQCCARCHNKNJBgSFmV4YW1wbGUudGFncy5TaGFyZWRUYWdiBnByb3RvMw==",
-  [file_spine_options],
+function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
+  const descriptorSet = fromBinary(
+    FileDescriptorSetSchema,
+    Buffer.from(descriptorSetBase64, "base64"),
+  );
+  const descriptor = descriptorSet.file[0];
+
+  if (descriptor === undefined) {
+    throw new Error("Server entity metadata fixture descriptor set is empty.");
+  }
+
+  return fileDesc(
+    Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"),
+    imports,
+  );
+}
+
+// Descriptor fixtures are generated from checked-in test-only .proto sources.
+const fileEntityMetadataFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
 );
 const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
@@ -49,42 +71,37 @@ const AggregateStateSchema = messageDesc(
 ) as GenMessage<AggregateState>;
 const GenericStateSchema = messageDesc(fileEntityMetadataFixture, 2) as GenMessage<GenericState>;
 
-const fileEntityEmptyFixture = fileDesc(
-  "CiJleGFtcGxlL2VudGl0eV9lbXB0eV9maXh0dXJlLnByb3RvEg5leGFtcGxlLmVudGl0eRoTc3BpbmUvb3B0aW9ucy5wcm90byIUCgpFbXB0eVN0YXRlOgb6iiQCCARCAGIGcHJvdG8z",
-  [file_spine_options],
+const fileEntityEmptyFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.empty.descriptorSetBase64,
 );
 const EmptyStateSchema = messageDesc(fileEntityEmptyFixture, 0) as GenMessage<EmptyState>;
 
-const fileEntityUnknownKindFixture = fileDesc(
-  "CilleGFtcGxlL2VudGl0eV91bmtub3duX2tpbmRfZml4dHVyZS5wcm90bxIOZXhhbXBsZS5lbnRpdHkaE3NwaW5lL29wdGlvbnMucHJvdG8iKgoQVW5rbm93bktpbmRTdGF0ZRIQCgJpZBgBIAEoCUIAUgJpZDoE+ookAEIAYgZwcm90bzM=",
-  [file_spine_options],
+const fileEntityUnknownKindFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.unknownKind.descriptorSetBase64,
 );
 const UnknownKindStateSchema = messageDesc(
   fileEntityUnknownKindFixture,
   0,
 ) as GenMessage<UnknownKindState>;
 
-const fileEntityInvalidColumnFixture = fileDesc(
-  "CitleGFtcGxlL2VudGl0eV9pbnZhbGlkX2NvbHVtbl9maXh0dXJlLnByb3RvEg5leGFtcGxlLmVudGl0eRoTc3BpbmUvb3B0aW9ucy5wcm90byJIChJJbnZhbGlkQ29sdW1uU3RhdGUSEAoCaWQYASABKAlCAFICaWQSGAoEdGFncxgCIAMoCUIE8IckAVIEdGFnczoG+ookAggCQgBiBnByb3RvMw==",
-  [file_spine_options],
+const fileEntityInvalidColumnFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.invalidColumn.descriptorSetBase64,
 );
 const InvalidColumnStateSchema = messageDesc(
   fileEntityInvalidColumnFixture,
   0,
 ) as GenMessage<InvalidColumnState>;
 
-const fileEntityInvalidTagFixture = fileDesc(
-  "CihleGFtcGxlL2VudGl0eV9pbnZhbGlkX3RhZ19maXh0dXJlLnByb3RvEg5leGFtcGxlLmVudGl0eRoTc3BpbmUvb3B0aW9ucy5wcm90byIvCg9JbnZhbGlkVGFnU3RhdGUSEAoCaWQYASABKAlCAFICaWQ6CvqKJAIIBNqLJABCAGIGcHJvdG8z",
-  [file_spine_options],
+const fileEntityInvalidTagFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.invalidTag.descriptorSetBase64,
 );
 const InvalidTagStateSchema = messageDesc(
   fileEntityInvalidTagFixture,
   0,
 ) as GenMessage<InvalidTagState>;
 
-const fileEntityVisibilityFixture = fileDesc(
-  "CidleGFtcGxlL2VudGl0eV92aXNpYmlsaXR5X2ZpeHR1cmUucHJvdG8SDmV4YW1wbGUuZW50aXR5GhNzcGluZS9vcHRpb25zLnByb3RvIjEKE1Byb2Nlc3NNYW5hZ2VyU3RhdGUSEAoCaWQYASABKAlCAFICaWQ6CPqKJAQIAxACIjEKE0Z1bGxWaXNpYmlsaXR5U3RhdGUSEAoCaWQYASABKAlCAFICaWQ6CPqKJAQIBBAEIikKC0hpZGRlblN0YXRlEhAKAmlkGAEgASgJQgBSAmlkOgj6iiQECAQQAUIAYgZwcm90bzM=",
-  [file_spine_options],
+const fileEntityVisibilityFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
 );
 const ProcessManagerStateSchema = messageDesc(
   fileEntityVisibilityFixture,
@@ -106,8 +123,8 @@ describe("@spine-ts/server", () => {
   it("extracts entity kind, default visibility, routing hints, columns, set-once fields, and tags", () => {
     const metadata = describeEntityMetadata(ProjectionStateSchema);
 
-    expect(metadata.fullTypeName).toBe("example.entity.ProjectionState");
-    expect(metadata.fileName).toBe("example/entity_metadata_fixture.proto");
+    expect(metadata.fullTypeName).toBe("ProjectionState");
+    expect(metadata.fileName).toBe("entity-metadata/main.proto");
     expect(metadata.kind).toBe("projection");
     expect(metadata.declaredVisibility).toBe("default");
     expect(metadata.visibility).toBe("full");
@@ -128,16 +145,33 @@ describe("@spine-ts/server", () => {
     expect(metadata.declaredVisibility).toBe("query");
     expect(metadata.visibility).toBe("query");
     expect(metadata.visibilitySource).toBe("explicit");
-    expect(metadata.columns.map((field) => field.name)).toEqual(["name"]);
+    expect(metadata.columns).toEqual([]);
     expect(metadata.setOnceFields.map((field) => field.name)).toEqual(["id"]);
     expect(metadata.semanticTags).toEqual(["example.tags.AggregateTag", "example.tags.SharedTag"]);
   });
 
   it("normalizes the remaining supported entity kinds and visibility values", () => {
-    expect(describeEntityMetadata(ProcessManagerStateSchema).kind).toBe("process-manager");
-    expect(describeEntityMetadata(ProcessManagerStateSchema).visibility).toBe("subscribe");
+    const processManagerMetadata = describeEntityMetadata(ProcessManagerStateSchema);
+
+    expect(processManagerMetadata.kind).toBe("process-manager");
+    expect(processManagerMetadata.visibility).toBe("subscribe");
+    expect(processManagerMetadata.columns.map((field) => field.name)).toEqual(["queue"]);
     expect(describeEntityMetadata(FullVisibilityStateSchema).visibility).toBe("full");
     expect(describeEntityMetadata(HiddenStateSchema).visibility).toBe("none");
+  });
+
+  it("ignores column declarations on entity kinds that are not column-eligible", () => {
+    expect(describeEntityMetadata(AggregateStateSchema).columns).toEqual([]);
+    expect(describeEntityMetadata(GenericStateSchema).columns).toEqual([]);
+  });
+
+  it("documents the checked-in fixture regeneration path", () => {
+    expect(serverEntityMetadataFixtureGeneration.command).toBe(
+      "node scripts/generate-server-test-fixtures.mjs",
+    );
+    expect(serverEntityMetadataFixtureGeneration.protoRoot).toBe(
+      "packages/server/test-fixtures/proto/entity-metadata",
+    );
   });
 
   it("distinguishes entity schemas from non-entity schemas", () => {
@@ -159,10 +193,10 @@ describe("@spine-ts/server", () => {
       /declares unsupported entity kind "KIND_UNKNOWN"/,
     );
     expect(() => describeEntityMetadata(InvalidColumnStateSchema)).toThrow(
-      /column field "example\.entity\.InvalidColumnState\.tags" must be singular/,
+      /column field "InvalidColumnState\.tags" must be singular/,
     );
     expect(() => describeEntityMetadata(InvalidTagStateSchema)).toThrow(
-      /semantic tag option "example\.entity\.InvalidTagState" must declare a non-empty java_type/,
+      /semantic tag option "InvalidTagState" must declare a non-empty java_type/,
     );
   });
 });

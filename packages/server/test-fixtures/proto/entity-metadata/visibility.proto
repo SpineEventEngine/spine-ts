@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+import "spine/options.proto";
+
+message ProcessManagerState {
+  option (entity).kind = PROCESS_MANAGER;
+  option (entity).visibility = SUBSCRIBE;
+
+  string id = 1;
+  string queue = 2 [(column) = true];
+}
+
+message FullVisibilityState {
+  option (entity).kind = ENTITY;
+  option (entity).visibility = FULL;
+
+  string id = 1;
+}
+
+message HiddenState {
+  option (entity).kind = ENTITY;
+  option (entity).visibility = NONE;
+
+  string id = 1;
+}

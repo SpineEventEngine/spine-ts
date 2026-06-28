@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+import "spine/options.proto";
+
+message InvalidTagState {
+  option (entity).kind = ENTITY;
+  option (is).java_type = "";
+
+  string id = 1;
+}

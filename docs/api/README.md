@@ -25,7 +25,8 @@ Server exports include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field
 routing hints, field metadata, and the descriptor-derived `EntityMetadata`
 contract for later handler registration, transaction validation, and repository
-assembly.
+assembly. Column metadata is exposed only for projection/process-manager
+schemas, matching the underlying Spine option contract.
 
 Storage exports include `StorageAdapter`, `StorageRecord`,
 `WriteSideRecordStore`, `ReadSideRecordStore`, aggregate event history

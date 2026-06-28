@@ -126,14 +126,17 @@ Current server metadata is pure and deterministic:
   entities);
 - the first declared field becomes both the canonical entity ID field and the
   first-field routing hint for later handler/repository tasks;
-- fields marked `(column) = true` and `(set_once) = true` are surfaced in
-  descriptor order; and
+- fields marked `(column) = true` are surfaced in descriptor order only for
+  projections and process managers, `(set_once) = true` fields are surfaced for
+  every entity kind, and
 - semantic tags from message `(is)` and file `(every_is)` options are
   preserved in deterministic sorted order.
 
 The extractor throws typed `DescriptorMetadataError` failures for non-entity
 schemas, unknown entity kinds, repeated/map column declarations, empty semantic
-tag values, and other unsupported combinations in this slice. It does not
+tag values, and other unsupported combinations in this slice. Aggregate and
+generic entity column declarations are ignored to match the source option
+contract. It does not
 register handlers, execute routes, validate transactions, assemble
 repositories, or write storage records.
 

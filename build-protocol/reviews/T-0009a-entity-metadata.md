@@ -55,3 +55,33 @@ Required reviewer roles:
 - performance/reliability.
 
 Reports are pending.
+
+Findings received by the authoring implementer:
+
+1. Maintainability/style: checked-in server metadata tests use opaque base64
+   `fileDesc(...)` blobs without checked-in readable `.proto` fixture sources
+   or a regeneration path.
+2. TypeScript/API docs: `packages/server/src/entity-metadata.ts` currently
+   exposes `(column)` fields for all entity kinds, but `proto/spine/options.proto`
+   says only projections and process managers are eligible and other kinds
+   should ignore column declarations.
+
+Authoring fix status:
+
+- Added checked-in readable fixture sources under
+  `packages/server/test-fixtures/proto/entity-metadata/` plus
+  `packages/server/test-fixtures/proto/entity-metadata/README.md` and the
+  generator/check command `node scripts/generate-server-test-fixtures.mjs`
+  (`--check` for sync verification).
+- Reworked server tests to consume the generated fixture module instead of
+  inline `fileDesc(...)` blobs, and added a dedicated generator sync test in
+  `scripts/generate-server-test-fixtures.test.mjs`.
+- Changed `describeEntityMetadata()` so `(column)` metadata is surfaced only
+  for `projection` and `process-manager` entity kinds; aggregate/generic entity
+  column declarations are ignored.
+- Verification after the fix passed: focused server/generator regressions
+  (`2` files / `10` tests), focused proto regressions (`1` file / `6` tests),
+  generator sync check, `corepack pnpm typecheck`, `corepack pnpm docs:check`,
+  and full `CI=true corepack pnpm verify` (`10` test files / `65` tests,
+  coverage statements `99.41%`, branches `94.11%`, functions `100%`, lines
+  `99.39%`).

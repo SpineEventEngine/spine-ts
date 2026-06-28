@@ -175,7 +175,21 @@ reviewers report no comments.
   storage exports.
 - Review round 1 dispatched on `2026-06-28 23:25 WEST` with diff package
   `.superpowers/sdd/review-04d79ed..a12e4f7.diff`.
+- Round-1 fixes added checked-in server test fixture `.proto` sources under
+  `packages/server/test-fixtures/proto/entity-metadata/`, the regeneration
+  command `node scripts/generate-server-test-fixtures.mjs` (`--check` for sync
+  verification), and column eligibility handling that now ignores aggregate and
+  generic entity `(column)` declarations while still validating projection and
+  process-manager columns.
+- Round-1 fix verification passed on `2026-06-28 23:41 WEST`: focused
+  server/generator regressions 2 files / 10 tests, focused proto regressions 1
+  file / 6 tests, generator sync check, `corepack pnpm typecheck`,
+  `corepack pnpm docs:check`, and full `CI=true corepack pnpm verify` with 10
+  test files / 65 tests, coverage statements 99.41%, branches 94.11%,
+  functions 100%, lines 99.39%; docs/API check again confirmed 100 proto
+  exports, 28 core exports, 11 server exports, and 26 storage exports.
 - D-0034 records that entity metadata belongs in `@spine-ts/server` and
   `@spine-ts/proto` should add only narrow curated option exports.
 - No blocking questions known.
-- Next step: collect round-1 reviewer reports.
+- Next step: commit the review-fix patch and hand the branch back to the
+  orchestrator for follow-up.

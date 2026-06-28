@@ -134,14 +134,7 @@ export function describeEntityMetadata<Schema extends DescriptorMessageSchema>(
     strategy: "first-field",
     field: idField,
   });
-  const columns = Object.freeze(
-    schema.fields
-      .filter((field) => hasOption(field, column) && getOption(field, column))
-      .map((field) => {
-        validateColumnField(schema, field);
-        return createFieldMetadata(field);
-      }),
-  );
+  const columns = collectColumns(schema, kind);
   const setOnceFields = Object.freeze(
     schema.fields
       .filter((field) => hasOption(field, set_once) && getOption(field, set_once))
@@ -231,6 +224,28 @@ function resolveVisibility(kind: EntityKind, declared: DeclaredEntityVisibility)
   }
 
   return kind === "projection" ? "full" : "none";
+}
+
+function collectColumns(
+  schema: DescriptorMessageSchema,
+  kind: EntityKind,
+): readonly DescriptorFieldMetadata[] {
+  if (!supportsColumns(kind)) {
+    return Object.freeze([]);
+  }
+
+  return Object.freeze(
+    schema.fields
+      .filter((field) => hasOption(field, column) && getOption(field, column))
+      .map((field) => {
+        validateColumnField(schema, field);
+        return createFieldMetadata(field);
+      }),
+  );
+}
+
+function supportsColumns(kind: EntityKind): boolean {
+  return kind === "projection" || kind === "process-manager";
 }
 
 function validateColumnField(schema: DescriptorMessageSchema, field: DescField): void {
