@@ -4,6 +4,7 @@ import {
   InMemoryStorageAdapter,
   type StorageAdapter,
   type WriteSideRecordStore,
+  StoragePayloadCloneError,
   StorageVersionConflictError,
   createInMemoryStorageAdapter,
 } from "./index.js";
@@ -182,7 +183,72 @@ describe("@spine-ts/storage", () => {
     expect(thrown).toBeInstanceOf(Error);
     expect((thrown as Error).name).toBe("StoragePayloadCloneError");
     expect((thrown as Error).message).toContain("structured-clone-compatible");
+    expect((thrown as Error).name).not.toContain("leakedSecret");
+    expect((thrown as Error).message).not.toContain("leakedSecret");
     expect((thrown as Error).message).not.toContain(leakedSecret);
+    expect((thrown as Error).name).not.toContain("() =>");
+    expect((thrown as Error).message).not.toContain("() =>");
+    expect((thrown as Error).name).not.toContain("could not be cloned");
+    expect((thrown as Error).message).not.toContain("could not be cloned");
+  });
+
+  it("leaves aggregate streams and global positions unchanged when append cloning fails", async () => {
+    const storage = createInMemoryStorageAdapter<
+      unknown,
+      {
+        readonly id: string;
+        readonly payload: { readonly action?: () => string; readonly title?: string };
+      }
+    >();
+    const leakedSecret = "token_live_do_not_log";
+
+    await expect(
+      storage.aggregateEvents.append({
+        streamId: "Task:clone-failure",
+        expectedVersion: 0,
+        events: [
+          { id: "event-ok", payload: { title: "cloneable" } },
+          { id: "event-unsafe", payload: { action: () => leakedSecret } },
+        ],
+      }),
+    ).rejects.toBeInstanceOf(StoragePayloadCloneError);
+
+    await expect(storage.aggregateEvents.readStream("Task:clone-failure")).resolves.toEqual([]);
+    await expect(storage.aggregateEvents.scan()).resolves.toEqual([]);
+
+    await expect(
+      storage.aggregateEvents.append({
+        streamId: "Task:clone-failure",
+        expectedVersion: 0,
+        events: [{ id: "event-after", payload: { title: "after failure" } }],
+      }),
+    ).resolves.toMatchObject([{ streamVersion: 1, globalPosition: 1 }]);
+  });
+
+  it("does not skip diagnostic sequences when attribute cloning fails", async () => {
+    const storage = createInMemoryStorageAdapter();
+    const leakedSecret = "token_live_do_not_log";
+    const unsafeAttributes = {
+      action: () => leakedSecret,
+    } as unknown as Readonly<Record<string, string>>;
+
+    await expect(
+      storage.diagnostics.append({
+        message: "unsafe diagnostic",
+        severity: "warn",
+        attributes: unsafeAttributes,
+      }),
+    ).rejects.toBeInstanceOf(StoragePayloadCloneError);
+
+    await expect(storage.diagnostics.read()).resolves.toEqual([]);
+    await expect(
+      storage.diagnostics.append({ message: "safe diagnostic", severity: "info" }),
+    ).resolves.toEqual({
+      id: "diagnostic-1",
+      sequence: 1,
+      message: "safe diagnostic",
+      severity: "info",
+    });
   });
 
   it("validates empty aggregate appends without retaining an empty stream", async () => {

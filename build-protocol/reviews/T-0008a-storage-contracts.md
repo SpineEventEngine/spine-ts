@@ -11,7 +11,7 @@ documentation `019f1004-8374-7f33-a643-13e86daebd3a`; TypeScript/API docs
 `019f1004-af48-7563-889e-dde078c55143`; security
 `019f1004-de72-7b40-9915-5ecef92ba29e`; performance/reliability
 `019f1005-0746-7353-bcda-e6bb1ee956c9`.
-Status: Follow-up fixes in progress
+Status: Second follow-up fixes complete; pending re-review
 Implementation sub-agent: `019f0ff4-becd-7c73-9f34-9120294e9083` (Darwin)
 
 ## Reviewer IDs
@@ -138,3 +138,46 @@ packages/storage/src/index.test.ts` passed with 1 file / 13 tests;
 
 Follow-up fix committed as `7b489418c58b2c11171baf70d04db1d009aa5501`.
 Orchestrator-owned follow-up re-review is pending.
+
+## Second Follow-Up Re-Review
+
+Review basis:
+`fa94e24bb19d6518311dc4470a404ece3853ac31`.
+
+Clean reports:
+
+- Maintainability/style: no comments.
+- TypeScript/API docs: no comments.
+- Performance/reliability: no comments.
+
+Findings to fix:
+
+- Reliability P2: aggregate append clone failures must be side-effect-free. If
+  any event payload cannot be cloned, no event should be stored and global
+  positions must not skip on the next successful append.
+- Reliability P2: diagnostic attribute clone failures must be side-effect-free.
+  If attributes cannot be cloned, the next successful diagnostic should still
+  start at `diagnostic-1`/sequence `1`.
+- Security regression hardening: clone error name/message must not expose
+  function-source identifiers such as `leakedSecret`, function syntax such as
+  `() =>`, or native clone text such as `could not be cloned`.
+- Durable status hygiene: task and review logs must reflect second follow-up
+  fix/re-review state instead of the stale follow-up-in-progress state.
+
+Second follow-up fix evidence so far:
+
+- RED: `corepack pnpm vitest run packages/storage/src/index.test.ts` failed
+  with 2 failing tests after adding the regressions. The aggregate retry
+  produced `globalPosition: 3` instead of `1`; the diagnostic retry produced
+  `diagnostic-2`/sequence `2` instead of `diagnostic-1`/sequence `1`.
+- GREEN focused so far: `corepack pnpm vitest run
+packages/storage/src/index.test.ts` passed with 1 file / 15 tests after
+  cloning aggregate event payloads and diagnostic attributes before advancing
+  counters or storing records.
+- Full second follow-up fix gate: `CI=true corepack pnpm verify` passed on
+  `2026-06-28 22:33 WEST` with 9 test files / 55 tests, coverage statements
+  99.63%, branches 93.5%, functions 100%, lines 99.61%, docs/API check with 85
+  proto exports, 28 core exports, and 26 storage exports, plus proto
+  lint/generate/check-generated.
+
+Second follow-up fix commit is pending.

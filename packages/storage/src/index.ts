@@ -366,21 +366,19 @@ class InMemoryAggregateEventStore<Payload> implements AggregateEventStore<Payloa
         return [];
       }
 
-      const appended: AggregateEventRecord<Payload>[] = [];
-      for (const event of input.events) {
-        this.#globalPosition += 1;
-        appended.push({
-          streamId: input.streamId,
-          payload: cloneValue(event),
-          streamVersion: current.length + appended.length + 1,
-          globalPosition: this.#globalPosition,
-        });
-      }
+      const clonedPayloads = input.events.map((event) => cloneValue(event));
+      const appended = clonedPayloads.map((payload, index): AggregateEventRecord<Payload> => ({
+        streamId: input.streamId,
+        payload,
+        streamVersion: current.length + index + 1,
+        globalPosition: this.#globalPosition + index + 1,
+      }));
 
       this.#streams.set(input.streamId, [
         ...current,
         ...appended.map((event) => cloneValue(event)),
       ]);
+      this.#globalPosition += appended.length;
       return appended.map((event) => cloneValue(event));
     });
   }
@@ -419,14 +417,16 @@ class InMemoryDiagnosticRecordStore implements DiagnosticRecordStore {
 
   append(input: AppendDiagnosticInput): Promise<DiagnosticRecord> {
     return asyncResult(() => {
-      this.#sequence += 1;
+      const attributes = input.attributes === undefined ? undefined : cloneValue(input.attributes);
+      const sequence = this.#sequence + 1;
       const record: DiagnosticRecord = {
-        id: `diagnostic-${String(this.#sequence)}`,
-        sequence: this.#sequence,
+        id: `diagnostic-${String(sequence)}`,
+        sequence,
         message: input.message,
         severity: input.severity,
-        ...(input.attributes === undefined ? {} : { attributes: cloneValue(input.attributes) }),
+        ...(attributes === undefined ? {} : { attributes }),
       };
+      this.#sequence = sequence;
       this.#records.push(cloneValue(record));
       return cloneValue(record);
     });

@@ -1,6 +1,6 @@
 # T-0008a: Storage Contracts And In-Memory Adapter
 
-Status: Follow-up fixes in progress
+Status: Second follow-up fixes complete; pending re-review
 Start: `2026-06-28 21:35 WEST`
 End: Pending
 Setup baseline commit: `db7130e`
@@ -14,7 +14,7 @@ documentation `019f1004-8374-7f33-a643-13e86daebd3a`; TypeScript/API docs
 `019f1004-de72-7b40-9915-5ecef92ba29e`; performance/reliability
 `019f1005-0746-7353-bcda-e6bb1ee956c9`.
 Implementation baseline commit: `0a6908e` (handoff), `f1911d7` recorded by setup logs
-Final branch checkpoint before integration: Pending follow-up review
+Final branch checkpoint before integration: Pending second follow-up re-review
 Main integration merge commit: Pending
 
 ## Objective
@@ -213,5 +213,33 @@ pnpm typecheck`, `corepack pnpm lint`, `corepack pnpm format:check`, and
   branches 93.33%, functions 100%, lines 99.61%; docs/API check confirmed 85
   proto exports, 28 core exports, and 26 storage exports; proto
   lint/generate/check-generated passed.
+- Second follow-up re-review completed at HEAD
+  `fa94e24bb19d6518311dc4470a404ece3853ac31`: maintainability/style,
+  TypeScript/API docs, and performance/reliability reported no comments.
+  Remaining findings: aggregate event append clone failures must not store
+  partial events or skip global positions; diagnostics must clone attributes
+  before advancing sequences; the clone error regression must also assert that
+  error name/message do not include function-source identifiers, function
+  syntax, or native structured-clone text; task/review log status must reflect
+  the second follow-up state.
+- Second follow-up RED evidence on `2026-06-28 22:31 WEST`: after adding
+  focused regressions, `corepack pnpm vitest run
+packages/storage/src/index.test.ts` failed with 2 failing tests. The aggregate
+  retry received `globalPosition: 3` instead of `1`, and the diagnostic retry
+  received `diagnostic-2`/sequence `2` instead of `diagnostic-1`/sequence `1`.
+- Second follow-up fix completed on `2026-06-28 22:31 WEST`: aggregate
+  appends now clone all event payloads before assigning global positions or
+  storing records, diagnostics clone attributes before advancing sequence, and
+  the safe clone-error regression checks for absence of `leakedSecret`, `() =>`,
+  and `could not be cloned` in both error name and message.
+- Second follow-up focused GREEN evidence: `corepack pnpm vitest run
+packages/storage/src/index.test.ts` passed with 1 file / 15 tests.
+- Second follow-up verification evidence on `2026-06-28 22:33 WEST`:
+  `corepack pnpm typecheck` passed; `corepack pnpm docs:check` passed with the
+  known TypeDoc invalid `origin` warning and confirmed 85 proto exports, 28 core
+  exports, and 26 storage exports; `CI=true corepack pnpm verify` passed with 9
+  test files / 55 tests, coverage statements 99.63%, branches 93.5%, functions
+  100%, lines 99.61%, docs/API check, proto lint/generate, and generated-output
+  cleanliness.
 - No blocking questions known.
-- Next step: run the orchestrator-owned follow-up re-review on the latest fix.
+- Next step: commit the second follow-up fix for orchestrator-owned re-review.
