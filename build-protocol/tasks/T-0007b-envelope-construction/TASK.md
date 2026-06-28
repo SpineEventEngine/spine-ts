@@ -1,6 +1,6 @@
 # T-0007b: Core Envelope Construction Helpers
 
-Status: Branch/worktree created; baseline verification pending
+Status: Baseline verified; implementation handoff pending
 Start: `2026-06-28 20:45 WEST`
 End: Pending
 Setup baseline commit: `c313086`
@@ -9,7 +9,7 @@ Branch: `task/T-0007b-envelope-construction`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007b-envelope-construction`
 Authoring sub-agent: Pending
 Reviewer sub-agents: Pending
-Implementation baseline commit: Pending
+Implementation baseline commit: `57fc257`
 Final branch checkpoint before integration: Pending
 Main integration merge commit: Pending
 
@@ -19,6 +19,15 @@ Created `task/T-0007b-envelope-construction` from setup commit
 `66cd115bf4adbd34db0a3718ff6bd36dfbf8a074` in isolated worktree
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0007b-envelope-construction`.
 Baseline verification is next before implementation handoff.
+
+## Baseline Verification
+
+Baseline verification passed on `2026-06-28 20:43 WEST` with
+`CI=true corepack pnpm verify`: typecheck, lint, format, tests, coverage,
+docs/API check, proto lint/generate, and generated-output cleanliness all
+passed. Vitest ran 9 test files and 35 tests. Coverage: statements 99.41%,
+branches 90.9%, functions 100%, lines 99.41%. TypeDoc emitted the known invalid
+`origin` warning and confirmed 85 proto exports plus 21 core exports.
 
 ## Objective
 
