@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Spine TS server runtime package skeleton.",
+  "description": "Spine TS server runtime metadata and assembly package.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -13,5 +13,9 @@
   "files": [
     "dist",
     "README.md"
-  ]
+  ],
+  "dependencies": {
+    "@bufbuild/protobuf": "2.12.1",
+    "@spine-ts/proto": "workspace:*"
+  }
 }

@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+import "spine/options.proto";
+
+message EmptyState {
+  option (entity).kind = ENTITY;
+}

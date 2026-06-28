@@ -4,7 +4,8 @@ TypeDoc is the canonical API documentation generator for this repository.
 
 Current status: the generated reference contains the curated `@spine-ts/proto`
 root API for copied Spine contracts, the `@spine-ts/core` metadata/type
-registry and validation facade APIs, and the first `@spine-ts/storage`
+registry and validation facade APIs, the first `@spine-ts/server`
+descriptor-derived entity metadata APIs, and the first `@spine-ts/storage`
 contracts.
 
 Proto exports include message types, generated schemas, enum values and enum
@@ -19,6 +20,13 @@ validation result/check helpers, `ValidationException`, structured
 envelope construction exports include `packAny()`, `unpackAny()`,
 `packCommand()`, `packEvent()`, `PackAnyOptions`, `PackCommandInput`, and
 `PackEventInput`.
+
+Server exports include `describeEntityMetadata()`, `isEntitySchema()`,
+`DescriptorMetadataError`, normalized entity kind/visibility types, first-field
+routing hints, field metadata, and the descriptor-derived `EntityMetadata`
+contract for later handler registration, transaction validation, and repository
+assembly. Column metadata is exposed only for projection/process-manager
+schemas, matching the underlying Spine option contract.
 
 Storage exports include `StorageAdapter`, `StorageRecord`,
 `WriteSideRecordStore`, `ReadSideRecordStore`, aggregate event history
@@ -41,6 +49,6 @@ pnpm docs:check
 Generated output is written to `docs/api/reference`.
 
 `docs:check` also emits temporary TypeDoc JSON, verifies that expected
-`@spine-ts/proto`, `@spine-ts/core`, and `@spine-ts/storage` entry-point exports
-are present in the API model, and rejects broad generated wildcard re-exports
-from the proto package root.
+`@spine-ts/proto`, `@spine-ts/core`, `@spine-ts/server`, and
+`@spine-ts/storage` entry-point exports are present in the API model, and
+rejects broad generated wildcard re-exports from the proto package root.

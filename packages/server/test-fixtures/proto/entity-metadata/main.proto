@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+import "spine/options.proto";
+
+option (every_is).java_type = "example.tags.SharedTag";
+
+message ProjectionState {
+  option (entity).kind = PROJECTION;
+  option (is).java_type = "example.tags.ProjectionTag";
+
+  string id = 1 [(set_once) = true];
+  string name = 2 [(column) = true];
+  int32 priority = 3 [(column) = true];
+}
+
+message AggregateState {
+  option (entity).kind = AGGREGATE;
+  option (entity).visibility = QUERY;
+  option (is).java_type = "example.tags.AggregateTag";
+
+  string id = 1 [(set_once) = true];
+  string name = 2 [(column) = true];
+  bool archived = 3;
+}
+
+message GenericState {
+  option (entity).kind = ENTITY;
+
+  string id = 1;
+  string searchable = 2 [(column) = true];
+}

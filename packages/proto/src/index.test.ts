@@ -9,15 +9,27 @@ import {
   CommandContextSchema,
   CommandIdSchema,
   CommandSchema,
+  column,
+  entity,
   EmailAddressSchema,
+  EntityOptionSchema,
+  EntityOption_Kind,
+  EntityOption_KindSchema,
+  EntityOption_Visibility,
+  EntityOption_VisibilitySchema,
   EnrichmentSchema,
+  every_is,
+  EveryIsOptionSchema,
   EventContextSchema,
   EventIdSchema,
   EventSchema,
   FieldPathSchema,
   InternetDomainSchema,
+  is,
+  IsOptionSchema,
   MessageIdSchema,
   OriginSchema,
+  set_once,
   TemplateStringSchema,
   TenantIdSchema,
   UserIdSchema,
@@ -113,6 +125,22 @@ describe("@spine-ts/proto", () => {
     );
   });
 
+  it("exports the curated Spine option descriptors needed by entity metadata", () => {
+    expect(EntityOptionSchema.typeName).toBe("EntityOption");
+    expect(EveryIsOptionSchema.typeName).toBe("EveryIsOption");
+    expect(IsOptionSchema.typeName).toBe("IsOption");
+    expect(EntityOption_Kind.PROJECTION).toBe(2);
+    expect(EntityOption_Visibility.FULL).toBe(4);
+    expect(EntityOption_KindSchema.typeName).toBe("EntityOption.Kind");
+    expect(EntityOption_VisibilitySchema.typeName).toBe("EntityOption.Visibility");
+    expect(hasOption(CommandSchema, is)).toBe(true);
+    expect(getOption(CommandSchema, is).javaType).toBe("CommandMixin");
+    expect(hasOption(file_spine_core_command, every_is)).toBe(false);
+    expect(entity.extendee.typeName).toBe("google.protobuf.MessageOptions");
+    expect(column.extendee.typeName).toBe("google.protobuf.FieldOptions");
+    expect(set_once.extendee.typeName).toBe("google.protobuf.FieldOptions");
+  });
+
   it("keeps the public root runtime exports curated", () => {
     expect(Object.keys(protoRoot).sort()).toEqual(
       [
@@ -125,11 +153,20 @@ describe("@spine-ts/proto", () => {
         "CommandValidationError",
         "CommandValidationErrorSchema",
         "Command_SystemPropertiesSchema",
+        "column",
         "DayOfWeek",
         "DayOfWeekSchema",
         "EmailAddressSchema",
+        "entity",
+        "EntityOptionSchema",
+        "EntityOption_Kind",
+        "EntityOption_KindSchema",
+        "EntityOption_Visibility",
+        "EntityOption_VisibilitySchema",
         "EnrichmentSchema",
         "Enrichment_ContainerSchema",
+        "every_is",
+        "EveryIsOptionSchema",
         "EventContextSchema",
         "EventIdSchema",
         "EventSchema",
@@ -137,6 +174,8 @@ describe("@spine-ts/proto", () => {
         "EventValidationErrorSchema",
         "FieldPathSchema",
         "InternetDomainSchema",
+        "is",
+        "IsOptionSchema",
         "Language",
         "LanguageSchema",
         "LocalDateSchema",
@@ -147,6 +186,7 @@ describe("@spine-ts/proto", () => {
         "MonthSchema",
         "OriginSchema",
         "RejectionEventContextSchema",
+        "set_once",
         "TemplateStringSchema",
         "TenantIdSchema",
         "UserIdSchema",

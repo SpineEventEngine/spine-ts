@@ -1,5 +1,14 @@
 # @spine-ts/server
 
-Package skeleton for future bounded context assembly, repositories, entities, buses, delivery, read-side stand, lifecycle, and gRPC service implementations.
+Descriptor-derived server metadata for Spine entity schemas.
 
-T-0002 does not implement server runtime behavior or install gRPC libraries.
+Current slice exposes:
+
+- `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
+- `isEntitySchema(schema)` for pure descriptor checks;
+- first-field routing hints from descriptor order;
+- `(column)` discovery for projections/process managers, `(set_once)` field discovery for all entity kinds; and
+- semantic tags from `(is)` and `(every_is)` with clear extraction errors.
+
+This package still does not implement handler registration, transactions,
+repositories, storage, buses, transport, or gRPC services.
