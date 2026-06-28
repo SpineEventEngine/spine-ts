@@ -1,6 +1,6 @@
 # T-0005: Metadata And Type Registry
 
-Status: Implementation complete; formal review pending
+Status: Review round 1 fixes verified; ready for re-review after fix commit
 Start: `2026-06-28 15:58 WEST`
 End: Pending
 Baseline commit: `80714f3`
@@ -8,9 +8,9 @@ Task log path: `build-protocol/tasks/T-0005-metadata-type-registry/TASK.md`
 Branch: `task/T-0005-registry-core`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0005-registry-core`
 Authoring sub-agent: T-0005 implementation sub-agent
-Reviewer sub-agents: Pending orchestrator review loop
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
+Reviewer sub-agents: Review round 1 completed; fix pass ready for re-review
+Implementation commit: `5705890eb5cdedaa2044375c6d5cccc304bdf283`
+Final branch HEAD: Review round 1 fix commit, branch HEAD after commit
 
 ## Objective
 
@@ -254,6 +254,25 @@ Out of scope:
 - Full verify final: `CI=true corepack pnpm verify` passed with 8 test files,
   20 tests, coverage above 90%, docs check, proto lint/generate, and
   generated-output cleanliness.
+- Review round 1 RED: `CI=true corepack pnpm vitest run packages/core/src/index.test.ts`
+  failed 2/10 tests before review-fix production changes, proving explicit type
+  URL validation and the read-only default registry view were missing.
+- Review round 1 GREEN focused checks:
+  `CI=true corepack pnpm vitest run packages/core/src/index.test.ts` passed
+  10/10 tests; `CI=true corepack pnpm typecheck` passed; `CI=true corepack pnpm docs:check`
+  passed with the known TypeDoc invalid `origin` warning and 12 expected
+  `@spine-ts/core` exports asserted.
+- Review round 1 full verify attempt 1: `CI=true corepack pnpm verify` failed
+  after 22/22 tests passed because function coverage was 88.88%, below the 90%
+  threshold. Focused tests were expanded to cover read-only lookup delegation
+  methods and semantic-tag indexing.
+- Review round 1 focused rerun:
+  `CI=true corepack pnpm vitest run packages/core/src/index.test.ts` passed
+  11/11 tests after coverage assertions were added.
+- Review round 1 full verify final: `CI=true corepack pnpm verify` passed with
+  8 test files, 23 tests, coverage statements 98.91%, branches 96.96%,
+  functions 100%, lines 98.91%, docs check, proto lint/generate, and generated
+  output cleanliness.
 
 ## Coverage Result
 
@@ -275,6 +294,10 @@ Out of scope:
 Documentation updates completed for package README, framework user guide, API
 reference notes/checks, and architecture notes. TypeDoc checks assert the new
 public `@spine-ts/core` exports.
+
+Review round 1 adds the public `TypeRegistryLookup` read-only interface to the
+API-doc assertion set and documents that the shared `spineCoreRegistry` cannot
+mutate the process-wide curated registry.
 
 ## Security Impact
 
@@ -301,6 +324,10 @@ public `@spine-ts/core` exports.
   functions 93.75%, lines 94.52%; docs check passed with the known TypeDoc
   invalid `origin` warning; proto lint/generate passed; generated output was
   clean.
+- Review round 1 final `CI=true corepack pnpm verify` passed: 8 test files and
+  23 tests passed; coverage statements 98.91%, branches 96.96%, functions 100%,
+  lines 98.91%; docs check passed with the known TypeDoc invalid `origin`
+  warning; proto lint/generate passed; generated output was clean.
 
 ## Open Risks And Follow-Up Routing
 
@@ -311,9 +338,18 @@ public `@spine-ts/core` exports.
 
 ## Review Rounds
 
-- Formal reviewer sub-agent loop is pending orchestrator handoff. The
-  implementation sub-agent performed a local self-review against T-0005 scope
-  before commit and found no code changes required after final verification.
+- Review round 1 reviewer IDs:
+  - Maintainability: `019f0edc-1a7b-7ba1-8c3f-0645ebc1db57`
+  - Documentation: `019f0edc-4344-7bf1-a173-b5003e4855c2`
+  - TypeScript/API docs: `019f0edc-756c-7101-9d1e-81c7709dfab7`
+  - Security: `019f0edc-a25e-7e03-87fe-482060e40d9d`
+  - Performance/reliability: `019f0edc-c7e1-7ff1-89f3-fcc97abb8f1f`
+- Review round 1 findings verified and fixed in one consolidated pass: mutable
+  default registry exposure, unvalidated explicit type URLs, erased concrete
+  schema type on schema lookup methods, stale durable log fields, and D-0028's
+  missing fallback prefix value.
+- Next step after the review round 1 fix commit: formal re-review of
+  `task/T-0005-registry-core`.
 
 ## Integration Result
 

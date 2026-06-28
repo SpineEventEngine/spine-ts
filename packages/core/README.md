@@ -14,8 +14,8 @@ The package currently provides the first descriptor-backed type registry slice:
   identity conflicts;
 - descriptor metadata for the registered schema, declaring file, first field,
   and file option access; and
-- a default `spineCoreRegistry` containing the current curated Spine schemas
-  exported by `@spine-ts/proto`.
+- a read-only default `spineCoreRegistry` lookup view containing the current
+  curated Spine schemas exported by `@spine-ts/proto`.
 
 ```ts
 import { FieldPathSchema } from "@spine-ts/proto";
@@ -26,6 +26,10 @@ const metadata = spineCoreRegistry.getByTypeUrl(typeUrl);
 
 console.log(metadata.fullTypeName);
 ```
+
+Use `createSpineCoreRegistry()` when a caller-owned mutable registry is needed.
+The shared `spineCoreRegistry` intentionally exposes lookup methods only, so
+application code cannot mutate the process-wide curated registry.
 
 Semantic tag lookup is intentionally empty for the current copied proto closure
 because no registered schema currently proves `(is)` or `(every_is)` consumer

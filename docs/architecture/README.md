@@ -23,6 +23,11 @@ registry slice consumes curated exports from `@spine-ts/proto`, derives type
 URLs from descriptor file options, and exposes immutable metadata by full type
 name, type URL, and schema identity.
 
+The shared `spineCoreRegistry` export is a read-only lookup view over the
+curated schemas. Mutable registration stays on caller-owned `TypeRegistry`
+instances, including those returned by `createSpineCoreRegistry()`, to avoid
+process-wide state mutation.
+
 The registry fails fast on duplicate full names, duplicate type URLs, and
 conflicting descriptor identities. This intentionally differs from the JVM
 `TypeDictionary.Builder` overwrite behavior because silent replacement would

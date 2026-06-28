@@ -14,8 +14,8 @@ The framework does not yet expose runnable Spine-compatible behavior. This guide
 - Curated Protobuf-ES schemas, descriptors, message types, and Spine custom
   options exported from `@spine-ts/proto` for the first intake set.
 - A core type registry in `@spine-ts/core` that derives Spine type URLs,
-  registers the current curated schemas, and looks up descriptor-backed
-  metadata by full type name, type URL, or schema.
+  exposes a read-only default lookup view for the current curated schemas, and
+  looks up descriptor-backed metadata by full type name, type URL, or schema.
 - A placeholder to-do example workspace.
 
 ## What Is Deferred
@@ -37,6 +37,9 @@ import { deriveTypeUrl, spineCoreRegistry } from "@spine-ts/core";
 const typeUrl = deriveTypeUrl(FieldPathSchema);
 const metadata = spineCoreRegistry.getByFullName("spine.base.FieldPath");
 ```
+
+The shared `spineCoreRegistry` is lookup-only. Use `createSpineCoreRegistry()`
+when application or test code needs a caller-owned mutable registry.
 
 Spine files normally declare `option (type_url_prefix) = "type.spine.io"`.
 `deriveTypeUrl()` composes that prefix with the schema's full Protobuf type

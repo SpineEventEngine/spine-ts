@@ -21,6 +21,7 @@ const expectedProtoExports = [
 const expectedCoreExports = [
   "DEFAULT_TYPE_URL_PREFIX",
   "TypeRegistry",
+  "TypeRegistryLookup",
   "createSpineCoreRegistry",
   "deriveTypeUrl",
   "getTypeUrlPrefix",

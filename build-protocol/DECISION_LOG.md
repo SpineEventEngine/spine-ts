@@ -403,7 +403,8 @@ message closure.
 
 Decision: The first registry will derive canonical type URLs as
 `<file type_url_prefix>/<schema.typeName>` when a file option supplies a prefix,
-with a documented fallback prefix used only for files without the option.
+with `type.googleapis.com` as the documented fallback prefix used only for
+files without the option.
 Registration fails fast on duplicate full names, duplicate type URLs, or
 conflicting schema identities. Public lookup APIs include throwing `get*`
 methods and non-throwing `find*` methods, so callers can choose fail-fast or

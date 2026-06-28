@@ -60,6 +60,26 @@ export interface TypeMetadata<Schema extends MessageSchema = MessageSchema> {
 /** Protobuf extension descriptor whose extendee is `google.protobuf.FileOptions`. */
 export type FileOptionExtension<Value = unknown> = GenExtension<FileOptions, Value>;
 
+/** Read-only lookup surface for a registry whose registrations are already fixed. */
+export interface TypeRegistryLookup {
+  /** Find metadata by fully qualified Protobuf type name. */
+  findByFullName(fullTypeName: string): TypeMetadata | undefined;
+  /** Find metadata by canonical type URL. */
+  findByTypeUrl(typeUrl: string): TypeMetadata | undefined;
+  /** Find metadata by generated schema identity. */
+  findBySchema<Schema extends MessageSchema>(schema: Schema): TypeMetadata<Schema> | undefined;
+  /** Find all metadata entries tagged with a semantic marker. */
+  findBySemanticTag(semanticTag: string): readonly TypeMetadata[];
+  /** Get metadata by fully qualified Protobuf type name or throw a descriptive error. */
+  getByFullName(fullTypeName: string): TypeMetadata;
+  /** Get metadata by canonical type URL or throw a descriptive error. */
+  getByTypeUrl(typeUrl: string): TypeMetadata;
+  /** Get metadata by generated schema identity or throw a descriptive error. */
+  getBySchema<Schema extends MessageSchema>(schema: Schema): TypeMetadata<Schema>;
+  /** Return all registered metadata in registration order. */
+  list(): readonly TypeMetadata[];
+}
+
 /** Options for deriving a schema type URL. */
 export interface DeriveTypeUrlOptions {
   /** Prefix used when the schema file has no Spine `type_url_prefix` option. */
@@ -106,10 +126,17 @@ export class TypeRegistry {
     options: RegisterTypeOptions = {},
   ): TypeMetadata<Schema> {
     const fullTypeName = schema.typeName;
-    const typeUrl = options.typeUrl ?? deriveTypeUrl(schema);
+    const typeUrl = resolveTypeUrl(schema, options.typeUrl);
     const duplicateFullName = this.#byFullName.get(fullTypeName);
     const duplicateTypeUrl = this.#byTypeUrl.get(typeUrl);
     const schemaIdentityConflict = this.#bySchemaDescriptor.get(schema.proto);
+
+    if (options.typeUrl !== undefined && duplicateTypeUrl !== undefined) {
+      throw new Error(
+        `Duplicate type URL "${typeUrl}" already registered for Protobuf type ` +
+          `"${duplicateTypeUrl.fullTypeName}".`,
+      );
+    }
 
     if (duplicateFullName !== undefined) {
       throw new Error(
@@ -159,8 +186,8 @@ export class TypeRegistry {
   }
 
   /** Find metadata by generated schema identity. */
-  findBySchema(schema: MessageSchema): TypeMetadata | undefined {
-    return this.#bySchema.get(schema);
+  findBySchema<Schema extends MessageSchema>(schema: Schema): TypeMetadata<Schema> | undefined {
+    return this.#bySchema.get(schema) as TypeMetadata<Schema> | undefined;
   }
 
   /** Find all metadata entries tagged with a semantic marker. */
@@ -191,7 +218,7 @@ export class TypeRegistry {
   }
 
   /** Get metadata by generated schema identity or throw a descriptive error. */
-  getBySchema(schema: MessageSchema): TypeMetadata {
+  getBySchema<Schema extends MessageSchema>(schema: Schema): TypeMetadata<Schema> {
     const metadata = this.findBySchema(schema);
 
     if (metadata === undefined) {
@@ -218,7 +245,58 @@ export function createSpineCoreRegistry(): TypeRegistry {
 }
 
 /** Shared registry for the first curated Spine schema set. */
-export const spineCoreRegistry: TypeRegistry = createSpineCoreRegistry();
+export const spineCoreRegistry: TypeRegistryLookup =
+  createTypeRegistryLookup(createSpineCoreRegistry());
+
+function createTypeRegistryLookup(registry: TypeRegistry): TypeRegistryLookup {
+  return Object.freeze({
+    findByFullName(fullTypeName: string): TypeMetadata | undefined {
+      return registry.findByFullName(fullTypeName);
+    },
+    findByTypeUrl(typeUrl: string): TypeMetadata | undefined {
+      return registry.findByTypeUrl(typeUrl);
+    },
+    findBySchema<Schema extends MessageSchema>(schema: Schema): TypeMetadata<Schema> | undefined {
+      return registry.findBySchema(schema);
+    },
+    findBySemanticTag(semanticTag: string): readonly TypeMetadata[] {
+      return registry.findBySemanticTag(semanticTag);
+    },
+    getByFullName(fullTypeName: string): TypeMetadata {
+      return registry.getByFullName(fullTypeName);
+    },
+    getByTypeUrl(typeUrl: string): TypeMetadata {
+      return registry.getByTypeUrl(typeUrl);
+    },
+    getBySchema<Schema extends MessageSchema>(schema: Schema): TypeMetadata<Schema> {
+      return registry.getBySchema(schema);
+    },
+    list(): readonly TypeMetadata[] {
+      return registry.list();
+    },
+  });
+}
+
+function resolveTypeUrl(schema: MessageSchema, explicitTypeUrl: string | undefined): string {
+  if (explicitTypeUrl === undefined) {
+    return deriveTypeUrl(schema);
+  }
+
+  validateExplicitTypeUrl(schema, explicitTypeUrl);
+
+  return explicitTypeUrl;
+}
+
+function validateExplicitTypeUrl(schema: MessageSchema, typeUrl: string): void {
+  const expectedSuffix = `/${schema.typeName}`;
+  const prefix = typeUrl.slice(0, typeUrl.length - expectedSuffix.length);
+
+  if (!typeUrl.endsWith(expectedSuffix) || prefix.length === 0) {
+    throw new Error(
+      `Explicit type URL "${typeUrl}" must have the form "<prefix>/${schema.typeName}".`,
+    );
+  }
+}
 
 function createTypeMetadata<Schema extends MessageSchema>(
   schema: Schema,
