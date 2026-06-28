@@ -376,5 +376,6 @@ Out of scope:
 
 ## Integration Result
 
-After the focused round-5 current-state wording commit, pending final focused
-re-check of durable log wording and orchestrator integration if clean.
+After the focused final metadata cleanup commit
+`92d470939288ac928a4f73aceee33c6797b1ebcf`, pending final re-check of durable
+log wording and orchestrator integration if clean.
