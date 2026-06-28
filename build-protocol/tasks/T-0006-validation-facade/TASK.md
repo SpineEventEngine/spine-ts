@@ -1,6 +1,6 @@
 # T-0006: Validation Facade
 
-Status: Round-8 clean; final verification pending
+Status: Final verification passed; integration pending
 Start: `2026-06-28 17:22 WEST`
 End: Pending
 Setup baseline commit: `62ffc33`
@@ -791,3 +791,11 @@ Round 8 reviewed focused log-fix basis `38bb610...5f215e3`:
 - Security `019f0f7d-398b-7c61-8278-bdbc6a77b97a`: no comments.
 - Performance/reliability `019f0f7d-3a10-76d2-8e57-f1a589bc36b3`: no
   comments.
+
+Final task verification passed on `2026-06-28 19:31 WEST` with
+`CI=true corepack pnpm verify`: typecheck, lint, format, tests, coverage,
+docs/API check, proto lint/generate, and generated-output cleanliness all
+passed. Vitest ran 9 test files and 33 tests. Coverage: statements 99.19%,
+branches 90.9%, functions 100%, lines 99.19%. TypeDoc emitted the known invalid
+`origin` source-link warning and confirmed 13 proto exports plus 21 core
+exports.
