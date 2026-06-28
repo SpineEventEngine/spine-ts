@@ -1,6 +1,6 @@
 # T-0009a: Descriptor Option Surface And Entity Metadata
 
-Status: Follow-up review in progress
+Status: Final follow-up review in progress
 Start: `2026-06-28 22:48 WEST`
 End: Pending
 Setup baseline commit: `dd4a365`
@@ -200,10 +200,33 @@ reviewers report no comments.
   performance/reliability reported clean. Documentation reported one remaining
   stale log-state wording issue, and TypeScript/API docs reported one remaining
   JSDoc wording issue for `EntityMetadata.columns`.
-- Final follow-up fix is in progress in the authoring worktree after commit
-  `3a1e85150c838f7b03401ccdd0420717fbee7622`.
+- Final follow-up fix committed as
+  `b19a9dcd072a1e233c973e401f35d12f224de1f7`.
+- Final follow-up review dispatched on `2026-06-28 23:48 WEST` with diff
+  package `.superpowers/sdd/review-3a1e851..b19a9dc.diff`: maintainability/style
+  `019f106e-1f92-7d12-905b-99d2da45460a`, documentation
+  `019f106e-200e-74d0-adec-fc474169892d`, TypeScript/API docs
+  `019f106e-206f-7490-b599-76134ecec087`, security
+  `019f106e-210d-7bd2-a828-b88ec1b8e92c`, and performance/reliability
+  `019f106e-2182-7d03-9fe5-fd02993e9953`.
+- Final follow-up verification evidence for
+  `b19a9dcd072a1e233c973e401f35d12f224de1f7` is recorded: focused
+  server/generator tests passed (`2` files / `10` tests), `corepack pnpm
+typecheck` passed, `corepack pnpm docs:check` passed, and `CI=true corepack
+pnpm verify` passed after one formatting retry (`10` files / `65` tests;
+  coverage statements 99.41%, branches 94.11%, functions 100%, lines 99.39%).
+- Final follow-up review results received: TypeScript/API docs
+  `019f106e-206f-7490-b599-76134ecec087` and security
+  `019f106e-210d-7bd2-a828-b88ec1b8e92c` reported clean. Maintainability/style
+  `019f106e-1f92-7d12-905b-99d2da45460a`, documentation
+  `019f106e-200e-74d0-adec-fc474169892d`, and performance/reliability
+  `019f106e-2182-7d03-9fe5-fd02993e9953` reported stale committed durable-log
+  wording in the reviewed scope `3a1e851..b19a9dc`.
+- This authoring correction addresses only those stale-log findings while
+  preserving the orchestrator's uncommitted dispatch edits already present in
+  the worktree.
 - D-0034 records that entity metadata belongs in `@spine-ts/server` and
   `@spine-ts/proto` should add only narrow curated option exports.
 - No blocking questions known.
-- Next step: apply the final follow-up log/JSDoc fixes, rerun verification, and
-  commit the result for orchestrator follow-up.
+- Next step: orchestrator re-review/final verification after this durable-log
+  correction commit.

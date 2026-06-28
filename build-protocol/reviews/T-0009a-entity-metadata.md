@@ -11,7 +11,7 @@ documentation `019f1056-4fbe-7eb1-8ef2-dc5c901887b8`; TypeScript/API docs
 `019f1056-502b-74f1-8cc5-24587c5ea99d`; security
 `019f1056-509e-7853-bafd-246d91c21fa8`; performance/reliability
 `019f1056-5133-73c1-9e09-756c7e49b061`.
-Status: Follow-up review in progress
+Status: Final follow-up review results received
 Implementation sub-agent: `019f103e-52ca-7722-88f0-49c49b017dbf` (Dalton)
 
 ## Review Focus
@@ -129,8 +129,54 @@ Reports received:
 
 Authoring follow-up fix status:
 
-- Final follow-up fix is in progress in the authoring worktree.
-- Remaining scope is limited to durable log/task state cleanup plus the
-  `EntityMetadata.columns` JSDoc clarification that columns are exposed only
-  for projection/process-manager entity kinds and ignored for aggregate/generic
-  entities.
+- Final follow-up fix committed as
+  `b19a9dcd072a1e233c973e401f35d12f224de1f7`.
+- Final follow-up verification evidence is recorded in the task/work logs:
+  focused server/generator tests passed (`2` files / `10` tests), `corepack
+pnpm typecheck` passed, `corepack pnpm docs:check` passed, and `CI=true
+corepack pnpm verify` passed after one formatting retry (`10` files / `65`
+  tests; coverage statements `99.41%`, branches `94.11%`, functions `100%`,
+  lines `99.39%`).
+- The remaining review scope is a durable-log correction only. It updates the
+  committed record so the post-`b19a9dcd072a1e233c973e401f35d12f224de1f7`
+  state no longer says that fix is still in progress.
+
+### Final Follow-Up Review
+
+Dispatched on `2026-06-28 23:48 WEST`.
+
+Review basis: `3a1e85150c838f7b03401ccdd0420717fbee7622..b19a9dcd072a1e233c973e401f35d12f224de1f7`.
+
+Review package: `.superpowers/sdd/review-3a1e851..b19a9dc.diff`.
+
+Required reviewer roles:
+
+- maintainability/style;
+- documentation;
+- TypeScript/API docs;
+- security;
+- performance/reliability.
+
+Reports received:
+
+- TypeScript/API docs `019f106e-206f-7490-b599-76134ecec087`: clean.
+- Security `019f106e-210d-7bd2-a828-b88ec1b8e92c`: clean.
+- Maintainability/style `019f106e-1f92-7d12-905b-99d2da45460a`: stale
+  committed durable-log wording remains in the reviewed scope
+  `3a1e851..b19a9dc`.
+- Documentation `019f106e-200e-74d0-adec-fc474169892d`: stale committed
+  durable-log wording remains in the reviewed scope `3a1e851..b19a9dc`.
+- Performance/reliability `019f106e-2182-7d03-9fe5-fd02993e9953`: stale
+  committed durable-log wording remains in the reviewed scope
+  `3a1e851..b19a9dc`.
+
+Authoring stale-log correction scope:
+
+- Preserve the orchestrator's uncommitted final-follow-up review dispatch edits
+  already present in the task/review/work logs.
+- Replace stale "in progress" and "next step: apply/commit the final
+  follow-up fix" wording with the actual post-commit state.
+- Record that this new authoring fix addresses only those stale-log review
+  findings.
+- Hand the branch back for orchestrator re-review/final verification after this
+  durable-log correction commit.
