@@ -45,7 +45,7 @@ Minor findings addressed in fix round 1:
   validator.
 - Added coverage for default-to-non-default existing-state set-once changes.
 
-Fix commit: current fix-round commit.
+Fix commit: `70c0052`.
 Verification:
 
 - `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
@@ -57,6 +57,49 @@ Verification:
   statements 98.48%, branches 92.34%, functions 100%, lines 98.44%; docs/API
   and proto checks passed with the known TypeDoc invalid-origin warning.
 
+## Round 2
+
+Reviewer package: `.superpowers/sdd/review-cd98ca3..70c0052.diff`.
+
+Important findings addressed in fix round 2:
+
+- Code semantics: missing own set-once fields were treated as unsafe even when
+  both previous and next descriptor-valid states omitted an optional singular
+  message field. The required semantics are absent-on-both compares equal,
+  absent-to-present and present-to-absent fail, and inherited/accessor-backed
+  forged values still fail closed without raw value leakage.
+- Durable logs: `TASK.md`, `build-protocol/work-logs/T-0009d1.md`, and this
+  review log had stale placeholders or current-state wording after `70c0052`.
+- API docs: `docs/api/README.md` did not mention that server transition
+  validation now exists in the current-status paragraph.
+
+Fix-round 2 entry:
+
+- Added a RED descriptor-valid test for `RichSetOnceState.details` absent from
+  both previous and next states.
+- Updated set-once field reads to treat truly absent own fields as safe missing
+  values while preserving fail-closed handling for inherited and accessor-backed
+  fields.
+- Refreshed task, work-log, review-log, implementation report, and API status
+  documentation.
+
+Verification:
+
+- RED
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected with 1 of 11 tests failing.
+- GREEN
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 20 tests.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.
+- `CI=true corepack pnpm verify` first failed on work-log formatting; after
+  Prettier cleanup, `CI=true corepack pnpm verify` passed with 13 test files /
+  94 tests and coverage statements 98.48%, branches 92.46%, functions 100%,
+  lines 98.45%.
+
 ## Follow-Up Rounds
 
-Pending.
+Round 2 findings are addressed in fix round 2. No later reviewer round is
+recorded in durable evidence yet.

@@ -250,6 +250,29 @@ describe("entity state transition validation", () => {
     );
   });
 
+  it("allows descriptor-valid singular message set-once fields absent from both states", () => {
+    const previous = create(RichSetOnceStateSchema, {
+      id: "rich-1",
+      fingerprint: new Uint8Array([1, 2]),
+      tags: ["alpha", "beta"],
+      mutableNote: "before",
+    });
+    const next = create(RichSetOnceStateSchema, {
+      id: "rich-1",
+      fingerprint: new Uint8Array([1, 2]),
+      tags: ["alpha", "beta"],
+      mutableNote: "after",
+    });
+
+    expect(
+      validateEntityStateTransition({
+        schema: RichSetOnceStateSchema,
+        previous,
+        next,
+      }).valid,
+    ).toBe(true);
+  });
+
   it("fails closed when forged set-once fields are inherited or accessor-backed", () => {
     const previous = create(ProjectionStateSchema, {
       id: "stable-id",

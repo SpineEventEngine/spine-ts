@@ -9,8 +9,11 @@ Branch: `task/T-0009d1-set-once-transition-validation`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009d1-set-once-transition-validation`
 Requirements splitter: `019f13a4-a6f5-7302-94e0-7b16366b0701` (Popper)
 Branch setup commit: `88cb0f3`
-Authoring sub-agent: TBD
-Reviewer sub-agents: TBD
+Authoring sub-agent: Codex implementation sub-agent
+Reviewer sub-agents: Round 1 and Round 2 role reviewers for
+code style/maintainability, documentation, TypeScript/API docs, security, and
+performance/reliability; individual reviewer IDs are not present in durable
+task evidence.
 Baseline verification evidence commit: `345c093`
 
 ## Objective
@@ -198,6 +201,24 @@ Out of scope:
   `2026-06-29 15:31 WEST`: 13 test files / 93 tests; coverage statements
   98.48%, branches 92.34%, functions 100%, lines 98.44%; docs/API and proto
   checks passed with the known TypeDoc invalid-origin warning.
+- RED fix-round 2
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected on `2026-06-29 15:40 WEST`: 1 of 11 tests failed because
+  descriptor-valid singular message set-once field `details` was absent from
+  both previous and next states but treated as unsafe.
+- GREEN fix-round 2
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 15:40 WEST`: 2 test files / 20 tests.
+- Fix-round 2 `corepack pnpm docs:check` passed on
+  `2026-06-29 15:42 WEST` with the known TypeDoc invalid-origin warning and
+  expected API export counts.
+- Fix-round 2 `corepack pnpm typecheck` passed on `2026-06-29 15:42 WEST`.
+- Fix-round 2 full verification first failed on Prettier formatting for
+  `build-protocol/work-logs/T-0009d1.md`. After formatting cleanup,
+  `CI=true corepack pnpm verify` passed on `2026-06-29 15:44 WEST`: 13 test
+  files / 94 tests; coverage statements 98.48%, branches 92.46%, functions
+  100%, lines 98.45%; docs/API and proto checks passed with the known TypeDoc
+  invalid-origin warning.
 
 ## Coverage Result
 
@@ -235,13 +256,24 @@ functions 100%, lines 98.44%.
 
 ## Review Rounds
 
-TBD
+- Round 1 reviewed implementation commit `e32f906` through review package
+  `.superpowers/sdd/review-cd98ca3..e32f906.diff`; findings were fixed in
+  `70c0052`. Round 1 role reviewers were closed after result capture.
+- Round 2 reviewed fix commit `70c0052` through review package
+  `.superpowers/sdd/review-cd98ca3..70c0052.diff`; findings required the
+  absent-on-both singular message set-once semantics fix plus stale task,
+  work-log, review-log, and API status documentation cleanup. Round 2 role
+  reviewers were closed after result capture.
+- Fix round 2 is in progress in this successor commit: add RED/GREEN coverage
+  for absent `RichSetOnceState.details`, update set-once field presence
+  semantics, refresh durable logs, and rerun required verification.
 
 ## Completion Checklist
 
 - [x] Baseline verification captured in the task worktree.
 - [x] Authoring sub-agent report captured and closed.
-- [ ] Five reviewer sub-agents completed and closed.
+- [x] Five reviewer role sub-agents completed and closed for the latest
+      captured review round.
 - [x] Review comments either fixed and re-reviewed or technically resolved.
 - [x] Full verification passed on the task branch.
 - [ ] Task branch merged back to `main`.

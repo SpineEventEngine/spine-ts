@@ -145,3 +145,40 @@ Fix-round commands run:
   TypeDoc invalid-origin warning.
 
 Full fix-round verification passed.
+
+## Fix Round 2
+
+Addressed round-2 findings from review package
+`.superpowers/sdd/review-cd98ca3..70c0052.diff` and the fix-agent handoff:
+
+- Code semantics: set-once field reads now distinguish truly absent descriptor
+  fields from inherited or accessor-backed forged values. Absent-on-both sides
+  compares equal, absent-to-present or present-to-absent fails, and unsafe
+  inherited/accessor-backed fields still fail closed without raw value leakage.
+- Regression coverage: added a descriptor-valid test using
+  `RichSetOnceState.details` absent from both previous and next states.
+- Durable docs/logs: replaced stale placeholders in `TASK.md`, updated the work
+  log current state after `70c0052`, replaced the round-1 fix commit placeholder
+  with `70c0052`, and recorded round-2 reviewer findings/fix activity.
+- API docs: updated `docs/api/README.md` current status to mention server
+  set-once transition validation without claiming runtime maturity.
+
+Fix-round 2 commands run:
+
+- RED:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected with 1 of 11 tests failing because absent
+  `RichSetOnceState.details` was rejected.
+- GREEN:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 20 tests.
+- Required verification:
+  `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts; `corepack pnpm typecheck` passed.
+- Full verification:
+  `CI=true corepack pnpm verify` first failed on Prettier formatting for
+  `build-protocol/work-logs/T-0009d1.md`; after
+  `corepack pnpm exec prettier --write build-protocol/work-logs/T-0009d1.md build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md build-protocol/reviews/T-0009d1-set-once-transition-validation.md build-protocol/tasks/T-0009d1-set-once-transition-validation/IMPLEMENTATION_REPORT.md docs/api/README.md`,
+  `CI=true corepack pnpm verify` passed with 13 test files / 94 tests; coverage
+  statements 98.48%, branches 92.46%, functions 100%, lines 98.45%; docs/API
+  and proto checks passed with the known TypeDoc invalid-origin warning.

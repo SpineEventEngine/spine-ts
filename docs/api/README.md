@@ -5,8 +5,8 @@ TypeDoc is the canonical API documentation generator for this repository.
 Current status: the generated reference contains the curated `@spine-ts/proto`
 root API for copied Spine contracts, the `@spine-ts/core` metadata/type
 registry and validation facade APIs, the first `@spine-ts/server`
-descriptor-derived entity metadata and explicit handler metadata APIs, and the
-first `@spine-ts/storage` contracts.
+descriptor-derived entity metadata, set-once transition validation, and
+explicit handler metadata APIs, and the first `@spine-ts/storage` contracts.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the

@@ -60,6 +60,7 @@ const MAX_EQUALITY_DEPTH = 64;
 
 interface FieldReadResult {
   readonly safe: boolean;
+  readonly present: boolean;
   readonly value?: unknown;
 }
 
@@ -78,7 +79,8 @@ function createSetOnceTransitionRule<Schema extends DescriptorMessageSchema>(
 
         return previousValue.safe &&
           nextValue.safe &&
-          valuesAreEqual(previousValue.value, nextValue.value)
+          previousValue.present === nextValue.present &&
+          (!previousValue.present || valuesAreEqual(previousValue.value, nextValue.value))
           ? []
           : [createSetOnceViolation(request.schema.typeName, field)];
       });
@@ -92,11 +94,15 @@ function readFieldValue(
 ): FieldReadResult {
   const descriptor = Object.getOwnPropertyDescriptor(message, field.localName);
 
-  if (!isSafeDataDescriptor(descriptor)) {
-    return { safe: false };
+  if (descriptor === undefined) {
+    return { safe: !(field.localName in message), present: false };
   }
 
-  return { safe: true, value: descriptor.value };
+  if (!isSafeDataDescriptor(descriptor)) {
+    return { safe: false, present: false };
+  }
+
+  return { safe: true, present: true, value: descriptor.value };
 }
 
 function valuesAreEqual(
