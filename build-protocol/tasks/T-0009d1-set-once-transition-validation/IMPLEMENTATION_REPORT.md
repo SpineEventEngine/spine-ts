@@ -304,6 +304,17 @@ Addressed round-5 findings from review package
 - Durable docs/logs: refreshed task, work-log, review-log, implementation
   report, API docs, architecture notes, user guide, server README, and
   developer API notes after committed fix-round 4 commit `e2369cc`.
+- JVM reference check: after human steering, inspected
+  `spine-jvm-docs/README.md`,
+  `spine-jvm-docs/spine-validation-storage-observability-and-support.md`,
+  `spine-jvm-docs/spine-domain-model-and-signals.md`, and
+  `spine-jvm-docs/spine-entities-repositories-and-state.md`. These notes place
+  set-once enforcement at generated builder/factory or state-update validation
+  boundaries over normal Protobuf state and state that repeated/map/explicit
+  optional `(set_once)` fields are unsupported at JVM build time. This confirmed
+  the conservative fix: keep map-valued set-once unsupported with a
+  field-specific violation and avoid adding a broader adversarial object
+  comparison abstraction.
 
 Fix-round 5 commands run:
 

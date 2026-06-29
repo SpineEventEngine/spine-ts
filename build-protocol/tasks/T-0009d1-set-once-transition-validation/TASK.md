@@ -2,7 +2,7 @@
 
 Status: Complete through fix round 5
 Start: `2026-06-29 14:52 WEST`
-End: `2026-06-29 16:45 WEST`
+End: `2026-06-29 16:50 WEST`
 Baseline commit: `1d939d7`
 Task log path: `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
 Branch: `task/T-0009d1-set-once-transition-validation`
@@ -124,6 +124,9 @@ Out of scope:
 ## Decisions
 
 - D-0038: enforce `(set_once)` as immutable after first committed state.
+- D-0039: keep server validation boundaries JVM-familiar; for this fix round,
+  map-valued `(set_once)` fields remain unsupported and fail closed rather than
+  adding speculative map canonicalization.
 
 ## Human Questions And Answers
 
@@ -133,6 +136,8 @@ Out of scope:
 ## Files Changed
 
 - `build-protocol/DEVELOPER_API.md`
+- `build-protocol/BUILD_PROTOCOL.md`
+- `build-protocol/DECISION_LOG.md`
 - `build-protocol/reviews/T-0009d1-set-once-transition-validation.md`
 - `build-protocol/tasks/T-0009d1-set-once-transition-validation/IMPLEMENTATION_REPORT.md`
 - `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
@@ -278,7 +283,7 @@ Out of scope:
   with the known TypeDoc invalid-origin warning and expected API export counts.
 - Fix-round 5 `corepack pnpm typecheck` passed on `2026-06-29 16:41 WEST`.
 - Final fix-round 5 `CI=true corepack pnpm verify` passed on
-  `2026-06-29 16:45 WEST`: 13 test files / 105 tests; coverage statements
+  `2026-06-29 16:50 WEST`: 13 test files / 105 tests; coverage statements
   97.12%, branches 91.07%, functions 100%, lines 97.05%; docs/API and proto
   checks passed with the known TypeDoc invalid-origin warning.
 
@@ -353,6 +358,16 @@ functions 100%, lines 97.05%.
   unsupported-map violation, adds descriptor-valid map and recursive
   `RichSetOnceState.details` coverage, and refreshes durable docs after
   `e2369cc`.
+- Human steering after fix round 5 required server-module work to inspect the
+  local Spine JVM notes before broadening behavior. The fix round inspected:
+  `spine-jvm-docs/README.md`;
+  `spine-jvm-docs/spine-validation-storage-observability-and-support.md`;
+  `spine-jvm-docs/spine-domain-model-and-signals.md`; and
+  `spine-jvm-docs/spine-entities-repositories-and-state.md`. The JVM notes
+  confirm `(set_once)` is a generated builder/state-update validation boundary
+  for normal Protobuf state and that repeated/map/explicit optional fields are
+  unsupported at build time, so no broader defensive comparison abstraction was
+  added.
 
 ## Completion Checklist
 

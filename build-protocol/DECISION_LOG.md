@@ -870,3 +870,60 @@ Consequences:
 - Reviewers must verify that T-0009d.1 does not instantiate entities, invoke
   handlers, apply events, read/write storage, start buses, mutate global
   runtime state, or introduce gRPC/ZeroMQ behavior.
+
+## D-0039: Keep server validation boundaries JVM-familiar
+
+Status: Accepted
+
+Date: 2026-06-29
+
+Context: During T-0009d.1 fix round 5, the human observed that server-module
+work may be over-inventing behavior compared with Spine JVM. The local
+`spine-jvm-docs/` corpus is available in this repository and summarizes the
+server/runtime behavior expected from Spine JVM `core-jvm`.
+
+JVM docs inspected for this decision:
+
+- `spine-jvm-docs/README.md`, Generated/Runtime Contract;
+- `spine-jvm-docs/spine-validation-storage-observability-and-support.md`,
+  Validation runtime, Field options, and Entity state sections;
+- `spine-jvm-docs/spine-domain-model-and-signals.md`, Validation Options That
+  Affect Modeling;
+- `spine-jvm-docs/spine-entities-repositories-and-state.md`, Transactions and
+  State Builders.
+
+Decision: Server-module work must check task-relevant local Spine JVM notes
+before introducing or expanding server/runtime behavior. For set-once
+validation, stay close to the JVM-familiar contract: enforcement belongs at
+generated builder/factory or state-update validation boundaries over normal
+Protobuf entity state, structured violations are surfaced through the validation
+facade, and repeated/map/explicit optional `(set_once)` fields are unsupported
+in the JVM generation contract. In TypeScript, unsupported map-valued set-once
+fields therefore fail closed with a field-specific validation violation instead
+of adding speculative canonical map comparison in this task.
+
+This does not make arbitrary hostile JavaScript object graphs part of the
+primary public contract. The T-0009d.1 hardening tests exist to preserve
+field-specific, sanitized failures at the public API boundary when callers pass
+forged or proxy-backed values; they should not grow into a broad adversarial
+object comparison subsystem unless a later runtime threat model requires it.
+
+Alternatives considered:
+
+- Implement canonical map-valued set-once comparison now. Rejected because JVM
+  notes say repeated/map `(set_once)` is unsupported at build time, and
+  Protobuf-ES deterministic map canonicalization policy has not been designed.
+- Continue expanding defensive equality for every hostile JavaScript object
+  shape. Rejected because the server runtime should be designed around
+  framework-controlled Protobuf state updates, with unsupported/adversarial
+  inputs documented and failed closed.
+
+Consequences:
+
+- Future `@spine-ts/server` tasks must record relevant JVM docs/source-note
+  inspection in task logs before broadening server behavior.
+- T-0009d.1 keeps the round-5 code fix narrow: catch top-level proxy reflection
+  failures and report map-valued set-once as unsupported, without adding new
+  validation abstractions.
+- A later task may revisit map support only after deciding a deterministic map
+  canonicalization policy and checking the JVM compatibility impact.
