@@ -650,3 +650,22 @@ Verification:
   warning and expected API export counts.
 - `corepack pnpm typecheck` passed.
 - `git diff --check` passed.
+
+## Fix Round 16
+
+Addressed round-16/final re-review verification-summary findings without
+changing runtime behavior:
+
+- Added missing fix-round 15 verification evidence to canonical `TASK.md` Tests
+  Run.
+- Updated work-log Current State to name the round-16 review package, correct
+  the round-15 package label, and summarize fix-round 15 verification evidence.
+- Recorded round-16 review outcomes in the review log.
+
+Verification:
+
+- `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.
+- `git diff --check` passed.
