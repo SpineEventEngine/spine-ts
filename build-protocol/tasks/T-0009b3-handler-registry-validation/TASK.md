@@ -1,19 +1,19 @@
 # T-0009b.3: Handler Metadata Registry And Validation
 
-Status: In progress
+Status: Implemented and verified
 Start: `2026-06-29 12:49 WEST`
-End: Pending
+End: `2026-06-29 13:02 WEST`
 Baseline commit: `3ecdaf0`
 Task log path: `build-protocol/tasks/T-0009b3-handler-registry-validation/TASK.md`
 Branch: `task/T-0009b3-handler-registry-validation`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b3-handler-registry-validation`
 Requirements splitter: `019f1334-c2a6-7463-ba98-6dbd12020957` (Parfit)
-Authoring sub-agent: Pending
+Authoring sub-agent: T-0009b.3 implementation sub-agent
 Reviewer sub-agents: Pending
 Branch setup commit: `041dc61`
-Implementation baseline commit: Pending branch commit
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
+Implementation baseline commit: `6a99321`
+Implementation commit: Pending final commit after log update
+Final branch HEAD: Pending final commit after log update
 
 ## Objective
 
@@ -82,11 +82,11 @@ Selected skills read before task actions:
 
 Skills passed to sub-agents/reviewers:
 
-| Recipient           | Skills/Instructions Passed                                                          | Notes                                                                                                 |
-| ------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| Splitter            | Protocol/spec docs, T-0009b logs, current server sources, `epic-breakdown-advisor`. | Produced T-0009b.3 recommendation with no blockers; splitter was closed after result capture.         |
-| Authoring sub-agent | Pending.                                                                            | Must receive TDD, TypeScript/API, ADR, worktree, verification, and no-runtime-execution instructions. |
-| Reviewers           | Pending.                                                                            | Must receive role-specific focus, diff package, and instruction to close after result capture.        |
+| Recipient           | Skills/Instructions Passed                                                          | Notes                                                                                         |
+| ------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Splitter            | Protocol/spec docs, T-0009b logs, current server sources, `epic-breakdown-advisor`. | Produced T-0009b.3 recommendation with no blockers; splitter was closed after result capture. |
+| Authoring sub-agent | TDD, JavaScript testing, TypeScript/API, ADR/domain, verification instructions.     | Implemented registry, tests, docs, API guard, and logs in this worktree.                      |
+| Reviewers           | Pending.                                                                            | Formal role-specific review remains for the orchestrator after this implementation commit.    |
 
 Skipped relevant-looking skills:
 
@@ -138,7 +138,18 @@ Out of scope:
 
 ## Files Changed
 
-- Pending.
+- `packages/server/src/handler-metadata.ts`
+- `packages/server/src/handler-metadata.test.ts`
+- `packages/server/src/index.ts`
+- `packages/server/src/index.test.ts`
+- `scripts/check-api-docs.mjs`
+- `packages/server/README.md`
+- `docs/USER_GUIDE.md`
+- `docs/api/README.md`
+- `docs/architecture/README.md`
+- `build-protocol/tasks/T-0009b3-handler-registry-validation/TASK.md`
+- `build-protocol/work-logs/T-0009b3.md`
+- `build-protocol/reviews/T-0009b3-handler-registry-validation.md`
 
 ## Tests Run
 
@@ -152,23 +163,47 @@ Out of scope:
   confirmed 100 proto exports, 28 core exports, 27 server exports, and 26
   storage exports; proto lint/generate/check-generated passed; known TypeDoc
   invalid-origin source-link warning remains.
+- RED `corepack pnpm vitest run packages/server/src/handler-metadata.test.ts`
+  failed as expected after adding focused registry tests: 5 existing tests passed
+  and 5 new tests failed because `HandlerMetadataRegistry` was not a
+  constructor.
+- GREEN `corepack pnpm vitest run packages/server/src/handler-metadata.test.ts`
+  passed after implementation: 1 test file / 10 tests passed.
+- RED `corepack pnpm vitest run packages/server/src/index.test.ts` failed as
+  expected after adding runtime exports: 8 tests passed and 1 export guard test
+  failed until `HandlerMetadataRegistry` and `HandlerMetadataRegistryError` were
+  added to the expected runtime surface.
+- `corepack pnpm vitest run packages/server/src/handler-metadata.test.ts packages/server/src/index.test.ts`
+  passed: 2 test files / 19 tests passed.
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm docs:check` passed; TypeDoc reported the known invalid
+  `origin` source-link warning and confirmed 100 proto exports, 28 core exports,
+  32 server exports, and 26 storage exports.
+- First `CI=true corepack pnpm verify` run failed at lint because new tests
+  destructured builder methods and triggered `@typescript-eslint/unbound-method`.
+  Tests were adjusted to call through the builder object.
+- Final `CI=true corepack pnpm verify` passed on `2026-06-29 13:02 WEST`: 11
+  test files / 75 tests passed; docs/API and proto checks passed with the known
+  TypeDoc invalid-origin warning.
 
 ## Coverage Result
 
 - Baseline `CI=true corepack pnpm verify` coverage: statements 99.44%, branches
   93.7%, functions 100%, lines 99.43%.
+- Final `CI=true corepack pnpm verify` coverage: statements 99.52%, branches
+  93.24%, functions 100%, lines 99.51%.
 
 ## Documentation And Public API Impact
 
-| Area                             | Impact                                                                              |
-| -------------------------------- | ----------------------------------------------------------------------------------- |
-| Package README impact            | Expected: registry creation/lookup example and duplicate-policy notes.              |
-| TypeDoc/API docs impact          | Expected: new registry public types/functions with comments and API guard coverage. |
-| Public API additions/removals    | Expected: caller-owned registry and structured registry error exports.              |
-| Framework `USER_GUIDE.md` impact | Expected: handler registry usage and non-runtime boundary notes.                    |
-| Example `USER_GUIDE.md` impact   | N/A for this slice; to-do example is not implemented yet.                           |
-| API examples                     | Expected in server README and API overview.                                         |
-| Compatibility notes              | Expected: registry validates metadata before later decorators/runtime use it.       |
+| Area                             | Impact                                                                          |
+| -------------------------------- | ------------------------------------------------------------------------------- |
+| Package README impact            | Added registry creation/lookup example and duplicate-policy notes.              |
+| TypeDoc/API docs impact          | Added registry public types/classes with comments and API guard coverage.       |
+| Public API additions/removals    | Added caller-owned registry, lookup/entry types, and structured registry error. |
+| Framework `USER_GUIDE.md` impact | Added handler registry usage and non-runtime boundary notes.                    |
+| Example `USER_GUIDE.md` impact   | N/A for this slice; to-do example is not implemented yet.                       |
+| API examples                     | Expected in server README and API overview.                                     |
+| Compatibility notes              | Expected: registry validates metadata before later decorators/runtime use it.   |
 
 ## Security Impact
 
@@ -187,19 +222,23 @@ Out of scope:
 - Baseline `CI=true corepack pnpm verify` passed in
   `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b3-handler-registry-validation`
   on `2026-06-29 12:52 WEST`.
+- Final `CI=true corepack pnpm verify` passed in
+  `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b3-handler-registry-validation`
+  on `2026-06-29 13:02 WEST`.
 
 ## Open Risks And Follow-Up Routing
 
-| Risk/Follow-Up                                                   | Owner               | Linked Task/Decision | Disposition                                                     | Next Review Point           |
-| ---------------------------------------------------------------- | ------------------- | -------------------- | --------------------------------------------------------------- | --------------------------- |
-| Registry API could imply runtime dispatch.                       | Author/reviewers    | T-0009b.3            | Keep lookup-only wording and no invocation tests.               | Maintainability/docs review |
-| Duplicate policy may need refinement for custom command routing. | Future routing task | D-0036               | First policy covers default one-effective-command-handler rule. | Repository/routing design   |
-| Decorator adapter must target this registry contract later.      | T-0009c             | D-0035               | Defer until registry semantics are stable.                      | T-0009c setup               |
+| Risk/Follow-Up                                                   | Owner               | Linked Task/Decision | Disposition                                                      | Next Review Point           |
+| ---------------------------------------------------------------- | ------------------- | -------------------- | ---------------------------------------------------------------- | --------------------------- |
+| Registry API could imply runtime dispatch.                       | Author/reviewers    | T-0009b.3            | Added lookup-only docs and no-instantiation/no-invocation tests. | Maintainability/docs review |
+| Duplicate policy may need refinement for custom command routing. | Future routing task | D-0036               | First policy covers default one-effective-command-handler rule.  | Repository/routing design   |
+| Decorator adapter must target this registry contract later.      | T-0009c             | D-0035               | Defer until registry semantics are stable.                       | T-0009c setup               |
 
 ## Review Rounds
 
-- Authoring sub-agent dispatch is next after baseline checkpoint commit.
+- Implementation sub-agent self-verification is complete; formal reviewer
+  sub-agents remain pending for the orchestrator.
 
 ## Integration Result
 
-Pending.
+Implementation ready for review/merge by the orchestrator after final commit.

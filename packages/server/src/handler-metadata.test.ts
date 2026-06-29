@@ -10,6 +10,8 @@ import {
   defineEntityHandlers,
   describeEntityMetadata,
   HandlerMetadataError,
+  HandlerMetadataRegistry,
+  HandlerMetadataRegistryError,
   type HandlerMethodName,
 } from "./index.js";
 
@@ -17,6 +19,12 @@ type ProjectionState = Message<"ProjectionState"> & {
   id: string;
   name: string;
   priority: number;
+};
+
+type AggregateState = Message<"AggregateState"> & {
+  id: string;
+  name: string;
+  archived: boolean;
 };
 
 class TaskProjection {
@@ -38,6 +46,50 @@ class TaskProjection {
 
   applyCreated(event: Message<"spine.core.Event">): void {
     void event;
+  }
+
+  assignArchive(command: Message<"spine.core.Command">): void {
+    void command;
+  }
+
+  commandFromArchive(command: Message<"spine.core.Command">): void {
+    void command;
+  }
+
+  subscribeArchived(event: Message<"spine.core.Event">): void {
+    void event;
+  }
+
+  reactToArchived(event: Message<"spine.core.Event">): void {
+    void event;
+  }
+
+  applyArchived(event: Message<"spine.core.Event">): void {
+    void event;
+  }
+}
+
+class OtherProjection {
+  assignCreate(command: Message<"spine.core.Command">): void {
+    void command;
+  }
+
+  applyCreated(event: Message<"spine.core.Event">): void {
+    void event;
+  }
+}
+
+class PassiveProjection {
+  static constructorCount = 0;
+  static invocationCount = 0;
+
+  constructor() {
+    PassiveProjection.constructorCount += 1;
+  }
+
+  assignCreate(command: Message<"spine.core.Command">): void {
+    void command;
+    PassiveProjection.invocationCount += 1;
   }
 }
 
@@ -78,6 +130,10 @@ const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
 ) as GenMessage<ProjectionState>;
+const AggregateStateSchema = messageDesc(
+  fileEntityMetadataFixture,
+  1,
+) as GenMessage<AggregateState>;
 
 describe("handler metadata", () => {
   it("defines frozen explicit handler metadata in declaration order", () => {
@@ -173,5 +229,137 @@ describe("handler metadata", () => {
         builder.assign(CommandSchema, "constructor" as never),
       ]),
     ).toThrow(HandlerMetadataError);
+  });
+});
+
+describe("handler metadata registry", () => {
+  it("registers entity handler metadata and exposes frozen deterministic lookup views", () => {
+    const projectionHandlers = defineEntityHandlers(
+      TaskProjection,
+      ProjectionStateSchema,
+      (builder) => [
+        builder.assign(CommandSchema, "assignCreate"),
+        builder.apply(EventSchema, "applyCreated"),
+      ],
+    );
+    const aggregateHandlers = defineEntityHandlers(
+      TaskProjection,
+      AggregateStateSchema,
+      (builder) => [
+        builder.command(CommandSchema, "commandFromArchive"),
+        builder.subscribe(EventSchema, "subscribeArchived"),
+        builder.react(EventSchema, "reactToArchived"),
+        builder.apply(EventSchema, "applyArchived"),
+      ],
+    );
+
+    const registry = new HandlerMetadataRegistry([projectionHandlers, aggregateHandlers]);
+
+    expect(registry.listEntityHandlers()).toEqual([projectionHandlers, aggregateHandlers]);
+    expect(registry.findEntityHandlersByState("ProjectionState")).toEqual([projectionHandlers]);
+    expect(registry.findEntityHandlersByState("AggregateState")).toEqual([aggregateHandlers]);
+    expect(registry.findHandlersByKind("event-application").map((entry) => entry.handler)).toEqual([
+      projectionHandlers.eventApplications[0],
+      aggregateHandlers.eventApplications[0],
+    ]);
+    expect(
+      registry
+        .findHandlersByMessageFullTypeName("spine.core.Event")
+        .map((entry) => [entry.entity.fullTypeName, entry.handler.kind, entry.handler.methodName]),
+    ).toEqual([
+      ["ProjectionState", "event-application", "applyCreated"],
+      ["AggregateState", "event-subscription", "subscribeArchived"],
+      ["AggregateState", "event-reaction", "reactToArchived"],
+      ["AggregateState", "event-application", "applyArchived"],
+    ]);
+    expect(registry.findCommandAssignment("spine.core.Command")?.handler).toBe(
+      projectionHandlers.commandAssignments[0],
+    );
+    expect(registry.findEventApplication("ProjectionState", "spine.core.Event")?.handler).toBe(
+      projectionHandlers.eventApplications[0],
+    );
+
+    expect(Object.isFrozen(registry.listEntityHandlers())).toBe(true);
+    expect(Object.isFrozen(registry.listHandlers())).toBe(true);
+    expect(Object.isFrozen(registry.findHandlersByKind("event-application"))).toBe(true);
+    expect(Object.isFrozen(registry.findHandlersByMessageFullTypeName("spine.core.Event"))).toBe(
+      true,
+    );
+  });
+
+  it("rejects duplicate command assignments in one caller-owned registry", () => {
+    const first = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+      builder.assign(CommandSchema, "assignCreate"),
+    ]);
+    const second = defineEntityHandlers(OtherProjection, AggregateStateSchema, (builder) => [
+      builder.assign(CommandSchema, "assignCreate"),
+    ]);
+
+    expect(() => new HandlerMetadataRegistry([first, second])).toThrow(
+      HandlerMetadataRegistryError,
+    );
+    expect(() => new HandlerMetadataRegistry([first, second])).toThrow(
+      /Duplicate command assignment for "spine\.core\.Command"/,
+    );
+  });
+
+  it("rejects duplicate event applications for the same entity state and event type", () => {
+    const first = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+      builder.apply(EventSchema, "applyCreated"),
+    ]);
+    const second = defineEntityHandlers(OtherProjection, ProjectionStateSchema, (builder) => [
+      builder.apply(EventSchema, "applyCreated"),
+    ]);
+
+    expect(() => new HandlerMetadataRegistry([first, second])).toThrow(
+      HandlerMetadataRegistryError,
+    );
+    expect(() => new HandlerMetadataRegistry([first, second])).toThrow(
+      /Duplicate event application for entity "ProjectionState" and event "spine\.core\.Event"/,
+    );
+  });
+
+  it("allows fan-out metadata for command reactions and event subscribers/reactors", () => {
+    const first = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+      builder.command(CommandSchema, "commandFromCommand"),
+      builder.subscribe(EventSchema, "subscribeCreated"),
+      builder.react(EventSchema, "reactToCreated"),
+    ]);
+    const second = defineEntityHandlers(TaskProjection, AggregateStateSchema, (builder) => [
+      builder.command(CommandSchema, "commandFromArchive"),
+      builder.subscribe(EventSchema, "subscribeArchived"),
+      builder.react(EventSchema, "reactToArchived"),
+    ]);
+
+    const registry = new HandlerMetadataRegistry([first, second]);
+
+    expect(registry.findHandlersByKind("command-reaction")).toHaveLength(2);
+    expect(registry.findHandlersByKind("event-subscription")).toHaveLength(2);
+    expect(registry.findHandlersByKind("event-reaction")).toHaveLength(2);
+    expect(registry.findHandlersByMessageFullTypeName("spine.core.Command")).toHaveLength(2);
+    expect(registry.findHandlersByMessageFullTypeName("spine.core.Event")).toHaveLength(4);
+  });
+
+  it("keeps registries caller-owned and does not instantiate or invoke handlers", () => {
+    PassiveProjection.constructorCount = 0;
+    PassiveProjection.invocationCount = 0;
+    const first = defineEntityHandlers(PassiveProjection, ProjectionStateSchema, (builder) => [
+      builder.assign(CommandSchema, "assignCreate"),
+    ]);
+    const second = defineEntityHandlers(OtherProjection, AggregateStateSchema, (builder) => [
+      builder.assign(CommandSchema, "assignCreate"),
+    ]);
+
+    const firstRegistry = new HandlerMetadataRegistry([first]);
+    const secondRegistry = new HandlerMetadataRegistry([second]);
+
+    expect(firstRegistry.findCommandAssignment("spine.core.Command")?.entityType).toBe(
+      PassiveProjection,
+    );
+    expect(secondRegistry.findCommandAssignment("spine.core.Command")?.entityType).toBe(
+      OtherProjection,
+    );
+    expect(PassiveProjection.constructorCount).toBe(0);
+    expect(PassiveProjection.invocationCount).toBe(0);
   });
 });

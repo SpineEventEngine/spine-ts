@@ -119,6 +119,8 @@ describe("@spine-ts/server", () => {
       [
         "DescriptorMetadataError",
         "HandlerMetadataError",
+        "HandlerMetadataRegistry",
+        "HandlerMetadataRegistryError",
         "defineEntityHandlers",
         "describeEntityMetadata",
         "isEntitySchema",
