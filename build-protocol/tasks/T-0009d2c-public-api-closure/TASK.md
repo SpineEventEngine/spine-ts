@@ -1,6 +1,6 @@
 # T-0009d.2c: Public API Polish, Compatibility Notes, Verification Closure
 
-Status: Complete; Integration Pending
+Status: Complete
 Start: `2026-06-29 21:20 WEST`
 End: `2026-06-29 21:50 WEST`
 Baseline commit: `5367bb8`
@@ -8,6 +8,7 @@ Task log path: `build-protocol/tasks/T-0009d2c-public-api-closure/TASK.md`
 Branch: `task/T-0009d2c-public-api-closure`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009d2c-public-api-closure`
+Integrated to main: `8e8230a`
 Requirements splitter: T-0009d.2 splitter
 `019f14c2-9605-7d11-b8c5-3f891b1880f7` (Sartre the 2nd, closed)
 Authoring sub-agent:
@@ -191,6 +192,12 @@ Out of scope:
   97.61%, branches 90.51%, functions 100%, lines 97.56%; TypeDoc/API reported
   100 proto, 28 core, 59 server, and 26 storage expected exports; proto
   lint/generate/check passed with generated output clean.
+- Main integration `CI=true corepack pnpm verify` passed on
+  `2026-06-29 21:53 WEST` after merge commit `8e8230a`: 14 test files / 129
+  tests; coverage statements 97.61%, branches 90.51%, functions 100%, lines
+  97.56%; TypeDoc/API reported 100 proto, 28 core, 59 server, and 26 storage
+  expected exports; proto lint/generate/check passed with generated output
+  clean.
 
 ## Review Rounds
 
@@ -218,4 +225,6 @@ Out of scope:
   fix cleared that stale marker and recorded the fix path.
 - Round 2 review is clean with all participating reviewer sub-agents closed.
 - Final branch verification passed on `2026-06-29 21:50 WEST`.
+- Integrated to `main` at `8e8230a`; main verification passed on
+  `2026-06-29 21:53 WEST`.
 - No new decision was needed; D-0043 covers the closure boundary.
