@@ -306,6 +306,11 @@ Splitter JVM impact summary:
   test files / 123 tests; coverage statements 97.51%, branches 90.28%,
   functions 100%, lines 97.46%; docs/API and proto checks passed with the known
   TypeDoc invalid-origin warning.
+- Final pre-integration `CI=true corepack pnpm verify` passed on
+  `2026-06-29 20:44 WEST` from clean-review commit `9e145b9`: 14 test files /
+  123 tests; coverage statements 97.51%, branches 90.28%, functions 100%,
+  lines 97.46%; TypeDoc/API check reported 100 proto, 28 core, 56 server, and
+  26 storage expected exports; proto lint/generate/check passed.
 
 ## Round 1 Review Fix Outcome
 
@@ -330,5 +335,5 @@ rejected. No sub-agents were spawned.
 - Requirements splitter completed and was closed.
 - Round 2 clean re-review completed and all participating sub-agents are
   closed.
-- Next step: record this clean review checkpoint, run fresh verification, then
-  integrate or continue the next subtask according to the protocol.
+- Final pre-integration verification passed.
+- Next step: integrate the reviewed branch into `main` and verify there.

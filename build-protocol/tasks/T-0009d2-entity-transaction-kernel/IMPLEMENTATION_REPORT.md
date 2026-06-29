@@ -213,6 +213,11 @@ format:check` passed on `2026-06-29 20:34 WEST`.
     test files / 123 tests; coverage statements 97.51%, branches 90.28%,
     functions 100%, lines 97.46%; docs/API and proto checks passed with the
     known TypeDoc invalid-origin warning.
+- Final pre-integration `CI=true corepack pnpm verify` passed on
+  `2026-06-29 20:44 WEST` from clean-review commit `9e145b9`: 14 test files /
+  123 tests; coverage statements 97.51%, branches 90.28%, functions 100%,
+  lines 97.46%; TypeDoc/API check reported 100 proto, 28 core, 56 server, and
+  26 storage expected exports; proto lint/generate/check passed.
 
 ## Review
 
