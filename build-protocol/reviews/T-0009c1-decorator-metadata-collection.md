@@ -22,11 +22,23 @@ clean. The orchestrator must close every reviewer after result capture.
 
 ## Round 1
 
-Pending. Implementation was authored and verified by the implementation
-sub-agent on `2026-06-29 13:53 WEST`; reviewer sub-agents were not spawned from
-the implementation handoff because the handoff explicitly prohibited spawning
-sub-agents. Review should inspect the implementation commit range from
-`722a192` through the implementation commit.
+Range reviewed: `722a192..39008b7`
+
+Review package:
+`.superpowers/sdd/review-722a192..39008b7.diff`
+
+Reviewer sub-agents:
+
+| Role                       | Agent                                  | Result                                                                                                                                                                                              | Disposition |
+| -------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| Code style/maintainability | `019f1378-1d75-7e53-953c-66e3569b0c2a` | P1 decorator return type rejects normally typed handler methods; P2 function-keyed metadata is not truly class-owned for copied/reused method functions.                                            | Fix needed. |
+| Documentation              | `019f1378-1e0d-7541-bd5c-60425f28ccd5` | P3 durable logs contain stale audit markers: authoring agent `TBD`, next-step wording, and review log verification timestamp should align with the final implementation report.                     | Fix needed. |
+| TypeScript/API docs        | `019f1378-1e76-7f53-a436-5b72bda747ad` | P1 public `HandlerMethodDecorator`/`HandlerMethodValue` type is too narrow for real typed handler parameters under strict TypeScript; API should be generic over method value/parameters.           | Fix needed. |
+| Security                   | `019f1378-1efc-7b50-b9ed-39904947bbfe` | CLEAN: no security findings. Residual risk noted that module-private `WeakMap` should be revisited only if D-0037 requires literal class-owned storage.                                             | Clean.      |
+| Performance/reliability    | `019f1378-1f7c-79f2-a64f-31fe92ea0ad0` | P2 function-keyed decorator metadata can be borrowed by another class if a decorated method function is copied/reused on another prototype, weakening class-owned deterministic metadata semantics. | Fix needed. |
+
+Round 1 outcome: not clean. Dispatch one fixer for the consolidated findings,
+then re-run all five reviewer roles against the fix range.
 
 ## Follow-Up Rounds
 
