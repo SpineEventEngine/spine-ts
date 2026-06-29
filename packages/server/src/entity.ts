@@ -14,15 +14,31 @@ export interface EntityLifecycleFlags {
   readonly deleted: boolean;
 }
 
+/** Plain snapshot data accepted as caller-owned entity version metadata. */
+export type EntityVersionMetadata =
+  | string
+  | number
+  | boolean
+  | bigint
+  | symbol
+  | null
+  | undefined
+  | readonly EntityVersionMetadata[]
+  | { readonly [key: string]: EntityVersionMetadata };
+
 /** Initial values for constructing an {@link Entity}. */
-export interface EntityOptions<Id, Schema extends DescriptorMessageSchema, Version = unknown> {
+export interface EntityOptions<
+  Id,
+  Schema extends DescriptorMessageSchema,
+  Version = EntityVersionMetadata,
+> {
   /** Stable entity identifier owned by the caller/domain type. */
   readonly id: Id;
   /** Generated Protobuf-ES schema describing the entity state. */
   readonly schema: Schema;
   /** Initial entity state snapshot. */
   readonly state: MessageShape<Schema>;
-  /** Caller-owned version metadata snapshot. */
+  /** Caller-owned plain version metadata snapshot. */
   readonly version: Version;
   /** Initial lifecycle flags. Defaults to active, not deleted. */
   readonly lifecycle?: Partial<EntityLifecycleFlags>;
@@ -32,12 +48,16 @@ export interface EntityOptions<Id, Schema extends DescriptorMessageSchema, Versi
  * Common in-memory OOP shell for one server-side entity state.
  *
  * The shell exposes identity, descriptor-derived metadata, cloned state
- * snapshots, caller-owned version metadata snapshots, and lifecycle flags. It does not
+ * snapshots, caller-owned plain version metadata snapshots, and lifecycle flags. It does not
  * invoke handlers, create transactions, write repositories or storage, dispatch
  * messages, increment versions, route IDs, query read models, start buses, or
  * mutate process-wide runtime state.
  */
-export abstract class Entity<Id, Schema extends DescriptorMessageSchema, Version = unknown> {
+export abstract class Entity<
+  Id,
+  Schema extends DescriptorMessageSchema,
+  Version = EntityVersionMetadata,
+> {
   readonly #id: Id;
   readonly #schema: Schema;
   readonly #metadata: EntityMetadata<Schema>;
@@ -79,7 +99,7 @@ export abstract class Entity<Id, Schema extends DescriptorMessageSchema, Version
     return cloneState(this.#schema, this.#state);
   }
 
-  /** Caller-owned version metadata snapshot. */
+  /** Caller-owned plain version metadata snapshot. */
   get version(): Version {
     return cloneVersionMetadata(this.#version);
   }
@@ -117,7 +137,7 @@ export abstract class Entity<Id, Schema extends DescriptorMessageSchema, Version
     this.#state = cloneState(this.#schema, state);
   }
 
-  /** Replace caller-owned version metadata from future subclass/runtime code. */
+  /** Replace caller-owned plain version metadata from future subclass/runtime code. */
   protected replaceVersionMetadata(version: Version): void {
     this.#version = cloneVersionMetadata(version);
   }
@@ -144,11 +164,106 @@ function cloneState<Schema extends DescriptorMessageSchema>(
 }
 
 function cloneVersionMetadata<Version>(version: Version): Version {
-  return isObjectLike(version) ? structuredClone(version) : version;
+  return clonePlainVersionMetadata(version, "$", new WeakSet()) as Version;
 }
 
-function isObjectLike(value: unknown): value is object {
-  return typeof value === "object" && value !== null;
+function clonePlainVersionMetadata(
+  value: unknown,
+  path: string,
+  stack: WeakSet<object>,
+): EntityVersionMetadata {
+  if (value === null) {
+    return value;
+  }
+
+  switch (typeof value) {
+    case "string":
+    case "number":
+    case "boolean":
+    case "bigint":
+    case "symbol":
+    case "undefined":
+      return value;
+    case "function":
+      throw nonPlainVersionMetadataError(path, "function");
+    case "object":
+      return clonePlainVersionObject(value, path, stack);
+  }
 }
 
-declare function structuredClone<T>(value: T): T;
+function clonePlainVersionObject(
+  value: object,
+  path: string,
+  stack: WeakSet<object>,
+): EntityVersionMetadata {
+  if (ArrayBuffer.isView(value)) {
+    throw nonPlainVersionMetadataError(path, getObjectKind(value));
+  }
+  if (value instanceof ArrayBuffer || isSharedArrayBuffer(value)) {
+    throw nonPlainVersionMetadataError(path, getObjectKind(value));
+  }
+  if (stack.has(value)) {
+    throw nonPlainVersionMetadataError(path, "cyclic object");
+  }
+
+  stack.add(value);
+  try {
+    if (Array.isArray(value)) {
+      return value.map((item, index) =>
+        clonePlainVersionMetadata(item, `${path}[${String(index)}]`, stack),
+      );
+    }
+
+    if (!isPlainObject(value)) {
+      throw nonPlainVersionMetadataError(path, getObjectKind(value));
+    }
+
+    const clone = Object.create(getObjectPrototype(value)) as Record<string, EntityVersionMetadata>;
+    const descriptors = Object.getOwnPropertyDescriptors(value);
+    const [symbolKey] = Object.getOwnPropertySymbols(descriptors);
+    if (symbolKey !== undefined) {
+      throw nonPlainVersionMetadataError(`${path}[${String(symbolKey)}]`, "symbol-keyed property");
+    }
+
+    for (const [key, descriptor] of Object.entries(descriptors)) {
+      const childPath = `${path}.${key}`;
+      if (!descriptor.enumerable) {
+        throw nonPlainVersionMetadataError(childPath, "non-enumerable property");
+      }
+      if (!("value" in descriptor)) {
+        throw nonPlainVersionMetadataError(childPath, "accessor property");
+      }
+      clone[key] = clonePlainVersionMetadata(descriptor.value, childPath, stack);
+    }
+
+    return clone;
+  } finally {
+    stack.delete(value);
+  }
+}
+
+function isPlainObject(value: object): boolean {
+  const prototype = getObjectPrototype(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
+function getObjectPrototype(value: object): object | null {
+  return Object.getPrototypeOf(value) as object | null;
+}
+
+function getObjectKind(value: object): string {
+  const constructor = (value as { readonly constructor?: { readonly name?: unknown } }).constructor;
+  return typeof constructor?.name === "string" && constructor.name.length > 0
+    ? constructor.name
+    : "object";
+}
+
+function isSharedArrayBuffer(value: object): boolean {
+  return typeof SharedArrayBuffer !== "undefined" && value instanceof SharedArrayBuffer;
+}
+
+function nonPlainVersionMetadataError(path: string, kind: string): TypeError {
+  return new TypeError(
+    `Entity version metadata must be plain snapshot data; ${path} contains ${kind}.`,
+  );
+}

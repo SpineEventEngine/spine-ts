@@ -21,6 +21,17 @@ interface RevisionMetadata {
   readonly labels?: readonly string[];
 }
 
+interface NestedRevisionMetadata extends RevisionMetadata {
+  readonly audit: {
+    readonly actor: string;
+    readonly checkpoints: readonly string[];
+  };
+  readonly history: readonly {
+    readonly stage: string;
+    readonly counters: readonly number[];
+  }[];
+}
+
 function createFixtureFileDescriptor(descriptorSetBase64: string) {
   const descriptorSet = fromBinary(
     FileDescriptorSetSchema,
@@ -65,6 +76,16 @@ class TestEntity extends Entity<string, typeof ProjectionStateSchema, RevisionMe
 
   applyLifecycle(lifecycle: { readonly archived?: boolean; readonly deleted?: boolean }): void {
     this.replaceLifecycleFlags(lifecycle);
+  }
+}
+
+class NestedVersionEntity extends Entity<
+  string,
+  typeof ProjectionStateSchema,
+  NestedRevisionMetadata
+> {
+  applyVersion(version: NestedRevisionMetadata): void {
+    this.replaceVersionMetadata(version);
   }
 }
 
@@ -142,6 +163,142 @@ describe("entities", () => {
     });
     expect(entity.version).not.toBe(initialVersion);
     expect(entity.version).not.toBe(returnedVersion);
+  });
+
+  it("rejects non-plain version metadata snapshots", () => {
+    class ClassBackedRevision {
+      revision = 1;
+      source = "server" as const;
+    }
+
+    const cyclicVersion = { revision: 1, source: "server" as const } as {
+      revision: number;
+      source: "server";
+      self?: unknown;
+    };
+    cyclicVersion.self = cyclicVersion;
+    const symbolKeyedVersion = {
+      revision: 1,
+      source: "server" as const,
+      [Symbol("trace")]: "caller",
+    };
+    const nonEnumerableVersion = { revision: 1, source: "server" as const };
+    Object.defineProperty(nonEnumerableVersion, "hidden", {
+      enumerable: false,
+      value: "caller",
+    });
+    const accessorVersion = { revision: 1, source: "server" as const };
+    Object.defineProperty(accessorVersion, "derived", {
+      enumerable: true,
+      get: () => "caller",
+    });
+    const invalidVersionInputs = [
+      { revision: 1, source: "server" as const, clock: new Date("2026-06-29T00:00:00.000Z") },
+      { revision: 1, source: "server" as const, seen: new Set(["task-1"]) },
+      { revision: 1, source: "server" as const, lookup: new Map([["task-1", 1]]) },
+      { revision: 1, source: "server" as const, bytes: new ArrayBuffer(1) },
+      { revision: 1, source: "server" as const, bytes: new SharedArrayBuffer(1) },
+      { revision: 1, source: "server" as const, bytes: new Uint8Array(new ArrayBuffer(1)) },
+      {
+        revision: 1,
+        source: "server" as const,
+        bytes: new Uint8Array(new SharedArrayBuffer(1)),
+      },
+      cyclicVersion,
+      symbolKeyedVersion,
+      nonEnumerableVersion,
+      accessorVersion,
+      new ClassBackedRevision(),
+      () => ({ revision: 1, source: "server" as const }),
+    ];
+
+    for (const version of invalidVersionInputs) {
+      expect(() => {
+        new TestEntity({
+          id: "task-1",
+          schema: ProjectionStateSchema,
+          state: createProjectionState(),
+          version: version as unknown as RevisionMetadata,
+        });
+      }).toThrow(/plain snapshot data/);
+    }
+
+    const entity = new TestEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+    expect(() => {
+      entity.applyVersion({
+        revision: 2,
+        source: "server",
+        bytes: new Uint8Array(new SharedArrayBuffer(1)),
+      } as unknown as RevisionMetadata);
+    }).toThrow(/plain snapshot data/);
+  });
+
+  it("keeps nested plain version metadata isolated through construction, reads, and replacement", () => {
+    const initialVersion = {
+      revision: 1,
+      source: "server" as const,
+      audit: { actor: "creator", checkpoints: ["created"] },
+      history: [{ stage: "draft", counters: [1] }],
+    };
+    const entity = new NestedVersionEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: initialVersion,
+    });
+
+    initialVersion.audit.actor = "caller";
+    initialVersion.audit.checkpoints.push("caller mutation");
+    initialVersion.history[0]?.counters.push(2);
+
+    const returnedInitialVersion = entity.version as unknown as {
+      audit: { actor: string; checkpoints: string[] };
+      history: { counters: number[] }[];
+    };
+    returnedInitialVersion.audit.actor = "getter";
+    returnedInitialVersion.audit.checkpoints.push("getter mutation");
+    returnedInitialVersion.history[0]?.counters.push(3);
+
+    expect(entity.version).toEqual({
+      revision: 1,
+      source: "server",
+      audit: { actor: "creator", checkpoints: ["created"] },
+      history: [{ stage: "draft", counters: [1] }],
+    });
+
+    const replacementVersion = {
+      revision: 2,
+      source: "server" as const,
+      audit: { actor: "approver", checkpoints: ["accepted"] },
+      history: [{ stage: "ready", counters: [5] }],
+    };
+    entity.applyVersion(replacementVersion);
+
+    replacementVersion.audit.actor = "caller";
+    replacementVersion.audit.checkpoints.push("caller mutation");
+    replacementVersion.history[0]?.counters.push(6);
+
+    const returnedReplacementVersion = entity.version as unknown as {
+      audit: { actor: string; checkpoints: string[] };
+      history: { counters: number[] }[];
+    };
+    returnedReplacementVersion.audit.actor = "getter";
+    returnedReplacementVersion.audit.checkpoints.push("getter mutation");
+    returnedReplacementVersion.history[0]?.counters.push(7);
+
+    expect(entity.version).toEqual({
+      revision: 2,
+      source: "server",
+      audit: { actor: "approver", checkpoints: ["accepted"] },
+      history: [{ stage: "ready", counters: [5] }],
+    });
+    expect(entity.version).not.toBe(replacementVersion);
+    expect(entity.version).not.toBe(returnedReplacementVersion);
   });
 
   it("tracks lifecycle flags and keeps lifecycle-change tracking sticky after protected changes", () => {

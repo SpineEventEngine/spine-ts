@@ -149,3 +149,46 @@ plain snapshot data contract instead of accepting arbitrary object graphs:
 - add focused regressions for rejected shared-memory and prototype-bearing
   metadata;
 - update public docs and API docs if a public error/type is introduced.
+
+## Round 2 Fix Route
+
+Review-fix implementation started on `2026-06-29 22:52 WEST` from Round 2
+review capture commit `4f52d08`.
+
+Accepted findings:
+
+- P2: version metadata must not retain a mutation path through shared backing
+  memory such as `SharedArrayBuffer`-backed typed arrays.
+- P2: version metadata must not rely on `structuredClone()` semantics for
+  functions or prototype-bearing objects.
+
+Fix route:
+
+- Add focused RED regressions for rejected non-plain metadata, including a
+  `SharedArrayBuffer`-backed typed array and a custom class instance.
+- Cover nested plain metadata isolation through constructor input, getter
+  output, and protected replacement input.
+- Export `EntityVersionMetadata` as the plain snapshot data contract and update
+  public docs/API export gates.
+- Replace `structuredClone()` with explicit recursive clone/validation for
+  primitives, `null`, arrays, and plain objects only.
+
+Verification:
+
+- RED focused check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts` failed on
+  `2026-06-29 22:52 WEST` as expected: 1 test file / 10 tests, with 1 failure
+  because non-plain version metadata was still accepted.
+- GREEN focused root/API check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 22:56 WEST`: 2 test files / 19 tests.
+- `corepack pnpm typecheck` passed; first `corepack pnpm lint` found 3 strict
+  TypeScript issues in the helper, and the rerun passed after typed
+  path/prototype fixes.
+- `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the expected broken-origin TypeDoc
+  warning and 63 expected `@spine-ts/server` exports.
+- `CI=true corepack pnpm verify` passed on `2026-06-29 23:03 WEST`: 15 test
+  files / 139 tests; coverage statements 97.69%, branches 91.24%, functions
+  100%, lines 97.64%; TypeDoc/API/proto gates passed and generated proto output
+  was clean.

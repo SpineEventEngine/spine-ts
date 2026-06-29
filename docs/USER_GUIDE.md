@@ -51,7 +51,7 @@ slices.
   entity kinds, and preserve semantic tags from `(is)` and `(every_is)`.
 - A common abstract server `Entity` shell that exposes identity,
   descriptor-derived metadata, cloned Protobuf-ES state snapshots, caller-owned
-  version metadata, lifecycle flags, active/archive/delete accessors, and
+  plain version metadata, lifecycle flags, active/archive/delete accessors, and
   sticky lifecycle-change tracking.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
@@ -333,7 +333,8 @@ ignored in this slice, matching the Spine option contract.
 ## Entity Shells
 
 Extend `Entity` when framework-owned code needs a local OOP holder for entity
-identity, state, version metadata, lifecycle flags, and descriptor metadata:
+identity, state, plain version metadata, lifecycle flags, and descriptor
+metadata:
 
 ```ts
 import { Entity } from "@spine-ts/server";
@@ -355,10 +356,13 @@ task.isActive; // true unless archived or deleted
 
 `Entity` snapshots supplied and returned state with Protobuf-ES binary cloning,
 so caller mutation does not mutate stored shell state. Version metadata is
-caller-owned and preserved as supplied; the shell does not increment versions,
-compute timestamps, or derive producer/event metadata. Lifecycle flags default
-to active/not deleted, and `lifecycleFlagsChanged` becomes true only when future
-subclass/runtime code changes lifecycle flags through protected hooks.
+caller-owned plain snapshot data: primitives, `null`, arrays, and plain objects
+are cloned, while functions, typed arrays, buffers, dates, maps, sets, class
+instances, and other non-plain objects are rejected. The shell does not
+increment versions, compute timestamps, or derive producer/event metadata.
+Lifecycle flags default to active/not deleted, and `lifecycleFlagsChanged`
+becomes true only when future subclass/runtime code changes lifecycle flags
+through protected hooks.
 
 The shell is deliberately not a transaction or runtime. It does not expose
 public state setters, invoke handlers, write repositories or storage, emit

@@ -199,8 +199,8 @@ messages, field paths, and no raw previous/next values.
 
 `Entity` is the first common OOP entity state shell. It binds a caller-supplied
 ID to one descriptor-backed Protobuf-ES state schema, derives and caches
-`EntityMetadata`, snapshots state on construction and read access, preserves
-caller-owned version metadata without computing increments, and exposes
+`EntityMetadata`, snapshots state on construction and read access, snapshots
+caller-owned plain version metadata without computing increments, and exposes
 lifecycle flags plus `isActive`, `isArchived`, `isDeleted`, and sticky
 `lifecycleFlagsChanged` accessors. Protected replacement hooks give future
 framework-owned subclasses a narrow place to apply accepted state/version or

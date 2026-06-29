@@ -180,6 +180,7 @@ const expectedServerExports = [
   "EntityHandlersMetadata",
   "EntityLifecycleFlags",
   "EntityOptions",
+  "EntityVersionMetadata",
   "EntityTransaction",
   "EntityTransactionAcceptedCommit",
   "EntityTransactionCommitResult",

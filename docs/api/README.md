@@ -21,10 +21,10 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 `packCommand()`, `packEvent()`, `PackAnyOptions`, `PackCommandInput`, and
 `PackEventInput`.
 
-Server exports include the abstract `Entity` shell, `EntityOptions`, and
-`EntityLifecycleFlags` for local OOP entity state with identity,
+Server exports include the abstract `Entity` shell, `EntityOptions`,
+`EntityVersionMetadata`, and `EntityLifecycleFlags` for local OOP entity state with identity,
 descriptor-derived metadata, cloned Protobuf-ES state snapshots, caller-owned
-version metadata, lifecycle flags, and active/archive/delete accessors. The
+plain version metadata, lifecycle flags, and active/archive/delete accessors. The
 shell has protected hooks for future framework-owned subclasses, but no public
 state setters, transaction execution, repository/storage writes, handler
 invocation, dispatch, lifecycle events, automatic version increments, routing,

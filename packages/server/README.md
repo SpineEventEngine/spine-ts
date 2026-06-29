@@ -7,8 +7,8 @@ Current slice exposes:
 
 - `Entity<Id, Schema, Version>` for a common abstract OOP state shell with
   identity, descriptor-derived metadata, cloned Protobuf-ES state snapshots,
-  caller-owned version metadata, lifecycle flags, and active/archive/delete
-  accessors; and
+  caller-owned plain version metadata, lifecycle flags, and
+  active/archive/delete accessors; and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
 - first-field routing hints from descriptor order;
@@ -121,8 +121,10 @@ task.isActive; // true unless archived or deleted
 
 The constructor derives metadata with `describeEntityMetadata(schema)`, snapshots
 the supplied Protobuf-ES state, defaults lifecycle flags to active/not deleted,
-and preserves version metadata exactly as supplied by the caller. State access
-returns cloned snapshots so caller mutation does not mutate stored entity state.
+and snapshots plain version metadata values. Version metadata accepts primitives,
+`null`, arrays, and plain objects; functions, typed arrays, buffers, dates,
+maps, sets, and class instances are rejected. State and version access return
+cloned snapshots so caller mutation does not mutate stored entity state.
 Protected replacement hooks exist only for later framework-owned subclasses;
 there are no public state setters, automatic version increments, transactions,
 handler invocation, repository writes, storage calls, lifecycle events, routing,

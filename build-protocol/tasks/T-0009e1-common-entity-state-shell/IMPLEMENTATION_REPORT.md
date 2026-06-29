@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.1 Common Entity State Shell
 
-Status: Review Fix Required
+Status: Round 2 Review Fix Implemented
 Task log: `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e1.md`
 Review log: `build-protocol/reviews/T-0009e1-common-entity-state-shell.md`
@@ -13,10 +13,10 @@ Worktree:
 Implemented the first common abstract `Entity` OOP state shell for
 `@spine-ts/server`. The class exposes stable identity, generated schema,
 descriptor-derived `EntityMetadata`, cloned Protobuf-ES state snapshots,
-caller-owned version metadata snapshots, lifecycle flags, `isActive`,
+caller-owned plain version metadata snapshots, lifecycle flags, `isActive`,
 `isArchived`, `isDeleted`, and sticky lifecycle-change tracking. Protected
-hooks allow future framework-owned subclasses to replace accepted state, version
-metadata, or lifecycle flags without adding public state setters.
+hooks allow future framework-owned subclasses to replace accepted state, plain
+version metadata, or lifecycle flags without adding public state setters.
 
 The implementation intentionally does not add `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, repositories, handler invocation,
@@ -39,8 +39,8 @@ Implementation impact:
 - expose ID, state, version metadata, lifecycle flags, active/archived/deleted
   accessors, and descriptor/model metadata equivalents;
 - clone state snapshots instead of exposing stored mutable state;
-- clone structured-clone-compatible object version metadata at constructor,
-  accessor, and protected replacement boundaries;
+- clone plain object/array version metadata at constructor, accessor, and
+  protected replacement boundaries while rejecting non-plain metadata;
 - keep `lifecycleFlagsChanged` sticky after a lifecycle replacement changes
   flags, matching JVM `AbstractEntity#setLifecycleFlags`;
 - defer repositories, dispatch, storage, lifecycle system events, and automatic
@@ -112,6 +112,21 @@ Implementation impact:
   97.7%, branches 90.72%, functions 100%, lines 97.65%; TypeDoc/API reported
   100 proto, 28 core, 62 server, and 26 storage expected exports; proto
   lint/generate/check passed with generated output clean.
+- Round 2 fix RED focused check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts` failed on
+  `2026-06-29 22:52 WEST` as expected: 1 test file / 10 tests, with 1 failure
+  because non-plain version metadata was still accepted.
+- Round 2 fix GREEN focused root/API check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 22:56 WEST`: 2 test files / 19 tests.
+- Round 2 fix `corepack pnpm typecheck`, `corepack pnpm lint`,
+  `corepack pnpm format:check`, and `corepack pnpm docs:check` passed on
+  `2026-06-29 22:56 WEST`; TypeDoc/API reported 63 expected server exports.
+- Round 2 fix `CI=true corepack pnpm verify` passed on
+  `2026-06-29 23:03 WEST`: 15 test files / 139 tests; coverage statements
+  97.69%, branches 91.24%, functions 100%, lines 97.64%; TypeDoc/API reported
+  100 proto, 28 core, 63 server, and 26 storage expected exports; proto
+  lint/generate/check passed with generated output clean.
 
 ## Review
 
@@ -137,3 +152,7 @@ Implementation impact:
 - Follow-up route: make version metadata an explicit plain snapshot data
   contract, reject non-plain object graphs, add focused regressions, and rerun
   the required review loop.
+- Round 2 fix implemented: exported `EntityVersionMetadata`, replaced
+  `structuredClone()` with explicit recursive plain-data validation/cloning,
+  rejected shared-memory/prototype-bearing metadata, documented the public
+  contract, and verified the focused and full gates.

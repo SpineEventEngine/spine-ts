@@ -1,4 +1,9 @@
-export { Entity, type EntityLifecycleFlags, type EntityOptions } from "./entity.js";
+export {
+  Entity,
+  type EntityLifecycleFlags,
+  type EntityOptions,
+  type EntityVersionMetadata,
+} from "./entity.js";
 
 export {
   type DeclaredEntityVisibility,

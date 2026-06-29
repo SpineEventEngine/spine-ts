@@ -1,6 +1,6 @@
 # T-0009e.1: Common Entity State Shell
 
-Status: Review Fix Required
+Status: Round 2 Review Fix Implemented
 Start: `2026-06-29 22:06 WEST`
 Baseline commit: `2ca23fd`
 Task log path: `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
@@ -13,8 +13,8 @@ Requirements splitter:
 Authoring sub-agent: Codex implementation sub-agent in this thread
 Round 1 reviewer sub-agents: complete; changes requested and accepted.
 Round 2 reviewer sub-agents: complete; changes requested and accepted.
-Review-fix implementation: second pass queued for version metadata contract
-hardening.
+Review-fix implementation: second pass implemented for version metadata
+contract hardening.
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:12 WEST`
 
@@ -192,6 +192,21 @@ Skipped relevant-looking skills:
   97.7%, branches 90.72%, functions 100%, lines 97.65%; TypeDoc/API reported
   100 proto, 28 core, 62 server, and 26 storage expected exports; proto
   lint/generate/check passed with generated output clean.
+- Round 2 fix RED focused check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts` failed on
+  `2026-06-29 22:52 WEST` as expected: 1 test file / 10 tests, with 1 failure
+  because non-plain version metadata was still accepted.
+- Round 2 fix GREEN focused root/API check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 22:56 WEST`: 2 test files / 19 tests.
+- Round 2 fix `corepack pnpm typecheck`, `corepack pnpm lint`,
+  `corepack pnpm format:check`, and `corepack pnpm docs:check` passed on
+  `2026-06-29 22:56 WEST`; TypeDoc/API reported 63 expected server exports.
+- Round 2 fix `CI=true corepack pnpm verify` passed on
+  `2026-06-29 23:03 WEST`: 15 test files / 139 tests; coverage statements
+  97.69%, branches 91.24%, functions 100%, lines 97.64%; TypeDoc/API reported
+  100 proto, 28 core, 63 server, and 26 storage expected exports; proto
+  lint/generate/check passed with generated output clean.
 
 ## Review Rounds
 
@@ -214,6 +229,10 @@ Skipped relevant-looking skills:
 - Fix route: define version metadata as plain snapshot data and replace
   `structuredClone()` with an explicit clone/rejection helper covered by
   focused regressions.
+- Round 2 fix implemented: version metadata now uses an explicit
+  `EntityVersionMetadata` plain snapshot data contract, rejects non-plain
+  object graphs, and keeps nested plain metadata isolated at construction,
+  read, and protected replacement boundaries.
 
 ## Current State
 
@@ -224,5 +243,6 @@ Skipped relevant-looking skills:
   `4ade81d`.
 - This review-fix pass addressed accepted Round 1 findings with focused
   regression coverage and durable-log cleanup.
-- Round 2 review was captured after commit `aef6297` and requires a second
-  focused fix for the version metadata snapshot contract.
+- Round 2 review was captured after commit `aef6297`; the accepted metadata
+  contract findings have been addressed with focused regressions, docs/API
+  updates, and full verification.
