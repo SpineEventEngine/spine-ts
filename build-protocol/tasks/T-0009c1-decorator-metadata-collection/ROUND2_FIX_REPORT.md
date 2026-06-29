@@ -78,5 +78,6 @@ decorators were added.
 
 ## Next Step
 
-Round 2 fix was committed as `e480a33` with log commit `e5e4f66`; Round 3
-review completed and requested a final audit-log wording cleanup.
+Round 2 fix was committed as `e480a33` with log commit `e5e4f66`. Round 3
+requested a final audit-log wording cleanup, which was applied in `444623c` and
+is ready for re-review.
