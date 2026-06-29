@@ -9,7 +9,7 @@ Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b3-ha
 Reviewer roles: code style/maintainability; documentation; TypeScript/API docs; security; performance/reliability
 Reviewer sub-agents: Round 1 and follow-up re-review completed
 Review timestamp: `2026-06-29 13:02 WEST`; follow-up re-review `2026-06-29 13:25 WEST`
-Status: Integrated into main; awaiting main verification
+Status: Complete and integrated
 
 ## Scope To Review
 
@@ -65,4 +65,8 @@ Status: Integrated into main; awaiting main verification
     passed with the known TypeDoc invalid-origin warning.
 - Integration:
   - Merged `task/T-0009b3-handler-registry-validation` into `main` as
-    `d4f92ac` on `2026-06-29 13:30 WEST`; main verification is pending.
+    `d4f92ac` on `2026-06-29 13:30 WEST`.
+  - `CI=true corepack pnpm verify` passed on `main` at `a836462` on
+    `2026-06-29 13:32 WEST`: 11 test files / 75 tests passed; coverage
+    statements 99.52%, branches 93.24%, functions 100%, lines 99.51%; docs/API
+    and proto checks passed with the known TypeDoc invalid-origin warning.

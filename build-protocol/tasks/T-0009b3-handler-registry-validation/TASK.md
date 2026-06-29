@@ -1,6 +1,6 @@
 # T-0009b.3: Handler Metadata Registry And Validation
 
-Status: Integrated into main; awaiting main verification
+Status: Complete and integrated
 Start: `2026-06-29 12:49 WEST`
 End: `2026-06-29 13:02 WEST`
 Baseline commit: `3ecdaf0`
@@ -17,6 +17,7 @@ Final reviewed implementation HEAD: `2c03b6a82902e4abdc066c67703354bf9140944f`
 Review-fix commit: `19876ac756c96f425d6868b5e68f46e3957e913b`
 Review-closure checkpoint: `5975f7d`
 Integration merge commit: `d4f92ac`
+Integration verification commit: `a836462`
 
 ## Objective
 
@@ -265,5 +266,5 @@ Out of scope:
 ## Integration Result
 
 Implementation and follow-up review loop are clean. Review-closure branch
-verification passed and the branch is integrated into `main`; main verification
-is the next gate.
+verification passed, the branch is integrated into `main`, and main verification
+passed at `a836462`.
