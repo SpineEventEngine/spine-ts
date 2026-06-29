@@ -1,6 +1,6 @@
 # T-0009b.3: Handler Metadata Registry And Validation
 
-Status: Implemented and verified
+Status: Review clean; awaiting branch-tip verification
 Start: `2026-06-29 12:49 WEST`
 End: `2026-06-29 13:02 WEST`
 Baseline commit: `3ecdaf0`
@@ -14,6 +14,7 @@ Branch setup commit: `041dc61`
 Implementation baseline commit: `6a99321`
 Implementation commit reviewed in round 1: `2c03b6a82902e4abdc066c67703354bf9140944f`
 Final reviewed implementation HEAD: `2c03b6a82902e4abdc066c67703354bf9140944f`
+Review-fix commit: `19876ac756c96f425d6868b5e68f46e3957e913b`
 
 ## Objective
 
@@ -82,11 +83,11 @@ Selected skills read before task actions:
 
 Skills passed to sub-agents/reviewers:
 
-| Recipient           | Skills/Instructions Passed                                                          | Notes                                                                                                                      |
-| ------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Splitter            | Protocol/spec docs, T-0009b logs, current server sources, `epic-breakdown-advisor`. | Produced T-0009b.3 recommendation with no blockers; splitter was closed after result capture.                              |
-| Authoring sub-agent | TDD, JavaScript testing, TypeScript/API, ADR/domain, verification instructions.     | Implemented registry, tests, docs, API guard, and logs in this worktree.                                                   |
-| Reviewers           | Round 1 completed.                                                                  | Review found stale durable-log/docs metadata and one scope wording gap; this follow-up fixes only those docs/log findings. |
+| Recipient           | Skills/Instructions Passed                                                          | Notes                                                                                                                    |
+| ------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Splitter            | Protocol/spec docs, T-0009b logs, current server sources, `epic-breakdown-advisor`. | Produced T-0009b.3 recommendation with no blockers; splitter was closed after result capture.                            |
+| Authoring sub-agent | TDD, JavaScript testing, TypeScript/API, ADR/domain, verification instructions.     | Implemented registry, tests, docs, API guard, and logs in this worktree.                                                 |
+| Reviewers           | Round 1 and follow-up completed.                                                    | Round 1 found stale durable-log/docs metadata and one scope wording gap; follow-up re-review was clean across all roles. |
 
 Skipped relevant-looking skills:
 
@@ -243,8 +244,13 @@ Out of scope:
   Their follow-up was limited to stale durable-log/docs metadata and the scope
   wording for command reactions; this review-fix commit updates those records
   without changing production code.
+- Follow-up reviewers checked
+  `2c03b6a82902e4abdc066c67703354bf9140944f..19876ac756c96f425d6868b5e68f46e3957e913b`.
+  Code style/maintainability, documentation, TypeScript/API docs, security, and
+  performance/reliability all returned clean results. All follow-up reviewer
+  agents were closed after result capture.
 
 ## Integration Result
 
-Implementation range reviewed in round 1; this file is an audit record, not a
-live branch-HEAD indicator.
+Implementation and follow-up review loop are clean. Branch-tip verification is
+the next gate before integration.

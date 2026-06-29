@@ -7,9 +7,9 @@ Baseline commit: `3ecdaf0`
 Reviewed commit/diff basis: `6a993212a5fa436a19214fc03ac52901a4035bdd..2c03b6a82902e4abdc066c67703354bf9140944f`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b3-handler-registry-validation`
 Reviewer roles: code style/maintainability; documentation; TypeScript/API docs; security; performance/reliability
-Reviewer sub-agents: Round 1 completed
-Review timestamp: `2026-06-29 13:02 WEST`
-Status: Round 1 requested a narrow durable-log/docs follow-up; no production-code change requested here
+Reviewer sub-agents: Round 1 and follow-up re-review completed
+Review timestamp: `2026-06-29 13:02 WEST`; follow-up re-review `2026-06-29 13:25 WEST`
+Status: Clean after durable-log/docs follow-up
 
 ## Scope To Review
 
@@ -52,3 +52,9 @@ Status: Round 1 requested a narrow durable-log/docs follow-up; no production-cod
   - This review log is an audit record for the reviewed implementation range;
     later follow-up commits should be recorded separately instead of changing
     the reviewed range retroactively.
+- Follow-up re-review:
+  - Reviewed the immutable follow-up range
+    `2c03b6a82902e4abdc066c67703354bf9140944f..19876ac756c96f425d6868b5e68f46e3957e913b`.
+  - Code style/maintainability, documentation, TypeScript/API docs, security,
+    and performance/reliability all returned clean results.
+  - All follow-up reviewer agents were closed after result capture.
