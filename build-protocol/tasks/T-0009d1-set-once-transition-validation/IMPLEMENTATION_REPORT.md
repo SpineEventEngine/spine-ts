@@ -98,3 +98,50 @@ hydrated the worktree dependency state.
 - No implementation concerns at this point.
 - Review rounds have not been run by this implementation sub-agent because the
   user explicitly instructed not to spawn sub-agents.
+
+## Fix Round 1
+
+Addressed first-round reviewer findings from
+`.superpowers/sdd/review-cd98ca3..e32f906.diff`:
+
+- Security inherited/accessor field reads: `readFieldValue()` now accepts only
+  own enumerable data properties for descriptor fields. Missing, inherited, and
+  accessor-backed forged set-once fields fail closed with a field-specific
+  set-once violation and no raw value leakage.
+- Security non-plain nested values: recursive equality now compares only
+  plain/protobuf-shaped records with matching prototypes. Dates, custom
+  prototypes, and other unsupported object shapes fail closed.
+- Reliability recursion safety: recursive comparison now has an active-pair
+  cycle guard and a deterministic depth limit, preserving set-once field paths
+  instead of allowing unbounded recursion or core error fallback.
+- Documentation: root `README.md` now states that core validation facades and
+  server-owned set-once transition validation exist, while transaction/runtime,
+  repository, transport, and production storage behavior remain deferred.
+- Minor fixture cleanup: descriptor-valid bytes, repeated string, and nested
+  message set-once fields were added to the server metadata fixture. The
+  schema-invalid equality tests were replaced by real descriptor-backed
+  coverage, with casts limited to explicit forged-state hardening tests.
+- Minor TypeDoc coverage: public request/function comments now mention set-once
+  semantics, `previous === undefined` creation behavior, side-effect-free
+  validation, and `DescriptorMetadataError` behavior for non-entity schemas.
+- Minor default coverage: added a focused existing-state default-to-non-default
+  set-once change test.
+
+Fix-round commands run:
+
+- RED:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected with 3 of 10 tests failing.
+- GREEN:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 19 tests.
+- Required verification:
+  `corepack pnpm typecheck` passed, and `corepack pnpm docs:check` passed with
+  the known TypeDoc invalid-origin warning.
+- Full verification:
+  `CI=true corepack pnpm verify` passed after lint and formatting cleanup with
+  13 test files / 93 tests; coverage statements 98.48%, branches 92.34%,
+  functions 100%, lines 98.44%; docs/API and proto checks passed with the known
+  TypeDoc invalid-origin warning.
+
+Full fix-round verification passed.

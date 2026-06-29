@@ -130,17 +130,21 @@ Out of scope:
 ## Files Changed
 
 - `build-protocol/DEVELOPER_API.md`
+- `build-protocol/reviews/T-0009d1-set-once-transition-validation.md`
 - `build-protocol/tasks/T-0009d1-set-once-transition-validation/IMPLEMENTATION_REPORT.md`
 - `build-protocol/work-logs/T-0009d1.md`
 - `docs/USER_GUIDE.md`
 - `docs/api/README.md`
 - `docs/architecture/README.md`
+- `README.md`
 - `packages/server/README.md`
 - `packages/server/package.json`
 - `packages/server/src/entity-transition-validation.test.ts`
 - `packages/server/src/entity-transition-validation.ts`
 - `packages/server/src/index.test.ts`
 - `packages/server/src/index.ts`
+- `packages/server/test-fixtures/entity-metadata-fixtures.ts`
+- `packages/server/test-fixtures/proto/entity-metadata/main.proto`
 - `pnpm-lock.yaml`
 - `scripts/check-api-docs.mjs`
 
@@ -177,11 +181,28 @@ Out of scope:
   test files / 89 tests; coverage statements 98.79%, branches 92.34%,
   functions 100%, lines 98.76%; docs/API and proto checks passed with the known
   TypeDoc invalid-origin warning.
+- RED fix-round
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected on `2026-06-29 15:26 WEST`: 3 of 10 tests failed because
+  inherited/accessor forged fields and non-plain objects were accepted, and
+  cyclic input did not preserve a field-specific set-once violation.
+- GREEN fix-round
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 15:27 WEST`: 2 test files / 19 tests.
+- Fix-round `corepack pnpm typecheck` passed on `2026-06-29 15:29 WEST`.
+- Fix-round `corepack pnpm docs:check` passed on `2026-06-29 15:29 WEST` with
+  the known TypeDoc invalid-origin warning and 43 expected `@spine-ts/server`
+  exports.
+- Fix-round full verification initially failed on lint, then on formatting.
+  After cleanup, final `CI=true corepack pnpm verify` passed on
+  `2026-06-29 15:31 WEST`: 13 test files / 93 tests; coverage statements
+  98.48%, branches 92.34%, functions 100%, lines 98.44%; docs/API and proto
+  checks passed with the known TypeDoc invalid-origin warning.
 
 ## Coverage Result
 
-Final full verification coverage: statements 98.79%, branches 92.34%,
-functions 100%, lines 98.76%.
+Latest full verification coverage: statements 98.48%, branches 92.34%,
+functions 100%, lines 98.44%.
 
 ## Documentation And Public API Impact
 
@@ -221,7 +242,7 @@ TBD
 - [x] Baseline verification captured in the task worktree.
 - [x] Authoring sub-agent report captured and closed.
 - [ ] Five reviewer sub-agents completed and closed.
-- [ ] Review comments either fixed and re-reviewed or technically resolved.
+- [x] Review comments either fixed and re-reviewed or technically resolved.
 - [x] Full verification passed on the task branch.
 - [ ] Task branch merged back to `main`.
 - [ ] Full verification passed on `main`.

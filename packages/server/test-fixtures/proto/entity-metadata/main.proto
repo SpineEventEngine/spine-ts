@@ -29,3 +29,17 @@ message GenericState {
   string id = 1;
   string searchable = 2 [(column) = true];
 }
+
+message SetOnceDetails {
+  string value = 1;
+}
+
+message RichSetOnceState {
+  option (entity).kind = PROJECTION;
+
+  string id = 1 [(set_once) = true];
+  bytes fingerprint = 2 [(set_once) = true];
+  repeated string tags = 3 [(set_once) = true];
+  SetOnceDetails details = 4 [(set_once) = true];
+  string mutable_note = 5;
+}
