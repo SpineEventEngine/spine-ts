@@ -1,6 +1,6 @@
 # T-0009d.2c: Public API Polish, Compatibility Notes, Verification Closure
 
-Status: Implementation Complete; Review Pending
+Status: Round 1 Fix Complete
 Start: `2026-06-29 21:20 WEST`
 Baseline commit: `5367bb8`
 Task log path: `build-protocol/tasks/T-0009d2c-public-api-closure/TASK.md`
@@ -11,7 +11,7 @@ Requirements splitter: T-0009d.2 splitter
 `019f14c2-9605-7d11-b8c5-3f891b1880f7` (Sartre the 2nd, closed)
 Authoring sub-agent: current implementation sub-agent in this worktree; no
 additional sub-agents spawned
-Reviewer sub-agents: pending
+Reviewer sub-agents: Round 1 complete; five reviewers closed
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 21:25 WEST`
 
@@ -152,12 +152,22 @@ Out of scope:
   97.61%, branches 90.51%, functions 100%, lines 97.56%; TypeDoc/API reported
   100 proto, 28 core, 59 server, and 26 storage expected exports; proto
   lint/generate/check passed with generated output clean.
+- Round 1 fix stale-marker search passed on `2026-06-29 21:43 WEST`: the
+  required `rg -n` search for stale implementation-commit-pending markers
+  returned no matches across the task, review, and work-log paths.
+- Round 1 fix `corepack pnpm format:check` passed on
+  `2026-06-29 21:43 WEST`.
+- Round 1 fix `git diff --check` passed on `2026-06-29 21:43 WEST`.
 
 ## Review Rounds
 
 - Implementation sub-agent spawned no sub-agents per prompt.
-- Orchestrator-level five-role review remains pending after implementation
-  commit.
+- Round 1 reviewed implementation commit `e606cff` and requested changes.
+  Maintainability and performance/reliability accepted the same P2 finding: the
+  review log retained stale implementation-pending language after `e606cff`
+  existed, which made the durable state interruption-risky.
+- This focused fix worker updated only durable task/review/work/report logs for
+  the accepted finding and spawned no sub-agents.
 
 ## Current State
 
@@ -165,7 +175,9 @@ Out of scope:
 - Durable setup logs are committed at `5361b7e`; baseline verification was
   recorded at `19b4805`.
 - Baseline verification passed on `2026-06-29 21:25 WEST`.
-- Implementation is complete and limited to public compatibility wording,
-  parent roadmap cleanup, and durable evidence logs. No runtime/source behavior
-  was added.
+- Implementation commit `e606cff` is complete and limited to public
+  compatibility wording, parent roadmap cleanup, and durable evidence logs. No
+  runtime/source behavior was added.
+- Round 1 found one accepted P2 stale-marker issue in durable review state; the
+  fix cleared that stale marker and recorded the fix path.
 - No new decision was needed; D-0043 covers the closure boundary.

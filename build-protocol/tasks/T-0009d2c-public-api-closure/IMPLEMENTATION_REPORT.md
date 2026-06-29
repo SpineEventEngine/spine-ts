@@ -1,6 +1,6 @@
 # Implementation Report: T-0009d.2c Public API Polish, Compatibility Notes, Verification Closure
 
-Status: Implementation Complete; Review Pending
+Status: Round 1 Fix Complete
 Task log: `build-protocol/tasks/T-0009d2c-public-api-closure/TASK.md`
 Work log: `build-protocol/work-logs/T-0009d2c.md`
 Review log: `build-protocol/reviews/T-0009d2c-public-api-closure.md`
@@ -58,6 +58,11 @@ new runtime behavior was added or considered.
   97.61%, branches 90.51%, functions 100%, lines 97.56%; TypeDoc/API reported
   100 proto, 28 core, 59 server, and 26 storage expected exports; proto
   lint/generate/check passed with generated output clean.
+- Round 1 fix stale-marker search passed on `2026-06-29 21:43 WEST`: the
+  required `rg -n` search returned no matches.
+- Round 1 fix `corepack pnpm format:check` passed on
+  `2026-06-29 21:43 WEST`.
+- Round 1 fix `git diff --check` passed on `2026-06-29 21:43 WEST`.
 
 ## Skills And Scope Notes
 
@@ -74,4 +79,12 @@ No new decision was needed; D-0043 already governs this closure boundary.
 
 ## Review
 
-- Pending required orchestrator-run five-role review.
+- Round 1 reviewed implementation commit `e606cff`; all five reviewers were
+  closed.
+- Accepted P2: the review log still described the implementation commit as
+  pending after `e606cff` existed, creating an interruption risk for resumed
+  workers.
+- Fix route: updated only durable task/review/work/report logs so the current
+  state, accepted finding, and verification evidence are unambiguous. No
+  runtime/source behavior or public docs are in scope for this fix.
+- The review-fix implementation sub-agent spawned no sub-agents.

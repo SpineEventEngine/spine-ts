@@ -38,10 +38,10 @@ Review result captured on `2026-06-29 21:43 WEST`: changes requested.
 Findings:
 
 - P2: `build-protocol/reviews/T-0009d2c-public-api-closure.md` still said
-  "Pending implementation commit" after implementation commit `e606cff` was
-  already created. Maintainability and performance/reliability both reported
-  this stale marker as interruption-risky because a resumed worker could wait
-  for or create a duplicate implementation commit.
+  the implementation commit was pending after implementation commit `e606cff`
+  was already created. Maintainability and performance/reliability both
+  reported this stale marker as interruption-risky because a resumed worker
+  could wait for or create a duplicate implementation commit.
 
 Clean-role evidence:
 
@@ -52,4 +52,18 @@ Clean-role evidence:
 - Security reported no findings and confirmed the range changes docs/logs only
   with no secrets, hidden IO, global state, storage, or transport behavior.
 
-Round 1 finding is accepted and will be fed to a focused fix worker.
+Round 1 finding is accepted and was fed to this focused fix worker.
+
+## Round 1 Fix
+
+Fix worker: current review-fix implementation sub-agent; no sub-agents spawned.
+
+Status: fixed and verified.
+
+Fix applied:
+
+- Remove stale implementation-pending language from durable task, review, work,
+  and implementation-report records.
+- Record the accepted P2 and its fix route in the task/report/work logs.
+- Re-ran the required stale-marker search, `corepack pnpm format:check`, and
+  `git diff --check`; all required verification passed.
