@@ -4,6 +4,52 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+## D-0044: T-0009e entity bases start as scoped OOP state shells
+
+Status: Accepted
+
+Date: 2026-06-29
+
+Context: The roadmap now reaches `T-0009e Concrete OOP Entity Base Classes
+With Capability Segregation`. `T-0009d.2` already provides an
+`EntityTransaction` draft/result kernel, handler metadata exists, and
+repositories/storage dispatch are still later tasks. Spine JVM `Entity`,
+`AbstractEntity`, `TransactionalEntity`, `Aggregate`, `Projection`, and
+`ProcessManager` show the desired conceptual shape, but most JVM behavior is
+repository or dispatch owned.
+
+Decision: Start entity base classes as small OOP state shells that expose
+identity, state snapshots, version metadata, lifecycle flags, and scoped
+transaction-backed draft mutation for future runtime callers. Do not implement
+repository ownership, handler invocation, event sourcing history, dispatch
+phases, idempotency, query clients, Bounded Context injection, lifecycle events,
+storage writes, buses, gRPC, or ZeroMQ in the first `T-0009e` slice. Family
+classes such as `Aggregate`, `Projection`, and `ProcessManager` may exist as
+typed capability markers only if the splitter keeps them shallow and verifies
+they do not pretend to dispatch.
+
+Alternatives considered:
+
+- Build full aggregate/projection/process-manager dispatch now. Rejected
+  because repositories, buses, event history, and storage integration are later
+  roadmap items and would over-invent the server module.
+- Keep only standalone transaction helpers and delay entity classes entirely.
+  Rejected because the developer API needs familiar OOP base-class shapes before
+  repository seams can bind metadata, handlers, and transactions.
+- Model JVM builders directly. Rejected because Protobuf-ES uses message
+  values and schemas rather than generated Java builders; TS should use
+  explicit transaction draft updates while preserving the conceptual boundary.
+
+Consequences:
+
+- Reviewers must reject any first-slice entity base behavior that silently
+  invokes handlers, stores state, posts signals, or exposes transport/runtime
+  details.
+- Public docs must be explicit that these bases are local OOP/domain shells and
+  future repository/runtime consumers own persistence and dispatch.
+- The splitter must stage any family-specific restrictions, event-sourced
+  aggregate behavior, or process-manager querying separately.
+
 ## D-0043: T-0009d.2c closes the transaction API without runtime expansion
 
 Status: Accepted

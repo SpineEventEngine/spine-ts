@@ -1,0 +1,153 @@
+# T-0009e: Concrete OOP Entity Base Classes With Capability Segregation
+
+Status: Setup In Progress
+Start: `2026-06-29 21:58 WEST`
+Baseline commit: `47eae4e`
+Task log path: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
+Branch: `task/T-0009e-entity-base-classes`
+Worktree:
+`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009e-entity-base-classes`
+Requirements splitter: pending
+Authoring sub-agent: pending
+Reviewer sub-agents: pending
+
+## Objective
+
+Introduce concrete OOP entity base-class APIs for the server package in a
+JVM-familiar but TypeScript-idiomatic way. The task must start small: entity
+bases should expose identity, state snapshots, lifecycle/version metadata, and
+scoped transaction-backed draft mutation for future repository/runtime callers.
+
+This task must not implement repositories, handler invocation, event dispatch,
+event sourcing history, process-manager command posting, query clients, storage
+writes, buses, gRPC, ZeroMQ, lifecycle event emission, or hidden global runtime
+state.
+
+## Roadmap Context
+
+The T-0009 roadmap now has these completed prerequisites:
+
+1. `T-0009a` descriptor-derived entity metadata.
+2. `T-0009b` explicit handler metadata and registry.
+3. `T-0009c.1` standard decorator adapter and explicit fallback parity.
+4. `T-0009d.1` built-in set-once transition validation.
+5. `T-0009d.2` entity transaction draft/result kernel and closure.
+
+Next roadmap item: this `T-0009e` entity base-class task. The following task is
+`T-0009f` repository seams and bounded-context registration skeleton.
+
+## Required JVM Shape
+
+Server work must inspect task-relevant Spine JVM `core-jvm/server` code before
+inventing behavior. Setup inspected:
+
+- `spine-jvm-docs/spine-entities-repositories-and-state.md`, entity base,
+  transaction, aggregate, projection, and process-manager sections;
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/Entity.java`;
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/AbstractEntity.java`;
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/TransactionalEntity.java`;
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/aggregate/Aggregate.java`;
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/projection/Projection.java`;
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/procman/ProcessManager.java`.
+
+Implementation impact:
+
+- JVM `Entity` exposes `id`, `state`, `version`, lifecycle flags, and model
+  class metadata.
+- JVM `AbstractEntity` owns state/version/lifecycle and validates state before
+  applying updates.
+- JVM `TransactionalEntity` exposes mutation only through an active
+  transaction/builder and delegates lifecycle flag updates to that transaction.
+- JVM family classes mostly add dispatch/repository-owned behavior; the first
+  TS slice must avoid pretending those runtime phases exist.
+- TypeScript should use Protobuf-ES schemas and value updates rather than Java
+  builders.
+
+## Skill Applicability
+
+Canonical checklist: `BUILD_PROTOCOL.md#skills-and-tooling` remains governing.
+
+Selected skills for setup:
+
+| Skill                            | Source                                                     | Applicability                        | Instructions Applied                                                        |
+| -------------------------------- | ---------------------------------------------------------- | ------------------------------------ | --------------------------------------------------------------------------- |
+| `subagent-driven-development`    | `~/.agents/skills/subagent-driven-development/SKILL.md`    | Required protocol execution model.   | Splitter, implementer, five reviewer roles, review loop, and agent closure. |
+| `using-git-worktrees`            | `~/.agents/skills/using-git-worktrees/SKILL.md`            | Required isolated worktree per task. | Created project-local `.worktrees/T-0009e-entity-base-classes`.             |
+| `requesting-code-review`         | `~/.agents/skills/requesting-code-review/SKILL.md`         | Mandatory review before integration. | Five role reviewers must inspect committed task ranges.                     |
+| `receiving-code-review`          | `~/.agents/skills/receiving-code-review/SKILL.md`          | Required reviewer comment handling.  | Reviewer findings must be verified and fed back to fix workers.             |
+| `verification-before-completion` | `~/.agents/skills/verification-before-completion/SKILL.md` | Required before completion claims.   | Baseline and final verification must be run and recorded.                   |
+| `test-driven-development`        | `~/.agents/skills/test-driven-development/SKILL.md`        | New public base-class behavior.      | Authoring workers must add RED tests before production changes.             |
+| `typescript-advanced-types`      | `~/.agents/skills/typescript-advanced-types/SKILL.md`      | Generic ID/state/version API design. | Preserve type safety without opaque type machinery.                         |
+| `architecture-decision-records`  | `~/.agents/skills/architecture-decision-records/SKILL.md`  | New entity-base boundary decision.   | Record D-0044.                                                              |
+| `codebase-design`                | `~/.agents/skills/codebase-design/SKILL.md`                | Deep module/API boundary design.     | Keep entity bases small and defer runtime ownership to repositories.        |
+
+Skipped relevant-looking skills:
+
+| Skill                 | Source                                          | Reason Skipped                                                                  |
+| --------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------- |
+| `event-store-design`  | `~/.agents/skills/event-store-design/SKILL.md`  | Aggregate event persistence/history is explicitly out of scope for setup.       |
+| `cqrs-implementation` | `~/.agents/skills/cqrs-implementation/SKILL.md` | Read/write segregation matters, but no read-side/query runtime is in scope yet. |
+| `saga-orchestration`  | `~/.agents/skills/saga-orchestration/SKILL.md`  | Process-manager workflow execution is not in the first entity-base slice.       |
+
+## Splitter Requirement
+
+A dedicated requirements-splitting sub-agent must refine `T-0009e` into staged
+subtasks before implementation. The splitter should:
+
+- preserve the D-0044 no-runtime-expansion boundary;
+- identify the first non-blocked implementable subtask;
+- decide whether family classes should be introduced in the first slice or
+  deferred behind a common `TransactionalEntity` base;
+- require JVM source inspection for any proposed family-specific behavior; and
+- list files/docs/tests expected for each subtask.
+
+## Initial Scope Constraints
+
+In scope for `T-0009e` overall:
+
+- Public OOP base-class shapes in `@spine-ts/server`.
+- Typed ID/state/schema/version/lifecycle metadata access.
+- Scoped transaction/draft helpers consuming the existing `EntityTransaction`
+  kernel.
+- Capability segregation among aggregate/projection/process-manager families
+  where it can be represented without dispatch.
+- Focused tests, TypeDoc exports, package/user/API/architecture docs, durable
+  logs, and decision logs.
+
+Out of scope until later tasks:
+
+- Repositories, entity records, storage integration, event history/snapshots,
+  handler invocation, routing, buses, services, transport, process workers,
+  lifecycle event emission, command posting, query clients, and Bounded Context
+  assembly.
+
+## Decisions
+
+- D-0044: `T-0009e` entity bases start as scoped OOP state shells and must not
+  broaden into repository/runtime behavior.
+
+## Human Questions And Answers
+
+- Blocking questions: none known.
+- Non-blocking questions: none known for setup.
+
+## Files Changed
+
+- `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
+- `build-protocol/tasks/T-0009e-entity-base-classes/IMPLEMENTATION_REPORT.md`
+- `build-protocol/work-logs/T-0009e.md`
+- `build-protocol/reviews/T-0009e-entity-base-classes.md`
+- `build-protocol/DECISION_LOG.md`
+
+## Tests Run
+
+- Pending setup formatting and baseline verification.
+
+## Review Rounds
+
+- Pending splitter and implementation.
+
+## Current State
+
+- Branch/worktree exists from `47eae4e`.
+- Durable setup logs are being created before the requirements splitter.
