@@ -1,8 +1,8 @@
 # T-0009d.1: Built-In Set-Once Transition Validation
 
-Status: Complete through fix round 7
+Status: Complete through fix round 8 docs/log cleanup; pending clean re-review/integration
 Start: `2026-06-29 14:52 WEST`
-End: `2026-06-29 17:29 WEST`
+End: `2026-06-29 17:44 WEST`
 Baseline commit: `1d939d7`
 Task log path: `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
 Branch: `task/T-0009d1-set-once-transition-validation`
@@ -103,9 +103,11 @@ In scope:
 
 - Public server transition-validation API for entity state transitions.
 - Built-in `(set_once)` checks derived from `describeEntityMetadata()`.
-- Creation transitions where `previous === undefined` pass `(set_once)` checks.
-- Existing-state transitions fail when a `(set_once)` field changes.
-- Equal previous/next `(set_once)` values pass.
+- Creation transitions where `previous === undefined` may initialize supported
+  `(set_once)` fields; unsupported repeated, map-valued, and explicit optional
+  `(set_once)` declarations fail closed even on creation.
+- Existing-state transitions fail when a supported `(set_once)` field changes.
+- Equal previous/next supported `(set_once)` values pass.
 - Violations use repo-local `spine.validation.ConstraintViolation` data with
   `fieldPath` and no raw previous/next payload leakage.
 - Focused TDD tests, public exports, TypeDoc comments, API docs guard, package
@@ -332,6 +334,14 @@ Out of scope:
   13 test files / 110 tests; coverage statements 97.35%, branches 90.72%,
   functions 100%, lines 97.28%; docs/API and proto checks passed with the known
   TypeDoc invalid-origin warning.
+- Fix-round 8 docs/log verification: `corepack pnpm format:check` first failed
+  on Prettier formatting for `TASK.md` and
+  `build-protocol/work-logs/T-0009d1.md`. After
+  `corepack pnpm exec prettier --write` on those two files,
+  `corepack pnpm format:check` passed on `2026-06-29 17:40 WEST`;
+  `corepack pnpm docs:check` passed on `2026-06-29 17:42 WEST` with the known
+  TypeDoc invalid-origin warning and expected API export counts. The final
+  `corepack pnpm typecheck` passed on `2026-06-29 17:43 WEST`.
 
 ## Coverage Result
 
@@ -340,15 +350,15 @@ functions 100%, lines 97.28%.
 
 ## Documentation And Public API Impact
 
-| Area                             | Expected Impact                                                             |
-| -------------------------------- | --------------------------------------------------------------------------- |
-| Package README impact            | Documented set-once transition validation and metadata-only boundaries.     |
-| TypeDoc/API docs impact          | Added public transition validation API with TypeDoc and API guard coverage. |
-| Public API additions/removals    | Added high-level server validation API; no removals.                        |
-| Framework `USER_GUIDE.md` impact | Explained single-message vs state-transition validation.                    |
-| Example `USER_GUIDE.md` impact   | N/A for this slice; to-do example is not implemented yet.                   |
-| API examples                     | Expected in server README and API overview.                                 |
-| Compatibility notes              | `(set_once)` is enforced after first committed state, not on creation.      |
+| Area                             | Expected Impact                                                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------------- |
+| Package README impact            | Documented set-once transition validation and metadata-only boundaries.                     |
+| TypeDoc/API docs impact          | Added public transition validation API with TypeDoc and API guard coverage.                 |
+| Public API additions/removals    | Added high-level server validation API; no removals.                                        |
+| Framework `USER_GUIDE.md` impact | Explained single-message vs state-transition validation.                                    |
+| Example `USER_GUIDE.md` impact   | N/A for this slice; to-do example is not implemented yet.                                   |
+| API examples                     | Expected in server README and API overview.                                                 |
+| Compatibility notes              | Supported `(set_once)` fields initialize on creation; unsupported declarations fail closed. |
 
 ## Security Impact
 
@@ -433,6 +443,13 @@ functions 100%, lines 97.28%.
   field-specific unsupported-explicit-optional violation. Public and durable
   docs now name repeated, map-valued, and explicit optional set-once fields as
   unsupported in this slice.
+- Fix round 8 is a docs/log-only cleanup after committed fix-round 7 commit
+  `3d2cb06`. It removes stale round-order and verification evidence from the
+  implementation report, updates task/work/review durable state for clean
+  re-review/integration, and qualifies public/TypeDoc creation-transition
+  wording so only supported set-once fields may initialize on creation while
+  unsupported repeated, map-valued, and explicit optional declarations fail
+  closed.
 
 ## Completion Checklist
 

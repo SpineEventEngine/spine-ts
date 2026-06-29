@@ -347,3 +347,40 @@ Verification:
 - `CI=true corepack pnpm verify` passed after lint/format cleanup with 13 test
   files / 110 tests and coverage statements 97.35%, branches 90.72%, functions
   100%, lines 97.28%; docs/API and proto checks passed with the known warning.
+
+## Round 8 Docs/Log Cleanup
+
+Review package `.superpowers/sdd/review-cd98ca3..3d2cb06.diff` found durable
+evidence wording issues after committed fix-round 7 commit `3d2cb06`:
+
+- `build-protocol/work-logs/T-0009d1.md` still said the next step was to commit
+  fix round 7 even though `3d2cb06` was already committed.
+- `TASK.md` task status/end evidence needed to reflect the committed fix-round
+  7 branch state and pending clean re-review/integration.
+- `IMPLEMENTATION_REPORT.md` had fix round 7 before fix round 6 and carried
+  older 105-test verification bullets under fix round 7 after the latest
+  110-test verification evidence.
+- `build-protocol/DEVELOPER_API.md`, `docs/architecture/README.md`, `TASK.md`,
+  and the public TypeDoc request comment described creation transitions as
+  passing set-once checks too broadly.
+- `docs/architecture/README.md` needed the wording `Repeated, map-valued`.
+
+Fix-round 8 response:
+
+- Updated work/task/review logs for this docs/log-only fix round and the exact
+  files touched.
+- Reordered the implementation report so fix round 6 precedes fix round 7 and
+  removed stale round-6/105-test verification bullets from the fix-round 7
+  section.
+- Qualified creation-transition wording: supported set-once fields may
+  initialize on creation, while unsupported repeated, map-valued, and explicit
+  optional declarations fail closed even on creation.
+
+Verification:
+
+- `corepack pnpm format:check` initially failed on `TASK.md` and
+  `build-protocol/work-logs/T-0009d1.md`; after Prettier cleanup on those two
+  files, `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.

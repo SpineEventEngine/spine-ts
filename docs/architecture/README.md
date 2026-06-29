@@ -188,9 +188,11 @@ process-wide handler registry.
 
 `validateEntityStateTransition()` is the first high-level server validation API
 over previous and proposed entity state. It calls `describeEntityMetadata()` to
-derive the schema's descriptor-ordered `(set_once)` fields, skips set-once
-checks for creation transitions where `previous === undefined`, and rejects
-existing-state transitions when a set-once field value changes. The low-level
+derive the schema's descriptor-ordered `(set_once)` fields, allows creation
+transitions where `previous === undefined` to initialize supported set-once
+fields, and rejects existing-state transitions when a supported set-once field
+value changes. Repeated, map-valued, and explicit optional set-once fields are
+unsupported and fail closed even on creation transitions. The low-level
 set-once rule remains private; callers receive the core
 `TransitionValidationResult` shape with repo-local `spine.validation.*`
 messages, field paths, and no raw previous/next values.

@@ -21,8 +21,9 @@ import {
  * Request for built-in server entity state transition validation.
  *
  * The built-in rules derive Spine `(set_once)` semantics from descriptor-backed
- * entity metadata. Creation transitions with `previous === undefined` are
- * accepted because the initial state is allowed to establish set-once values.
+ * entity metadata. Creation transitions with `previous === undefined` may
+ * establish supported set-once values; unsupported repeated, map-valued, and
+ * explicit optional set-once declarations fail closed even on creation.
  */
 export interface EntityStateTransitionValidationRequest<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,

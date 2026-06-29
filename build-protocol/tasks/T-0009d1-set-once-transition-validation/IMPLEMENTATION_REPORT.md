@@ -16,9 +16,11 @@ transition validator:
 
 The validator derives `(set_once)` fields from `describeEntityMetadata()` and
 keeps the low-level rule private. Creation transitions where
-`previous === undefined` pass the built-in set-once checks. Existing-state
-transitions fail when a set-once field changes and pass when set-once values
-remain equal. Violations are returned through `@spine-ts/core`
+`previous === undefined` may initialize supported set-once fields.
+Existing-state transitions fail when a supported set-once field changes and
+pass when supported set-once values remain equal. Unsupported repeated,
+map-valued, and explicit optional set-once declarations fail closed even on
+creation. Violations are returned through `@spine-ts/core`
 `validateTransition()`, include `fieldPath`, and do not include raw previous or
 next values.
 
@@ -327,6 +329,52 @@ Fix-round 5 commands run:
   `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
   passed with 2 test files / 31 tests.
 
+## Fix Round 6
+
+Addressed human pre-review steering after D-0039: descriptor-level repeated/list
+`(set_once)` fields were still treated as supported by unchanged list equality,
+even though the local JVM notes and D-0039 say repeated/map/explicit optional
+set-once fields are unsupported in the JVM generation contract.
+
+- Repeated set-once contract: descriptor-level repeated/list `(set_once)` fields
+  now fail closed with a field-specific unsupported-repeated violation, matching
+  the unsupported map-valued set-once boundary.
+- Test fixture split: `RichSetOnceState.tags` is now the unsupported repeated
+  set-once fixture. A new `SingularSetOnceState` fixture preserves bytes and
+  singular-message set-once coverage without routing through a top-level
+  repeated set-once field.
+- Scope cleanup: removed top-level repeated set-once equality/collection
+  hardening tests from the supported path. Array comparison helpers remain only
+  for nested singular message comparison and internal key comparison behavior.
+- Documentation: public docs, architecture notes, TypeDoc comments, and D-0039
+  now say repeated and map-valued set-once fields are unsupported in this slice
+  and fail closed with field-specific violations.
+
+Fix-round 6 commands run:
+
+- RED:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected with 1 of 22 tests failing because unchanged
+  `RichSetOnceState.tags` was accepted.
+- GREEN:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 31 tests.
+- Coverage recovery:
+  `CI=true corepack pnpm verify` first failed on global branch coverage after
+  top-level repeated/list equality support and tests were removed. After
+  narrowing obsolete array/cycle-pair helper behavior and adding focused
+  supported bytes/singular-message coverage, `corepack pnpm test:coverage`
+  passed with 13 test files / 105 tests; coverage statements 97.47%, branches
+  90.63%, functions 100%, lines 97.40%.
+- Required verification:
+  `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts; `corepack pnpm typecheck` passed.
+- Full verification:
+  `CI=true corepack pnpm verify` passed with 13 test files / 105 tests;
+  coverage statements 97.47%, branches 90.63%, functions 100%, lines 97.40%;
+  docs/API and proto checks passed with the known TypeDoc invalid-origin
+  warning.
+
 ## Fix Round 7
 
 Addressed review package `.superpowers/sdd/review-cd98ca3..d61874b.diff` and
@@ -377,58 +425,41 @@ Fix-round 7 commands run:
   coverage statements 97.35%, branches 90.72%, functions 100%, lines 97.28%;
   docs/API and proto checks passed with the known TypeDoc invalid-origin
   warning.
-- Coverage recovery:
-  `CI=true corepack pnpm verify` first failed on global branch coverage after
-  removing top-level repeated set-once support and its broad hardening tests.
-  The array equality helper was narrowed to canonical nested-message arrays,
-  obsolete cycle-pair bookkeeping was removed, and focused bytes/singular
-  nested-message coverage was added. `corepack pnpm test:coverage` then passed
-  with 13 test files / 105 tests; coverage statements 97.47%, branches 90.63%,
-  functions 100%, lines 97.40%.
-- Required verification:
-  `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
-  warning and expected API export counts; `corepack pnpm typecheck` passed.
-- Full verification:
-  `CI=true corepack pnpm verify` passed with 13 test files / 105 tests;
-  coverage statements 97.47%, branches 90.63%, functions 100%, lines 97.40%;
-  docs/API and proto checks passed with the known TypeDoc invalid-origin
-  warning.
-- Required verification:
-  `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
-  warning and expected API export counts; `corepack pnpm typecheck` passed.
-- Full verification:
-  `CI=true corepack pnpm verify` passed with 13 test files / 105 tests;
-  coverage statements 97.12%, branches 91.07%, functions 100%, lines 97.05%;
-  docs/API and proto checks passed with the known TypeDoc invalid-origin
-  warning.
 
-## Fix Round 6
+## Fix Round 8
 
-Addressed human pre-review steering after D-0039: descriptor-level repeated/list
-`(set_once)` fields were still treated as supported by unchanged list equality,
-even though the local JVM notes and D-0039 say repeated/map/explicit optional
-set-once fields are unsupported in the JVM generation contract.
+Addressed round-7 docs/log findings from
+`.superpowers/sdd/review-cd98ca3..3d2cb06.diff` without changing runtime/source
+code beyond TypeDoc wording:
 
-- Repeated set-once contract: descriptor-level repeated/list `(set_once)` fields
-  now fail closed with a field-specific unsupported-repeated violation, matching
-  the unsupported map-valued set-once boundary.
-- Test fixture split: `RichSetOnceState.tags` is now the unsupported repeated
-  set-once fixture. A new `SingularSetOnceState` fixture preserves bytes and
-  singular-message set-once coverage without routing through a top-level
-  repeated set-once field.
-- Scope cleanup: removed top-level repeated set-once equality/collection
-  hardening tests from the supported path. Array comparison helpers remain only
-  for nested singular message comparison and internal key comparison behavior.
-- Documentation: public docs, architecture notes, TypeDoc comments, and D-0039
-  now say repeated and map-valued set-once fields are unsupported in this slice
-  and fail closed with field-specific violations.
+- Work log current state now records committed fix-round 7 commit `3d2cb06` and
+  points the next step to clean re-review/integration.
+- Task status/end evidence now describes the branch as complete through this
+  docs/log cleanup and pending clean re-review/integration.
+- Fix round 6 now precedes fix round 7 in this report; stale duplicate 105-test
+  verification bullets were removed from fix round 7.
+- Developer API, architecture notes, task scope/compatibility notes, and
+  TypeDoc request wording now qualify creation transitions as supported
+  set-once initialization only; unsupported repeated, map-valued, and explicit
+  optional declarations fail closed even on creation.
+- Architecture wording now says `Repeated, map-valued`.
 
-Fix-round 6 commands run so far:
+Fix-round 8 files changed:
 
-- RED:
-  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
-  failed as expected with 1 of 22 tests failing because unchanged
-  `RichSetOnceState.tags` was accepted.
-- GREEN:
-  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
-  passed with 2 test files / 31 tests.
+- `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
+- `build-protocol/tasks/T-0009d1-set-once-transition-validation/IMPLEMENTATION_REPORT.md`
+- `build-protocol/reviews/T-0009d1-set-once-transition-validation.md`
+- `build-protocol/work-logs/T-0009d1.md`
+- `build-protocol/DEVELOPER_API.md`
+- `docs/architecture/README.md`
+- `packages/server/src/entity-transition-validation.ts`
+
+Fix-round 8 verification:
+
+- `corepack pnpm format:check` initially failed on `TASK.md` and
+  `build-protocol/work-logs/T-0009d1.md`; after
+  `corepack pnpm exec prettier --write build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md build-protocol/work-logs/T-0009d1.md`,
+  `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.
