@@ -33,16 +33,22 @@ type RichSetOnceState = Message<"RichSetOnceState"> & {
   mutableNote: string;
 };
 
+type SingularSetOnceState = Message<"SingularSetOnceState"> & {
+  id: string;
+  fingerprint: Uint8Array;
+  details?: SetOnceDetails;
+  mutableNote: string;
+};
+
 type MapSetOnceState = Message<"MapSetOnceState"> & {
   id: string;
   labels: Record<string, string>;
   mutableNote: string;
 };
 
-interface RichSetOnceStateOverrides {
+interface SingularSetOnceStateOverrides {
   readonly id?: string;
   readonly fingerprint?: Uint8Array;
-  readonly tags?: string[];
   readonly details?: { readonly value?: string; readonly child?: SetOnceDetails };
   readonly mutableNote?: string;
 }
@@ -83,6 +89,10 @@ const MapSetOnceStateSchema = messageDesc(
   fileEntityMetadataFixture,
   5,
 ) as GenMessage<MapSetOnceState>;
+const SingularSetOnceStateSchema = messageDesc(
+  fileEntityMetadataFixture,
+  6,
+) as GenMessage<SingularSetOnceState>;
 
 describe("entity state transition validation", () => {
   it("exports the public high-level entity state transition validator", () => {
@@ -205,25 +215,57 @@ describe("entity state transition validation", () => {
     ).toBe(true);
   });
 
-  it("compares descriptor-valid bytes, arrays, and nested messages by content", () => {
+  it("rejects descriptor-valid repeated set-once fields as unsupported even when unchanged", () => {
     const previous = create(RichSetOnceStateSchema, {
       id: "rich-1",
       fingerprint: new Uint8Array([1, 2]),
-      tags: ["alpha", "beta"],
+      tags: ["private-repeated-tag"],
       details: { value: "same" },
-      mutableNote: "before",
+      mutableNote: "secret-previous-repeated",
     });
     const next = create(RichSetOnceStateSchema, {
       id: "rich-1",
       fingerprint: new Uint8Array([1, 2]),
-      tags: ["alpha", "beta"],
+      tags: ["private-repeated-tag"],
+      details: { value: "same" },
+      mutableNote: "secret-next-repeated",
+    });
+
+    const result = validateEntityStateTransition({
+      schema: RichSetOnceStateSchema,
+      previous,
+      next,
+    });
+
+    expectSetOnceViolation(result, "tags");
+    expect(result.error?.constraintViolation[0]?.message?.withPlaceholders).toBe(
+      "Repeated set-once fields are not supported by entity state transition validation.",
+    );
+    expectNoValueLeak(
+      result,
+      "private-repeated-tag",
+      "secret-previous-repeated",
+      "secret-next-repeated",
+    );
+  });
+
+  it("compares descriptor-valid bytes and singular nested messages by content", () => {
+    const previous = create(SingularSetOnceStateSchema, {
+      id: "singular-1",
+      fingerprint: new Uint8Array([1, 2]),
+      details: { value: "same" },
+      mutableNote: "before",
+    });
+    const next = create(SingularSetOnceStateSchema, {
+      id: "singular-1",
+      fingerprint: new Uint8Array([1, 2]),
       details: { value: "same" },
       mutableNote: "after",
     });
 
     expect(
       validateEntityStateTransition({
-        schema: RichSetOnceStateSchema,
+        schema: SingularSetOnceStateSchema,
         previous,
         next,
       }).valid,
@@ -231,12 +273,11 @@ describe("entity state transition validation", () => {
 
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: RichSetOnceStateSchema,
+        schema: SingularSetOnceStateSchema,
         previous,
-        next: create(RichSetOnceStateSchema, {
-          id: "rich-1",
+        next: create(SingularSetOnceStateSchema, {
+          id: "singular-1",
           fingerprint: new Uint8Array([1, 3]),
-          tags: ["alpha", "beta"],
           details: { value: "same" },
           mutableNote: "after",
         }),
@@ -245,27 +286,25 @@ describe("entity state transition validation", () => {
     );
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: RichSetOnceStateSchema,
+        schema: SingularSetOnceStateSchema,
         previous,
-        next: create(RichSetOnceStateSchema, {
-          id: "rich-1",
+        next: create(SingularSetOnceStateSchema, {
+          id: "singular-1",
           fingerprint: new Uint8Array([1, 2]),
-          tags: ["alpha", "gamma"],
-          details: { value: "same" },
+          details: { value: "changed" },
           mutableNote: "after",
         }),
       }),
-      "tags",
+      "details",
     );
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: RichSetOnceStateSchema,
+        schema: SingularSetOnceStateSchema,
         previous,
-        next: create(RichSetOnceStateSchema, {
-          id: "rich-1",
+        next: create(SingularSetOnceStateSchema, {
+          id: "singular-1",
           fingerprint: new Uint8Array([1, 2]),
-          tags: ["alpha", "beta"],
-          details: { value: "changed" },
+          details: { value: "same", child: { value: "now-present" } },
           mutableNote: "after",
         }),
       }),
@@ -274,22 +313,20 @@ describe("entity state transition validation", () => {
   });
 
   it("allows descriptor-valid singular message set-once fields absent from both states", () => {
-    const previous = create(RichSetOnceStateSchema, {
-      id: "rich-1",
+    const previous = create(SingularSetOnceStateSchema, {
+      id: "singular-1",
       fingerprint: new Uint8Array([1, 2]),
-      tags: ["alpha", "beta"],
       mutableNote: "before",
     });
-    const next = create(RichSetOnceStateSchema, {
-      id: "rich-1",
+    const next = create(SingularSetOnceStateSchema, {
+      id: "singular-1",
       fingerprint: new Uint8Array([1, 2]),
-      tags: ["alpha", "beta"],
       mutableNote: "after",
     });
 
     expect(
       validateEntityStateTransition({
-        schema: RichSetOnceStateSchema,
+        schema: SingularSetOnceStateSchema,
         previous,
         next,
       }).valid,
@@ -297,23 +334,21 @@ describe("entity state transition validation", () => {
   });
 
   it("rejects descriptor-valid singular message set-once fields moving absent to present", () => {
-    const previous = create(RichSetOnceStateSchema, {
-      id: "rich-1",
+    const previous = create(SingularSetOnceStateSchema, {
+      id: "singular-1",
       fingerprint: new Uint8Array([1, 2]),
-      tags: ["alpha", "beta"],
       mutableNote: "before",
     });
-    const next = create(RichSetOnceStateSchema, {
-      id: "rich-1",
+    const next = create(SingularSetOnceStateSchema, {
+      id: "singular-1",
       fingerprint: new Uint8Array([1, 2]),
-      tags: ["alpha", "beta"],
       details: { value: "now-present" },
       mutableNote: "after",
     });
 
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: RichSetOnceStateSchema,
+        schema: SingularSetOnceStateSchema,
         previous,
         next,
       }),
@@ -322,23 +357,21 @@ describe("entity state transition validation", () => {
   });
 
   it("rejects descriptor-valid singular message set-once fields moving present to absent", () => {
-    const previous = create(RichSetOnceStateSchema, {
-      id: "rich-1",
+    const previous = create(SingularSetOnceStateSchema, {
+      id: "singular-1",
       fingerprint: new Uint8Array([1, 2]),
-      tags: ["alpha", "beta"],
       details: { value: "was-present" },
       mutableNote: "before",
     });
-    const next = create(RichSetOnceStateSchema, {
-      id: "rich-1",
+    const next = create(SingularSetOnceStateSchema, {
+      id: "singular-1",
       fingerprint: new Uint8Array([1, 2]),
-      tags: ["alpha", "beta"],
       mutableNote: "after",
     });
 
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: RichSetOnceStateSchema,
+        schema: SingularSetOnceStateSchema,
         previous,
         next,
       }),
@@ -418,12 +451,12 @@ describe("entity state transition validation", () => {
   });
 
   it("uses canonical protobuf values instead of proxy-forged nested descriptors", () => {
-    const previous = createRichSetOnceState({
+    const previous = createSingularSetOnceState({
       details: { value: "private-previous-details" },
       mutableNote: "secret-previous-nested-proxy",
     });
     const changedDetails = create(SetOnceDetailsSchema, { value: "private-next-details" });
-    const next = createRichSetOnceState({
+    const next = createSingularSetOnceState({
       details: new Proxy(changedDetails, {
         getOwnPropertyDescriptor(target, property) {
           if (property === "value") {
@@ -442,7 +475,7 @@ describe("entity state transition validation", () => {
     });
 
     const result = validateEntityStateTransition({
-      schema: RichSetOnceStateSchema,
+      schema: SingularSetOnceStateSchema,
       previous,
       next,
     });
@@ -458,7 +491,7 @@ describe("entity state transition validation", () => {
   });
 
   it("fails closed when nested message canonicalization cannot read protobuf values", () => {
-    const previous = createRichSetOnceState({
+    const previous = createSingularSetOnceState({
       details: { value: "private-previous-throwing-details" },
       mutableNote: "secret-previous-throwing-nested",
     });
@@ -475,9 +508,9 @@ describe("entity state transition validation", () => {
       },
     );
     const result = validateEntityStateTransition({
-      schema: RichSetOnceStateSchema,
+      schema: SingularSetOnceStateSchema,
       previous,
-      next: createRichSetOnceState({
+      next: createSingularSetOnceState({
         details: throwingDetails,
         mutableNote: "secret-next-throwing-nested",
       }),
@@ -499,40 +532,22 @@ describe("entity state transition validation", () => {
 
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: RichSetOnceStateSchema,
-        previous: forgeRichSetOnceState({
+        schema: SingularSetOnceStateSchema,
+        previous: forgeSingularSetOnceState({
           details: sameCustomObject as unknown as SetOnceDetails,
           mutableNote: "secret-previous-same-details",
         }),
-        next: forgeRichSetOnceState({
+        next: forgeSingularSetOnceState({
           details: sameCustomObject as unknown as SetOnceDetails,
           mutableNote: "secret-next-same-details",
         }),
       }),
       "details",
     );
-
-    const sameSparseTags = [] as string[];
-    sameSparseTags.length = 1;
-
-    expectSetOnceViolation(
-      validateEntityStateTransition({
-        schema: RichSetOnceStateSchema,
-        previous: createRichSetOnceState({
-          tags: sameSparseTags,
-          mutableNote: "secret-previous-same-tags",
-        }),
-        next: createRichSetOnceState({
-          tags: sameSparseTags,
-          mutableNote: "secret-next-same-tags",
-        }),
-      }),
-      "tags",
-    );
   });
 
   it("fails closed for forged set-once bytes collections", () => {
-    const previousWithOverriddenMethod = createRichSetOnceState({
+    const previousWithOverriddenMethod = createSingularSetOnceState({
       fingerprint: new Uint8Array([1, 2]),
       mutableNote: "secret-previous-bytes-method",
     });
@@ -540,13 +555,13 @@ describe("entity state transition validation", () => {
       enumerable: true,
       value: () => true,
     });
-    const changedBytes = createRichSetOnceState({
+    const changedBytes = createSingularSetOnceState({
       fingerprint: new Uint8Array([1, 3]),
       mutableNote: "secret-next-bytes-method",
     });
 
     const overriddenMethodResult = validateEntityStateTransition({
-      schema: RichSetOnceStateSchema,
+      schema: SingularSetOnceStateSchema,
       previous: previousWithOverriddenMethod,
       next: changedBytes,
     });
@@ -558,7 +573,7 @@ describe("entity state transition validation", () => {
       "secret-next-bytes-method",
     );
 
-    const previous = createRichSetOnceState({
+    const previous = createSingularSetOnceState({
       fingerprint: new Uint8Array([4, 5]),
       mutableNote: "secret-previous-bytes-proxy",
     });
@@ -571,13 +586,13 @@ describe("entity state transition validation", () => {
         return Reflect.get(target, property, receiver) as unknown;
       },
     });
-    const nextWithProxy = createRichSetOnceState({
+    const nextWithProxy = createSingularSetOnceState({
       fingerprint: proxiedBytes,
       mutableNote: "secret-next-bytes-proxy",
     });
 
     const proxyResult = validateEntityStateTransition({
-      schema: RichSetOnceStateSchema,
+      schema: SingularSetOnceStateSchema,
       previous,
       next: nextWithProxy,
     });
@@ -588,9 +603,9 @@ describe("entity state transition validation", () => {
     class SubclassedBytes extends Uint8Array {}
     const changedPrototypeBytes = new SubclassedBytes([1, 2]);
     const changedPrototypeResult = validateEntityStateTransition({
-      schema: RichSetOnceStateSchema,
-      previous: createRichSetOnceState({ mutableNote: "secret-previous-bytes-prototype" }),
-      next: createRichSetOnceState({
+      schema: SingularSetOnceStateSchema,
+      previous: createSingularSetOnceState({ mutableNote: "secret-previous-bytes-prototype" }),
+      next: createSingularSetOnceState({
         fingerprint: changedPrototypeBytes,
         mutableNote: "secret-next-bytes-prototype",
       }),
@@ -602,129 +617,27 @@ describe("entity state transition validation", () => {
       "secret-previous-bytes-prototype",
       "secret-next-bytes-prototype",
     );
-  });
 
-  it("fails closed for forged set-once repeated collections", () => {
-    const tagsWithOverriddenMethod = ["alpha"];
-    Object.defineProperty(tagsWithOverriddenMethod, "every", {
+    const symbolKeyBytes = new Uint8Array([1, 2]);
+    Object.defineProperty(symbolKeyBytes, Symbol("hidden"), {
       enumerable: true,
-      value: () => true,
-    });
-    const previousWithOverriddenMethod = createRichSetOnceState({
-      tags: tagsWithOverriddenMethod,
-      mutableNote: "secret-previous-tags-method",
-    });
-    const nextWithChangedTags = createRichSetOnceState({
-      tags: ["secret-next-tag"],
-      mutableNote: "secret-next-tags-method",
-    });
-
-    const overriddenMethodResult = validateEntityStateTransition({
-      schema: RichSetOnceStateSchema,
-      previous: previousWithOverriddenMethod,
-      next: nextWithChangedTags,
-    });
-
-    expectSetOnceViolation(overriddenMethodResult, "tags");
-    expectNoValueLeak(
-      overriddenMethodResult,
-      "secret-previous-tags-method",
-      "secret-next-tags-method",
-      "secret-next-tag",
-    );
-
-    const inheritedIndexTags = [] as string[];
-    inheritedIndexTags.length = 1;
-    Object.setPrototypeOf(inheritedIndexTags, { 0: "alpha", __proto__: Array.prototype });
-    const nextWithInheritedIndex = createRichSetOnceState({
-      tags: inheritedIndexTags,
-      mutableNote: "secret-next-tags-inherited",
-    });
-
-    const inheritedIndexResult = validateEntityStateTransition({
-      schema: RichSetOnceStateSchema,
-      previous: createRichSetOnceState({ mutableNote: "secret-previous-tags-inherited" }),
-      next: nextWithInheritedIndex,
-    });
-
-    expectSetOnceViolation(inheritedIndexResult, "tags");
-    expectNoValueLeak(
-      inheritedIndexResult,
-      "secret-previous-tags-inherited",
-      "secret-next-tags-inherited",
-    );
-
-    const proxiedTags = new Proxy(["secret-next-proxy-tag"], {
-      get(target, property, receiver): unknown {
-        if (property === "0") {
-          return "alpha";
-        }
-
-        return Reflect.get(target, property, receiver) as unknown;
-      },
-    });
-    const nextWithProxy = createRichSetOnceState({
-      tags: proxiedTags,
-      mutableNote: "secret-next-tags-proxy",
-    });
-
-    const proxyResult = validateEntityStateTransition({
-      schema: RichSetOnceStateSchema,
-      previous: createRichSetOnceState({ mutableNote: "secret-previous-tags-proxy" }),
-      next: nextWithProxy,
-    });
-
-    expectSetOnceViolation(proxyResult, "tags");
-    expectNoValueLeak(
-      proxyResult,
-      "secret-previous-tags-proxy",
-      "secret-next-tags-proxy",
-      "secret-next-proxy-tag",
-    );
-
-    const accessorIndexTags = ["placeholder"];
-    Object.defineProperty(accessorIndexTags, "0", {
-      enumerable: true,
-      get: () => "alpha",
-    });
-    const nextWithAccessorIndex = createRichSetOnceState({
-      tags: accessorIndexTags,
-      mutableNote: "secret-next-tags-accessor",
-    });
-
-    const accessorIndexResult = validateEntityStateTransition({
-      schema: RichSetOnceStateSchema,
-      previous: createRichSetOnceState({ mutableNote: "secret-previous-tags-accessor" }),
-      next: nextWithAccessorIndex,
-    });
-
-    expectSetOnceViolation(accessorIndexResult, "tags");
-    expectNoValueLeak(
-      accessorIndexResult,
-      "secret-previous-tags-accessor",
-      "secret-next-tags-accessor",
-    );
-
-    const symbolKeyTags = ["alpha"];
-    Object.defineProperty(symbolKeyTags, Symbol("hidden"), {
-      enumerable: true,
-      value: "private-next-symbol-tag",
+      value: "private-symbol-byte",
     });
     const symbolKeyResult = validateEntityStateTransition({
-      schema: RichSetOnceStateSchema,
-      previous: createRichSetOnceState({ mutableNote: "secret-previous-tags-symbol" }),
-      next: createRichSetOnceState({
-        tags: symbolKeyTags,
-        mutableNote: "secret-next-tags-symbol",
+      schema: SingularSetOnceStateSchema,
+      previous: createSingularSetOnceState({ mutableNote: "secret-previous-bytes-symbol" }),
+      next: createSingularSetOnceState({
+        fingerprint: symbolKeyBytes,
+        mutableNote: "secret-next-bytes-symbol",
       }),
     });
 
-    expectSetOnceViolation(symbolKeyResult, "tags");
+    expectSetOnceViolation(symbolKeyResult, "fingerprint");
     expectNoValueLeak(
       symbolKeyResult,
-      "secret-previous-tags-symbol",
-      "secret-next-tags-symbol",
-      "private-next-symbol-tag",
+      "private-symbol-byte",
+      "secret-previous-bytes-symbol",
+      "secret-next-bytes-symbol",
     );
   });
 
@@ -792,12 +705,12 @@ describe("entity state transition validation", () => {
 
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: RichSetOnceStateSchema,
-        previous: forgeRichSetOnceState({
+        schema: SingularSetOnceStateSchema,
+        previous: forgeSingularSetOnceState({
           details: previousCycle,
           mutableNote: "secret-previous-details-cycle",
         }),
-        next: forgeRichSetOnceState({
+        next: forgeSingularSetOnceState({
           details: nextCycle,
           mutableNote: "secret-next-details-cycle",
         }),
@@ -807,12 +720,12 @@ describe("entity state transition validation", () => {
 
     expectSetOnceViolation(
       validateEntityStateTransition({
-        schema: RichSetOnceStateSchema,
-        previous: createRichSetOnceState({
+        schema: SingularSetOnceStateSchema,
+        previous: createSingularSetOnceState({
           details: createDeepDetails(80),
           mutableNote: "secret-previous-details-depth",
         }),
-        next: createRichSetOnceState({
+        next: createSingularSetOnceState({
           details: createDeepDetails(80),
           mutableNote: "secret-next-details-depth",
         }),
@@ -855,27 +768,29 @@ function validateForgedSetOnceId(previousId: unknown, nextId: unknown) {
   });
 }
 
-function createRichSetOnceState(overrides: RichSetOnceStateOverrides = {}): RichSetOnceState {
-  return create(RichSetOnceStateSchema, {
-    id: "rich-1",
+function createSingularSetOnceState(
+  overrides: SingularSetOnceStateOverrides = {},
+): SingularSetOnceState {
+  return create(SingularSetOnceStateSchema, {
+    id: "singular-1",
     fingerprint: new Uint8Array([1, 2]),
-    tags: ["alpha"],
     details: { value: "same" },
     mutableNote: "mutable",
     ...overrides,
   });
 }
 
-function forgeRichSetOnceState(overrides: RichSetOnceStateOverrides = {}): RichSetOnceState {
+function forgeSingularSetOnceState(
+  overrides: SingularSetOnceStateOverrides = {},
+): SingularSetOnceState {
   return {
-    $typeName: "RichSetOnceState",
-    id: "rich-1",
+    $typeName: "SingularSetOnceState",
+    id: "singular-1",
     fingerprint: new Uint8Array([1, 2]),
-    tags: ["alpha"],
     details: create(SetOnceDetailsSchema, { value: "same" }),
     mutableNote: "mutable",
     ...overrides,
-  } as RichSetOnceState;
+  } as SingularSetOnceState;
 }
 
 function expectSetOnceViolation(

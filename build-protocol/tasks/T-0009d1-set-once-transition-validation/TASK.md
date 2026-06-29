@@ -124,9 +124,10 @@ Out of scope:
 ## Decisions
 
 - D-0038: enforce `(set_once)` as immutable after first committed state.
-- D-0039: keep server validation boundaries JVM-familiar; for this fix round,
-  map-valued `(set_once)` fields remain unsupported and fail closed rather than
-  adding speculative map canonicalization.
+- D-0039: keep server validation boundaries JVM-familiar; repeated and
+  map-valued `(set_once)` fields are unsupported in the JVM generation
+  contract and fail closed here rather than adding speculative collection
+  canonicalization.
 
 ## Human Questions And Answers
 
@@ -286,11 +287,32 @@ Out of scope:
   `2026-06-29 16:50 WEST`: 13 test files / 105 tests; coverage statements
   97.12%, branches 91.07%, functions 100%, lines 97.05%; docs/API and proto
   checks passed with the known TypeDoc invalid-origin warning.
+- RED fix-round 6
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected on `2026-06-29 16:55 WEST`: 1 of 22 tests failed because
+  unchanged `RichSetOnceState.tags` was accepted instead of rejected as an
+  unsupported repeated set-once field.
+- GREEN fix-round 6
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 16:58 WEST`: 2 test files / 31 tests.
+- Fix-round 6 full verification initially failed on global branch coverage after
+  top-level repeated/list equality support and tests were removed. After
+  narrowing obsolete array/cycle-pair helper behavior and adding focused
+  supported bytes/singular-message coverage, `corepack pnpm test:coverage`
+  passed on `2026-06-29 17:06 WEST`: 13 test files / 105 tests; coverage
+  statements 97.47%, branches 90.63%, functions 100%, lines 97.40%.
+- Fix-round 6 `corepack pnpm docs:check` passed on `2026-06-29 17:07 WEST`
+  with the known TypeDoc invalid-origin warning and expected API export counts.
+- Fix-round 6 `corepack pnpm typecheck` passed on `2026-06-29 17:07 WEST`.
+- Final fix-round 6 `CI=true corepack pnpm verify` passed on
+  `2026-06-29 17:08 WEST`: 13 test files / 105 tests; coverage statements
+  97.47%, branches 90.63%, functions 100%, lines 97.40%; docs/API and proto
+  checks passed with the known TypeDoc invalid-origin warning.
 
 ## Coverage Result
 
-Latest full verification coverage: statements 97.12%, branches 91.07%,
-functions 100%, lines 97.05%.
+Latest full verification coverage: statements 97.47%, branches 90.63%,
+functions 100%, lines 97.40%.
 
 ## Documentation And Public API Impact
 
@@ -368,6 +390,15 @@ functions 100%, lines 97.05%.
   for normal Protobuf state and that repeated/map/explicit optional fields are
   unsupported at build time, so no broader defensive comparison abstraction was
   added.
+- Fix round 6 was directed by human pre-review steering after D-0039: the
+  descriptor-level repeated/list set-once path still accepted unchanged
+  `RichSetOnceState.tags`, which over-invented beyond the JVM boundary and was
+  inconsistent with unsupported map-valued set-once handling. The fix removes
+  top-level repeated set-once support, fails repeated/list set-once fields
+  closed with a field-specific unsupported-repeated violation, keeps bytes and
+  singular-message set-once coverage on a singular-only fixture, and updates
+  public docs/TypeDoc wording to name repeated and map set-once as unsupported
+  in this slice.
 
 ## Completion Checklist
 

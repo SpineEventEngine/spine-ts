@@ -898,9 +898,9 @@ validation, stay close to the JVM-familiar contract: enforcement belongs at
 generated builder/factory or state-update validation boundaries over normal
 Protobuf entity state, structured violations are surfaced through the validation
 facade, and repeated/map/explicit optional `(set_once)` fields are unsupported
-in the JVM generation contract. In TypeScript, unsupported map-valued set-once
-fields therefore fail closed with a field-specific validation violation instead
-of adding speculative canonical map comparison in this task.
+in the JVM generation contract. In TypeScript, unsupported repeated and
+map-valued set-once fields therefore fail closed with field-specific validation
+violations instead of adding speculative collection comparison in this task.
 
 This does not make arbitrary hostile JavaScript object graphs part of the
 primary public contract. The T-0009d.1 hardening tests exist to preserve
@@ -910,9 +910,10 @@ object comparison subsystem unless a later runtime threat model requires it.
 
 Alternatives considered:
 
-- Implement canonical map-valued set-once comparison now. Rejected because JVM
-  notes say repeated/map `(set_once)` is unsupported at build time, and
-  Protobuf-ES deterministic map canonicalization policy has not been designed.
+- Implement canonical repeated or map-valued set-once comparison now. Rejected
+  because JVM notes say repeated/map `(set_once)` is unsupported at build time,
+  and collection canonicalization policy has not been designed for this
+  contract.
 - Continue expanding defensive equality for every hostile JavaScript object
   shape. Rejected because the server runtime should be designed around
   framework-controlled Protobuf state updates, with unsupported/adversarial
@@ -922,8 +923,9 @@ Consequences:
 
 - Future `@spine-ts/server` tasks must record relevant JVM docs/source-note
   inspection in task logs before broadening server behavior.
-- T-0009d.1 keeps the round-5 code fix narrow: catch top-level proxy reflection
-  failures and report map-valued set-once as unsupported, without adding new
-  validation abstractions.
-- A later task may revisit map support only after deciding a deterministic map
-  canonicalization policy and checking the JVM compatibility impact.
+- T-0009d.1 keeps the server validator narrow: catch top-level proxy reflection
+  failures and report repeated/map-valued set-once as unsupported, without
+  adding new validation abstractions.
+- A later task may revisit repeated or map support only after checking the JVM
+  compatibility impact and deciding the relevant collection canonicalization
+  policy.

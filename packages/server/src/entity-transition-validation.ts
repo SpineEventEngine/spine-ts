@@ -45,9 +45,10 @@ export type EntityStateTransitionValidationResult = TransitionValidationResult;
  * The validator currently enforces descriptor-derived `(set_once)` fields,
  * delegates result shaping to `@spine-ts/core` `validateTransition()`, and does
  * not instantiate entities, dispatch handlers, touch repositories, or perform
- * runtime I/O. Map-valued `(set_once)` fields are unsupported in this slice and
- * fail closed with a field-specific violation. Non-entity schemas still fail through
- * {@link DescriptorMetadataError} from `describeEntityMetadata()`.
+ * runtime I/O. Repeated and map-valued `(set_once)` fields are unsupported in
+ * this slice and fail closed with field-specific violations. Non-entity schemas
+ * still fail through {@link DescriptorMetadataError} from
+ * `describeEntityMetadata()`.
  */
 export function validateEntityStateTransition<Schema extends DescriptorMessageSchema>(
   request: EntityStateTransitionValidationRequest<Schema>,
@@ -70,11 +71,6 @@ interface FieldPropertyReadResult {
   readonly value?: unknown;
 }
 
-interface SafeArrayLengthDescriptor {
-  readonly enumerable: false;
-  readonly value: number;
-}
-
 function createSetOnceTransitionRule<Schema extends DescriptorMessageSchema>(
   setOnceFields: readonly DescriptorFieldMetadata[],
 ): TransitionValidationRule<Schema> {
@@ -85,6 +81,10 @@ function createSetOnceTransitionRule<Schema extends DescriptorMessageSchema>(
       }
 
       return setOnceFields.flatMap((field) => {
+        if (isUnsupportedSetOnceField(field)) {
+          return [createSetOnceViolation(request.schema.typeName, field)];
+        }
+
         const previousValue = readFieldValue(
           request.schema,
           request.previous as Record<string, unknown>,
@@ -194,18 +194,12 @@ function fieldValueShapeIsSafe(field: DescriptorFieldMetadata, value: unknown): 
     case "message":
       return isRecord(value);
     case "list":
-      return Array.isArray(value) && readSafeArrayElements(value) !== undefined;
     case "map":
       return false;
   }
 }
 
-function valuesAreEqual(
-  previousValue: unknown,
-  nextValue: unknown,
-  depth = 0,
-  activePairs: WeakMap<object, WeakSet<object>> = new WeakMap<object, WeakSet<object>>(),
-): boolean {
+function valuesAreEqual(previousValue: unknown, nextValue: unknown, depth = 0): boolean {
   if (primitiveValuesAreIdentical(previousValue, nextValue)) {
     return true;
   }
@@ -219,11 +213,11 @@ function valuesAreEqual(
   }
 
   if (Array.isArray(previousValue) && Array.isArray(nextValue)) {
-    return arraysAreEqual(previousValue, nextValue, depth, activePairs);
+    return arraysAreEqual(previousValue, nextValue, depth);
   }
 
   if (isRecord(previousValue) && isRecord(nextValue)) {
-    return recordsAreEqual(previousValue, nextValue, depth, activePairs);
+    return recordsAreEqual(previousValue, nextValue, depth);
   }
 
   return false;
@@ -254,21 +248,13 @@ function arraysAreEqual(
   previousValue: readonly unknown[],
   nextValue: readonly unknown[],
   depth: number,
-  activePairs: WeakMap<object, WeakSet<object>>,
 ): boolean {
-  const previousElements = readSafeArrayElements(previousValue);
-  const nextElements = readSafeArrayElements(nextValue);
-
-  if (previousElements === undefined || nextElements === undefined) {
+  if (previousValue.length !== nextValue.length) {
     return false;
   }
 
-  if (previousElements.length !== nextElements.length) {
-    return false;
-  }
-
-  for (let index = 0; index < previousElements.length; index += 1) {
-    if (!valuesAreEqual(previousElements[index], nextElements[index], depth + 1, activePairs)) {
+  for (let index = 0; index < previousValue.length; index += 1) {
+    if (!valuesAreEqual(previousValue[index], nextValue[index], depth + 1)) {
       return false;
     }
   }
@@ -280,43 +266,32 @@ function recordsAreEqual(
   previousValue: Record<string, unknown>,
   nextValue: Record<string, unknown>,
   depth: number,
-  activePairs: WeakMap<object, WeakSet<object>>,
 ): boolean {
   if (Object.getPrototypeOf(previousValue) !== Object.getPrototypeOf(nextValue)) {
     return false;
   }
 
-  if (hasActivePair(previousValue, nextValue, activePairs)) {
-    return false;
-  }
-
-  markActivePair(previousValue, nextValue, activePairs);
-
   const previousKeys = Object.keys(previousValue).sort();
   const nextKeys = Object.keys(nextValue).sort();
 
-  try {
-    if (!arraysAreEqual(previousKeys, nextKeys, depth, activePairs)) {
+  if (!arraysAreEqual(previousKeys, nextKeys, depth)) {
+    return false;
+  }
+
+  for (const key of previousKeys) {
+    const previousDescriptor = Object.getOwnPropertyDescriptor(previousValue, key);
+    const nextDescriptor = Object.getOwnPropertyDescriptor(nextValue, key);
+
+    if (
+      !isSafeDataDescriptor(previousDescriptor) ||
+      !isSafeDataDescriptor(nextDescriptor) ||
+      !valuesAreEqual(previousDescriptor.value, nextDescriptor.value, depth + 1)
+    ) {
       return false;
     }
-
-    for (const key of previousKeys) {
-      const previousDescriptor = Object.getOwnPropertyDescriptor(previousValue, key);
-      const nextDescriptor = Object.getOwnPropertyDescriptor(nextValue, key);
-
-      if (
-        !isSafeDataDescriptor(previousDescriptor) ||
-        !isSafeDataDescriptor(nextDescriptor) ||
-        !valuesAreEqual(previousDescriptor.value, nextDescriptor.value, depth + 1, activePairs)
-      ) {
-        return false;
-      }
-    }
-
-    return true;
-  } finally {
-    unmarkActivePair(previousValue, nextValue, activePairs);
   }
+
+  return true;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -356,7 +331,7 @@ function readSafeUint8ArrayBytes(value: Uint8Array): Uint8Array | undefined {
     return undefined;
   }
 
-  if (!hasOnlyDenseIndexedDataProperties(value, copy.length, false)) {
+  if (!hasOnlyDenseIndexedDataProperties(value, copy.length)) {
     return undefined;
   }
 
@@ -372,50 +347,10 @@ function readSafeUint8ArrayBytes(value: Uint8Array): Uint8Array | undefined {
   return copy;
 }
 
-function readSafeArrayElements(value: readonly unknown[]): readonly unknown[] | undefined {
-  if (Object.getPrototypeOf(value) !== Array.prototype) {
-    return undefined;
-  }
-
-  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
-
-  if (!isSafeArrayLengthDescriptor(lengthDescriptor)) {
-    return undefined;
-  }
-
-  const length = lengthDescriptor.value;
-
-  if (!hasOnlyDenseIndexedDataProperties(value, length, true)) {
-    return undefined;
-  }
-
-  const elements: unknown[] = [];
-
-  for (let index = 0; index < length; index += 1) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-
-    if (!isSafeDataDescriptor(descriptor) || descriptor.value !== value[index]) {
-      return undefined;
-    }
-
-    elements.push(descriptor.value);
-  }
-
-  return elements;
-}
-
-function hasOnlyDenseIndexedDataProperties(
-  value: object,
-  length: number,
-  includesLengthProperty: boolean,
-): boolean {
+function hasOnlyDenseIndexedDataProperties(value: object, length: number): boolean {
   const seenIndexes = new Set<number>();
 
   for (const key of Reflect.ownKeys(value)) {
-    if (key === "length" && includesLengthProperty) {
-      continue;
-    }
-
     if (typeof key !== "string") {
       return false;
     }
@@ -423,12 +358,6 @@ function hasOnlyDenseIndexedDataProperties(
     const index = parseDenseIndexKey(key, length);
 
     if (index === undefined) {
-      return false;
-    }
-
-    const descriptor = Object.getOwnPropertyDescriptor(value, key);
-
-    if (!isSafeDataDescriptor(descriptor)) {
       return false;
     }
 
@@ -448,62 +377,32 @@ function parseDenseIndexKey(key: string, length: number): number | undefined {
   return String(index) === key ? index : undefined;
 }
 
-function isSafeArrayLengthDescriptor(
-  descriptor: PropertyDescriptor | undefined,
-): descriptor is SafeArrayLengthDescriptor {
-  return (
-    descriptor?.enumerable === false &&
-    Object.hasOwn(descriptor, "value") &&
-    Number.isSafeInteger(descriptor.value) &&
-    descriptor.value >= 0
-  );
-}
-
-function hasActivePair(
-  previousValue: Record<string, unknown>,
-  nextValue: Record<string, unknown>,
-  activePairs: WeakMap<object, WeakSet<object>>,
-): boolean {
-  return activePairs.get(previousValue)?.has(nextValue) ?? false;
-}
-
-function markActivePair(
-  previousValue: Record<string, unknown>,
-  nextValue: Record<string, unknown>,
-  activePairs: WeakMap<object, WeakSet<object>>,
-): void {
-  const nextValues = activePairs.get(previousValue);
-
-  if (nextValues === undefined) {
-    activePairs.set(previousValue, new WeakSet([nextValue]));
-    return;
-  }
-
-  nextValues.add(nextValue);
-}
-
-function unmarkActivePair(
-  previousValue: Record<string, unknown>,
-  nextValue: Record<string, unknown>,
-  activePairs: WeakMap<object, WeakSet<object>>,
-): void {
-  activePairs.get(previousValue)?.delete(nextValue);
-}
-
 function createSetOnceViolation(
   typeName: string,
   field: DescriptorFieldMetadata,
 ): ConstraintViolation {
-  const message =
-    field.descriptor.fieldKind === "map"
-      ? "Map-valued set-once fields are not supported by entity state transition validation."
-      : "Set-once fields cannot change after entity state creation.";
-
   return create(ConstraintViolationSchema, {
     typeName,
     fieldPath: create(FieldPathSchema, { fieldName: [field.name] }),
     message: create(TemplateStringSchema, {
-      withPlaceholders: message,
+      withPlaceholders: setOnceViolationMessage(field),
     }),
   });
+}
+
+function isUnsupportedSetOnceField(field: DescriptorFieldMetadata): boolean {
+  return field.descriptor.fieldKind === "list" || field.descriptor.fieldKind === "map";
+}
+
+function setOnceViolationMessage(field: DescriptorFieldMetadata): string {
+  switch (field.descriptor.fieldKind) {
+    case "list":
+      return "Repeated set-once fields are not supported by entity state transition validation.";
+    case "map":
+      return "Map-valued set-once fields are not supported by entity state transition validation.";
+    case "scalar":
+    case "enum":
+    case "message":
+      return "Set-once fields cannot change after entity state creation.";
+  }
 }

@@ -52,3 +52,12 @@ message MapSetOnceState {
   map<string, string> labels = 2 [(set_once) = true];
   string mutable_note = 3;
 }
+
+message SingularSetOnceState {
+  option (entity).kind = PROJECTION;
+
+  string id = 1 [(set_once) = true];
+  bytes fingerprint = 2 [(set_once) = true];
+  SetOnceDetails details = 3 [(set_once) = true];
+  string mutable_note = 4;
+}

@@ -326,6 +326,22 @@ Fix-round 5 commands run:
 - GREEN:
   `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
   passed with 2 test files / 31 tests.
+- Coverage recovery:
+  `CI=true corepack pnpm verify` first failed on global branch coverage after
+  removing top-level repeated set-once support and its broad hardening tests.
+  The array equality helper was narrowed to canonical nested-message arrays,
+  obsolete cycle-pair bookkeeping was removed, and focused bytes/singular
+  nested-message coverage was added. `corepack pnpm test:coverage` then passed
+  with 13 test files / 105 tests; coverage statements 97.47%, branches 90.63%,
+  functions 100%, lines 97.40%.
+- Required verification:
+  `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts; `corepack pnpm typecheck` passed.
+- Full verification:
+  `CI=true corepack pnpm verify` passed with 13 test files / 105 tests;
+  coverage statements 97.47%, branches 90.63%, functions 100%, lines 97.40%;
+  docs/API and proto checks passed with the known TypeDoc invalid-origin
+  warning.
 - Required verification:
   `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
   warning and expected API export counts; `corepack pnpm typecheck` passed.
@@ -334,3 +350,34 @@ Fix-round 5 commands run:
   coverage statements 97.12%, branches 91.07%, functions 100%, lines 97.05%;
   docs/API and proto checks passed with the known TypeDoc invalid-origin
   warning.
+
+## Fix Round 6
+
+Addressed human pre-review steering after D-0039: descriptor-level repeated/list
+`(set_once)` fields were still treated as supported by unchanged list equality,
+even though the local JVM notes and D-0039 say repeated/map/explicit optional
+set-once fields are unsupported in the JVM generation contract.
+
+- Repeated set-once contract: descriptor-level repeated/list `(set_once)` fields
+  now fail closed with a field-specific unsupported-repeated violation, matching
+  the unsupported map-valued set-once boundary.
+- Test fixture split: `RichSetOnceState.tags` is now the unsupported repeated
+  set-once fixture. A new `SingularSetOnceState` fixture preserves bytes and
+  singular-message set-once coverage without routing through a top-level
+  repeated set-once field.
+- Scope cleanup: removed top-level repeated set-once equality/collection
+  hardening tests from the supported path. Array comparison helpers remain only
+  for nested singular message comparison and internal key comparison behavior.
+- Documentation: public docs, architecture notes, TypeDoc comments, and D-0039
+  now say repeated and map-valued set-once fields are unsupported in this slice
+  and fail closed with field-specific violations.
+
+Fix-round 6 commands run so far:
+
+- RED:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected with 1 of 22 tests failing because unchanged
+  `RichSetOnceState.tags` was accepted.
+- GREEN:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 31 tests.

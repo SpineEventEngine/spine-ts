@@ -31,8 +31,8 @@ validation exports include `validateEntityStateTransition()`,
 `EntityStateTransitionValidationRequest`, and
 `EntityStateTransitionValidationResult` for built-in `(set_once)` checks derived
 from descriptor metadata and shaped through the core transition validation
-facade. Map-valued `(set_once)` fields are unsupported in this slice and fail
-closed with a field-specific validation violation. Server handler metadata exports include `defineEntityHandlers()`,
+facade. Repeated and map-valued `(set_once)` fields are unsupported in this
+slice and fail closed with field-specific validation violations. Server handler metadata exports include `defineEntityHandlers()`,
 `HandlerRegistrationBuilder`, the five handler metadata roles for command
 assignment, command reaction, event subscription, event reaction, and event
 application, and `HandlerMetadataError` for registration-time structural
