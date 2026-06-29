@@ -7,7 +7,12 @@ import { file_spine_options } from "@spine-ts/proto";
 import { serverEntityMetadataTestFixtures } from "../test-fixtures/entity-metadata-fixtures.js";
 
 import * as serverRoot from "./index.js";
-import { describeEntityMetadata, Entity } from "./index.js";
+import {
+  describeEntityMetadata,
+  Entity,
+  type EntityOptions,
+  type EntityVersionMetadata,
+} from "./index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -16,6 +21,7 @@ type ProjectionState = Message<"ProjectionState"> & {
 };
 
 interface RevisionMetadata {
+  readonly [key: string]: EntityVersionMetadata;
   readonly revision: number;
   readonly source: "server";
   readonly labels?: readonly string[];
@@ -236,6 +242,132 @@ describe("entities", () => {
         bytes: new Uint8Array(new SharedArrayBuffer(1)),
       } as unknown as RevisionMetadata);
     }).toThrow(/plain snapshot data/);
+  });
+
+  it("rejects array version metadata with caller-controlled descriptor hazards", () => {
+    let speciesRead = false;
+    class CallerArray<T> extends Array<T> {
+      static override get [Symbol.species](): ArrayConstructor {
+        speciesRead = true;
+        return Array;
+      }
+    }
+
+    const speciesVersion = {
+      revision: 1,
+      source: "server" as const,
+      labels: new CallerArray("initial"),
+    };
+    expect(() => {
+      new TestEntity({
+        id: "task-1",
+        schema: ProjectionStateSchema,
+        state: createProjectionState(),
+        version: speciesVersion,
+      });
+    }).toThrow(/plain snapshot data/);
+    expect(speciesRead).toBe(false);
+
+    let accessorRead = false;
+    const accessorLabels = ["initial"];
+    Object.defineProperty(accessorLabels, "0", {
+      enumerable: true,
+      get: () => {
+        accessorRead = true;
+        return "caller";
+      },
+    });
+    expect(() => {
+      new TestEntity({
+        id: "task-1",
+        schema: ProjectionStateSchema,
+        state: createProjectionState(),
+        version: { revision: 1, source: "server", labels: accessorLabels },
+      });
+    }).toThrow(/plain snapshot data/);
+    expect(accessorRead).toBe(false);
+
+    const customPropertyLabels = ["initial"] as string[] & { extra?: string };
+    customPropertyLabels.extra = "caller";
+    expect(() => {
+      new TestEntity({
+        id: "task-1",
+        schema: ProjectionStateSchema,
+        state: createProjectionState(),
+        version: { revision: 1, source: "server", labels: customPropertyLabels },
+      });
+    }).toThrow(/plain snapshot data/);
+  });
+
+  it("clones JSON __proto__ version metadata without mutating clone prototypes", () => {
+    const version = JSON.parse(
+      '{"revision":1,"source":"server","__proto__":{"polluted":true}}',
+    ) as RevisionMetadata & { readonly __proto__: { readonly polluted: true } };
+
+    const entity = new TestEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version,
+    });
+
+    const returnedVersion = entity.version as RevisionMetadata & {
+      readonly __proto__: { readonly polluted: true };
+    };
+    expect(Object.prototype.hasOwnProperty.call(returnedVersion, "__proto__")).toBe(true);
+    expect(returnedVersion.__proto__).toEqual({ polluted: true });
+    expect(Object.getPrototypeOf(returnedVersion)).toBe(Object.prototype);
+    expect(({} as { readonly polluted?: true }).polluted).toBeUndefined();
+  });
+
+  it("does not invoke caller-controlled constructor getters while labeling rejected metadata", () => {
+    let constructorRead = false;
+    const rejectedVersion = Object.create({ arbitrary: true }) as RevisionMetadata;
+    Object.defineProperty(rejectedVersion, "constructor", {
+      enumerable: true,
+      get: () => {
+        constructorRead = true;
+        return { name: "CallerControlled" };
+      },
+    });
+
+    expect(() => {
+      new TestEntity({
+        id: "task-1",
+        schema: ProjectionStateSchema,
+        state: createProjectionState(),
+        version: rejectedVersion,
+      });
+    }).toThrow(/plain snapshot data/);
+    expect(constructorRead).toBe(false);
+  });
+
+  it("rejects excessively deep plain version metadata with the domain error", () => {
+    let deepVersion: unknown = { revision: 1, source: "server" };
+    for (let index = 0; index < 20_000; index += 1) {
+      deepVersion = { child: deepVersion };
+    }
+
+    expect(() => {
+      new TestEntity({
+        id: "task-1",
+        schema: ProjectionStateSchema,
+        state: createProjectionState(),
+        version: deepVersion as RevisionMetadata,
+      });
+    }).toThrow(/plain snapshot data/);
+  });
+
+  it("constrains entity version generics to plain metadata at compile time", () => {
+    expectTypeOf<TestEntity["version"]>().toEqualTypeOf<RevisionMetadata>();
+
+    // @ts-expect-error Date is non-plain metadata and must be rejected by EntityOptions.
+    type DateVersionOptions = EntityOptions<string, typeof ProjectionStateSchema, Date>;
+    // @ts-expect-error Date is non-plain metadata and must be rejected by Entity.
+    class DateVersionEntity extends Entity<string, typeof ProjectionStateSchema, Date> {}
+
+    expectTypeOf<DateVersionOptions>().not.toBeAny();
+    expectTypeOf<DateVersionEntity>().not.toBeAny();
   });
 
   it("keeps nested plain version metadata isolated through construction, reads, and replacement", () => {

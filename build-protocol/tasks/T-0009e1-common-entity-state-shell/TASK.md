@@ -1,6 +1,6 @@
 # T-0009e.1: Common Entity State Shell
 
-Status: Round 3 Review Fix Required
+Status: Round 3 Review Fix Implemented; Round 4 Review Pending
 Start: `2026-06-29 22:06 WEST`
 Baseline commit: `2ca23fd`
 Task log path: `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
@@ -14,9 +14,9 @@ Authoring sub-agent: Codex implementation sub-agent in this thread
 Round 1 reviewer sub-agents: complete; changes requested and accepted.
 Round 2 reviewer sub-agents: complete; changes requested and accepted.
 Round 3 reviewer sub-agents: complete; changes requested and accepted.
-Review-fix implementation: second pass implemented for version metadata
-contract hardening; third pass queued for descriptor-safe cloning and generic
-constraint fixes.
+Review-fix implementation: third pass implemented and verified for
+descriptor-safe version metadata cloning and generic constraint fixes; focused
+review pending.
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:12 WEST`
 
@@ -209,6 +209,35 @@ Skipped relevant-looking skills:
   97.69%, branches 91.24%, functions 100%, lines 97.64%; TypeDoc/API reported
   100 proto, 28 core, 63 server, and 26 storage expected exports; proto
   lint/generate/check passed with generated output clean.
+- Round 3 fix RED focused check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts` failed on
+  `2026-06-29 23:13 WEST` as expected: 1 test file / 15 tests, with 4
+  failures covering array descriptor hazards, JSON `__proto__`, constructor
+  getter label safety, and deep metadata stack overflow.
+- Round 3 fix RED `corepack pnpm typecheck` failed on
+  `2026-06-29 23:13 WEST` as expected after test-shape cleanup: the
+  `@ts-expect-error` assertions for `EntityOptions<..., Date>` and
+  `Entity<..., Date>` were unused because the public generics were still
+  unconstrained.
+- Round 3 fix GREEN focused check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts` passed on
+  `2026-06-29 23:16 WEST`: 1 test file / 15 tests.
+- Round 3 fix `corepack pnpm typecheck` passed on
+  `2026-06-29 23:16 WEST`.
+- Round 3 fix `corepack pnpm lint` first failed on
+  `2026-06-29 23:18 WEST` because test metadata aliases violated the repo's
+  interface preference; after adding explicit plain-data index signatures to
+  interfaces, rerun passed.
+- Round 3 fix `corepack pnpm format:check` first found the edited work log on
+  `2026-06-29 23:18 WEST`; after formatting that file, rerun passed.
+- Round 3 fix `corepack pnpm docs:check` passed on
+  `2026-06-29 23:18 WEST` with the expected broken-origin TypeDoc warning and
+  63 expected server exports.
+- Round 3 fix `CI=true corepack pnpm verify` passed on
+  `2026-06-29 23:19 WEST`: 15 test files / 144 tests; coverage statements
+  97.3%, branches 91.24%, functions 100%, lines 97.24%; TypeDoc/API reported
+  100 proto, 28 core, 63 server, and 26 storage expected exports; proto
+  lint/generate/check passed with generated output clean.
 
 ## Review Rounds
 
@@ -247,6 +276,11 @@ Skipped relevant-looking skills:
 - Fix route: harden descriptor-based plain metadata cloning, add focused RED
   regressions, update logs/docs if public wording changes, verify, and rerun all
   five review roles.
+- Round 3 fix implemented: `Entity` and `EntityOptions` now constrain `Version`
+  to `EntityVersionMetadata`; array metadata is descriptor-validated and cloned
+  without `map()`; object metadata uses data-property definitions so JSON
+  `__proto__` stays an own property; rejection labels avoid caller-controlled
+  constructors; and excessive nesting rejects with the domain `TypeError`.
 
 ## Current State
 
@@ -260,5 +294,5 @@ Skipped relevant-looking skills:
 - Round 2 review was captured after commit `aef6297`; the accepted metadata
   contract findings have been addressed with focused regressions, docs/API
   updates, and full verification.
-- Round 3 review was captured after commit `50a1802`; the accepted findings
-  require another focused review-fix pass before completion.
+- Round 3 review was captured after commit `50a1802`; the accepted findings have
+  a focused verified implementation pass, with the next review still pending.

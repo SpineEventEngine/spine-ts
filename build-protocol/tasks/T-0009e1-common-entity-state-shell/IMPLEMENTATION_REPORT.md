@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.1 Common Entity State Shell
 
-Status: Round 3 Review Fix Required
+Status: Round 3 Review Fix Implemented; Round 4 Review Pending
 Task log: `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e1.md`
 Review log: `build-protocol/reviews/T-0009e1-common-entity-state-shell.md`
@@ -127,6 +127,34 @@ Implementation impact:
   97.69%, branches 91.24%, functions 100%, lines 97.64%; TypeDoc/API reported
   100 proto, 28 core, 63 server, and 26 storage expected exports; proto
   lint/generate/check passed with generated output clean.
+- Round 3 fix RED focused check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts` failed on
+  `2026-06-29 23:13 WEST` as expected: 1 test file / 15 tests, with 4 failures
+  covering array descriptor hazards, JSON `__proto__`, constructor getter label
+  safety, and deep metadata stack overflow.
+- Round 3 fix RED `corepack pnpm typecheck` failed on
+  `2026-06-29 23:13 WEST` as expected after test-shape cleanup because
+  `EntityOptions<..., Date>` and `Entity<..., Date>` were not rejected at
+  compile time.
+- Round 3 fix GREEN focused check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts` passed on
+  `2026-06-29 23:16 WEST`: 1 test file / 15 tests.
+- Round 3 fix `corepack pnpm typecheck` passed on
+  `2026-06-29 23:16 WEST`.
+- Round 3 fix `corepack pnpm lint` first failed on
+  `2026-06-29 23:18 WEST` because test metadata aliases violated the repo's
+  interface preference; after adding explicit plain-data index signatures to
+  interfaces, rerun passed.
+- Round 3 fix `corepack pnpm format:check` first found the edited work log on
+  `2026-06-29 23:18 WEST`; after formatting that file, rerun passed.
+- Round 3 fix `corepack pnpm docs:check` passed on
+  `2026-06-29 23:18 WEST` with the expected broken-origin TypeDoc warning and
+  63 expected server exports.
+- Round 3 fix `CI=true corepack pnpm verify` passed on
+  `2026-06-29 23:19 WEST`: 15 test files / 144 tests; coverage statements
+  97.3%, branches 91.24%, functions 100%, lines 97.24%; TypeDoc/API reported
+  100 proto, 28 core, 63 server, and 26 storage expected exports; proto
+  lint/generate/check passed with generated output clean.
 
 ## Review
 
@@ -164,3 +192,9 @@ Implementation impact:
   preserve or reject array own properties instead of dropping them, reject deep
   metadata with a domain error, and avoid caller-controlled constructor lookups
   while formatting rejection labels.
+- Round 3 fix implemented: `Entity` and `EntityOptions` now constrain `Version`
+  to `EntityVersionMetadata`; array metadata is cloned from validated
+  descriptors without `Array.prototype.map()`; object metadata defines data
+  properties so JSON `__proto__` cannot mutate prototypes; error labels avoid
+  caller-controlled constructors; and excessive nesting rejects with the domain
+  `TypeError`.

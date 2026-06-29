@@ -248,3 +248,58 @@ without adding new runtime surface:
 - stop reading caller-controlled `constructor` properties for error labels;
 - add a maximum nesting-depth rejection or equivalent iterative clone;
 - add focused RED regressions for the accepted cases and rerun the review loop.
+
+## Round 3 Fix Route
+
+Review-fix implementation started on `2026-06-29 23:13 WEST` from Round 3
+review capture commit `a54c198`.
+
+Accepted findings:
+
+- P2/API: `Entity` and `EntityOptions` version generics must reject non-plain
+  metadata such as `Date` at compile time.
+- P2/security/reliability: version metadata cloning must not invoke caller
+  array species, accessors, or constructor getters; must not mutate clone
+  prototypes through JSON `__proto__`; must not silently drop array own
+  properties; and must not surface raw stack overflows for excessive nesting.
+
+Fix route:
+
+- Add focused RED regressions for array species/accessor/custom-property
+  hazards, JSON `__proto__`, constructor getter label safety, deep metadata
+  rejection, and `Date` generic exclusion.
+- Constrain `EntityOptions` and `Entity` `Version` parameters to
+  `EntityVersionMetadata`.
+- Clone arrays from validated property descriptors without
+  `Array.prototype.map()`, rejecting accessor, symbol-keyed, non-enumerable,
+  sparse, subclassed, or custom-property arrays.
+- Clone plain-object data properties with `Object.defineProperty()` so own
+  `__proto__` remains data and cannot change clone prototypes.
+- Use bounded recursion for plain metadata and safe built-in labels that do not
+  read caller-controlled `constructor` properties.
+
+Verification:
+
+- RED focused check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts` failed on
+  `2026-06-29 23:13 WEST` as expected: 1 test file / 15 tests, with 4 failures
+  covering array descriptor hazards, JSON `__proto__`, constructor getter label
+  safety, and deep metadata stack overflow.
+- RED `corepack pnpm typecheck` failed on `2026-06-29 23:13 WEST` as expected
+  after test-shape cleanup because the `Date` generic `@ts-expect-error`
+  assertions were unused.
+- GREEN focused check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts` passed on
+  `2026-06-29 23:16 WEST`: 1 test file / 15 tests.
+- `corepack pnpm typecheck` passed on `2026-06-29 23:16 WEST`.
+- `corepack pnpm lint` first failed on `2026-06-29 23:18 WEST` because test
+  metadata aliases violated the repo's interface preference; after adding
+  explicit plain-data index signatures to interfaces, rerun passed.
+- `corepack pnpm format:check` first found the edited work log on
+  `2026-06-29 23:18 WEST`; after formatting that file, rerun passed.
+- `corepack pnpm docs:check` passed on `2026-06-29 23:18 WEST` with the
+  expected broken-origin TypeDoc warning and 63 expected server exports.
+- `CI=true corepack pnpm verify` passed on `2026-06-29 23:19 WEST`: 15 test
+  files / 144 tests; coverage statements 97.3%, branches 91.24%, functions
+  100%, lines 97.24%; TypeDoc/API/proto gates passed and generated proto output
+  was clean.

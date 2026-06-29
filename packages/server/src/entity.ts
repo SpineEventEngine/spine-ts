@@ -30,7 +30,7 @@ export type EntityVersionMetadata =
 export interface EntityOptions<
   Id,
   Schema extends DescriptorMessageSchema,
-  Version = EntityVersionMetadata,
+  Version extends EntityVersionMetadata = EntityVersionMetadata,
 > {
   /** Stable entity identifier owned by the caller/domain type. */
   readonly id: Id;
@@ -56,7 +56,7 @@ export interface EntityOptions<
 export abstract class Entity<
   Id,
   Schema extends DescriptorMessageSchema,
-  Version = EntityVersionMetadata,
+  Version extends EntityVersionMetadata = EntityVersionMetadata,
 > {
   readonly #id: Id;
   readonly #schema: Schema;
@@ -163,15 +163,22 @@ function cloneState<Schema extends DescriptorMessageSchema>(
   return fromBinary(schema, toBinary(schema, state, { writeUnknownFields: false }));
 }
 
-function cloneVersionMetadata<Version>(version: Version): Version {
-  return clonePlainVersionMetadata(version, "$", new WeakSet()) as Version;
+const maxVersionMetadataDepth = 1_000;
+
+function cloneVersionMetadata<Version extends EntityVersionMetadata>(version: Version): Version {
+  return clonePlainVersionMetadata(version, "$", new WeakSet(), 0) as Version;
 }
 
 function clonePlainVersionMetadata(
   value: unknown,
   path: string,
   stack: WeakSet<object>,
+  depth: number,
 ): EntityVersionMetadata {
+  if (depth > maxVersionMetadataDepth) {
+    throw nonPlainVersionMetadataError(path, "excessive nesting depth");
+  }
+
   if (value === null) {
     return value;
   }
@@ -187,7 +194,7 @@ function clonePlainVersionMetadata(
     case "function":
       throw nonPlainVersionMetadataError(path, "function");
     case "object":
-      return clonePlainVersionObject(value, path, stack);
+      return clonePlainVersionObject(value, path, stack, depth);
   }
 }
 
@@ -195,6 +202,7 @@ function clonePlainVersionObject(
   value: object,
   path: string,
   stack: WeakSet<object>,
+  depth: number,
 ): EntityVersionMetadata {
   if (ArrayBuffer.isView(value)) {
     throw nonPlainVersionMetadataError(path, getObjectKind(value));
@@ -209,9 +217,7 @@ function clonePlainVersionObject(
   stack.add(value);
   try {
     if (Array.isArray(value)) {
-      return value.map((item, index) =>
-        clonePlainVersionMetadata(item, `${path}[${String(index)}]`, stack),
-      );
+      return clonePlainVersionArray(value, path, stack, depth);
     }
 
     if (!isPlainObject(value)) {
@@ -233,13 +239,80 @@ function clonePlainVersionObject(
       if (!("value" in descriptor)) {
         throw nonPlainVersionMetadataError(childPath, "accessor property");
       }
-      clone[key] = clonePlainVersionMetadata(descriptor.value, childPath, stack);
+      Object.defineProperty(clone, key, {
+        configurable: true,
+        enumerable: true,
+        value: clonePlainVersionMetadata(descriptor.value, childPath, stack, depth + 1),
+        writable: true,
+      });
     }
 
     return clone;
   } finally {
     stack.delete(value);
   }
+}
+
+function clonePlainVersionArray(
+  value: readonly unknown[],
+  path: string,
+  stack: WeakSet<object>,
+  depth: number,
+): readonly EntityVersionMetadata[] {
+  if (getObjectPrototype(value) !== Array.prototype) {
+    throw nonPlainVersionMetadataError(path, "Array");
+  }
+
+  const descriptors: Record<string, PropertyDescriptor> = Object.getOwnPropertyDescriptors(value);
+  const [symbolKey] = Object.getOwnPropertySymbols(descriptors);
+  if (symbolKey !== undefined) {
+    throw nonPlainVersionMetadataError(`${path}[${String(symbolKey)}]`, "symbol-keyed property");
+  }
+
+  const lengthDescriptor = descriptors.length;
+  if (lengthDescriptor === undefined || !("value" in lengthDescriptor)) {
+    throw nonPlainVersionMetadataError(path, "array without data length");
+  }
+
+  const length = lengthDescriptor.value as number;
+  const clone = new Array<EntityVersionMetadata>(length);
+  for (const [key, descriptor] of Object.entries(descriptors)) {
+    if (key === "length") {
+      continue;
+    }
+
+    if (!isArrayElementKey(key, length)) {
+      throw nonPlainVersionMetadataError(`${path}.${key}`, "custom array property");
+    }
+    if (!descriptor.enumerable) {
+      throw nonPlainVersionMetadataError(`${path}[${key}]`, "non-enumerable property");
+    }
+    if (!("value" in descriptor)) {
+      throw nonPlainVersionMetadataError(`${path}[${key}]`, "accessor property");
+    }
+  }
+
+  for (let index = 0; index < length; index += 1) {
+    const key = String(index);
+    const descriptor = descriptors[key];
+    if (descriptor === undefined || !("value" in descriptor)) {
+      throw nonPlainVersionMetadataError(`${path}[${key}]`, "sparse array element");
+    }
+
+    Object.defineProperty(clone, index, {
+      configurable: true,
+      enumerable: true,
+      value: clonePlainVersionMetadata(descriptor.value, `${path}[${key}]`, stack, depth + 1),
+      writable: true,
+    });
+  }
+
+  return clone;
+}
+
+function isArrayElementKey(key: string, length: number): boolean {
+  const index = Number(key);
+  return Number.isInteger(index) && index >= 0 && index < length && String(index) === key;
 }
 
 function isPlainObject(value: object): boolean {
@@ -252,10 +325,25 @@ function getObjectPrototype(value: object): object | null {
 }
 
 function getObjectKind(value: object): string {
-  const constructor = (value as { readonly constructor?: { readonly name?: unknown } }).constructor;
-  return typeof constructor?.name === "string" && constructor.name.length > 0
-    ? constructor.name
-    : "object";
+  if (value instanceof Date) {
+    return "Date";
+  }
+  if (value instanceof Map) {
+    return "Map";
+  }
+  if (value instanceof Set) {
+    return "Set";
+  }
+  if (ArrayBuffer.isView(value)) {
+    return "typed array";
+  }
+  if (value instanceof ArrayBuffer) {
+    return "ArrayBuffer";
+  }
+  if (isSharedArrayBuffer(value)) {
+    return "SharedArrayBuffer";
+  }
+  return "object";
 }
 
 function isSharedArrayBuffer(value: object): boolean {
