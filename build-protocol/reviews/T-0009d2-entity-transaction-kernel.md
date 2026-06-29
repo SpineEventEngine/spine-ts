@@ -90,3 +90,32 @@ Round 1 fix evidence:
 
 All assigned findings were accepted. No reviewer comment was rejected. No
 sub-agents were spawned for the fix.
+
+## Round 2
+
+Review range: `7b13f1c..285710c`.
+
+Round 2 verified the full `T-0009d.2a` implementation plus round 1 fixes.
+
+| Role                       | Reviewer Agent                                  | Outcome | Notes                                                                                                                                                                                                |
+| -------------------------- | ----------------------------------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Code style/maintainability | `019f14e4-9a52-7162-adb0-816465957fa2` (closed) | CLEAN   | Confirmed the transaction kernel stays small, validates before acceptance, preserves D-0041 rejected-commit status, and adds no forbidden runtime/storage/transport concepts.                        |
+| Documentation              | `019f14e4-9aca-7871-8107-1a85a798ba42` (closed) | CLEAN   | Confirmed `docs/USER_GUIDE.md` now documents `createEntityTransaction()` and the docs consistently avoid claiming storage/repository/dispatch/runtime behavior.                                      |
+| TypeScript/API docs        | `019f14e4-9b31-7153-85e1-b3f76562e306` (closed) | CLEAN   | Confirmed transaction exports are in the API docs gate, API README documents commit/rollback behavior, and generic version metadata flows through accepted commit results.                           |
+| Security                   | `019f14e4-9bc3-7213-9028-a9fc38b43240` (closed) | CLEAN   | Confirmed no new security findings; the feature remains in-memory, clones state snapshots, gates acceptance through transition validation, and avoids IO/storage/transport/global transaction state. |
+| Performance/reliability    | `019f14e4-9c35-71b3-a777-5a68966374d0` (closed) | CLEAN   | Confirmed the added tests cover rollback-after-commit, rollback-after-rollback, rejected-commit-then-rollback, and updater exception invariants.                                                     |
+
+Verification evidence from reviewers:
+
+- Performance/reliability focused Vitest:
+  `corepack pnpm vitest run packages/server/src/entity-transaction.test.ts packages/server/src/index.test.ts`
+  passed with 2 files / 21 tests.
+- TypeScript/API docs gate:
+  `node scripts/check-api-docs.mjs` passed with 100 proto, 28 core, 56 server,
+  and 26 storage expected exports; focused Vitest and tooling typecheck also
+  passed.
+- Maintainability, security, and other reviewers ran read-only diff/status
+  checks including `git diff --check`.
+
+Round 2 result: all required reviewer roles are clean. All reviewer sub-agents
+were closed after result capture.

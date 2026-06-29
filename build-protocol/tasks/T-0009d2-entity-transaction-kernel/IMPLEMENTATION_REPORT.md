@@ -1,6 +1,6 @@
 # Implementation Report: T-0009d.2 Entity Transaction Draft/Result Kernel
 
-Status: Implemented; pending review
+Status: Implemented; clean-reviewed; pending integration
 Task log: `build-protocol/tasks/T-0009d2-entity-transaction-kernel/TASK.md`
 Work log: `build-protocol/work-logs/T-0009d2.md`
 Review log: `build-protocol/reviews/T-0009d2-entity-transaction-kernel.md`
@@ -217,3 +217,7 @@ format:check` passed on `2026-06-29 20:34 WEST`.
 ## Review
 
 - Round 1 review findings fixed; no reviewer comment was rejected.
+- Round 2 re-review of `7b13f1c..285710c` completed clean for all required
+  roles: code style/maintainability, documentation, TypeScript/API docs,
+  security, and performance/reliability.
+- All authoring, fix, splitter, and reviewer sub-agents have been closed.

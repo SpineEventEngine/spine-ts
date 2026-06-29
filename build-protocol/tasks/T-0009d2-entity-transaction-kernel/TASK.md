@@ -9,10 +9,32 @@ Branch: `task/T-0009d2-entity-transaction-kernel`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009d2-entity-transaction-kernel`
 Requirements splitter: `019f14c2-9605-7d11-b8c5-3f891b1880f7` (Sartre the 2nd, closed)
-Authoring sub-agent: pending
-Reviewer sub-agents: pending
-Baseline verification evidence: `CI=true corepack pnpm verify` passed on
-`2026-06-29 20:02 WEST`
+Authoring sub-agent: `019f14c7-1e68-73e3-a228-d0ce2dc487bf` (Boyle the 2nd, closed)
+Review-fix sub-agent: `019f14db-1a42-7291-985e-46a44d0c00e3` (Kuhn the 2nd, closed)
+Reviewer sub-agents:
+
+- Round 1 code style/maintainability:
+  `019f14d7-fdca-7030-9e3f-cba488c467e1` (Carson the 2nd, closed)
+- Round 1 documentation:
+  `019f14d7-fe57-7840-adb9-f1425c74df13` (Dewey the 2nd, closed)
+- Round 1 TypeScript/API docs:
+  `019f14d7-fec9-78f3-b964-7dbda8f50b8b` (Godel the 2nd, closed)
+- Round 1 security:
+  `019f14d7-ff46-7b22-8b2b-ccc03d6d3c6a` (Maxwell the 2nd, closed)
+- Round 1 performance/reliability:
+  `019f14d8-039b-75e0-a6fd-dd1a2bbe5526` (Plato the 2nd, closed)
+- Round 2 code style/maintainability:
+  `019f14e4-9a52-7162-adb0-816465957fa2` (Huygens the 2nd, closed)
+- Round 2 documentation:
+  `019f14e4-9aca-7871-8107-1a85a798ba42` (Hubble the 2nd, closed)
+- Round 2 TypeScript/API docs:
+  `019f14e4-9b31-7153-85e1-b3f76562e306` (Parfit the 2nd, closed)
+- Round 2 security:
+  `019f14e4-9bc3-7213-9028-a9fc38b43240` (Archimedes the 2nd, closed)
+- Round 2 performance/reliability:
+  `019f14e4-9c35-71b3-a777-5a68966374d0` (Bacon the 2nd, closed)
+  Baseline verification evidence: `CI=true corepack pnpm verify` passed on
+  `2026-06-29 20:02 WEST`
 
 ## Objective
 
@@ -292,7 +314,13 @@ rejected. No sub-agents were spawned.
 
 ## Review Rounds
 
-- Pending implementation and review loop.
+- Round 1 review of `7b13f1c..ca95f41` completed with accepted findings from
+  documentation, TypeScript/API docs, and performance/reliability. Code
+  style/maintainability and security were clean.
+- Round 1 fix commit `285710c` accepted all findings and rejected none.
+- Round 2 review of `7b13f1c..285710c` completed clean for
+  code style/maintainability, documentation, TypeScript/API docs, security, and
+  performance/reliability. All round 2 reviewer sub-agents were closed.
 
 ## Current State
 
@@ -300,4 +328,7 @@ rejected. No sub-agents were spawned.
 - Setup logs are committed at `7c267ee`.
 - `T-0009d.2a` implementation is complete and verified locally.
 - Requirements splitter completed and was closed.
-- Next step: orchestrator review loop for the committed implementation.
+- Round 2 clean re-review completed and all participating sub-agents are
+  closed.
+- Next step: record this clean review checkpoint, run fresh verification, then
+  integrate or continue the next subtask according to the protocol.
