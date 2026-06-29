@@ -326,6 +326,57 @@ Fix-round 5 commands run:
 - GREEN:
   `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
   passed with 2 test files / 31 tests.
+
+## Fix Round 7
+
+Addressed review package `.superpowers/sdd/review-cd98ca3..d61874b.diff` and
+the fix-round 7 handoff:
+
+- Unsupported creation path: unsupported repeated/list and map-valued
+  `(set_once)` fields now fail closed before the creation-transition shortcut,
+  so creation transitions report field-specific unsupported violations instead
+  of accepting unsupported declarations.
+- Explicit optional contract: Protobuf-ES exposes proto3 explicit optional
+  fields through `field.descriptor.proto.proto3Optional`. The validator now
+  treats that narrow descriptor flag as unsupported for `(set_once)` and reports
+  a field-specific unsupported-explicit-optional violation. This avoids adding a
+  broader optional/presence subsystem.
+- Guarded shape checks: bytes/message shape guards and equality helpers now
+  catch proxy/reflection failures and return unsafe/unequal so violations remain
+  field-specific and sanitized instead of falling through to core's generic
+  rule-failed violation.
+- Fixture coverage: added `OptionalSetOnceState.optional string explicit_id`
+  to the descriptor-backed fixture and regenerated the server descriptor
+  fixture.
+- Documentation/log cleanup: refreshed public docs, D-0039, task log, review
+  log, work log, and this implementation report to name repeated, map-valued,
+  and explicit optional set-once fields as unsupported in this slice.
+
+Fix-round 7 commands run:
+
+- RED:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected with 4 of 26 tests failing for creation-time
+  repeated/map acceptance and generic rule failures from throwing bytes/message
+  shape proxies.
+- RED explicit optional:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected with 1 of 27 tests failing because unchanged
+  `OptionalSetOnceState.explicit_id` was accepted.
+- GREEN:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 36 tests.
+- Required verification:
+  `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts; `corepack pnpm typecheck` passed.
+- Full verification:
+  `CI=true corepack pnpm verify` first failed on lint for an unnecessary
+  previous-state type assertion, then on Prettier formatting for
+  `packages/server/src/entity-transition-validation.ts`. After cleanup,
+  `CI=true corepack pnpm verify` passed with 13 test files / 110 tests;
+  coverage statements 97.35%, branches 90.72%, functions 100%, lines 97.28%;
+  docs/API and proto checks passed with the known TypeDoc invalid-origin
+  warning.
 - Coverage recovery:
   `CI=true corepack pnpm verify` first failed on global branch coverage after
   removing top-level repeated set-once support and its broad hardening tests.

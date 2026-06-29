@@ -174,13 +174,14 @@ const result = validateEntityStateTransition({
 
 `validateEntityStateTransition()` derives set-once fields from
 `describeEntityMetadata()`. Creation transitions where `previous === undefined`
-pass these checks. Existing-state transitions fail when a set-once field's value
-changes and pass when set-once values remain equal. Violations are shaped by the
-core `validateTransition()` facade, include the changed field path, and omit raw
-previous/next values. Repeated and map-valued `(set_once)` fields are
-explicitly unsupported in this slice, matching the JVM generation boundary, and
-fail closed with field-specific violations even when their contents are
-unchanged. The server API is pure validation: it does not
+may initialize supported set-once fields. Existing-state transitions fail when a
+supported set-once field's value changes and pass when supported set-once values
+remain equal. Violations are shaped by the core `validateTransition()` facade,
+include the changed field path, and omit raw previous/next values. Repeated,
+map-valued, and explicit optional `(set_once)` fields are explicitly unsupported
+in this slice, matching the JVM generation boundary, and fail closed with
+field-specific violations even when their contents are unchanged or the
+transition is a creation. The server API is pure validation: it does not
 instantiate entities, invoke handlers, read or write storage, assemble
 repositories, dispatch buses, or start transport.
 

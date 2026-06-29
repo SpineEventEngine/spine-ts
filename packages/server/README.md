@@ -110,11 +110,12 @@ if (!result.valid) {
 ```
 
 The validator derives `(set_once)` fields from `describeEntityMetadata()`.
-Creation transitions where `previous === undefined` pass the built-in set-once
-checks. Once a previous state exists, each set-once field must remain equal in
-the proposed next state. Violations are returned through the `@spine-ts/core`
-transition validation facade as repo-local `spine.validation.*` messages, carry
-the `fieldPath`, and do not include raw previous or next values. Repeated and
-map-valued `(set_once)` fields are not supported in this slice, matching the JVM
-generation boundary; they fail closed with field-specific violations even when
-their contents are unchanged.
+Creation transitions where `previous === undefined` may initialize supported
+set-once fields. Once a previous state exists, each supported set-once field
+must remain equal in the proposed next state. Violations are returned through
+the `@spine-ts/core` transition validation facade as repo-local
+`spine.validation.*` messages, carry the `fieldPath`, and do not include raw
+previous or next values. Repeated, map-valued, and explicit optional
+`(set_once)` fields are not supported in this slice, matching the JVM generation
+boundary; they fail closed with field-specific violations even when their
+contents are unchanged or the transition is a creation.

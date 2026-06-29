@@ -1,8 +1,8 @@
 # T-0009d.1: Built-In Set-Once Transition Validation
 
-Status: Complete through fix round 5
+Status: Complete through fix round 7
 Start: `2026-06-29 14:52 WEST`
-End: `2026-06-29 16:50 WEST`
+End: `2026-06-29 17:29 WEST`
 Baseline commit: `1d939d7`
 Task log path: `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
 Branch: `task/T-0009d1-set-once-transition-validation`
@@ -124,10 +124,10 @@ Out of scope:
 ## Decisions
 
 - D-0038: enforce `(set_once)` as immutable after first committed state.
-- D-0039: keep server validation boundaries JVM-familiar; repeated and
-  map-valued `(set_once)` fields are unsupported in the JVM generation
-  contract and fail closed here rather than adding speculative collection
-  canonicalization.
+- D-0039: keep server validation boundaries JVM-familiar; repeated,
+  map-valued, and explicit optional `(set_once)` fields are unsupported in the
+  JVM generation contract and fail closed here rather than adding speculative
+  collection or presence canonicalization.
 
 ## Human Questions And Answers
 
@@ -308,11 +308,35 @@ Out of scope:
   `2026-06-29 17:08 WEST`: 13 test files / 105 tests; coverage statements
   97.47%, branches 90.63%, functions 100%, lines 97.40%; docs/API and proto
   checks passed with the known TypeDoc invalid-origin warning.
+- RED fix-round 7
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected on `2026-06-29 17:19 WEST`: 4 of 26 tests failed because
+  creation transitions skipped unsupported repeated/map set-once fields and
+  throwing bytes/message shape proxies produced generic core rule failures
+  without field paths.
+- RED fix-round 7 explicit optional
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected on `2026-06-29 17:22 WEST`: 1 of 27 tests failed because
+  unchanged `optional string explicit_id` was accepted instead of rejected as an
+  unsupported explicit optional set-once field.
+- GREEN fix-round 7
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 17:25 WEST`: 2 test files / 36 tests.
+- Fix-round 7 `corepack pnpm docs:check` passed on `2026-06-29 17:22 WEST`
+  with the known TypeDoc invalid-origin warning and expected API export counts.
+- Fix-round 7 `corepack pnpm typecheck` passed on `2026-06-29 17:23 WEST`.
+- Fix-round 7 full verification initially failed on lint after the creation
+  guard made a previous-state type assertion unnecessary, then on Prettier
+  formatting for `packages/server/src/entity-transition-validation.ts`. After
+  cleanup, `CI=true corepack pnpm verify` passed on `2026-06-29 17:29 WEST`:
+  13 test files / 110 tests; coverage statements 97.35%, branches 90.72%,
+  functions 100%, lines 97.28%; docs/API and proto checks passed with the known
+  TypeDoc invalid-origin warning.
 
 ## Coverage Result
 
-Latest full verification coverage: statements 97.47%, branches 90.63%,
-functions 100%, lines 97.40%.
+Latest full verification coverage: statements 97.35%, branches 90.72%,
+functions 100%, lines 97.28%.
 
 ## Documentation And Public API Impact
 
@@ -399,6 +423,16 @@ functions 100%, lines 97.40%.
   singular-message set-once coverage on a singular-only fixture, and updates
   public docs/TypeDoc wording to name repeated and map set-once as unsupported
   in this slice.
+- Fix round 7 addressed review package
+  `.superpowers/sdd/review-cd98ca3..d61874b.diff`: unsupported repeated/map
+  set-once fields now fail closed on creation transitions as well as
+  existing-state transitions; bytes/message shape-check reflection failures are
+  caught as unsafe field values so violations remain field-specific and
+  sanitized; explicit optional set-once fields are detected through the
+  Protobuf-ES `proto3Optional` descriptor flag and fail closed with a
+  field-specific unsupported-explicit-optional violation. Public and durable
+  docs now name repeated, map-valued, and explicit optional set-once fields as
+  unsupported in this slice.
 
 ## Completion Checklist
 

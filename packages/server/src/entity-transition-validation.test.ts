@@ -46,6 +46,12 @@ type MapSetOnceState = Message<"MapSetOnceState"> & {
   mutableNote: string;
 };
 
+type OptionalSetOnceState = Message<"OptionalSetOnceState"> & {
+  id: string;
+  explicitId?: string;
+  mutableNote: string;
+};
+
 interface SingularSetOnceStateOverrides {
   readonly id?: string;
   readonly fingerprint?: Uint8Array;
@@ -93,6 +99,10 @@ const SingularSetOnceStateSchema = messageDesc(
   fileEntityMetadataFixture,
   6,
 ) as GenMessage<SingularSetOnceState>;
+const OptionalSetOnceStateSchema = messageDesc(
+  fileEntityMetadataFixture,
+  7,
+) as GenMessage<OptionalSetOnceState>;
 
 describe("entity state transition validation", () => {
   it("exports the public high-level entity state transition validator", () => {
@@ -247,6 +257,28 @@ describe("entity state transition validation", () => {
       "secret-previous-repeated",
       "secret-next-repeated",
     );
+  });
+
+  it("rejects creation transitions with repeated set-once fields as unsupported", () => {
+    const next = create(RichSetOnceStateSchema, {
+      id: "rich-1",
+      fingerprint: new Uint8Array([1, 2]),
+      tags: ["private-creation-repeated-tag"],
+      details: { value: "same" },
+      mutableNote: "secret-creation-repeated",
+    });
+
+    const result = validateEntityStateTransition({
+      schema: RichSetOnceStateSchema,
+      previous: undefined,
+      next,
+    });
+
+    expectSetOnceViolation(result, "tags");
+    expect(result.error?.constraintViolation[0]?.message?.withPlaceholders).toBe(
+      "Repeated set-once fields are not supported by entity state transition validation.",
+    );
+    expectNoValueLeak(result, "private-creation-repeated-tag", "secret-creation-repeated");
   });
 
   it("compares descriptor-valid bytes and singular nested messages by content", () => {
@@ -641,6 +673,72 @@ describe("entity state transition validation", () => {
     );
   });
 
+  it("preserves a field-specific violation when set-once bytes shape checks throw", () => {
+    const previous = createSingularSetOnceState({
+      fingerprint: new Uint8Array([1, 2]),
+      mutableNote: "secret-previous-throwing-bytes-shape",
+    });
+    const throwingBytesShape = new Proxy(new Uint8Array([1, 2]), {
+      getPrototypeOf() {
+        throw new Error("bytes prototype trap");
+      },
+    });
+    const next = forgeSingularSetOnceState({
+      fingerprint: throwingBytesShape,
+      mutableNote: "secret-next-throwing-bytes-shape",
+    });
+
+    const result = validateEntityStateTransition({
+      schema: SingularSetOnceStateSchema,
+      previous,
+      next,
+    });
+
+    expectSetOnceViolation(result, "fingerprint");
+    expect(result.error?.constraintViolation[0]?.message?.withPlaceholders).toBe(
+      "Set-once fields cannot change after entity state creation.",
+    );
+    expectNoValueLeak(
+      result,
+      "bytes prototype trap",
+      "secret-previous-throwing-bytes-shape",
+      "secret-next-throwing-bytes-shape",
+    );
+  });
+
+  it("preserves a field-specific violation when set-once message shape checks throw", () => {
+    const previous = createSingularSetOnceState({
+      details: { value: "same" },
+      mutableNote: "secret-previous-throwing-message-shape",
+    });
+    const throwingMessageShape = new Proxy(create(SetOnceDetailsSchema, { value: "same" }), {
+      getPrototypeOf() {
+        throw new Error("message prototype trap");
+      },
+    });
+    const next = forgeSingularSetOnceState({
+      details: throwingMessageShape,
+      mutableNote: "secret-next-throwing-message-shape",
+    });
+
+    const result = validateEntityStateTransition({
+      schema: SingularSetOnceStateSchema,
+      previous,
+      next,
+    });
+
+    expectSetOnceViolation(result, "details");
+    expect(result.error?.constraintViolation[0]?.message?.withPlaceholders).toBe(
+      "Set-once fields cannot change after entity state creation.",
+    );
+    expectNoValueLeak(
+      result,
+      "message prototype trap",
+      "secret-previous-throwing-message-shape",
+      "secret-next-throwing-message-shape",
+    );
+  });
+
   it("fails closed when forged set-once fields are inherited or accessor-backed", () => {
     const previous = create(ProjectionStateSchema, {
       id: "stable-id",
@@ -757,6 +855,56 @@ describe("entity state transition validation", () => {
       "Map-valued set-once fields are not supported by entity state transition validation.",
     );
     expectNoValueLeak(result, "private-map-value", "secret-previous-map", "secret-next-map");
+  });
+
+  it("rejects explicit optional set-once fields as unsupported even when unchanged", () => {
+    const previous = create(OptionalSetOnceStateSchema, {
+      id: "optional-1",
+      explicitId: "private-explicit-optional",
+      mutableNote: "secret-previous-optional",
+    });
+    const next = create(OptionalSetOnceStateSchema, {
+      id: "optional-1",
+      explicitId: "private-explicit-optional",
+      mutableNote: "secret-next-optional",
+    });
+
+    const result = validateEntityStateTransition({
+      schema: OptionalSetOnceStateSchema,
+      previous,
+      next,
+    });
+
+    expectSetOnceViolation(result, "explicit_id");
+    expect(result.error?.constraintViolation[0]?.message?.withPlaceholders).toBe(
+      "Explicit optional set-once fields are not supported by entity state transition validation.",
+    );
+    expectNoValueLeak(
+      result,
+      "private-explicit-optional",
+      "secret-previous-optional",
+      "secret-next-optional",
+    );
+  });
+
+  it("rejects creation transitions with map-valued set-once fields as unsupported", () => {
+    const next = create(MapSetOnceStateSchema, {
+      id: "map-1",
+      labels: { alpha: "private-creation-map-value" },
+      mutableNote: "secret-creation-map",
+    });
+
+    const result = validateEntityStateTransition({
+      schema: MapSetOnceStateSchema,
+      previous: undefined,
+      next,
+    });
+
+    expectSetOnceViolation(result, "labels");
+    expect(result.error?.constraintViolation[0]?.message?.withPlaceholders).toBe(
+      "Map-valued set-once fields are not supported by entity state transition validation.",
+    );
+    expectNoValueLeak(result, "private-creation-map-value", "secret-creation-map");
   });
 });
 

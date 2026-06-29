@@ -61,3 +61,11 @@ message SingularSetOnceState {
   SetOnceDetails details = 3 [(set_once) = true];
   string mutable_note = 4;
 }
+
+message OptionalSetOnceState {
+  option (entity).kind = PROJECTION;
+
+  string id = 1 [(set_once) = true];
+  optional string explicit_id = 2 [(set_once) = true];
+  string mutable_note = 3;
+}

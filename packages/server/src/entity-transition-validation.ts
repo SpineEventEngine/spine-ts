@@ -45,9 +45,9 @@ export type EntityStateTransitionValidationResult = TransitionValidationResult;
  * The validator currently enforces descriptor-derived `(set_once)` fields,
  * delegates result shaping to `@spine-ts/core` `validateTransition()`, and does
  * not instantiate entities, dispatch handlers, touch repositories, or perform
- * runtime I/O. Repeated and map-valued `(set_once)` fields are unsupported in
- * this slice and fail closed with field-specific violations. Non-entity schemas
- * still fail through {@link DescriptorMetadataError} from
+ * runtime I/O. Repeated, map-valued, and explicit optional `(set_once)` fields
+ * are unsupported in this slice and fail closed with field-specific violations.
+ * Non-entity schemas still fail through {@link DescriptorMetadataError} from
  * `describeEntityMetadata()`.
  */
 export function validateEntityStateTransition<Schema extends DescriptorMessageSchema>(
@@ -76,7 +76,7 @@ function createSetOnceTransitionRule<Schema extends DescriptorMessageSchema>(
 ): TransitionValidationRule<Schema> {
   return {
     validateTransition(request) {
-      if (request.previous === undefined || setOnceFields.length === 0) {
+      if (setOnceFields.length === 0) {
         return [];
       }
 
@@ -85,11 +85,11 @@ function createSetOnceTransitionRule<Schema extends DescriptorMessageSchema>(
           return [createSetOnceViolation(request.schema.typeName, field)];
         }
 
-        const previousValue = readFieldValue(
-          request.schema,
-          request.previous as Record<string, unknown>,
-          field,
-        );
+        if (request.previous === undefined) {
+          return [];
+        }
+
+        const previousValue = readFieldValue(request.schema, request.previous, field);
         const nextValue = readFieldValue(request.schema, request.next, field);
 
         return previousValue.safe &&
@@ -180,6 +180,14 @@ function canonicalizeFieldValue(
 }
 
 function fieldValueShapeIsSafe(field: DescriptorFieldMetadata, value: unknown): boolean {
+  try {
+    return fieldValueShapeIsSafeUnchecked(field, value);
+  } catch {
+    return false;
+  }
+}
+
+function fieldValueShapeIsSafeUnchecked(field: DescriptorFieldMetadata, value: unknown): boolean {
   const descriptor = field.descriptor;
 
   switch (descriptor.fieldKind) {
@@ -200,27 +208,31 @@ function fieldValueShapeIsSafe(field: DescriptorFieldMetadata, value: unknown): 
 }
 
 function valuesAreEqual(previousValue: unknown, nextValue: unknown, depth = 0): boolean {
-  if (primitiveValuesAreIdentical(previousValue, nextValue)) {
-    return true;
-  }
+  try {
+    if (primitiveValuesAreIdentical(previousValue, nextValue)) {
+      return true;
+    }
 
-  if (depth > MAX_EQUALITY_DEPTH) {
+    if (depth > MAX_EQUALITY_DEPTH) {
+      return false;
+    }
+
+    if (previousValue instanceof Uint8Array && nextValue instanceof Uint8Array) {
+      return bytesAreEqual(previousValue, nextValue);
+    }
+
+    if (Array.isArray(previousValue) && Array.isArray(nextValue)) {
+      return arraysAreEqual(previousValue, nextValue, depth);
+    }
+
+    if (isRecord(previousValue) && isRecord(nextValue)) {
+      return recordsAreEqual(previousValue, nextValue, depth);
+    }
+
+    return false;
+  } catch {
     return false;
   }
-
-  if (previousValue instanceof Uint8Array && nextValue instanceof Uint8Array) {
-    return bytesAreEqual(previousValue, nextValue);
-  }
-
-  if (Array.isArray(previousValue) && Array.isArray(nextValue)) {
-    return arraysAreEqual(previousValue, nextValue, depth);
-  }
-
-  if (isRecord(previousValue) && isRecord(nextValue)) {
-    return recordsAreEqual(previousValue, nextValue, depth);
-  }
-
-  return false;
 }
 
 function bytesAreEqual(previousValue: Uint8Array, nextValue: Uint8Array): boolean {
@@ -299,7 +311,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
     return false;
   }
 
-  const prototype: unknown = Object.getPrototypeOf(value);
+  let prototype: unknown;
+
+  try {
+    prototype = Object.getPrototypeOf(value);
+  } catch {
+    return false;
+  }
 
   return prototype === Object.prototype || prototype === null;
 }
@@ -319,32 +337,30 @@ function primitiveValuesAreIdentical(previousValue: unknown, nextValue: unknown)
 }
 
 function readSafeUint8ArrayBytes(value: Uint8Array): Uint8Array | undefined {
-  if (Object.getPrototypeOf(value) !== Uint8Array.prototype) {
-    return undefined;
-  }
-
-  let copy: Uint8Array;
-
   try {
-    copy = Uint8Array.prototype.slice.call(value);
+    if (Object.getPrototypeOf(value) !== Uint8Array.prototype) {
+      return undefined;
+    }
+
+    const copy = Uint8Array.prototype.slice.call(value);
+
+    if (!hasOnlyDenseIndexedDataProperties(value, copy.length)) {
+      return undefined;
+    }
+
+    for (let index = 0; index < copy.length; index += 1) {
+      const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+      const byte = copy[index];
+
+      if (byte === undefined || !isSafeDataDescriptor(descriptor) || descriptor.value !== byte) {
+        return undefined;
+      }
+    }
+
+    return copy;
   } catch {
     return undefined;
   }
-
-  if (!hasOnlyDenseIndexedDataProperties(value, copy.length)) {
-    return undefined;
-  }
-
-  for (let index = 0; index < copy.length; index += 1) {
-    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
-    const byte = copy[index];
-
-    if (byte === undefined || !isSafeDataDescriptor(descriptor) || descriptor.value !== byte) {
-      return undefined;
-    }
-  }
-
-  return copy;
 }
 
 function hasOnlyDenseIndexedDataProperties(value: object, length: number): boolean {
@@ -391,10 +407,18 @@ function createSetOnceViolation(
 }
 
 function isUnsupportedSetOnceField(field: DescriptorFieldMetadata): boolean {
-  return field.descriptor.fieldKind === "list" || field.descriptor.fieldKind === "map";
+  return (
+    field.descriptor.fieldKind === "list" ||
+    field.descriptor.fieldKind === "map" ||
+    field.descriptor.proto.proto3Optional
+  );
 }
 
 function setOnceViolationMessage(field: DescriptorFieldMetadata): string {
+  if (field.descriptor.proto.proto3Optional) {
+    return "Explicit optional set-once fields are not supported by entity state transition validation.";
+  }
+
   switch (field.descriptor.fieldKind) {
     case "list":
       return "Repeated set-once fields are not supported by entity state transition validation.";

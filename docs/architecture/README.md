@@ -144,9 +144,9 @@ contract.
 Server-owned transition validation currently compares descriptor-derived
 `(set_once)` fields through the core transition facade and Protobuf-ES
 canonicalization for scalar, enum, bytes, and singular message values. Repeated
-and map-valued `(set_once)` fields are intentionally unsupported in this slice,
-matching the JVM generation boundary; they fail closed with field-specific
-violations and no raw previous/next value leakage.
+map-valued, and explicit optional `(set_once)` fields are intentionally
+unsupported in this slice, matching the JVM generation boundary; they fail
+closed with field-specific violations and no raw previous/next value leakage.
 
 `defineEntityHandlers()` is the explicit metadata target that later decorators
 must produce. It accepts an entity class, a state schema, and a builder callback

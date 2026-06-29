@@ -300,3 +300,50 @@ Verification recorded so far:
 - GREEN
   `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
   passed with 2 test files / 31 tests.
+
+Round 6 review package `.superpowers/sdd/review-cd98ca3..d61874b.diff` found
+the following fix-round 7 issues:
+
+- Unsupported repeated/map `(set_once)` fields were still skipped on creation
+  transitions because the `previous === undefined` shortcut ran before the
+  unsupported-field check.
+- D-0039 and the JVM notes named explicit optional `(set_once)` as unsupported,
+  but the TypeScript validator only enforced repeated/list and map-valued
+  unsupported fields.
+- Bytes/message shape checks could still throw on proxy-shaped values and fall
+  through to core's generic rule-failed violation without a field path.
+- Durable task status/end time, work-log current state, review log, and
+  implementation report needed current round-6/round-7 evidence.
+
+Fix-round 7 response:
+
+- Moved unsupported-field handling ahead of the creation shortcut so repeated
+  and map-valued set-once fields fail closed on creation transitions.
+- Added descriptor-backed explicit optional coverage with
+  `OptionalSetOnceState.optional string explicit_id`; implemented the narrow
+  Protobuf-ES `field.descriptor.proto.proto3Optional` check and explicit
+  optional unsupported violation.
+- Wrapped bytes/message shape checks and equality reflection helpers so
+  throwing proxies return unsafe/unequal and preserve field-specific sanitized
+  violations.
+- Refreshed public docs, D-0039, task log, implementation report, and work log
+  to name repeated, map-valued, and explicit optional set-once fields as
+  unsupported in this slice.
+
+Verification:
+
+- RED
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected with 4 of 26 tests failing.
+- RED explicit optional
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected with 1 of 27 tests failing.
+- GREEN
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 36 tests.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.
+- `CI=true corepack pnpm verify` passed after lint/format cleanup with 13 test
+  files / 110 tests and coverage statements 97.35%, branches 90.72%, functions
+  100%, lines 97.28%; docs/API and proto checks passed with the known warning.
