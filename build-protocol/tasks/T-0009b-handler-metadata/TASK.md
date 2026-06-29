@@ -1,6 +1,6 @@
 # T-0009b: Handler Metadata Contract And Explicit Registration API
 
-Status: Complete; ready for integration
+Status: Integrated into main; awaiting main verification
 Start: `2026-06-29 00:40 WEST`
 End: `2026-06-29 12:40 WEST`
 Baseline commit: `11a6c70`
@@ -17,6 +17,7 @@ Round-1 fix commit: `195112ab968b4560c5efab1c557a56ba59a0182b`
 Follow-up fix commit: `b6c8251a7404c974b073615b1a2aa888444bdac4`
 Durable-log correction checkpoint: `6b514ac2f2f44af40358bf66135097740befef69`
 Review closure checkpoint: `9d87aebf31fa347ba719910b18a29ac2152b54a6`
+Integration merge commit: `a536eed`
 
 ## Objective
 
@@ -256,6 +257,8 @@ Out of scope:
   storage exports; proto lint/generate/check-generated passed; generated proto
   output remained clean; the known TypeDoc invalid-origin source-link warning
   remains.
+- Integration: merged `task/T-0009b-handler-metadata` into `main` as
+  `a536eed` on `2026-06-29 12:43 WEST`; main verification is the next gate.
 
 ## Open Risks And Follow-Up Routing
 

@@ -12,7 +12,7 @@ Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b-han
 Reviewer roles: code style/maintainability; documentation; TypeScript/API docs; security; performance/reliability
 Reviewer sub-agents: Round 1, follow-up, and final log/API re-review completed; known reviewer agents closed after result capture
 Review timestamp: `2026-06-29` round 1 and follow-up
-Status: Complete; ready for integration
+Status: Integrated into main; awaiting main verification
 
 ## Scope To Review
 
@@ -76,3 +76,5 @@ Status: Complete; ready for integration
   `2026-06-29 12:40 WEST` with 11 test files / 70 tests, coverage statements
   99.44%, branches 93.7%, functions 100%, lines 99.43%, docs/API checks, proto
   lint/generation, and generated-clean checks passing.
+- Integration: merged `task/T-0009b-handler-metadata` into `main` as
+  `a536eed` on `2026-06-29 12:43 WEST`; main verification is pending.
