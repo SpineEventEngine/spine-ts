@@ -152,11 +152,23 @@ the user declaration order, and role-specific arrays preserve the same relative
 order after filtering. Registration validates only that explicitly named
 handlers are own prototype data methods declared with normal class method
 syntax; accessors, `constructor`, inherited methods, and instance fields are
-rejected without invoking user code. Duplicate-handler rules and lookup
-registries belong to the follow-up registry/validation slice. The handler
-metadata layer does not execute routes, invoke handlers, validate transactions,
-enforce `(set_once)`, assemble repositories, mutate storage, register buses, or
-start transport.
+rejected without invoking user code.
+
+`HandlerMetadataRegistry` is the first caller-owned lookup and duplicate-policy
+layer over explicit `EntityHandlersMetadata`. It registers existing metadata
+objects, keeps deterministic frozen listing/lookup arrays in registration and
+handler declaration order, and indexes handlers by entity state full type name,
+handler kind, and command/event message full type name. The first duplicate
+policy rejects one ambiguous command assignment per command message full type
+name and one ambiguous event application per entity state full type name plus
+event message full type name. Command reactions, event subscriptions, and event
+reactions intentionally allow multiple handlers for the same message type so
+later runtime fan-out remains possible.
+
+The server metadata layer still does not execute routes, invoke handlers,
+instantiate entities, deserialize `Any` payloads, validate transactions, enforce
+`(set_once)`, assemble repositories, mutate storage, register buses, mutate a
+global registry, or start transport.
 
 ## Storage Boundary
 

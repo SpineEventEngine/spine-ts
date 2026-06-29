@@ -31,8 +31,12 @@ exports include `defineEntityHandlers()`, `HandlerRegistrationBuilder`, the
 five handler metadata roles for command assignment, command reaction, event
 subscription, event reaction, and event application, and `HandlerMetadataError`
 for registration-time structural failures. Handler names must refer to own
-prototype data methods declared with normal class method syntax. These APIs are
-metadata-only and do not execute handlers.
+prototype data methods declared with normal class method syntax. The server
+registry exports include `HandlerMetadataRegistry`,
+`HandlerMetadataRegistryLookup`, `RegisteredHandlerMetadata`, and
+`HandlerMetadataRegistryError` for caller-owned lookup-only registration and
+duplicate-policy validation. These APIs are metadata-only and do not execute
+handlers.
 
 Storage exports include `StorageAdapter`, `StorageRecord`,
 `WriteSideRecordStore`, `ReadSideRecordStore`, aggregate event history

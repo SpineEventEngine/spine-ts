@@ -26,7 +26,12 @@ export {
   type HandlerMetadata,
   HandlerMetadataError,
   type HandlerMetadataErrorCode,
+  HandlerMetadataRegistry,
+  HandlerMetadataRegistryError,
+  type HandlerMetadataRegistryErrorCode,
+  type HandlerMetadataRegistryLookup,
   type HandlerMethodName,
   type HandlerRegistrationBuilder,
+  type RegisteredHandlerMetadata,
   defineEntityHandlers,
 } from "./handler-metadata.js";

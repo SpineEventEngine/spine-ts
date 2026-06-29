@@ -12,10 +12,12 @@ callers can pack already-built domain messages into generated Spine
 `Command`/`Event` envelopes. `@spine-ts/server` now derives descriptor-backed
 entity metadata from `(entity)`, `(column)`, `(set_once)`, `(is)`, and
 `(every_is)` options and defines explicit handler metadata without invoking
-handlers or mutating global runtime state. `@spine-ts/storage` also exposes
-asynchronous record-oriented storage contracts and a deterministic in-memory
-adapter for tests/development. Entity runtime, transport, durable production
-storage, and the to-do application remain later slices.
+handlers or mutating global runtime state. It also exposes a caller-owned
+handler metadata registry for duplicate validation and lookup-only views.
+`@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
+deterministic in-memory adapter for tests/development. Entity runtime,
+transport, durable production storage, and the to-do application remain later
+slices.
 
 ## What Exists Now
 
@@ -47,6 +49,10 @@ storage, and the to-do application remain later slices.
 - Server handler metadata helpers in `@spine-ts/server` that explicitly bind
   generated command/event schemas to entity method names for command assignment,
   command reaction, event subscription, event reaction, and event application.
+- A caller-owned server handler metadata registry that registers explicit
+  entity handler metadata, rejects duplicate command assignments and duplicate
+  event appliers for the same entity/event pair, and exposes frozen
+  deterministic lookup views.
 - Storage contracts in `@spine-ts/storage` for write-side entity records,
   aggregate event histories/snapshots, read-side projection records, delivery
   records, tenant indexes, and safe diagnostics.
@@ -265,9 +271,34 @@ order. Accessors, `constructor`, inherited methods, and instance fields are
 rejected without invoking user code. The builder exposes `assign()`,
 `command()`, `subscribe()`, `react()`, and `apply()` for the five first handler
 roles. `apply(..., { allowImport: true })` records importability for future
-event import/replay work, but this slice does not implement an import bus,
-handler invocation, duplicate-handler validation, transactions, repositories,
-storage writes, or transport.
+event import/replay work.
+
+Use `HandlerMetadataRegistry` when application assembly or tests need a
+caller-owned lookup view over one or more `EntityHandlersMetadata` objects:
+
+```ts
+import { HandlerMetadataRegistry, defineEntityHandlers } from "@spine-ts/server";
+
+const registry = new HandlerMetadataRegistry([taskHandlers]);
+
+registry.findEntityHandlersByState(TaskStateSchema.typeName);
+registry.findHandlersByKind("event-application");
+registry.findHandlersByMessageFullTypeName(TaskCreatedSchema.typeName);
+registry.findCommandAssignment(CreateTaskSchema.typeName)?.handler.methodName; // "create"
+registry.findEventApplication(TaskStateSchema.typeName, TaskCreatedSchema.typeName)?.handler
+  .methodName; // "onCreated"
+```
+
+Registry listing and lookup methods return frozen arrays in registration and
+handler declaration order. One registry permits only one command assignment for
+each command message full type name and only one event application for each
+entity state full type name plus event message full type name. Command
+reactions, event subscriptions, and event reactions may have multiple handlers
+for the same message type, preserving later fan-out behavior. The registry is
+metadata-only and caller-owned: it does not instantiate entities, invoke
+handlers, unpack `Any` payloads, log payloads, mutate a global registry,
+implement an import bus, validate transactions, assemble repositories, write
+storage, or start transport.
 
 ## Storage
 

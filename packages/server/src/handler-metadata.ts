@@ -183,6 +183,194 @@ export interface EntityHandlersMetadata<
   readonly eventApplications: readonly EventApplicationHandlerMetadata[];
 }
 
+/** Error code for handler metadata registry validation failures. */
+export type HandlerMetadataRegistryErrorCode =
+  "DUPLICATE_COMMAND_ASSIGNMENT" | "DUPLICATE_EVENT_APPLICATION";
+
+/** Error thrown when a caller-owned handler metadata registry rejects metadata. */
+export class HandlerMetadataRegistryError extends Error {
+  /** Stable code for callers/tests that need structured failure handling. */
+  readonly code: HandlerMetadataRegistryErrorCode;
+
+  constructor(code: HandlerMetadataRegistryErrorCode, message: string) {
+    super(message);
+    this.name = "HandlerMetadataRegistryError";
+    this.code = code;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/** A handler metadata record paired with the entity metadata that declared it. */
+export interface RegisteredHandlerMetadata<Handler extends HandlerMetadata = HandlerMetadata> {
+  /** Entity handler metadata object registered by the caller. */
+  readonly entityHandlers: EntityHandlersMetadata;
+  /** Entity class that owns the registered handler method. */
+  readonly entityType: EntityClass;
+  /** Descriptor-derived entity metadata for the handler's state type. */
+  readonly entity: EntityMetadata;
+  /** Handler metadata record declared for the entity. */
+  readonly handler: Handler;
+}
+
+/** Read-only lookup surface for already registered handler metadata. */
+export interface HandlerMetadataRegistryLookup {
+  /** Return registered entity handler metadata in registration order. */
+  listEntityHandlers(): readonly EntityHandlersMetadata[];
+  /** Return all registered handler entries in registration and declaration order. */
+  listHandlers(): readonly RegisteredHandlerMetadata[];
+  /** Find entity handler metadata by entity state full type name. */
+  findEntityHandlersByState(entityStateFullTypeName: string): readonly EntityHandlersMetadata[];
+  /** Find handler entries by handler role. */
+  findHandlersByKind<Kind extends HandlerKind>(
+    kind: Kind,
+  ): readonly RegisteredHandlerMetadata<Extract<HandlerMetadata, { readonly kind: Kind }>>[];
+  /** Find handler entries by command/event message full type name. */
+  findHandlersByMessageFullTypeName(
+    messageFullTypeName: string,
+  ): readonly RegisteredHandlerMetadata[];
+  /** Find the unique command assignment for a command message full type name. */
+  findCommandAssignment(
+    commandFullTypeName: string,
+  ): RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> | undefined;
+  /** Find the unique event applier for an entity state and event message full type name. */
+  findEventApplication(
+    entityStateFullTypeName: string,
+    eventFullTypeName: string,
+  ): RegisteredHandlerMetadata<EventApplicationHandlerMetadata> | undefined;
+}
+
+/** Caller-owned registry for lookup-only handler metadata and duplicate validation. */
+export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
+  readonly #entityHandlers: EntityHandlersMetadata[] = [];
+  readonly #handlerEntries: RegisteredHandlerMetadata[] = [];
+  readonly #byEntityState = new Map<string, EntityHandlersMetadata[]>();
+  readonly #byKind = new Map<HandlerKind, RegisteredHandlerMetadata[]>();
+  readonly #byMessage = new Map<string, RegisteredHandlerMetadata[]>();
+  readonly #commandAssignments = new Map<
+    string,
+    RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>
+  >();
+  readonly #eventApplications = new Map<
+    string,
+    RegisteredHandlerMetadata<EventApplicationHandlerMetadata>
+  >();
+
+  /** Create a caller-owned registry and optionally register metadata immediately. */
+  constructor(entityHandlers: Iterable<EntityHandlersMetadata> = []) {
+    for (const metadata of entityHandlers) {
+      this.register(metadata);
+    }
+  }
+
+  /** Register one entity handler metadata object and return it unchanged. */
+  register<Metadata extends EntityHandlersMetadata>(metadata: Metadata): Metadata {
+    const entries = metadata.handlers.map((handler) => createRegisteredHandler(metadata, handler));
+    const commandAssignments = new Map<
+      string,
+      RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>
+    >();
+    const eventApplications = new Map<
+      string,
+      RegisteredHandlerMetadata<EventApplicationHandlerMetadata>
+    >();
+
+    for (const entry of entries) {
+      if (entry.handler.kind === "command-assignment") {
+        const commandEntry = entry as RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>;
+        validateCommandAssignment(
+          commandEntry,
+          this.#commandAssignments.get(entry.handler.messageFullTypeName) ??
+            commandAssignments.get(entry.handler.messageFullTypeName),
+        );
+        commandAssignments.set(entry.handler.messageFullTypeName, commandEntry);
+      }
+
+      if (entry.handler.kind === "event-application") {
+        const eventEntry = entry as RegisteredHandlerMetadata<EventApplicationHandlerMetadata>;
+        const key = eventApplicationKey(
+          entry.entity.fullTypeName,
+          entry.handler.messageFullTypeName,
+        );
+
+        validateEventApplication(
+          eventEntry,
+          this.#eventApplications.get(key) ?? eventApplications.get(key),
+        );
+        eventApplications.set(key, eventEntry);
+      }
+    }
+
+    this.#entityHandlers.push(metadata);
+    pushMapValue(this.#byEntityState, metadata.entity.fullTypeName, metadata);
+
+    for (const entry of entries) {
+      this.#handlerEntries.push(entry);
+      pushMapValue(this.#byKind, entry.handler.kind, entry);
+      pushMapValue(this.#byMessage, entry.handler.messageFullTypeName, entry);
+    }
+
+    for (const [messageFullTypeName, entry] of commandAssignments) {
+      this.#commandAssignments.set(messageFullTypeName, entry);
+    }
+
+    for (const [key, entry] of eventApplications) {
+      this.#eventApplications.set(key, entry);
+    }
+
+    return metadata;
+  }
+
+  /** Return registered entity handler metadata in registration order. */
+  listEntityHandlers(): readonly EntityHandlersMetadata[] {
+    return Object.freeze([...this.#entityHandlers]);
+  }
+
+  /** Return all registered handler entries in registration and declaration order. */
+  listHandlers(): readonly RegisteredHandlerMetadata[] {
+    return Object.freeze([...this.#handlerEntries]);
+  }
+
+  /** Find entity handler metadata by entity state full type name. */
+  findEntityHandlersByState(entityStateFullTypeName: string): readonly EntityHandlersMetadata[] {
+    return Object.freeze([...(this.#byEntityState.get(entityStateFullTypeName) ?? [])]);
+  }
+
+  /** Find handler entries by handler role. */
+  findHandlersByKind<Kind extends HandlerKind>(
+    kind: Kind,
+  ): readonly RegisteredHandlerMetadata<Extract<HandlerMetadata, { readonly kind: Kind }>>[] {
+    return Object.freeze([
+      ...((this.#byKind.get(kind) ?? []) as RegisteredHandlerMetadata<
+        Extract<HandlerMetadata, { readonly kind: Kind }>
+      >[]),
+    ]);
+  }
+
+  /** Find handler entries by command/event message full type name. */
+  findHandlersByMessageFullTypeName(
+    messageFullTypeName: string,
+  ): readonly RegisteredHandlerMetadata[] {
+    return Object.freeze([...(this.#byMessage.get(messageFullTypeName) ?? [])]);
+  }
+
+  /** Find the unique command assignment for a command message full type name. */
+  findCommandAssignment(
+    commandFullTypeName: string,
+  ): RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> | undefined {
+    return this.#commandAssignments.get(commandFullTypeName);
+  }
+
+  /** Find the unique event applier for an entity state and event message full type name. */
+  findEventApplication(
+    entityStateFullTypeName: string,
+    eventFullTypeName: string,
+  ): RegisteredHandlerMetadata<EventApplicationHandlerMetadata> | undefined {
+    return this.#eventApplications.get(
+      eventApplicationKey(entityStateFullTypeName, eventFullTypeName),
+    );
+  }
+}
+
 /**
  * Explicitly bind schemas to entity class method names without invoking handlers.
  *
@@ -296,4 +484,63 @@ function filterHandlers<Kind extends HandlerKind>(
       return handler.kind === kind;
     }),
   );
+}
+
+function createRegisteredHandler(
+  entityHandlers: EntityHandlersMetadata,
+  handler: HandlerMetadata,
+): RegisteredHandlerMetadata {
+  return Object.freeze({
+    entityHandlers,
+    entityType: entityHandlers.entityType,
+    entity: entityHandlers.entity,
+    handler,
+  });
+}
+
+function validateCommandAssignment(
+  entry: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>,
+  duplicate: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> | undefined,
+): void {
+  if (duplicate === undefined) {
+    return;
+  }
+
+  throw new HandlerMetadataRegistryError(
+    "DUPLICATE_COMMAND_ASSIGNMENT",
+    `Duplicate command assignment for "${entry.handler.messageFullTypeName}" declared by entity ` +
+      `"${entry.entity.fullTypeName}"; already declared by entity ` +
+      `"${duplicate.entity.fullTypeName}".`,
+  );
+}
+
+function validateEventApplication(
+  entry: RegisteredHandlerMetadata<EventApplicationHandlerMetadata>,
+  duplicate: RegisteredHandlerMetadata<EventApplicationHandlerMetadata> | undefined,
+): void {
+  if (duplicate === undefined) {
+    return;
+  }
+
+  throw new HandlerMetadataRegistryError(
+    "DUPLICATE_EVENT_APPLICATION",
+    `Duplicate event application for entity "${entry.entity.fullTypeName}" and event ` +
+      `"${entry.handler.messageFullTypeName}"; already declared by method ` +
+      `"${duplicate.handler.methodName}".`,
+  );
+}
+
+function eventApplicationKey(entityStateFullTypeName: string, eventFullTypeName: string): string {
+  return `${entityStateFullTypeName}\u0000${eventFullTypeName}`;
+}
+
+function pushMapValue<Key, Value>(map: Map<Key, Value[]>, key: Key, value: Value): void {
+  const values = map.get(key);
+
+  if (values === undefined) {
+    map.set(key, [value]);
+    return;
+  }
+
+  values.push(value);
 }

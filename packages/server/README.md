@@ -12,10 +12,12 @@ Current slice exposes:
 - semantic tags from `(is)` and `(every_is)` with clear extraction errors; and
 - `defineEntityHandlers(EntityClass, StateSchema, builder => [...])` for
   explicit, frozen handler metadata that binds generated Protobuf-ES schemas to
-  entity method names.
+  entity method names; and
+- `HandlerMetadataRegistry` for caller-owned metadata registration, deterministic
+  lookup views, and duplicate command/applier validation.
 
 ```ts
-import { defineEntityHandlers } from "@spine-ts/server";
+import { HandlerMetadataRegistry, defineEntityHandlers } from "@spine-ts/server";
 import { CreateTaskSchema } from "./generated/task_commands_pb.js";
 import { TaskCreatedSchema, TaskStateSchema } from "./generated/tasks_pb.js";
 
@@ -32,6 +34,11 @@ const taskHandlers = defineEntityHandlers(TaskAggregate, TaskStateSchema, ({ ass
 
 taskHandlers.handlers.map((handler) => handler.kind);
 taskHandlers.eventApplications[0]?.allowImport; // true
+
+const registry = new HandlerMetadataRegistry([taskHandlers]);
+registry.findCommandAssignment(CreateTaskSchema.typeName)?.handler.methodName; // "create"
+registry.findEventApplication(TaskStateSchema.typeName, TaskCreatedSchema.typeName)?.handler
+  .methodName; // "onCreated"
 ```
 
 The explicit registration API records command assignments, command reactions,
@@ -41,3 +48,14 @@ normal class method syntax; accessors, `constructor`, inherited methods, and
 instance fields are rejected without invoking user code. The API does not
 invoke handlers, enforce transactions or `(set_once)`, build repositories, write
 storage, register buses, start transport, or implement gRPC services.
+
+`HandlerMetadataRegistry` registers existing `EntityHandlersMetadata` objects
+and exposes frozen listing/lookup arrays by entity state full type name, handler
+kind, and command/event message full type name. One registry rejects duplicate
+command assignments for the same command message type and duplicate event
+applications for the same entity state plus event message type. Command
+reactions, event subscriptions, and event reactions may fan out to multiple
+handlers for the same message type. The registry is caller-owned and
+metadata-only: constructing or registering it does not instantiate entities,
+invoke methods, unpack payloads, mutate global process state, write storage, or
+start buses/transports.
