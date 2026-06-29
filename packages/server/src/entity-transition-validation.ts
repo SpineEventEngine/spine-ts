@@ -45,7 +45,8 @@ export type EntityStateTransitionValidationResult = TransitionValidationResult;
  * The validator currently enforces descriptor-derived `(set_once)` fields,
  * delegates result shaping to `@spine-ts/core` `validateTransition()`, and does
  * not instantiate entities, dispatch handlers, touch repositories, or perform
- * runtime I/O. Non-entity schemas still fail through
+ * runtime I/O. Map-valued `(set_once)` fields are unsupported in this slice and
+ * fail closed with a field-specific violation. Non-entity schemas still fail through
  * {@link DescriptorMetadataError} from `describeEntityMetadata()`.
  */
 export function validateEntityStateTransition<Schema extends DescriptorMessageSchema>(
@@ -107,7 +108,13 @@ function readFieldValue(
   message: Record<string, unknown>,
   field: DescriptorFieldMetadata,
 ): FieldReadResult {
-  const descriptor = Object.getOwnPropertyDescriptor(message, field.localName);
+  let descriptor: PropertyDescriptor | undefined;
+
+  try {
+    descriptor = Object.getOwnPropertyDescriptor(message, field.localName);
+  } catch {
+    return { safe: false, present: false };
+  }
 
   if (descriptor === undefined) {
     const property = readFieldProperty(message, field);
@@ -487,11 +494,16 @@ function createSetOnceViolation(
   typeName: string,
   field: DescriptorFieldMetadata,
 ): ConstraintViolation {
+  const message =
+    field.descriptor.fieldKind === "map"
+      ? "Map-valued set-once fields are not supported by entity state transition validation."
+      : "Set-once fields cannot change after entity state creation.";
+
   return create(ConstraintViolationSchema, {
     typeName,
     fieldPath: create(FieldPathSchema, { fieldName: [field.name] }),
     message: create(TemplateStringSchema, {
-      withPlaceholders: "Set-once fields cannot change after entity state creation.",
+      withPlaceholders: message,
     }),
   });
 }

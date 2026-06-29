@@ -209,7 +209,56 @@ Verification:
   docs/API and proto checks passed with the known TypeDoc invalid-origin
   warning.
 
+## Round 5
+
+Reviewer package: `.superpowers/sdd/review-cd98ca3..e2369cc.diff`.
+
+Important findings addressed in fix round 5:
+
+- Reliability/security: `Object.getOwnPropertyDescriptor()` in
+  `readFieldValue()` was outside a `try`, so throwing top-level proxy
+  reflection produced core's generic rule-failed violation without `fieldPath`
+  instead of a field-specific set-once violation.
+- API contract: map-valued `(set_once)` fields were always unsafe, while docs
+  implied unchanged set-once values pass. This fix round keeps maps unsupported
+  for the task and documents/reports that public boundary explicitly.
+- Coverage: cyclic/too-deep recursive equality and same-reference unsupported
+  object coverage still used forged scalar `id` values instead of
+  descriptor-backed nested message set-once field `RichSetOnceState.details`.
+- Durable logs: latest coverage numbers, current state after `e2369cc`, task
+  end time, review log, work log, and implementation report needed the current
+  fix round recorded.
+
+Fix-round 5 entry:
+
+- Added RED tests for throwing top-level proxy reflection, descriptor-valid
+  map-valued set-once fields, descriptor-backed recursive
+  `RichSetOnceState.details` cycle/depth handling, and descriptor-backed
+  same-reference unsupported message values.
+- Caught top-level field descriptor reflection failures in `readFieldValue()` as
+  unsafe field reads, preserving field-specific set-once violations without raw
+  value or proxy error leakage.
+- Kept map-valued `(set_once)` fields unsupported and made the violation/docs
+  explicit for that public contract.
+- Refreshed durable task, work-log, review-log, implementation-report, and
+  public documentation after committed fix-round 4 commit `e2369cc`.
+
+Verification:
+
+- RED
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  failed as expected with 2 failing tests after the cyclic forged-state test
+  setup was corrected to exercise the validator.
+- GREEN
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 31 tests.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.
+- `CI=true corepack pnpm verify` passed with 13 test files / 105 tests and
+  coverage statements 97.12%, branches 91.07%, functions 100%, lines 97.05%.
+
 ## Follow-Up Rounds
 
-Round 4 findings are addressed in fix round 4. No later reviewer round is
+Round 5 findings are addressed in fix round 5. No later reviewer round is
 recorded in durable evidence yet.

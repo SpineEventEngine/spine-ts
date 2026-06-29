@@ -32,6 +32,7 @@ message GenericState {
 
 message SetOnceDetails {
   string value = 1;
+  SetOnceDetails child = 2;
 }
 
 message RichSetOnceState {
@@ -42,4 +43,12 @@ message RichSetOnceState {
   repeated string tags = 3 [(set_once) = true];
   SetOnceDetails details = 4 [(set_once) = true];
   string mutable_note = 5;
+}
+
+message MapSetOnceState {
+  option (entity).kind = PROJECTION;
+
+  string id = 1 [(set_once) = true];
+  map<string, string> labels = 2 [(set_once) = true];
+  string mutable_note = 3;
 }

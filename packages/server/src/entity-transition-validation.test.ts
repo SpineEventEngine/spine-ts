@@ -22,6 +22,7 @@ type GenericState = Message<"GenericState"> & {
 
 type SetOnceDetails = Message<"SetOnceDetails"> & {
   value: string;
+  child?: SetOnceDetails;
 };
 
 type RichSetOnceState = Message<"RichSetOnceState"> & {
@@ -32,11 +33,17 @@ type RichSetOnceState = Message<"RichSetOnceState"> & {
   mutableNote: string;
 };
 
+type MapSetOnceState = Message<"MapSetOnceState"> & {
+  id: string;
+  labels: Record<string, string>;
+  mutableNote: string;
+};
+
 interface RichSetOnceStateOverrides {
   readonly id?: string;
   readonly fingerprint?: Uint8Array;
   readonly tags?: string[];
-  readonly details?: { readonly value?: string };
+  readonly details?: { readonly value?: string; readonly child?: SetOnceDetails };
   readonly mutableNote?: string;
 }
 
@@ -72,6 +79,10 @@ const RichSetOnceStateSchema = messageDesc(
   fileEntityMetadataFixture,
   4,
 ) as GenMessage<RichSetOnceState>;
+const MapSetOnceStateSchema = messageDesc(
+  fileEntityMetadataFixture,
+  5,
+) as GenMessage<MapSetOnceState>;
 
 describe("entity state transition validation", () => {
   it("exports the public high-level entity state transition validator", () => {
@@ -371,6 +382,41 @@ describe("entity state transition validation", () => {
     expectNoValueLeak(result, "private-previous-proxy-id", "private-next-proxy-id");
   });
 
+  it("preserves a field-specific violation when top-level proxy reflection throws", () => {
+    const previous = create(ProjectionStateSchema, {
+      id: "private-previous-throwing-proxy-id",
+      name: "Draft",
+      priority: 1,
+    });
+    const changedNext = create(ProjectionStateSchema, {
+      id: "private-next-throwing-proxy-id",
+      name: "Draft",
+      priority: 1,
+    });
+    const next = new Proxy(changedNext, {
+      getOwnPropertyDescriptor() {
+        throw new Error("descriptor trap");
+      },
+    });
+
+    const result = validateEntityStateTransition({
+      schema: ProjectionStateSchema,
+      previous,
+      next,
+    });
+
+    expectSetOnceViolation(result, "id");
+    expect(result.error?.constraintViolation[0]?.message?.withPlaceholders).toBe(
+      "Set-once fields cannot change after entity state creation.",
+    );
+    expectNoValueLeak(
+      result,
+      "private-previous-throwing-proxy-id",
+      "private-next-throwing-proxy-id",
+      "descriptor trap",
+    );
+  });
+
   it("uses canonical protobuf values instead of proxy-forged nested descriptors", () => {
     const previous = createRichSetOnceState({
       details: { value: "private-previous-details" },
@@ -450,6 +496,21 @@ describe("entity state transition validation", () => {
   it("fails closed for same-reference unsupported set-once object and collection values", () => {
     const sameCustomObject = new Date(0);
     expectSetOnceViolation(validateForgedSetOnceId(sameCustomObject, sameCustomObject), "id");
+
+    expectSetOnceViolation(
+      validateEntityStateTransition({
+        schema: RichSetOnceStateSchema,
+        previous: forgeRichSetOnceState({
+          details: sameCustomObject as unknown as SetOnceDetails,
+          mutableNote: "secret-previous-same-details",
+        }),
+        next: forgeRichSetOnceState({
+          details: sameCustomObject as unknown as SetOnceDetails,
+          mutableNote: "secret-next-same-details",
+        }),
+      }),
+      "details",
+    );
 
     const sameSparseTags = [] as string[];
     sameSparseTags.length = 1;
@@ -722,6 +783,68 @@ describe("entity state transition validation", () => {
       "id",
     );
   });
+
+  it("fails closed for cyclic and too-deep descriptor-backed nested set-once messages", () => {
+    const previousCycle = { value: "same" } as SetOnceDetails;
+    const nextCycle = { value: "same" } as SetOnceDetails;
+    previousCycle.child = previousCycle;
+    nextCycle.child = nextCycle;
+
+    expectSetOnceViolation(
+      validateEntityStateTransition({
+        schema: RichSetOnceStateSchema,
+        previous: forgeRichSetOnceState({
+          details: previousCycle,
+          mutableNote: "secret-previous-details-cycle",
+        }),
+        next: forgeRichSetOnceState({
+          details: nextCycle,
+          mutableNote: "secret-next-details-cycle",
+        }),
+      }),
+      "details",
+    );
+
+    expectSetOnceViolation(
+      validateEntityStateTransition({
+        schema: RichSetOnceStateSchema,
+        previous: createRichSetOnceState({
+          details: createDeepDetails(80),
+          mutableNote: "secret-previous-details-depth",
+        }),
+        next: createRichSetOnceState({
+          details: createDeepDetails(80),
+          mutableNote: "secret-next-details-depth",
+        }),
+      }),
+      "details",
+    );
+  });
+
+  it("rejects map-valued set-once fields as unsupported even when unchanged", () => {
+    const previous = create(MapSetOnceStateSchema, {
+      id: "map-1",
+      labels: { alpha: "private-map-value" },
+      mutableNote: "secret-previous-map",
+    });
+    const next = create(MapSetOnceStateSchema, {
+      id: "map-1",
+      labels: { alpha: "private-map-value" },
+      mutableNote: "secret-next-map",
+    });
+
+    const result = validateEntityStateTransition({
+      schema: MapSetOnceStateSchema,
+      previous,
+      next,
+    });
+
+    expectSetOnceViolation(result, "labels");
+    expect(result.error?.constraintViolation[0]?.message?.withPlaceholders).toBe(
+      "Map-valued set-once fields are not supported by entity state transition validation.",
+    );
+    expectNoValueLeak(result, "private-map-value", "secret-previous-map", "secret-next-map");
+  });
 });
 
 function validateForgedSetOnceId(previousId: unknown, nextId: unknown) {
@@ -741,6 +864,18 @@ function createRichSetOnceState(overrides: RichSetOnceStateOverrides = {}): Rich
     mutableNote: "mutable",
     ...overrides,
   });
+}
+
+function forgeRichSetOnceState(overrides: RichSetOnceStateOverrides = {}): RichSetOnceState {
+  return {
+    $typeName: "RichSetOnceState",
+    id: "rich-1",
+    fingerprint: new Uint8Array([1, 2]),
+    tags: ["alpha"],
+    details: create(SetOnceDetailsSchema, { value: "same" }),
+    mutableNote: "mutable",
+    ...overrides,
+  } as RichSetOnceState;
 }
 
 function expectSetOnceViolation(
@@ -774,6 +909,19 @@ function createDeepObject(depth: number): Record<string, unknown> {
 
   for (let index = 0; index < depth; index += 1) {
     value = { child: value };
+  }
+
+  return value;
+}
+
+function createDeepDetails(depth: number): SetOnceDetails {
+  let value = create(SetOnceDetailsSchema, { value: "same" });
+
+  for (let index = 0; index < depth; index += 1) {
+    value = create(SetOnceDetailsSchema, {
+      value: "same",
+      child: value,
+    });
   }
 
   return value;

@@ -137,7 +137,8 @@ It derives `(set_once)` fields from descriptor-backed `EntityMetadata` and
 delegates result shaping to the core `validateTransition()` facade. Creation
 transitions where `previous === undefined` pass set-once checks; existing-state
 transitions fail when a set-once field changes. Violations include the changed
-field path and omit raw previous/next values.
+field path and omit raw previous/next values. Map-valued `(set_once)` fields
+are unsupported in this slice and fail closed with a field-specific violation.
 
 ## Client/SDK API
 

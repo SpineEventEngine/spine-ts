@@ -141,6 +141,13 @@ tag values, and other unsupported combinations in this slice. Aggregate and
 generic entity column declarations are ignored to match the source option
 contract.
 
+Server-owned transition validation currently compares descriptor-derived
+`(set_once)` fields through the core transition facade and Protobuf-ES
+canonicalization for scalar, enum, bytes, repeated, and singular message values.
+Map-valued `(set_once)` fields are intentionally unsupported until a later task
+defines a deterministic map canonicalization policy; they fail closed with a
+field-specific violation and no raw previous/next value leakage.
+
 `defineEntityHandlers()` is the explicit metadata target that later decorators
 must produce. It accepts an entity class, a state schema, and a builder callback
 whose methods record command assignment, command reaction, event subscription,

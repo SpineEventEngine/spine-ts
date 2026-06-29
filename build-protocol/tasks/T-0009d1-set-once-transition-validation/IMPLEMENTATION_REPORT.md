@@ -284,3 +284,42 @@ Fix-round 4 commands run:
   `CI=true corepack pnpm verify` passed with 13 test files / 102 tests; coverage
   statements 96.79%, branches 90.09%, functions 100%, lines 96.71%; docs/API
   and proto checks passed with the known TypeDoc invalid-origin warning.
+
+## Fix Round 5
+
+Addressed round-5 findings from review package
+`.superpowers/sdd/review-cd98ca3..e2369cc.diff` and the fix-agent handoff:
+
+- Reliability/security top-level proxy reflection: `readFieldValue()` now
+  catches `Object.getOwnPropertyDescriptor()` failures and treats that field as
+  unsafe, preserving a field-specific set-once violation and avoiding raw value
+  or proxy error leakage through the core generic rule-failed path.
+- Map-valued set-once contract: map-valued `(set_once)` fields remain
+  unsupported in this slice and now fail closed with an explicit
+  field-specific unsupported-map violation. Public docs and TypeDoc comments
+  state this limitation.
+- Coverage: added descriptor-valid map set-once coverage, descriptor-backed
+  recursive `RichSetOnceState.details` cycle/depth coverage, and
+  descriptor-backed same-reference unsupported message coverage.
+- Durable docs/logs: refreshed task, work-log, review-log, implementation
+  report, API docs, architecture notes, user guide, server README, and
+  developer API notes after committed fix-round 4 commit `e2369cc`.
+
+Fix-round 5 commands run:
+
+- RED:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  failed as expected with 2 failing tests for throwing top-level proxy
+  reflection and unsupported-map violation wording after the cyclic forged-state
+  test setup was corrected to enter the validator.
+- GREEN:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 31 tests.
+- Required verification:
+  `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts; `corepack pnpm typecheck` passed.
+- Full verification:
+  `CI=true corepack pnpm verify` passed with 13 test files / 105 tests;
+  coverage statements 97.12%, branches 91.07%, functions 100%, lines 97.05%;
+  docs/API and proto checks passed with the known TypeDoc invalid-origin
+  warning.

@@ -177,9 +177,11 @@ const result = validateEntityStateTransition({
 pass these checks. Existing-state transitions fail when a set-once field's value
 changes and pass when set-once values remain equal. Violations are shaped by the
 core `validateTransition()` facade, include the changed field path, and omit raw
-previous/next values. The server API is pure validation: it does not instantiate
-entities, invoke handlers, read or write storage, assemble repositories,
-dispatch buses, or start transport.
+previous/next values. Map-valued `(set_once)` fields are explicitly unsupported
+in this slice and fail closed with a field-specific violation even if the map
+contents are unchanged. The server API is pure validation: it does not
+instantiate entities, invoke handlers, read or write storage, assemble
+repositories, dispatch buses, or start transport.
 
 Rule-returned violations are sanitized before aggregation. If a transition rule
 throws, the core seam records a structured transition-rule failure and continues

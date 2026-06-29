@@ -114,4 +114,6 @@ Creation transitions where `previous === undefined` pass the built-in set-once
 checks. Once a previous state exists, each set-once field must remain equal in
 the proposed next state. Violations are returned through the `@spine-ts/core`
 transition validation facade as repo-local `spine.validation.*` messages, carry
-the `fieldPath`, and do not include raw previous or next values.
+the `fieldPath`, and do not include raw previous or next values. Map-valued
+`(set_once)` fields are not supported in this slice; they fail closed with a
+field-specific violation even when the map contents are unchanged.

@@ -1,8 +1,8 @@
 # T-0009d.1: Built-In Set-Once Transition Validation
 
-Status: Complete through fix round 4
+Status: Complete through fix round 5
 Start: `2026-06-29 14:52 WEST`
-End: `2026-06-29 16:00 WEST`
+End: `2026-06-29 16:45 WEST`
 Baseline commit: `1d939d7`
 Task log path: `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
 Branch: `task/T-0009d1-set-once-transition-validation`
@@ -265,11 +265,27 @@ Out of scope:
   `2026-06-29 16:29 WEST`: 13 test files / 102 tests; coverage statements
   96.79%, branches 90.09%, functions 100%, lines 96.71%; docs/API and proto
   checks passed with the known TypeDoc invalid-origin warning.
+- RED fix-round 5
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  failed as expected on `2026-06-29 16:39 WEST`: 2 of 31 tests failed because
+  throwing top-level proxy reflection produced the core generic rule-failed
+  violation without `fieldPath`, and map-valued set-once fields used the
+  generic set-once message instead of the explicit unsupported-map contract.
+- GREEN fix-round 5
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 16:40 WEST`: 2 test files / 31 tests.
+- Fix-round 5 `corepack pnpm docs:check` passed on `2026-06-29 16:41 WEST`
+  with the known TypeDoc invalid-origin warning and expected API export counts.
+- Fix-round 5 `corepack pnpm typecheck` passed on `2026-06-29 16:41 WEST`.
+- Final fix-round 5 `CI=true corepack pnpm verify` passed on
+  `2026-06-29 16:45 WEST`: 13 test files / 105 tests; coverage statements
+  97.12%, branches 91.07%, functions 100%, lines 97.05%; docs/API and proto
+  checks passed with the known TypeDoc invalid-origin warning.
 
 ## Coverage Result
 
-Latest full verification coverage: statements 97.34%, branches 90.72%,
-functions 100%, lines 97.26%.
+Latest full verification coverage: statements 97.12%, branches 91.07%,
+functions 100%, lines 97.05%.
 
 ## Documentation And Public API Impact
 
@@ -324,6 +340,19 @@ functions 100%, lines 97.26%.
   short-circuiting, direct singular message presence transition coverage,
   bytes comparison without number-array materialization, and final durable-doc
   cleanup.
+- Fix round 4 was committed as `e2369cc` with proxy/reflection hardening and
+  durable-doc cleanup.
+- Round 5 reviewed `e2369cc` through review package
+  `.superpowers/sdd/review-cd98ca3..e2369cc.diff`; findings required
+  field-specific handling for throwing top-level proxy reflection, an explicit
+  public contract for unsupported map-valued set-once fields, descriptor-backed
+  recursive message depth/cycle coverage, descriptor-backed same-reference
+  unsupported message coverage, and durable-doc cleanup.
+- Fix round 5 catches top-level field reflection failures as unsafe field reads,
+  reports unsupported map-valued set-once fields with a field-specific
+  unsupported-map violation, adds descriptor-valid map and recursive
+  `RichSetOnceState.details` coverage, and refreshes durable docs after
+  `e2369cc`.
 
 ## Completion Checklist
 
