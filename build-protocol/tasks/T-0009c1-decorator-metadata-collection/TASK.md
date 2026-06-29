@@ -11,7 +11,7 @@ Requirements splitter: `019f135f-f815-7143-928f-8ba84237d0af` (Goodall)
 Branch setup commit: `e711edc`
 Authoring sub-agent: TBD
 Reviewer sub-agents: TBD
-Baseline verification commit: TBD
+Baseline verification evidence commit: `07e40c0`
 
 ## Objective
 
