@@ -69,6 +69,10 @@ repositories, handlers, phase propagation, storage, and lifecycle events.
   test files / 151 tests; coverage statements 97.22%, branches 91.37%,
   functions 99.14%, lines 97.16%; TypeDoc/API/proto gates passed and generated
   proto output was clean.
+- Root-session verification `CI=true corepack pnpm verify` passed on
+  `2026-06-30 00:44 WEST`: 15 test files / 151 tests; coverage statements
+  97.22%, branches 91.37%, functions 99.14%, lines 97.16%; TypeDoc/API/proto
+  gates passed with 68 expected server exports and generated proto output clean.
 
 ## Review
 
