@@ -11,7 +11,7 @@ Requirements splitter: `019f13a4-a6f5-7302-94e0-7b16366b0701` (Popper)
 Branch setup commit: `88cb0f3`
 Authoring sub-agent: TBD
 Reviewer sub-agents: TBD
-Baseline verification evidence commit: TBD
+Baseline verification evidence commit: `345c093`
 
 ## Objective
 
