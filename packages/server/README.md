@@ -13,7 +13,8 @@ Current slice exposes:
 - `validateEntityStateTransition({ schema, previous, next })` for built-in
   `(set_once)` transition validation over descriptor-backed entity state; and
 - `EntityTransaction` and `createEntityTransaction()` for a buffered
-  draft/commit/rollback boundary over one entity state; and
+  draft/commit/rollback boundary over one entity state, with draft lifecycle
+  and explicit version metadata helpers; and
 - `defineEntityHandlers(EntityClass, StateSchema, builder => [...])` for
   explicit, frozen handler metadata that binds generated Protobuf-ES schemas to
   entity method names; and
@@ -138,12 +139,15 @@ const transaction = createEntityTransaction({
 });
 
 transaction.update((state) => ({ ...state, name: "Ready" }));
+transaction.archive();
+transaction.updateVersionMetadata(9);
 
 const result = transaction.commit();
 
 if (result.status === "accepted") {
   result.next; // accepted state snapshot
-  result.version.committed; // 8
+  result.lifecycle.archived; // true
+  result.version.committed; // 9
 }
 ```
 
@@ -162,8 +166,15 @@ if (result.status === "rejected") {
 ```
 
 `rollback()` releases the transaction and returns previous/draft evidence
-without accepting state. After an accepted commit or rollback, `update()` and
-`commit()` throw `EntityTransactionStateError` deterministically.
+without accepting state. `archive()`, `unarchive()`, `markDeleted()`, and
+`restore()` mutate only buffered lifecycle flags; `updateVersionMetadata()`
+replaces only caller-owned draft version metadata and does not compute version
+increments, clocks, producer metadata, or event versions. `requireActive()`
+guards active-only state mutation by rejecting committed/rolled-back
+transactions and active drafts already marked archived or deleted. After an
+accepted commit or rollback, active-only helpers throw
+`EntityTransactionStateError` deterministically; archived/deleted active drafts
+throw `EntityTransactionDraftStateError` without embedding entity state payloads.
 
 This is only an in-memory commit boundary for future entity base classes. It
 does not instantiate entities, invoke handlers, write repositories or storage,

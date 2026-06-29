@@ -119,6 +119,7 @@ describe("@spine-ts/server", () => {
       [
         "Apply",
         "Assign",
+        "EntityTransactionDraftStateError",
         "EntityTransaction",
         "EntityTransactionStateError",
         "DescriptorMetadataError",
