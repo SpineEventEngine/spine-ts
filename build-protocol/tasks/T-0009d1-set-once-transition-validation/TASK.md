@@ -1,8 +1,8 @@
 # T-0009d.1: Built-In Set-Once Transition Validation
 
-Status: Complete through fix round 18 lint cleanup; pending clean re-review/integration
+Status: Complete through fix round 19 docs/log cleanup; pending clean re-review/integration
 Start: `2026-06-29 14:52 WEST`
-End: `2026-06-29 19:08 WEST`
+End: `2026-06-29 19:32 WEST`
 Baseline commit: `1d939d7`
 Task log path: `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
 Branch: `task/T-0009d1-set-once-transition-validation`
@@ -10,7 +10,7 @@ Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009d1-se
 Requirements splitter: `019f13a4-a6f5-7302-94e0-7b16366b0701` (Popper)
 Branch setup commit: `88cb0f3`
 Authoring sub-agent: Codex implementation sub-agent
-Reviewer sub-agents: Round 1 through Round 18 role reviewers for code
+Reviewer sub-agents: Round 1 through Round 19 role reviewers for code
 style/maintainability, documentation, TypeScript/API docs, security, and
 performance/reliability; individual reviewer IDs are not present in durable task
 evidence.
@@ -625,6 +625,10 @@ functions 100%, lines 97.31%.
   also refreshes durable logs and reviewer metadata for the failed full
   verification and routes the next step to clean re-review/integration after
   fresh verification.
+- Fix round 19 addresses round-18 documentation/maintainability findings by
+  updating the top-level task end timestamp and reviewer metadata to match the
+  latest completed verification/review evidence, with no runtime, public API, or
+  test behavior change.
 
 ## Completion Checklist
 

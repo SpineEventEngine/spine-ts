@@ -744,3 +744,25 @@ Verification:
   warning.
 - `git diff --check` passed.
 - `corepack pnpm format:check` passed.
+
+## Fix Round 19
+
+Addressing round-18 re-review task-header metadata findings without changing
+runtime behavior, tests, or public API:
+
+- Updated top-level `TASK.md` status/end timestamp/reviewer metadata through fix
+  round 19.
+- Updated work-log Current State to route to clean re-review of this
+  metadata-only cleanup, then integration.
+- Recorded this metadata-only follow-up in task, work, review, and
+  implementation logs.
+
+Verification:
+
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm format:check` initially failed on
+  `build-protocol/work-logs/T-0009d1.md`; after
+  `corepack pnpm exec prettier --write build-protocol/work-logs/T-0009d1.md`,
+  `corepack pnpm format:check` passed.
+- `git diff --check` passed.
