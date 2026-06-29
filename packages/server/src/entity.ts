@@ -437,7 +437,7 @@ export abstract class TransactionalEntity<
       this.#transaction = undefined;
     }
 
-    return result;
+    return cloneCommitResult(result);
   }
 
   /**
@@ -462,6 +462,36 @@ export abstract class TransactionalEntity<
 
     return transaction;
   }
+}
+
+function cloneCommitResult<Schema extends DescriptorMessageSchema, Version>(
+  result: EntityTransactionCommitResult<Schema, Version>,
+): EntityTransactionCommitResult<Schema, Version> {
+  if (result.status === "accepted") {
+    return {
+      ...result,
+      version: {
+        previous: cloneVersionMetadata(result.version.previous),
+        committed: cloneVersionMetadata(result.version.committed),
+      },
+      lifecycle: {
+        archived: result.lifecycle.archived,
+        deleted: result.lifecycle.deleted,
+      },
+    };
+  }
+
+  return {
+    ...result,
+    version: {
+      previous: cloneVersionMetadata(result.version.previous),
+      draft: cloneVersionMetadata(result.version.draft),
+    },
+    lifecycle: {
+      archived: result.lifecycle.archived,
+      deleted: result.lifecycle.deleted,
+    },
+  };
 }
 
 function cloneState<Schema extends DescriptorMessageSchema>(

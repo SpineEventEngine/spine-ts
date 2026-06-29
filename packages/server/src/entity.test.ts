@@ -735,6 +735,41 @@ describe("entities", () => {
     expect(entity.changed).toBe(true);
   });
 
+  it("keeps rejected commit version results isolated from the active transaction", () => {
+    const entity = new TestTransactionalEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    entity.start();
+    entity.changeDraftId("task-2");
+    entity.reviseDraft(2);
+
+    const rejected = entity.commitForTest();
+
+    expect(rejected.status).toBe("rejected");
+    if (rejected.status !== "rejected") {
+      throw new Error("Expected the first transaction commit to be rejected.");
+    }
+    expect(entity.hasActiveTransaction()).toBe(true);
+
+    const rejectedVersion = rejected.version as unknown as {
+      draft: { revision: number; labels?: string[] };
+    };
+    rejectedVersion.draft.revision = 99;
+    rejectedVersion.draft.labels = ["caller mutation"];
+
+    entity.changeDraftId("task-1");
+    entity.renameDraft("Recovered", 3);
+
+    const accepted = entity.commitForTest();
+
+    expect(accepted.status).toBe("accepted");
+    expect(entity.version).toEqual({ revision: 2, source: "server" });
+  });
+
   it("rolls back active transactional entity drafts without applying them", () => {
     const entity = new TestTransactionalEntity({
       id: "task-1",

@@ -153,4 +153,8 @@ Skipped relevant-looking skills:
   coverage statements 97.22%, branches 91.37%, functions 99.14%, lines 97.16%;
   TypeDoc/API/proto gates passed with 68 expected server exports and generated
   proto output clean.
-- Next step: commit implementation and dispatch reviewers.
+- Implementation commit `13f8a05` and verification evidence commit `a7acaca`
+  were reviewed in Round 1 over range `4e250b2..a7acaca`.
+- Round 1 review requested changes for rejected commit version result snapshot
+  isolation and stale durable status wording. The focused fix is implemented,
+  verified, and ready for Round 2 review.

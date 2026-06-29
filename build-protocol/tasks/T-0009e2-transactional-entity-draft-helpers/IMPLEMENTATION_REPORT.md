@@ -76,4 +76,22 @@ repositories, handlers, phase propagation, storage, and lifecycle events.
 
 ## Review
 
-- Pending implementation and five-role review.
+- Round 1 reviewed committed range `4e250b2..a7acaca`; result: changes
+  requested.
+- Accepted P2 security/reliability finding: `commitTransaction()` returned raw
+  rejected commit results whose `version.draft` still aliased the active
+  transaction's draft version metadata.
+- Accepted P2/P3 documentation/maintainability finding: live durable logs still
+  described implementation commit/reviewer dispatch as pending or pointed at the
+  implementation-only commit instead of the reviewed range.
+- Fix route: add a RED regression for rejected commit result version aliasing,
+  return cloned version evidence from `commitTransaction()` for accepted and
+  rejected outcomes, update stale live status wording, and rerun the review
+  loop.
+- Round 1 fix implemented and verified on `2026-06-30 00:53 WEST`: focused
+  RED/GREEN showed the rejected-result aliasing regression fail and then pass;
+  typecheck, lint, format check, docs check, and full
+  `CI=true corepack pnpm verify` passed with 15 test files / 152 tests, coverage
+  97.23% statements / 91.41% branches / 99.15% functions / 97.17% lines,
+  TypeDoc/API/proto gates passed with 68 expected server exports, and generated
+  proto output clean.
