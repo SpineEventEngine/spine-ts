@@ -8,6 +8,7 @@ Task log path: `build-protocol/tasks/T-0009c1-decorator-metadata-collection/TASK
 Branch: `task/T-0009c1-decorator-metadata-collection`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009c1-decorator-metadata-collection`
 Requirements splitter: `019f135f-f815-7143-928f-8ba84237d0af` (Goodall)
+Branch setup commit: `e711edc`
 Authoring sub-agent: TBD
 Reviewer sub-agents: TBD
 
@@ -136,7 +137,7 @@ TBD
 
 ## Tests Run
 
-TBD
+- Branch setup is based on `e711edc`; baseline verification is pending.
 
 ## Coverage Result
 
