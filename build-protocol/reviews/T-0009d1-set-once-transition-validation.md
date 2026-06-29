@@ -773,3 +773,35 @@ Verification:
   `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
   warning and expected API export counts; `corepack pnpm typecheck` passed;
   `git diff --check` passed.
+
+## Fix Round 18 Lint Verification Follow-Up
+
+Latest verification finding to fix:
+
+- `CI=true corepack pnpm verify` failed at lint with two
+  `@typescript-eslint/no-unnecessary-type-assertion` errors in
+  `packages/server/src/entity-transition-validation.ts` and
+  `packages/server/src/entity-transition-validation.test.ts`.
+
+Fix response:
+
+- Removed the redundant assertion from the schema-keyed cache write. The
+  inferred frozen rules array already satisfies the cache value type.
+- Removed redundant proxy-helper assertions from the schema traversal cache
+  test. The proxy keeps the schema type by inference and the `get` trap returns
+  `Reflect.get()` directly.
+- Updated durable task, implementation, work, and review logs for the failed
+  full verification and this narrow verification-fix round.
+- Updated top-level `TASK.md` reviewer metadata through round 18.
+
+Verification:
+
+- `corepack pnpm lint` passed.
+- `CI=true corepack pnpm verify` first failed on Prettier formatting for
+  `build-protocol/work-logs/T-0009d1.md`; after Prettier rewrote touched owned
+  files, `CI=true corepack pnpm verify` passed with 13 test files / 111 tests
+  and coverage statements 97.38%, branches 90.78%, functions 100%, lines
+  97.31%. Docs/API and proto checks passed with the known TypeDoc
+  invalid-origin warning.
+- `git diff --check` passed.
+- `corepack pnpm format:check` passed.

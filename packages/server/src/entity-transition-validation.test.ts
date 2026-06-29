@@ -965,9 +965,9 @@ function countSchemaFieldsReads<Schema extends typeof ProjectionStateSchema>(sch
           fieldsReadCount += 1;
         }
 
-        return Reflect.get(target, property, receiver) as unknown;
+        return Reflect.get(target, property, receiver);
       },
-    }) as Schema,
+    }),
     getFieldsReadCount: () => fieldsReadCount,
   };
 }

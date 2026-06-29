@@ -712,3 +712,35 @@ Verification:
   `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
   warning and expected API export counts; `corepack pnpm typecheck` passed;
   `git diff --check` passed.
+
+## Fix Round 18
+
+Addressing the post-round-17 full-verification lint failure without changing
+runtime behavior or public API:
+
+- Removed an unnecessary cached-rule type assertion in
+  `packages/server/src/entity-transition-validation.ts`; the frozen
+  descriptor-derived rule array already satisfies the `WeakMap` value type.
+- Removed unnecessary assertions from the schema traversal proxy helper in
+  `packages/server/src/entity-transition-validation.test.ts`; the proxy keeps
+  the target schema type by inference and `Reflect.get()` can be returned
+  directly from the trap.
+- Recorded the failed pre-fix `CI=true corepack pnpm verify` lint result and
+  updated the work-log Current State next-step wording so it routes to clean
+  re-review/integration after fresh full verification, not another stale commit
+  instruction.
+- Updated top-level `TASK.md` reviewer metadata through round 18.
+
+Verification:
+
+- `corepack pnpm lint` passed.
+- `CI=true corepack pnpm verify` first failed on Prettier formatting for
+  `build-protocol/work-logs/T-0009d1.md`.
+- After
+  `corepack pnpm exec prettier --write packages/server/src/entity-transition-validation.ts packages/server/src/entity-transition-validation.test.ts build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md build-protocol/tasks/T-0009d1-set-once-transition-validation/IMPLEMENTATION_REPORT.md build-protocol/work-logs/T-0009d1.md build-protocol/reviews/T-0009d1-set-once-transition-validation.md`,
+  `CI=true corepack pnpm verify` passed with 13 test files / 111 tests;
+  coverage statements 97.38%, branches 90.78%, functions 100%, lines 97.31%;
+  docs/API and proto checks passed with the known TypeDoc invalid-origin
+  warning.
+- `git diff --check` passed.
+- `corepack pnpm format:check` passed.

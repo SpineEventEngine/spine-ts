@@ -88,10 +88,7 @@ function getTransitionValidationRules<Schema extends DescriptorMessageSchema>(
   const metadata = describeEntityMetadata(schema);
   const rules = Object.freeze([createSetOnceTransitionRule<Schema>(metadata.setOnceFields)]);
 
-  transitionRulesBySchema.set(
-    schema,
-    rules as readonly TransitionValidationRule<DescriptorMessageSchema>[],
-  );
+  transitionRulesBySchema.set(schema, rules);
 
   return rules;
 }

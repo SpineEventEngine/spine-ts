@@ -1,6 +1,6 @@
 # T-0009d.1: Built-In Set-Once Transition Validation
 
-Status: Complete through fix round 17 cache/doc cleanup; pending clean re-review/integration
+Status: Complete through fix round 18 lint cleanup; pending clean re-review/integration
 Start: `2026-06-29 14:52 WEST`
 End: `2026-06-29 19:08 WEST`
 Baseline commit: `1d939d7`
@@ -10,7 +10,7 @@ Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009d1-se
 Requirements splitter: `019f13a4-a6f5-7302-94e0-7b16366b0701` (Popper)
 Branch setup commit: `88cb0f3`
 Authoring sub-agent: Codex implementation sub-agent
-Reviewer sub-agents: Round 1 through Round 17 role reviewers for code
+Reviewer sub-agents: Round 1 through Round 18 role reviewers for code
 style/maintainability, documentation, TypeScript/API docs, security, and
 performance/reliability; individual reviewer IDs are not present in durable task
 evidence.
@@ -115,6 +115,26 @@ and
 No skill source was unreachable; no sub-agents are allowed for this fix round.
 Skipped adjacent runtime/architecture skills because the requested fix is a
 narrow cache/test/docs update, not a runtime or transaction design change.
+
+Fix round 18 verification-fix skill applicability check
+(`2026-06-29 19:20 WEST`): session inventory exposed applicable
+`javascript-testing-patterns`, `typescript-advanced-types`, and
+`verification-before-completion` skills. Task prompt explicitly required
+reading `BUILD_PROTOCOL.md#skills-and-tooling` and
+`EXPECTED_SKILLS.md`, using TypeScript/testing/verification guidance, avoiding
+sub-agents, staying in this worktree, and editing only the owned files. Read
+`build-protocol/BUILD_PROTOCOL.md`,
+`build-protocol/skills/EXPECTED_SKILLS.md`,
+`build-protocol/CODE_QUALITY.md`,
+`~/.agents/skills/javascript-testing-patterns/SKILL.md`,
+`~/.agents/skills/typescript-advanced-types/SKILL.md`, and
+`~/.agents/skills/verification-before-completion/SKILL.md`. Bounded inventory
+commands used:
+`find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`
+and a targeted `/Users/armiol/.agents/.skill-lock.json` query for expected
+skills. No skill source was unreachable. Skipped worktree, sub-agent, TDD,
+architecture, and runtime skills because this round is a narrow lint
+verification fix with no behavior change and the prompt forbids sub-agents.
 
 ## Scope
 
@@ -424,11 +444,29 @@ Out of scope:
   `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
   warning and expected API export counts; `corepack pnpm typecheck` passed;
   `git diff --check` passed.
+- Pre-fix full verification for fix round 18:
+  `CI=true corepack pnpm verify` failed at lint with two
+  `@typescript-eslint/no-unnecessary-type-assertion` errors:
+  `packages/server/src/entity-transition-validation.ts` cached rule storage
+  asserted the inferred frozen rule array, and
+  `packages/server/src/entity-transition-validation.test.ts` asserted the
+  schema proxy/helper return type. This round removes those redundant
+  assertions without changing behavior or public API, then reruns fresh lint,
+  full verification, diff, and format checks.
+- Fix-round 18 verification: `corepack pnpm lint` passed on
+  `2026-06-29 19:22 WEST`. Fresh `CI=true corepack pnpm verify` first failed
+  on Prettier formatting for `build-protocol/work-logs/T-0009d1.md`; after
+  `corepack pnpm exec prettier --write packages/server/src/entity-transition-validation.ts packages/server/src/entity-transition-validation.test.ts build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md build-protocol/tasks/T-0009d1-set-once-transition-validation/IMPLEMENTATION_REPORT.md build-protocol/work-logs/T-0009d1.md build-protocol/reviews/T-0009d1-set-once-transition-validation.md`,
+  `CI=true corepack pnpm verify` passed on `2026-06-29 19:24 WEST`: 13 test
+  files / 111 tests; coverage statements 97.38%, branches 90.78%, functions
+  100%, lines 97.31%; docs/API and proto checks passed with the known TypeDoc
+  invalid-origin warning. `git diff --check` passed and
+  `corepack pnpm format:check` passed.
 
 ## Coverage Result
 
-Latest full verification coverage: statements 97.35%, branches 90.72%,
-functions 100%, lines 97.28%.
+Latest full verification coverage: statements 97.38%, branches 90.78%,
+functions 100%, lines 97.31%.
 
 ## Documentation And Public API Impact
 
@@ -581,6 +619,12 @@ functions 100%, lines 97.28%.
   regression test, adding this missing fix-round-16 Review Rounds bullet, and
   clarifying that the early 15:15 full verification was superseded by the
   later 17:29 full verification evidence.
+- Fix round 18 addresses a post-round-17 full-verification lint failure by
+  removing redundant TypeScript assertions from the schema-keyed cache write
+  and schema traversal proxy helper, with no behavior or public API change. It
+  also refreshes durable logs and reviewer metadata for the failed full
+  verification and routes the next step to clean re-review/integration after
+  fresh verification.
 
 ## Completion Checklist
 
