@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.1 Common Entity State Shell
 
-Status: Implementation Complete
+Status: Review Fix Required
 Task log: `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e1.md`
 Review log: `build-protocol/reviews/T-0009e1-common-entity-state-shell.md`
@@ -128,3 +128,12 @@ Implementation impact:
 - Review-fix verification passed on `2026-06-29 22:38 WEST`, including focused
   entity/root tests, typecheck, lint, format check, full verify, and stale-marker
   search.
+- Round 2 reviewed review-fix commit `aef6297`; result: changes requested.
+- Accepted P2 finding: the broad `structuredClone()` contract keeps a
+  shared-memory mutation path for `SharedArrayBuffer`-backed typed arrays.
+- Accepted P2 finding: the broad `structuredClone()` contract is fragile for
+  generic `Version` metadata because it throws for functions and changes
+  prototype-bearing objects.
+- Follow-up route: make version metadata an explicit plain snapshot data
+  contract, reject non-plain object graphs, add focused regressions, and rerun
+  the required review loop.

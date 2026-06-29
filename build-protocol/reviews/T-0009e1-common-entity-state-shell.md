@@ -102,3 +102,50 @@ Verification:
 - `CI=true corepack pnpm verify` passed on `2026-06-29 22:38 WEST`: 15 test
   files / 137 tests; coverage statements 97.7%, branches 90.72%, functions
   100%, lines 97.65%; TypeDoc/API/proto gates passed.
+
+## Round 2
+
+Review-fix commit under review: `aef6297`.
+
+Review result captured on `2026-06-29 22:49 WEST`: changes requested.
+
+| Role                       | Reviewer ID                            | Result     | Closure                         |
+| -------------------------- | -------------------------------------- | ---------- | ------------------------------- |
+| Code style/maintainability | `019f1557-55e2-7a12-86c7-eec7a4b23038` | Clean      | Closed                          |
+| Documentation              | `019f1557-566f-7b03-ad67-9c22d765177a` | Clean      | Closed                          |
+| TypeScript/API docs        | `019f1557-56e5-7c10-9b1f-3b126051b5a8` | Clean      | Closed                          |
+| Security                   | `019f1557-5760-7233-ae49-8cd1ad61bb7f` | P2 finding | No longer addressable from root |
+| Performance/reliability    | `019f1557-57e6-7390-a176-69c6fd914f5e` | P2 finding | No longer addressable from root |
+
+Findings:
+
+- P2: `cloneVersionMetadata()` relies on `structuredClone()` for all
+  object-shaped metadata. `SharedArrayBuffer`-backed typed arrays can preserve a
+  shared backing-memory mutation path even after structured cloning, so version
+  metadata can still be mutated through constructor input, getter output, or
+  protected replacement input when callers provide shared-memory values.
+- P2: `structuredClone()` is too permissive and too surprising for the
+  unconstrained generic `Version` contract. Function-valued metadata throws
+  `DataCloneError`; custom class instances can lose their prototype while still
+  being typed as `Version`.
+
+Clean-role evidence:
+
+- Code style/maintainability reported no findings after the round 1 fix.
+- Documentation reported no stale pending markers and no documentation issues.
+- TypeScript/API docs reported no findings, ran
+  `corepack pnpm exec tsc --noEmit -p packages/server/tsconfig.json`,
+  `corepack pnpm exec tsc --noEmit -p tsconfig.eslint.json`,
+  `node scripts/check-api-docs.mjs`, and focused entity tests.
+
+Both P2 findings are accepted. The fix route is to make version metadata a
+plain snapshot data contract instead of accepting arbitrary object graphs:
+
+- define the accepted `Version` shape as primitive/array/plain-object snapshot
+  data;
+- replace `structuredClone()` with a small explicit recursive clone that rejects
+  functions, class instances, typed arrays, `ArrayBuffer`, `SharedArrayBuffer`,
+  and other non-plain objects;
+- add focused regressions for rejected shared-memory and prototype-bearing
+  metadata;
+- update public docs and API docs if a public error/type is introduced.

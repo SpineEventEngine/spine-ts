@@ -1,6 +1,6 @@
 # T-0009e.1: Common Entity State Shell
 
-Status: Implementation Complete
+Status: Review Fix Required
 Start: `2026-06-29 22:06 WEST`
 Baseline commit: `2ca23fd`
 Task log path: `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
@@ -12,7 +12,9 @@ Requirements splitter:
 `019f1531-96a3-7870-bb40-b24fc9a456c8` (Goodall the 3rd, closed)
 Authoring sub-agent: Codex implementation sub-agent in this thread
 Round 1 reviewer sub-agents: complete; changes requested and accepted.
-Review-fix implementation: this pass.
+Round 2 reviewer sub-agents: complete; changes requested and accepted.
+Review-fix implementation: second pass queued for version metadata contract
+hardening.
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:12 WEST`
 
@@ -203,6 +205,15 @@ Skipped relevant-looking skills:
   replacement version snapshot isolation, then clone structured-clone-compatible
   object version metadata at constructor, accessor, and protected replacement
   boundaries.
+- Round 2 reviewed review-fix commit `aef6297`; result: changes requested.
+- Accepted P2 finding: `structuredClone()` leaves a shared-memory mutation path
+  for `SharedArrayBuffer`-backed typed arrays.
+- Accepted P2 finding: `structuredClone()` is a fragile contract for
+  unconstrained generic `Version` metadata because it rejects functions and
+  changes prototype-bearing objects.
+- Fix route: define version metadata as plain snapshot data and replace
+  `structuredClone()` with an explicit clone/rejection helper covered by
+  focused regressions.
 
 ## Current State
 
@@ -213,5 +224,5 @@ Skipped relevant-looking skills:
   `4ade81d`.
 - This review-fix pass addressed accepted Round 1 findings with focused
   regression coverage and durable-log cleanup.
-- Required review-fix verification has passed and is recorded in this task log
-  and the work log.
+- Round 2 review was captured after commit `aef6297` and requires a second
+  focused fix for the version metadata snapshot contract.
