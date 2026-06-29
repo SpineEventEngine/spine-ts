@@ -824,3 +824,49 @@ Consequences:
 - If local TypeScript standard decorator semantics prove insufficient for a
   particular ergonomic goal, the explicit registration API remains supported and
   a later codegen task can be proposed without changing the registry contract.
+
+## D-0038: Enforce set-once after the first committed entity state
+
+Status: Accepted
+
+Date: 2026-06-29
+
+Context: `T-0009d.1 Built-In Set-Once Transition Validation` starts the
+transaction/runtime validation roadmap without implementing transactions,
+repositories, storage writes, or handler dispatch. Entity metadata already
+surfaces fields marked with Spine `(set_once) = true`, and the core package
+already exposes a framework-owned `validateTransition()` seam that sanitizes
+transition-rule violations into repo-local `spine.validation.*` messages.
+Proto3 scalar fields do not preserve user intent to set a default value, so the
+first slice needs a deterministic committed-state rule.
+
+Decision: Implement `(set_once)` as a server transition-validation rule over
+previous and next entity state messages. Creation transitions where
+`previous === undefined` pass built-in set-once checks. Once a previous state
+exists, each `(set_once)` field value is fixed; any unequal proposed next value
+violates the rule, including default-to-non-default changes. The public first
+slice should expose a high-level entity-state transition validation API and keep
+low-level rule construction private unless later tasks show caller value.
+Violation results must be shaped through the core transition-validation facade
+and must not leak previous or next field values.
+
+Alternatives considered:
+
+- Treat default previous values as unset and allow a later non-default value.
+  Rejected because proto3 presence is not reliable for all scalar fields and
+  storage snapshots represent committed state.
+- Expose a public `createSetOnceTransitionRule()` immediately. Rejected because
+  the runtime needs a high-level entity transition validator first, and exposing
+  rule construction would broaden the API before caller needs are proven.
+- Enforce set-once only inside repositories. Rejected because repository work
+  comes later and should consume a tested validation primitive.
+
+Consequences:
+
+- `@spine-ts/server` may depend on `@spine-ts/core` for transition result
+  shaping while keeping storage and dispatch out of scope.
+- Future transaction/entity-base/repository tasks can call the same high-level
+  validator before commit.
+- Reviewers must verify that T-0009d.1 does not instantiate entities, invoke
+  handlers, apply events, read/write storage, start buses, mutate global
+  runtime state, or introduce gRPC/ZeroMQ behavior.
