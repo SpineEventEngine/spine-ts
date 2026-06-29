@@ -1,6 +1,6 @@
 # T-0009e.1: Common Entity State Shell
 
-Status: Round 7 Review Fix Implemented; Round 8 Review Pending
+Status: Round 8 Review Complete; Integration Pending
 Start: `2026-06-29 22:06 WEST`
 Baseline commit: `2ca23fd`
 Task log path: `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
@@ -18,6 +18,7 @@ Round 4 reviewer sub-agents: complete; changes requested and accepted.
 Round 5 reviewer sub-agents: complete; changes requested and accepted.
 Round 6 reviewer sub-agents: complete; changes requested and accepted.
 Round 7 reviewer sub-agents: complete; changes requested and accepted.
+Round 8 reviewer sub-agents: complete; clean and closed.
 Review-fix implementation: third pass implemented and verified for
 descriptor-safe version metadata cloning and generic constraint fixes; focused
 fourth pass implemented and verified for plain-interface type compatibility and
@@ -342,3 +343,5 @@ Skipped relevant-looking skills:
 - Round 7 review was captured after commit `a6a3791`; the accepted docs-only
   status findings have this focused verified cleanup pass ready for Round 8
   review.
+- Round 8 reviewed commit `5c62059`; all five reviewer lanes returned clean and
+  were closed. The subtask is ready for final verification and integration.

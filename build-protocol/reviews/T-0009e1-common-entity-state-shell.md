@@ -537,13 +537,53 @@ Docs-only fix implemented and verified on `2026-06-30 00:17 WEST`.
 
 - Task/report/work-log current-state wording now records Round 5 as fixed and
   reviewed in Round 6, Round 6 as fixed and reviewed in Round 7, and this
-  Round 7 docs-only cleanup as pending Round 8 review.
+  Round 7 docs-only cleanup as advanced to the next review checkpoint.
 - Open-risk routing records the stale Round 4 status issue as fixed/reviewed and
   adds the Round 7 stale-status cleanup as the active Round 8 review point.
 - `corepack pnpm docs:check` passed with the expected invalid-origin TypeDoc
   warning and 64 expected server exports.
 - `corepack pnpm format:check` passed with all matched files using Prettier
   style.
+- `CI=true corepack pnpm verify` passed with 15 test files / 145 tests, coverage
+  97.31% statements / 91.28% branches / 100% functions / 97.25% lines,
+  TypeDoc/API/proto gates passed with 64 expected server exports, and generated
+  proto output clean.
+
+## Round 8
+
+Round 7 docs-only fix commit under review: `5c62059`.
+
+Review result captured on `2026-06-30 00:20 WEST`: clean.
+
+| Role                       | Reviewer ID                            | Result | Closure |
+| -------------------------- | -------------------------------------- | ------ | ------- |
+| Code style/maintainability | `019f15ad-b34e-7800-ba1f-35c3abca1ab6` | Clean  | Closed  |
+| Documentation              | `019f15ad-d363-7af2-a3a9-3932d69d499b` | Clean  | Closed  |
+| TypeScript/API docs        | `019f15ad-ed8c-7550-80a5-3a77c8870d8a` | Clean  | Closed  |
+| Security                   | `019f15ae-0fe0-7242-bd4b-0609d4110c09` | Clean  | Closed  |
+| Performance/reliability    | `019f15ae-29fb-7da3-8df1-9b39a9936ff5` | Clean  | Closed  |
+
+Clean-role evidence:
+
+- Code style/maintainability confirmed the range changes only four
+  `build-protocol` Markdown files, with no source/runtime files changed, and
+  that current durable status is consistent for Round 7 fixed and Round 8 clean.
+- Documentation confirmed `BUILD_PROTOCOL.md` and `DECISION_LOG.md` already
+  include the Spine JVM `core-jvm/server` inspection note for server-module work
+  and found no documentation/status/chronology issues.
+- TypeScript/API confirmed no TypeScript source, generated files, API gate
+  source, or public API surface files changed; prior API evidence remains
+  recorded.
+- Security returned clean for the docs-only range.
+- Performance/reliability returned clean for the docs-only range.
+
+Round 8 is accepted as clean. The subtask is ready for final verification and
+integration.
+
+## Round 8 Final Verification
+
+Final verification passed on `2026-06-30 00:22 WEST`.
+
 - `CI=true corepack pnpm verify` passed with 15 test files / 145 tests, coverage
   97.31% statements / 91.28% branches / 100% functions / 97.25% lines,
   TypeDoc/API/proto gates passed with 64 expected server exports, and generated

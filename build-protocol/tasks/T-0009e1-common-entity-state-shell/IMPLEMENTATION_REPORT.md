@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.1 Common Entity State Shell
 
-Status: Round 7 Review Fix Implemented; Round 8 Review Pending
+Status: Round 8 Review Complete; Integration Pending
 Task log: `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e1.md`
 Review log: `build-protocol/reviews/T-0009e1-common-entity-state-shell.md`
@@ -264,10 +264,19 @@ pnpm verify` passed with 15 test files / 145 tests, coverage 97.31%
   bullets still described earlier review readiness, even though Round 6 had been
   reviewed, fixed, and verified.
 - Round 7 docs-only fix implemented: task/report/work-log status and
-  current-state wording now identify the Round 6 fix as completed and this
-  Round 7 cleanup as pending Round 8 review.
+  current-state wording identified the Round 6 fix as completed and advanced
+  the Round 7 cleanup to the next review checkpoint.
 - Round 7 fix verification passed on `2026-06-30 00:17 WEST`: docs and format
   checks passed; full `CI=true corepack pnpm verify` passed with 15 test files /
   145 tests, coverage 97.31% statements / 91.28% branches / 100% functions /
   97.25% lines, TypeDoc/API/proto gates passed with 64 expected server exports,
   and generated proto output clean.
+- Round 8 reviewed Round 7 cleanup commit `5c62059`; result: clean across code
+  style/maintainability, documentation, TypeScript/API docs, security, and
+  performance/reliability. All reviewer sub-agents were closed. The subtask is
+  ready for final verification and integration.
+- Round 8 final verification passed on `2026-06-30 00:22 WEST`: full
+  `CI=true corepack pnpm verify` passed with 15 test files / 145 tests, coverage
+  97.31% statements / 91.28% branches / 100% functions / 97.25% lines,
+  TypeDoc/API/proto gates passed with 64 expected server exports, and generated
+  proto output clean.
