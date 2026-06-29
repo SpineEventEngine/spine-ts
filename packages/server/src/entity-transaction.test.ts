@@ -2,12 +2,16 @@ import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { file_spine_options } from "@spine-ts/proto";
 import { serverEntityMetadataTestFixtures } from "../test-fixtures/entity-metadata-fixtures.js";
 
 import * as serverRoot from "./index.js";
-import { createEntityTransaction, EntityTransaction } from "./index.js";
+import {
+  createEntityTransaction,
+  EntityTransaction,
+  type EntityTransactionVersionMetadata,
+} from "./index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -111,6 +115,30 @@ describe("entity transactions", () => {
     expect(transaction.status).toBe("committed");
   });
 
+  it("preserves caller-supplied version metadata type after an accepted commit", () => {
+    interface RevisionMetadata {
+      revision: number;
+      source: "server";
+    }
+    const version: EntityTransactionVersionMetadata<RevisionMetadata> = {
+      previous: { revision: 1, source: "server" },
+      draft: { revision: 2, source: "server" },
+    };
+    const transaction = createEntityTransaction({
+      schema: ProjectionStateSchema,
+      previous: createProjectionState(),
+      version,
+    });
+
+    const result = transaction.commit();
+
+    if (result.status !== "accepted") {
+      throw new Error("Expected unchanged set-once state to commit successfully.");
+    }
+    expect(result.version.committed).toEqual({ revision: 2, source: "server" });
+    expectTypeOf(result.version.committed).toEqualTypeOf<RevisionMetadata>();
+  });
+
   it("returns a rejected commit result with validator violations when set-once state changes", () => {
     const transaction = createEntityTransaction({
       schema: ProjectionStateSchema,
@@ -152,6 +180,63 @@ describe("entity transactions", () => {
     expect(result.version).toEqual({ previous: 3, draft: 4 });
     expect(result.lifecycle).toEqual({ archived: true, deleted: false });
     expect(transaction.status).toBe("rolled-back");
+  });
+
+  it("rejects rollback after an accepted commit", () => {
+    const transaction = createEntityTransaction({
+      schema: ProjectionStateSchema,
+      previous: createProjectionState(),
+      version: { previous: 1, draft: 2 },
+    });
+    transaction.commit();
+
+    expect(() => transaction.rollback()).toThrow(/committed/);
+    expect(transaction.status).toBe("committed");
+  });
+
+  it("rejects rollback after rollback", () => {
+    const transaction = createEntityTransaction({
+      schema: ProjectionStateSchema,
+      previous: createProjectionState(),
+      version: { previous: 1, draft: 2 },
+    });
+    transaction.rollback();
+
+    expect(() => transaction.rollback()).toThrow(/rolled-back/);
+    expect(transaction.status).toBe("rolled-back");
+  });
+
+  it("allows rollback after a rejected commit", () => {
+    const transaction = createEntityTransaction({
+      schema: ProjectionStateSchema,
+      previous: createProjectionState({ id: "task-1" }),
+      version: { previous: 1, draft: 2 },
+    });
+    transaction.update((draft) => ({ ...draft, id: "task-2" }));
+
+    const rejected = transaction.commit();
+    const rolledBack = transaction.rollback();
+
+    expect(rejected.status).toBe("rejected");
+    expect(rolledBack.draft).toEqual(createProjectionState({ id: "task-2" }));
+    expect(transaction.status).toBe("rolled-back");
+  });
+
+  it("keeps status and current draft unchanged when update throws", () => {
+    const transaction = createEntityTransaction({
+      schema: ProjectionStateSchema,
+      previous: createProjectionState(),
+      version: { previous: 1, draft: 2 },
+    });
+    const before = transaction.currentDraft;
+
+    expect(() =>
+      transaction.update(() => {
+        throw new Error("boom");
+      }),
+    ).toThrow("boom");
+    expect(transaction.status).toBe("active");
+    expect(transaction.currentDraft).toEqual(before);
   });
 
   it("rejects updates and commits after commit or rollback", () => {

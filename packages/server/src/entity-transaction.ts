@@ -15,19 +15,19 @@ export interface EntityTransactionLifecycleFlags {
 }
 
 /** Explicit version metadata carried by an entity transaction draft. */
-export interface EntityTransactionVersionMetadata {
+export interface EntityTransactionVersionMetadata<Version = unknown> {
   /** Caller-supplied previous committed version metadata. */
-  readonly previous: unknown;
+  readonly previous: Version;
   /** Caller-supplied draft version metadata. */
-  readonly draft: unknown;
+  readonly draft: Version;
 }
 
 /** Explicit version metadata returned by an accepted commit. */
-export interface EntityTransactionCommittedVersionMetadata {
+export interface EntityTransactionCommittedVersionMetadata<Version = unknown> {
   /** Caller-supplied previous committed version metadata. */
-  readonly previous: unknown;
+  readonly previous: Version;
   /** Draft metadata accepted by the commit boundary. */
-  readonly committed: unknown;
+  readonly committed: Version;
 }
 
 /** Visible lifecycle status of an entity transaction. */
@@ -39,7 +39,10 @@ export type EntityTransactionUpdater<Schema extends DescriptorMessageSchema> = (
 ) => MessageShape<Schema>;
 
 /** Options for creating an {@link EntityTransaction}. */
-export interface EntityTransactionOptions<Schema extends DescriptorMessageSchema> {
+export interface EntityTransactionOptions<
+  Schema extends DescriptorMessageSchema,
+  Version = unknown,
+> {
   /** Generated Protobuf-ES schema describing the entity state. */
   readonly schema: Schema;
   /** Previous committed entity state, absent for creation transactions. */
@@ -47,13 +50,16 @@ export interface EntityTransactionOptions<Schema extends DescriptorMessageSchema
   /** Initial draft state. Defaults to a clone of `previous`, or an empty state for creations. */
   readonly draft?: MessageShape<Schema>;
   /** Explicit version metadata to carry through draft, commit, and rollback results. */
-  readonly version: EntityTransactionVersionMetadata;
+  readonly version: EntityTransactionVersionMetadata<Version>;
   /** Draft lifecycle flags. Defaults to active, not deleted. */
   readonly lifecycle?: Partial<EntityTransactionLifecycleFlags>;
 }
 
 /** Result returned when a transaction commit is accepted. */
-export interface EntityTransactionAcceptedCommit<Schema extends DescriptorMessageSchema> {
+export interface EntityTransactionAcceptedCommit<
+  Schema extends DescriptorMessageSchema,
+  Version = unknown,
+> {
   /** Commit result discriminator. */
   readonly status: "accepted";
   /** Previous committed state snapshot. */
@@ -61,7 +67,7 @@ export interface EntityTransactionAcceptedCommit<Schema extends DescriptorMessag
   /** Accepted next state snapshot. */
   readonly next: MessageShape<Schema>;
   /** Accepted commit version metadata. */
-  readonly version: EntityTransactionCommittedVersionMetadata;
+  readonly version: EntityTransactionCommittedVersionMetadata<Version>;
   /** Lifecycle flags accepted with the committed state. */
   readonly lifecycle: EntityTransactionLifecycleFlags;
   /** Successful transition validation result. */
@@ -69,7 +75,10 @@ export interface EntityTransactionAcceptedCommit<Schema extends DescriptorMessag
 }
 
 /** Result returned when a transaction commit is rejected by validation. */
-export interface EntityTransactionRejectedCommit<Schema extends DescriptorMessageSchema> {
+export interface EntityTransactionRejectedCommit<
+  Schema extends DescriptorMessageSchema,
+  Version = unknown,
+> {
   /** Commit result discriminator. */
   readonly status: "rejected";
   /** Previous committed state snapshot. */
@@ -77,7 +86,7 @@ export interface EntityTransactionRejectedCommit<Schema extends DescriptorMessag
   /** Rejected draft state snapshot. */
   readonly next: MessageShape<Schema>;
   /** Draft version metadata that was not accepted. */
-  readonly version: EntityTransactionVersionMetadata;
+  readonly version: EntityTransactionVersionMetadata<Version>;
   /** Lifecycle flags that were not accepted. */
   readonly lifecycle: EntityTransactionLifecycleFlags;
   /** Failed transition validation result with validator violations. */
@@ -85,11 +94,18 @@ export interface EntityTransactionRejectedCommit<Schema extends DescriptorMessag
 }
 
 /** Structured result returned by {@link EntityTransaction.commit}. */
-export type EntityTransactionCommitResult<Schema extends DescriptorMessageSchema> =
-  EntityTransactionAcceptedCommit<Schema> | EntityTransactionRejectedCommit<Schema>;
+export type EntityTransactionCommitResult<
+  Schema extends DescriptorMessageSchema,
+  Version = unknown,
+> =
+  | EntityTransactionAcceptedCommit<Schema, Version>
+  | EntityTransactionRejectedCommit<Schema, Version>;
 
 /** Structured result returned by {@link EntityTransaction.rollback}. */
-export interface EntityTransactionRollbackResult<Schema extends DescriptorMessageSchema> {
+export interface EntityTransactionRollbackResult<
+  Schema extends DescriptorMessageSchema,
+  Version = unknown,
+> {
   /** Rollback result discriminator. */
   readonly status: "rolled-back";
   /** Previous committed state snapshot. */
@@ -97,7 +113,7 @@ export interface EntityTransactionRollbackResult<Schema extends DescriptorMessag
   /** Draft state snapshot that was discarded. */
   readonly draft: MessageShape<Schema>;
   /** Draft version metadata that was discarded. */
-  readonly version: EntityTransactionVersionMetadata;
+  readonly version: EntityTransactionVersionMetadata<Version>;
   /** Lifecycle flags that were discarded. */
   readonly lifecycle: EntityTransactionLifecycleFlags;
 }
@@ -123,16 +139,16 @@ export class EntityTransactionStateError extends Error {
  * handlers, write repositories, apply snapshots, dispatch messages, start
  * buses, or participate in async-local/global transaction state.
  */
-export class EntityTransaction<Schema extends DescriptorMessageSchema> {
+export class EntityTransaction<Schema extends DescriptorMessageSchema, Version = unknown> {
   readonly #schema: Schema;
   readonly #previous: MessageShape<Schema> | undefined;
   #draft: MessageShape<Schema>;
   #status: EntityTransactionStatus = "active";
-  readonly #version: EntityTransactionVersionMetadata;
+  readonly #version: EntityTransactionVersionMetadata<Version>;
   readonly #lifecycle: EntityTransactionLifecycleFlags;
 
   /** Create a transaction over previous state and a buffered draft. */
-  constructor(options: EntityTransactionOptions<Schema>) {
+  constructor(options: EntityTransactionOptions<Schema, Version>) {
     this.#schema = options.schema;
     this.#previous =
       options.previous === undefined ? undefined : cloneState(options.schema, options.previous);
@@ -166,7 +182,7 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema> {
   }
 
   /** Explicit version metadata carried by the current draft. */
-  get version(): EntityTransactionVersionMetadata {
+  get version(): EntityTransactionVersionMetadata<Version> {
     return { previous: this.#version.previous, draft: this.#version.draft };
   }
 
@@ -195,7 +211,7 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema> {
    * results with validator violations. They do not throw and do not mark the
    * transaction committed.
    */
-  commit(): EntityTransactionCommitResult<Schema> {
+  commit(): EntityTransactionCommitResult<Schema, Version> {
     this.#requireActive("commit");
 
     const previous = this.previous;
@@ -238,7 +254,7 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema> {
    * Rollback does not validate or accept state. It only closes this in-memory
    * transaction so future updates or commits are rejected deterministically.
    */
-  rollback(): EntityTransactionRollbackResult<Schema> {
+  rollback(): EntityTransactionRollbackResult<Schema, Version> {
     this.#requireActive("rollback");
     this.#status = "rolled-back";
 
@@ -259,9 +275,9 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema> {
 }
 
 /** Create an {@link EntityTransaction} with inferred schema state typing. */
-export function createEntityTransaction<Schema extends DescriptorMessageSchema>(
-  options: EntityTransactionOptions<Schema>,
-): EntityTransaction<Schema> {
+export function createEntityTransaction<Schema extends DescriptorMessageSchema, Version = unknown>(
+  options: EntityTransactionOptions<Schema, Version>,
+): EntityTransaction<Schema, Version> {
   return new EntityTransaction(options);
 }
 

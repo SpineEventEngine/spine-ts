@@ -33,13 +33,19 @@ validation exports include `validateEntityStateTransition()`,
 from descriptor metadata and shaped through the core transition validation
 facade. Repeated, map-valued, and explicit optional `(set_once)` fields are
 unsupported in this slice and fail closed with field-specific validation
-violations. Server handler metadata exports include `defineEntityHandlers()`,
-`HandlerRegistrationBuilder`, the five handler metadata roles for command
-assignment, command reaction, event subscription, event reaction, and event
-application, and `HandlerMetadataError` for registration-time structural
-failures. Handler names must refer to own prototype data methods declared with
-normal class method syntax. Decorator adapter exports include `@Assign`,
-`@Command`, `@Subscribe`, `@React`, `@Apply`,
+violations. The transaction kernel exports `EntityTransaction`,
+`createEntityTransaction()`, typed draft/commit/rollback result contracts,
+version metadata contracts, lifecycle flags, status/updater types, and
+`EntityTransactionStateError`. `commit()` validates the buffered draft and closes
+the transaction only for accepted commits; rejected commits return violations
+and leave the transaction active. `rollback()` closes the transaction and
+returns the discarded draft evidence. Server handler metadata exports include
+`defineEntityHandlers()`, `HandlerRegistrationBuilder`, the five handler
+metadata roles for command assignment, command reaction, event subscription,
+event reaction, and event application, and `HandlerMetadataError` for
+registration-time structural failures. Handler names must refer to own prototype
+data methods declared with normal class method syntax. Decorator adapter exports
+include `@Assign`, `@Command`, `@Subscribe`, `@React`, `@Apply`,
 `materializeDecoratedEntityHandlers()`, `HandlerMethodDecorator`, and
 `HandlerMethodValue`. Decorators require explicit Protobuf-ES schema arguments
 and record standard per-class metadata that materializes into the same

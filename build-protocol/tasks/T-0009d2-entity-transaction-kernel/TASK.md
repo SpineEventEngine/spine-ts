@@ -90,6 +90,43 @@ Skipped relevant-looking skills:
 | `saga-orchestration`      | `~/.agents/skills/saga-orchestration/SKILL.md`      | No process-manager dispatch or compensation workflow is in scope.               |
 | `nodejs-backend-patterns` | `~/.agents/skills/nodejs-backend-patterns/SKILL.md` | No HTTP/gRPC server, middleware, or service endpoint is in scope.               |
 
+### Round 1 Review-Fix Skill Applicability Check
+
+Checked at `2026-06-29 20:29 WEST` before review-fix source, test, or docs
+edits.
+
+Inventory evidence:
+
+- Session skill inventory exposed the task-required skills:
+  `receiving-code-review`, `test-driven-development`,
+  `typescript-advanced-types`, and `verification-before-completion`, plus
+  adjacent `javascript-testing-patterns`.
+- Task prompt explicitly required `receiving-code-review`,
+  `test-driven-development` or `javascript-testing-patterns`,
+  `typescript-advanced-types`, and `verification-before-completion`.
+- Repo manifest checked with `cat build-protocol/skills/EXPECTED_SKILLS.md`.
+- User-installed entrypoints checked with
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`.
+- Installed lock checked with
+  `rg -n "receiving-code-review|test-driven-development|javascript-testing-patterns|typescript-advanced-types|verification-before-completion" /Users/armiol/.agents/.skill-lock.json`.
+
+Selected skills fully read before use:
+
+| Skill                            | Source                                                                 | Applicability                                      | Instructions Applied                                                                  |
+| -------------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `receiving-code-review`          | `/Users/armiol/.agents/skills/receiving-code-review/SKILL.md`          | Required for round 1 reviewer findings.            | Verify each finding against the codebase, implement accepted fixes, and record scope. |
+| `test-driven-development`        | `/Users/armiol/.agents/skills/test-driven-development/SKILL.md`        | Focused assertion additions and behavior coverage. | Add focused tests first; record assertion-only coverage when behavior already passes. |
+| `typescript-advanced-types`      | `/Users/armiol/.agents/skills/typescript-advanced-types/SKILL.md`      | Generic version metadata API change.               | Preserve caller metadata types with simple generic parameters and type coverage.      |
+| `verification-before-completion` | `/Users/armiol/.agents/skills/verification-before-completion/SKILL.md` | Required before final claims and commit.           | Run fresh targeted and full verification before reporting completion.                 |
+
+Skipped relevant-looking skills:
+
+| Skill                           | Source                                                                | Reason Skipped                                                                                     |
+| ------------------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `javascript-testing-patterns`   | `/Users/armiol/.agents/skills/javascript-testing-patterns/SKILL.md`   | TDD skill covers the focused Vitest additions; no mocks or new shared test utilities are expected. |
+| `architecture-decision-records` | `/Users/armiol/.agents/skills/architecture-decision-records/SKILL.md` | Review fixes apply existing D-0040/D-0041 decisions; no new decision is planned.                   |
+| `requesting-code-review`        | `/Users/armiol/.agents/skills/requesting-code-review/SKILL.md`        | This turn fixes already-received review findings; it does not spawn or request review sub-agents.  |
+
 ## Scope
 
 In scope:
@@ -182,12 +219,15 @@ Splitter JVM impact summary:
 - `build-protocol/work-logs/T-0009d2.md`
 - `build-protocol/reviews/T-0009d2-entity-transaction-kernel.md`
 - `build-protocol/DECISION_LOG.md`
+- `docs/USER_GUIDE.md`
+- `docs/api/README.md`
 - `docs/architecture/README.md`
 - `packages/server/README.md`
 - `packages/server/src/entity-transaction.ts`
 - `packages/server/src/entity-transaction.test.ts`
 - `packages/server/src/index.ts`
 - `packages/server/src/index.test.ts`
+- `scripts/check-api-docs.mjs`
 
 ## Tests Run
 
@@ -220,6 +260,35 @@ Splitter JVM impact summary:
 - Final full `CI=true corepack pnpm verify` passed again on
   `2026-06-29 20:21 WEST` after durable-log updates with the same 14 test files
   / 118 tests and coverage above thresholds.
+- Round 1 review-fix focused assertion run before production changes,
+  `corepack pnpm vitest run packages/server/src/entity-transaction.test.ts packages/server/src/index.test.ts`,
+  passed on `2026-06-29 20:31 WEST`: 2 files / 21 tests. This recorded the
+  reliability findings as assertion-only coverage because existing behavior
+  already satisfied rollback-after-close, rejected-commit-then-rollback, and
+  failed-update invariants.
+- Round 1 review-fix type-level RED `corepack pnpm typecheck` failed on
+  `2026-06-29 20:31 WEST` because accepted committed version metadata was still
+  `unknown`.
+- Round 1 review-fix GREEN focused
+  `corepack pnpm vitest run packages/server/src/entity-transaction.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 20:33 WEST`: 2 files / 21 tests.
+- `corepack pnpm typecheck` passed on `2026-06-29 20:33 WEST`.
+- `corepack pnpm docs:check` passed on `2026-06-29 20:33 WEST` with the known
+  invalid-origin TypeDoc warning; API export counts included 56
+  `@spine-ts/server` exports.
+- Initial `corepack pnpm format:check` and `corepack pnpm lint` failed on
+  `2026-06-29 20:33 WEST` for durable-log formatting and one test-local
+  type/interface style issue. After cleanup, `corepack pnpm format:check` and
+  `corepack pnpm lint` passed on `2026-06-29 20:34 WEST`.
+- Full `CI=true corepack pnpm verify` passed on `2026-06-29 20:35 WEST`: 14
+  test files / 123 tests; coverage statements 97.51%, branches 90.28%,
+  functions 100%, lines 97.46%; docs/API and proto checks passed with the known
+  TypeDoc invalid-origin warning.
+
+## Round 1 Review Fix Outcome
+
+All assigned round 1 findings were accepted and fixed. No reviewer comments were
+rejected. No sub-agents were spawned.
 
 ## Review Rounds
 

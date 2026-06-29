@@ -68,6 +68,56 @@ Skipped relevant-looking skills:
 | `nodejs-backend-patterns` | Expected manifest and installed entrypoint | No HTTP/gRPC service, middleware, or endpoint implementation is in scope.                          |
 | `saga-orchestration`      | Installed entrypoint                       | No process-manager workflow or compensation logic is in scope.                                     |
 
+## Round 1 Review-Fix Skill Applicability Check
+
+Canonical checklist source: `build-protocol/BUILD_PROTOCOL.md#skills-and-tooling`.
+Checked at `2026-06-29 20:29 WEST` before review-fix source, test, or docs
+edits.
+
+Inventory evidence:
+
+- Session skill inventory exposed the task-required skills:
+  `receiving-code-review`, `test-driven-development`,
+  `typescript-advanced-types`, and `verification-before-completion`, plus
+  adjacent `javascript-testing-patterns`.
+- Task prompt explicitly required `receiving-code-review`,
+  `test-driven-development` or `javascript-testing-patterns`,
+  `typescript-advanced-types`, and `verification-before-completion`.
+- Repo manifest checked with `cat build-protocol/skills/EXPECTED_SKILLS.md`.
+- User-installed entrypoints checked with
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`.
+- Installed lock checked with
+  `rg -n "receiving-code-review|test-driven-development|javascript-testing-patterns|typescript-advanced-types|verification-before-completion" /Users/armiol/.agents/.skill-lock.json`.
+
+Selected skills fully read before use:
+
+| Skill                            | Source                                                                 | Applied To                                                                                  |
+| -------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `receiving-code-review`          | `/Users/armiol/.agents/skills/receiving-code-review/SKILL.md`          | Evaluate and apply round 1 documentation, reliability, TypeScript/API, and docs findings.   |
+| `test-driven-development`        | `/Users/armiol/.agents/skills/test-driven-development/SKILL.md`        | Add focused tests before type/API implementation changes where production behavior changes. |
+| `typescript-advanced-types`      | `/Users/armiol/.agents/skills/typescript-advanced-types/SKILL.md`      | Parameterize version metadata without complex type machinery.                               |
+| `verification-before-completion` | `/Users/armiol/.agents/skills/verification-before-completion/SKILL.md` | Run fresh targeted and full verification before completion claims and commit.               |
+
+Skipped relevant-looking skills:
+
+| Skill                           | Source Evidence                                     | Reason                                                                                             |
+| ------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `javascript-testing-patterns`   | Installed entrypoint and session inventory metadata | TDD skill covers the focused Vitest additions; no mocks or new shared test utilities are expected. |
+| `architecture-decision-records` | Expected manifest and installed entrypoint          | Review fixes apply existing D-0040/D-0041 decisions; no new decision is planned.                   |
+| `requesting-code-review`        | Expected manifest and installed entrypoint          | This turn fixes already-received review findings; it does not spawn or request sub-agents.         |
+
+Round 1 fix plan:
+
+- Update user/API docs to describe the available buffered entity transaction
+  boundary and explicitly exclude entities, storage/repositories, handler
+  dispatch, buses/transports, and async-local/global transaction state.
+- Add focused Vitest assertions for rollback-after-close and failed-update
+  invariants; record as assertion-only coverage if current behavior already
+  satisfies them.
+- Add every intended transaction export to `scripts/check-api-docs.mjs`.
+- Parameterize transaction version metadata generically so caller-supplied
+  draft metadata flows to accepted committed metadata with its type preserved.
+
 ## Files Changed
 
 - `build-protocol/DECISION_LOG.md`
@@ -76,11 +126,39 @@ Skipped relevant-looking skills:
 - `build-protocol/work-logs/T-0009d2.md`
 - `build-protocol/reviews/T-0009d2-entity-transaction-kernel.md`
 - `docs/architecture/README.md`
+- `docs/USER_GUIDE.md`
+- `docs/api/README.md`
 - `packages/server/README.md`
 - `packages/server/src/entity-transaction.ts`
 - `packages/server/src/entity-transaction.test.ts`
 - `packages/server/src/index.ts`
 - `packages/server/src/index.test.ts`
+- `scripts/check-api-docs.mjs`
+
+## Round 1 Review Fixes
+
+Accepted and fixed all round 1 findings assigned in this turn:
+
+- Documentation P2: added a user guide entity transaction section with a minimal
+  `createEntityTransaction()` example and explicit exclusions for entity
+  instantiation, storage/repositories, handler dispatch, buses/transports, and
+  async-local/global transaction state.
+- Performance/reliability P2: added focused assertions for rollback after
+  accepted commit, rollback after rollback, rollback after rejected commit, and
+  throwing `update()` leaving status and `currentDraft` unchanged. These were
+  assertion-only coverage because existing runtime behavior already passed.
+- TypeScript/API P1: added every intended transaction export from
+  `packages/server/src/index.ts` to `scripts/check-api-docs.mjs`
+  `expectedServerExports`; docs check now reports 56 expected server exports.
+- TypeScript/API docs P2: updated `docs/api/README.md` to mention the
+  transaction kernel plus commit/rollback status behavior.
+- TypeScript/API P2: parameterized transaction version metadata generically with
+  `Version = unknown` across options, class, commit result, rollback result,
+  accepted/rejected metadata, and `createEntityTransaction()`. Added type
+  coverage proving accepted commit metadata preserves the caller-supplied
+  version type.
+
+No reviewer comments were rejected. No sub-agents were spawned.
 
 ## Verification
 
@@ -107,7 +185,35 @@ Skipped relevant-looking skills:
 - Final full `CI=true corepack pnpm verify` passed again on
   `2026-06-29 20:21 WEST` after durable-log updates with the same 14 test files
   / 118 tests and coverage above thresholds.
+- Round 1 review-fix RED/GREEN:
+  - Focused assertion run before production changes,
+    `corepack pnpm vitest run packages/server/src/entity-transaction.test.ts packages/server/src/index.test.ts`,
+    passed on `2026-06-29 20:31 WEST`: 2 files / 21 tests. The reliability
+    findings were assertion-only coverage because production behavior already
+    satisfied them.
+  - Type-level RED `corepack pnpm typecheck` failed on
+    `2026-06-29 20:31 WEST` with
+    `Type '{ revision: number; source: "draft"; }' does not satisfy the constraint '"Expected: ..., Actual: unknown"'`,
+    confirming accepted committed metadata was still `unknown`.
+  - GREEN focused
+    `corepack pnpm vitest run packages/server/src/entity-transaction.test.ts packages/server/src/index.test.ts`
+    passed on `2026-06-29 20:33 WEST`: 2 files / 21 tests.
+  - GREEN `corepack pnpm typecheck` passed on `2026-06-29 20:33 WEST`.
+  - `corepack pnpm docs:check` passed on `2026-06-29 20:33 WEST` with the known
+    invalid-origin TypeDoc warning; API export counts now include 56
+    `@spine-ts/server` exports.
+  - Initial `corepack pnpm format:check` failed on `2026-06-29 20:33 WEST` for
+    four durable log files. After Prettier formatting, `corepack pnpm
+format:check` passed on `2026-06-29 20:34 WEST`.
+  - Initial `corepack pnpm lint` failed on `2026-06-29 20:33 WEST` for one
+    `@typescript-eslint/consistent-type-definitions` error in the type test.
+    After switching the local test shape to an interface, `corepack pnpm lint`
+    passed on `2026-06-29 20:34 WEST`.
+  - Full `CI=true corepack pnpm verify` passed on `2026-06-29 20:35 WEST`: 14
+    test files / 123 tests; coverage statements 97.51%, branches 90.28%,
+    functions 100%, lines 97.46%; docs/API and proto checks passed with the
+    known TypeDoc invalid-origin warning.
 
 ## Review
 
-- Pending five-role orchestrator review loop.
+- Round 1 review findings fixed; no reviewer comment was rejected.
