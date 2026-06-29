@@ -721,3 +721,55 @@ Verification:
   warning and expected API export counts.
 - `corepack pnpm typecheck` passed.
 - `git diff --check` passed.
+
+## Round 17 Cache And Durable Evidence Follow-Up
+
+Latest reviewer findings to fix:
+
+- Performance/reliability P2: `validateEntityStateTransition()` called
+  `describeEntityMetadata()` and recreated the set-once transition rule on
+  every validation call. The requested fix was a small schema-keyed cache, not
+  a runtime transaction stack or broader abstraction.
+- Documentation: `TASK.md` Review Rounds stopped at fix round 15 even though
+  round 16 was recorded elsewhere.
+- Documentation: the implementation report labeled the early `15:15 WEST`
+  verification as "Full final verification" even though later full
+  verification at `17:29 WEST` superseded it.
+- Durable evidence: add fix-round 17 / round-17 evidence to the task,
+  implementation report, work log, and review log.
+
+Fix response:
+
+- Added a module-level `WeakMap` keyed by schema that stores the
+  descriptor-derived transition-rule array. The cache preserves existing
+  fail-closed behavior because initial metadata derivation still throws for
+  invalid schemas, and only successful rule derivation is cached.
+- Added a focused cache regression test using a schema proxy that counts
+  descriptor `fields` reads. This avoids awkward ESM import monkey-patching
+  while still proving same-schema validations do not repeat descriptor/rule
+  derivation and distinct schema objects derive independently.
+- Added the missing fix-round-16 Review Rounds bullet in `TASK.md`.
+- Updated top-level `TASK.md` reviewer metadata through round 17.
+- Clarified the implementation report's early `15:15 WEST` verification as
+  superseded by the later `17:29 WEST` full verification.
+- Added round-17 entries across the durable task, implementation, work, and
+  review logs.
+
+Verification:
+
+- RED:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected with 1 of 28 tests failing because the second validation
+  with the same schema still traversed descriptor `fields`.
+- GREEN:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 37 tests.
+- Final verification:
+  `corepack pnpm format:check` first failed on
+  `packages/server/src/entity-transition-validation.ts` and
+  `build-protocol/work-logs/T-0009d1.md`, then needed one additional work-log
+  wrap after final evidence text was added; after Prettier rewrote touched
+  owned files, `corepack pnpm format:check` passed.
+  `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts; `corepack pnpm typecheck` passed;
+  `git diff --check` passed.

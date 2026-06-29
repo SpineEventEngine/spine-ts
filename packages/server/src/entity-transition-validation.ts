@@ -39,6 +39,11 @@ export interface EntityStateTransitionValidationRequest<
 /** Structured, sanitized result returned by {@link validateEntityStateTransition}. */
 export type EntityStateTransitionValidationResult = TransitionValidationResult;
 
+const transitionRulesBySchema = new WeakMap<
+  DescriptorMessageSchema,
+  readonly TransitionValidationRule<DescriptorMessageSchema>[]
+>();
+
 /**
  * Validate a proposed entity state transition with built-in, side-effect-free
  * server rules.
@@ -54,9 +59,7 @@ export type EntityStateTransitionValidationResult = TransitionValidationResult;
 export function validateEntityStateTransition<Schema extends DescriptorMessageSchema>(
   request: EntityStateTransitionValidationRequest<Schema>,
 ): EntityStateTransitionValidationResult {
-  const metadata = describeEntityMetadata(request.schema);
-
-  return validateTransition(request, [createSetOnceTransitionRule(metadata.setOnceFields)]);
+  return validateTransition(request, getTransitionValidationRules(request.schema));
 }
 
 const MAX_EQUALITY_DEPTH = 64;
@@ -70,6 +73,27 @@ interface FieldReadResult {
 interface FieldPropertyReadResult {
   readonly safe: boolean;
   readonly value?: unknown;
+}
+
+function getTransitionValidationRules<Schema extends DescriptorMessageSchema>(
+  schema: Schema,
+): readonly TransitionValidationRule<Schema>[] {
+  const cachedRules = transitionRulesBySchema.get(schema) as
+    readonly TransitionValidationRule<Schema>[] | undefined;
+
+  if (cachedRules !== undefined) {
+    return cachedRules;
+  }
+
+  const metadata = describeEntityMetadata(schema);
+  const rules = Object.freeze([createSetOnceTransitionRule<Schema>(metadata.setOnceFields)]);
+
+  transitionRulesBySchema.set(
+    schema,
+    rules as readonly TransitionValidationRule<DescriptorMessageSchema>[],
+  );
+
+  return rules;
 }
 
 function createSetOnceTransitionRule<Schema extends DescriptorMessageSchema>(

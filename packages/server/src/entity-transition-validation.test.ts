@@ -131,6 +131,45 @@ describe("entity state transition validation", () => {
     `);
   });
 
+  it("caches descriptor-derived transition rules per schema", () => {
+    const firstSchema = countSchemaFieldsReads(ProjectionStateSchema);
+    const secondSchema = countSchemaFieldsReads(ProjectionStateSchema);
+    const next = create(ProjectionStateSchema, {
+      id: "task-1",
+      name: "Draft",
+      priority: 1,
+    });
+
+    expect(
+      validateEntityStateTransition({
+        schema: firstSchema.schema,
+        previous: undefined,
+        next,
+      }).valid,
+    ).toBe(true);
+
+    const fieldsReadsAfterFirstValidation = firstSchema.getFieldsReadCount();
+
+    expect(fieldsReadsAfterFirstValidation).toBeGreaterThan(0);
+    expect(
+      validateEntityStateTransition({
+        schema: firstSchema.schema,
+        previous: undefined,
+        next,
+      }).valid,
+    ).toBe(true);
+    expect(firstSchema.getFieldsReadCount()).toBe(fieldsReadsAfterFirstValidation);
+
+    expect(
+      validateEntityStateTransition({
+        schema: secondSchema.schema,
+        previous: undefined,
+        next,
+      }).valid,
+    ).toBe(true);
+    expect(secondSchema.getFieldsReadCount()).toBeGreaterThan(0);
+  });
+
   it("allows existing-state transitions when set-once values are unchanged", () => {
     const previous = create(ProjectionStateSchema, {
       id: "task-1",
@@ -914,6 +953,23 @@ function validateForgedSetOnceId(previousId: unknown, nextId: unknown) {
     previous: { id: previousId } as ProjectionState,
     next: { id: nextId } as ProjectionState,
   });
+}
+
+function countSchemaFieldsReads<Schema extends typeof ProjectionStateSchema>(schema: Schema) {
+  let fieldsReadCount = 0;
+
+  return {
+    schema: new Proxy(schema, {
+      get(target, property, receiver) {
+        if (property === "fields") {
+          fieldsReadCount += 1;
+        }
+
+        return Reflect.get(target, property, receiver) as unknown;
+      },
+    }) as Schema,
+    getFieldsReadCount: () => fieldsReadCount,
+  };
 }
 
 function createSingularSetOnceState(

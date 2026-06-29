@@ -1,8 +1,8 @@
 # T-0009d.1: Built-In Set-Once Transition Validation
 
-Status: Complete through fix round 16 docs/log cleanup; pending clean re-review/integration
+Status: Complete through fix round 17 cache/doc cleanup; pending clean re-review/integration
 Start: `2026-06-29 14:52 WEST`
-End: `2026-06-29 18:51 WEST`
+End: `2026-06-29 19:08 WEST`
 Baseline commit: `1d939d7`
 Task log path: `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
 Branch: `task/T-0009d1-set-once-transition-validation`
@@ -10,7 +10,7 @@ Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009d1-se
 Requirements splitter: `019f13a4-a6f5-7302-94e0-7b16366b0701` (Popper)
 Branch setup commit: `88cb0f3`
 Authoring sub-agent: Codex implementation sub-agent
-Reviewer sub-agents: Round 1 through Round 16 role reviewers for code
+Reviewer sub-agents: Round 1 through Round 17 role reviewers for code
 style/maintainability, documentation, TypeScript/API docs, security, and
 performance/reliability; individual reviewer IDs are not present in durable task
 evidence.
@@ -96,6 +96,25 @@ Skipped relevant-looking skills:
 | `cqrs-implementation` | `~/.agents/skills/cqrs-implementation/SKILL.md` | Only read/write boundary language is relevant; no CQRS runtime is implemented.    |
 | `event-store-design`  | `~/.agents/skills/event-store-design/SKILL.md`  | No event persistence, replay, storage append, or repository behavior is in scope. |
 | `saga-orchestration`  | `~/.agents/skills/saga-orchestration/SKILL.md`  | No process-manager execution, compensation, or orchestration runtime is in scope. |
+
+Fix round 17 sub-agent skill applicability check (`2026-06-29 19:00 WEST`):
+session inventory exposed applicable `test-driven-development`, `tdd`,
+`javascript-testing-patterns`, `typescript-advanced-types`, and
+`verification-before-completion` skills. Task prompt explicitly required TDD,
+TypeScript, JavaScript testing, and verification skills. Read
+`BUILD_PROTOCOL.md#skills-and-tooling`, `EXPECTED_SKILLS.md`,
+`~/.agents/skills/test-driven-development/SKILL.md`,
+`~/.agents/skills/tdd/SKILL.md`,
+`~/.agents/skills/javascript-testing-patterns/SKILL.md`,
+`~/.agents/skills/typescript-advanced-types/SKILL.md`, and
+`~/.agents/skills/verification-before-completion/SKILL.md`. Bounded inventory
+commands used:
+`find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`
+and
+`test -f /Users/armiol/.agents/.skill-lock.json && sed -n '1,220p' /Users/armiol/.agents/.skill-lock.json || true`.
+No skill source was unreachable; no sub-agents are allowed for this fix round.
+Skipped adjacent runtime/architecture skills because the requested fix is a
+narrow cache/test/docs update, not a runtime or transaction design change.
 
 ## Scope
 
@@ -388,6 +407,23 @@ Out of scope:
   `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
   warning and expected API export counts; `corepack pnpm typecheck` passed;
   `git diff --check` passed.
+- RED fix-round 17
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected on `2026-06-29 19:02 WEST`: 1 of 28 tests failed because
+  the same-schema second validation still re-read descriptor `fields`, moving
+  the schema traversal counter from 3 to 6.
+- GREEN fix-round 17 focused verification:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 19:02 WEST`: 2 test files / 37 tests.
+- Fix-round 17 verification: `corepack pnpm format:check` first failed on
+  `packages/server/src/entity-transition-validation.ts` and
+  `build-protocol/work-logs/T-0009d1.md`, then needed one additional work-log
+  wrap after final evidence text was added; after
+  `corepack pnpm exec prettier --write packages/server/src/entity-transition-validation.ts packages/server/src/entity-transition-validation.test.ts build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md build-protocol/tasks/T-0009d1-set-once-transition-validation/IMPLEMENTATION_REPORT.md build-protocol/work-logs/T-0009d1.md build-protocol/reviews/T-0009d1-set-once-transition-validation.md`,
+  `corepack pnpm format:check` passed on `2026-06-29 19:08 WEST`.
+  `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts; `corepack pnpm typecheck` passed;
+  `git diff --check` passed.
 
 ## Coverage Result
 
@@ -535,6 +571,16 @@ functions 100%, lines 97.28%.
 - Fix round 15 addresses round-14/final re-review findings by adding
   fix-round 14 verification evidence to this canonical Tests Run section and
   the work-log Current State verification summary.
+- Fix round 16 addresses round-16/final re-review findings by adding
+  fix-round 15 verification evidence to this canonical Tests Run section,
+  correcting stale round/package wording in the work-log Current State, and
+  recording round-16 review outcomes.
+- Fix round 17 addresses the latest performance/reliability and durable-doc
+  findings by caching descriptor-derived set-once transition rules in a
+  module-level `WeakMap` keyed by schema, adding a focused schema traversal
+  regression test, adding this missing fix-round-16 Review Rounds bullet, and
+  clarifying that the early 15:15 full verification was superseded by the
+  later 17:29 full verification evidence.
 
 ## Completion Checklist
 

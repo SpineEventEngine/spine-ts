@@ -78,7 +78,7 @@ Completed before full final verification:
   and nested object set-once equality paths: 13 test files / 89 tests; coverage
   statements 98.79%, branches 92.34%, functions 100%, lines 98.76%.
 
-Full final verification:
+Superseded early full verification:
 
 - `CI=true corepack pnpm verify` passed on `2026-06-29 15:15 WEST`: 13 test
   files / 89 tests passed; coverage statements 98.79%, branches 92.34%,
@@ -89,7 +89,9 @@ One full verification run failed before the final pass because the edited task
 and work logs needed Prettier formatting. A later full verification run reached
 coverage and failed because the new equality helper lowered global branch
 coverage below 90%; focused set-once equality coverage was added and the final
-full verification passed.
+early full verification passed. This evidence was later superseded by the
+fix-round 7 full verification at `2026-06-29 17:29 WEST` after additional
+review fixes and coverage.
 
 ## Dependency Notes
 
@@ -669,3 +671,44 @@ Verification:
   warning and expected API export counts.
 - `corepack pnpm typecheck` passed.
 - `git diff --check` passed.
+
+## Fix Round 17
+
+Addressed the latest performance/reliability and durable-doc findings:
+
+- Cached descriptor-derived set-once transition rules in a module-level
+  `WeakMap` keyed by schema, so `validateEntityStateTransition()` no longer
+  calls `describeEntityMetadata()` or recreates the set-once rule on every
+  validation for the same schema. Behavior and fail-closed validation semantics
+  remain unchanged.
+- Added a focused regression test proving descriptor/rule derivation is cached
+  per schema. The test observes descriptor `fields` traversal through a schema
+  proxy instead of monkey-patching the ESM `describeEntityMetadata()` import,
+  keeping the assertion tied to the public schema object while still catching
+  repeated metadata traversal on same-schema validation.
+- Added the missing fix-round-16 Review Rounds bullet to `TASK.md`.
+- Updated top-level `TASK.md` reviewer metadata through round 17.
+- Renamed the early `15:15 WEST` "Full final verification" section to
+  "Superseded early full verification" so the later `17:29 WEST` full
+  verification remains the durable latest full-verification evidence.
+- Recorded round-17 reviewer findings, fix response, and verification plan in
+  the task, work, review, and implementation logs.
+
+Verification:
+
+- RED:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected with 1 of 28 tests failing because same-schema validation
+  traversed descriptor `fields` again.
+- GREEN:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 37 tests.
+- Final verification:
+  `corepack pnpm format:check` first failed on
+  `packages/server/src/entity-transition-validation.ts` and
+  `build-protocol/work-logs/T-0009d1.md`, then needed one additional work-log
+  wrap after final evidence text was added; after Prettier rewrote touched
+  owned files, `corepack pnpm format:check` passed.
+  `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts; `corepack pnpm typecheck` passed;
+  `git diff --check` passed.
