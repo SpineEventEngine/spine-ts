@@ -11,6 +11,7 @@ Requirements splitter: `019f135f-f815-7143-928f-8ba84237d0af` (Goodall)
 Branch setup commit: `e711edc`
 Authoring sub-agent: TBD
 Reviewer sub-agents: TBD
+Baseline verification commit: TBD
 
 ## Objective
 
@@ -65,32 +66,32 @@ Canonical checklist: `BUILD_PROTOCOL.md#skills-and-tooling` remains governing.
 
 Selected skills read before task actions:
 
-| Skill                            | Source                                                     | Applicability                                  | Instructions Applied                                                        |
-| -------------------------------- | ---------------------------------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------- |
-| `subagent-driven-development`    | `~/.agents/skills/subagent-driven-development/SKILL.md`    | Required protocol execution model.             | Splitter, implementer, five reviewer roles, review loop, and agent closure. |
-| `using-git-worktrees`            | `~/.agents/skills/using-git-worktrees/SKILL.md`            | Required isolated worktree per task.           | Use project-local `.worktrees` branch/worktree and baseline verification.   |
-| `requesting-code-review`         | `~/.agents/skills/requesting-code-review/SKILL.md`         | Mandatory review before task completion.       | Review implementation and any review-fix ranges.                            |
-| `receiving-code-review`          | `~/.agents/skills/receiving-code-review/SKILL.md`          | Required reviewer comment handling.            | Verify comments before fix dispatch; no performative acceptance.            |
-| `verification-before-completion` | `~/.agents/skills/verification-before-completion/SKILL.md` | Required before completion claims.             | Run and read verification before merge/completion.                          |
-| `test-driven-development`        | `~/.agents/skills/test-driven-development/SKILL.md`        | New public decorator behavior.                 | Authoring sub-agent must write failing tests before production code.        |
-| `javascript-testing-patterns`    | `~/.agents/skills/javascript-testing-patterns/SKILL.md`    | Vitest coverage and fixture design.            | Behavior-level decorator and registry-parity tests.                         |
-| `typescript-advanced-types`      | `~/.agents/skills/typescript-advanced-types/SKILL.md`      | Typed decorator APIs and materialization.      | Prefer useful generics without opaque conditional-type machinery.           |
-| `architecture-decision-records`  | `~/.agents/skills/architecture-decision-records/SKILL.md`  | D-0037 decorator adapter decision.             | Record context, decision, alternatives, and consequences.                   |
+| Skill                            | Source                                                     | Applicability                             | Instructions Applied                                                        |
+| -------------------------------- | ---------------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------- |
+| `subagent-driven-development`    | `~/.agents/skills/subagent-driven-development/SKILL.md`    | Required protocol execution model.        | Splitter, implementer, five reviewer roles, review loop, and agent closure. |
+| `using-git-worktrees`            | `~/.agents/skills/using-git-worktrees/SKILL.md`            | Required isolated worktree per task.      | Use project-local `.worktrees` branch/worktree and baseline verification.   |
+| `requesting-code-review`         | `~/.agents/skills/requesting-code-review/SKILL.md`         | Mandatory review before task completion.  | Review implementation and any review-fix ranges.                            |
+| `receiving-code-review`          | `~/.agents/skills/receiving-code-review/SKILL.md`          | Required reviewer comment handling.       | Verify comments before fix dispatch; no performative acceptance.            |
+| `verification-before-completion` | `~/.agents/skills/verification-before-completion/SKILL.md` | Required before completion claims.        | Run and read verification before merge/completion.                          |
+| `test-driven-development`        | `~/.agents/skills/test-driven-development/SKILL.md`        | New public decorator behavior.            | Authoring sub-agent must write failing tests before production code.        |
+| `javascript-testing-patterns`    | `~/.agents/skills/javascript-testing-patterns/SKILL.md`    | Vitest coverage and fixture design.       | Behavior-level decorator and registry-parity tests.                         |
+| `typescript-advanced-types`      | `~/.agents/skills/typescript-advanced-types/SKILL.md`      | Typed decorator APIs and materialization. | Prefer useful generics without opaque conditional-type machinery.           |
+| `architecture-decision-records`  | `~/.agents/skills/architecture-decision-records/SKILL.md`  | D-0037 decorator adapter decision.        | Record context, decision, alternatives, and consequences.                   |
 
 Skills to pass to sub-agents/reviewers:
 
-| Recipient           | Skills/Instructions To Pass                                                        | Notes                                                                 |
-| ------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| Authoring sub-agent | TDD, JavaScript testing, TypeScript/API, ADR/domain, verification instructions.    | Must implement in the task worktree and update durable logs/docs.     |
+| Recipient           | Skills/Instructions To Pass                                                                                   | Notes                                                                  |
+| ------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| Authoring sub-agent | TDD, JavaScript testing, TypeScript/API, ADR/domain, verification instructions.                               | Must implement in the task worktree and update durable logs/docs.      |
 | Reviewers           | Five role-specific reviewers: maintainability, documentation, TS/API docs, security, performance/reliability. | Must inspect the committed task range and report clean/finding status. |
 
 Skipped relevant-looking skills:
 
-| Skill                 | Source                                          | Reason Skipped                                                                            |
-| --------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `cqrs-implementation` | `~/.agents/skills/cqrs-implementation/SKILL.md` | Decorator collection is metadata-only and does not implement read/write processing.        |
-| `event-store-design`  | `~/.agents/skills/event-store-design/SKILL.md`  | No event persistence, replay, or storage adapter work is in scope.                        |
-| `saga-orchestration`  | `~/.agents/skills/saga-orchestration/SKILL.md`  | No process-manager execution, compensation, or orchestration runtime is in scope.          |
+| Skill                 | Source                                          | Reason Skipped                                                                      |
+| --------------------- | ----------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `cqrs-implementation` | `~/.agents/skills/cqrs-implementation/SKILL.md` | Decorator collection is metadata-only and does not implement read/write processing. |
+| `event-store-design`  | `~/.agents/skills/event-store-design/SKILL.md`  | No event persistence, replay, or storage adapter work is in scope.                  |
+| `saga-orchestration`  | `~/.agents/skills/saga-orchestration/SKILL.md`  | No process-manager execution, compensation, or orchestration runtime is in scope.   |
 
 ## Scope
 
@@ -137,7 +138,19 @@ TBD
 
 ## Tests Run
 
-- Branch setup is based on `e711edc`; baseline verification is pending.
+- `corepack pnpm install --offline` failed because
+  `@bufbuild/buf@1.71.0` was missing from the local pnpm store.
+- `corepack pnpm install` passed with the existing lockfile and hydrated the new
+  worktree dependency metadata.
+- First baseline `CI=true corepack pnpm verify` failed at `format:check`
+  because the new T-0009c.1 setup logs needed Prettier formatting.
+- `corepack pnpm exec prettier --write
+build-protocol/tasks/T-0009c1-decorator-metadata-collection/TASK.md
+build-protocol/work-logs/T-0009c1.md` formatted the setup logs.
+- Baseline `CI=true corepack pnpm verify` passed on `2026-06-29 13:41 WEST`:
+  11 test files / 75 tests passed; coverage statements 99.52%, branches
+  93.24%, functions 100%, lines 99.51%; docs/API and proto checks passed with
+  the known TypeDoc invalid-origin warning.
 
 ## Coverage Result
 
@@ -157,20 +170,20 @@ TBD
 
 ## Security Impact
 
-| Area                    | Expected Impact                                                         |
-| ----------------------- | ----------------------------------------------------------------------- |
-| Secrets/auth            | None; metadata-only local runtime API.                                  |
-| Runtime side effects    | Must avoid global mutable registration and import-time process mutation. |
-| User code execution     | Must not instantiate entities or invoke handler methods.                |
-| Input validation        | Schema arguments must be explicit descriptor-bearing Protobuf-ES schemas. |
+| Area                 | Expected Impact                                                           |
+| -------------------- | ------------------------------------------------------------------------- |
+| Secrets/auth         | None; metadata-only local runtime API.                                    |
+| Runtime side effects | Must avoid global mutable registration and import-time process mutation.  |
+| User code execution  | Must not instantiate entities or invoke handler methods.                  |
+| Input validation     | Schema arguments must be explicit descriptor-bearing Protobuf-ES schemas. |
 
 ## Performance/Reliability Impact
 
-| Area             | Expected Impact                                                             |
-| ---------------- | --------------------------------------------------------------------------- |
-| Runtime overhead | Class metadata collection only; materialization should be deterministic.     |
-| Reliability      | Must avoid import-order-sensitive global registries.                         |
-| Concurrency      | No asynchronous processing or transport behavior in scope.                   |
+| Area             | Expected Impact                                                          |
+| ---------------- | ------------------------------------------------------------------------ |
+| Runtime overhead | Class metadata collection only; materialization should be deterministic. |
+| Reliability      | Must avoid import-order-sensitive global registries.                     |
+| Concurrency      | No asynchronous processing or transport behavior in scope.               |
 
 ## Review Rounds
 
@@ -178,7 +191,7 @@ TBD
 
 ## Completion Checklist
 
-- [ ] Baseline verification captured in the task worktree.
+- [x] Baseline verification captured in the task worktree.
 - [ ] Authoring sub-agent report captured and closed.
 - [ ] Five reviewer sub-agents completed and closed.
 - [ ] Review comments either fixed and re-reviewed or technically resolved.
