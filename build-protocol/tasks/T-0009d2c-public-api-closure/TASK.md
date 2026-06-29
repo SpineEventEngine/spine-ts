@@ -1,7 +1,8 @@
 # T-0009d.2c: Public API Polish, Compatibility Notes, Verification Closure
 
-Status: Review Clean; Final Verification Pending
+Status: Complete; Integration Pending
 Start: `2026-06-29 21:20 WEST`
+End: `2026-06-29 21:50 WEST`
 Baseline commit: `5367bb8`
 Task log path: `build-protocol/tasks/T-0009d2c-public-api-closure/TASK.md`
 Branch: `task/T-0009d2c-public-api-closure`
@@ -185,6 +186,11 @@ Out of scope:
   passed with 100 proto, 28 core, 59 server, and 26 storage expected exports.
 - Round 2 TypeScript/API and performance/reliability reviews ran
   `git diff --check 4807f6f..b6abcd6`, which passed.
+- Final branch `CI=true corepack pnpm verify` passed on
+  `2026-06-29 21:50 WEST`: 14 test files / 129 tests; coverage statements
+  97.61%, branches 90.51%, functions 100%, lines 97.56%; TypeDoc/API reported
+  100 proto, 28 core, 59 server, and 26 storage expected exports; proto
+  lint/generate/check passed with generated output clean.
 
 ## Review Rounds
 
@@ -211,4 +217,5 @@ Out of scope:
 - Round 1 found one accepted P2 stale-marker issue in durable review state; the
   fix cleared that stale marker and recorded the fix path.
 - Round 2 review is clean with all participating reviewer sub-agents closed.
+- Final branch verification passed on `2026-06-29 21:50 WEST`.
 - No new decision was needed; D-0043 covers the closure boundary.
