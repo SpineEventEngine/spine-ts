@@ -1,11 +1,10 @@
 # T-0009d.2: Entity Transaction Draft/Result Kernel
 
-Status: `T-0009d.2a` and `T-0009d.2b` complete and integrated to `main`;
-`T-0009d.2c` public API closure in progress
+Status: Complete and integrated to `main`
 Start: `2026-06-29 19:58 WEST`
 End: `T-0009d.2a` integrated `2026-06-29 20:47 WEST`; `T-0009d.2b`
-integrated `2026-06-29 21:19 WEST`; `T-0009d.2c` pending final review and
-integration
+integrated `2026-06-29 21:19 WEST`; `T-0009d.2c` integrated
+`2026-06-29 21:53 WEST`
 Baseline commit: `3d08195`
 Task log path: `build-protocol/tasks/T-0009d2-entity-transaction-kernel/TASK.md`
 Branch: `task/T-0009d2-entity-transaction-kernel`
