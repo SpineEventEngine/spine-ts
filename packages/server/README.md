@@ -12,9 +12,9 @@ Current slice exposes:
 - semantic tags from `(is)` and `(every_is)` with clear extraction errors; and
 - `validateEntityStateTransition({ schema, previous, next })` for built-in
   `(set_once)` transition validation over descriptor-backed entity state; and
-- `EntityTransaction` and `createEntityTransaction()` for a buffered
-  draft/commit/rollback boundary over one entity state, with draft lifecycle
-  and explicit version metadata helpers; and
+- `EntityTransaction` and `createEntityTransaction()` for a framework-owned,
+  in-memory draft/commit/rollback boundary over one entity state, with draft
+  lifecycle and explicit version metadata helpers; and
 - `defineEntityHandlers(EntityClass, StateSchema, builder => [...])` for
   explicit, frozen handler metadata that binds generated Protobuf-ES schemas to
   entity method names; and
@@ -125,8 +125,8 @@ contents are unchanged or the transition is a creation.
 
 ## Entity Transactions
 
-Use `createEntityTransaction()` when framework-controlled code needs a buffered
-draft over previous state before accepting a commit result:
+Use `createEntityTransaction()` when framework-controlled code needs an
+in-memory buffered draft over previous state before accepting a commit result:
 
 ```ts
 import { createEntityTransaction } from "@spine-ts/server";
@@ -164,6 +164,12 @@ if (result.status === "rejected") {
   result.validation.violations.map((violation) => violation.fieldPath?.fieldName.join("."));
 }
 ```
+
+Compatibility note: `EntityTransaction` is the public draft/result shape that
+future framework-owned entity bases can use around handler execution. It is not
+a storage-backed transaction, a unit-of-work implementation, or a process-wide
+runtime context; applications should treat its returned snapshots as evidence
+for later runtime layers rather than as persisted state.
 
 `rollback()` releases the transaction and returns previous/draft evidence
 without accepting state. `archive()`, `unarchive()`, `markDeleted()`, and

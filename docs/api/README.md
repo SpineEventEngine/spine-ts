@@ -37,13 +37,17 @@ violations. The transaction kernel exports `EntityTransaction`,
 `createEntityTransaction()`, typed draft/commit/rollback result contracts,
 version metadata contracts, lifecycle flags, status/updater/helper operation
 types, `EntityTransactionStateError`, and
-`EntityTransactionDraftStateError`. Lifecycle helpers mutate only buffered
-draft flags, `updateVersionMetadata()` replaces only caller-owned draft version
-metadata, and `requireActive()` rejects closed transactions or active drafts
-already marked archived/deleted without including state payloads. `commit()`
-validates the buffered draft and closes the transaction only for accepted
-commits; rejected commits return violations and leave the transaction active.
-`rollback()` closes the transaction and returns the discarded draft evidence.
+`EntityTransactionDraftStateError`. This public surface is an in-memory,
+framework-owned draft/result boundary over one entity state. It is intentionally
+not a storage-backed transaction API, repository unit of work, async-local
+transaction context, dispatch phase, or lifecycle-event emitter. Lifecycle
+helpers mutate only buffered draft flags, `updateVersionMetadata()` replaces
+only caller-owned draft version metadata, and `requireActive()` rejects closed
+transactions or active drafts already marked archived/deleted without including
+state payloads. `commit()` validates the buffered draft and closes the
+transaction only for accepted commits; rejected commits return violations and
+leave the transaction active. `rollback()` closes the transaction and returns
+the discarded draft evidence.
 Server handler metadata exports include
 `defineEntityHandlers()`, `HandlerRegistrationBuilder`, the five handler
 metadata roles for command assignment, command reaction, event subscription,

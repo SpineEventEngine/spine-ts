@@ -1,8 +1,11 @@
 # T-0009d.2: Entity Transaction Draft/Result Kernel
 
-Status: `T-0009d.2a` complete and integrated to `main`; `T-0009d.2b` pending
+Status: `T-0009d.2a` and `T-0009d.2b` complete and integrated to `main`;
+`T-0009d.2c` public API closure in progress
 Start: `2026-06-29 19:58 WEST`
-End: `T-0009d.2a` integrated `2026-06-29 20:47 WEST`
+End: `T-0009d.2a` integrated `2026-06-29 20:47 WEST`; `T-0009d.2b`
+integrated `2026-06-29 21:19 WEST`; `T-0009d.2c` pending final review and
+integration
 Baseline commit: `3d08195`
 Task log path: `build-protocol/tasks/T-0009d2-entity-transaction-kernel/TASK.md`
 Branch: `task/T-0009d2-entity-transaction-kernel`
@@ -317,6 +320,17 @@ Splitter JVM impact summary:
   tests; coverage statements 97.51%, branches 90.28%, functions 100%, lines
   97.46%; TypeDoc/API check reported 100 proto, 28 core, 56 server, and 26
   storage expected exports; proto lint/generate/check passed.
+- `T-0009d.2b` main integration `CI=true corepack pnpm verify` passed on
+  `2026-06-29 21:19 WEST` after merge commit `5c182d3`: 14 test files / 129
+  tests; coverage statements 97.61%, branches 90.51%, functions 100%, lines
+  97.56%; TypeDoc/API check reported 100 proto, 28 core, 59 server, and 26
+  storage expected exports; proto lint/generate/check passed.
+- `T-0009d.2c` baseline `CI=true corepack pnpm verify` passed on
+  `2026-06-29 21:25 WEST` from branch baseline `5367bb8`: 14 test files / 129
+  tests; coverage statements 97.61%, branches 90.51%, functions 100%, lines
+  97.56%; TypeDoc/API check reported 100 proto, 28 core, 59 server, and 26
+  storage expected exports; proto lint/generate/check passed with generated
+  output clean.
 
 ## Round 1 Review Fix Outcome
 
@@ -337,12 +351,13 @@ rejected. No sub-agents were spawned.
 
 - Branch/worktree exists from `3d08195`.
 - Setup logs are committed at `7c267ee`.
-- `T-0009d.2a` implementation is complete and verified locally.
+- `T-0009d.2a` implementation is complete, verified locally, clean-reviewed,
+  and integrated to `main` at `2b3f3e9`.
+- `T-0009d.2b` lifecycle/version helper follow-up is complete, clean-reviewed,
+  and integrated to `main` at `5c182d3`.
 - Requirements splitter completed and was closed.
-- Round 2 clean re-review completed and all participating sub-agents are
-  closed.
-- Final pre-integration verification passed.
-- Merge commit `2b3f3e9` integrated `T-0009d.2a` to `main`.
-- Main-branch verification passed.
-- Next step: continue `T-0009d.2b Lifecycle And Version Draft Helpers` in a
-  fresh branch/worktree per protocol.
+- All participating `2a` and `2b` splitter, author, fix, and reviewer
+  sub-agents are closed.
+- `T-0009d.2c` is active in
+  `.worktrees/T-0009d2c-public-api-closure` for public API compatibility notes,
+  parent-roadmap cleanup, and verification closure only.
