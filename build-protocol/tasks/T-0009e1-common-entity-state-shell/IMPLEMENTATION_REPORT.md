@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.1 Common Entity State Shell
 
-Status: Round 5 Review Fix Implemented; Round 6 Review Pending
+Status: Round 7 Review Fix Implemented; Round 8 Review Pending
 Task log: `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e1.md`
 Review log: `build-protocol/reviews/T-0009e1-common-entity-state-shell.md`
@@ -250,10 +250,24 @@ pnpm verify` passed with 15 test files / 145 tests, coverage 97.31%
 - Round 6 reviewed Round 5 fix commit `c79f925`; result: documentation changes
   requested.
 - Round 6 docs-only fix implemented: work-log current-state wording no longer
-  says Round 4 is ready for Round 5 review after Round 5 completed, and this
-  implementation report now records the Round 5 fix verification evidence.
+  kept obsolete Round 4/Round 5 review-readiness text after Round 5 completed,
+  and this implementation report now records the Round 5 fix verification
+  evidence.
 - Round 6 fix verification passed on `2026-06-30 00:08 WEST`: `CI=true corepack
 pnpm verify` passed with 15 test files / 145 tests, coverage 97.31%
   statements / 91.28% branches / 100% functions / 97.25% lines, TypeDoc/API and
   proto gates passed with 64 expected server exports, and generated proto output
   clean.
+- Round 7 reviewed Round 6 docs-only cleanup commit `a6a3791`; result:
+  documentation changes requested.
+- Accepted docs/status finding: task/report top-level statuses and current-state
+  bullets still described earlier review readiness, even though Round 6 had been
+  reviewed, fixed, and verified.
+- Round 7 docs-only fix implemented: task/report/work-log status and
+  current-state wording now identify the Round 6 fix as completed and this
+  Round 7 cleanup as pending Round 8 review.
+- Round 7 fix verification passed on `2026-06-30 00:17 WEST`: docs and format
+  checks passed; full `CI=true corepack pnpm verify` passed with 15 test files /
+  145 tests, coverage 97.31% statements / 91.28% branches / 100% functions /
+  97.25% lines, TypeDoc/API/proto gates passed with 64 expected server exports,
+  and generated proto output clean.

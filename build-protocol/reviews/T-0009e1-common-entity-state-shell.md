@@ -431,8 +431,8 @@ Focused fix implemented and verified on `2026-06-30 00:02 WEST`.
   input positions.
 - Added a compile-time regression for a plain metadata interface with a `size`
   field, while retaining the `Date` input rejection regression.
-- Updated task/report/work-log status wording so the durable state reflects
-  Round 5 implementation pending Round 6 review.
+- Updated task/report/work-log status wording so the durable state reflected the
+  then-current next review checkpoint after the Round 5 implementation.
 - `CI=true corepack pnpm verify` passed with 15 test files / 145 tests,
   coverage 97.31% statements / 91.28% branches / 100% functions / 97.25% lines,
   TypeDoc/API/proto gates passed with 64 expected server exports, and generated
@@ -456,9 +456,9 @@ Findings:
 
 - P2/P3: work-log current-state wording still said the Round 4 fix was ready
   for Round 5 review even though Round 5 was complete and ready for Round 6.
-- P3: the implementation report status said Round 5 was implemented and
-  pending Round 6 review, but the report did not include the Round 5 fix
-  verification evidence already present in the review/work logs.
+- P3: the implementation report status had advanced to the next review
+  checkpoint, but the report did not include the Round 5 fix verification
+  evidence already present in the review/work logs.
 
 Clean-role evidence:
 
@@ -488,5 +488,63 @@ Docs-only fix implemented and verified on `2026-06-30 00:08 WEST`.
 - Implementation report now records the Round 5 fix and verification evidence.
 - `CI=true corepack pnpm verify` passed with 15 test files / 145 tests,
   coverage 97.31% statements / 91.28% branches / 100% functions / 97.25% lines,
+  TypeDoc/API/proto gates passed with 64 expected server exports, and generated
+  proto output clean.
+
+## Round 7
+
+Round 6 docs-only fix commit under review: `a6a3791`.
+
+Review result captured on `2026-06-30 00:14 WEST`: changes requested.
+
+| Role                       | Reviewer ID                            | Result     | Closure |
+| -------------------------- | -------------------------------------- | ---------- | ------- |
+| Code style/maintainability | `019f15a5-c637-76a0-82c9-eac15866faf5` | P2/P3      | Closed  |
+| Documentation              | `019f15a5-c6b3-7f71-9516-ef822db26d2a` | P2 finding | Closed  |
+| TypeScript/API docs        | `019f15a5-c71f-7760-b833-d57157c78e32` | P3 finding | Closed  |
+| Security                   | `019f15a5-c7b8-7271-9410-868316f12505` | Clean      | Closed  |
+| Performance/reliability    | `019f15a5-c828-7b00-a81d-32108b7590ea` | P3 finding | Closed  |
+
+Findings:
+
+- P2/P3: task/report top-level status and task/work-log current-state text still
+  described earlier review readiness after the Round 6 docs-only fix had already
+  been implemented and verified.
+- P3: open-risk routing still pointed the stale durable-status follow-up at the
+  prior review checkpoint instead of recording the Round 6 review/fix outcome.
+
+Clean-role evidence:
+
+- Security confirmed the docs-only cleanup did not affect runtime security
+  behavior or weaken the plain metadata rejection contract.
+- TypeScript/API confirmed the public API surface, export gate, and
+  `PlainEntityVersionMetadata` documentation remained unchanged except for stale
+  status wording.
+- Performance/reliability confirmed no runtime or test-performance behavior
+  changed in the docs-only diff.
+
+Both findings are accepted. The fix route is docs-only:
+
+- update task/report status lines to reflect Round 7 fix implemented and Round 8
+  review pending;
+- update task/work-log current-state and open-risk routing so Round 5 and Round
+  6 are recorded as reviewed/fixed history;
+- run docs/format/full verification and rerun the required review loop.
+
+## Round 7 Fix Evidence
+
+Docs-only fix implemented and verified on `2026-06-30 00:17 WEST`.
+
+- Task/report/work-log current-state wording now records Round 5 as fixed and
+  reviewed in Round 6, Round 6 as fixed and reviewed in Round 7, and this
+  Round 7 docs-only cleanup as pending Round 8 review.
+- Open-risk routing records the stale Round 4 status issue as fixed/reviewed and
+  adds the Round 7 stale-status cleanup as the active Round 8 review point.
+- `corepack pnpm docs:check` passed with the expected invalid-origin TypeDoc
+  warning and 64 expected server exports.
+- `corepack pnpm format:check` passed with all matched files using Prettier
+  style.
+- `CI=true corepack pnpm verify` passed with 15 test files / 145 tests, coverage
+  97.31% statements / 91.28% branches / 100% functions / 97.25% lines,
   TypeDoc/API/proto gates passed with 64 expected server exports, and generated
   proto output clean.

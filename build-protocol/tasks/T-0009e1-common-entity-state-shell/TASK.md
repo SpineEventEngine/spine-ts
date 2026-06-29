@@ -1,6 +1,6 @@
 # T-0009e.1: Common Entity State Shell
 
-Status: Round 5 Review Fix Implemented; Round 6 Review Pending
+Status: Round 7 Review Fix Implemented; Round 8 Review Pending
 Start: `2026-06-29 22:06 WEST`
 Baseline commit: `2ca23fd`
 Task log path: `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
@@ -16,11 +16,14 @@ Round 2 reviewer sub-agents: complete; changes requested and accepted.
 Round 3 reviewer sub-agents: complete; changes requested and accepted.
 Round 4 reviewer sub-agents: complete; changes requested and accepted.
 Round 5 reviewer sub-agents: complete; changes requested and accepted.
+Round 6 reviewer sub-agents: complete; changes requested and accepted.
+Round 7 reviewer sub-agents: complete; changes requested and accepted.
 Review-fix implementation: third pass implemented and verified for
 descriptor-safe version metadata cloning and generic constraint fixes; focused
 fourth pass implemented and verified for plain-interface type compatibility and
 proxy rejection; fifth pass implemented and verified for property-name type
-compatibility and stale-status cleanup.
+compatibility and stale-status cleanup; sixth and seventh docs-only passes
+implemented and verified for durable review/status evidence cleanup.
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:12 WEST`
 
@@ -333,4 +336,9 @@ Skipped relevant-looking skills:
   have a focused verified implementation pass committed in `98842f8` and
   cleanup/evidence commit `258d361`.
 - Round 5 review was captured after commit `258d361`; the accepted findings
-  have a focused verified implementation pass ready for Round 6 review.
+  were fixed and verified in commit `c79f925`.
+- Round 6 review was captured after commit `c79f925`; the accepted docs-only
+  findings were fixed and verified in commit `a6a3791`.
+- Round 7 review was captured after commit `a6a3791`; the accepted docs-only
+  status findings have this focused verified cleanup pass ready for Round 8
+  review.
