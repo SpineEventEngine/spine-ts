@@ -428,6 +428,35 @@ Verification:
 - `corepack pnpm typecheck` passed.
 - `git diff --check` passed.
 
+## Round 11 Documentation Follow-Up
+
+Review package `.superpowers/sdd/review-cd98ca3..0c69b4d.diff` was reviewed by
+the five required role reviewers.
+
+Reviewer outcomes:
+
+- Security: CLEAN.
+- Code style/maintainability: CLEAN.
+- TypeScript/API docs: CLEAN.
+- Performance/reliability: CLEAN.
+- Documentation: Important finding that the work-log Current State review
+  sentence still described round 8 as the last completed review step even
+  though round 10 re-review and its follow-up were now recorded.
+
+Fix response:
+
+- Updated `build-protocol/work-logs/T-0009d1.md` Current State to identify
+  round 10 re-review as the last completed review step and to record the
+  remaining documentation finding this follow-up addresses.
+
+Verification:
+
+- `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.
+- `git diff --check` passed.
+
 ## Round 9 Review
 
 Review package `.superpowers/sdd/review-cd98ca3..0d05294.diff` was reviewed by
