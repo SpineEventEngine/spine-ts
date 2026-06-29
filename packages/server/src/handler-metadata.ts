@@ -3,7 +3,12 @@ import { describeEntityMetadata } from "./entity-metadata.js";
 
 /** Entity class value accepted by explicit handler metadata registration. */
 export interface EntityClass<Instance extends object = object> {
-  /** Prototype inspected for explicitly named handler methods. */
+  /**
+   * Prototype inspected for explicitly named handler methods. Registered names
+   * must refer to own prototype data methods declared with normal class method
+   * syntax; accessors, `constructor`, inherited methods, and instance fields are
+   * rejected at runtime.
+   */
   readonly prototype: Instance;
 }
 
@@ -15,7 +20,14 @@ export type HandlerKind =
   | "event-reaction"
   | "event-application";
 
-/** Method names on an entity instance that point to callable properties. */
+/**
+ * Compile-time approximation of entity callable member names.
+ *
+ * TypeScript cannot distinguish normal class prototype methods from accessors
+ * that return functions or other callable instance properties. Runtime
+ * registration therefore applies the narrower public contract: handler names
+ * must be own prototype data methods declared with normal class method syntax.
+ */
 export type HandlerMethodName<Instance extends object> = Extract<
   {
     [Name in keyof Instance]: Instance[Name] extends (...parameters: never[]) => unknown
@@ -109,7 +121,12 @@ export type HandlerMetadata<
   | EventReactionHandlerMetadata<Schema, MethodName>
   | EventApplicationHandlerMetadata<Schema, MethodName>;
 
-/** Builder passed to `defineEntityHandlers()` for typed method-name registration. */
+/**
+ * Builder passed to `defineEntityHandlers()` for typed method-name registration.
+ *
+ * Builder methods accept the compile-time callable-name approximation, then
+ * validate that the selected name is an own prototype data method.
+ */
 export interface HandlerRegistrationBuilder<Instance extends object> {
   /** Register a command assignee method. */
   assign<Schema extends DescriptorMessageSchema>(
@@ -166,7 +183,13 @@ export interface EntityHandlersMetadata<
   readonly eventApplications: readonly EventApplicationHandlerMetadata[];
 }
 
-/** Explicitly bind schemas to entity class method names without invoking handlers. */
+/**
+ * Explicitly bind schemas to entity class method names without invoking handlers.
+ *
+ * Handler names must identify own prototype data methods declared with normal
+ * class method syntax. Registration rejects accessors, `constructor`, inherited
+ * methods, and instance fields without invoking user code.
+ */
 export function defineEntityHandlers<
   Instance extends object,
   StateSchema extends DescriptorMessageSchema,
@@ -259,7 +282,7 @@ function validateHandlerMethod<Instance extends object>(
   ) {
     throw new HandlerMetadataError(
       "UNKNOWN_HANDLER_METHOD",
-      `Handler method "${methodName}" must exist as an own prototype data method on the registered entity prototype.`,
+      `Handler method "${methodName}" must be an own prototype data method declared with normal class method syntax on the registered entity prototype.`,
     );
   }
 }

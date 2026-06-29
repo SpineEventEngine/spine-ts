@@ -1,6 +1,6 @@
 # T-0009b: Handler Metadata Contract And Explicit Registration API
 
-Status: Implementation verified; ready for review
+Status: Follow-up re-review fixes verified; pending re-review
 Start: `2026-06-29 00:40 WEST`
 End: `2026-06-29 00:53 WEST`
 Baseline commit: `11a6c70`
@@ -9,11 +9,12 @@ Branch: `task/T-0009b-handler-metadata`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b-handler-metadata`
 Requirements splitter: `019f1097-55bb-7b73-a9f8-706db486721e` (Kierkegaard the 2nd)
 Authoring sub-agent: `019f109d-ce8b-7b42-94d3-cc93b9ead054` (Russell the 2nd)
-Reviewer sub-agents: Pending
+Reviewer sub-agents: Round 1 and follow-up re-review completed
 Branch setup commit: `2b03b6b`
 Implementation baseline commit: `b1d158e`
 Implementation commit: `28d8e419918c14ac1d54079bc912931ce8b23bd9`
-Final branch HEAD: `28d8e419918c14ac1d54079bc912931ce8b23bd9` before round-1 fixes
+Round-1 fix commit: `195112ab968b4560c5efab1c557a56ba59a0182b`
+Current committed HEAD: `195112ab968b4560c5efab1c557a56ba59a0182b` before follow-up log/API contract fixes
 
 ## Objective
 
@@ -72,11 +73,11 @@ Selected skills read before task actions:
 
 Skills passed to sub-agents/reviewers:
 
-| Recipient           | Skills/Instructions Passed                     | Notes                                                                            |
-| ------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------- |
-| Splitter            | Protocol/spec docs and T-0009a/D-0034 context. | Produced first-slice recommendation with no blockers.                            |
-| Authoring sub-agent | Pending.                                       | Must receive TDD, TypeScript, API, ADR, worktree, and verification instructions. |
-| Reviewers           | Pending.                                       | Five role prompts must include T-0009b scope/non-scope and diff package.         |
+| Recipient           | Skills/Instructions Passed                                     | Notes                                                                                                                                                                               |
+| ------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Splitter            | Protocol/spec docs and T-0009a/D-0034 context.                 | Produced first-slice recommendation with no blockers.                                                                                                                               |
+| Authoring sub-agent | TDD, TypeScript/API, ADR, worktree, verification instructions. | Produced implementation commit `28d8e419918c14ac1d54079bc912931ce8b23bd9`, round-1 fix commit `195112ab968b4560c5efab1c557a56ba59a0182b`, and follow-up fixes in this working tree. |
+| Reviewers           | T-0009b scope/non-scope and diff packages.                     | Round 1 and follow-up re-review completed; current working-tree fixes need follow-up re-review after commit.                                                                        |
 
 Skipped relevant-looking skills:
 
@@ -169,6 +170,14 @@ Out of scope:
   passed after switching handler method validation to own property descriptor
   inspection.
 - Round 1 final: `CI=true corepack pnpm verify` passed after the review fixes.
+- Follow-up RED: `corepack pnpm test packages/server/src/handler-metadata.test.ts`
+  failed because the accessor regression did not yet require the runtime error
+  to describe normal class methods.
+- Follow-up GREEN: `corepack pnpm test packages/server/src/handler-metadata.test.ts`
+  passed after aligning the error message, TypeDoc comments, public docs, and
+  test evidence with the own-prototype-data-method runtime contract.
+- Follow-up final: `CI=true corepack pnpm verify` passed after the log/API
+  contract fixes.
 
 ## Coverage Result
 
@@ -176,15 +185,17 @@ Out of scope:
   93.54%, functions 100%, lines 99.43%.
 - Round 1 `CI=true corepack pnpm verify` coverage: statements 99.44%, branches
   93.7%, functions 100%, lines 99.43%.
+- Follow-up `CI=true corepack pnpm verify` coverage: statements 99.44%,
+  branches 93.7%, functions 100%, lines 99.43%.
 
 ## Documentation And Public API Impact
 
 | Area                             | Impact                                                                     |
 | -------------------------------- | -------------------------------------------------------------------------- |
 | Package README impact            | Added explicit registration example and non-scope notes.                   |
-| TypeDoc/API docs impact          | Added handler metadata exports to API overview and docs check.             |
+| TypeDoc/API docs impact          | Added handler metadata exports and normal-class-method contract notes.     |
 | Public API additions/removals    | Added handler metadata contracts, builder, and registration error.         |
-| Framework `USER_GUIDE.md` impact | Added explicit handler metadata workflow and deferred-runtime notes.       |
+| Framework `USER_GUIDE.md` impact | Added explicit handler metadata workflow and method-shape constraints.     |
 | Example `USER_GUIDE.md` impact   | N/A for this slice; to-do example is not implemented yet.                  |
 | API examples                     | Expected in server README and API docs overview.                           |
 | Compatibility notes              | Expected: explicit registration is the stable target for later decorators. |
@@ -225,6 +236,12 @@ Out of scope:
   confirmed 100 proto exports, 28 core exports, 27 server exports, and 26
   storage exports; proto lint/generate/check-generated passed; the known
   TypeDoc invalid-origin source-link warning remains.
+- Follow-up fix `CI=true corepack pnpm verify` passed on
+  `2026-06-29 12:12 WEST`: 11 test files / 70 tests passed; coverage statements
+  99.44%, branches 93.7%, functions 100%, lines 99.43%; docs/API check
+  confirmed 100 proto exports, 28 core exports, 27 server exports, and 26
+  storage exports; proto lint/generate/check-generated passed; the known
+  TypeDoc invalid-origin source-link warning remains.
 
 ## Open Risks And Follow-Up Routing
 
@@ -241,8 +258,15 @@ Out of scope:
   the first T-0009b slice: handler metadata contract plus explicit
   registration API.
 - Authoring sub-agent finished implementation verification on
-  `2026-06-29 00:53 WEST`. The diff is ready for reviewer sub-agents.
+  `2026-06-29 00:53 WEST`; round-1 reviewers inspected
+  `d200447..28d8e419918c14ac1d54079bc912931ce8b23bd9`.
+- Round-1 fixes were committed as
+  `195112ab968b4560c5efab1c557a56ba59a0182b`; follow-up reviewers inspected
+  `28d8e419918c14ac1d54079bc912931ce8b23bd9..195112ab968b4560c5efab1c557a56ba59a0182b`.
+- Follow-up re-review findings are addressed in this working tree. Next review
+  point is follow-up re-review after this fix commit.
 
 ## Integration Result
 
-Pending.
+Not integrated by this authoring sub-agent; orchestrator owns integration after
+follow-up re-review.

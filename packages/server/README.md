@@ -36,6 +36,8 @@ taskHandlers.eventApplications[0]?.allowImport; // true
 
 The explicit registration API records command assignments, command reactions,
 event subscriptions, event reactions, and event applications in declaration
-order. It does not invoke handlers, enforce transactions or `(set_once)`, build
-repositories, write storage, register buses, start transport, or implement gRPC
-services.
+order. Handler names must refer to own prototype data methods declared with
+normal class method syntax; accessors, `constructor`, inherited methods, and
+instance fields are rejected without invoking user code. The API does not
+invoke handlers, enforce transactions or `(set_once)`, build repositories, write
+storage, register buses, start transport, or implement gRPC services.

@@ -5,11 +5,12 @@ Work log: `build-protocol/work-logs/T-0009b.md`
 Branch: `task/T-0009b-handler-metadata`
 Baseline commit: `11a6c70`
 Reviewed commit/diff basis: `d200447..28d8e419918c14ac1d54079bc912931ce8b23bd9`
+Follow-up reviewed basis: `28d8e419918c14ac1d54079bc912931ce8b23bd9..195112ab968b4560c5efab1c557a56ba59a0182b`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b-handler-metadata`
 Reviewer roles: code style/maintainability; documentation; TypeScript/API docs; security; performance/reliability
-Reviewer sub-agents: Pending
-Review timestamp: `2026-06-29` round 1
-Status: Round-1 fixes verified; pending follow-up review
+Reviewer sub-agents: Round 1 and follow-up re-review completed
+Review timestamp: `2026-06-29` round 1 and follow-up
+Status: Follow-up re-review findings verified in working tree
 
 ## Scope To Review
 
@@ -37,9 +38,20 @@ Status: Round-1 fixes verified; pending follow-up review
   and performance/reliability reviewers flagged `Reflect.get()` in
   `validateHandlerMethod()` because it could execute prototype getters during
   metadata registration. Documentation reviewer flagged stale implementation
-  commit/review-basis log fields. Fixes are in progress.
+  commit/review-basis log fields.
 - Round 1 fixes: `validateHandlerMethod()` now inspects own prototype property
   descriptors and accepts only data descriptors whose value is a function.
   Regression tests cover accessors without getter invocation, inherited
   built-ins, and `constructor`. Durable logs now name the reviewed
   implementation commit and range.
+- Follow-up re-review of
+  `28d8e419918c14ac1d54079bc912931ce8b23bd9..195112ab968b4560c5efab1c557a56ba59a0182b`:
+  security and performance/reliability reviewers were clean. Documentation and
+  maintainability/style reviewers flagged stale durable-log state. TypeScript/API
+  docs reviewer flagged that TypeDoc/public docs described callable instance
+  properties more broadly than the runtime's own-prototype-data-method rule.
+- Follow-up fixes: durable logs now record the round-1 fix commit/range and
+  reviewer outcomes, and public TypeDoc/docs/tests now state that handler names
+  must refer to own prototype data methods declared with normal class method
+  syntax. Focused tests, typecheck, docs check, and full verification passed in
+  the working tree.

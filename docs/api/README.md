@@ -30,8 +30,9 @@ schemas, matching the underlying Spine option contract. Server handler metadata
 exports include `defineEntityHandlers()`, `HandlerRegistrationBuilder`, the
 five handler metadata roles for command assignment, command reaction, event
 subscription, event reaction, and event application, and `HandlerMetadataError`
-for registration-time structural failures. These APIs are metadata-only and do
-not execute handlers.
+for registration-time structural failures. Handler names must refer to own
+prototype data methods declared with normal class method syntax. These APIs are
+metadata-only and do not execute handlers.
 
 Storage exports include `StorageAdapter`, `StorageRecord`,
 `WriteSideRecordStore`, `ReadSideRecordStore`, aggregate event history

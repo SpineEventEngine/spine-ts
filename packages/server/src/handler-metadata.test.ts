@@ -2,11 +2,16 @@ import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { CommandSchema, EventSchema, file_spine_options } from "@spine-ts/proto";
 import { serverEntityMetadataTestFixtures } from "../test-fixtures/entity-metadata-fixtures.js";
 
-import { defineEntityHandlers, describeEntityMetadata, HandlerMetadataError } from "./index.js";
+import {
+  defineEntityHandlers,
+  describeEntityMetadata,
+  HandlerMetadataError,
+  type HandlerMethodName,
+} from "./index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -136,15 +141,21 @@ describe("handler metadata", () => {
       defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
         builder.assign(CommandSchema, "missingMethod" as never),
       ]),
-    ).toThrow(/must exist as an own prototype data method/);
+    ).toThrow(/normal class method syntax/);
   });
 
-  it("rejects accessor properties without invoking getters during registration", () => {
+  it("documents that callable-name typing is narrower at runtime than TypeScript can express", () => {
+    expectTypeOf<"accessorHandler">().toExtend<HandlerMethodName<AccessorProjection>>();
     expect(() =>
       defineEntityHandlers(AccessorProjection, ProjectionStateSchema, (builder) => [
         builder.assign(CommandSchema, "accessorHandler"),
       ]),
     ).toThrow(HandlerMetadataError);
+    expect(() =>
+      defineEntityHandlers(AccessorProjection, ProjectionStateSchema, (builder) => [
+        builder.assign(CommandSchema, "accessorHandler"),
+      ]),
+    ).toThrow(/normal class method/);
     expect(AccessorProjection.getterAccessCount).toBe(0);
   });
 

@@ -259,8 +259,10 @@ taskHandlers.eventApplications[0]?.allowImport; // true
 ```
 
 `defineEntityHandlers()` calls `describeEntityMetadata()` for the state schema,
-checks that named methods exist on the entity prototype, and returns frozen
-metadata arrays preserving declaration order. The builder exposes `assign()`,
+checks that named methods are own prototype data methods declared with normal
+class method syntax, and returns frozen metadata arrays preserving declaration
+order. Accessors, `constructor`, inherited methods, and instance fields are
+rejected without invoking user code. The builder exposes `assign()`,
 `command()`, `subscribe()`, `react()`, and `apply()` for the five first handler
 roles. `apply(..., { allowImport: true })` records importability for future
 event import/replay work, but this slice does not implement an import bus,

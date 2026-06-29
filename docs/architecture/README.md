@@ -149,12 +149,14 @@ import/replay machinery.
 
 Handler metadata is deterministic and frozen. The all-handlers array preserves
 the user declaration order, and role-specific arrays preserve the same relative
-order after filtering. Registration validates only that explicitly named methods
-exist on the entity prototype; duplicate-handler rules and lookup registries
-belong to the follow-up registry/validation slice. The handler metadata layer
-does not execute routes, invoke handlers, validate transactions, enforce
-`(set_once)`, assemble repositories, mutate storage, register buses, or start
-transport.
+order after filtering. Registration validates only that explicitly named
+handlers are own prototype data methods declared with normal class method
+syntax; accessors, `constructor`, inherited methods, and instance fields are
+rejected without invoking user code. Duplicate-handler rules and lookup
+registries belong to the follow-up registry/validation slice. The handler
+metadata layer does not execute routes, invoke handlers, validate transactions,
+enforce `(set_once)`, assemble repositories, mutate storage, register buses, or
+start transport.
 
 ## Storage Boundary
 
