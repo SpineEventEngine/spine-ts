@@ -24,4 +24,22 @@ clean. The orchestrator must close every reviewer after result capture.
 
 ## Round 1
 
-Pending implementation.
+Pending `T-0009d.2a` implementation. Required review roles:
+
+- code style/maintainability;
+- documentation;
+- TypeScript/API docs;
+- security;
+- performance/reliability.
+
+Reviewer risk focus from the splitter:
+
+- reject speculative storage, repositories, handler invocation, dispatcher
+  phases, buses, gRPC, or ZeroMQ;
+- confirm `commit()` uses `validateEntityStateTransition()` before accepted
+  results;
+- confirm ordinary validation failure returns structured data and does not
+  encourage mutation bypasses;
+- keep generics useful but simple; and
+- ensure docs say this is a buffered transaction boundary, not a complete
+  runtime.

@@ -10,9 +10,10 @@ Worktree:
 
 ## Summary
 
-Pending implementation. The task is constrained to a small server transaction
-draft/result kernel that mirrors the JVM transaction concept without pulling in
-storage, repositories, handler dispatch, phases, buses, gRPC, or ZeroMQ.
+Implementation pending. Setup logs are committed and baseline verification has
+passed. The task is constrained to a small server transaction draft/result
+kernel that mirrors the JVM transaction concept without pulling in storage,
+repositories, handler dispatch, phases, buses, gRPC, or ZeroMQ.
 
 ## JVM Research Used
 
@@ -27,7 +28,10 @@ the transaction result is accepted by later runtime code.
 
 ## Verification
 
-- Pending baseline verification.
+- Baseline `CI=true corepack pnpm verify` passed on
+  `2026-06-29 20:02 WEST`: 13 test files / 111 tests; coverage statements
+  97.38%, branches 90.78%, functions 100%, lines 97.31%; docs/API and proto
+  checks passed with the known TypeDoc invalid-origin warning.
 
 ## Review
 

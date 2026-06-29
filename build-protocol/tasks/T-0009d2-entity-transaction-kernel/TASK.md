@@ -8,10 +8,11 @@ Task log path: `build-protocol/tasks/T-0009d2-entity-transaction-kernel/TASK.md`
 Branch: `task/T-0009d2-entity-transaction-kernel`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009d2-entity-transaction-kernel`
-Requirements splitter: pending
+Requirements splitter: `019f14c2-9605-7d11-b8c5-3f891b1880f7` (Sartre the 2nd, closed)
 Authoring sub-agent: pending
 Reviewer sub-agents: pending
-Baseline verification evidence: pending
+Baseline verification evidence: `CI=true corepack pnpm verify` passed on
+`2026-06-29 20:02 WEST`
 
 ## Objective
 
@@ -114,6 +115,54 @@ Out of scope:
 - Automatic ID-field initialization from entity ID unless the splitter proves a
   very small descriptor-backed helper is needed for this slice.
 
+## Splitter Result
+
+The dedicated splitter reported no blocking questions and recommended three
+staged subtasks:
+
+1. `T-0009d.2a Minimal Transaction Draft/Commit Kernel`
+2. `T-0009d.2b Lifecycle And Version Draft Helpers`
+3. `T-0009d.2c Public API Polish, Compatibility Notes, Verification Closure`
+
+Recommended first implementable subtask: `T-0009d.2a`.
+
+`T-0009d.2a` scope:
+
+- add the first public transaction module in `@spine-ts/server`;
+- model `schema`, `previous`, draft next state, lifecycle flags, version
+  metadata, and status;
+- expose an OOP-style generic API such as `EntityTransaction<Schema>` with
+  `update(fn)`, `commit()`, `rollback()`, `status`, `previous`, and
+  `currentDraft`;
+- call `validateEntityStateTransition({ schema, previous, next })` during
+  commit;
+- return a rejected commit result with validator violations when transition
+  validation fails; and
+- avoid storage, repositories, handler invocation, phases, concrete entity
+  classes, buses, gRPC, ZeroMQ, and entity records.
+
+`T-0009d.2a` owned files:
+
+- `packages/server/src/entity-transaction.ts`
+- `packages/server/src/entity-transaction.test.ts`
+- `packages/server/src/index.ts`
+- `packages/server/README.md`
+- `docs/architecture/README.md`
+- durable task/work/review/report logs
+
+Splitter JVM impact summary:
+
+- JVM `Transaction` buffers state, version, and lifecycle until commit; TS
+  should do the same.
+- JVM exposes mutation only while a transaction is active; TS should reject
+  updates after commit/rollback.
+- JVM validates before applying state; TS must call
+  `validateEntityStateTransition()` before accepting commit results.
+- JVM rollback restores initial state/version and releases the transaction; TS
+  should expose rollback/release status explicitly.
+- JVM phases, listeners, entity records, repository storage, recent history,
+  and concrete entity-family rules are intentionally excluded from `T-0009d.2`.
+
 ## Decisions
 
 - D-0040: keep the transaction kernel JVM-familiar and deliberately smaller
@@ -134,7 +183,13 @@ Out of scope:
 
 ## Tests Run
 
-- Baseline verification: pending.
+- Dependency hydration: sandboxed `corepack pnpm install` was interrupted after
+  registry DNS retries. Escalated `corepack pnpm install` passed and hydrated
+  the worktree from the existing lockfile/store.
+- Baseline `CI=true corepack pnpm verify` passed on
+  `2026-06-29 20:02 WEST`: 13 test files / 111 tests; coverage statements
+  97.38%, branches 90.78%, functions 100%, lines 97.31%; docs/API and proto
+  checks passed with the known TypeDoc invalid-origin warning.
 
 ## Review Rounds
 
@@ -143,8 +198,7 @@ Out of scope:
 ## Current State
 
 - Branch/worktree exists from `3d08195`.
-- Durable setup logs are being created before splitter and implementation
-  sub-agents begin task work.
-- Next step: commit setup logs, run baseline verification, spawn and close the
-  requirements splitter, then spawn the implementation authoring sub-agent for
-  the first non-blocked subtask.
+- Setup logs are committed at `7c267ee`.
+- Baseline verification passed.
+- Requirements splitter completed and was closed.
+- Next step: spawn the implementation authoring sub-agent for `T-0009d.2a`.
