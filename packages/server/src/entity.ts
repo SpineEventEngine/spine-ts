@@ -22,7 +22,7 @@ export interface EntityOptions<Id, Schema extends DescriptorMessageSchema, Versi
   readonly schema: Schema;
   /** Initial entity state snapshot. */
   readonly state: MessageShape<Schema>;
-  /** Caller-owned version metadata. */
+  /** Caller-owned version metadata snapshot. */
   readonly version: Version;
   /** Initial lifecycle flags. Defaults to active, not deleted. */
   readonly lifecycle?: Partial<EntityLifecycleFlags>;
@@ -32,7 +32,7 @@ export interface EntityOptions<Id, Schema extends DescriptorMessageSchema, Versi
  * Common in-memory OOP shell for one server-side entity state.
  *
  * The shell exposes identity, descriptor-derived metadata, cloned state
- * snapshots, caller-owned version metadata, and lifecycle flags. It does not
+ * snapshots, caller-owned version metadata snapshots, and lifecycle flags. It does not
  * invoke handlers, create transactions, write repositories or storage, dispatch
  * messages, increment versions, route IDs, query read models, start buses, or
  * mutate process-wide runtime state.
@@ -52,7 +52,7 @@ export abstract class Entity<Id, Schema extends DescriptorMessageSchema, Version
     this.#schema = options.schema;
     this.#metadata = describeEntityMetadata(options.schema);
     this.#state = cloneState(options.schema, options.state);
-    this.#version = options.version;
+    this.#version = cloneVersionMetadata(options.version);
     this.#lifecycle = {
       archived: options.lifecycle?.archived ?? false,
       deleted: options.lifecycle?.deleted ?? false,
@@ -79,9 +79,9 @@ export abstract class Entity<Id, Schema extends DescriptorMessageSchema, Version
     return cloneState(this.#schema, this.#state);
   }
 
-  /** Caller-owned version metadata. */
+  /** Caller-owned version metadata snapshot. */
   get version(): Version {
-    return this.#version;
+    return cloneVersionMetadata(this.#version);
   }
 
   /** Current lifecycle flag snapshot. */
@@ -119,7 +119,7 @@ export abstract class Entity<Id, Schema extends DescriptorMessageSchema, Version
 
   /** Replace caller-owned version metadata from future subclass/runtime code. */
   protected replaceVersionMetadata(version: Version): void {
-    this.#version = version;
+    this.#version = cloneVersionMetadata(version);
   }
 
   /** Replace lifecycle flags from future subclass/runtime code. */
@@ -142,3 +142,13 @@ function cloneState<Schema extends DescriptorMessageSchema>(
 ): MessageShape<Schema> {
   return fromBinary(schema, toBinary(schema, state, { writeUnknownFields: false }));
 }
+
+function cloneVersionMetadata<Version>(version: Version): Version {
+  return isObjectLike(version) ? structuredClone(version) : version;
+}
+
+function isObjectLike(value: unknown): value is object {
+  return typeof value === "object" && value !== null;
+}
+
+declare function structuredClone<T>(value: T): T;

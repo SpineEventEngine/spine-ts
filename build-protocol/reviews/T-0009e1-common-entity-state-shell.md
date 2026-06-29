@@ -41,8 +41,8 @@ Findings:
   the public `version` getter returns the same reference. Object-shaped version
   metadata can be mutated through the constructor object or getter result,
   creating a public mutation path outside `replaceVersionMetadata()`.
-- P2: durable task, work, and review logs retained stale implementation-pending
-  language after implementation commit `4ade81d` existed.
+- P2: durable task, work, and review logs retained stale pre-commit language
+  after implementation commit `4ade81d` existed.
 
 Clean-role evidence:
 
@@ -57,4 +57,48 @@ Clean-role evidence:
   sticky, and no async, timers, process-global mutation, or runtime behavior was
   added.
 
-Both findings are accepted and will be fed to a focused fix worker.
+Both findings were accepted and routed to this focused fix pass.
+
+## Round 1 Fix Route
+
+Review-fix implementation started on `2026-06-29 22:36 WEST` from review
+capture commit `bff6e5e`.
+
+Accepted findings:
+
+- P2: object-shaped `Version` metadata must not be mutable through constructor
+  input, the public `version` accessor, or protected replacement input.
+- P2: durable task, work, review, and report logs must not retain live stale
+  pre-commit wording after implementation commit `4ade81d`.
+
+Fix route:
+
+- Add focused RED regressions for constructor/getter and protected replacement
+  version metadata aliasing.
+- Store and return cloned structured-clone-compatible object version metadata
+  while leaving primitive version metadata as value-like caller-owned data.
+- Update durable task/report/work/review logs to record the accepted findings
+  and remove live stale pre-commit wording.
+
+Verification:
+
+- RED focused check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts` failed on
+  `2026-06-29 22:35 WEST` as expected: 1 test file / 8 tests, with 2 failures
+  covering constructor/getter and protected replacement version metadata
+  aliasing.
+- GREEN focused check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts` passed on
+  `2026-06-29 22:36 WEST`: 1 test file / 8 tests.
+- Focused root/API check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 22:37 WEST`: 2 test files / 17 tests.
+- Targeted stale-marker search for live implementation-precommit wording in
+  T-0009e.1 task/report/work/review logs found no matches on
+  `2026-06-29 22:37 WEST`.
+- `corepack pnpm typecheck` passed after correcting explicit mutable test
+  casts; `corepack pnpm lint` passed; `corepack pnpm format:check` passed after
+  formatting the edited work log.
+- `CI=true corepack pnpm verify` passed on `2026-06-29 22:38 WEST`: 15 test
+  files / 137 tests; coverage statements 97.7%, branches 90.72%, functions
+  100%, lines 97.65%; TypeDoc/API/proto gates passed.

@@ -18,6 +18,7 @@ type ProjectionState = Message<"ProjectionState"> & {
 interface RevisionMetadata {
   readonly revision: number;
   readonly source: "server";
+  readonly labels?: readonly string[];
 }
 
 function createFixtureFileDescriptor(descriptorSetBase64: string) {
@@ -115,6 +116,34 @@ describe("entities", () => {
     expect(entity.state).not.toBe(returnedState);
   });
 
+  it("keeps constructor-provided version metadata isolated from caller mutations", () => {
+    const initialVersion = { revision: 1, source: "server" as const, labels: ["initial"] };
+    const entity = new TestEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: initialVersion,
+    });
+
+    initialVersion.revision = 2;
+    initialVersion.labels.push("caller mutation");
+
+    const returnedVersion = entity.version as unknown as {
+      revision: number;
+      labels: string[];
+    };
+    returnedVersion.revision = 3;
+    returnedVersion.labels.push("getter mutation");
+
+    expect(entity.version).toEqual({
+      revision: 1,
+      source: "server",
+      labels: ["initial"],
+    });
+    expect(entity.version).not.toBe(initialVersion);
+    expect(entity.version).not.toBe(returnedVersion);
+  });
+
   it("tracks lifecycle flags and keeps lifecycle-change tracking sticky after protected changes", () => {
     const entity = new TestEntity({
       id: "task-1",
@@ -180,5 +209,35 @@ describe("entities", () => {
     expect(entity.state).toEqual(createProjectionState({ name: "Ready", priority: 2 }));
     expect(entity.version).toEqual({ revision: 99, source: "server" });
     expect(entity.lifecycleFlagsChanged).toBe(false);
+  });
+
+  it("keeps protected version metadata replacements isolated from caller mutations", () => {
+    const replacementVersion = { revision: 2, source: "server" as const, labels: ["accepted"] };
+    const entity = new TestEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    entity.applyVersion(replacementVersion);
+
+    replacementVersion.revision = 3;
+    replacementVersion.labels.push("caller mutation");
+
+    const returnedVersion = entity.version as unknown as {
+      revision: number;
+      labels: string[];
+    };
+    returnedVersion.revision = 4;
+    returnedVersion.labels.push("getter mutation");
+
+    expect(entity.version).toEqual({
+      revision: 2,
+      source: "server",
+      labels: ["accepted"],
+    });
+    expect(entity.version).not.toBe(replacementVersion);
+    expect(entity.version).not.toBe(returnedVersion);
   });
 });

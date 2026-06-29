@@ -11,7 +11,8 @@ Parent task: `T-0009e`
 Requirements splitter:
 `019f1531-96a3-7870-bb40-b24fc9a456c8` (Goodall the 3rd, closed)
 Authoring sub-agent: Codex implementation sub-agent in this thread
-Reviewer sub-agents: pending
+Round 1 reviewer sub-agents: complete; changes requested and accepted.
+Review-fix implementation: this pass.
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:12 WEST`
 
@@ -164,15 +165,53 @@ Skipped relevant-looking skills:
   functions 100%, lines 97.64%; TypeDoc/API reported 100 proto, 28 core, 62
   server, and 26 storage expected exports; proto lint/generate/check passed
   with generated output clean.
+- Review-fix RED focused check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts` failed on
+  `2026-06-29 22:35 WEST` as expected: 1 test file / 8 tests, with 2 failures
+  covering constructor/getter and protected replacement version metadata
+  aliasing.
+- Review-fix GREEN focused check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts` passed on
+  `2026-06-29 22:36 WEST`: 1 test file / 8 tests.
+- Review-fix focused root/API check
+  `corepack pnpm exec vitest run packages/server/src/entity.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 22:37 WEST`: 2 test files / 17 tests.
+- Targeted stale-marker search for live implementation-precommit wording in
+  T-0009e.1 task/report/work/review logs found no matches on
+  `2026-06-29 22:37 WEST`.
+- Review-fix `corepack pnpm typecheck` first failed on `2026-06-29 22:37 WEST`
+  because the regression tests intentionally mutated readonly metadata through
+  casts; after making the casts explicit through `unknown`, rerun passed.
+- Review-fix `corepack pnpm lint` passed on `2026-06-29 22:38 WEST`.
+- Review-fix `corepack pnpm format:check` first found the edited work log on
+  `2026-06-29 22:38 WEST`; after formatting that file, rerun passed.
+- Review-fix `CI=true corepack pnpm verify` passed on
+  `2026-06-29 22:38 WEST`: 15 test files / 137 tests; coverage statements
+  97.7%, branches 90.72%, functions 100%, lines 97.65%; TypeDoc/API reported
+  100 proto, 28 core, 62 server, and 26 storage expected exports; proto
+  lint/generate/check passed with generated output clean.
 
 ## Review Rounds
 
-- Pending implementation.
+- Round 1 reviewed implementation commit `4ade81d`; result: changes
+  requested.
+- Accepted P2 finding: object-shaped `Version` metadata was stored and returned
+  by reference, allowing mutation outside `replaceVersionMetadata()`.
+- Accepted P2 finding: durable task/work/review/report logs retained stale
+  pre-commit wording after implementation commit `4ade81d`.
+- Fix route: add RED regression tests for constructor/getter and protected
+  replacement version snapshot isolation, then clone structured-clone-compatible
+  object version metadata at constructor, accessor, and protected replacement
+  boundaries.
 
 ## Current State
 
 - Branch/worktree exists on `task/T-0009e1-common-entity-state-shell` at
   baseline `ae5110c`.
-- Durable setup logs are committed through `ae5110c`.
-- Common abstract `Entity` state shell implementation is complete locally.
-- Final verification passed; implementation commit is next.
+- Round 1 review was captured in commit `bff6e5e`.
+- Common abstract `Entity` state shell implementation exists in commit
+  `4ade81d`.
+- This review-fix pass addressed accepted Round 1 findings with focused
+  regression coverage and durable-log cleanup.
+- Required review-fix verification has passed and is recorded in this task log
+  and the work log.
