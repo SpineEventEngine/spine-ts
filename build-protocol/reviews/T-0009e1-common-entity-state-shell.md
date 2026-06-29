@@ -374,3 +374,66 @@ Focused fix implemented on `2026-06-29 23:38 WEST`.
   with 15 test files / 145 tests, coverage 97.31% statements / 91.28% branches /
   100% functions / 97.25% lines, 64 expected server exports, TypeDoc/API and
   proto gates passed, and generated proto output clean.
+
+## Round 5
+
+Round 4 fix commits under review: `362f62e..258d361`.
+
+Review result captured on `2026-06-29 23:57 WEST`: changes requested.
+
+| Role                       | Reviewer ID                            | Result     | Closure |
+| -------------------------- | -------------------------------------- | ---------- | ------- |
+| Code style/maintainability | `019f1594-5fbd-71d0-a8d0-7c8392f7d3c8` | P2/P3      | Closed  |
+| Documentation              | `019f1594-604f-7c90-a1a7-2fcbd9a12f8f` | P2 finding | Closed  |
+| TypeScript/API docs        | `019f1594-60d6-7973-8dbc-848bf987a042` | Clean      | Closed  |
+| Security                   | `019f1594-6156-7ac2-9d42-be11f0b73bec` | Clean      | Closed  |
+| Performance/reliability    | `019f1594-61ec-77b3-98d7-3637107626b7` | Clean      | Closed  |
+
+Findings:
+
+- P2: `EntityVersionMetadata` still used a property-name denylist through the
+  broad public generic bound. Otherwise plain metadata interfaces with fields
+  such as `size`, `clear`, `then`, or `apply` could still be rejected, even
+  though runtime plain-object cloning accepts them.
+- P2/P3: durable top-level statuses still said `Round 4 Review Fix Required`,
+  and the task log still described the fourth pass as queued or ready for commit
+  even though the fix had been verified and committed.
+
+Clean-role evidence:
+
+- TypeScript/API confirmed ordinary plain metadata interfaces without index
+  signatures compile, `Date` remains rejected at `EntityOptions` input
+  boundaries, root exports and API gate include `PlainEntityVersionMetadata`,
+  and focused TypeScript/Vitest/API checks pass.
+- Security confirmed proxy metadata is rejected before reflective inspection,
+  proxy traps are covered by regression tests, and the earlier
+  array/accessor/species, `__proto__`, constructor-label, and shared-buffer
+  findings remain fixed.
+- Performance/reliability found no cost or brittleness issues in the
+  type-only helper or Node `isProxy()` runtime path under the repo's Node
+  `>=24` requirement.
+
+Both findings are accepted. The fix route is:
+
+- make the broad `EntityVersionMetadata` object arm intentionally broad and let
+  `PlainEntityVersionMetadata<T>` perform the precise recursive validation at
+  entity input positions;
+- add a regression for an otherwise plain interface with a `size` field;
+- update stale durable statuses and current-state wording;
+- rerun focused tests, typecheck, format/lint/docs, and full verification.
+
+## Round 5 Fix Evidence
+
+Focused fix implemented and verified on `2026-06-30 00:02 WEST`.
+
+- `EntityVersionMetadata` now uses a property-name-neutral object arm; precise
+  structural validation remains in `PlainEntityVersionMetadata<T>` at entity
+  input positions.
+- Added a compile-time regression for a plain metadata interface with a `size`
+  field, while retaining the `Date` input rejection regression.
+- Updated task/report/work-log status wording so the durable state reflects
+  Round 5 implementation pending Round 6 review.
+- `CI=true corepack pnpm verify` passed with 15 test files / 145 tests,
+  coverage 97.31% statements / 91.28% branches / 100% functions / 97.25% lines,
+  TypeDoc/API/proto gates passed with 64 expected server exports, and generated
+  proto output clean.

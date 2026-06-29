@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.1 Common Entity State Shell
 
-Status: Round 4 Review Fix Required
+Status: Round 5 Review Fix Implemented; Round 6 Review Pending
 Task log: `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e1.md`
 Review log: `build-protocol/reviews/T-0009e1-common-entity-state-shell.md`
@@ -232,3 +232,9 @@ Implemented on `2026-06-29 23:38 WEST`.
   test files / 145 tests, coverage 97.31% statements / 91.28% branches / 100%
   functions / 97.25% lines, TypeDoc/API/proto gates passed, and generated proto
   output clean.
+- Round 5 reviewed Round 4 fix commits `362f62e..258d361`; result: changes
+  requested.
+- Accepted P2 finding: the broad public version metadata object arm still
+  rejected otherwise plain property names such as `size`.
+- Accepted stale-status finding: task/report top-level status still said Round 4
+  fix required after the fix was verified and committed.

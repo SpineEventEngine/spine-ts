@@ -17,25 +17,9 @@ export interface EntityLifecycleFlags {
 type EntityVersionMetadataPrimitive =
   string | number | boolean | bigint | symbol | null | undefined;
 
-type EntityVersionMetadataPlainObject = object & {
-  readonly getTime?: never;
-  readonly toISOString?: never;
-  readonly exec?: never;
-  readonly then?: never;
-  readonly byteLength?: never;
-  readonly byteOffset?: never;
-  readonly size?: never;
-  readonly clear?: never;
-  readonly apply?: never;
-  readonly call?: never;
-  readonly bind?: never;
-};
-
 /** Plain snapshot data accepted as caller-owned entity version metadata. */
 export type EntityVersionMetadata =
-  | EntityVersionMetadataPrimitive
-  | readonly EntityVersionMetadata[]
-  | EntityVersionMetadataPlainObject;
+  EntityVersionMetadataPrimitive | readonly EntityVersionMetadata[] | object;
 
 type NonPlainEntityVersionMetadata =
   | Date
@@ -86,13 +70,11 @@ type PlainEntityVersionMetadataAtDepth<
               }
             : never;
 
-type EntityVersionMetadataInput<Version extends EntityVersionMetadata> = [Version] extends [
-  EntityVersionMetadata,
-]
+type EntityVersionMetadataInput<Version> = [Version] extends [EntityVersionMetadata]
   ? [EntityVersionMetadata] extends [Version]
     ? Version
     : PlainEntityVersionMetadata<Version>
-  : never;
+  : PlainEntityVersionMetadata<Version>;
 
 declare const process: {
   readonly getBuiltinModule: (specifier: "node:util") => {
@@ -108,7 +90,7 @@ const isProxy = process.getBuiltinModule("node:util").types.isProxy;
 export interface EntityOptions<
   Id,
   Schema extends DescriptorMessageSchema,
-  Version extends EntityVersionMetadata = EntityVersionMetadata,
+  Version = EntityVersionMetadata,
 > {
   /** Stable entity identifier owned by the caller/domain type. */
   readonly id: Id;
@@ -134,7 +116,7 @@ export interface EntityOptions<
 export abstract class Entity<
   Id,
   Schema extends DescriptorMessageSchema,
-  Version extends EntityVersionMetadata = EntityVersionMetadata,
+  Version = EntityVersionMetadata,
 > {
   readonly #id: Id;
   readonly #schema: Schema;

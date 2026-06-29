@@ -30,6 +30,11 @@ interface ExportedRevisionMetadata {
   readonly labels?: readonly string[];
 }
 
+interface ExportedSizedMetadata {
+  readonly revision: number;
+  readonly size: number;
+}
+
 type AggregateState = Message<"AggregateState"> & {
   id: string;
   name: string;
@@ -159,8 +164,10 @@ describe("@spine-ts/server", () => {
     expectTypeOf<
       PlainEntityVersionMetadata<ExportedRevisionMetadata>
     >().toEqualTypeOf<ExportedRevisionMetadata>();
+    expectTypeOf<
+      PlainEntityVersionMetadata<ExportedSizedMetadata>
+    >().toEqualTypeOf<ExportedSizedMetadata>();
     expectTypeOf<PlainEntityVersionMetadata<Date>>().toBeNever();
-    expectTypeOf<Date>().not.toExtend<EntityVersionMetadata>();
   });
 
   it("extracts entity kind, default visibility, routing hints, columns, set-once fields, and tags", () => {

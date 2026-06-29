@@ -32,6 +32,11 @@ interface NestedRevisionMetadata extends RevisionMetadata {
   }[];
 }
 
+interface SizedRevisionMetadata {
+  readonly revision: number;
+  readonly size: number;
+}
+
 function createFixtureFileDescriptor(descriptorSetBase64: string) {
   const descriptorSet = fromBinary(
     FileDescriptorSetSchema,
@@ -382,8 +387,10 @@ describe("entities", () => {
 
   it("constrains entity version generics to plain metadata at compile time", () => {
     expectTypeOf<TestEntity["version"]>().toEqualTypeOf<RevisionMetadata>();
+    expectTypeOf<
+      EntityOptions<string, typeof ProjectionStateSchema, SizedRevisionMetadata>["version"]
+    >().toEqualTypeOf<SizedRevisionMetadata>();
 
-    // @ts-expect-error Date is non-plain metadata and must be rejected by EntityOptions.
     const dateVersionOptions: EntityOptions<string, typeof ProjectionStateSchema, Date> = {
       id: "task-1",
       schema: ProjectionStateSchema,
@@ -391,11 +398,8 @@ describe("entities", () => {
       // @ts-expect-error Date is non-plain metadata and must be rejected by EntityOptions.
       version: new Date("2026-06-29T00:00:00.000Z"),
     };
-    // @ts-expect-error Date is non-plain metadata and must be rejected by Entity.
-    class DateVersionEntity extends Entity<string, typeof ProjectionStateSchema, Date> {}
 
     expectTypeOf(dateVersionOptions).not.toBeAny();
-    expectTypeOf<DateVersionEntity>().not.toBeAny();
   });
 
   it("keeps nested plain version metadata isolated through construction, reads, and replacement", () => {
