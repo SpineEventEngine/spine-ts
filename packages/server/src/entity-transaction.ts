@@ -1,0 +1,273 @@
+import { create, fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
+
+import type { DescriptorMessageSchema } from "./entity-metadata.js";
+import {
+  type EntityStateTransitionValidationResult,
+  validateEntityStateTransition,
+} from "./entity-transition-validation.js";
+
+/** Lifecycle flags carried by an entity transaction draft and result. */
+export interface EntityTransactionLifecycleFlags {
+  /** Whether the draft entity state is archived. */
+  readonly archived: boolean;
+  /** Whether the draft entity state is deleted. */
+  readonly deleted: boolean;
+}
+
+/** Explicit version metadata carried by an entity transaction draft. */
+export interface EntityTransactionVersionMetadata {
+  /** Caller-supplied previous committed version metadata. */
+  readonly previous: unknown;
+  /** Caller-supplied draft version metadata. */
+  readonly draft: unknown;
+}
+
+/** Explicit version metadata returned by an accepted commit. */
+export interface EntityTransactionCommittedVersionMetadata {
+  /** Caller-supplied previous committed version metadata. */
+  readonly previous: unknown;
+  /** Draft metadata accepted by the commit boundary. */
+  readonly committed: unknown;
+}
+
+/** Visible lifecycle status of an entity transaction. */
+export type EntityTransactionStatus = "active" | "committed" | "rolled-back";
+
+/** Function used to produce the next buffered draft state. */
+export type EntityTransactionUpdater<Schema extends DescriptorMessageSchema> = (
+  draft: MessageShape<Schema>,
+) => MessageShape<Schema>;
+
+/** Options for creating an {@link EntityTransaction}. */
+export interface EntityTransactionOptions<Schema extends DescriptorMessageSchema> {
+  /** Generated Protobuf-ES schema describing the entity state. */
+  readonly schema: Schema;
+  /** Previous committed entity state, absent for creation transactions. */
+  readonly previous: MessageShape<Schema> | undefined;
+  /** Initial draft state. Defaults to a clone of `previous`, or an empty state for creations. */
+  readonly draft?: MessageShape<Schema>;
+  /** Explicit version metadata to carry through draft, commit, and rollback results. */
+  readonly version: EntityTransactionVersionMetadata;
+  /** Draft lifecycle flags. Defaults to active, not deleted. */
+  readonly lifecycle?: Partial<EntityTransactionLifecycleFlags>;
+}
+
+/** Result returned when a transaction commit is accepted. */
+export interface EntityTransactionAcceptedCommit<Schema extends DescriptorMessageSchema> {
+  /** Commit result discriminator. */
+  readonly status: "accepted";
+  /** Previous committed state snapshot. */
+  readonly previous: MessageShape<Schema> | undefined;
+  /** Accepted next state snapshot. */
+  readonly next: MessageShape<Schema>;
+  /** Accepted commit version metadata. */
+  readonly version: EntityTransactionCommittedVersionMetadata;
+  /** Lifecycle flags accepted with the committed state. */
+  readonly lifecycle: EntityTransactionLifecycleFlags;
+  /** Successful transition validation result. */
+  readonly validation: EntityStateTransitionValidationResult & { readonly valid: true };
+}
+
+/** Result returned when a transaction commit is rejected by validation. */
+export interface EntityTransactionRejectedCommit<Schema extends DescriptorMessageSchema> {
+  /** Commit result discriminator. */
+  readonly status: "rejected";
+  /** Previous committed state snapshot. */
+  readonly previous: MessageShape<Schema> | undefined;
+  /** Rejected draft state snapshot. */
+  readonly next: MessageShape<Schema>;
+  /** Draft version metadata that was not accepted. */
+  readonly version: EntityTransactionVersionMetadata;
+  /** Lifecycle flags that were not accepted. */
+  readonly lifecycle: EntityTransactionLifecycleFlags;
+  /** Failed transition validation result with validator violations. */
+  readonly validation: EntityStateTransitionValidationResult & { readonly valid: false };
+}
+
+/** Structured result returned by {@link EntityTransaction.commit}. */
+export type EntityTransactionCommitResult<Schema extends DescriptorMessageSchema> =
+  EntityTransactionAcceptedCommit<Schema> | EntityTransactionRejectedCommit<Schema>;
+
+/** Structured result returned by {@link EntityTransaction.rollback}. */
+export interface EntityTransactionRollbackResult<Schema extends DescriptorMessageSchema> {
+  /** Rollback result discriminator. */
+  readonly status: "rolled-back";
+  /** Previous committed state snapshot. */
+  readonly previous: MessageShape<Schema> | undefined;
+  /** Draft state snapshot that was discarded. */
+  readonly draft: MessageShape<Schema>;
+  /** Draft version metadata that was discarded. */
+  readonly version: EntityTransactionVersionMetadata;
+  /** Lifecycle flags that were discarded. */
+  readonly lifecycle: EntityTransactionLifecycleFlags;
+}
+
+/** Error thrown when transaction methods are called after commit or rollback. */
+export class EntityTransactionStateError extends Error {
+  /** Transaction status that rejected the operation. */
+  readonly status: EntityTransactionStatus;
+
+  /** Create a deterministic closed-transaction error. */
+  constructor(status: EntityTransactionStatus, operation: "commit" | "rollback" | "update") {
+    super(`Cannot ${operation} an entity transaction with status "${status}".`);
+    this.name = "EntityTransactionStateError";
+    this.status = status;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Framework-owned buffered transaction over one entity state draft.
+ *
+ * The transaction owns only in-memory draft/result data. It does not invoke
+ * handlers, write repositories, apply snapshots, dispatch messages, start
+ * buses, or participate in async-local/global transaction state.
+ */
+export class EntityTransaction<Schema extends DescriptorMessageSchema> {
+  readonly #schema: Schema;
+  readonly #previous: MessageShape<Schema> | undefined;
+  #draft: MessageShape<Schema>;
+  #status: EntityTransactionStatus = "active";
+  readonly #version: EntityTransactionVersionMetadata;
+  readonly #lifecycle: EntityTransactionLifecycleFlags;
+
+  /** Create a transaction over previous state and a buffered draft. */
+  constructor(options: EntityTransactionOptions<Schema>) {
+    this.#schema = options.schema;
+    this.#previous =
+      options.previous === undefined ? undefined : cloneState(options.schema, options.previous);
+    this.#draft = cloneState(
+      options.schema,
+      options.draft ?? options.previous ?? create(options.schema),
+    );
+    this.#version = {
+      previous: options.version.previous,
+      draft: options.version.draft,
+    };
+    this.#lifecycle = {
+      archived: options.lifecycle?.archived ?? false,
+      deleted: options.lifecycle?.deleted ?? false,
+    };
+  }
+
+  /** Current lifecycle status of the transaction. */
+  get status(): EntityTransactionStatus {
+    return this.#status;
+  }
+
+  /** Previous committed state snapshot, absent for creation transactions. */
+  get previous(): MessageShape<Schema> | undefined {
+    return this.#previous === undefined ? undefined : cloneState(this.#schema, this.#previous);
+  }
+
+  /** Current draft state snapshot. */
+  get currentDraft(): MessageShape<Schema> {
+    return cloneState(this.#schema, this.#draft);
+  }
+
+  /** Explicit version metadata carried by the current draft. */
+  get version(): EntityTransactionVersionMetadata {
+    return { previous: this.#version.previous, draft: this.#version.draft };
+  }
+
+  /** Lifecycle flags carried by the current draft. */
+  get lifecycle(): EntityTransactionLifecycleFlags {
+    return { archived: this.#lifecycle.archived, deleted: this.#lifecycle.deleted };
+  }
+
+  /**
+   * Replace the buffered draft with the state returned by `updater`.
+   *
+   * The updater receives a snapshot of the current draft. The previous committed
+   * state is never exposed as mutable transaction storage.
+   */
+  update(updater: EntityTransactionUpdater<Schema>): MessageShape<Schema> {
+    this.#requireActive("update");
+    this.#draft = cloneState(this.#schema, updater(this.currentDraft));
+
+    return this.currentDraft;
+  }
+
+  /**
+   * Validate and commit the current draft at this transaction boundary.
+   *
+   * Ordinary entity state validation failures are returned as rejected commit
+   * results with validator violations. They do not throw and do not mark the
+   * transaction committed.
+   */
+  commit(): EntityTransactionCommitResult<Schema> {
+    this.#requireActive("commit");
+
+    const previous = this.previous;
+    const next = this.currentDraft;
+    const validation = validateEntityStateTransition({
+      schema: this.#schema,
+      previous,
+      next,
+    });
+
+    if (!validation.valid) {
+      return {
+        status: "rejected",
+        previous,
+        next,
+        version: this.version,
+        lifecycle: this.lifecycle,
+        validation,
+      };
+    }
+
+    this.#status = "committed";
+
+    return {
+      status: "accepted",
+      previous,
+      next,
+      version: {
+        previous: this.#version.previous,
+        committed: this.#version.draft,
+      },
+      lifecycle: this.lifecycle,
+      validation,
+    };
+  }
+
+  /**
+   * Release the transaction and return the unaccepted draft evidence.
+   *
+   * Rollback does not validate or accept state. It only closes this in-memory
+   * transaction so future updates or commits are rejected deterministically.
+   */
+  rollback(): EntityTransactionRollbackResult<Schema> {
+    this.#requireActive("rollback");
+    this.#status = "rolled-back";
+
+    return {
+      status: "rolled-back",
+      previous: this.previous,
+      draft: this.currentDraft,
+      version: this.version,
+      lifecycle: this.lifecycle,
+    };
+  }
+
+  #requireActive(operation: "commit" | "rollback" | "update"): void {
+    if (this.#status !== "active") {
+      throw new EntityTransactionStateError(this.#status, operation);
+    }
+  }
+}
+
+/** Create an {@link EntityTransaction} with inferred schema state typing. */
+export function createEntityTransaction<Schema extends DescriptorMessageSchema>(
+  options: EntityTransactionOptions<Schema>,
+): EntityTransaction<Schema> {
+  return new EntityTransaction(options);
+}
+
+function cloneState<Schema extends DescriptorMessageSchema>(
+  schema: Schema,
+  state: MessageShape<Schema>,
+): MessageShape<Schema> {
+  return fromBinary(schema, toBinary(schema, state, { writeUnknownFields: false }));
+}

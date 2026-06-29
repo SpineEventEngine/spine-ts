@@ -4,6 +4,31 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+## D-0041: T-0009d.2a validation-rejected commits leave the draft transaction active
+
+Date: 2026-06-29
+
+Context: `T-0009d.2a` adds the minimal `EntityTransaction` draft/result kernel.
+The task requires ordinary validation failures to return rejected commit results
+with validator violations and not throw. It also requires deterministic rejection
+of `update()` and `commit()` after commit or rollback, but does not specify that
+a validation-rejected commit attempt releases the transaction.
+
+Decision: A validation-rejected `commit()` returns `status: "rejected"` with
+the previous state, rejected draft, version metadata, lifecycle flags, and
+validator result, while keeping the transaction `status` as `"active"`.
+Accepted commits set transaction status to `"committed"`; rollback sets it to
+`"rolled-back"`.
+
+Consequences:
+
+- Framework/runtime code can inspect validator violations and decide whether to
+  update the draft again, roll back, or surface the rejection.
+- The minimal transaction status union remains the D-0040 set:
+  `"active" | "committed" | "rolled-back"`.
+- Future repository/handler slices may add stricter caller policy without
+  changing the structured rejected commit result.
+
 ## D-0040: T-0009d.2 server transaction kernel stays smaller than runtime
 
 Date: 2026-06-29

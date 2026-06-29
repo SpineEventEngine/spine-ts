@@ -1,8 +1,8 @@
 # T-0009d.2: Entity Transaction Draft/Result Kernel
 
-Status: In progress
+Status: Implemented; pending review
 Start: `2026-06-29 19:58 WEST`
-End: pending
+End: `2026-06-29 20:18 WEST`
 Baseline commit: `3d08195`
 Task log path: `build-protocol/tasks/T-0009d2-entity-transaction-kernel/TASK.md`
 Branch: `task/T-0009d2-entity-transaction-kernel`
@@ -167,6 +167,8 @@ Splitter JVM impact summary:
 
 - D-0040: keep the transaction kernel JVM-familiar and deliberately smaller
   than runtime dispatch/storage.
+- D-0041: validation-rejected commits return structured rejected results and
+  leave the minimal transaction active; accepted commit and rollback close it.
 
 ## Human Questions And Answers
 
@@ -180,6 +182,12 @@ Splitter JVM impact summary:
 - `build-protocol/work-logs/T-0009d2.md`
 - `build-protocol/reviews/T-0009d2-entity-transaction-kernel.md`
 - `build-protocol/DECISION_LOG.md`
+- `docs/architecture/README.md`
+- `packages/server/README.md`
+- `packages/server/src/entity-transaction.ts`
+- `packages/server/src/entity-transaction.test.ts`
+- `packages/server/src/index.ts`
+- `packages/server/src/index.test.ts`
 
 ## Tests Run
 
@@ -190,6 +198,28 @@ Splitter JVM impact summary:
   `2026-06-29 20:02 WEST`: 13 test files / 111 tests; coverage statements
   97.38%, branches 90.78%, functions 100%, lines 97.31%; docs/API and proto
   checks passed with the known TypeDoc invalid-origin warning.
+- RED `corepack pnpm vitest run packages/server/src/entity-transaction.test.ts packages/server/src/index.test.ts`
+  failed on `2026-06-29 20:13 WEST` as expected: 2 files ran, 7 tests failed
+  because `createEntityTransaction`, `EntityTransaction`, and root exports were
+  not implemented.
+- GREEN focused
+  `corepack pnpm vitest run packages/server/src/entity-transaction.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 20:17 WEST`: 2 files / 16 tests.
+- `corepack pnpm typecheck` passed on `2026-06-29 20:17 WEST`.
+- `corepack pnpm lint` passed on `2026-06-29 20:17 WEST` after removing an
+  unnecessary optional chain in the new test.
+- `corepack pnpm docs:check` passed on `2026-06-29 20:17 WEST` with the known
+  invalid-origin TypeDoc warning; API export counts included 43
+  `@spine-ts/server` exports.
+- `corepack pnpm format:check` passed on `2026-06-29 20:17 WEST` after
+  Prettier formatting touched source/docs/log files.
+- Full `CI=true corepack pnpm verify` passed on `2026-06-29 20:18 WEST`: 14
+  test files / 118 tests; coverage statements 97.51%, branches 90.28%,
+  functions 100%, lines 97.46%; docs/API and proto checks passed with the known
+  TypeDoc invalid-origin warning.
+- Final full `CI=true corepack pnpm verify` passed again on
+  `2026-06-29 20:21 WEST` after durable-log updates with the same 14 test files
+  / 118 tests and coverage above thresholds.
 
 ## Review Rounds
 
@@ -199,6 +229,6 @@ Splitter JVM impact summary:
 
 - Branch/worktree exists from `3d08195`.
 - Setup logs are committed at `7c267ee`.
-- Baseline verification passed.
+- `T-0009d.2a` implementation is complete and verified locally.
 - Requirements splitter completed and was closed.
-- Next step: spawn the implementation authoring sub-agent for `T-0009d.2a`.
+- Next step: orchestrator review loop for the committed implementation.

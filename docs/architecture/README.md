@@ -197,10 +197,22 @@ set-once rule remains private; callers receive the core
 `TransitionValidationResult` shape with repo-local `spine.validation.*`
 messages, field paths, and no raw previous/next values.
 
+`EntityTransaction` is the first server-owned draft/result commit boundary over
+one entity state. It buffers a draft state, explicit previous/draft version
+metadata, lifecycle flags, and visible status (`active`, `committed`, or
+`rolled-back`). `update()` replaces only the buffered draft, while `previous`
+and `currentDraft` accessors return snapshots so callers do not mutate the
+transaction's stored previous state by accident. `commit()` validates the
+previous-to-draft transition through `validateEntityStateTransition()` before
+returning an accepted result. Ordinary validation failures return a rejected
+result with validator violations and leave the transaction active for caller
+policy to decide; rollback closes the transaction and returns discarded draft
+evidence.
+
 The server metadata and validation layer still does not execute routes, invoke
 handlers, instantiate entities, deserialize `Any` payloads, assemble
-repositories, mutate storage, register buses, mutate a global registry, or start
-transport.
+repositories, mutate storage, register buses, mutate a global registry, provide
+async-local transaction state, or start transport.
 
 ## Storage Boundary
 
