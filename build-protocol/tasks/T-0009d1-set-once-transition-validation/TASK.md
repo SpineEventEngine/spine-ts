@@ -1,8 +1,8 @@
 # T-0009d.1: Built-In Set-Once Transition Validation
 
-Status: Complete through fix round 10 docs/log cleanup; pending clean re-review/integration
+Status: Complete through fix round 12 docs/log cleanup; pending clean re-review/integration
 Start: `2026-06-29 14:52 WEST`
-End: `2026-06-29 18:03 WEST`
+End: `2026-06-29 18:21 WEST`
 Baseline commit: `1d939d7`
 Task log path: `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
 Branch: `task/T-0009d1-set-once-transition-validation`
@@ -10,7 +10,7 @@ Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009d1-se
 Requirements splitter: `019f13a4-a6f5-7302-94e0-7b16366b0701` (Popper)
 Branch setup commit: `88cb0f3`
 Authoring sub-agent: Codex implementation sub-agent
-Reviewer sub-agents: Round 1 through Round 8 role reviewers for code
+Reviewer sub-agents: Round 1 through Round 12 role reviewers for code
 style/maintainability, documentation, TypeScript/API docs, security, and
 performance/reliability; individual reviewer IDs are not present in durable task
 evidence.
@@ -487,6 +487,13 @@ functions 100%, lines 97.28%.
   rather than adding a speculative TypeScript transaction stack in this slice.
   This round also refreshes the final task end timestamp and the Tests Run
   section for fix-round 9 verification evidence.
+- Fix round 11 addresses round-10 re-review findings by adding fix-round 10
+  verification evidence to `TASK.md`, the work-log chronological row, and the
+  work-log Current State summary.
+- Fix round 12 addresses round-11/final re-review findings by updating this
+  task status/reviewer metadata, moving the review-log rounds into
+  chronological order, and making the work-log Current State identify the
+  latest completed review state accurately.
 
 ## Completion Checklist
 

@@ -428,35 +428,6 @@ Verification:
 - `corepack pnpm typecheck` passed.
 - `git diff --check` passed.
 
-## Round 11 Documentation Follow-Up
-
-Review package `.superpowers/sdd/review-cd98ca3..0c69b4d.diff` was reviewed by
-the five required role reviewers.
-
-Reviewer outcomes:
-
-- Security: CLEAN.
-- Code style/maintainability: CLEAN.
-- TypeScript/API docs: CLEAN.
-- Performance/reliability: CLEAN.
-- Documentation: Important finding that the work-log Current State review
-  sentence still described round 8 as the last completed review step even
-  though round 10 re-review and its follow-up were now recorded.
-
-Fix response:
-
-- Updated `build-protocol/work-logs/T-0009d1.md` Current State to identify
-  round 10 re-review as the last completed review step and to record the
-  remaining documentation finding this follow-up addresses.
-
-Verification:
-
-- `corepack pnpm format:check` passed.
-- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
-  warning and expected API export counts.
-- `corepack pnpm typecheck` passed.
-- `git diff --check` passed.
-
 ## Round 9 Review
 
 Review package `.superpowers/sdd/review-cd98ca3..0d05294.diff` was reviewed by
@@ -489,6 +460,74 @@ Fix response:
   future transaction/runtime boundary instead of adding a speculative
   TypeScript transaction stack in this slice.
 - Refreshed `TASK.md` end timestamp and Tests Run evidence for fix round 9.
+
+Verification:
+
+- `corepack pnpm format:check` initially failed on
+  `build-protocol/work-logs/T-0009d1.md`; after
+  `corepack pnpm exec prettier --write build-protocol/work-logs/T-0009d1.md`,
+  `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.
+- `git diff --check` passed.
+
+## Round 11 Documentation Follow-Up
+
+Review package `.superpowers/sdd/review-cd98ca3..0c69b4d.diff` was reviewed by
+the five required role reviewers.
+
+Reviewer outcomes:
+
+- Security: CLEAN.
+- Code style/maintainability: CLEAN.
+- TypeScript/API docs: CLEAN.
+- Performance/reliability: CLEAN.
+- Documentation: Important finding that the work-log Current State review
+  sentence still described round 8 as the last completed review step even
+  though round 10 re-review and its follow-up were now recorded.
+
+Fix response:
+
+- Updated `build-protocol/work-logs/T-0009d1.md` Current State to identify
+  round 10 re-review as the last completed review step and to record the
+  remaining documentation finding this follow-up addresses.
+
+Verification:
+
+- `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.
+- `git diff --check` passed.
+
+## Round 12 Durable Metadata Follow-Up
+
+Review package `.superpowers/sdd/review-cd98ca3..67d0a83.diff` was reviewed by
+the five required role reviewers.
+
+Reviewer outcomes:
+
+- Security: CLEAN.
+- Code style/maintainability: Important findings that the work-log Current
+  State still framed round 11 as unresolved and `TASK.md` metadata still named
+  only rounds 1-8.
+- Documentation: Important finding that the work-log Current State did not name
+  round 11, package `.superpowers/sdd/review-cd98ca3..0c69b4d.diff`, or cleanup
+  commit `67d0a83` as the current review/follow-up state.
+- Performance/reliability: finding that `TASK.md` status and reviewer metadata
+  contradicted later review rounds.
+- TypeScript/API docs: Important finding that Round 11 was recorded before
+  Rounds 9 and 10, making durable review order incoherent.
+
+Fix response:
+
+- Updated `TASK.md` status and reviewer metadata through round 12 and added
+  fix-round 11/12 narrative entries.
+- Updated `build-protocol/work-logs/T-0009d1.md` Current State to identify the
+  latest round-11/final re-review package and the current follow-up cleanup.
+- Moved review-log sections into chronological order and recorded this round-12
+  response.
 
 Verification:
 
