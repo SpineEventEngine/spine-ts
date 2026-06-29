@@ -7,7 +7,8 @@ Task log path: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Branch: `task/T-0009e-entity-base-classes`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009e-entity-base-classes`
-Requirements splitter: pending
+Requirements splitter:
+`019f1531-96a3-7870-bb40-b24fc9a456c8` (Goodall the 3rd, closed)
 Authoring sub-agent: pending
 Reviewer sub-agents: pending
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
@@ -103,6 +104,54 @@ subtasks before implementation. The splitter should:
 - require JVM source inspection for any proposed family-specific behavior; and
 - list files/docs/tests expected for each subtask.
 
+## Splitter Result
+
+The dedicated splitter reported no blocking questions and recommended this
+staged roadmap:
+
+1. `T-0009e.1 Common Entity State Shell`
+2. `T-0009e.2 TransactionalEntity Scoped Draft Helpers`
+3. `T-0009e.3 Family Capability Marker Classes`
+4. `T-0009e.4 Public API Closure And Verification`
+
+Recommended first non-blocked subtask: `T-0009e.1 Common Entity State Shell`.
+
+`T-0009e.1` scope:
+
+- add an abstract `Entity` base class for identity, state snapshots, version
+  metadata, lifecycle flags, active/archived/deleted accessors,
+  lifecycle-change tracking, and descriptor-derived metadata;
+- use Protobuf-ES schema/value snapshots, not Java-style builders;
+- keep state mutation out of public API; and
+- avoid transactions, repositories, handler invocation, dispatch, storage,
+  lifecycle events, automatic version increments, ID routing, and query support.
+
+`T-0009e.1` expected files:
+
+- `packages/server/src/entity.ts`
+- `packages/server/src/entity.test.ts`
+- `packages/server/src/index.ts`
+- `packages/server/src/index.test.ts`
+- `scripts/check-api-docs.mjs`
+- `packages/server/README.md`
+- `docs/api/README.md`
+- `docs/USER_GUIDE.md`
+- `docs/architecture/README.md`
+- durable task/work/review/report logs
+
+Splitter JVM impact notes for `T-0009e.1`:
+
+- JVM `Entity` and `AbstractEntity` expose ID, state, version, lifecycle flags,
+  active/inactive status, lifecycle-change tracking, and model metadata.
+- JVM validates and updates state internally, not through arbitrary public
+  mutation.
+- Storage, lifecycle event emission, repository filtering, and dispatch are left
+  to later infrastructure.
+- TypeScript should use schema plus `EntityMetadata` instead of JVM reflection
+  `EntityClass`, return cloned Protobuf-ES snapshots, keep version metadata
+  caller-owned for now, and avoid Java builders, recent history, transaction
+  listeners, lifecycle system events, or repositories.
+
 ## Initial Scope Constraints
 
 In scope for `T-0009e` overall:
@@ -160,4 +209,5 @@ Out of scope until later tasks:
 - Branch/worktree exists from `47eae4e`.
 - Durable setup logs are committed at `3ff607b`.
 - Baseline verification passed on `2026-06-29 22:01 WEST`.
-- Requirements splitter is next.
+- Requirements splitter completed with no blockers and was closed.
+- Next step: create the isolated `T-0009e.1` branch/worktree.
