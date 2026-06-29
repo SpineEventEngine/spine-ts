@@ -1,6 +1,6 @@
 # T-0009b.3: Handler Metadata Registry And Validation
 
-Status: Review clean; awaiting branch-tip verification
+Status: Review clean; branch verification passed
 Start: `2026-06-29 12:49 WEST`
 End: `2026-06-29 13:02 WEST`
 Baseline commit: `3ecdaf0`
@@ -15,6 +15,7 @@ Implementation baseline commit: `6a99321`
 Implementation commit reviewed in round 1: `2c03b6a82902e4abdc066c67703354bf9140944f`
 Final reviewed implementation HEAD: `2c03b6a82902e4abdc066c67703354bf9140944f`
 Review-fix commit: `19876ac756c96f425d6868b5e68f46e3957e913b`
+Review-closure checkpoint: `5975f7d`
 
 ## Objective
 
@@ -186,12 +187,18 @@ Out of scope:
 - Final `CI=true corepack pnpm verify` passed on `2026-06-29 13:02 WEST`: 11
   test files / 75 tests passed; docs/API and proto checks passed with the known
   TypeDoc invalid-origin warning.
+- Review-closure branch verification `CI=true corepack pnpm verify` passed on
+  `2026-06-29 13:28 WEST` at `5975f7d`: 11 test files / 75 tests passed;
+  docs/API and proto checks passed with the known TypeDoc invalid-origin
+  warning.
 
 ## Coverage Result
 
 - Baseline `CI=true corepack pnpm verify` coverage: statements 99.44%, branches
   93.7%, functions 100%, lines 99.43%.
 - Final `CI=true corepack pnpm verify` coverage: statements 99.52%, branches
+  93.24%, functions 100%, lines 99.51%.
+- Review-closure branch verification coverage: statements 99.52%, branches
   93.24%, functions 100%, lines 99.51%.
 
 ## Documentation And Public API Impact
@@ -226,6 +233,8 @@ Out of scope:
 - Final `CI=true corepack pnpm verify` passed in
   `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b3-handler-registry-validation`
   on `2026-06-29 13:02 WEST`.
+- Review-closure `CI=true corepack pnpm verify` passed in the same worktree on
+  `2026-06-29 13:28 WEST` at `5975f7d`.
 
 ## Open Risks And Follow-Up Routing
 
@@ -252,5 +261,5 @@ Out of scope:
 
 ## Integration Result
 
-Implementation and follow-up review loop are clean. Branch-tip verification is
-the next gate before integration.
+Implementation and follow-up review loop are clean. Review-closure branch
+verification passed; integration is the next gate.
