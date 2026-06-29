@@ -1,8 +1,8 @@
 # T-0009d.1: Built-In Set-Once Transition Validation
 
-Status: Complete through fix round 13 docs/log cleanup; pending clean re-review/integration
+Status: Complete through fix round 14 docs/log cleanup; pending clean re-review/integration
 Start: `2026-06-29 14:52 WEST`
-End: `2026-06-29 18:26 WEST`
+End: `2026-06-29 18:35 WEST`
 Baseline commit: `1d939d7`
 Task log path: `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
 Branch: `task/T-0009d1-set-once-transition-validation`
@@ -10,7 +10,7 @@ Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009d1-se
 Requirements splitter: `019f13a4-a6f5-7302-94e0-7b16366b0701` (Popper)
 Branch setup commit: `88cb0f3`
 Authoring sub-agent: Codex implementation sub-agent
-Reviewer sub-agents: Round 1 through Round 13 role reviewers for code
+Reviewer sub-agents: Round 1 through Round 14 role reviewers for code
 style/maintainability, documentation, TypeScript/API docs, security, and
 performance/reliability; individual reviewer IDs are not present in durable task
 evidence.
@@ -356,6 +356,22 @@ Out of scope:
   `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
   warning and expected API export counts; `corepack pnpm typecheck` passed;
   `git diff --check` passed.
+- Fix-round 11 docs/log verification: `corepack pnpm format:check` initially
+  failed on `build-protocol/work-logs/T-0009d1.md`; after
+  `corepack pnpm exec prettier --write build-protocol/work-logs/T-0009d1.md`,
+  `corepack pnpm format:check` passed. `corepack pnpm docs:check` passed with
+  the known TypeDoc invalid-origin warning and expected API export counts;
+  `corepack pnpm typecheck` passed; `git diff --check` passed.
+- Fix-round 12 docs/log verification: `corepack pnpm format:check` passed.
+  `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts; `corepack pnpm typecheck` passed;
+  `git diff --check` passed.
+- Fix-round 13 docs/log verification: `corepack pnpm format:check` initially
+  failed on `build-protocol/work-logs/T-0009d1.md`; after
+  `corepack pnpm exec prettier --write build-protocol/work-logs/T-0009d1.md`,
+  `corepack pnpm format:check` passed. `corepack pnpm docs:check` passed with
+  the known TypeDoc invalid-origin warning and expected API export counts;
+  `corepack pnpm typecheck` passed; `git diff --check` passed.
 
 ## Coverage Result
 
@@ -497,6 +513,9 @@ functions 100%, lines 97.28%.
 - Fix round 13 addresses round-12/final re-review findings by rewriting the
   review-log tail so Rounds 9-13 physically appear in chronological order and
   updating task/work/report metadata to name this final chronology cleanup.
+- Fix round 14 addresses round-13/final re-review findings by adding
+  fix-round 11-13 verification evidence to this canonical Tests Run section and
+  the work-log Current State verification summary.
 
 ## Completion Checklist
 
