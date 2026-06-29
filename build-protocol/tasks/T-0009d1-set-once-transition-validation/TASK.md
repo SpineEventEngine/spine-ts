@@ -8,6 +8,7 @@ Task log path: `build-protocol/tasks/T-0009d1-set-once-transition-validation/TAS
 Branch: `task/T-0009d1-set-once-transition-validation`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009d1-set-once-transition-validation`
 Requirements splitter: `019f13a4-a6f5-7302-94e0-7b16366b0701` (Popper)
+Branch setup commit: `88cb0f3`
 Authoring sub-agent: TBD
 Reviewer sub-agents: TBD
 
@@ -131,7 +132,7 @@ TBD
 
 ## Tests Run
 
-TBD
+- Branch setup is based on `88cb0f3`; baseline verification is pending.
 
 ## Coverage Result
 
