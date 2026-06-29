@@ -129,7 +129,20 @@ Out of scope:
 
 ## Files Changed
 
-TBD
+- `build-protocol/DEVELOPER_API.md`
+- `build-protocol/tasks/T-0009d1-set-once-transition-validation/IMPLEMENTATION_REPORT.md`
+- `build-protocol/work-logs/T-0009d1.md`
+- `docs/USER_GUIDE.md`
+- `docs/api/README.md`
+- `docs/architecture/README.md`
+- `packages/server/README.md`
+- `packages/server/package.json`
+- `packages/server/src/entity-transition-validation.test.ts`
+- `packages/server/src/entity-transition-validation.ts`
+- `packages/server/src/index.test.ts`
+- `packages/server/src/index.ts`
+- `pnpm-lock.yaml`
+- `scripts/check-api-docs.mjs`
 
 ## Tests Run
 
@@ -142,22 +155,45 @@ TBD
   12 test files / 83 tests passed; coverage statements 98.72%, branches
   91.16%, functions 100%, lines 98.69%; docs/API and proto checks passed with
   the known TypeDoc invalid-origin warning.
+- RED `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected on `2026-06-29 15:03 WEST` with four behavior failures
+  because `validateEntityStateTransition` was not a function.
+- `corepack pnpm install --offline` was interrupted after pnpm attempted
+  network registry/attestation lookups while hydrating `node_modules`; rerun
+  `corepack pnpm install` with network approval passed.
+- GREEN `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 15:12 WEST`: 2 test files / 15 tests.
+- `corepack pnpm typecheck` passed on `2026-06-29 15:10 WEST`.
+- `corepack pnpm docs:check` passed on `2026-06-29 15:09 WEST` with the known
+  TypeDoc invalid-origin warning and 43 expected `@spine-ts/server` exports.
+- `corepack pnpm format:check` passed on `2026-06-29 15:10 WEST`.
+- `corepack pnpm test:coverage` passed on `2026-06-29 15:12 WEST`: 13 test
+  files / 89 tests; coverage statements 98.79%, branches 92.34%, functions
+  100%, lines 98.76%.
+- Initial full verification failed first on Markdown formatting, then on branch
+  coverage after the new equality helper. Formatting and equality-path coverage
+  were added.
+- Final `CI=true corepack pnpm verify` passed on `2026-06-29 15:15 WEST`: 13
+  test files / 89 tests; coverage statements 98.79%, branches 92.34%,
+  functions 100%, lines 98.76%; docs/API and proto checks passed with the known
+  TypeDoc invalid-origin warning.
 
 ## Coverage Result
 
-TBD
+Final full verification coverage: statements 98.79%, branches 92.34%,
+functions 100%, lines 98.76%.
 
 ## Documentation And Public API Impact
 
-| Area                             | Expected Impact                                                           |
-| -------------------------------- | ------------------------------------------------------------------------- |
-| Package README impact            | Document set-once transition validation and metadata-only boundaries.     |
-| TypeDoc/API docs impact          | Add public transition validation API with TypeDoc and API guard coverage. |
-| Public API additions/removals    | Add high-level server validation API; no removals expected.               |
-| Framework `USER_GUIDE.md` impact | Explain single-message vs state-transition validation.                    |
-| Example `USER_GUIDE.md` impact   | N/A for this slice; to-do example is not implemented yet.                 |
-| API examples                     | Expected in server README and API overview.                               |
-| Compatibility notes              | `(set_once)` is enforced after first committed state, not on creation.    |
+| Area                             | Expected Impact                                                             |
+| -------------------------------- | --------------------------------------------------------------------------- |
+| Package README impact            | Documented set-once transition validation and metadata-only boundaries.     |
+| TypeDoc/API docs impact          | Added public transition validation API with TypeDoc and API guard coverage. |
+| Public API additions/removals    | Added high-level server validation API; no removals.                        |
+| Framework `USER_GUIDE.md` impact | Explained single-message vs state-transition validation.                    |
+| Example `USER_GUIDE.md` impact   | N/A for this slice; to-do example is not implemented yet.                   |
+| API examples                     | Expected in server README and API overview.                                 |
+| Compatibility notes              | `(set_once)` is enforced after first committed state, not on creation.      |
 
 ## Security Impact
 
@@ -183,10 +219,10 @@ TBD
 ## Completion Checklist
 
 - [x] Baseline verification captured in the task worktree.
-- [ ] Authoring sub-agent report captured and closed.
+- [x] Authoring sub-agent report captured and closed.
 - [ ] Five reviewer sub-agents completed and closed.
 - [ ] Review comments either fixed and re-reviewed or technically resolved.
-- [ ] Full verification passed on the task branch.
+- [x] Full verification passed on the task branch.
 - [ ] Task branch merged back to `main`.
 - [ ] Full verification passed on `main`.
 - [ ] Durable task/work/review logs updated with final commits and verification.

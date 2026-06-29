@@ -177,6 +177,8 @@ const expectedServerExports = [
   "DescriptorMetadataError",
   "EntityClass",
   "EntityHandlersMetadata",
+  "EntityStateTransitionValidationRequest",
+  "EntityStateTransitionValidationResult",
   "FirstFieldRoutingHint",
   "EntityKind",
   "EntityMetadata",
@@ -204,6 +206,7 @@ const expectedServerExports = [
   "isEntitySchema",
   "describeEntityMetadata",
   "materializeDecoratedEntityHandlers",
+  "validateEntityStateTransition",
 ];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 
