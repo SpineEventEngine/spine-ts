@@ -1,6 +1,6 @@
 # T-0009b.3: Handler Metadata Registry And Validation
 
-Status: Review clean; branch verification passed
+Status: Integrated into main; awaiting main verification
 Start: `2026-06-29 12:49 WEST`
 End: `2026-06-29 13:02 WEST`
 Baseline commit: `3ecdaf0`
@@ -16,6 +16,7 @@ Implementation commit reviewed in round 1: `2c03b6a82902e4abdc066c67703354bf9140
 Final reviewed implementation HEAD: `2c03b6a82902e4abdc066c67703354bf9140944f`
 Review-fix commit: `19876ac756c96f425d6868b5e68f46e3957e913b`
 Review-closure checkpoint: `5975f7d`
+Integration merge commit: `d4f92ac`
 
 ## Objective
 
@@ -235,6 +236,8 @@ Out of scope:
   on `2026-06-29 13:02 WEST`.
 - Review-closure `CI=true corepack pnpm verify` passed in the same worktree on
   `2026-06-29 13:28 WEST` at `5975f7d`.
+- Integration: merged `task/T-0009b3-handler-registry-validation` into `main`
+  as `d4f92ac` on `2026-06-29 13:30 WEST`; main verification is the next gate.
 
 ## Open Risks And Follow-Up Routing
 
@@ -262,4 +265,5 @@ Out of scope:
 ## Integration Result
 
 Implementation and follow-up review loop are clean. Review-closure branch
-verification passed; integration is the next gate.
+verification passed and the branch is integrated into `main`; main verification
+is the next gate.
