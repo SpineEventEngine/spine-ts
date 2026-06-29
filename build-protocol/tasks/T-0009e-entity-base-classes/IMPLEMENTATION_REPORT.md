@@ -24,7 +24,11 @@ remaining smaller than repositories and dispatch.
 
 ## Verification
 
-- Pending baseline verification.
+- Baseline `CI=true corepack pnpm verify` passed on
+  `2026-06-29 22:01 WEST`: 14 test files / 129 tests; coverage statements
+  97.61%, branches 90.51%, functions 100%, lines 97.56%; TypeDoc/API reported
+  100 proto, 28 core, 59 server, and 26 storage expected exports; proto
+  lint/generate/check passed with generated output clean.
 
 ## Review
 
