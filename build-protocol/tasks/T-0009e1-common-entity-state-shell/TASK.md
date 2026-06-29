@@ -1,6 +1,6 @@
 # T-0009e.1: Common Entity State Shell
 
-Status: Round 3 Review Fix Implemented; Round 4 Review Pending
+Status: Round 4 Review Fix Required
 Start: `2026-06-29 22:06 WEST`
 Baseline commit: `2ca23fd`
 Task log path: `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
@@ -14,9 +14,10 @@ Authoring sub-agent: Codex implementation sub-agent in this thread
 Round 1 reviewer sub-agents: complete; changes requested and accepted.
 Round 2 reviewer sub-agents: complete; changes requested and accepted.
 Round 3 reviewer sub-agents: complete; changes requested and accepted.
+Round 4 reviewer sub-agents: complete; changes requested and accepted.
 Review-fix implementation: third pass implemented and verified for
 descriptor-safe version metadata cloning and generic constraint fixes; focused
-review pending.
+fourth pass queued for plain-interface type compatibility and proxy rejection.
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:12 WEST`
 
@@ -281,6 +282,17 @@ Skipped relevant-looking skills:
   without `map()`; object metadata uses data-property definitions so JSON
   `__proto__` stays an own property; rejection labels avoid caller-controlled
   constructors; and excessive nesting rejects with the domain `TypeError`.
+- Round 4 reviewed Round 3 fix commit `7bcb7f8`; result: changes requested.
+- Accepted P2/API finding: the index-signature bound rejects ordinary named
+  plain metadata interfaces, so the public type contract must use a
+  plain-shape validator instead of requiring callers to add string index
+  signatures.
+- Accepted P2/security finding: proxy metadata can execute traps during
+  reflective validation; proxies must be rejected before reflective object/array
+  inspection.
+- Fix route: add compile-time regressions for accepted plain interfaces and
+  rejected non-plain types, add a runtime proxy-trap regression, implement the
+  smallest type/runtime hardening, verify, and rerun all five review roles.
 
 ## Current State
 
@@ -296,3 +308,5 @@ Skipped relevant-looking skills:
   updates, and full verification.
 - Round 3 review was captured after commit `50a1802`; the accepted findings have
   a focused verified implementation pass, with the next review still pending.
+- Round 4 review was captured after commit `7bcb7f8`; the accepted findings
+  require a narrow follow-up fix before completion.

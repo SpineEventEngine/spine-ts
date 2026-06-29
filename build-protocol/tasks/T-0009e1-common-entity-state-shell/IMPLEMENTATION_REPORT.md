@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.1 Common Entity State Shell
 
-Status: Round 3 Review Fix Implemented; Round 4 Review Pending
+Status: Round 4 Review Fix Required
 Task log: `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e1.md`
 Review log: `build-protocol/reviews/T-0009e1-common-entity-state-shell.md`
@@ -198,3 +198,11 @@ Implementation impact:
   properties so JSON `__proto__` cannot mutate prototypes; error labels avoid
   caller-controlled constructors; and excessive nesting rejects with the domain
   `TypeError`.
+- Round 4 reviewed Round 3 fix commit `7bcb7f8`; result: changes requested.
+- Accepted P2/API finding: the current generic bound rejects ordinary named
+  plain metadata interfaces because it requires an index signature.
+- Accepted P2/security finding: proxy metadata can execute traps before
+  reflective validation rejects or accepts it.
+- Follow-up route: replace the generic bound with a plain-shape type validator,
+  reject proxies before reflection, add focused regressions, and rerun the
+  required review loop.

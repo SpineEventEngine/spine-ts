@@ -303,3 +303,51 @@ Verification:
   files / 144 tests; coverage statements 97.3%, branches 91.24%, functions
   100%, lines 97.24%; TypeDoc/API/proto gates passed and generated proto output
   was clean.
+
+## Round 4
+
+Round 3 fix commit under review: `7bcb7f8`.
+
+Review result captured on `2026-06-29 23:25 WEST`: changes requested.
+
+| Role                       | Reviewer ID                            | Result     | Closure |
+| -------------------------- | -------------------------------------- | ---------- | ------- |
+| Code style/maintainability | `019f157a-8682-7d41-acfb-36250edfcdbe` | Clean      | Closed  |
+| Documentation              | `019f157a-86fa-72a0-9734-72f6f57c6762` | Clean      | Closed  |
+| TypeScript/API docs        | `019f157a-8762-7b61-a3a2-869413db1b6a` | P2 finding | Closed  |
+| Security                   | `019f157a-87eb-7ad3-b0c5-706e0b790534` | P2 finding | Closed  |
+| Performance/reliability    | `019f157a-8860-79b0-8df7-e2553dfd6254` | Clean      | Closed  |
+
+Findings:
+
+- P2/API: the `Version extends EntityVersionMetadata` constraint rejects valid
+  plain metadata interfaces unless callers add an explicit string index
+  signature. The type contract should reject non-plain types such as `Date`
+  while accepting ordinary named interfaces with plain fields.
+- P2/security: proxy objects can still execute caller-controlled traps during
+  validation because reflective checks such as `Object.getPrototypeOf()` and
+  `Object.getOwnPropertyDescriptors()` are reached before any proxy rejection.
+  This task accepts explicit runtime rejection before reflective inspection.
+
+Clean-role evidence:
+
+- Code style/maintainability found the Round 3 fix scoped to private metadata
+  helpers, focused tests, and durable logs only, with no runtime-scope creep.
+- Documentation found no stale status, inaccurate verification evidence,
+  missing Round 4 readiness, or public wording implying repository/runtime
+  behavior.
+- Performance/reliability confirmed deep metadata now rejects with the domain
+  `TypeError`, arrays do not drop custom own properties silently, nested plain
+  metadata still clones, and normal metadata clone cost remains linear and
+  bounded by depth.
+
+Both findings are accepted. The fix route is:
+
+- replace the index-signature generic bound with a recursive mapped/conditional
+  type contract that accepts normal plain interfaces and rejects non-plain
+  values such as `Date`;
+- add compile-time regressions for both accepted plain interfaces and rejected
+  non-plain metadata;
+- reject Node proxies before reflective object/array validation, using an
+  intrinsic check such as `util.types.isProxy()`;
+- add a focused runtime regression proving proxy traps are not invoked.
