@@ -9,7 +9,7 @@ Branch: `task/T-0009c1-decorator-metadata-collection`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009c1-decorator-metadata-collection`
 Requirements splitter: `019f135f-f815-7143-928f-8ba84237d0af` (Goodall)
 Branch setup commit: `e711edc`
-Authoring sub-agent: TBD
+Authoring sub-agent: Codex implementation sub-agent
 Reviewer sub-agents: TBD
 Baseline verification evidence commit: `07e40c0`
 
@@ -134,7 +134,20 @@ Out of scope:
 
 ## Files Changed
 
-TBD
+- `packages/server/src/handler-decorators.ts`
+- `packages/server/src/handler-decorators.test.ts`
+- `packages/server/src/index.ts`
+- `packages/server/src/index.test.ts`
+- `packages/server/README.md`
+- `docs/USER_GUIDE.md`
+- `docs/api/README.md`
+- `docs/architecture/README.md`
+- `scripts/check-api-docs.mjs`
+- `tsconfig.base.json`
+- `build-protocol/tasks/T-0009c1-decorator-metadata-collection/TASK.md`
+- `build-protocol/tasks/T-0009c1-decorator-metadata-collection/IMPLEMENTATION_REPORT.md`
+- `build-protocol/work-logs/T-0009c1.md`
+- `build-protocol/reviews/T-0009c1-decorator-metadata-collection.md`
 
 ## Tests Run
 
@@ -151,10 +164,37 @@ build-protocol/work-logs/T-0009c1.md` formatted the setup logs.
   11 test files / 75 tests passed; coverage statements 99.52%, branches
   93.24%, functions 100%, lines 99.51%; docs/API and proto checks passed with
   the known TypeDoc invalid-origin warning.
+- RED `corepack pnpm vitest run packages/server/src/handler-decorators.test.ts`
+  failed on `2026-06-29 13:48 WEST` with five expected failures because
+  `Assign` was not yet implemented/exported.
+- GREEN `corepack pnpm vitest run packages/server/src/handler-decorators.test.ts`
+  passed on `2026-06-29 13:50 WEST`: 1 test file / 5 tests passed.
+- Focused export/decorator check `corepack pnpm vitest run
+packages/server/src/handler-decorators.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 13:52 WEST`: 2 test files / 14 tests passed.
+- `corepack pnpm typecheck` passed on `2026-06-29 13:53 WEST`.
+- `corepack pnpm docs:check` passed on `2026-06-29 13:52 WEST` with the known
+  TypeDoc invalid-origin warning.
+- First full `CI=true corepack pnpm verify` failed at lint on
+  `2026-06-29 13:53 WEST`; lint reported unnecessary single-use generics in
+  decorator factories and a redundant `context.kind` check.
+- Final `CI=true corepack pnpm verify` passed on `2026-06-29 13:56 WEST`: 12
+  test files / 80 tests passed; coverage statements 98.89%, branches 91.42%,
+  functions 100%, lines 98.86%; docs/API, proto lint/generate, and generated
+  output checks passed with the known TypeDoc invalid-origin warning.
 
 ## Coverage Result
 
-TBD
+Final full verification coverage from `CI=true corepack pnpm verify`:
+
+- Statements: 98.89% (449/454)
+- Branches: 91.42% (160/175)
+- Functions: 100% (141/141)
+- Lines: 98.86% (437/442)
+
+The new `packages/server/src/handler-decorators.ts` file reported 90.9%
+statement coverage and 81.48% branch coverage; repository thresholds remained
+green.
 
 ## Documentation And Public API Impact
 
@@ -187,15 +227,17 @@ TBD
 
 ## Review Rounds
 
-TBD
+Implementation authored and verified. Reviewer sub-agents were not spawned by
+this implementation sub-agent per the handoff instruction. Round 1 remains
+pending for the orchestrator/review phase.
 
 ## Completion Checklist
 
 - [x] Baseline verification captured in the task worktree.
-- [ ] Authoring sub-agent report captured and closed.
+- [x] Authoring sub-agent report captured and closed.
 - [ ] Five reviewer sub-agents completed and closed.
 - [ ] Review comments either fixed and re-reviewed or technically resolved.
-- [ ] Full verification passed on the task branch.
+- [x] Full verification passed on the task branch.
 - [ ] Task branch merged back to `main`.
 - [ ] Full verification passed on `main`.
 - [ ] Durable task/work/review logs updated with final commits and verification.

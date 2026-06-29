@@ -115,9 +115,11 @@ responsibilities remain with later runtime slices.
 ## Server Entity Metadata
 
 `@spine-ts/server` now owns the first descriptor-derived entity metadata layer,
-following D-0034, and the first explicit handler metadata layer, following
-D-0035. The package consumes only curated option exports from `@spine-ts/proto`
-and keeps generic schema/type-URL lookup in `@spine-ts/core`.
+following D-0034, the first explicit handler metadata layer, following D-0035,
+the caller-owned handler registry, following D-0036, and the first standard
+decorator adapter, following D-0037. The package consumes only curated option
+exports from `@spine-ts/proto` and keeps generic schema/type-URL lookup in
+`@spine-ts/core`.
 
 Current server metadata is pure and deterministic:
 
@@ -164,6 +166,17 @@ name and one ambiguous event application per entity state full type name plus
 event message full type name. Command reactions, event subscriptions, and event
 reactions intentionally allow multiple handlers for the same message type so
 later runtime fan-out remains possible.
+
+The standard decorator adapter is metadata-only syntax over the same explicit
+contract. `@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply` require
+explicit generated Protobuf-ES schemas, collect declarations from public
+instance methods, and `materializeDecoratedEntityHandlers()` scans the entity
+class's own prototype methods to produce ordinary `EntityHandlersMetadata`.
+This keeps decorated classes compatible with `HandlerMetadataRegistry` and
+preserves `defineEntityHandlers()` as the canonical fallback for environments
+that avoid decorators. The adapter does not use legacy `emitDecoratorMetadata`,
+`reflect-metadata`, parameter decorators, inferred message type metadata, or a
+process-wide handler registry.
 
 The server metadata layer still does not execute routes, invoke handlers,
 instantiate entities, deserialize `Any` payloads, validate transactions, enforce
