@@ -206,3 +206,29 @@ Implementation impact:
 - Follow-up route: replace the generic bound with a plain-shape type validator,
   reject proxies before reflection, add focused regressions, and rerun the
   required review loop.
+
+## Round 4 Fix
+
+Implemented on `2026-06-29 23:38 WEST`.
+
+- Type contract: `RevisionMetadata` no longer needs a string index signature;
+  `Entity`/`EntityOptions` accept named plain interfaces through the recursive
+  `PlainEntityVersionMetadata` input validator and keep `Date` rejected at
+  compile time.
+- Runtime contract: version metadata proxies are rejected with the domain
+  plain-snapshot error before prototype, descriptor, array, or other reflective
+  inspection can invoke traps.
+- RED evidence: `corepack pnpm typecheck` failed on the old index-signature
+  bound after removing the test-only index signature from `RevisionMetadata`;
+  the focused entity test failed the proxy regression with
+  `"proxy trap invoked"`.
+- GREEN evidence: typecheck passed; focused entity/root tests passed 2 files /
+  25 tests.
+- Final verification: `corepack pnpm typecheck` passed; `corepack pnpm lint`
+  passed after removing the unused test import exposed by the first lint run;
+  `corepack pnpm format:check` passed after formatting that cleanup;
+  `corepack pnpm docs:check` passed with the expected broken-origin TypeDoc
+  warning and 63 expected server exports; final `CI=true corepack pnpm verify`
+  passed with 15 test files / 145 tests, coverage 97.31% statements / 91.28%
+  branches / 100% functions / 97.25% lines, TypeDoc/API/proto gates passed, and
+  generated proto output clean.

@@ -293,6 +293,22 @@ Skipped relevant-looking skills:
 - Fix route: add compile-time regressions for accepted plain interfaces and
   rejected non-plain types, add a runtime proxy-trap regression, implement the
   smallest type/runtime hardening, verify, and rerun all five review roles.
+- Round 4 fix RED evidence on `2026-06-29 23:30 WEST`:
+  `corepack pnpm typecheck` failed because `RevisionMetadata` and
+  `NestedRevisionMetadata` no longer satisfied the index-signature
+  `EntityVersionMetadata` bound; the focused entity test failed the proxy
+  regression with `"proxy trap invoked"` before the domain error.
+- Round 4 fix GREEN evidence on `2026-06-29 23:37 WEST`: typecheck passed after
+  replacing the bound with the recursive `PlainEntityVersionMetadata` input
+  validator and rejecting proxies before reflection; focused entity/root tests
+  passed 2 files / 25 tests.
+- Final Round 4 fix verification on `2026-06-29 23:41 WEST`: typecheck passed;
+  first lint failed on an unused `EntityVersionMetadata` test import and passed
+  after cleanup; format check passed after formatting the cleanup; docs check
+  passed with the expected broken-origin TypeDoc warning and 63 expected server
+  exports; final `CI=true corepack pnpm verify` passed with 15 test files / 145
+  tests, coverage 97.31% statements / 91.28% branches / 100% functions / 97.25%
+  lines, TypeDoc/API/proto gates passed, and generated proto output clean.
 
 ## Current State
 
@@ -309,4 +325,4 @@ Skipped relevant-looking skills:
 - Round 3 review was captured after commit `50a1802`; the accepted findings have
   a focused verified implementation pass, with the next review still pending.
 - Round 4 review was captured after commit `7bcb7f8`; the accepted findings
-  require a narrow follow-up fix before completion.
+  have a focused verified implementation pass ready for commit.

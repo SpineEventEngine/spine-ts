@@ -351,3 +351,25 @@ Both findings are accepted. The fix route is:
 - reject Node proxies before reflective object/array validation, using an
   intrinsic check such as `util.types.isProxy()`;
 - add a focused runtime regression proving proxy traps are not invoked.
+
+## Round 4 Fix Evidence
+
+Focused fix implemented on `2026-06-29 23:38 WEST`.
+
+- RED: `corepack pnpm typecheck` failed against the old generic bound after
+  removing the test-only index signature from `RevisionMetadata` and
+  `NestedRevisionMetadata`.
+- RED: `corepack pnpm test packages/server/src/entity.test.ts` failed the proxy
+  regression because a proxy trap was invoked before the plain-snapshot domain
+  error.
+- GREEN: `corepack pnpm typecheck` passed after adding
+  `PlainEntityVersionMetadata` input validation and preserving compile-time
+  rejection for `Date`.
+- GREEN: focused entity/root tests passed 2 files / 25 tests after proxies were
+  rejected before reflective validation.
+- Final verification: `corepack pnpm typecheck`, `corepack pnpm lint`,
+  `corepack pnpm format:check`, and `corepack pnpm docs:check` passed after a
+  one-line unused-import cleanup and formatting rerun. Final full verify passed
+  with 15 test files / 145 tests, coverage 97.31% statements / 91.28% branches /
+  100% functions / 97.25% lines, TypeDoc/API and proto gates passed, and
+  generated proto output clean.

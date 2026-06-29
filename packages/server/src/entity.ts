@@ -14,17 +14,95 @@ export interface EntityLifecycleFlags {
   readonly deleted: boolean;
 }
 
+type EntityVersionMetadataPrimitive =
+  string | number | boolean | bigint | symbol | null | undefined;
+
+type EntityVersionMetadataPlainObject = object & {
+  readonly getTime?: never;
+  readonly toISOString?: never;
+  readonly exec?: never;
+  readonly then?: never;
+  readonly byteLength?: never;
+  readonly byteOffset?: never;
+  readonly size?: never;
+  readonly clear?: never;
+  readonly apply?: never;
+  readonly call?: never;
+  readonly bind?: never;
+};
+
 /** Plain snapshot data accepted as caller-owned entity version metadata. */
 export type EntityVersionMetadata =
-  | string
-  | number
-  | boolean
-  | bigint
-  | symbol
-  | null
-  | undefined
+  | EntityVersionMetadataPrimitive
   | readonly EntityVersionMetadata[]
-  | { readonly [key: string]: EntityVersionMetadata };
+  | EntityVersionMetadataPlainObject;
+
+type NonPlainEntityVersionMetadata =
+  | Date
+  | RegExp
+  | Error
+  | Promise<unknown>
+  | Map<unknown, unknown>
+  | Set<unknown>
+  | WeakMap<object, unknown>
+  | WeakSet<object>
+  | ArrayBuffer
+  | SharedArrayBuffer
+  | DataView
+  | Int8Array
+  | Uint8Array
+  | Uint8ClampedArray
+  | Int16Array
+  | Uint16Array
+  | Int32Array
+  | Uint32Array
+  | Float32Array
+  | Float64Array
+  | BigInt64Array
+  | BigUint64Array;
+
+/** Recursive type-level validator for caller-owned plain entity version metadata. */
+export type PlainEntityVersionMetadata<Version> = PlainEntityVersionMetadataAtDepth<Version, []>;
+
+type PlainEntityVersionMetadataAtDepth<
+  Version,
+  Depth extends readonly unknown[],
+> = Depth["length"] extends 20
+  ? EntityVersionMetadata
+  : Version extends EntityVersionMetadataPrimitive
+    ? Version
+    : Version extends (...args: never[]) => unknown
+      ? never
+      : Version extends NonPlainEntityVersionMetadata
+        ? never
+        : Version extends readonly (infer Element)[]
+          ? readonly PlainEntityVersionMetadataAtDepth<Element, readonly [unknown, ...Depth]>[]
+          : Version extends object
+            ? {
+                readonly [Key in keyof Version]: PlainEntityVersionMetadataAtDepth<
+                  Version[Key],
+                  readonly [unknown, ...Depth]
+                >;
+              }
+            : never;
+
+type EntityVersionMetadataInput<Version extends EntityVersionMetadata> = [Version] extends [
+  EntityVersionMetadata,
+]
+  ? [EntityVersionMetadata] extends [Version]
+    ? Version
+    : PlainEntityVersionMetadata<Version>
+  : never;
+
+declare const process: {
+  readonly getBuiltinModule: (specifier: "node:util") => {
+    readonly types: {
+      readonly isProxy: (value: object) => boolean;
+    };
+  };
+};
+
+const isProxy = process.getBuiltinModule("node:util").types.isProxy;
 
 /** Initial values for constructing an {@link Entity}. */
 export interface EntityOptions<
@@ -39,7 +117,7 @@ export interface EntityOptions<
   /** Initial entity state snapshot. */
   readonly state: MessageShape<Schema>;
   /** Caller-owned plain version metadata snapshot. */
-  readonly version: Version;
+  readonly version: EntityVersionMetadataInput<Version>;
   /** Initial lifecycle flags. Defaults to active, not deleted. */
   readonly lifecycle?: Partial<EntityLifecycleFlags>;
 }
@@ -72,7 +150,7 @@ export abstract class Entity<
     this.#schema = options.schema;
     this.#metadata = describeEntityMetadata(options.schema);
     this.#state = cloneState(options.schema, options.state);
-    this.#version = cloneVersionMetadata(options.version);
+    this.#version = cloneVersionMetadata(options.version) as Version;
     this.#lifecycle = {
       archived: options.lifecycle?.archived ?? false,
       deleted: options.lifecycle?.deleted ?? false,
@@ -138,8 +216,8 @@ export abstract class Entity<
   }
 
   /** Replace caller-owned plain version metadata from future subclass/runtime code. */
-  protected replaceVersionMetadata(version: Version): void {
-    this.#version = cloneVersionMetadata(version);
+  protected replaceVersionMetadata(version: EntityVersionMetadataInput<Version>): void {
+    this.#version = cloneVersionMetadata(version) as Version;
   }
 
   /** Replace lifecycle flags from future subclass/runtime code. */
@@ -165,7 +243,7 @@ function cloneState<Schema extends DescriptorMessageSchema>(
 
 const maxVersionMetadataDepth = 1_000;
 
-function cloneVersionMetadata<Version extends EntityVersionMetadata>(version: Version): Version {
+function cloneVersionMetadata<Version>(version: Version): Version {
   return clonePlainVersionMetadata(version, "$", new WeakSet(), 0) as Version;
 }
 
@@ -204,6 +282,9 @@ function clonePlainVersionObject(
   stack: WeakSet<object>,
   depth: number,
 ): EntityVersionMetadata {
+  if (isProxy(value)) {
+    throw nonPlainVersionMetadataError(path, "Proxy");
+  }
   if (ArrayBuffer.isView(value)) {
     throw nonPlainVersionMetadataError(path, getObjectKind(value));
   }

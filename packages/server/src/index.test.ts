@@ -15,6 +15,7 @@ import {
   DescriptorMetadataError,
   isEntitySchema,
   type EntityVersionMetadata,
+  type PlainEntityVersionMetadata,
 } from "./index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -22,6 +23,12 @@ type ProjectionState = Message<"ProjectionState"> & {
   name: string;
   priority: number;
 };
+
+interface ExportedRevisionMetadata {
+  readonly revision: number;
+  readonly source: "server";
+  readonly labels?: readonly string[];
+}
 
 type AggregateState = Message<"AggregateState"> & {
   id: string;
@@ -149,6 +156,10 @@ describe("@spine-ts/server", () => {
       readonly source: string;
       readonly checkpoints: readonly (string | null)[];
     }>().toExtend<EntityVersionMetadata>();
+    expectTypeOf<
+      PlainEntityVersionMetadata<ExportedRevisionMetadata>
+    >().toEqualTypeOf<ExportedRevisionMetadata>();
+    expectTypeOf<PlainEntityVersionMetadata<Date>>().toBeNever();
     expectTypeOf<Date>().not.toExtend<EntityVersionMetadata>();
   });
 

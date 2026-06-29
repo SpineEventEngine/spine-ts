@@ -7,12 +7,7 @@ import { file_spine_options } from "@spine-ts/proto";
 import { serverEntityMetadataTestFixtures } from "../test-fixtures/entity-metadata-fixtures.js";
 
 import * as serverRoot from "./index.js";
-import {
-  describeEntityMetadata,
-  Entity,
-  type EntityOptions,
-  type EntityVersionMetadata,
-} from "./index.js";
+import { describeEntityMetadata, Entity, type EntityOptions } from "./index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -21,7 +16,6 @@ type ProjectionState = Message<"ProjectionState"> & {
 };
 
 interface RevisionMetadata {
-  readonly [key: string]: EntityVersionMetadata;
   readonly revision: number;
   readonly source: "server";
   readonly labels?: readonly string[];
@@ -342,6 +336,34 @@ describe("entities", () => {
     expect(constructorRead).toBe(false);
   });
 
+  it("rejects proxy version metadata without invoking traps", () => {
+    let trapInvoked = false;
+    const trap = () => {
+      trapInvoked = true;
+      throw new Error("proxy trap invoked");
+    };
+    const proxiedVersion = new Proxy(
+      { revision: 1, source: "server" as const },
+      {
+        getPrototypeOf: trap,
+        getOwnPropertyDescriptor: trap,
+        ownKeys: trap,
+        get: trap,
+        has: trap,
+      },
+    );
+
+    expect(() => {
+      new TestEntity({
+        id: "task-1",
+        schema: ProjectionStateSchema,
+        state: createProjectionState(),
+        version: proxiedVersion,
+      });
+    }).toThrow(/plain snapshot data/);
+    expect(trapInvoked).toBe(false);
+  });
+
   it("rejects excessively deep plain version metadata with the domain error", () => {
     let deepVersion: unknown = { revision: 1, source: "server" };
     for (let index = 0; index < 20_000; index += 1) {
@@ -362,11 +384,17 @@ describe("entities", () => {
     expectTypeOf<TestEntity["version"]>().toEqualTypeOf<RevisionMetadata>();
 
     // @ts-expect-error Date is non-plain metadata and must be rejected by EntityOptions.
-    type DateVersionOptions = EntityOptions<string, typeof ProjectionStateSchema, Date>;
+    const dateVersionOptions: EntityOptions<string, typeof ProjectionStateSchema, Date> = {
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      // @ts-expect-error Date is non-plain metadata and must be rejected by EntityOptions.
+      version: new Date("2026-06-29T00:00:00.000Z"),
+    };
     // @ts-expect-error Date is non-plain metadata and must be rejected by Entity.
     class DateVersionEntity extends Entity<string, typeof ProjectionStateSchema, Date> {}
 
-    expectTypeOf<DateVersionOptions>().not.toBeAny();
+    expectTypeOf(dateVersionOptions).not.toBeAny();
     expectTypeOf<DateVersionEntity>().not.toBeAny();
   });
 

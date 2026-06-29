@@ -3,6 +3,7 @@ export {
   type EntityLifecycleFlags,
   type EntityOptions,
   type EntityVersionMetadata,
+  type PlainEntityVersionMetadata,
 } from "./entity.js";
 
 export {
