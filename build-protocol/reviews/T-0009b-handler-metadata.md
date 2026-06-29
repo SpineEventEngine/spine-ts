@@ -7,12 +7,12 @@ Baseline commit: `11a6c70`
 Reviewed commit/diff basis: `d200447..28d8e419918c14ac1d54079bc912931ce8b23bd9`
 Follow-up reviewed basis: `28d8e419918c14ac1d54079bc912931ce8b23bd9..195112ab968b4560c5efab1c557a56ba59a0182b`
 API/log follow-up fix basis: `195112ab968b4560c5efab1c557a56ba59a0182b..b6c8251a7404c974b073615b1a2aa888444bdac4`
-Next review basis: `195112ab968b4560c5efab1c557a56ba59a0182b..6b514ac2f2f44af40358bf66135097740befef69`
+Next review basis: orchestrator packages from `195112ab968b4560c5efab1c557a56ba59a0182b` through branch HEAD
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b-handler-metadata`
 Reviewer roles: code style/maintainability; documentation; TypeScript/API docs; security; performance/reliability
 Reviewer sub-agents: Round 1 and follow-up re-review completed
 Review timestamp: `2026-06-29` round 1 and follow-up
-Status: Ready for follow-up re-review of `195112a..6b514ac`
+Status: Ready for follow-up re-review from `195112a` through branch HEAD
 
 ## Scope To Review
 
@@ -62,5 +62,5 @@ Status: Ready for follow-up re-review of `195112a..6b514ac`
 - Durable-log correction checkpoint committed as
   `6b514ac2f2f44af40358bf66135097740befef69`: removed live-head wording and
   extended the next review basis to include the committed log correction.
-- Next review basis:
-  `195112ab968b4560c5efab1c557a56ba59a0182b..6b514ac2f2f44af40358bf66135097740befef69`.
+- Next review basis: orchestrator packages from
+  `195112ab968b4560c5efab1c557a56ba59a0182b` through branch HEAD.
