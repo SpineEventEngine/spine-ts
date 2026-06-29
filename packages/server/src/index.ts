@@ -13,6 +13,12 @@ export {
 } from "./entity-metadata.js";
 
 export {
+  type EntityStateTransitionValidationRequest,
+  type EntityStateTransitionValidationResult,
+  validateEntityStateTransition,
+} from "./entity-transition-validation.js";
+
+export {
   Apply,
   Assign,
   Command,

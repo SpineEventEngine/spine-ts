@@ -72,12 +72,12 @@ exceptions into structured `spine.validation.ConstraintViolation` data instead
 of leaking raw exception objects or messages.
 
 State-transition validation is a separate framework-owned seam because rules
-such as `(set_once)` need both previous and proposed state. The current
-`validateTransition()` API only aggregates transition rule violations into the
-same structured result shape; built-in entity transaction enforcement remains a
-later runtime responsibility. Rule-returned violations are sanitized before
-aggregation, and throwing transition rules are isolated into structured
-transition-rule failures so later rules still run deterministically.
+such as `(set_once)` need both previous and proposed state. The
+`validateTransition()` API aggregates transition rule violations into the same
+structured result shape and remains the sanitizer for server-owned built-in
+entity rules. Rule-returned violations are sanitized before aggregation, and
+throwing transition rules are isolated into structured transition-rule failures
+so later rules still run deterministically.
 
 ## Core Envelope Construction
 
@@ -116,10 +116,10 @@ responsibilities remain with later runtime slices.
 
 `@spine-ts/server` now owns the first descriptor-derived entity metadata layer,
 following D-0034, the first explicit handler metadata layer, following D-0035,
-the caller-owned handler registry, following D-0036, and the first standard
-decorator adapter, following D-0037. The package consumes only curated option
-exports from `@spine-ts/proto` and keeps generic schema/type-URL lookup in
-`@spine-ts/core`.
+the caller-owned handler registry, following D-0036, the first standard
+decorator adapter, following D-0037, and built-in set-once transition
+validation, following D-0038. The package consumes curated option exports from
+`@spine-ts/proto` and delegates transition result shaping to `@spine-ts/core`.
 
 Current server metadata is pure and deterministic:
 
@@ -140,6 +140,13 @@ schemas, unknown entity kinds, repeated/map column declarations, empty semantic
 tag values, and other unsupported combinations in this slice. Aggregate and
 generic entity column declarations are ignored to match the source option
 contract.
+
+Server-owned transition validation currently compares descriptor-derived
+`(set_once)` fields through the core transition facade and Protobuf-ES
+canonicalization for scalar, enum, bytes, and singular message values. Repeated,
+map-valued, and explicit optional `(set_once)` fields are intentionally
+unsupported in this slice, matching the JVM generation boundary; they fail
+closed with field-specific violations and no raw previous/next value leakage.
 
 `defineEntityHandlers()` is the explicit metadata target that later decorators
 must produce. It accepts an entity class, a state schema, and a builder callback
@@ -179,10 +186,21 @@ that avoid decorators. The adapter does not use legacy `emitDecoratorMetadata`,
 `reflect-metadata`, parameter decorators, inferred message type metadata, or a
 process-wide handler registry.
 
-The server metadata layer still does not execute routes, invoke handlers,
-instantiate entities, deserialize `Any` payloads, validate transactions, enforce
-`(set_once)`, assemble repositories, mutate storage, register buses, mutate a
-global registry, or start transport.
+`validateEntityStateTransition()` is the first high-level server validation API
+over previous and proposed entity state. It calls `describeEntityMetadata()` to
+derive the schema's descriptor-ordered `(set_once)` fields, allows creation
+transitions where `previous === undefined` to initialize supported set-once
+fields, and rejects existing-state transitions when a supported set-once field
+value changes. Repeated, map-valued, and explicit optional set-once fields are
+unsupported and fail closed even on creation transitions. The low-level
+set-once rule remains private; callers receive the core
+`TransitionValidationResult` shape with repo-local `spine.validation.*`
+messages, field paths, and no raw previous/next values.
+
+The server metadata and validation layer still does not execute routes, invoke
+handlers, instantiate entities, deserialize `Any` payloads, assemble
+repositories, mutate storage, register buses, mutate a global registry, or start
+transport.
 
 ## Storage Boundary
 

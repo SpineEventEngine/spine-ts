@@ -3,10 +3,11 @@
 This repository is the TypeScript/Node.js implementation workspace for a Spine-inspired server-side framework.
 
 Current status: workspace/toolchain bootstrap, the first copied Spine Protobuf
-contract intake, and a non-durable in-memory storage adapter. Runtime behavior,
-validation integration, gRPC services, ZeroMQ transport, production storage
-adapters/repository runtime, and the to-do domain are intentionally deferred to
-later tasks.
+contract intake, core validation facades, descriptor-backed server metadata, a
+server-owned set-once state-transition validator, and a non-durable in-memory
+storage adapter. Entity transaction/runtime behavior, gRPC services, ZeroMQ
+transport, production storage adapters/repository runtime, and the to-do domain
+are intentionally deferred to later tasks.
 
 ## Workspace
 
@@ -27,4 +28,4 @@ later tasks.
 - `pnpm docs:api`
 - `pnpm proto:generate`
 
-See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for the framework user guide placeholder and [build-protocol](build-protocol/README.md) for the implementation protocol.
+See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for the framework user guide and runnable API examples, and [build-protocol](build-protocol/README.md) for the implementation protocol.

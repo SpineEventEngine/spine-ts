@@ -5,8 +5,8 @@ TypeDoc is the canonical API documentation generator for this repository.
 Current status: the generated reference contains the curated `@spine-ts/proto`
 root API for copied Spine contracts, the `@spine-ts/core` metadata/type
 registry and validation facade APIs, the first `@spine-ts/server`
-descriptor-derived entity metadata and explicit handler metadata APIs, and the
-first `@spine-ts/storage` contracts.
+descriptor-derived entity metadata, set-once transition validation, and
+explicit handler metadata APIs, and the first `@spine-ts/storage` contracts.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
@@ -24,16 +24,23 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 Server exports include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field
 routing hints, field metadata, and the descriptor-derived `EntityMetadata`
-contract for later handler registration, transaction validation, and repository
+contract for handler registration, transaction validation, and later repository
 assembly. Column metadata is exposed only for projection/process-manager
-schemas, matching the underlying Spine option contract. Server handler metadata
-exports include `defineEntityHandlers()`, `HandlerRegistrationBuilder`, the
-five handler metadata roles for command assignment, command reaction, event
-subscription, event reaction, and event application, and `HandlerMetadataError`
-for registration-time structural failures. Handler names must refer to own
-prototype data methods declared with normal class method syntax. Decorator
-adapter exports include `@Assign`, `@Command`, `@Subscribe`, `@React`,
-`@Apply`, `materializeDecoratedEntityHandlers()`, `HandlerMethodDecorator`, and
+schemas, matching the underlying Spine option contract. Server transition
+validation exports include `validateEntityStateTransition()`,
+`EntityStateTransitionValidationRequest`, and
+`EntityStateTransitionValidationResult` for built-in `(set_once)` checks derived
+from descriptor metadata and shaped through the core transition validation
+facade. Repeated, map-valued, and explicit optional `(set_once)` fields are
+unsupported in this slice and fail closed with field-specific validation
+violations. Server handler metadata exports include `defineEntityHandlers()`,
+`HandlerRegistrationBuilder`, the five handler metadata roles for command
+assignment, command reaction, event subscription, event reaction, and event
+application, and `HandlerMetadataError` for registration-time structural
+failures. Handler names must refer to own prototype data methods declared with
+normal class method syntax. Decorator adapter exports include `@Assign`,
+`@Command`, `@Subscribe`, `@React`, `@Apply`,
+`materializeDecoratedEntityHandlers()`, `HandlerMethodDecorator`, and
 `HandlerMethodValue`. Decorators require explicit Protobuf-ES schema arguments
 and record standard per-class metadata that materializes into the same
 `EntityHandlersMetadata` contract as explicit registration. The server registry
@@ -41,7 +48,7 @@ exports include `HandlerMetadataRegistry`,
 `HandlerMetadataRegistryLookup`, `RegisteredHandlerMetadata`, and
 `HandlerMetadataRegistryError` for caller-owned lookup-only registration and
 duplicate-policy validation. These APIs are metadata-only and do not execute
-handlers.
+handlers, access storage, dispatch buses, or start transport.
 
 Storage exports include `StorageAdapter`, `StorageRecord`,
 `WriteSideRecordStore`, `ReadSideRecordStore`, aggregate event history

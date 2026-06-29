@@ -130,6 +130,7 @@ describe("@spine-ts/server", () => {
         "describeEntityMetadata",
         "isEntitySchema",
         "materializeDecoratedEntityHandlers",
+        "validateEntityStateTransition",
       ].sort(),
     );
   });

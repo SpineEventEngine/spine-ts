@@ -10,6 +10,8 @@ Current slice exposes:
 - first-field routing hints from descriptor order;
 - `(column)` discovery for projections/process managers, `(set_once)` field discovery for all entity kinds; and
 - semantic tags from `(is)` and `(every_is)` with clear extraction errors; and
+- `validateEntityStateTransition({ schema, previous, next })` for built-in
+  `(set_once)` transition validation over descriptor-backed entity state; and
 - `defineEntityHandlers(EntityClass, StateSchema, builder => [...])` for
   explicit, frozen handler metadata that binds generated Protobuf-ES schemas to
   entity method names; and
@@ -85,3 +87,35 @@ handlers for the same message type. The registry is caller-owned and
 metadata-only: constructing or registering it does not instantiate entities,
 invoke methods, unpack payloads, mutate global process state, write storage, or
 start buses/transports.
+
+## Entity State Transition Validation
+
+Use `validateEntityStateTransition()` when framework-controlled transaction
+code or tests need the built-in entity state rules without creating entities or
+repositories:
+
+```ts
+import { validateEntityStateTransition } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+const result = validateEntityStateTransition({
+  schema: TaskStateSchema,
+  previous,
+  next,
+});
+
+if (!result.valid) {
+  result.violations.map((violation) => violation.fieldPath?.fieldName.join("."));
+}
+```
+
+The validator derives `(set_once)` fields from `describeEntityMetadata()`.
+Creation transitions where `previous === undefined` may initialize supported
+set-once fields. Once a previous state exists, each supported set-once field
+must remain equal in the proposed next state. Violations are returned through
+the `@spine-ts/core` transition validation facade as repo-local
+`spine.validation.*` messages, carry the `fieldPath`, and do not include raw
+previous or next values. Repeated, map-valued, and explicit optional
+`(set_once)` fields are not supported in this slice, matching the JVM generation
+boundary; they fail closed with field-specific violations even when their
+contents are unchanged or the transition is a creation.

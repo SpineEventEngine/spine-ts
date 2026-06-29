@@ -13,8 +13,9 @@ callers can pack already-built domain messages into generated Spine
 entity metadata from `(entity)`, `(column)`, `(set_once)`, `(is)`, and
 `(every_is)` options and defines explicit or decorator-collected handler
 metadata without invoking handlers or mutating global runtime state. It also
-exposes a caller-owned handler metadata registry for duplicate validation and
-lookup-only views.
+exposes built-in `(set_once)` entity state transition validation and a
+caller-owned handler metadata registry for duplicate validation and lookup-only
+views.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
 deterministic in-memory adapter for tests/development. Entity runtime,
 transport, durable production storage, and the to-do application remain later
@@ -47,6 +48,9 @@ slices.
   kind and visibility, expose first-field routing hints, surface `(column)`
   fields for projections/process managers, surface `(set_once)` fields for all
   entity kinds, and preserve semantic tags from `(is)` and `(every_is)`.
+- A server entity state transition validator that enforces built-in
+  `(set_once)` checks by comparing previous and proposed entity state through
+  the core transition validation facade.
 - Server handler metadata helpers in `@spine-ts/server` that explicitly bind
   generated command/event schemas to entity method names for command assignment,
   command reaction, event subscription, event reaction, and event application.
@@ -146,8 +150,8 @@ structured violations instead of leaking raw exceptions. Placeholder keys may
 remain so callers can understand the template shape, but values do not expose
 payload data.
 
-Transition-only rules such as `(set_once)` need previous state and proposed
-state, so they use the separate framework seam:
+Transition-only rules need previous state and proposed state, so they use the
+separate framework seam:
 
 ```ts
 import { validateTransition } from "@spine-ts/core";
@@ -155,11 +159,35 @@ import { validateTransition } from "@spine-ts/core";
 const result = validateTransition({ schema: TaskSchema, previous, next }, rules);
 ```
 
-The first seam is intentionally minimal. Later entity/runtime tasks will provide
-the built-in transition rules and call this seam from framework-controlled
-transactions. Rule-returned violations are sanitized before aggregation. If a
-transition rule throws, the seam records a structured transition-rule failure
-and continues later rules in order.
+`@spine-ts/server` provides the first built-in entity rule for `(set_once)`
+fields:
+
+```ts
+import { validateEntityStateTransition } from "@spine-ts/server";
+
+const result = validateEntityStateTransition({
+  schema: TaskStateSchema,
+  previous,
+  next,
+});
+```
+
+`validateEntityStateTransition()` derives set-once fields from
+`describeEntityMetadata()`. Creation transitions where `previous === undefined`
+may initialize supported set-once fields. Existing-state transitions fail when a
+supported set-once field's value changes and pass when supported set-once values
+remain equal. Violations are shaped by the core `validateTransition()` facade,
+include the changed field path, and omit raw previous/next values. Repeated,
+map-valued, and explicit optional `(set_once)` fields are explicitly unsupported
+in this slice, matching the JVM generation boundary, and fail closed with
+field-specific violations even when their contents are unchanged or the
+transition is a creation. The server API is pure validation: it does not
+instantiate entities, invoke handlers, read or write storage, assemble
+repositories, dispatch buses, or start transport.
+
+Rule-returned violations are sanitized before aggregation. If a transition rule
+throws, the core seam records a structured transition-rule failure and continues
+later rules in order.
 
 ## Envelope Packing
 
@@ -234,8 +262,10 @@ metadata.semanticTags;
 ```
 
 `describeEntityMetadata()` is pure and descriptor-backed. It does not register
-handlers, perform routing, enforce `(set_once)`, touch storage, or mutate a
-global registry. It throws `DescriptorMetadataError` when a caller requires
+handlers, perform routing, touch storage, or mutate a global registry. Built-in
+`(set_once)` enforcement lives in `validateEntityStateTransition()`, which
+consumes this descriptor metadata. `describeEntityMetadata()` throws
+`DescriptorMetadataError` when a caller requires
 entity metadata from a non-entity schema or when the descriptor uses
 unsupported combinations such as repeated/map `(column)` fields on projections
 or process managers. Aggregate and generic entity `(column)` declarations are

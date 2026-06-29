@@ -842,13 +842,14 @@ first slice needs a deterministic committed-state rule.
 
 Decision: Implement `(set_once)` as a server transition-validation rule over
 previous and next entity state messages. Creation transitions where
-`previous === undefined` pass built-in set-once checks. Once a previous state
-exists, each `(set_once)` field value is fixed; any unequal proposed next value
-violates the rule, including default-to-non-default changes. The public first
-slice should expose a high-level entity-state transition validation API and keep
-low-level rule construction private unless later tasks show caller value.
-Violation results must be shaped through the core transition-validation facade
-and must not leak previous or next field values.
+`previous === undefined` pass built-in set-once checks for supported field
+shapes. Once a previous state exists, each supported `(set_once)` field value is
+fixed; any unequal proposed next value violates the rule, including
+default-to-non-default changes. Unsupported field-shape handling is recorded in
+D-0039. The public first slice should expose a high-level entity-state
+transition validation API and keep low-level rule construction private unless
+later tasks show caller value. Violation results must be shaped through the core
+transition-validation facade and must not leak previous or next field values.
 
 Alternatives considered:
 
@@ -870,3 +871,75 @@ Consequences:
 - Reviewers must verify that T-0009d.1 does not instantiate entities, invoke
   handlers, apply events, read/write storage, start buses, mutate global
   runtime state, or introduce gRPC/ZeroMQ behavior.
+
+## D-0039: Keep server validation boundaries JVM-familiar
+
+Status: Accepted
+
+Date: 2026-06-29
+
+Context: During T-0009d.1 fix round 5, the human observed that server-module
+work may be over-inventing behavior compared with Spine JVM. The local
+`spine-jvm-docs/` corpus is available in this repository and summarizes the
+server/runtime behavior expected from Spine JVM `core-jvm`.
+
+JVM docs inspected for this decision:
+
+- `spine-jvm-docs/README.md`, Generated/Runtime Contract;
+- `spine-jvm-docs/spine-validation-storage-observability-and-support.md`,
+  Validation runtime, Field options, and Entity state sections;
+- `spine-jvm-docs/spine-domain-model-and-signals.md`, Validation Options That
+  Affect Modeling;
+- `spine-jvm-docs/spine-entities-repositories-and-state.md`, Transactions and
+  State Builders.
+
+Additional `core-jvm` server source inspected during T-0009d.1 fix round 10:
+
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/Transaction.java`,
+  transaction buffering and commit/update flow;
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/TransactionalEntity.java`,
+  active-transaction builder access;
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/AbstractEntity.java`,
+  state update validation;
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/InvalidEntityStateException.java`,
+  structured validation exception creation.
+
+Decision: Server-module work must check task-relevant local Spine JVM notes and,
+when available, the corresponding `core-jvm` `server` source before introducing
+or expanding server/runtime behavior. For set-once validation, stay close to the
+JVM-familiar contract: enforcement belongs at generated builder/factory or
+state-update validation boundaries over normal Protobuf entity state, structured
+violations are surfaced through the validation facade, and repeated/map/explicit
+optional `(set_once)` fields are unsupported in the JVM generation contract. In
+TypeScript, unsupported repeated, map-valued, and explicit optional set-once
+fields therefore fail closed with field-specific validation violations instead
+of adding speculative collection or presence comparison in this task.
+
+This does not make arbitrary hostile JavaScript object graphs part of the
+primary public contract. The T-0009d.1 hardening tests exist to preserve
+field-specific, sanitized failures at the public API boundary when callers pass
+forged or proxy-backed values; they should not grow into a broad adversarial
+object comparison subsystem unless a later runtime threat model requires it.
+
+Alternatives considered:
+
+- Implement canonical repeated, map-valued, or explicit optional set-once
+  comparison now. Rejected because JVM notes say repeated/map/explicit optional
+  `(set_once)` is unsupported at build time, and collection/presence
+  canonicalization policy has not been designed for this contract.
+- Continue expanding defensive equality for every hostile JavaScript object
+  shape. Rejected because the server runtime should be designed around
+  framework-controlled Protobuf state updates, with unsupported/adversarial
+  inputs documented and failed closed.
+
+Consequences:
+
+- Future `@spine-ts/server` tasks must record relevant JVM docs and
+  corresponding `core-jvm` server source inspection in task logs before
+  broadening server behavior.
+- T-0009d.1 keeps the server validator narrow: catch proxy reflection failures
+  and report repeated/map-valued/explicit optional set-once as unsupported,
+  without adding new validation abstractions.
+- A later task may revisit repeated, map, or explicit optional support only
+  after checking the JVM compatibility impact and deciding the relevant
+  collection or presence canonicalization policy.

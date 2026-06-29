@@ -123,6 +123,25 @@ const violations = validation.validate(CreateTaskSchema, command);
 
 The facade wraps `@spine-event-engine/validation-ts` and adds framework checks for state-transition validation, command/event envelope validation, and domain runtime rules.
 
+The first server-owned transition validation API is:
+
+```typescript
+const result = validateEntityStateTransition({
+  schema: TaskStateSchema,
+  previous,
+  next,
+});
+```
+
+It derives `(set_once)` fields from descriptor-backed `EntityMetadata` and
+delegates result shaping to the core `validateTransition()` facade. Creation
+transitions where `previous === undefined` may initialize supported set-once
+fields; existing-state transitions fail when a supported set-once field
+changes. Violations include the changed field path and omit raw previous/next
+values. Repeated, map-valued, and explicit optional `(set_once)` fields are
+unsupported in this slice and fail closed with field-specific violations,
+including on creation transitions.
+
 ## Client/SDK API
 
 The client SDK should expose:
@@ -143,4 +162,3 @@ Every package must have:
 - examples for the major user-facing APIs;
 - architecture notes updated with each feature task;
 - compatibility notes for deviations from Spine JVM behavior.
-
