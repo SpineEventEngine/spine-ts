@@ -776,3 +776,51 @@ Consequences:
 - Custom command routing or transformation/splitting may require a future
   extension of the duplicate policy, but the first lookup-only registry remains
   deterministic and conservative.
+
+## D-0037: Use standard decorators as metadata-only handler adapters
+
+Status: Accepted
+
+Date: 2026-06-29
+
+Context: `T-0009c.1 Decorator Metadata Collection` follows the explicit handler
+metadata contract and caller-owned registry from D-0035 and D-0036. The
+developer API calls for TypeScript 5+ standard decorators when they fit, while
+preserving an explicit fallback and avoiding legacy `emitDecoratorMetadata`,
+parameter decorators, import-order-sensitive globals, or runtime invocation
+during metadata declaration.
+
+Decision: Implement decorator support as syntax over the explicit handler
+metadata contract. Public `@Assign`, `@Command`, `@Subscribe`, `@React`, and
+`@Apply` method decorators must require explicit Protobuf-ES schemas, collect
+class-owned deterministic metadata, and expose a materialization function that
+returns the same `EntityHandlersMetadata` shape accepted by
+`HandlerMetadataRegistry`. The explicit `defineEntityHandlers()` API remains the
+fallback and the canonical metadata shape. Decorators must not instantiate
+entities, invoke handlers, unpack payloads, write storage, start buses or
+transports, or mutate a global process-wide registry.
+
+Alternatives considered:
+
+- Use legacy decorator metadata or `reflect-metadata`. Rejected because the
+  project targets TypeScript 5+ standard decorators and explicit schema
+  arguments preserve Protobuf contract clarity.
+- Register decorated handlers in a global registry at import time. Rejected
+  because import order would become observable and would make tests and bounded
+  contexts harder to isolate.
+- Skip decorators and rely only on explicit registration. Rejected because the
+  developer API asks for annotation-like OOP handler declaration when standard
+  decorators can fit without replacing explicit registration.
+- Use code generation as the first decorator-like mechanism. Rejected for this
+  slice because standard decorators can be tested locally against the same
+  metadata contract before adding a generation pipeline.
+
+Consequences:
+
+- Decorator APIs must remain metadata-only and registry-compatible.
+- Reviewers must verify there is no import-time global registration, handler
+  invocation, repository/runtime behavior, storage write, bus, gRPC, or ZeroMQ
+  behavior in T-0009c.1.
+- If local TypeScript standard decorator semantics prove insufficient for a
+  particular ergonomic goal, the explicit registration API remains supported and
+  a later codegen task can be proposed without changing the registry contract.
