@@ -1,8 +1,8 @@
 # T-0009b: Handler Metadata Contract And Explicit Registration API
 
-Status: Awaiting orchestrator-supplied follow-up re-review package
+Status: Complete; ready for integration
 Start: `2026-06-29 00:40 WEST`
-End: Pending
+End: `2026-06-29 12:40 WEST`
 Baseline commit: `11a6c70`
 Task log path: `build-protocol/tasks/T-0009b-handler-metadata/TASK.md`
 Branch: `task/T-0009b-handler-metadata`
@@ -16,6 +16,7 @@ Implementation commit: `28d8e419918c14ac1d54079bc912931ce8b23bd9`
 Round-1 fix commit: `195112ab968b4560c5efab1c557a56ba59a0182b`
 Follow-up fix commit: `b6c8251a7404c974b073615b1a2aa888444bdac4`
 Durable-log correction checkpoint: `6b514ac2f2f44af40358bf66135097740befef69`
+Review closure checkpoint: `9d87aebf31fa347ba719910b18a29ac2152b54a6`
 
 ## Objective
 
@@ -78,7 +79,7 @@ Skills passed to sub-agents/reviewers:
 | ------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Splitter            | Protocol/spec docs and T-0009a/D-0034 context.                 | Produced first-slice recommendation with no blockers.                                                                                                                                                          |
 | Authoring sub-agent | TDD, TypeScript/API, ADR, worktree, verification instructions. | Produced implementation commit `28d8e419918c14ac1d54079bc912931ce8b23bd9`, round-1 fix commit `195112ab968b4560c5efab1c557a56ba59a0182b`, and follow-up fix commit `b6c8251a7404c974b073615b1a2aa888444bdac4`. |
-| Reviewers           | T-0009b scope/non-scope and diff packages.                     | Round 1 and first follow-up re-review completed; orchestrator supplies the next explicit review package/range and records the upper bound after package creation.                                              |
+| Reviewers           | T-0009b scope/non-scope and diff packages.                     | Round 1, follow-up, and final log/API re-review completed clean; reviewer agents were closed after their results were consumed.                                                                                |
 
 Skipped relevant-looking skills:
 
@@ -179,6 +180,9 @@ Out of scope:
   test evidence with the own-prototype-data-method runtime contract.
 - Follow-up final: `CI=true corepack pnpm verify` passed after the log/API
   contract fixes.
+- Final branch verification: `CI=true corepack pnpm verify` passed on
+  `2026-06-29 12:40 WEST` after all reviewer findings were resolved and the
+  final log/API re-review was clean.
 
 ## Coverage Result
 
@@ -187,6 +191,8 @@ Out of scope:
 - Round 1 `CI=true corepack pnpm verify` coverage: statements 99.44%, branches
   93.7%, functions 100%, lines 99.43%.
 - Follow-up `CI=true corepack pnpm verify` coverage: statements 99.44%,
+  branches 93.7%, functions 100%, lines 99.43%.
+- Final branch `CI=true corepack pnpm verify` coverage: statements 99.44%,
   branches 93.7%, functions 100%, lines 99.43%.
 
 ## Documentation And Public API Impact
@@ -243,6 +249,13 @@ Out of scope:
   confirmed 100 proto exports, 28 core exports, 27 server exports, and 26
   storage exports; proto lint/generate/check-generated passed; the known
   TypeDoc invalid-origin source-link warning remains.
+- Final branch `CI=true corepack pnpm verify` passed on
+  `2026-06-29 12:40 WEST`: 11 test files / 70 tests passed; coverage statements
+  99.44%, branches 93.7%, functions 100%, lines 99.43%; docs/API check
+  confirmed 100 proto exports, 28 core exports, 27 server exports, and 26
+  storage exports; proto lint/generate/check-generated passed; generated proto
+  output remained clean; the known TypeDoc invalid-origin source-link warning
+  remains.
 
 ## Open Risks And Follow-Up Routing
 
@@ -258,6 +271,11 @@ Out of scope:
 - Authoring sub-agent dispatched on `2026-06-29 00:43 WEST` with ownership of
   the first T-0009b slice: handler metadata contract plus explicit
   registration API.
+- Final log/API re-review used the explicit package for
+  `195112ab968b4560c5efab1c557a56ba59a0182b..9d87aebf31fa347ba719910b18a29ac2152b54a6`.
+  All five reviewer roles returned clean results:
+  code style/maintainability, documentation, TypeScript/API docs, security, and
+  performance/reliability. Reviewer agents were closed after result capture.
 - Authoring sub-agent finished implementation verification on
   `2026-06-29 00:53 WEST`; round-1 reviewers inspected
   `d200447..28d8e419918c14ac1d54079bc912931ce8b23bd9`.
