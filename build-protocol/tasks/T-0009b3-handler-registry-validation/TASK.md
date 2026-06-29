@@ -10,6 +10,8 @@ Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b3-ha
 Requirements splitter: `019f1334-c2a6-7463-ba98-6dbd12020957` (Parfit)
 Authoring sub-agent: Pending
 Reviewer sub-agents: Pending
+Branch setup commit: `041dc61`
+Implementation baseline commit: Pending branch commit
 Implementation commit: Pending branch commit
 Final branch HEAD: Pending branch commit
 
@@ -140,11 +142,21 @@ Out of scope:
 
 ## Tests Run
 
-- Pending baseline verification in task worktree.
+- `corepack pnpm install --offline` failed because
+  `@bufbuild/protoplugin@2.12.1` was missing from the local pnpm store.
+- `corepack pnpm install` passed with the existing lockfile and hydrated the new
+  worktree dependency metadata.
+- Baseline `CI=true corepack pnpm verify` passed on
+  `2026-06-29 12:52 WEST`: 11 test files / 70 tests passed; coverage statements
+  99.44%, branches 93.7%, functions 100%, lines 99.43%; docs/API check
+  confirmed 100 proto exports, 28 core exports, 27 server exports, and 26
+  storage exports; proto lint/generate/check-generated passed; known TypeDoc
+  invalid-origin source-link warning remains.
 
 ## Coverage Result
 
-- Pending.
+- Baseline `CI=true corepack pnpm verify` coverage: statements 99.44%, branches
+  93.7%, functions 100%, lines 99.43%.
 
 ## Documentation And Public API Impact
 
@@ -172,7 +184,9 @@ Out of scope:
 
 ## Verification
 
-- Pending.
+- Baseline `CI=true corepack pnpm verify` passed in
+  `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b3-handler-registry-validation`
+  on `2026-06-29 12:52 WEST`.
 
 ## Open Risks And Follow-Up Routing
 
@@ -184,7 +198,7 @@ Out of scope:
 
 ## Review Rounds
 
-- Pending.
+- Authoring sub-agent dispatch is next after baseline checkpoint commit.
 
 ## Integration Result
 
