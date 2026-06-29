@@ -4,6 +4,51 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+## D-0043: T-0009d.2c closes the transaction API without runtime expansion
+
+Status: Accepted
+
+Date: 2026-06-29
+
+Context: `T-0009d.2a` introduced the minimal `EntityTransaction` draft/commit
+kernel, and `T-0009d.2b` added lifecycle and explicit version draft helpers.
+The remaining splitter item, `T-0009d.2c Public API Polish, Compatibility
+Notes, Verification Closure`, should make the series interruption-resistant and
+clear to users without adding behavior that belongs to later repository,
+entity-base, dispatch, storage, or transport tasks.
+
+Decision: Treat `T-0009d.2c` as a public API compatibility and verification
+closure. It may update parent task/work logs, user/API/architecture docs,
+TypeDoc wording, export-gate expectations, and tests that assert the existing
+public surface. It must not add new transaction runtime capabilities unless a
+concrete compatibility defect is discovered, the corresponding Spine JVM
+`core-jvm/server` code is inspected, and a new decision is recorded. The
+default implementation path is docs, compatibility notes, API assertions, and
+verification evidence.
+
+Alternatives considered:
+
+- Add the next runtime layer now, such as entity base classes or repository
+  commit integration. Rejected because the splitter scoped this final item as
+  public API polish and verification closure, and the human asked to avoid
+  over-inventing server behavior.
+- Add convenience helpers proactively before entity bases exist. Rejected
+  because D-0040 through D-0042 keep the transaction kernel deliberately small
+  until concrete runtime consumers prove the API gap.
+- Skip the closure because `2a` and `2b` already pass verification. Rejected
+  because parent roadmap logs and public compatibility notes must stay durable
+  and clear before the next server task builds on this API.
+
+Consequences:
+
+- Reviewers for `T-0009d.2c` must flag any new runtime behavior as out of
+  scope unless it is tied to a recorded compatibility defect and JVM source
+  inspection.
+- Public docs should describe `EntityTransaction` as a JVM-familiar in-memory
+  draft/result boundary, not storage-backed transaction infrastructure.
+- Completion requires fresh branch verification and main integration
+  verification evidence.
+
 ## D-0042: T-0009d.2b lifecycle and version helpers are draft metadata only
 
 Date: 2026-06-29
