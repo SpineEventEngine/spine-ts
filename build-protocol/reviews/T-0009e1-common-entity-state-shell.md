@@ -437,3 +437,56 @@ Focused fix implemented and verified on `2026-06-30 00:02 WEST`.
   coverage 97.31% statements / 91.28% branches / 100% functions / 97.25% lines,
   TypeDoc/API/proto gates passed with 64 expected server exports, and generated
   proto output clean.
+
+## Round 6
+
+Round 5 fix commit under review: `c79f925`.
+
+Review result captured on `2026-06-30 00:06 WEST`: changes requested.
+
+| Role                       | Reviewer ID                            | Result     | Closure |
+| -------------------------- | -------------------------------------- | ---------- | ------- |
+| Code style/maintainability | `019f15a0-2960-7193-a732-20af83680980` | P3 finding | Closed  |
+| Documentation              | `019f15a0-29e2-7220-88b0-f00c817f0e74` | P2/P3      | Closed  |
+| TypeScript/API docs        | `019f15a0-2a71-77c3-a30b-2d6f19545657` | Clean      | Closed  |
+| Security                   | `019f15a0-2aef-7703-ab6e-65e3162f26bc` | Clean      | Closed  |
+| Performance/reliability    | `019f15a0-2b6a-7e31-88ed-87fa0b8ae9f3` | Clean      | Closed  |
+
+Findings:
+
+- P2/P3: work-log current-state wording still said the Round 4 fix was ready
+  for Round 5 review even though Round 5 was complete and ready for Round 6.
+- P3: the implementation report status said Round 5 was implemented and
+  pending Round 6 review, but the report did not include the Round 5 fix
+  verification evidence already present in the review/work logs.
+
+Clean-role evidence:
+
+- TypeScript/API confirmed plain metadata interfaces with fields such as `size`
+  now compile, `Date` remains rejected at `EntityOptions` input boundaries,
+  runtime non-plain rejection remains covered, and the API gate still reports 64
+  server exports.
+- Security confirmed the Round 5 type broadening did not weaken runtime
+  clone/rejection behavior for functions, proxies, buffers, dates, maps, sets,
+  classes, accessors, symbol keys, `__proto__`, or cycles.
+- Performance/reliability confirmed the broad type change is type-only and
+  runtime depth/proxy behavior remains unchanged.
+
+Both findings are accepted. The fix route is docs-only:
+
+- update the work-log current-state bullet for Round 4 to describe completed
+  Round 5 review/fix history rather than readiness for Round 5;
+- add the Round 5 fix verification evidence to the implementation report;
+- run docs/format checks and rerun the required review loop.
+
+## Round 6 Fix Evidence
+
+Docs-only fix implemented and verified on `2026-06-30 00:08 WEST`.
+
+- Work-log current-state wording no longer says the Round 4 fix is ready for
+  Round 5 review after Round 5 completed.
+- Implementation report now records the Round 5 fix and verification evidence.
+- `CI=true corepack pnpm verify` passed with 15 test files / 145 tests,
+  coverage 97.31% statements / 91.28% branches / 100% functions / 97.25% lines,
+  TypeDoc/API/proto gates passed with 64 expected server exports, and generated
+  proto output clean.

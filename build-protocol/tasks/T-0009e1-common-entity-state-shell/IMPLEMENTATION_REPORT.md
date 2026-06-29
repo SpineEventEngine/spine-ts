@@ -238,3 +238,22 @@ Implemented on `2026-06-29 23:38 WEST`.
   rejected otherwise plain property names such as `size`.
 - Accepted stale-status finding: task/report top-level status still said Round 4
   fix required after the fix was verified and committed.
+- Round 5 fix implemented: `EntityVersionMetadata` now uses a
+  property-name-neutral object arm while `PlainEntityVersionMetadata` validates
+  entity inputs; compile-time regressions cover a plain `size` metadata
+  interface and non-plain `Date` input rejection.
+- Round 5 fix verification passed on `2026-06-30 00:02 WEST`: `CI=true corepack
+pnpm verify` passed with 15 test files / 145 tests, coverage 97.31%
+  statements / 91.28% branches / 100% functions / 97.25% lines, TypeDoc/API and
+  proto gates passed with 64 expected server exports, and generated proto output
+  clean.
+- Round 6 reviewed Round 5 fix commit `c79f925`; result: documentation changes
+  requested.
+- Round 6 docs-only fix implemented: work-log current-state wording no longer
+  says Round 4 is ready for Round 5 review after Round 5 completed, and this
+  implementation report now records the Round 5 fix verification evidence.
+- Round 6 fix verification passed on `2026-06-30 00:08 WEST`: `CI=true corepack
+pnpm verify` passed with 15 test files / 145 tests, coverage 97.31%
+  statements / 91.28% branches / 100% functions / 97.25% lines, TypeDoc/API and
+  proto gates passed with 64 expected server exports, and generated proto output
+  clean.
