@@ -1,6 +1,6 @@
 # T-0009b: Handler Metadata Contract And Explicit Registration API
 
-Status: Follow-up re-review fixes verified; pending re-review
+Status: Ready for follow-up re-review of `195112a..b6c8251`
 Start: `2026-06-29 00:40 WEST`
 End: `2026-06-29 00:53 WEST`
 Baseline commit: `11a6c70`
@@ -14,7 +14,8 @@ Branch setup commit: `2b03b6b`
 Implementation baseline commit: `b1d158e`
 Implementation commit: `28d8e419918c14ac1d54079bc912931ce8b23bd9`
 Round-1 fix commit: `195112ab968b4560c5efab1c557a56ba59a0182b`
-Current committed HEAD: `195112ab968b4560c5efab1c557a56ba59a0182b` before follow-up log/API contract fixes
+Follow-up fix commit: `b6c8251a7404c974b073615b1a2aa888444bdac4`
+Current committed HEAD: `b6c8251a7404c974b073615b1a2aa888444bdac4`
 
 ## Objective
 
@@ -73,11 +74,11 @@ Selected skills read before task actions:
 
 Skills passed to sub-agents/reviewers:
 
-| Recipient           | Skills/Instructions Passed                                     | Notes                                                                                                                                                                               |
-| ------------------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Splitter            | Protocol/spec docs and T-0009a/D-0034 context.                 | Produced first-slice recommendation with no blockers.                                                                                                                               |
-| Authoring sub-agent | TDD, TypeScript/API, ADR, worktree, verification instructions. | Produced implementation commit `28d8e419918c14ac1d54079bc912931ce8b23bd9`, round-1 fix commit `195112ab968b4560c5efab1c557a56ba59a0182b`, and follow-up fixes in this working tree. |
-| Reviewers           | T-0009b scope/non-scope and diff packages.                     | Round 1 and follow-up re-review completed; current working-tree fixes need follow-up re-review after commit.                                                                        |
+| Recipient           | Skills/Instructions Passed                                     | Notes                                                                                                                                                                                                          |
+| ------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Splitter            | Protocol/spec docs and T-0009a/D-0034 context.                 | Produced first-slice recommendation with no blockers.                                                                                                                                                          |
+| Authoring sub-agent | TDD, TypeScript/API, ADR, worktree, verification instructions. | Produced implementation commit `28d8e419918c14ac1d54079bc912931ce8b23bd9`, round-1 fix commit `195112ab968b4560c5efab1c557a56ba59a0182b`, and follow-up fix commit `b6c8251a7404c974b073615b1a2aa888444bdac4`. |
+| Reviewers           | T-0009b scope/non-scope and diff packages.                     | Round 1 and first follow-up re-review completed; next review basis is `195112ab968b4560c5efab1c557a56ba59a0182b..b6c8251a7404c974b073615b1a2aa888444bdac4`.                                                    |
 
 Skipped relevant-looking skills:
 
@@ -263,8 +264,10 @@ Out of scope:
 - Round-1 fixes were committed as
   `195112ab968b4560c5efab1c557a56ba59a0182b`; follow-up reviewers inspected
   `28d8e419918c14ac1d54079bc912931ce8b23bd9..195112ab968b4560c5efab1c557a56ba59a0182b`.
-- Follow-up re-review findings are addressed in this working tree. Next review
-  point is follow-up re-review after this fix commit.
+- Follow-up log/API contract fixes were committed as
+  `b6c8251a7404c974b073615b1a2aa888444bdac4`.
+- Next review point is follow-up re-review of
+  `195112ab968b4560c5efab1c557a56ba59a0182b..b6c8251a7404c974b073615b1a2aa888444bdac4`.
 
 ## Integration Result
 

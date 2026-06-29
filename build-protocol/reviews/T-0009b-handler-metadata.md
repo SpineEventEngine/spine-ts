@@ -6,11 +6,12 @@ Branch: `task/T-0009b-handler-metadata`
 Baseline commit: `11a6c70`
 Reviewed commit/diff basis: `d200447..28d8e419918c14ac1d54079bc912931ce8b23bd9`
 Follow-up reviewed basis: `28d8e419918c14ac1d54079bc912931ce8b23bd9..195112ab968b4560c5efab1c557a56ba59a0182b`
+Next review basis: `195112ab968b4560c5efab1c557a56ba59a0182b..b6c8251a7404c974b073615b1a2aa888444bdac4`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b-handler-metadata`
 Reviewer roles: code style/maintainability; documentation; TypeScript/API docs; security; performance/reliability
 Reviewer sub-agents: Round 1 and follow-up re-review completed
 Review timestamp: `2026-06-29` round 1 and follow-up
-Status: Follow-up re-review findings verified in working tree
+Status: Ready for follow-up re-review of `195112a..b6c8251`
 
 ## Scope To Review
 
@@ -50,8 +51,12 @@ Status: Follow-up re-review findings verified in working tree
   maintainability/style reviewers flagged stale durable-log state. TypeScript/API
   docs reviewer flagged that TypeDoc/public docs described callable instance
   properties more broadly than the runtime's own-prototype-data-method rule.
-- Follow-up fixes: durable logs now record the round-1 fix commit/range and
-  reviewer outcomes, and public TypeDoc/docs/tests now state that handler names
-  must refer to own prototype data methods declared with normal class method
-  syntax. Focused tests, typecheck, docs check, and full verification passed in
-  the working tree.
+- Follow-up fixes committed as
+  `b6c8251a7404c974b073615b1a2aa888444bdac4`: addressed the TypeScript/API
+  docs contract finding by stating that handler names must refer to own
+  prototype data methods declared with normal class method syntax, and addressed
+  the stale durable-log findings by recording reviewed/fix ranges and reviewer
+  outcomes. Focused tests, typecheck, docs check, and full verification passed
+  before commit.
+- Next review basis:
+  `195112ab968b4560c5efab1c557a56ba59a0182b..b6c8251a7404c974b073615b1a2aa888444bdac4`.
