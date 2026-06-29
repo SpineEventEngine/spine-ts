@@ -1,3 +1,5 @@
+export { Entity, type EntityLifecycleFlags, type EntityOptions } from "./entity.js";
+
 export {
   type DeclaredEntityVisibility,
   type DescriptorFieldMetadata,

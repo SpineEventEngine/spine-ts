@@ -1,6 +1,6 @@
 # T-0009e.1: Common Entity State Shell
 
-Status: Setup In Progress
+Status: Implementation Complete
 Start: `2026-06-29 22:06 WEST`
 Baseline commit: `2ca23fd`
 Task log path: `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
@@ -10,7 +10,7 @@ Worktree:
 Parent task: `T-0009e`
 Requirements splitter:
 `019f1531-96a3-7870-bb40-b24fc9a456c8` (Goodall the 3rd, closed)
-Authoring sub-agent: pending
+Authoring sub-agent: Codex implementation sub-agent in this thread
 Reviewer sub-agents: pending
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:12 WEST`
@@ -123,6 +123,15 @@ Skipped relevant-looking skills:
 
 ## Files Changed
 
+- `packages/server/src/entity.ts`
+- `packages/server/src/entity.test.ts`
+- `packages/server/src/index.ts`
+- `packages/server/src/index.test.ts`
+- `scripts/check-api-docs.mjs`
+- `packages/server/README.md`
+- `docs/api/README.md`
+- `docs/USER_GUIDE.md`
+- `docs/architecture/README.md`
 - `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
 - `build-protocol/tasks/T-0009e1-common-entity-state-shell/IMPLEMENTATION_REPORT.md`
 - `build-protocol/work-logs/T-0009e1.md`
@@ -137,6 +146,24 @@ Skipped relevant-looking skills:
   97.61%, branches 90.51%, functions 100%, lines 97.56%; TypeDoc/API reported
   100 proto, 28 core, 59 server, and 26 storage expected exports; proto
   lint/generate/check passed with generated output clean.
+- RED focused check `corepack pnpm exec vitest run packages/server/src/entity.test.ts packages/server/src/index.test.ts`
+  failed on `2026-06-29 22:18 WEST` because `Entity` was not exported and the
+  new entity test could not subclass it.
+- GREEN focused check `corepack pnpm exec vitest run packages/server/src/entity.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 22:19 WEST`: 2 test files / 14 tests.
+- Initial final verification attempt `CI=true corepack pnpm verify` failed on
+  `2026-06-29 22:25 WEST` at the coverage threshold: branch coverage was
+  89.73% against the 90% global threshold.
+- Coverage follow-up focused check `corepack pnpm exec vitest run packages/server/src/entity.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 22:25 WEST`: 2 test files / 15 tests.
+- `corepack pnpm typecheck`, `corepack pnpm lint`,
+  `corepack pnpm format:check`, and `corepack pnpm docs:check` passed on
+  `2026-06-29 22:26 WEST`; TypeDoc reported 62 expected server exports.
+- Final `CI=true corepack pnpm verify` passed on `2026-06-29 22:27 WEST`: 15
+  test files / 135 tests; coverage statements 97.69%, branches 90.9%,
+  functions 100%, lines 97.64%; TypeDoc/API reported 100 proto, 28 core, 62
+  server, and 26 storage expected exports; proto lint/generate/check passed
+  with generated output clean.
 
 ## Review Rounds
 
@@ -144,7 +171,8 @@ Skipped relevant-looking skills:
 
 ## Current State
 
-- Branch/worktree exists from `2ca23fd`.
-- Durable setup logs are committed at `d9c5494`.
-- Baseline verification passed on `2026-06-29 22:12 WEST`.
-- Implementation delegation is next.
+- Branch/worktree exists on `task/T-0009e1-common-entity-state-shell` at
+  baseline `ae5110c`.
+- Durable setup logs are committed through `ae5110c`.
+- Common abstract `Entity` state shell implementation is complete locally.
+- Final verification passed; implementation commit is next.

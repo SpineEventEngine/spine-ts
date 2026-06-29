@@ -5,6 +5,10 @@ metadata, and standard decorator metadata adapters.
 
 Current slice exposes:
 
+- `Entity<Id, Schema, Version>` for a common abstract OOP state shell with
+  identity, descriptor-derived metadata, cloned Protobuf-ES state snapshots,
+  caller-owned version metadata, lifecycle flags, and active/archive/delete
+  accessors; and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
 - first-field routing hints from descriptor order;
@@ -90,6 +94,39 @@ handlers for the same message type. The registry is caller-owned and
 metadata-only: constructing or registering it does not instantiate entities,
 invoke methods, unpack payloads, mutate global process state, write storage, or
 start buses/transports.
+
+## Entity State Shell
+
+Extend `Entity` when framework-owned code needs a common base for local entity
+state and metadata without introducing repository/runtime behavior:
+
+```ts
+import { Entity } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskEntity extends Entity<string, typeof TaskStateSchema, number> {}
+
+const task = new TaskEntity({
+  id: "task-1",
+  schema: TaskStateSchema,
+  state: taskState,
+  version: 7,
+});
+
+task.id; // "task-1"
+task.metadata.fullTypeName; // TaskStateSchema.typeName
+task.state; // cloned state snapshot
+task.isActive; // true unless archived or deleted
+```
+
+The constructor derives metadata with `describeEntityMetadata(schema)`, snapshots
+the supplied Protobuf-ES state, defaults lifecycle flags to active/not deleted,
+and preserves version metadata exactly as supplied by the caller. State access
+returns cloned snapshots so caller mutation does not mutate stored entity state.
+Protected replacement hooks exist only for later framework-owned subclasses;
+there are no public state setters, automatic version increments, transactions,
+handler invocation, repository writes, storage calls, lifecycle events, routing,
+queries, buses, transports, or global runtime state.
 
 ## Entity State Transition Validation
 

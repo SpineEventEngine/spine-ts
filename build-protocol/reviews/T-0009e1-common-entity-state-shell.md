@@ -5,7 +5,7 @@ Work log: `build-protocol/work-logs/T-0009e1.md`
 Branch: `task/T-0009e1-common-entity-state-shell`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009e1-common-entity-state-shell`
-Baseline commit: `2ca23fd`
+Baseline commit: `ae5110c`
 
 ## Review Requirements
 
@@ -23,4 +23,5 @@ role is clean. The orchestrator must close every reviewer after result capture.
 
 ## Round 1
 
-Pending implementation commit.
+Pending implementation commit and orchestrator reviewer sub-agents. Authoring
+agent spawned no sub-agents.
