@@ -4,6 +4,48 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+## D-0040: T-0009d.2 server transaction kernel stays smaller than runtime
+
+Date: 2026-06-29
+
+Context: T-0009d.2 starts the entity transaction layer after built-in
+`(set_once)` transition validation. The human specifically warned that
+`@spine-ts/server` work should closely inspect Spine JVM `core-jvm/server` and
+avoid over-inventing. Task-relevant JVM code shows `Transaction` as a buffered
+draft over entity state, version, and lifecycle flags, injected into a
+`TransactionalEntity`, validated at commit, and released after commit or
+rollback. It also owns dispatch phases and entity mutation in JVM, but those
+runtime concerns are larger than this TS slice.
+
+Decision: Implement only a small TypeScript transaction draft/result kernel in
+this task. It may expose an explicit draft/update API, active/committed/rolled
+back status, lifecycle/version draft data, commit-time state transition
+validation through `validateEntityStateTransition()`, and structured commit
+results. It must not implement repositories, storage writes/reads, handler
+dispatch, dispatcher phases, recent history, buses, gRPC, ZeroMQ, worker
+processes, or transport adapters.
+
+Alternatives considered:
+
+- Implement a full JVM-like `Transaction` with dispatch phases now. Rejected
+  because handler invocation, repositories, and storage are not ready, and this
+  would overfit unimplemented runtime behavior.
+- Keep only the existing pure `validateEntityStateTransition()` API. Rejected
+  because the next server slice needs a framework-owned commit boundary that
+  future entity base classes can consume.
+- Use implicit global or async-local transaction state. Rejected for this slice
+  because the JVM model exposes explicit transaction ownership and the TS spec
+  prefers explicit parameters for Node async safety.
+
+Consequences:
+
+- Future `Aggregate`, `Projection`, and `ProcessManager` base classes can build
+  on a small validation-backed transaction boundary.
+- Later runtime tasks may add repository integration and dispatch phases without
+  breaking this public kernel.
+- Reviewers should reject speculative transport/storage/dispatch behavior in
+  this task even if it resembles later JVM responsibilities.
+
 ## D-0001: Documentation-only scope for current task
 
 Answer from human: create documentation/specifications only now. Do not create package skeletons or implementation code.
