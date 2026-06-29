@@ -114,9 +114,15 @@ const FullVisibilityStateSchema = messageDesc(
 const HiddenStateSchema = messageDesc(fileEntityVisibilityFixture, 2) as GenMessage<HiddenState>;
 
 describe("@spine-ts/server", () => {
-  it("exports the descriptor-derived entity metadata surface", () => {
+  it("exports the descriptor-derived entity and handler metadata surface", () => {
     expect(Object.keys(serverRoot).sort()).toEqual(
-      ["DescriptorMetadataError", "describeEntityMetadata", "isEntitySchema"].sort(),
+      [
+        "DescriptorMetadataError",
+        "HandlerMetadataError",
+        "defineEntityHandlers",
+        "describeEntityMetadata",
+        "isEntitySchema",
+      ].sort(),
     );
   });
 

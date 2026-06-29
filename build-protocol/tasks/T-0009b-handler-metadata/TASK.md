@@ -1,17 +1,22 @@
 # T-0009b: Handler Metadata Contract And Explicit Registration API
 
-Status: Setup in progress
+Status: Complete; ready for integration
 Start: `2026-06-29 00:40 WEST`
-End: Pending
+End: `2026-06-29 12:40 WEST`
 Baseline commit: `11a6c70`
 Task log path: `build-protocol/tasks/T-0009b-handler-metadata/TASK.md`
 Branch: `task/T-0009b-handler-metadata`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b-handler-metadata`
 Requirements splitter: `019f1097-55bb-7b73-a9f8-706db486721e` (Kierkegaard the 2nd)
-Authoring sub-agent: Pending
-Reviewer sub-agents: Pending
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
+Authoring sub-agent: `019f109d-ce8b-7b42-94d3-cc93b9ead054` (Russell the 2nd)
+Reviewer sub-agents: Round 1 and follow-up re-review completed
+Branch setup commit: `2b03b6b`
+Implementation baseline commit: `b1d158e`
+Implementation commit: `28d8e419918c14ac1d54079bc912931ce8b23bd9`
+Round-1 fix commit: `195112ab968b4560c5efab1c557a56ba59a0182b`
+Follow-up fix commit: `b6c8251a7404c974b073615b1a2aa888444bdac4`
+Durable-log correction checkpoint: `6b514ac2f2f44af40358bf66135097740befef69`
+Review closure checkpoint: `9d87aebf31fa347ba719910b18a29ac2152b54a6`
 
 ## Objective
 
@@ -70,11 +75,11 @@ Selected skills read before task actions:
 
 Skills passed to sub-agents/reviewers:
 
-| Recipient           | Skills/Instructions Passed                     | Notes                                                                            |
-| ------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------- |
-| Splitter            | Protocol/spec docs and T-0009a/D-0034 context. | Produced first-slice recommendation with no blockers.                            |
-| Authoring sub-agent | Pending.                                       | Must receive TDD, TypeScript, API, ADR, worktree, and verification instructions. |
-| Reviewers           | Pending.                                       | Five role prompts must include T-0009b scope/non-scope and diff package.         |
+| Recipient           | Skills/Instructions Passed                                     | Notes                                                                                                                                                                                                          |
+| ------------------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Splitter            | Protocol/spec docs and T-0009a/D-0034 context.                 | Produced first-slice recommendation with no blockers.                                                                                                                                                          |
+| Authoring sub-agent | TDD, TypeScript/API, ADR, worktree, verification instructions. | Produced implementation commit `28d8e419918c14ac1d54079bc912931ce8b23bd9`, round-1 fix commit `195112ab968b4560c5efab1c557a56ba59a0182b`, and follow-up fix commit `b6c8251a7404c974b073615b1a2aa888444bdac4`. |
+| Reviewers           | T-0009b scope/non-scope and diff packages.                     | Round 1, follow-up, and final log/API re-review completed clean; reviewer agents were closed after their results were consumed.                                                                                |
 
 Skipped relevant-looking skills:
 
@@ -123,27 +128,84 @@ Out of scope:
 
 ## Files Changed
 
-- Pending.
+- `packages/server/src/handler-metadata.ts`
+- `packages/server/src/handler-metadata.test.ts`
+- `packages/server/src/index.ts`
+- `packages/server/src/index.test.ts`
+- `packages/server/README.md`
+- `docs/USER_GUIDE.md`
+- `docs/architecture/README.md`
+- `docs/api/README.md`
+- `scripts/check-api-docs.mjs`
+- `build-protocol/tasks/T-0009b-handler-metadata/TASK.md`
+- `build-protocol/work-logs/T-0009b.md`
+- `build-protocol/reviews/T-0009b-handler-metadata.md`
 
 ## Tests Run
 
-- Pending.
+- RED: `corepack pnpm test packages/server/src/handler-metadata.test.ts`
+  failed because `defineEntityHandlers` was not a function.
+- GREEN: `corepack pnpm test packages/server/src/handler-metadata.test.ts`
+  passed after adding the first explicit handler metadata implementation.
+- RED: `corepack pnpm test packages/server/src/handler-metadata.test.ts`
+  failed because missing prototype methods were not rejected.
+- GREEN: `corepack pnpm test packages/server/src/handler-metadata.test.ts`
+  passed after adding `HandlerMetadataError` and prototype method validation.
+- RED: `corepack pnpm test packages/server/src/index.test.ts packages/server/src/handler-metadata.test.ts`
+  failed because the root export expectation still described the old server
+  runtime surface.
+- GREEN: `corepack pnpm test packages/server/src/index.test.ts packages/server/src/handler-metadata.test.ts`
+  passed after updating the root export expectation.
+- `corepack pnpm typecheck:build` passed.
+- `corepack pnpm lint` initially failed on test placeholder methods and
+  unbound builder destructuring; passed after test cleanup.
+- `corepack pnpm typecheck:tooling` passed.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid remote
+  source-link warning and confirmed 27 expected server exports.
+- `corepack pnpm test packages/server/src/index.test.ts packages/server/src/handler-metadata.test.ts`
+  passed after formatting.
+- `CI=true corepack pnpm verify` passed.
+- Round 1 RED: `corepack pnpm test packages/server/src/handler-metadata.test.ts`
+  failed because accessor properties, inherited built-ins, and `constructor`
+  were accepted as handler method names.
+- Round 1 GREEN: `corepack pnpm test packages/server/src/handler-metadata.test.ts`
+  passed after switching handler method validation to own property descriptor
+  inspection.
+- Round 1 final: `CI=true corepack pnpm verify` passed after the review fixes.
+- Follow-up RED: `corepack pnpm test packages/server/src/handler-metadata.test.ts`
+  failed because the accessor regression did not yet require the runtime error
+  to describe normal class methods.
+- Follow-up GREEN: `corepack pnpm test packages/server/src/handler-metadata.test.ts`
+  passed after aligning the error message, TypeDoc comments, public docs, and
+  test evidence with the own-prototype-data-method runtime contract.
+- Follow-up final: `CI=true corepack pnpm verify` passed after the log/API
+  contract fixes.
+- Final branch verification: `CI=true corepack pnpm verify` passed on
+  `2026-06-29 12:40 WEST` after all reviewer findings were resolved and the
+  final log/API re-review was clean.
 
 ## Coverage Result
 
-- Pending.
+- Final `CI=true corepack pnpm verify` coverage: statements 99.44%, branches
+  93.54%, functions 100%, lines 99.43%.
+- Round 1 `CI=true corepack pnpm verify` coverage: statements 99.44%, branches
+  93.7%, functions 100%, lines 99.43%.
+- Follow-up `CI=true corepack pnpm verify` coverage: statements 99.44%,
+  branches 93.7%, functions 100%, lines 99.43%.
+- Final branch `CI=true corepack pnpm verify` coverage: statements 99.44%,
+  branches 93.7%, functions 100%, lines 99.43%.
 
 ## Documentation And Public API Impact
 
-| Area                             | Impact                                                                        |
-| -------------------------------- | ----------------------------------------------------------------------------- |
-| Package README impact            | Expected: explicit registration examples and non-scope notes.                 |
-| TypeDoc/API docs impact          | Expected: new public server exports and `scripts/check-api-docs.mjs` updates. |
-| Public API additions/removals    | Expected: handler metadata and explicit registration builders.                |
-| Framework `USER_GUIDE.md` impact | Expected: brief user-facing explicit registration workflow.                   |
-| Example `USER_GUIDE.md` impact   | N/A for this slice; to-do example is not implemented yet.                     |
-| API examples                     | Expected in server README and API docs overview.                              |
-| Compatibility notes              | Expected: explicit registration is the stable target for later decorators.    |
+| Area                             | Impact                                                                     |
+| -------------------------------- | -------------------------------------------------------------------------- |
+| Package README impact            | Added explicit registration example and non-scope notes.                   |
+| TypeDoc/API docs impact          | Added handler metadata exports and normal-class-method contract notes.     |
+| Public API additions/removals    | Added handler metadata contracts, builder, and registration error.         |
+| Framework `USER_GUIDE.md` impact | Added explicit handler metadata workflow and method-shape constraints.     |
+| Example `USER_GUIDE.md` impact   | N/A for this slice; to-do example is not implemented yet.                  |
+| API examples                     | Expected in server README and API docs overview.                           |
+| Compatibility notes              | Expected: explicit registration is the stable target for later decorators. |
 
 ## Security Impact
 
@@ -159,7 +221,41 @@ Out of scope:
 
 ## Verification
 
-- Pending baseline verification.
+- `corepack pnpm install --offline` failed because
+  `@bufbuild/protoc-gen-es@2.12.1` was missing from the local pnpm store.
+- `corepack pnpm install` passed with the existing lockfile and hydrated the
+  worktree dependency metadata.
+- Baseline `CI=true corepack pnpm verify` passed on `2026-06-29 00:41 WEST`:
+  10 test files / 65 tests passed; coverage statements 99.41%, branches 94.11%,
+  functions 100%, lines 99.39%; docs/API check confirmed 100 proto exports, 28
+  core exports, 11 server exports, and 26 storage exports; proto
+  lint/generate/check-generated passed; known non-blocking TypeDoc
+  invalid-origin source-link warning remains.
+- Implementation `CI=true corepack pnpm verify` passed on
+  `2026-06-29 00:53 WEST`: 11 test files / 67 tests passed; coverage statements
+  99.44%, branches 93.54%, functions 100%, lines 99.43%; docs/API check
+  confirmed 100 proto exports, 28 core exports, 27 server exports, and 26
+  storage exports; proto lint/generate/check-generated passed; the known
+  TypeDoc invalid-origin source-link warning remains.
+- Round 1 fix `CI=true corepack pnpm verify` passed on
+  `2026-06-29 11:58 WEST`: 11 test files / 70 tests passed; coverage statements
+  99.44%, branches 93.7%, functions 100%, lines 99.43%; docs/API check
+  confirmed 100 proto exports, 28 core exports, 27 server exports, and 26
+  storage exports; proto lint/generate/check-generated passed; the known
+  TypeDoc invalid-origin source-link warning remains.
+- Follow-up fix `CI=true corepack pnpm verify` passed on
+  `2026-06-29 12:12 WEST`: 11 test files / 70 tests passed; coverage statements
+  99.44%, branches 93.7%, functions 100%, lines 99.43%; docs/API check
+  confirmed 100 proto exports, 28 core exports, 27 server exports, and 26
+  storage exports; proto lint/generate/check-generated passed; the known
+  TypeDoc invalid-origin source-link warning remains.
+- Final branch `CI=true corepack pnpm verify` passed on
+  `2026-06-29 12:40 WEST`: 11 test files / 70 tests passed; coverage statements
+  99.44%, branches 93.7%, functions 100%, lines 99.43%; docs/API check
+  confirmed 100 proto exports, 28 core exports, 27 server exports, and 26
+  storage exports; proto lint/generate/check-generated passed; generated proto
+  output remained clean; the known TypeDoc invalid-origin source-link warning
+  remains.
 
 ## Open Risks And Follow-Up Routing
 
@@ -172,8 +268,29 @@ Out of scope:
 
 ## Review Rounds
 
-- Pending.
+- Authoring sub-agent dispatched on `2026-06-29 00:43 WEST` with ownership of
+  the first T-0009b slice: handler metadata contract plus explicit
+  registration API.
+- Final log/API re-review used the explicit package for
+  `195112ab968b4560c5efab1c557a56ba59a0182b..9d87aebf31fa347ba719910b18a29ac2152b54a6`.
+  All five reviewer roles returned clean results:
+  code style/maintainability, documentation, TypeScript/API docs, security, and
+  performance/reliability. Reviewer agents were closed after result capture.
+- Authoring sub-agent finished implementation verification on
+  `2026-06-29 00:53 WEST`; round-1 reviewers inspected
+  `d200447..28d8e419918c14ac1d54079bc912931ce8b23bd9`.
+- Round-1 fixes were committed as
+  `195112ab968b4560c5efab1c557a56ba59a0182b`; follow-up reviewers inspected
+  `28d8e419918c14ac1d54079bc912931ce8b23bd9..195112ab968b4560c5efab1c557a56ba59a0182b`.
+- Follow-up log/API contract fixes were committed as
+  `b6c8251a7404c974b073615b1a2aa888444bdac4`.
+- Durable-log correction checkpoint was committed as
+  `6b514ac2f2f44af40358bf66135097740befef69`.
+- Next review point is follow-up re-review using an explicit package/range
+  supplied by the orchestrator; record the upper bound only after package
+  creation.
 
 ## Integration Result
 
-Pending.
+Not integrated by this authoring sub-agent; orchestrator owns integration after
+follow-up re-review.

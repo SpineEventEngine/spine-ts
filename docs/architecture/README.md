@@ -115,8 +115,9 @@ responsibilities remain with later runtime slices.
 ## Server Entity Metadata
 
 `@spine-ts/server` now owns the first descriptor-derived entity metadata layer,
-following D-0034. The package consumes only curated option exports from
-`@spine-ts/proto` and keeps generic schema/type-URL lookup in `@spine-ts/core`.
+following D-0034, and the first explicit handler metadata layer, following
+D-0035. The package consumes only curated option exports from `@spine-ts/proto`
+and keeps generic schema/type-URL lookup in `@spine-ts/core`.
 
 Current server metadata is pure and deterministic:
 
@@ -132,13 +133,30 @@ Current server metadata is pure and deterministic:
 - semantic tags from message `(is)` and file `(every_is)` options are
   preserved in deterministic sorted order.
 
-The extractor throws typed `DescriptorMetadataError` failures for non-entity
+The entity extractor throws typed `DescriptorMetadataError` failures for non-entity
 schemas, unknown entity kinds, repeated/map column declarations, empty semantic
 tag values, and other unsupported combinations in this slice. Aggregate and
 generic entity column declarations are ignored to match the source option
-contract. It does not
-register handlers, execute routes, validate transactions, assemble
-repositories, or write storage records.
+contract.
+
+`defineEntityHandlers()` is the explicit metadata target that later decorators
+must produce. It accepts an entity class, a state schema, and a builder callback
+whose methods record command assignment, command reaction, event subscription,
+event reaction, and event application metadata. Each handler record keeps the
+generated Protobuf-ES schema, message full type name, handler kind, and entity
+method name. Event application metadata also records `allowImport` for future
+import/replay machinery.
+
+Handler metadata is deterministic and frozen. The all-handlers array preserves
+the user declaration order, and role-specific arrays preserve the same relative
+order after filtering. Registration validates only that explicitly named
+handlers are own prototype data methods declared with normal class method
+syntax; accessors, `constructor`, inherited methods, and instance fields are
+rejected without invoking user code. Duplicate-handler rules and lookup
+registries belong to the follow-up registry/validation slice. The handler
+metadata layer does not execute routes, invoke handlers, validate transactions,
+enforce `(set_once)`, assemble repositories, mutate storage, register buses, or
+start transport.
 
 ## Storage Boundary
 

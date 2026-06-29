@@ -5,8 +5,8 @@ TypeDoc is the canonical API documentation generator for this repository.
 Current status: the generated reference contains the curated `@spine-ts/proto`
 root API for copied Spine contracts, the `@spine-ts/core` metadata/type
 registry and validation facade APIs, the first `@spine-ts/server`
-descriptor-derived entity metadata APIs, and the first `@spine-ts/storage`
-contracts.
+descriptor-derived entity metadata and explicit handler metadata APIs, and the
+first `@spine-ts/storage` contracts.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
@@ -26,7 +26,13 @@ Server exports include `describeEntityMetadata()`, `isEntitySchema()`,
 routing hints, field metadata, and the descriptor-derived `EntityMetadata`
 contract for later handler registration, transaction validation, and repository
 assembly. Column metadata is exposed only for projection/process-manager
-schemas, matching the underlying Spine option contract.
+schemas, matching the underlying Spine option contract. Server handler metadata
+exports include `defineEntityHandlers()`, `HandlerRegistrationBuilder`, the
+five handler metadata roles for command assignment, command reaction, event
+subscription, event reaction, and event application, and `HandlerMetadataError`
+for registration-time structural failures. Handler names must refer to own
+prototype data methods declared with normal class method syntax. These APIs are
+metadata-only and do not execute handlers.
 
 Storage exports include `StorageAdapter`, `StorageRecord`,
 `WriteSideRecordStore`, `ReadSideRecordStore`, aggregate event history

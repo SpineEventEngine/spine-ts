@@ -2,8 +2,8 @@
 
 Current status: early framework guide for the descriptor registry,
 single-message validation facade, core envelope construction helpers, the first
-server entity metadata layer, and the first storage contracts with an in-memory
-adapter.
+server entity and handler metadata layers, and the first storage contracts with
+an in-memory adapter.
 
 This guide covers the runnable behavior available now: Spine proto descriptors
 are exposed through curated packages, `@spine-ts/core` can derive and look up
@@ -11,11 +11,11 @@ type metadata, framework users can validate one Protobuf message at a time, and
 callers can pack already-built domain messages into generated Spine
 `Command`/`Event` envelopes. `@spine-ts/server` now derives descriptor-backed
 entity metadata from `(entity)`, `(column)`, `(set_once)`, `(is)`, and
-`(every_is)` options without registering handlers or mutating global runtime
-state. `@spine-ts/storage` also exposes asynchronous record-oriented storage
-contracts and a deterministic in-memory adapter for tests/development. Entity
-runtime, transport, durable production storage, and the to-do application
-remain later slices.
+`(every_is)` options and defines explicit handler metadata without invoking
+handlers or mutating global runtime state. `@spine-ts/storage` also exposes
+asynchronous record-oriented storage contracts and a deterministic in-memory
+adapter for tests/development. Entity runtime, transport, durable production
+storage, and the to-do application remain later slices.
 
 ## What Exists Now
 
@@ -44,6 +44,9 @@ remain later slices.
   kind and visibility, expose first-field routing hints, surface `(column)`
   fields for projections/process managers, surface `(set_once)` fields for all
   entity kinds, and preserve semantic tags from `(is)` and `(every_is)`.
+- Server handler metadata helpers in `@spine-ts/server` that explicitly bind
+  generated command/event schemas to entity method names for command assignment,
+  command reaction, event subscription, event reaction, and event application.
 - Storage contracts in `@spine-ts/storage` for write-side entity records,
   aggregate event histories/snapshots, read-side projection records, delivery
   records, tenant indexes, and safe diagnostics.
@@ -58,8 +61,8 @@ remain later slices.
   event producer/version/origin policy, command system properties, and runtime
   metadata generation.
 - Semantic tag registration from `(is)` and `(every_is)` into handler/routing
-  registries. The server metadata API preserves the tags now, but no handler
-  registry consumes them yet.
+  registries. The server metadata APIs preserve entity tags and explicit
+  handler declarations now, but no runtime registry consumes them yet.
 - gRPC service implementations.
 - Entity, bus, transport, durable production storage, and to-do domain runtime
   behavior.
@@ -227,6 +230,44 @@ entity metadata from a non-entity schema or when the descriptor uses
 unsupported combinations such as repeated/map `(column)` fields on projections
 or process managers. Aggregate and generic entity `(column)` declarations are
 ignored in this slice, matching the Spine option contract.
+
+## Handler Metadata
+
+Use explicit handler metadata when an entity class needs to declare which
+methods later runtime slices should inspect:
+
+```ts
+import { defineEntityHandlers } from "@spine-ts/server";
+import { CreateTaskSchema } from "./generated/task_commands_pb.js";
+import { TaskCreatedSchema, TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskAggregate {
+  create(command: unknown): void {}
+
+  onCreated(event: unknown): void {}
+}
+
+const taskHandlers = defineEntityHandlers(TaskAggregate, TaskStateSchema, ({ assign, apply }) => [
+  assign(CreateTaskSchema, "create"),
+  apply(TaskCreatedSchema, "onCreated", { allowImport: true }),
+]);
+
+taskHandlers.entity.fullTypeName;
+taskHandlers.handlers.map((handler) => handler.kind);
+taskHandlers.commandAssignments[0]?.methodName; // "create"
+taskHandlers.eventApplications[0]?.allowImport; // true
+```
+
+`defineEntityHandlers()` calls `describeEntityMetadata()` for the state schema,
+checks that named methods are own prototype data methods declared with normal
+class method syntax, and returns frozen metadata arrays preserving declaration
+order. Accessors, `constructor`, inherited methods, and instance fields are
+rejected without invoking user code. The builder exposes `assign()`,
+`command()`, `subscribe()`, `react()`, and `apply()` for the five first handler
+roles. `apply(..., { allowImport: true })` records importability for future
+event import/replay work, but this slice does not implement an import bus,
+handler invocation, duplicate-handler validation, transactions, repositories,
+storage writes, or transport.
 
 ## Storage
 
