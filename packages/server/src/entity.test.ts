@@ -7,7 +7,13 @@ import { file_spine_options } from "@spine-ts/proto";
 import { serverEntityMetadataTestFixtures } from "../test-fixtures/entity-metadata-fixtures.js";
 
 import * as serverRoot from "./index.js";
-import { describeEntityMetadata, Entity, type EntityOptions } from "./index.js";
+import {
+  describeEntityMetadata,
+  Entity,
+  TransactionalEntity,
+  TransactionalEntityScopeError,
+  type EntityOptions,
+} from "./index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -94,9 +100,86 @@ class NestedVersionEntity extends Entity<
   }
 }
 
+class TestTransactionalEntity extends TransactionalEntity<
+  string,
+  typeof ProjectionStateSchema,
+  RevisionMetadata
+> {
+  start(): void {
+    this.startTransaction();
+  }
+
+  draft(): ProjectionState {
+    return this.currentDraft();
+  }
+
+  draftVersion(): { readonly previous: RevisionMetadata; readonly draft: RevisionMetadata } {
+    return this.draftVersionMetadata();
+  }
+
+  draftLifecycle(): { readonly archived: boolean; readonly deleted: boolean } {
+    return this.draftLifecycleFlags();
+  }
+
+  renameDraft(name: string, priority = this.currentDraft().priority): ProjectionState {
+    return this.updateDraftState((draft) => ({
+      ...draft,
+      name,
+      priority,
+    }));
+  }
+
+  changeDraftId(id: string): ProjectionState {
+    return this.updateDraftState((draft) => ({
+      ...draft,
+      id,
+    }));
+  }
+
+  reviseDraft(revision: number): {
+    readonly previous: RevisionMetadata;
+    readonly draft: RevisionMetadata;
+  } {
+    return this.updateDraftVersionMetadata({ revision, source: "server" });
+  }
+
+  archiveDraftForTest(): void {
+    this.archiveDraft();
+  }
+
+  unarchiveDraftForTest(): void {
+    this.unarchiveDraft();
+  }
+
+  markDraftDeletedForTest(): void {
+    this.markDraftDeleted();
+  }
+
+  restoreDraftForTest(): void {
+    this.restoreDraft();
+  }
+
+  commitForTest(): ReturnType<TestTransactionalEntity["commitTransaction"]> {
+    return this.commitTransaction();
+  }
+
+  rollbackForTest(): ReturnType<TestTransactionalEntity["rollbackTransaction"]> {
+    return this.rollbackTransaction();
+  }
+
+  hasActiveTransaction(): boolean {
+    return this.isTransactionInProgress();
+  }
+}
+
 describe("entities", () => {
   it("exports the common entity base class from the server root", () => {
     expect(serverRoot.Entity).toBe(Entity);
+  });
+
+  it("exports the transactional entity base class and scope error from the server root", () => {
+    expect(serverRoot.TransactionalEntity).toBe(TransactionalEntity);
+    expect(serverRoot.TransactionalEntityScopeError).toBe(TransactionalEntityScopeError);
   });
 
   it("exposes identity, descriptor metadata, state snapshots, version, and active lifecycle defaults", () => {
@@ -560,5 +643,144 @@ describe("entities", () => {
     });
     expect(entity.version).not.toBe(replacementVersion);
     expect(entity.version).not.toBe(returnedVersion);
+  });
+
+  it("requires one active transactional entity scope for draft helpers", () => {
+    const entity = new TestTransactionalEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    expect(entity.hasActiveTransaction()).toBe(false);
+    expect(() => entity.draft()).toThrow(TransactionalEntityScopeError);
+    expect(() => entity.draft()).toThrow(/requires an active transaction/);
+
+    entity.start();
+
+    expect(entity.hasActiveTransaction()).toBe(true);
+    expect(() => {
+      entity.start();
+    }).toThrow(TransactionalEntityScopeError);
+    expect(() => {
+      entity.start();
+    }).toThrow(/already has an active transaction/);
+  });
+
+  it("commits accepted draft state, version metadata, and lifecycle flags back to the entity", () => {
+    const entity = new TestTransactionalEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    entity.start();
+    const returnedDraft = entity.renameDraft("Ready", 2);
+    returnedDraft.name = "Caller-side draft mutation";
+    entity.reviseDraft(2);
+    entity.archiveDraftForTest();
+
+    expect(entity.state).toEqual(createProjectionState());
+    expect(entity.version).toEqual({ revision: 1, source: "server" });
+    expect(entity.lifecycle).toEqual({ archived: false, deleted: false });
+    expect(entity.changed).toBe(false);
+
+    const result = entity.commitForTest();
+
+    expect(result.status).toBe("accepted");
+    expect(entity.hasActiveTransaction()).toBe(false);
+    expect(entity.state).toEqual(createProjectionState({ name: "Ready", priority: 2 }));
+    expect(entity.version).toEqual({ revision: 2, source: "server" });
+    expect(entity.lifecycle).toEqual({ archived: true, deleted: false });
+    expect(entity.lifecycleFlagsChanged).toBe(true);
+    expect(entity.changed).toBe(true);
+  });
+
+  it("keeps rejected commits active and does not apply state, version, or lifecycle", () => {
+    const entity = new TestTransactionalEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    entity.start();
+    entity.changeDraftId("task-2");
+    entity.reviseDraft(2);
+    entity.markDraftDeletedForTest();
+
+    const rejected = entity.commitForTest();
+
+    expect(rejected.status).toBe("rejected");
+    expect(entity.hasActiveTransaction()).toBe(true);
+    expect(entity.state).toEqual(createProjectionState());
+    expect(entity.version).toEqual({ revision: 1, source: "server" });
+    expect(entity.lifecycle).toEqual({ archived: false, deleted: false });
+    expect(entity.changed).toBe(false);
+
+    entity.restoreDraftForTest();
+    entity.changeDraftId("task-1");
+    entity.renameDraft("Recovered", 3);
+    entity.reviseDraft(3);
+
+    const accepted = entity.commitForTest();
+
+    expect(accepted.status).toBe("accepted");
+    expect(entity.hasActiveTransaction()).toBe(false);
+    expect(entity.state).toEqual(createProjectionState({ name: "Recovered", priority: 3 }));
+    expect(entity.version).toEqual({ revision: 3, source: "server" });
+    expect(entity.lifecycle).toEqual({ archived: false, deleted: false });
+    expect(entity.changed).toBe(true);
+  });
+
+  it("rolls back active transactional entity drafts without applying them", () => {
+    const entity = new TestTransactionalEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    entity.start();
+    entity.renameDraft("Discarded", 9);
+    entity.reviseDraft(9);
+    entity.archiveDraftForTest();
+
+    const result = entity.rollbackForTest();
+
+    expect(result.status).toBe("rolled-back");
+    expect(entity.hasActiveTransaction()).toBe(false);
+    expect(entity.state).toEqual(createProjectionState());
+    expect(entity.version).toEqual({ revision: 1, source: "server" });
+    expect(entity.lifecycle).toEqual({ archived: false, deleted: false });
+    expect(entity.changed).toBe(false);
+    expect(() => entity.commitForTest()).toThrow(TransactionalEntityScopeError);
+  });
+
+  it("keeps public snapshots isolated while a transaction draft is active", () => {
+    const entity = new TestTransactionalEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    entity.start();
+    const draft = entity.draft();
+    draft.name = "Caller-side mutation";
+    const version = entity.draftVersion() as {
+      draft: { revision: number };
+    };
+    version.draft.revision = 99;
+
+    expect(entity.draft()).toEqual(createProjectionState());
+    expect(entity.draftVersion()).toEqual({
+      previous: { revision: 1, source: "server" },
+      draft: { revision: 1, source: "server" },
+    });
+    expect(entity.state).toEqual(createProjectionState());
+    expect(entity.version).toEqual({ revision: 1, source: "server" });
   });
 });

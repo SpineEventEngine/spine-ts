@@ -53,6 +53,9 @@ slices.
   descriptor-derived metadata, cloned Protobuf-ES state snapshots, caller-owned
   plain version metadata, lifecycle flags, active/archive/delete accessors, and
   sticky lifecycle-change tracking.
+- A protected `TransactionalEntity` base that wraps the transaction kernel with
+  one active scoped draft per entity and applies only accepted commits back to
+  the entity shell.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.
@@ -247,6 +250,45 @@ for future framework-owned entity bases. It is not a storage-backed transaction
 system, repository unit of work, handler dispatch phase, lifecycle-event
 emitter, or async-local/global transaction context. The snapshots returned from
 commit and rollback are evidence for later runtime layers, not persisted state.
+
+## Transactional Entity Draft Helpers
+
+Extend `TransactionalEntity` when framework-owned subclasses need protected
+draft helpers over the transaction kernel:
+
+```ts
+import { TransactionalEntity } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskEntity extends TransactionalEntity<string, typeof TaskStateSchema, number> {
+  rename(name: string): void {
+    this.startTransaction();
+    this.updateDraftState((state) => ({ ...state, name }));
+    this.updateDraftVersionMetadata(this.version + 1);
+
+    const result = this.commitTransaction();
+    if (result.status === "rejected") {
+      this.rollbackTransaction();
+    }
+  }
+}
+```
+
+Only subclass code can use the draft scope. `startTransaction()` opens one
+active transaction from the entity's current state, version metadata, and
+lifecycle snapshots. Draft helpers return snapshots, so mutating returned state
+or version data does not mutate the buffered draft. Accepted commits close the
+scope and replace the entity state, explicit version metadata, and lifecycle
+flags. Rejected commits keep the scope active for correction or explicit
+rollback and apply nothing to the entity. `rollbackTransaction()` closes the
+scope without applying state, version, or lifecycle changes.
+
+`changed` becomes true when an accepted commit changes entity state or committed
+lifecycle flags. It does not include version-only commits and does not decide
+whether a repository should store the entity. Missing or duplicate scopes throw
+`TransactionalEntityScopeError`. The base still does not invoke handlers, write
+storage, emit lifecycle events, increment versions automatically, dispatch
+messages, or create async-local/global transaction state.
 
 ## Envelope Packing
 

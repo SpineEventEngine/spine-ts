@@ -5,6 +5,14 @@ import {
   type DescriptorMessageSchema,
   type EntityMetadata,
 } from "./entity-metadata.js";
+import {
+  EntityTransaction,
+  type EntityTransactionCommitResult,
+  type EntityTransactionLifecycleFlags,
+  type EntityTransactionRollbackResult,
+  type EntityTransactionUpdater,
+  type EntityTransactionVersionMetadata,
+} from "./entity-transaction.js";
 
 /** Lifecycle flags carried by a common entity shell. */
 export interface EntityLifecycleFlags {
@@ -12,6 +20,49 @@ export interface EntityLifecycleFlags {
   readonly archived: boolean;
   /** Whether the entity is deleted. */
   readonly deleted: boolean;
+}
+
+/** Reason a {@link TransactionalEntity} transaction-scope operation failed. */
+export type TransactionalEntityScopeErrorReason = "duplicate" | "missing";
+
+/** Protected {@link TransactionalEntity} operation guarded by transaction scope. */
+export type TransactionalEntityScopeOperation =
+  | "archiveDraft"
+  | "commitTransaction"
+  | "currentDraft"
+  | "draftLifecycleFlags"
+  | "draftVersionMetadata"
+  | "markDraftDeleted"
+  | "restoreDraft"
+  | "rollbackTransaction"
+  | "startTransaction"
+  | "unarchiveDraft"
+  | "updateDraftState"
+  | "updateDraftVersionMetadata";
+
+/** Error thrown when a transactional entity draft helper is used outside its scope. */
+export class TransactionalEntityScopeError extends Error {
+  /** Scope failure reason. */
+  readonly reason: TransactionalEntityScopeErrorReason;
+
+  /** Operation rejected by the current transaction scope. */
+  readonly operation: TransactionalEntityScopeOperation;
+
+  /** Create a deterministic transaction-scope error. */
+  constructor(
+    reason: TransactionalEntityScopeErrorReason,
+    operation: TransactionalEntityScopeOperation,
+  ) {
+    super(
+      reason === "duplicate"
+        ? `Cannot ${operation}: transactional entity already has an active transaction.`
+        : `Cannot ${operation}: transactional entity requires an active transaction.`,
+    );
+    this.name = "TransactionalEntityScopeError";
+    this.reason = reason;
+    this.operation = operation;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
 }
 
 type EntityVersionMetadataPrimitive =
@@ -216,11 +267,223 @@ export abstract class Entity<
   }
 }
 
+/**
+ * Common in-memory entity shell with a protected scoped transaction draft.
+ *
+ * The transaction scope is backed by {@link EntityTransaction}. Subclasses can
+ * start one active draft, mutate draft state/version/lifecycle through protected
+ * helpers, and then commit or roll back the scope. Accepted commits replace this
+ * entity's in-memory state, explicit version metadata, and lifecycle flags.
+ * Rejected commits leave the transaction active so subclass code can correct the
+ * draft or roll it back explicitly. This base does not write repositories,
+ * emit events, dispatch handlers, increment versions, or manage global
+ * transaction state.
+ */
+export abstract class TransactionalEntity<
+  Id,
+  Schema extends DescriptorMessageSchema,
+  Version = EntityVersionMetadata,
+> extends Entity<Id, Schema, Version> {
+  #transaction: EntityTransaction<Schema, Version> | undefined;
+  #stateChanged = false;
+
+  /** Whether accepted transaction state changes or lifecycle flag changes are visible. */
+  get changed(): boolean {
+    return this.#stateChanged || this.lifecycleFlagsChanged;
+  }
+
+  /** Whether a protected transaction scope is currently active. */
+  protected isTransactionInProgress(): boolean {
+    return this.#transaction?.status === "active";
+  }
+
+  /**
+   * Start a protected draft transaction from the entity's current snapshots.
+   *
+   * @throws {@link TransactionalEntityScopeError} when another transaction is active.
+   */
+  protected startTransaction(): void {
+    if (this.isTransactionInProgress()) {
+      throw new TransactionalEntityScopeError("duplicate", "startTransaction");
+    }
+
+    const previousVersion = this.version;
+    this.#transaction = new EntityTransaction({
+      schema: this.schema,
+      previous: this.state,
+      version: {
+        previous: previousVersion,
+        draft: cloneVersionMetadata(previousVersion),
+      },
+      lifecycle: this.lifecycle,
+    });
+  }
+
+  /**
+   * Current draft state snapshot.
+   *
+   * @throws {@link TransactionalEntityScopeError} when no transaction is active.
+   */
+  protected currentDraft(): MessageShape<Schema> {
+    return this.#requireTransaction("currentDraft").currentDraft;
+  }
+
+  /**
+   * Current draft version metadata snapshot.
+   *
+   * @throws {@link TransactionalEntityScopeError} when no transaction is active.
+   */
+  protected draftVersionMetadata(): EntityTransactionVersionMetadata<Version> {
+    const version = this.#requireTransaction("draftVersionMetadata").version;
+
+    return {
+      previous: cloneVersionMetadata(version.previous),
+      draft: cloneVersionMetadata(version.draft),
+    };
+  }
+
+  /**
+   * Current draft lifecycle flag snapshot.
+   *
+   * @throws {@link TransactionalEntityScopeError} when no transaction is active.
+   */
+  protected draftLifecycleFlags(): EntityTransactionLifecycleFlags {
+    return this.#requireTransaction("draftLifecycleFlags").lifecycle;
+  }
+
+  /**
+   * Replace the buffered draft state with the updater result.
+   *
+   * @throws {@link TransactionalEntityScopeError} when no transaction is active.
+   */
+  protected updateDraftState(updater: EntityTransactionUpdater<Schema>): MessageShape<Schema> {
+    return this.#requireTransaction("updateDraftState").update(updater);
+  }
+
+  /**
+   * Replace the buffered draft version metadata. No version increments are computed.
+   *
+   * @throws {@link TransactionalEntityScopeError} when no transaction is active.
+   */
+  protected updateDraftVersionMetadata(
+    draft: EntityVersionMetadataInput<Version>,
+  ): EntityTransactionVersionMetadata<Version> {
+    this.#requireTransaction("updateDraftVersionMetadata").updateVersionMetadata(
+      cloneVersionMetadata(draft) as Version,
+    );
+
+    return this.draftVersionMetadata();
+  }
+
+  /**
+   * Mark the buffered draft lifecycle as archived.
+   *
+   * @throws {@link TransactionalEntityScopeError} when no transaction is active.
+   */
+  protected archiveDraft(): EntityTransactionLifecycleFlags {
+    return this.#requireTransaction("archiveDraft").archive();
+  }
+
+  /**
+   * Mark the buffered draft lifecycle as not archived.
+   *
+   * @throws {@link TransactionalEntityScopeError} when no transaction is active.
+   */
+  protected unarchiveDraft(): EntityTransactionLifecycleFlags {
+    return this.#requireTransaction("unarchiveDraft").unarchive();
+  }
+
+  /**
+   * Mark the buffered draft lifecycle as deleted.
+   *
+   * @throws {@link TransactionalEntityScopeError} when no transaction is active.
+   */
+  protected markDraftDeleted(): EntityTransactionLifecycleFlags {
+    return this.#requireTransaction("markDraftDeleted").markDeleted();
+  }
+
+  /**
+   * Mark the buffered draft lifecycle as not deleted.
+   *
+   * @throws {@link TransactionalEntityScopeError} when no transaction is active.
+   */
+  protected restoreDraft(): EntityTransactionLifecycleFlags {
+    return this.#requireTransaction("restoreDraft").restore();
+  }
+
+  /**
+   * Commit the active draft transaction.
+   *
+   * Accepted commits apply state, version metadata, and lifecycle flags to this
+   * entity and close the transaction. Rejected commits do not apply anything and
+   * keep the transaction active for correction or explicit rollback.
+   *
+   * @throws {@link TransactionalEntityScopeError} when no transaction is active.
+   */
+  protected commitTransaction(): EntityTransactionCommitResult<Schema, Version> {
+    const transaction = this.#requireTransaction("commitTransaction");
+    const result = transaction.commit();
+
+    if (result.status === "accepted") {
+      if (
+        result.previous === undefined ||
+        !statesAreEqual(this.schema, result.previous, result.next)
+      ) {
+        this.#stateChanged = true;
+      }
+      this.replaceState(result.next);
+      this.replaceVersionMetadata(result.version.committed as EntityVersionMetadataInput<Version>);
+      this.replaceLifecycleFlags(result.lifecycle);
+      this.#transaction = undefined;
+    }
+
+    return result;
+  }
+
+  /**
+   * Roll back the active draft without applying state, version, or lifecycle changes.
+   *
+   * @throws {@link TransactionalEntityScopeError} when no transaction is active.
+   */
+  protected rollbackTransaction(): EntityTransactionRollbackResult<Schema, Version> {
+    const result = this.#requireTransaction("rollbackTransaction").rollback();
+    this.#transaction = undefined;
+
+    return result;
+  }
+
+  #requireTransaction(
+    operation: TransactionalEntityScopeOperation,
+  ): EntityTransaction<Schema, Version> {
+    const transaction = this.#transaction;
+    if (transaction?.status !== "active") {
+      throw new TransactionalEntityScopeError("missing", operation);
+    }
+
+    return transaction;
+  }
+}
+
 function cloneState<Schema extends DescriptorMessageSchema>(
   schema: Schema,
   state: MessageShape<Schema>,
 ): MessageShape<Schema> {
   return fromBinary(schema, toBinary(schema, state, { writeUnknownFields: false }));
+}
+
+function statesAreEqual<Schema extends DescriptorMessageSchema>(
+  schema: Schema,
+  previous: MessageShape<Schema>,
+  next: MessageShape<Schema>,
+): boolean {
+  const previousBinary = toBinary(schema, previous, { writeUnknownFields: false });
+  const nextBinary = toBinary(schema, next, { writeUnknownFields: false });
+
+  if (previousBinary.byteLength !== nextBinary.byteLength) {
+    return false;
+  }
+
+  return previousBinary.every((byte, index) => byte === nextBinary[index]);
 }
 
 const maxVersionMetadataDepth = 1_000;

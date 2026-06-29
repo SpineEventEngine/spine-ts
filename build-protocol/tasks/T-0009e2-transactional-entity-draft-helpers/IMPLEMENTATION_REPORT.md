@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.2 TransactionalEntity Scoped Draft Helpers
 
-Status: Setup Complete; Implementation Pending
+Status: Implementation Complete; Review Pending
 Task log:
 `build-protocol/tasks/T-0009e2-transactional-entity-draft-helpers/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e2.md`
@@ -12,8 +12,15 @@ Worktree:
 
 ## Summary
 
-Setup is complete. Baseline verification passed in the isolated T-0009e.2
-worktree. Implementation is pending the authoring sub-agent.
+Authoring sub-agent `019f15ba-f2f2-7f21-a244-bd61564e0eb6` (Aquinas the 3rd)
+implemented the scoped `TransactionalEntity` base over the existing
+`EntityTransaction` kernel. The new base exposes protected helpers for one
+active draft transaction, draft state/version/lifecycle updates,
+accepted-commit application, rollback, missing/duplicate scope errors, and a
+small `changed` signal for accepted state changes or committed lifecycle flag
+changes. Rejected commits intentionally keep the transaction active for
+correction or explicit rollback and do not apply state, version, or lifecycle to
+the entity.
 
 ## JVM Research Used
 
@@ -25,7 +32,19 @@ repositories, handlers, phase propagation, storage, and lifecycle events.
 
 ## Files Changed
 
-- Pending implementation.
+- `packages/server/src/entity.ts`
+- `packages/server/src/entity.test.ts`
+- `packages/server/src/index.ts`
+- `packages/server/src/index.test.ts`
+- `scripts/check-api-docs.mjs`
+- `packages/server/README.md`
+- `docs/api/README.md`
+- `docs/USER_GUIDE.md`
+- `docs/architecture/README.md`
+- `build-protocol/tasks/T-0009e2-transactional-entity-draft-helpers/TASK.md`
+- `build-protocol/tasks/T-0009e2-transactional-entity-draft-helpers/IMPLEMENTATION_REPORT.md`
+- `build-protocol/work-logs/T-0009e2.md`
+- `build-protocol/reviews/T-0009e2-transactional-entity-draft-helpers.md`
 
 ## Verification
 
@@ -34,6 +53,22 @@ repositories, handlers, phase propagation, storage, and lifecycle events.
   functions 100%, lines 97.25%; TypeDoc/API reported 100 proto, 28 core, 64
   server, and 26 storage expected exports; proto lint/generate/check passed with
   generated output clean.
+- RED focused test run on `2026-06-30 00:36 WEST`:
+  `corepack pnpm vitest run packages/server/src/entity.test.ts packages/server/src/index.test.ts`
+  failed because `TransactionalEntity` was undefined and root exports were
+  missing, as expected before production implementation.
+- GREEN focused test run on `2026-06-30 00:37 WEST`:
+  `corepack pnpm vitest run packages/server/src/entity.test.ts packages/server/src/index.test.ts`
+  passed with 2 files / 31 tests.
+- `corepack pnpm typecheck` passed on `2026-06-30 00:38 WEST`.
+- `corepack pnpm lint` passed on `2026-06-30 00:40 WEST`.
+- `corepack pnpm format:check` passed on `2026-06-30 00:40 WEST`.
+- `corepack pnpm docs:check` passed on `2026-06-30 00:41 WEST`: TypeDoc/API
+  reported 100 proto, 28 core, 68 server, and 26 storage expected exports.
+- Final `CI=true corepack pnpm verify` passed on `2026-06-30 00:41 WEST`: 15
+  test files / 151 tests; coverage statements 97.22%, branches 91.37%,
+  functions 99.14%, lines 97.16%; TypeDoc/API/proto gates passed and generated
+  proto output was clean.
 
 ## Review
 

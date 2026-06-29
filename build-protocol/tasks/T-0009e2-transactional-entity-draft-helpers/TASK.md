@@ -1,6 +1,6 @@
 # T-0009e.2: TransactionalEntity Scoped Draft Helpers
 
-Status: Setup In Progress
+Status: Implementation Complete; Review Pending
 Start: `2026-06-30 00:28 WEST`
 Baseline commit: `bd8d02e`
 Task log path:
@@ -11,7 +11,8 @@ Worktree:
 Parent task: `T-0009e`
 Requirements splitter:
 `019f1531-96a3-7870-bb40-b24fc9a456c8` (Goodall the 3rd, closed)
-Authoring sub-agent: pending after setup commit
+Authoring sub-agent:
+`019f15ba-f2f2-7f21-a244-bd61564e0eb6` (Aquinas the 3rd)
 Reviewer sub-agents: pending
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-30 00:31 WEST`
@@ -124,6 +125,9 @@ Skipped relevant-looking skills:
   into repository/runtime behavior.
 - D-0039: server work must stay JVM-familiar and inspect task-relevant
   `core-jvm/server` code before broadening behavior.
+- Rejected `TransactionalEntity` commits keep the scoped transaction active for
+  correction or explicit rollback, matching the current
+  `EntityTransaction.commit()` accepted/rejected behavior.
 
 ## Human Questions And Answers
 
@@ -139,4 +143,14 @@ Skipped relevant-looking skills:
 - Baseline verification passed on `2026-06-30 00:31 WEST`: 15 test files / 145
   tests; coverage 97.31% statements / 91.28% branches / 100% functions / 97.25%
   lines; TypeDoc/API/proto gates passed with 64 expected server exports.
-- Next step: spawn the authoring sub-agent.
+- Authoring sub-agent `019f15ba-f2f2-7f21-a244-bd61564e0eb6` (Aquinas the 3rd)
+  added RED tests and implemented the scoped `TransactionalEntity` draft helper
+  layer. Focused GREEN verification passed on `2026-06-30 00:37 WEST`:
+  `corepack pnpm vitest run packages/server/src/entity.test.ts packages/server/src/index.test.ts`
+  reported 2 files / 31 tests passing.
+- Final verification passed on `2026-06-30 00:41 WEST`:
+  `CI=true corepack pnpm verify` reported 15 test files / 151 tests passing,
+  coverage statements 97.22%, branches 91.37%, functions 99.14%, lines 97.16%;
+  TypeDoc/API/proto gates passed with 68 expected server exports and generated
+  proto output clean.
+- Next step: commit implementation and dispatch reviewers.

@@ -25,4 +25,8 @@ capture.
 
 ## Round 1
 
-Pending baseline verification, implementation commit, and reviewer dispatch.
+Authoring sub-agent:
+`019f15ba-f2f2-7f21-a244-bd61564e0eb6` (Aquinas the 3rd).
+
+Implementation is complete and final verification passed. Reviewer dispatch
+remains pending the implementation commit.
