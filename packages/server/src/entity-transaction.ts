@@ -33,6 +33,21 @@ export interface EntityTransactionCommittedVersionMetadata<Version = unknown> {
 /** Visible lifecycle status of an entity transaction. */
 export type EntityTransactionStatus = "active" | "committed" | "rolled-back";
 
+/** Transaction operation guarded by active-status checks. */
+export type EntityTransactionOperation =
+  | "archive"
+  | "commit"
+  | "markDeleted"
+  | "requireActive"
+  | "restore"
+  | "rollback"
+  | "unarchive"
+  | "update"
+  | "updateVersionMetadata";
+
+/** Draft lifecycle reason that prevents active-only entity state mutation. */
+export type EntityTransactionDraftStateReason = "archived" | "deleted";
+
 /** Function used to produce the next buffered draft state. */
 export type EntityTransactionUpdater<Schema extends DescriptorMessageSchema> = (
   draft: MessageShape<Schema>,
@@ -123,11 +138,35 @@ export class EntityTransactionStateError extends Error {
   /** Transaction status that rejected the operation. */
   readonly status: EntityTransactionStatus;
 
+  /** Operation rejected by the transaction status. */
+  readonly operation: EntityTransactionOperation;
+
   /** Create a deterministic closed-transaction error. */
-  constructor(status: EntityTransactionStatus, operation: "commit" | "rollback" | "update") {
+  constructor(status: EntityTransactionStatus, operation: EntityTransactionOperation) {
     super(`Cannot ${operation} an entity transaction with status "${status}".`);
     this.name = "EntityTransactionStateError";
     this.status = status;
+    this.operation = operation;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Error thrown when active-only state mutation is attempted for an archived or
+ * deleted draft.
+ *
+ * The error exposes only the deterministic draft lifecycle reason. It does not
+ * include entity state payloads, IDs, or previous/draft values.
+ */
+export class EntityTransactionDraftStateError extends Error {
+  /** Draft lifecycle reason that rejected active-only mutation. */
+  readonly reason: EntityTransactionDraftStateReason;
+
+  /** Create a deterministic draft lifecycle guard error. */
+  constructor(reason: EntityTransactionDraftStateReason) {
+    super(`Cannot mutate active entity state while the draft is ${reason}.`);
+    this.name = "EntityTransactionDraftStateError";
+    this.reason = reason;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -144,8 +183,8 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
   readonly #previous: MessageShape<Schema> | undefined;
   #draft: MessageShape<Schema>;
   #status: EntityTransactionStatus = "active";
-  readonly #version: EntityTransactionVersionMetadata<Version>;
-  readonly #lifecycle: EntityTransactionLifecycleFlags;
+  #version: EntityTransactionVersionMetadata<Version>;
+  #lifecycle: EntityTransactionLifecycleFlags;
 
   /** Create a transaction over previous state and a buffered draft. */
   constructor(options: EntityTransactionOptions<Schema, Version>) {
@@ -192,16 +231,97 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
   }
 
   /**
+   * Require an active, non-archived, non-deleted draft for entity state mutation.
+   *
+   * This guard is intentionally local to the buffered transaction draft. It
+   * does not query repositories, filter read-side results, or inspect storage.
+   *
+   * @throws {@link EntityTransactionStateError} when the transaction was already
+   * committed or rolled back.
+   * @throws {@link EntityTransactionDraftStateError} when the active draft is
+   * archived or deleted.
+   */
+  requireActive(): void {
+    this.#requireActiveStatus("requireActive");
+    this.#requireDraftAllowsStateMutation();
+  }
+
+  /**
    * Replace the buffered draft with the state returned by `updater`.
    *
    * The updater receives a snapshot of the current draft. The previous committed
    * state is never exposed as mutable transaction storage.
    */
   update(updater: EntityTransactionUpdater<Schema>): MessageShape<Schema> {
-    this.#requireActive("update");
+    this.#requireActiveForStateMutation("update");
     this.#draft = cloneState(this.#schema, updater(this.currentDraft));
 
     return this.currentDraft;
+  }
+
+  /**
+   * Mark the buffered draft as archived.
+   *
+   * The helper changes only in-memory draft lifecycle metadata. It does not
+   * persist lifecycle state, emit lifecycle events, or filter queries.
+   */
+  archive(): EntityTransactionLifecycleFlags {
+    this.#replaceLifecycle("archive", { archived: true });
+
+    return this.lifecycle;
+  }
+
+  /**
+   * Mark the buffered draft as not archived.
+   *
+   * The helper changes only in-memory draft lifecycle metadata. It does not
+   * persist lifecycle state, emit lifecycle events, or filter queries.
+   */
+  unarchive(): EntityTransactionLifecycleFlags {
+    this.#replaceLifecycle("unarchive", { archived: false });
+
+    return this.lifecycle;
+  }
+
+  /**
+   * Mark the buffered draft as deleted.
+   *
+   * The helper changes only in-memory draft lifecycle metadata. It does not
+   * persist lifecycle state, emit lifecycle events, or filter queries.
+   */
+  markDeleted(): EntityTransactionLifecycleFlags {
+    this.#replaceLifecycle("markDeleted", { deleted: true });
+
+    return this.lifecycle;
+  }
+
+  /**
+   * Mark the buffered draft as not deleted.
+   *
+   * The helper changes only in-memory draft lifecycle metadata. It does not
+   * persist lifecycle state, emit lifecycle events, or filter queries.
+   */
+  restore(): EntityTransactionLifecycleFlags {
+    this.#replaceLifecycle("restore", { deleted: false });
+
+    return this.lifecycle;
+  }
+
+  /**
+   * Replace caller-owned explicit draft version metadata.
+   *
+   * This helper does not compute version increments, timestamps, producer
+   * metadata, or event versions. It preserves the transaction's `Version`
+   * generic and returns a snapshot of the previous/draft metadata pair.
+   */
+  updateVersionMetadata(draft: Version): EntityTransactionVersionMetadata<Version> {
+    this.#requireActiveStatus("updateVersionMetadata");
+    this.#version = {
+      previous: this.#version.previous,
+      draft,
+    };
+
+    return this.version;
   }
 
   /**
@@ -212,7 +332,7 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
    * transaction committed.
    */
   commit(): EntityTransactionCommitResult<Schema, Version> {
-    this.#requireActive("commit");
+    this.#requireActiveStatus("commit");
 
     const previous = this.previous;
     const next = this.currentDraft;
@@ -255,7 +375,7 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
    * transaction so future updates or commits are rejected deterministically.
    */
   rollback(): EntityTransactionRollbackResult<Schema, Version> {
-    this.#requireActive("rollback");
+    this.#requireActiveStatus("rollback");
     this.#status = "rolled-back";
 
     return {
@@ -267,9 +387,34 @@ export class EntityTransaction<Schema extends DescriptorMessageSchema, Version =
     };
   }
 
-  #requireActive(operation: "commit" | "rollback" | "update"): void {
+  #replaceLifecycle(
+    operation: "archive" | "markDeleted" | "restore" | "unarchive",
+    updates: Partial<EntityTransactionLifecycleFlags>,
+  ): void {
+    this.#requireActiveStatus(operation);
+    this.#lifecycle = {
+      archived: updates.archived ?? this.#lifecycle.archived,
+      deleted: updates.deleted ?? this.#lifecycle.deleted,
+    };
+  }
+
+  #requireActiveForStateMutation(operation: "update"): void {
+    this.#requireActiveStatus(operation);
+    this.#requireDraftAllowsStateMutation();
+  }
+
+  #requireActiveStatus(operation: EntityTransactionOperation): void {
     if (this.#status !== "active") {
       throw new EntityTransactionStateError(this.#status, operation);
+    }
+  }
+
+  #requireDraftAllowsStateMutation(): void {
+    if (this.#lifecycle.archived) {
+      throw new EntityTransactionDraftStateError("archived");
+    }
+    if (this.#lifecycle.deleted) {
+      throw new EntityTransactionDraftStateError("deleted");
     }
   }
 }

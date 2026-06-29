@@ -202,7 +202,14 @@ one entity state. It buffers a draft state, explicit previous/draft version
 metadata, lifecycle flags, and visible status (`active`, `committed`, or
 `rolled-back`). `update()` replaces only the buffered draft, while `previous`
 and `currentDraft` accessors return snapshots so callers do not mutate the
-transaction's stored previous state by accident. `commit()` validates the
+transaction's stored previous state by accident. `archive()`, `unarchive()`,
+`markDeleted()`, and `restore()` replace only buffered lifecycle flags, and
+`updateVersionMetadata()` replaces only caller-owned draft version metadata.
+These helpers deliberately do not compute automatic version increments, emit
+lifecycle events, write storage, or filter read-side queries. `requireActive()`
+is the local active-state guard: it rejects committed/rolled-back transactions
+and active drafts already marked archived or deleted with deterministic errors
+that do not include entity state payloads. `commit()` validates the
 previous-to-draft transition through `validateEntityStateTransition()` before
 returning an accepted result. Ordinary validation failures return a rejected
 result with validator violations and leave the transaction active for caller

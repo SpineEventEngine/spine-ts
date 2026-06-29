@@ -35,11 +35,16 @@ facade. Repeated, map-valued, and explicit optional `(set_once)` fields are
 unsupported in this slice and fail closed with field-specific validation
 violations. The transaction kernel exports `EntityTransaction`,
 `createEntityTransaction()`, typed draft/commit/rollback result contracts,
-version metadata contracts, lifecycle flags, status/updater types, and
-`EntityTransactionStateError`. `commit()` validates the buffered draft and closes
-the transaction only for accepted commits; rejected commits return violations
-and leave the transaction active. `rollback()` closes the transaction and
-returns the discarded draft evidence. Server handler metadata exports include
+version metadata contracts, lifecycle flags, status/updater/helper operation
+types, `EntityTransactionStateError`, and
+`EntityTransactionDraftStateError`. Lifecycle helpers mutate only buffered
+draft flags, `updateVersionMetadata()` replaces only caller-owned draft version
+metadata, and `requireActive()` rejects closed transactions or active drafts
+already marked archived/deleted without including state payloads. `commit()`
+validates the buffered draft and closes the transaction only for accepted
+commits; rejected commits return violations and leave the transaction active.
+`rollback()` closes the transaction and returns the discarded draft evidence.
+Server handler metadata exports include
 `defineEntityHandlers()`, `HandlerRegistrationBuilder`, the five handler
 metadata roles for command assignment, command reaction, event subscription,
 event reaction, and event application, and `HandlerMetadataError` for

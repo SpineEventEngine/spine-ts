@@ -53,7 +53,7 @@ slices.
   the core transition validation facade.
 - A server entity transaction kernel with `createEntityTransaction()` for an
   in-memory buffered draft boundary that validates on commit and releases on
-  rollback.
+  rollback, plus draft lifecycle and explicit version metadata helpers.
 - Server handler metadata helpers in `@spine-ts/server` that explicitly bind
   generated command/event schemas to entity method names for command assignment,
   command reaction, event subscription, event reaction, and event application.
@@ -208,12 +208,15 @@ const transaction = createEntityTransaction({
 });
 
 transaction.update((state) => ({ ...state, name: "Ready" }));
+transaction.archive();
+transaction.updateVersionMetadata(9);
 
 const result = transaction.commit();
 
 if (result.status === "accepted") {
   result.next; // accepted state snapshot
-  result.version.committed; // 8
+  result.lifecycle.archived; // true
+  result.version.committed; // 9
 }
 ```
 
@@ -221,6 +224,16 @@ if (result.status === "accepted") {
 Rejected commits return validator violations and leave the transaction active;
 accepted commits close the transaction. `rollback()` closes the transaction and
 returns previous/draft evidence without accepting state.
+
+Use `archive()`, `unarchive()`, `markDeleted()`, and `restore()` only for
+buffered draft lifecycle metadata. They do not write storage, emit lifecycle
+events, or filter queries. Use `updateVersionMetadata()` only when caller-owned
+draft version metadata should be replaced explicitly; automatic version
+increments, clocks, event versions, and producer metadata remain deferred.
+`requireActive()` is the active-state guard future entity base classes can call
+before state mutation: it rejects committed/rolled-back transactions and active
+drafts already marked archived or deleted with deterministic errors that do not
+include entity state payloads.
 
 The transaction kernel is available now only as an in-memory buffered boundary.
 It does not instantiate entities, write storage or repositories, dispatch
