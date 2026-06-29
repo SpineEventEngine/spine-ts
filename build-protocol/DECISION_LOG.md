@@ -842,13 +842,14 @@ first slice needs a deterministic committed-state rule.
 
 Decision: Implement `(set_once)` as a server transition-validation rule over
 previous and next entity state messages. Creation transitions where
-`previous === undefined` pass built-in set-once checks. Once a previous state
-exists, each `(set_once)` field value is fixed; any unequal proposed next value
-violates the rule, including default-to-non-default changes. The public first
-slice should expose a high-level entity-state transition validation API and keep
-low-level rule construction private unless later tasks show caller value.
-Violation results must be shaped through the core transition-validation facade
-and must not leak previous or next field values.
+`previous === undefined` pass built-in set-once checks for supported field
+shapes. Once a previous state exists, each supported `(set_once)` field value is
+fixed; any unequal proposed next value violates the rule, including
+default-to-non-default changes. Unsupported field-shape handling is recorded in
+D-0039. The public first slice should expose a high-level entity-state
+transition validation API and keep low-level rule construction private unless
+later tasks show caller value. Violation results must be shaped through the core
+transition-validation facade and must not leak previous or next field values.
 
 Alternatives considered:
 

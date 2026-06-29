@@ -148,14 +148,17 @@ Before implementing a typical task, the orchestrator must also:
 
 No sub-agent should invent infrastructure before checking available tools/libraries unless the task is explicitly novel.
 
-For work in `@spine-ts/server`, the orchestrator or implementer must also
-inspect the relevant local Spine JVM notes under `spine-jvm-docs/` before
-inventing server/runtime behavior. Use `rg` first, read only task-relevant
-sections, and record the inspected files plus the implementation impact in the
-task log. Prefer the smallest TypeScript contract that remains familiar to
-Spine JVM server/runtime behavior; document unsupported or adversarial input
-boundaries instead of broadening the server module with speculative
-infrastructure.
+For work in `@spine-ts/server`, the orchestrator or implementer must also take
+a close look at the corresponding `server` module code in Spine's `core-jvm`
+repository before inventing server/runtime behavior. Start with `rg` over the
+local `spine-jvm-docs/` research notes to identify the relevant `core-jvm`
+source paths, then inspect the corresponding local source files when available
+or record why only the summarized notes could be used. Read only task-relevant
+sections/files, and record the inspected notes/source files plus the
+implementation impact in the task log. Prefer the smallest TypeScript contract
+that remains familiar to Spine JVM server/runtime behavior; document
+unsupported or adversarial input boundaries instead of broadening the server
+module with speculative infrastructure.
 
 ## Logging Protocol
 

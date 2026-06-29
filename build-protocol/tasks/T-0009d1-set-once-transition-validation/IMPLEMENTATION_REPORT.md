@@ -24,7 +24,10 @@ creation. Violations are returned through `@spine-ts/core`
 `validateTransition()`, include `fieldPath`, and do not include raw previous or
 next values.
 
-D-0038 already matched the implemented semantics, so no ADR update was needed.
+D-0038 records the baseline supported-field semantics. D-0039 records the later
+JVM-aligned boundary that repeated, map-valued, and explicit optional
+`(set_once)` declarations are unsupported in this slice and fail closed even on
+creation.
 
 ## TDD Evidence
 
@@ -463,3 +466,40 @@ Fix-round 8 verification:
 - `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
   warning and expected API export counts.
 - `corepack pnpm typecheck` passed.
+
+## Fix Round 9
+
+Addressed round-8 follow-up findings and the human server-module steering note
+without changing runtime/source behavior:
+
+- `BUILD_PROTOCOL.md` now requires `@spine-ts/server` work to take a close look
+  at corresponding Spine `core-jvm` `server` module code when available, using
+  `spine-jvm-docs/` to locate task-relevant source paths and recording any
+  fallback to summarized notes.
+- D-0038 and this report now state that creation transitions pass only for
+  supported `(set_once)` field shapes; unsupported repeated, map-valued, and
+  explicit optional field shapes remain governed by D-0039 and fail closed.
+- Work-log current state, task reviewer metadata, architecture wording, and
+  duplicate round-5 verification evidence were cleaned up for a clean re-review
+  baseline.
+
+Fix-round 9 files changed:
+
+- `build-protocol/BUILD_PROTOCOL.md`
+- `build-protocol/DECISION_LOG.md`
+- `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
+- `build-protocol/tasks/T-0009d1-set-once-transition-validation/IMPLEMENTATION_REPORT.md`
+- `build-protocol/reviews/T-0009d1-set-once-transition-validation.md`
+- `build-protocol/work-logs/T-0009d1.md`
+- `docs/architecture/README.md`
+
+Fix-round 9 verification:
+
+- `corepack pnpm format:check` initially failed on
+  `build-protocol/work-logs/T-0009d1.md`; after
+  `corepack pnpm exec prettier --write build-protocol/work-logs/T-0009d1.md`,
+  `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.
+- `git diff --check` passed.

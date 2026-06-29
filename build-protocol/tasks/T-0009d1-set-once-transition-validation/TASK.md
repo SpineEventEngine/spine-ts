@@ -1,8 +1,8 @@
 # T-0009d.1: Built-In Set-Once Transition Validation
 
-Status: Complete through fix round 8 docs/log cleanup; pending clean re-review/integration
+Status: Complete through fix round 9 docs/log cleanup; pending clean re-review/integration
 Start: `2026-06-29 14:52 WEST`
-End: `2026-06-29 17:44 WEST`
+End: `2026-06-29 17:52 WEST`
 Baseline commit: `1d939d7`
 Task log path: `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
 Branch: `task/T-0009d1-set-once-transition-validation`
@@ -10,10 +10,10 @@ Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009d1-se
 Requirements splitter: `019f13a4-a6f5-7302-94e0-7b16366b0701` (Popper)
 Branch setup commit: `88cb0f3`
 Authoring sub-agent: Codex implementation sub-agent
-Reviewer sub-agents: Round 1, Round 2, and Round 3 role reviewers for
-code style/maintainability, documentation, TypeScript/API docs, security, and
-performance/reliability; individual reviewer IDs are not present in durable
-task evidence.
+Reviewer sub-agents: Round 1 through Round 8 role reviewers for code
+style/maintainability, documentation, TypeScript/API docs, security, and
+performance/reliability; individual reviewer IDs are not present in durable task
+evidence.
 Baseline verification evidence commit: `345c093`
 
 ## Objective
@@ -450,6 +450,13 @@ functions 100%, lines 97.28%.
   wording so only supported set-once fields may initialize on creation while
   unsupported repeated, map-valued, and explicit optional declarations fail
   closed.
+- Fix round 9 is a docs/log-only follow-up after round-8 re-review and human
+  server-module steering. It strengthens `BUILD_PROTOCOL.md` to require close
+  inspection of corresponding Spine `core-jvm` `server` module source for
+  `@spine-ts/server` work when available, records that the local
+  `/private/tmp/spine-research/core-jvm/server` checkout is present, and cleans
+  remaining D-0038/report/work-log/review-log evidence drift without changing
+  runtime code.
 
 ## Completion Checklist
 

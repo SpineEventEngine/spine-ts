@@ -143,7 +143,7 @@ contract.
 
 Server-owned transition validation currently compares descriptor-derived
 `(set_once)` fields through the core transition facade and Protobuf-ES
-canonicalization for scalar, enum, bytes, and singular message values. Repeated
+canonicalization for scalar, enum, bytes, and singular message values. Repeated,
 map-valued, and explicit optional `(set_once)` fields are intentionally
 unsupported in this slice, matching the JVM generation boundary; they fail
 closed with field-specific violations and no raw previous/next value leakage.

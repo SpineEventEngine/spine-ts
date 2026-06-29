@@ -264,11 +264,6 @@ Verification:
   `CI=true corepack pnpm verify` passed. Full verify reported 13 test files /
   105 tests and coverage statements 97.47%, branches 90.63%, functions 100%,
   lines 97.40%.
-- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
-  warning and expected API export counts.
-- `corepack pnpm typecheck` passed.
-- `CI=true corepack pnpm verify` passed with 13 test files / 105 tests and
-  coverage statements 97.12%, branches 91.07%, functions 100%, lines 97.05%.
 
 ## Follow-Up Rounds
 
@@ -376,6 +371,30 @@ Fix-round 8 response:
   initialize on creation, while unsupported repeated, map-valued, and explicit
   optional declarations fail closed even on creation.
 
+## Round 8 Follow-Up Cleanup
+
+Review package `.superpowers/sdd/review-cd98ca3..e319748.diff` found remaining
+durable-doc cleanup issues:
+
+- D-0038 and the implementation report implied creation transitions pass all
+  set-once checks, without the D-0039 unsupported-field exception.
+- `build-protocol/work-logs/T-0009d1.md` still named earlier review/fix rounds
+  as the latest current state.
+- `TASK.md` reviewer metadata only mentioned rounds 1-3.
+- `docs/architecture/README.md` still missed the comma in
+  "Repeated, map-valued".
+- Round-5 review evidence had duplicate verification lines with conflicting
+  historical coverage values.
+
+Fix response:
+
+- Qualified D-0038 as supported-field semantics and pointed unsupported field
+  shapes to D-0039.
+- Updated current-state and reviewer metadata to include later rounds and
+  docs/log cleanup.
+- Fixed the architecture wording and removed duplicate round-5 verification
+  lines.
+
 Verification:
 
 - `corepack pnpm format:check` initially failed on `TASK.md` and
@@ -384,3 +403,27 @@ Verification:
 - `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
   warning and expected API export counts.
 - `corepack pnpm typecheck` passed.
+
+## Round 8 Follow-Up Protocol Note
+
+Human steering added that `@spine-ts/server` implementation work should inspect
+the corresponding Spine `core-jvm` `server` module code closely because the TS
+implementation may otherwise over-invent behavior. The follow-up response:
+
+- Updated `BUILD_PROTOCOL.md` to require close task-relevant inspection of the
+  corresponding `core-jvm` `server` module source when available, with
+  `spine-jvm-docs/` used first to locate relevant source paths.
+- Recorded that `/private/tmp/spine-research/core-jvm/server` is present in this
+  environment.
+- Left runtime code unchanged in this docs/log cleanup.
+
+Verification:
+
+- `corepack pnpm format:check` initially failed on
+  `build-protocol/work-logs/T-0009d1.md`; after
+  `corepack pnpm exec prettier --write build-protocol/work-logs/T-0009d1.md`,
+  `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.
+- `git diff --check` passed.
