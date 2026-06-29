@@ -220,9 +220,8 @@ function requireDecoratorMetadata(context: {
 function readClassDecoratorMetadata<Instance extends object>(
   entityType: EntityClass<Instance>,
 ): Record<PropertyKey, unknown> | undefined {
-  const metadata = (entityType as unknown as Readonly<Record<symbol, unknown>>)[
-    decoratorMetadataSymbol
-  ];
+  const descriptor = Object.getOwnPropertyDescriptor(entityType, decoratorMetadataSymbol);
+  const metadata: unknown = descriptor?.value;
 
   if (metadata === null || typeof metadata !== "object") {
     return undefined;

@@ -95,6 +95,8 @@ interface DecoratedClassFactoryOutput {
   readonly SecondDecoratedProjection: new () => object;
   readonly SourceCopiedProjection: new () => object;
   readonly BorrowingProjection: new () => object;
+  readonly DecoratedBaseProjection: new () => object;
+  readonly UndecoratedOverrideProjection: new () => object;
 }
 
 async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
@@ -188,6 +190,19 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
         Object.getOwnPropertyDescriptor(SourceCopiedProjection.prototype, "assignCreate"),
       );
 
+      class DecoratedBaseProjection {
+        @Assign(CommandSchema)
+        assignCreate(command) {
+          void command;
+        }
+      }
+
+      class UndecoratedOverrideProjection extends DecoratedBaseProjection {
+        assignCreate(command) {
+          void command;
+        }
+      }
+
       return {
         DecoratedProjection,
         DecoratedAggregate,
@@ -196,6 +211,8 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
         SecondDecoratedProjection,
         SourceCopiedProjection,
         BorrowingProjection,
+        DecoratedBaseProjection,
+        UndecoratedOverrideProjection,
       };
     }
   `;
@@ -392,6 +409,20 @@ describe("handler decorators", () => {
 
     expect(source.handlers.map((handler) => handler.methodName)).toEqual(["assignCreate"]);
     expect(borrowing.handlers).toEqual([]);
+  });
+
+  it("does not borrow decorator metadata from an undecorated subclass override", async () => {
+    const { DecoratedBaseProjection, UndecoratedOverrideProjection } =
+      await createDecoratedClasses();
+
+    const base = materializeDecoratedEntityHandlers(DecoratedBaseProjection, ProjectionStateSchema);
+    const subclass = materializeDecoratedEntityHandlers(
+      UndecoratedOverrideProjection,
+      ProjectionStateSchema,
+    );
+
+    expect(base.handlers.map((handler) => handler.methodName)).toEqual(["assignCreate"]);
+    expect(subclass.handlers).toEqual([]);
   });
 
   it("uses the same duplicate policy as explicit handler metadata", async () => {

@@ -14,6 +14,7 @@ Reviewer sub-agents: Round 1 completed; see review log.
 Baseline verification evidence commit: `07e40c0`
 Implementation commit under review: `39008b7`
 Round 1 fix commit: `f84ca92`
+Round 2 fix commit: pending
 
 ## Objective
 
@@ -203,16 +204,13 @@ packages/server/src/handler-decorators.test.ts` passed on
 
 ## Coverage Result
 
-Final full verification coverage from `CI=true corepack pnpm verify`:
+Round 1 final full verification coverage from `CI=true corepack pnpm verify`:
 
-- Statements: 98.89% (449/454)
-- Branches: 91.42% (160/175)
-- Functions: 100% (141/141)
-- Lines: 98.86% (437/442)
-
-The new `packages/server/src/handler-decorators.ts` file reported 90.9%
-statement coverage and 81.48% branch coverage; repository thresholds remained
-green.
+- Test files / tests: 12 / 82
+- Statements: 98.72%
+- Branches: 91.16%
+- Functions: 100%
+- Lines: 98.69%
 
 ## Documentation And Public API Impact
 
@@ -261,6 +259,34 @@ copied-method regression tests, class-owned standard decorator metadata, and
 generic decorator method types. Durable logs were updated in this report pass.
 Next protocol step: re-review the fix range.
 
+Round 2 reviewed the Round 1 fix range and was not clean. Findings:
+
+- P2: `readClassDecoratorMetadata()` read inherited `Symbol.metadata` through
+  normal property lookup, allowing an undecorated subclass override with the
+  same method name to borrow base-class handler metadata.
+- P3: this task log's coverage section still contained pre-Round 1 final
+  verification coverage values.
+
+Round 2 focused fix addressed both findings. RED
+`corepack pnpm vitest run packages/server/src/handler-decorators.test.ts`
+failed on `2026-06-29 14:26 WEST` with the expected subclass override metadata
+borrowing assertion. GREEN
+`corepack pnpm vitest run packages/server/src/handler-decorators.test.ts`
+passed on `2026-06-29 14:26 WEST`: 1 test file / 8 tests passed.
+After a lint-safe `unknown` annotation for
+`Object.getOwnPropertyDescriptor().value`, focused GREEN was rerun on
+`2026-06-29 14:28 WEST`: 1 test file / 8 tests passed.
+`corepack pnpm typecheck` passed on `2026-06-29 14:27 WEST`.
+`corepack pnpm docs:check` passed on `2026-06-29 14:27 WEST` with the known
+TypeDoc invalid-origin warning. First Round 2 full
+`CI=true corepack pnpm verify` failed at lint because
+`Object.getOwnPropertyDescriptor().value` is typed as `any`; after the explicit
+`unknown` narrowing, final `CI=true corepack pnpm verify` passed on
+`2026-06-29 14:29 WEST`: 12 test files / 83 tests passed; coverage statements
+98.72%, branches 91.16%, functions 100%, lines 98.69%; docs/API, proto
+lint/generate, and generated output checks passed with the known TypeDoc
+invalid-origin warning.
+
 ## Completion Checklist
 
 - [x] Baseline verification captured in the task worktree.
@@ -272,3 +298,4 @@ Next protocol step: re-review the fix range.
 - [ ] Full verification passed on `main`.
 - [x] Durable task/work/review logs updated with Round 1 fix commit and
       verification.
+- [x] Durable task/work/review logs updated with Round 2 fix verification.
