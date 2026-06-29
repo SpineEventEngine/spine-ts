@@ -472,6 +472,43 @@ Verification:
 - `corepack pnpm typecheck` passed.
 - `git diff --check` passed.
 
+## Round 10 Re-Review
+
+Review package `.superpowers/sdd/review-cd98ca3..22a6acd.diff` was reviewed by
+the five required role reviewers.
+
+Reviewer outcomes:
+
+- Security: CLEAN.
+- TypeScript/API docs: CLEAN.
+- Code style/maintainability: prior Important source-inspection finding closed;
+  Minor finding that work-log Current State still omitted fix-round 10
+  verification/state.
+- Documentation: Important finding that task/report/review/work-log evidence
+  was not coherent because the work-log chronological row and Current State did
+  not include fix-round 10 verification commands.
+- Performance/reliability: Minor finding that canonical `TASK.md` Tests Run
+  recorded fix-round 9 verification but not fix-round 10 verification.
+
+Fix response:
+
+- Added fix-round 10 verification evidence to the canonical `TASK.md` Tests Run
+  section.
+- Added fix-round 10 verification commands and outcomes to the work-log
+  chronological row and Current State summary.
+- Recorded this round-10 re-review response in the review log.
+
+Verification:
+
+- `corepack pnpm format:check` initially failed on
+  `build-protocol/work-logs/T-0009d1.md`; after
+  `corepack pnpm exec prettier --write build-protocol/work-logs/T-0009d1.md`,
+  `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.
+- `git diff --check` passed.
+
 ## Round 11 Documentation Follow-Up
 
 Review package `.superpowers/sdd/review-cd98ca3..0c69b4d.diff` was reviewed by
@@ -540,31 +577,33 @@ Verification:
 - `corepack pnpm typecheck` passed.
 - `git diff --check` passed.
 
-## Round 10 Re-Review
+## Round 13 Chronology Follow-Up
 
-Review package `.superpowers/sdd/review-cd98ca3..22a6acd.diff` was reviewed by
+Review package `.superpowers/sdd/review-cd98ca3..dc7867f.diff` was reviewed by
 the five required role reviewers.
 
 Reviewer outcomes:
 
-- Security: CLEAN.
-- TypeScript/API docs: CLEAN.
-- Code style/maintainability: prior Important source-inspection finding closed;
-  Minor finding that work-log Current State still omitted fix-round 10
-  verification/state.
-- Documentation: Important finding that task/report/review/work-log evidence
-  was not coherent because the work-log chronological row and Current State did
-  not include fix-round 10 verification commands.
-- Performance/reliability: Minor finding that canonical `TASK.md` Tests Run
-  recorded fix-round 9 verification but not fix-round 10 verification.
+- Code style/maintainability: Important finding that Round 12 still appeared
+  before Round 10 in this review log. It also confirmed `TASK.md`
+  status/reviewer rounds and work-log Current State were closed.
+- Documentation: Important findings that review chronology was still out of
+  order, work-log Current State called the `67d0a83` package round 11 instead
+  of round 12, and this implementation report stopped at fix round 10.
+- TypeScript/API docs: Important finding that Round 10 still appeared after
+  Round 12.
+- Security: Important process/audit-trail finding that Round 10 still appeared
+  after Round 12; no runtime security regression.
+- Performance/reliability: P2 finding that Round 10 still appeared after Round
+  12; no runtime reliability regression.
 
 Fix response:
 
-- Added fix-round 10 verification evidence to the canonical `TASK.md` Tests Run
-  section.
-- Added fix-round 10 verification commands and outcomes to the work-log
-  chronological row and Current State summary.
-- Recorded this round-10 re-review response in the review log.
+- Rewrote the review-log tail so sections physically appear in chronological
+  order: Round 9, Round 10, Round 11, Round 12, Round 13.
+- Updated `TASK.md`, `IMPLEMENTATION_REPORT.md`, and
+  `build-protocol/work-logs/T-0009d1.md` to name fix/round 13 and the
+  corrected review chronology.
 
 Verification:
 

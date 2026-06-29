@@ -1,8 +1,8 @@
 # T-0009d.1: Built-In Set-Once Transition Validation
 
-Status: Complete through fix round 12 docs/log cleanup; pending clean re-review/integration
+Status: Complete through fix round 13 docs/log cleanup; pending clean re-review/integration
 Start: `2026-06-29 14:52 WEST`
-End: `2026-06-29 18:21 WEST`
+End: `2026-06-29 18:26 WEST`
 Baseline commit: `1d939d7`
 Task log path: `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
 Branch: `task/T-0009d1-set-once-transition-validation`
@@ -10,7 +10,7 @@ Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009d1-se
 Requirements splitter: `019f13a4-a6f5-7302-94e0-7b16366b0701` (Popper)
 Branch setup commit: `88cb0f3`
 Authoring sub-agent: Codex implementation sub-agent
-Reviewer sub-agents: Round 1 through Round 12 role reviewers for code
+Reviewer sub-agents: Round 1 through Round 13 role reviewers for code
 style/maintainability, documentation, TypeScript/API docs, security, and
 performance/reliability; individual reviewer IDs are not present in durable task
 evidence.
@@ -494,6 +494,9 @@ functions 100%, lines 97.28%.
   task status/reviewer metadata, moving the review-log rounds into
   chronological order, and making the work-log Current State identify the
   latest completed review state accurately.
+- Fix round 13 addresses round-12/final re-review findings by rewriting the
+  review-log tail so Rounds 9-13 physically appear in chronological order and
+  updating task/work/report metadata to name this final chronology cleanup.
 
 ## Completion Checklist
 

@@ -544,3 +544,67 @@ Fix-round 10 verification:
   warning and expected API export counts.
 - `corepack pnpm typecheck` passed.
 - `git diff --check` passed.
+
+## Fix Round 11
+
+Addressed round-10 re-review log-coherence findings without changing runtime
+behavior:
+
+- Added fix-round 10 verification evidence to the canonical `TASK.md` Tests Run
+  section.
+- Added fix-round 10 verification commands and outcomes to the work-log
+  chronological row and Current State summary.
+- Recorded round-10 re-review outcomes in the review log.
+
+Verification:
+
+- `corepack pnpm format:check` initially failed on
+  `build-protocol/work-logs/T-0009d1.md`; after
+  `corepack pnpm exec prettier --write build-protocol/work-logs/T-0009d1.md`,
+  `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.
+- `git diff --check` passed.
+
+## Fix Round 12
+
+Addressed round-11/final re-review durable metadata findings without changing
+runtime behavior:
+
+- Updated `TASK.md` status and reviewer metadata through round 12.
+- Added fix-round 11/12 task narrative entries.
+- Updated work-log Current State to describe the latest review state.
+- Recorded round-12 review outcomes in the review log.
+
+Verification:
+
+- `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.
+- `git diff --check` passed.
+
+## Fix Round 13
+
+Addressed round-12/final re-review chronology and implementation-report
+coherence findings without changing runtime behavior:
+
+- Rewrote the review-log tail so Rounds 9-13 physically appear in chronological
+  order.
+- Updated `TASK.md` status and reviewer metadata through round 13.
+- Updated work-log Current State to name the round-12 package
+  `.superpowers/sdd/review-cd98ca3..dc7867f.diff` as the source of this
+  follow-up.
+- Added this implementation-report evidence for fix rounds 11-13.
+
+Verification:
+
+- `corepack pnpm format:check` initially failed on
+  `build-protocol/work-logs/T-0009d1.md`; after
+  `corepack pnpm exec prettier --write build-protocol/work-logs/T-0009d1.md`,
+  `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.
+- `git diff --check` passed.
