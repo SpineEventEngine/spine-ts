@@ -13,6 +13,22 @@ export {
 } from "./entity-metadata.js";
 
 export {
+  createEntityTransaction,
+  EntityTransaction,
+  EntityTransactionStateError,
+  type EntityTransactionAcceptedCommit,
+  type EntityTransactionCommitResult,
+  type EntityTransactionCommittedVersionMetadata,
+  type EntityTransactionLifecycleFlags,
+  type EntityTransactionOptions,
+  type EntityTransactionRejectedCommit,
+  type EntityTransactionRollbackResult,
+  type EntityTransactionStatus,
+  type EntityTransactionUpdater,
+  type EntityTransactionVersionMetadata,
+} from "./entity-transaction.js";
+
+export {
   type EntityStateTransitionValidationRequest,
   type EntityStateTransitionValidationResult,
   validateEntityStateTransition,

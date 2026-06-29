@@ -12,6 +12,8 @@ Current slice exposes:
 - semantic tags from `(is)` and `(every_is)` with clear extraction errors; and
 - `validateEntityStateTransition({ schema, previous, next })` for built-in
   `(set_once)` transition validation over descriptor-backed entity state; and
+- `EntityTransaction` and `createEntityTransaction()` for a buffered
+  draft/commit/rollback boundary over one entity state; and
 - `defineEntityHandlers(EntityClass, StateSchema, builder => [...])` for
   explicit, frozen handler metadata that binds generated Protobuf-ES schemas to
   entity method names; and
@@ -119,3 +121,51 @@ previous or next values. Repeated, map-valued, and explicit optional
 `(set_once)` fields are not supported in this slice, matching the JVM generation
 boundary; they fail closed with field-specific violations even when their
 contents are unchanged or the transition is a creation.
+
+## Entity Transactions
+
+Use `createEntityTransaction()` when framework-controlled code needs a buffered
+draft over previous state before accepting a commit result:
+
+```ts
+import { createEntityTransaction } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+const transaction = createEntityTransaction({
+  schema: TaskStateSchema,
+  previous,
+  version: { previous: 7, draft: 8 },
+});
+
+transaction.update((state) => ({ ...state, name: "Ready" }));
+
+const result = transaction.commit();
+
+if (result.status === "accepted") {
+  result.next; // accepted state snapshot
+  result.version.committed; // 8
+}
+```
+
+`commit()` calls `validateEntityStateTransition({ schema, previous, next })`.
+Ordinary validation failures, such as changing a `(set_once)` field, return a
+rejected result with the validator violations instead of throwing:
+
+```ts
+transaction.update((state) => ({ ...state, id: "different-id" }));
+
+const result = transaction.commit();
+
+if (result.status === "rejected") {
+  result.validation.violations.map((violation) => violation.fieldPath?.fieldName.join("."));
+}
+```
+
+`rollback()` releases the transaction and returns previous/draft evidence
+without accepting state. After an accepted commit or rollback, `update()` and
+`commit()` throw `EntityTransactionStateError` deterministically.
+
+This is only an in-memory commit boundary for future entity base classes. It
+does not instantiate entities, invoke handlers, write repositories or storage,
+apply snapshots, dispatch messages, register buses, start transport, or provide
+async-local/global transaction state.

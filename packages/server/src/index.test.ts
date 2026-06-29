@@ -119,6 +119,8 @@ describe("@spine-ts/server", () => {
       [
         "Apply",
         "Assign",
+        "EntityTransaction",
+        "EntityTransactionStateError",
         "DescriptorMetadataError",
         "Command",
         "HandlerMetadataError",
@@ -128,6 +130,7 @@ describe("@spine-ts/server", () => {
         "Subscribe",
         "defineEntityHandlers",
         "describeEntityMetadata",
+        "createEntityTransaction",
         "isEntitySchema",
         "materializeDecoratedEntityHandlers",
         "validateEntityStateTransition",

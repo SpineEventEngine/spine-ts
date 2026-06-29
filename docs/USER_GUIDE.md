@@ -13,9 +13,9 @@ callers can pack already-built domain messages into generated Spine
 entity metadata from `(entity)`, `(column)`, `(set_once)`, `(is)`, and
 `(every_is)` options and defines explicit or decorator-collected handler
 metadata without invoking handlers or mutating global runtime state. It also
-exposes built-in `(set_once)` entity state transition validation and a
-caller-owned handler metadata registry for duplicate validation and lookup-only
-views.
+exposes built-in `(set_once)` entity state transition validation, a buffered
+entity transaction boundary, and a caller-owned handler metadata registry for
+duplicate validation and lookup-only views.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
 deterministic in-memory adapter for tests/development. Entity runtime,
 transport, durable production storage, and the to-do application remain later
@@ -51,6 +51,9 @@ slices.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.
+- A server entity transaction kernel with `createEntityTransaction()` for an
+  in-memory buffered draft boundary that validates on commit and releases on
+  rollback.
 - Server handler metadata helpers in `@spine-ts/server` that explicitly bind
   generated command/event schemas to entity method names for command assignment,
   command reaction, event subscription, event reaction, and event application.
@@ -188,6 +191,41 @@ repositories, dispatch buses, or start transport.
 Rule-returned violations are sanitized before aggregation. If a transition rule
 throws, the core seam records a structured transition-rule failure and continues
 later rules in order.
+
+## Entity Transactions
+
+Use `createEntityTransaction()` when framework-controlled code needs a buffered
+draft over previous entity state before accepting a commit result:
+
+```ts
+import { createEntityTransaction } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+const transaction = createEntityTransaction({
+  schema: TaskStateSchema,
+  previous,
+  version: { previous: 7, draft: 8 },
+});
+
+transaction.update((state) => ({ ...state, name: "Ready" }));
+
+const result = transaction.commit();
+
+if (result.status === "accepted") {
+  result.next; // accepted state snapshot
+  result.version.committed; // 8
+}
+```
+
+`commit()` runs `validateEntityStateTransition()` before accepting the draft.
+Rejected commits return validator violations and leave the transaction active;
+accepted commits close the transaction. `rollback()` closes the transaction and
+returns previous/draft evidence without accepting state.
+
+The transaction kernel is available now only as an in-memory buffered boundary.
+It does not instantiate entities, write storage or repositories, dispatch
+handlers, start buses or transports, or provide async-local/global transaction
+state.
 
 ## Envelope Packing
 
