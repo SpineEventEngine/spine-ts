@@ -1,6 +1,6 @@
 # T-0009d.2c: Public API Polish, Compatibility Notes, Verification Closure
 
-Status: Round 1 Fix Complete
+Status: Review Clean; Final Verification Pending
 Start: `2026-06-29 21:20 WEST`
 Baseline commit: `5367bb8`
 Task log path: `build-protocol/tasks/T-0009d2c-public-api-closure/TASK.md`
@@ -9,11 +9,34 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009d2c-public-api-closure`
 Requirements splitter: T-0009d.2 splitter
 `019f14c2-9605-7d11-b8c5-3f891b1880f7` (Sartre the 2nd, closed)
-Authoring sub-agent: current implementation sub-agent in this worktree; no
-additional sub-agents spawned
-Reviewer sub-agents: Round 1 complete; five reviewers closed
-Baseline verification evidence: `CI=true corepack pnpm verify` passed on
-`2026-06-29 21:25 WEST`
+Authoring sub-agent:
+`019f1510-9df9-7722-b981-a2230ae582ad` (Hume the 2nd, closed)
+Review-fix sub-agent:
+`019f151d-82c7-74d3-921d-70aa07809628` (Gibbs the 2nd, closed)
+Reviewer sub-agents:
+
+- Round 1 code style/maintainability:
+  `019f151a-0660-7b01-87ca-3a660a96bf2e` (closed)
+- Round 1 documentation:
+  `019f151a-06ce-7a32-bd00-b16ba546ba02` (closed)
+- Round 1 TypeScript/API docs:
+  `019f151a-0741-7532-bf94-224328e56ef5` (closed)
+- Round 1 security:
+  `019f151a-07d1-7012-b543-12db5c964d05` (closed)
+- Round 1 performance/reliability:
+  `019f151a-0840-76e1-88a5-d440c7c2f436` (closed)
+- Round 2 code style/maintainability:
+  `019f1522-0c74-7d80-bfdc-239e5aae1690` (closed)
+- Round 2 documentation:
+  `019f1522-0cea-7663-9673-e89b69d03b66` (closed)
+- Round 2 TypeScript/API docs:
+  `019f1522-0d59-7832-94ad-7dc6886be5fd` (closed)
+- Round 2 security:
+  `019f1522-0ddb-7f51-8baa-768d2c7ac10a` (closed)
+- Round 2 performance/reliability:
+  `019f1522-0e70-7dd3-aba4-971fa574543d` (closed)
+  Baseline verification evidence: `CI=true corepack pnpm verify` passed on
+  `2026-06-29 21:25 WEST`
 
 ## Objective
 
@@ -158,6 +181,10 @@ Out of scope:
 - Round 1 fix `corepack pnpm format:check` passed on
   `2026-06-29 21:43 WEST`.
 - Round 1 fix `git diff --check` passed on `2026-06-29 21:43 WEST`.
+- Round 2 TypeScript/API review ran `node scripts/check-api-docs.mjs`, which
+  passed with 100 proto, 28 core, 59 server, and 26 storage expected exports.
+- Round 2 TypeScript/API and performance/reliability reviews ran
+  `git diff --check 4807f6f..b6abcd6`, which passed.
 
 ## Review Rounds
 
@@ -168,6 +195,9 @@ Out of scope:
   existed, which made the durable state interruption-risky.
 - This focused fix worker updated only durable task/review/work/report logs for
   the accepted finding and spawned no sub-agents.
+- Round 2 reviewed fix commit `b6abcd6`. Code style/maintainability,
+  documentation, TypeScript/API docs, security, and performance/reliability all
+  reported clean, and every reviewer sub-agent was closed after result capture.
 
 ## Current State
 
@@ -180,4 +210,5 @@ Out of scope:
   runtime/source behavior was added.
 - Round 1 found one accepted P2 stale-marker issue in durable review state; the
   fix cleared that stale marker and recorded the fix path.
+- Round 2 review is clean with all participating reviewer sub-agents closed.
 - No new decision was needed; D-0043 covers the closure boundary.

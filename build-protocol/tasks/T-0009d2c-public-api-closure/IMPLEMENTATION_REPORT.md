@@ -1,6 +1,6 @@
 # Implementation Report: T-0009d.2c Public API Polish, Compatibility Notes, Verification Closure
 
-Status: Round 1 Fix Complete
+Status: Review Clean; Final Verification Pending
 Task log: `build-protocol/tasks/T-0009d2c-public-api-closure/TASK.md`
 Work log: `build-protocol/work-logs/T-0009d2c.md`
 Review log: `build-protocol/reviews/T-0009d2c-public-api-closure.md`
@@ -63,6 +63,10 @@ new runtime behavior was added or considered.
 - Round 1 fix `corepack pnpm format:check` passed on
   `2026-06-29 21:43 WEST`.
 - Round 1 fix `git diff --check` passed on `2026-06-29 21:43 WEST`.
+- Round 2 TypeScript/API review ran `node scripts/check-api-docs.mjs`, which
+  passed with 100 proto, 28 core, 59 server, and 26 storage expected exports.
+- Round 2 TypeScript/API and performance/reliability reviews ran
+  `git diff --check 4807f6f..b6abcd6`, which passed.
 
 ## Skills And Scope Notes
 
@@ -88,3 +92,5 @@ No new decision was needed; D-0043 already governs this closure boundary.
   state, accepted finding, and verification evidence are unambiguous. No
   runtime/source behavior or public docs are in scope for this fix.
 - The review-fix implementation sub-agent spawned no sub-agents.
+- Round 2 reviewed fix commit `b6abcd6`; all five required roles reported
+  clean and every reviewer sub-agent was closed after result capture.
