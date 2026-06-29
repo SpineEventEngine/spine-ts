@@ -1,6 +1,6 @@
 # Implementation Report: T-0009d.2 Entity Transaction Draft/Result Kernel
 
-Status: Implemented; clean-reviewed; pending integration
+Status: `T-0009d.2a` implemented, clean-reviewed, and integrated
 Task log: `build-protocol/tasks/T-0009d2-entity-transaction-kernel/TASK.md`
 Work log: `build-protocol/work-logs/T-0009d2.md`
 Review log: `build-protocol/reviews/T-0009d2-entity-transaction-kernel.md`
@@ -218,6 +218,11 @@ format:check` passed on `2026-06-29 20:34 WEST`.
   123 tests; coverage statements 97.51%, branches 90.28%, functions 100%,
   lines 97.46%; TypeDoc/API check reported 100 proto, 28 core, 56 server, and
   26 storage expected exports; proto lint/generate/check passed.
+- Main integration `CI=true corepack pnpm verify` passed on
+  `2026-06-29 20:46 WEST` after merge commit `2b3f3e9`: 14 test files / 123
+  tests; coverage statements 97.51%, branches 90.28%, functions 100%, lines
+  97.46%; TypeDoc/API check reported 100 proto, 28 core, 56 server, and 26
+  storage expected exports; proto lint/generate/check passed.
 
 ## Review
 
@@ -226,3 +231,10 @@ format:check` passed on `2026-06-29 20:34 WEST`.
   roles: code style/maintainability, documentation, TypeScript/API docs,
   security, and performance/reliability.
 - All authoring, fix, splitter, and reviewer sub-agents have been closed.
+
+## Integration
+
+- Merge commit: `2b3f3e9` (`Merge T-0009d.2a entity transaction kernel`).
+- Main verification: passed on `2026-06-29 20:46 WEST`.
+- Follow-up routing: continue `T-0009d.2b Lifecycle And Version Draft Helpers`
+  in a fresh branch/worktree.

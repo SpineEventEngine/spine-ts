@@ -1,8 +1,8 @@
 # T-0009d.2: Entity Transaction Draft/Result Kernel
 
-Status: Implemented; pending review
+Status: `T-0009d.2a` complete and integrated to `main`; `T-0009d.2b` pending
 Start: `2026-06-29 19:58 WEST`
-End: `2026-06-29 20:18 WEST`
+End: `T-0009d.2a` integrated `2026-06-29 20:47 WEST`
 Baseline commit: `3d08195`
 Task log path: `build-protocol/tasks/T-0009d2-entity-transaction-kernel/TASK.md`
 Branch: `task/T-0009d2-entity-transaction-kernel`
@@ -33,8 +33,9 @@ Reviewer sub-agents:
   `019f14e4-9bc3-7213-9028-a9fc38b43240` (Archimedes the 2nd, closed)
 - Round 2 performance/reliability:
   `019f14e4-9c35-71b3-a777-5a68966374d0` (Bacon the 2nd, closed)
-  Baseline verification evidence: `CI=true corepack pnpm verify` passed on
-  `2026-06-29 20:02 WEST`
+
+Baseline verification evidence: `CI=true corepack pnpm verify` passed on
+`2026-06-29 20:02 WEST`
 
 ## Objective
 
@@ -311,6 +312,11 @@ Splitter JVM impact summary:
   123 tests; coverage statements 97.51%, branches 90.28%, functions 100%,
   lines 97.46%; TypeDoc/API check reported 100 proto, 28 core, 56 server, and
   26 storage expected exports; proto lint/generate/check passed.
+- Main integration `CI=true corepack pnpm verify` passed on
+  `2026-06-29 20:46 WEST` after merge commit `2b3f3e9`: 14 test files / 123
+  tests; coverage statements 97.51%, branches 90.28%, functions 100%, lines
+  97.46%; TypeDoc/API check reported 100 proto, 28 core, 56 server, and 26
+  storage expected exports; proto lint/generate/check passed.
 
 ## Round 1 Review Fix Outcome
 
@@ -336,4 +342,7 @@ rejected. No sub-agents were spawned.
 - Round 2 clean re-review completed and all participating sub-agents are
   closed.
 - Final pre-integration verification passed.
-- Next step: integrate the reviewed branch into `main` and verify there.
+- Merge commit `2b3f3e9` integrated `T-0009d.2a` to `main`.
+- Main-branch verification passed.
+- Next step: continue `T-0009d.2b Lifecycle And Version Draft Helpers` in a
+  fresh branch/worktree per protocol.
