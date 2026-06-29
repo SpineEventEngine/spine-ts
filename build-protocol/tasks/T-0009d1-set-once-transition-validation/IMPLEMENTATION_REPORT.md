@@ -629,3 +629,24 @@ Verification:
   warning and expected API export counts.
 - `corepack pnpm typecheck` passed.
 - `git diff --check` passed.
+
+## Fix Round 15
+
+Addressed round-14/final re-review verification-summary findings without
+changing runtime behavior:
+
+- Added fix-round 14 verification evidence to canonical `TASK.md` Tests Run.
+- Updated work-log Current State to summarize fix-round 14 verification
+  evidence.
+- Recorded round-15 review outcomes in the review log.
+
+Verification:
+
+- `corepack pnpm format:check` initially failed on
+  `build-protocol/work-logs/T-0009d1.md`; after
+  `corepack pnpm exec prettier --write build-protocol/work-logs/T-0009d1.md`,
+  `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.
+- `git diff --check` passed.
