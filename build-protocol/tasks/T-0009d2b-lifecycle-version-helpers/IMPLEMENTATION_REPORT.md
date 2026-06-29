@@ -7,6 +7,7 @@ Review log: `build-protocol/reviews/T-0009d2b-lifecycle-version-helpers.md`
 Branch: `task/T-0009d2b-lifecycle-version-helpers`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009d2b-lifecycle-version-helpers`
+Integrated to main: `5c182d3`
 
 ## Summary
 
@@ -97,6 +98,12 @@ packages/server/src/entity-transaction.test.ts packages/server/src/index.test.ts
   97.61%, branches 90.51%, functions 100%, lines 97.56%; TypeDoc/API reported
   100 proto, 28 core, 59 server, and 26 storage expected exports; proto
   lint/generate/check passed with generated output clean.
+- Main integration `CI=true corepack pnpm verify` passed on
+  `2026-06-29 21:19 WEST` after merge commit `5c182d3`: 14 test files / 129
+  tests; coverage statements 97.61%, branches 90.51%, functions 100%, lines
+  97.56%; TypeDoc/API reported 100 proto, 28 core, 59 server, and 26 storage
+  expected exports; proto lint/generate/check passed with generated output
+  clean.
 
 ## Review
 
