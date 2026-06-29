@@ -51,9 +51,10 @@ slices.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.
-- A server entity transaction kernel with `createEntityTransaction()` for an
-  in-memory buffered draft boundary that validates on commit and releases on
-  rollback, plus draft lifecycle and explicit version metadata helpers.
+- A server entity transaction kernel with `createEntityTransaction()` for a
+  framework-owned, in-memory buffered draft boundary that validates on commit
+  and releases on rollback, plus draft lifecycle and explicit version metadata
+  helpers.
 - Server handler metadata helpers in `@spine-ts/server` that explicitly bind
   generated command/event schemas to entity method names for command assignment,
   command reaction, event subscription, event reaction, and event application.
@@ -194,8 +195,9 @@ later rules in order.
 
 ## Entity Transactions
 
-Use `createEntityTransaction()` when framework-controlled code needs a buffered
-draft over previous entity state before accepting a commit result:
+Use `createEntityTransaction()` when framework-controlled code needs an
+in-memory buffered draft over previous entity state before accepting a commit
+result:
 
 ```ts
 import { createEntityTransaction } from "@spine-ts/server";
@@ -235,10 +237,11 @@ before state mutation: it rejects committed/rolled-back transactions and active
 drafts already marked archived or deleted with deterministic errors that do not
 include entity state payloads.
 
-The transaction kernel is available now only as an in-memory buffered boundary.
-It does not instantiate entities, write storage or repositories, dispatch
-handlers, start buses or transports, or provide async-local/global transaction
-state.
+Compatibility note: this transaction kernel is the public draft/result boundary
+for future framework-owned entity bases. It is not a storage-backed transaction
+system, repository unit of work, handler dispatch phase, lifecycle-event
+emitter, or async-local/global transaction context. The snapshots returned from
+commit and rollback are evidence for later runtime layers, not persisted state.
 
 ## Envelope Packing
 

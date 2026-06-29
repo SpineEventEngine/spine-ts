@@ -1,6 +1,6 @@
 # T-0009d.2c: Public API Polish, Compatibility Notes, Verification Closure
 
-Status: In Progress
+Status: Implementation Complete; Review Pending
 Start: `2026-06-29 21:20 WEST`
 Baseline commit: `5367bb8`
 Task log path: `build-protocol/tasks/T-0009d2c-public-api-closure/TASK.md`
@@ -9,7 +9,8 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009d2c-public-api-closure`
 Requirements splitter: T-0009d.2 splitter
 `019f14c2-9605-7d11-b8c5-3f891b1880f7` (Sartre the 2nd, closed)
-Authoring sub-agent: pending
+Authoring sub-agent: current implementation sub-agent in this worktree; no
+additional sub-agents spawned
 Reviewer sub-agents: pending
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 21:25 WEST`
@@ -72,6 +73,22 @@ Skipped relevant-looking skills:
 | `saga-orchestration`      | `~/.agents/skills/saga-orchestration/SKILL.md`      | No process-manager workflow or compensation behavior is in scope.                  |
 | `nodejs-backend-patterns` | `~/.agents/skills/nodejs-backend-patterns/SKILL.md` | No HTTP/gRPC server, middleware, or service endpoint work is in this closure task. |
 
+Implementation sub-agent re-check on `2026-06-29 21:28 WEST`:
+
+- Fully read the selected `SKILL.md` files for
+  `test-driven-development`, `typescript-advanced-types`,
+  `verification-before-completion`, and `subagent-driven-development`.
+- Applied `test-driven-development` as a guard: no production behavior or API
+  assertions were changed, so no new RED/GREEN test cycle was required.
+- Applied `typescript-advanced-types` by preserving the existing simple
+  `Schema`/`Version` generic public surface and avoiding new helper types.
+- Applied `verification-before-completion` by planning fresh `format:check`,
+  `docs:check`, and `CI=true corepack pnpm verify` runs before completion
+  claims or commit.
+- Applied only the durable-log guidance from
+  `subagent-driven-development`; the task prompt forbids spawning sub-agents,
+  so none were spawned.
+
 ## Scope
 
 In scope:
@@ -108,9 +125,14 @@ Out of scope:
 
 - `build-protocol/tasks/T-0009d2c-public-api-closure/TASK.md`
 - `build-protocol/tasks/T-0009d2c-public-api-closure/IMPLEMENTATION_REPORT.md`
+- `build-protocol/tasks/T-0009d2-entity-transaction-kernel/TASK.md`
 - `build-protocol/work-logs/T-0009d2c.md`
+- `build-protocol/work-logs/T-0009d2.md`
 - `build-protocol/reviews/T-0009d2c-public-api-closure.md`
-- `build-protocol/DECISION_LOG.md`
+- `docs/USER_GUIDE.md`
+- `docs/api/README.md`
+- `docs/architecture/README.md`
+- `packages/server/README.md`
 
 ## Tests Run
 
@@ -121,13 +143,29 @@ Out of scope:
   97.61%, branches 90.51%, functions 100%, lines 97.56%; TypeDoc/API reported
   100 proto, 28 core, 59 server, and 26 storage expected exports; proto
   lint/generate/check passed with generated output clean.
+- Focused documentation/API check `corepack pnpm docs:check` passed on
+  `2026-06-29 21:35 WEST` with the known invalid-origin TypeDoc warning; API
+  export counts remained 100 proto, 28 core, 59 server, and 26 storage.
+- Required `corepack pnpm format:check` passed on `2026-06-29 21:35 WEST`.
+- Required full `CI=true corepack pnpm verify` passed on
+  `2026-06-29 21:35 WEST`: 14 test files / 129 tests; coverage statements
+  97.61%, branches 90.51%, functions 100%, lines 97.56%; TypeDoc/API reported
+  100 proto, 28 core, 59 server, and 26 storage expected exports; proto
+  lint/generate/check passed with generated output clean.
 
 ## Review Rounds
 
-- Pending implementation and review loop.
+- Implementation sub-agent spawned no sub-agents per prompt.
+- Orchestrator-level five-role review remains pending after implementation
+  commit.
 
 ## Current State
 
 - Branch/worktree exists from `5367bb8`.
-- Durable setup logs are committed at `5361b7e`.
+- Durable setup logs are committed at `5361b7e`; baseline verification was
+  recorded at `19b4805`.
 - Baseline verification passed on `2026-06-29 21:25 WEST`.
+- Implementation is complete and limited to public compatibility wording,
+  parent roadmap cleanup, and durable evidence logs. No runtime/source behavior
+  was added.
+- No new decision was needed; D-0043 covers the closure boundary.

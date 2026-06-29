@@ -200,8 +200,12 @@ messages, field paths, and no raw previous/next values.
 `EntityTransaction` is the first server-owned draft/result commit boundary over
 one entity state. It buffers a draft state, explicit previous/draft version
 metadata, lifecycle flags, and visible status (`active`, `committed`, or
-`rolled-back`). `update()` replaces only the buffered draft, while `previous`
-and `currentDraft` accessors return snapshots so callers do not mutate the
+`rolled-back`). The compatibility contract is intentionally small and
+JVM-familiar: this API owns only in-memory transaction evidence for future
+framework-controlled entity bases, not repository storage, database
+transactions, dispatch phases, event emission, or process-wide transaction
+state. `update()` replaces only the buffered draft, while `previous` and
+`currentDraft` accessors return snapshots so callers do not mutate the
 transaction's stored previous state by accident. `archive()`, `unarchive()`,
 `markDeleted()`, and `restore()` replace only buffered lifecycle flags, and
 `updateVersionMetadata()` replaces only caller-owned draft version metadata.
