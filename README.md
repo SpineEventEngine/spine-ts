@@ -28,4 +28,4 @@ are intentionally deferred to later tasks.
 - `pnpm docs:api`
 - `pnpm proto:generate`
 
-See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for the framework user guide placeholder and [build-protocol](build-protocol/README.md) for the implementation protocol.
+See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for the framework user guide and runnable API examples, and [build-protocol](build-protocol/README.md) for the implementation protocol.

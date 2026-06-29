@@ -1,8 +1,8 @@
 # T-0009d.1: Built-In Set-Once Transition Validation
 
-Status: In progress
+Status: Complete through fix round 3
 Start: `2026-06-29 14:52 WEST`
-End: TBD
+End: `2026-06-29 16:00 WEST`
 Baseline commit: `1d939d7`
 Task log path: `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
 Branch: `task/T-0009d1-set-once-transition-validation`
@@ -10,7 +10,7 @@ Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009d1-se
 Requirements splitter: `019f13a4-a6f5-7302-94e0-7b16366b0701` (Popper)
 Branch setup commit: `88cb0f3`
 Authoring sub-agent: Codex implementation sub-agent
-Reviewer sub-agents: Round 1 and Round 2 role reviewers for
+Reviewer sub-agents: Round 1, Round 2, and Round 3 role reviewers for
 code style/maintainability, documentation, TypeScript/API docs, security, and
 performance/reliability; individual reviewer IDs are not present in durable
 task evidence.
@@ -219,11 +219,31 @@ Out of scope:
   files / 94 tests; coverage statements 98.48%, branches 92.46%, functions
   100%, lines 98.45%; docs/API and proto checks passed with the known TypeDoc
   invalid-origin warning.
+- RED fix-round 3
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected on `2026-06-29 15:54 WEST`: 2 of 13 tests failed because
+  forged bytes and repeated set-once collections were accepted through
+  overridden collection methods and indexed reads.
+- GREEN fix-round 3
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 15:56 WEST`: 2 test files / 22 tests.
+- Fix-round 3 `corepack pnpm docs:check` initially failed on the new
+  typed-array helper type, then passed on `2026-06-29 15:57 WEST` with the
+  known TypeDoc invalid-origin warning and expected API export counts.
+- Fix-round 3 `corepack pnpm typecheck` initially failed on the same helper and
+  test-helper types, then passed on `2026-06-29 15:58 WEST`.
+- Fix-round 3 full verification first failed on lint for the new proxy/helper
+  code, then on Prettier formatting for
+  `packages/server/src/entity-transition-validation.test.ts`. After cleanup,
+  `CI=true corepack pnpm verify` passed on `2026-06-29 16:00 WEST`: 13 test
+  files / 96 tests; coverage statements 97.34%, branches 90.72%, functions
+  100%, lines 97.26%; docs/API and proto checks passed with the known TypeDoc
+  invalid-origin warning.
 
 ## Coverage Result
 
-Latest full verification coverage: statements 98.48%, branches 92.34%,
-functions 100%, lines 98.44%.
+Latest full verification coverage: statements 97.34%, branches 90.72%,
+functions 100%, lines 97.26%.
 
 ## Documentation And Public API Impact
 
@@ -264,9 +284,14 @@ functions 100%, lines 98.44%.
   absent-on-both singular message set-once semantics fix plus stale task,
   work-log, review-log, and API status documentation cleanup. Round 2 role
   reviewers were closed after result capture.
-- Fix round 2 is in progress in this successor commit: add RED/GREEN coverage
-  for absent `RichSetOnceState.details`, update set-once field presence
-  semantics, refresh durable logs, and rerun required verification.
+- Fix round 2 was committed as `01cfb47` with absent-field semantics and
+  durable-doc cleanup.
+- Round 3 reviewed `01cfb47` through review package
+  `.superpowers/sdd/review-cd98ca3..01cfb47.diff`; findings required hardened
+  bytes/repeated collection comparison plus durable-doc consistency cleanup.
+  This fix round added RED/GREEN forged collection coverage, hardened
+  descriptor-safe comparison, refreshed durable logs, and reran required
+  verification.
 
 ## Completion Checklist
 
@@ -278,4 +303,4 @@ functions 100%, lines 98.44%.
 - [x] Full verification passed on the task branch.
 - [ ] Task branch merged back to `main`.
 - [ ] Full verification passed on `main`.
-- [ ] Durable task/work/review logs updated with final commits and verification.
+- [x] Durable task/work/review logs updated with final commits and verification.

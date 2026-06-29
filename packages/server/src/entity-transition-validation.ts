@@ -64,6 +64,11 @@ interface FieldReadResult {
   readonly value?: unknown;
 }
 
+interface SafeArrayLengthDescriptor {
+  readonly enumerable: false;
+  readonly value: number;
+}
+
 function createSetOnceTransitionRule<Schema extends DescriptorMessageSchema>(
   setOnceFields: readonly DescriptorFieldMetadata[],
 ): TransitionValidationRule<Schema> {
@@ -135,10 +140,24 @@ function valuesAreEqual(
 }
 
 function bytesAreEqual(previousValue: Uint8Array, nextValue: Uint8Array): boolean {
-  return (
-    previousValue.length === nextValue.length &&
-    previousValue.every((byte, index) => byte === nextValue[index])
-  );
+  const previousBytes = readSafeUint8ArrayBytes(previousValue);
+  const nextBytes = readSafeUint8ArrayBytes(nextValue);
+
+  if (previousBytes === undefined || nextBytes === undefined) {
+    return false;
+  }
+
+  if (previousBytes.length !== nextBytes.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previousBytes.length; index += 1) {
+    if (previousBytes[index] !== nextBytes[index]) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function arraysAreEqual(
@@ -147,12 +166,24 @@ function arraysAreEqual(
   depth: number,
   activePairs: WeakMap<object, WeakSet<object>>,
 ): boolean {
-  return (
-    previousValue.length === nextValue.length &&
-    previousValue.every((value, index) =>
-      valuesAreEqual(value, nextValue[index], depth + 1, activePairs),
-    )
-  );
+  const previousElements = readSafeArrayElements(previousValue);
+  const nextElements = readSafeArrayElements(nextValue);
+
+  if (previousElements === undefined || nextElements === undefined) {
+    return false;
+  }
+
+  if (previousElements.length !== nextElements.length) {
+    return false;
+  }
+
+  for (let index = 0; index < previousElements.length; index += 1) {
+    if (!valuesAreEqual(previousElements[index], nextElements[index], depth + 1, activePairs)) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function recordsAreEqual(
@@ -174,22 +205,28 @@ function recordsAreEqual(
   const previousKeys = Object.keys(previousValue).sort();
   const nextKeys = Object.keys(nextValue).sort();
 
-  const equal =
-    arraysAreEqual(previousKeys, nextKeys, depth, activePairs) &&
-    previousKeys.every((key) => {
+  try {
+    if (!arraysAreEqual(previousKeys, nextKeys, depth, activePairs)) {
+      return false;
+    }
+
+    for (const key of previousKeys) {
       const previousDescriptor = Object.getOwnPropertyDescriptor(previousValue, key);
       const nextDescriptor = Object.getOwnPropertyDescriptor(nextValue, key);
 
-      return (
-        isSafeDataDescriptor(previousDescriptor) &&
-        isSafeDataDescriptor(nextDescriptor) &&
-        valuesAreEqual(previousDescriptor.value, nextDescriptor.value, depth + 1, activePairs)
-      );
-    });
+      if (
+        !isSafeDataDescriptor(previousDescriptor) ||
+        !isSafeDataDescriptor(nextDescriptor) ||
+        !valuesAreEqual(previousDescriptor.value, nextDescriptor.value, depth + 1, activePairs)
+      ) {
+        return false;
+      }
+    }
 
-  unmarkActivePair(previousValue, nextValue, activePairs);
-
-  return equal;
+    return true;
+  } finally {
+    unmarkActivePair(previousValue, nextValue, activePairs);
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -206,6 +243,126 @@ function isSafeDataDescriptor(
   descriptor: PropertyDescriptor | undefined,
 ): descriptor is PropertyDescriptor & { value: unknown } {
   return descriptor?.enumerable === true && Object.hasOwn(descriptor, "value");
+}
+
+function readSafeUint8ArrayBytes(value: Uint8Array): readonly number[] | undefined {
+  if (Object.getPrototypeOf(value) !== Uint8Array.prototype) {
+    return undefined;
+  }
+
+  let copy: Uint8Array;
+
+  try {
+    copy = Uint8Array.prototype.slice.call(value);
+  } catch {
+    return undefined;
+  }
+
+  if (!hasOnlyDenseIndexedDataProperties(value, copy.length, false)) {
+    return undefined;
+  }
+
+  const bytes: number[] = [];
+
+  for (let index = 0; index < copy.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+    const byte = copy[index];
+
+    if (byte === undefined || !isSafeDataDescriptor(descriptor) || descriptor.value !== byte) {
+      return undefined;
+    }
+
+    bytes.push(byte);
+  }
+
+  return bytes;
+}
+
+function readSafeArrayElements(value: readonly unknown[]): readonly unknown[] | undefined {
+  if (Object.getPrototypeOf(value) !== Array.prototype) {
+    return undefined;
+  }
+
+  const lengthDescriptor = Object.getOwnPropertyDescriptor(value, "length");
+
+  if (!isSafeArrayLengthDescriptor(lengthDescriptor)) {
+    return undefined;
+  }
+
+  const length = lengthDescriptor.value;
+
+  if (!hasOnlyDenseIndexedDataProperties(value, length, true)) {
+    return undefined;
+  }
+
+  const elements: unknown[] = [];
+
+  for (let index = 0; index < length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
+
+    if (!isSafeDataDescriptor(descriptor)) {
+      return undefined;
+    }
+
+    elements.push(descriptor.value);
+  }
+
+  return elements;
+}
+
+function hasOnlyDenseIndexedDataProperties(
+  value: object,
+  length: number,
+  includesLengthProperty: boolean,
+): boolean {
+  const seenIndexes = new Set<number>();
+
+  for (const key of Reflect.ownKeys(value)) {
+    if (key === "length" && includesLengthProperty) {
+      continue;
+    }
+
+    if (typeof key !== "string") {
+      return false;
+    }
+
+    const index = parseDenseIndexKey(key, length);
+
+    if (index === undefined) {
+      return false;
+    }
+
+    const descriptor = Object.getOwnPropertyDescriptor(value, key);
+
+    if (!isSafeDataDescriptor(descriptor)) {
+      return false;
+    }
+
+    seenIndexes.add(index);
+  }
+
+  return seenIndexes.size === length;
+}
+
+function parseDenseIndexKey(key: string, length: number): number | undefined {
+  const index = Number(key);
+
+  if (!Number.isSafeInteger(index) || index < 0 || index >= length) {
+    return undefined;
+  }
+
+  return String(index) === key ? index : undefined;
+}
+
+function isSafeArrayLengthDescriptor(
+  descriptor: PropertyDescriptor | undefined,
+): descriptor is SafeArrayLengthDescriptor {
+  return (
+    descriptor?.enumerable === false &&
+    Object.hasOwn(descriptor, "value") &&
+    Number.isSafeInteger(descriptor.value) &&
+    descriptor.value >= 0
+  );
 }
 
 function hasActivePair(

@@ -39,7 +39,12 @@ before counting RED.
 
 ## Files Changed
 
+- `README.md`
 - `build-protocol/DEVELOPER_API.md`
+- `build-protocol/reviews/T-0009d1-set-once-transition-validation.md`
+- `build-protocol/tasks/T-0009d1-set-once-transition-validation/IMPLEMENTATION_REPORT.md`
+- `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
+- `build-protocol/work-logs/T-0009d1.md`
 - `docs/USER_GUIDE.md`
 - `docs/api/README.md`
 - `docs/architecture/README.md`
@@ -49,11 +54,10 @@ before counting RED.
 - `packages/server/src/entity-transition-validation.ts`
 - `packages/server/src/index.test.ts`
 - `packages/server/src/index.ts`
+- `packages/server/test-fixtures/entity-metadata-fixtures.ts`
+- `packages/server/test-fixtures/proto/entity-metadata/main.proto`
 - `pnpm-lock.yaml`
 - `scripts/check-api-docs.mjs`
-- `build-protocol/tasks/T-0009d1-set-once-transition-validation/IMPLEMENTATION_REPORT.md`
-- `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
-- `build-protocol/work-logs/T-0009d1.md`
 
 ## Verification
 
@@ -181,4 +185,50 @@ Fix-round 2 commands run:
   `corepack pnpm exec prettier --write build-protocol/work-logs/T-0009d1.md build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md build-protocol/reviews/T-0009d1-set-once-transition-validation.md build-protocol/tasks/T-0009d1-set-once-transition-validation/IMPLEMENTATION_REPORT.md docs/api/README.md`,
   `CI=true corepack pnpm verify` passed with 13 test files / 94 tests; coverage
   statements 98.48%, branches 92.46%, functions 100%, lines 98.45%; docs/API
+  and proto checks passed with the known TypeDoc invalid-origin warning.
+
+## Fix Round 3
+
+Addressed round-3 findings from review package
+`.superpowers/sdd/review-cd98ca3..01cfb47.diff` and the fix-agent handoff:
+
+- Security collection comparison: bytes comparison now copies real
+  `Uint8Array` values through the intrinsic typed-array slice path and rejects
+  forged/proxied/extra-property byte collections. Repeated-field comparison now
+  requires descriptor-valid dense own data properties, rejects extra own
+  methods, inherited indexes, accessor indexes, sparse arrays, symbol keys, and
+  changed prototypes, and uses explicit loops rather than user-controlled array
+  methods or indexed reads.
+- Regression coverage: added forged bytes and repeated set-once tests for
+  overridden `every`, typed-array and repeated proxy reads, inherited repeated
+  indexes, and accessor-backed repeated indexes. The assertions verify
+  sanitized set-once violations and no previous/next value leakage.
+- Durable docs/logs: refreshed task, work-log, review-log, implementation
+  report, and root README wording after committed fix-round 2 commit
+  `01cfb47` and this fix round.
+- Documentation inventory: `Files Changed` now includes all files changed
+  across the task, including root `README.md`, the review log, and server
+  fixture/proto files.
+
+Fix-round 3 commands run:
+
+- RED:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected with 2 of 13 tests failing for forged bytes and repeated
+  collections that were incorrectly accepted.
+- GREEN:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 22 tests.
+- Required verification:
+  `corepack pnpm docs:check` first failed on the new typed-array helper type,
+  then passed with the known TypeDoc invalid-origin warning and expected API
+  export counts; `corepack pnpm typecheck` first failed on the same helper and
+  test-helper types, then passed.
+- Full verification:
+  `CI=true corepack pnpm verify` first failed on lint for the new proxy/helper
+  code, then on Prettier formatting for
+  `packages/server/src/entity-transition-validation.test.ts`; after cleanup and
+  `corepack pnpm exec prettier --write packages/server/src/entity-transition-validation.test.ts packages/server/src/entity-transition-validation.ts`,
+  `CI=true corepack pnpm verify` passed with 13 test files / 96 tests; coverage
+  statements 97.34%, branches 90.72%, functions 100%, lines 97.26%; docs/API
   and proto checks passed with the known TypeDoc invalid-origin warning.

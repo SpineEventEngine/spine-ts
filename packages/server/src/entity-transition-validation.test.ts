@@ -32,6 +32,14 @@ type RichSetOnceState = Message<"RichSetOnceState"> & {
   mutableNote: string;
 };
 
+interface RichSetOnceStateOverrides {
+  readonly id?: string;
+  readonly fingerprint?: Uint8Array;
+  readonly tags?: string[];
+  readonly details?: { readonly value?: string };
+  readonly mutableNote?: string;
+}
+
 function createFixtureFileDescriptor(descriptorSetBase64: string) {
   const descriptorSet = fromBinary(
     FileDescriptorSetSchema,
@@ -273,6 +281,163 @@ describe("entity state transition validation", () => {
     ).toBe(true);
   });
 
+  it("fails closed for forged set-once bytes collections", () => {
+    const previousWithOverriddenMethod = createRichSetOnceState({
+      fingerprint: new Uint8Array([1, 2]),
+      mutableNote: "secret-previous-bytes-method",
+    });
+    Object.defineProperty(previousWithOverriddenMethod.fingerprint, "every", {
+      enumerable: true,
+      value: () => true,
+    });
+    const changedBytes = createRichSetOnceState({
+      fingerprint: new Uint8Array([1, 3]),
+      mutableNote: "secret-next-bytes-method",
+    });
+
+    const overriddenMethodResult = validateEntityStateTransition({
+      schema: RichSetOnceStateSchema,
+      previous: previousWithOverriddenMethod,
+      next: changedBytes,
+    });
+
+    expectSetOnceViolation(overriddenMethodResult, "fingerprint");
+    expectNoValueLeak(
+      overriddenMethodResult,
+      "secret-previous-bytes-method",
+      "secret-next-bytes-method",
+    );
+
+    const previous = createRichSetOnceState({
+      fingerprint: new Uint8Array([4, 5]),
+      mutableNote: "secret-previous-bytes-proxy",
+    });
+    const proxiedBytes = new Proxy(new Uint8Array([4, 6]), {
+      get(target, property, receiver): unknown {
+        if (property === "1") {
+          return 5;
+        }
+
+        return Reflect.get(target, property, receiver) as unknown;
+      },
+    });
+    const nextWithProxy = createRichSetOnceState({
+      fingerprint: proxiedBytes,
+      mutableNote: "secret-next-bytes-proxy",
+    });
+
+    const proxyResult = validateEntityStateTransition({
+      schema: RichSetOnceStateSchema,
+      previous,
+      next: nextWithProxy,
+    });
+
+    expectSetOnceViolation(proxyResult, "fingerprint");
+    expectNoValueLeak(proxyResult, "secret-previous-bytes-proxy", "secret-next-bytes-proxy");
+  });
+
+  it("fails closed for forged set-once repeated collections", () => {
+    const tagsWithOverriddenMethod = ["alpha"];
+    Object.defineProperty(tagsWithOverriddenMethod, "every", {
+      enumerable: true,
+      value: () => true,
+    });
+    const previousWithOverriddenMethod = createRichSetOnceState({
+      tags: tagsWithOverriddenMethod,
+      mutableNote: "secret-previous-tags-method",
+    });
+    const nextWithChangedTags = createRichSetOnceState({
+      tags: ["secret-next-tag"],
+      mutableNote: "secret-next-tags-method",
+    });
+
+    const overriddenMethodResult = validateEntityStateTransition({
+      schema: RichSetOnceStateSchema,
+      previous: previousWithOverriddenMethod,
+      next: nextWithChangedTags,
+    });
+
+    expectSetOnceViolation(overriddenMethodResult, "tags");
+    expectNoValueLeak(
+      overriddenMethodResult,
+      "secret-previous-tags-method",
+      "secret-next-tags-method",
+      "secret-next-tag",
+    );
+
+    const inheritedIndexTags = [] as string[];
+    inheritedIndexTags.length = 1;
+    Object.setPrototypeOf(inheritedIndexTags, { 0: "alpha", __proto__: Array.prototype });
+    const nextWithInheritedIndex = createRichSetOnceState({
+      tags: inheritedIndexTags,
+      mutableNote: "secret-next-tags-inherited",
+    });
+
+    const inheritedIndexResult = validateEntityStateTransition({
+      schema: RichSetOnceStateSchema,
+      previous: createRichSetOnceState({ mutableNote: "secret-previous-tags-inherited" }),
+      next: nextWithInheritedIndex,
+    });
+
+    expectSetOnceViolation(inheritedIndexResult, "tags");
+    expectNoValueLeak(
+      inheritedIndexResult,
+      "secret-previous-tags-inherited",
+      "secret-next-tags-inherited",
+    );
+
+    const proxiedTags = new Proxy(["secret-next-proxy-tag"], {
+      get(target, property, receiver): unknown {
+        if (property === "0") {
+          return "alpha";
+        }
+
+        return Reflect.get(target, property, receiver) as unknown;
+      },
+    });
+    const nextWithProxy = createRichSetOnceState({
+      tags: proxiedTags,
+      mutableNote: "secret-next-tags-proxy",
+    });
+
+    const proxyResult = validateEntityStateTransition({
+      schema: RichSetOnceStateSchema,
+      previous: createRichSetOnceState({ mutableNote: "secret-previous-tags-proxy" }),
+      next: nextWithProxy,
+    });
+
+    expectSetOnceViolation(proxyResult, "tags");
+    expectNoValueLeak(
+      proxyResult,
+      "secret-previous-tags-proxy",
+      "secret-next-tags-proxy",
+      "secret-next-proxy-tag",
+    );
+
+    const accessorIndexTags = ["placeholder"];
+    Object.defineProperty(accessorIndexTags, "0", {
+      enumerable: true,
+      get: () => "alpha",
+    });
+    const nextWithAccessorIndex = createRichSetOnceState({
+      tags: accessorIndexTags,
+      mutableNote: "secret-next-tags-accessor",
+    });
+
+    const accessorIndexResult = validateEntityStateTransition({
+      schema: RichSetOnceStateSchema,
+      previous: createRichSetOnceState({ mutableNote: "secret-previous-tags-accessor" }),
+      next: nextWithAccessorIndex,
+    });
+
+    expectSetOnceViolation(accessorIndexResult, "tags");
+    expectNoValueLeak(
+      accessorIndexResult,
+      "secret-previous-tags-accessor",
+      "secret-next-tags-accessor",
+    );
+  });
+
   it("fails closed when forged set-once fields are inherited or accessor-backed", () => {
     const previous = create(ProjectionStateSchema, {
       id: "stable-id",
@@ -338,6 +503,17 @@ function validateForgedSetOnceId(previousId: unknown, nextId: unknown) {
   });
 }
 
+function createRichSetOnceState(overrides: RichSetOnceStateOverrides = {}): RichSetOnceState {
+  return create(RichSetOnceStateSchema, {
+    id: "rich-1",
+    fingerprint: new Uint8Array([1, 2]),
+    tags: ["alpha"],
+    details: { value: "same" },
+    mutableNote: "mutable",
+    ...overrides,
+  });
+}
+
 function expectSetOnceViolation(
   result: ReturnType<typeof validateEntityStateTransition>,
   fieldName: string,
@@ -351,6 +527,17 @@ function expectSetOnceViolation(
   expect(result.violations[0].fieldPath?.fieldName).toEqual([fieldName]);
   expect(result.violations[0].fieldValue).toBeUndefined();
   expect(JSON.stringify(result)).not.toContain("stable-id");
+}
+
+function expectNoValueLeak(
+  result: ReturnType<typeof validateEntityStateTransition>,
+  ...values: readonly string[]
+) {
+  const serializedResult = JSON.stringify(result);
+
+  for (const value of values) {
+    expect(serializedResult).not.toContain(value);
+  }
 }
 
 function createDeepObject(depth: number): Record<string, unknown> {

@@ -99,7 +99,57 @@ Verification:
   94 tests and coverage statements 98.48%, branches 92.46%, functions 100%,
   lines 98.45%.
 
+## Round 3
+
+Reviewer package: `.superpowers/sdd/review-cd98ca3..01cfb47.diff`.
+
+Important findings addressed in fix round 3:
+
+- Security: bytes and repeated set-once equality trusted user-controlled
+  collection methods and indexed reads. Forged arrays, `Uint8Array`s, and
+  proxies could make changed values appear stable through overridden `every`,
+  inherited or accessor indexes, or proxy reads.
+- Durable logs: `TASK.md` and `build-protocol/work-logs/T-0009d1.md` still
+  described fix round 2 as in progress after committed fix-round 2 commit
+  `01cfb47`.
+- Review log: round 3 findings and the current fix round were not yet recorded.
+- Coverage docs: `TASK.md` latest coverage needed to match the latest full
+  verification evidence.
+- Implementation report: `Files Changed` omitted files changed across the task,
+  including root `README.md`, this review log, and server fixture/proto files.
+- README: root `README.md` still called `docs/USER_GUIDE.md` a placeholder.
+
+Fix-round 3 entry:
+
+- Added RED tests for forged bytes/repeated set-once collections with overridden
+  `every`, typed-array and repeated proxy reads, inherited repeated indexes, and
+  accessor-backed repeated indexes.
+- Hardened bytes comparison around intrinsic typed-array copying and dense own
+  data descriptors, rejecting forged/proxied/extra-property byte values.
+- Hardened repeated comparison around dense own data descriptors and explicit
+  loops, rejecting inherited/accessor indexes, extra methods, sparse arrays,
+  symbol keys, and changed prototypes without leaking previous/next values.
+- Refreshed task, work-log, review-log, implementation report, and root README
+  documentation for committed `01cfb47` and this fix round.
+
+Verification:
+
+- RED
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts`
+  failed as expected with 2 of 13 tests failing.
+- GREEN
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 22 tests.
+- `corepack pnpm docs:check` first failed on a helper type, then passed with the
+  known TypeDoc invalid-origin warning and expected API export counts.
+- `corepack pnpm typecheck` first failed on helper/test-helper types, then
+  passed.
+- `CI=true corepack pnpm verify` first failed on lint, then formatting; after
+  cleanup, `CI=true corepack pnpm verify` passed with 13 test files / 96 tests
+  and coverage statements 97.34%, branches 90.72%, functions 100%, lines
+  97.26%.
+
 ## Follow-Up Rounds
 
-Round 2 findings are addressed in fix round 2. No later reviewer round is
+Round 3 findings are addressed in fix round 3. No later reviewer round is
 recorded in durable evidence yet.
