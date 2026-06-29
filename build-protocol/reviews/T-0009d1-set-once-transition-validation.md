@@ -427,3 +427,47 @@ Verification:
   warning and expected API export counts.
 - `corepack pnpm typecheck` passed.
 - `git diff --check` passed.
+
+## Round 9 Review
+
+Review package `.superpowers/sdd/review-cd98ca3..0d05294.diff` was reviewed by
+the five required role reviewers.
+
+Reviewer outcomes:
+
+- Documentation: CLEAN.
+- Security: CLEAN.
+- TypeScript/API docs: CLEAN.
+- Performance/reliability: Minor finding that the canonical task-log
+  `Tests Run` section did not include fix-round 9 verification evidence.
+- Code style/maintainability: Important finding that the newly strengthened
+  `@spine-ts/server` protocol rule required durable evidence of actual
+  corresponding Spine `core-jvm` `server` source inspection because
+  `/private/tmp/spine-research/core-jvm/server` is present locally; the branch
+  had only recorded JVM notes and checkout existence.
+
+Fix response:
+
+- Inspected task-relevant `core-jvm` server files:
+  `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/Transaction.java`,
+  `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/TransactionalEntity.java`,
+  `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/AbstractEntity.java`,
+  and
+  `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/InvalidEntityStateException.java`.
+- Recorded the source impact: JVM keeps entity state mutation behind a
+  transaction-owned validating builder and validates replacement state during
+  commit/update, so T-0009d.1 remains a narrow transition validator for the
+  future transaction/runtime boundary instead of adding a speculative
+  TypeScript transaction stack in this slice.
+- Refreshed `TASK.md` end timestamp and Tests Run evidence for fix round 9.
+
+Verification:
+
+- `corepack pnpm format:check` initially failed on
+  `build-protocol/work-logs/T-0009d1.md`; after
+  `corepack pnpm exec prettier --write build-protocol/work-logs/T-0009d1.md`,
+  `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm typecheck` passed.
+- `git diff --check` passed.

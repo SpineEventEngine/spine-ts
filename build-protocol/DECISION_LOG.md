@@ -893,16 +893,27 @@ JVM docs inspected for this decision:
 - `spine-jvm-docs/spine-entities-repositories-and-state.md`, Transactions and
   State Builders.
 
-Decision: Server-module work must check task-relevant local Spine JVM notes
-before introducing or expanding server/runtime behavior. For set-once
-validation, stay close to the JVM-familiar contract: enforcement belongs at
-generated builder/factory or state-update validation boundaries over normal
-Protobuf entity state, structured violations are surfaced through the validation
-facade, and repeated/map/explicit optional `(set_once)` fields are unsupported
-in the JVM generation contract. In TypeScript, unsupported repeated,
-map-valued, and explicit optional set-once fields therefore fail closed with
-field-specific validation violations instead of adding speculative collection or
-presence comparison in this task.
+Additional `core-jvm` server source inspected during T-0009d.1 fix round 10:
+
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/Transaction.java`,
+  transaction buffering and commit/update flow;
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/TransactionalEntity.java`,
+  active-transaction builder access;
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/AbstractEntity.java`,
+  state update validation;
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/InvalidEntityStateException.java`,
+  structured validation exception creation.
+
+Decision: Server-module work must check task-relevant local Spine JVM notes and,
+when available, the corresponding `core-jvm` `server` source before introducing
+or expanding server/runtime behavior. For set-once validation, stay close to the
+JVM-familiar contract: enforcement belongs at generated builder/factory or
+state-update validation boundaries over normal Protobuf entity state, structured
+violations are surfaced through the validation facade, and repeated/map/explicit
+optional `(set_once)` fields are unsupported in the JVM generation contract. In
+TypeScript, unsupported repeated, map-valued, and explicit optional set-once
+fields therefore fail closed with field-specific validation violations instead
+of adding speculative collection or presence comparison in this task.
 
 This does not make arbitrary hostile JavaScript object graphs part of the
 primary public contract. The T-0009d.1 hardening tests exist to preserve
@@ -923,8 +934,9 @@ Alternatives considered:
 
 Consequences:
 
-- Future `@spine-ts/server` tasks must record relevant JVM docs/source-note
-  inspection in task logs before broadening server behavior.
+- Future `@spine-ts/server` tasks must record relevant JVM docs and
+  corresponding `core-jvm` server source inspection in task logs before
+  broadening server behavior.
 - T-0009d.1 keeps the server validator narrow: catch proxy reflection failures
   and report repeated/map-valued/explicit optional set-once as unsupported,
   without adding new validation abstractions.

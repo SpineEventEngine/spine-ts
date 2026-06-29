@@ -1,8 +1,8 @@
 # T-0009d.1: Built-In Set-Once Transition Validation
 
-Status: Complete through fix round 9 docs/log cleanup; pending clean re-review/integration
+Status: Complete through fix round 10 docs/log cleanup; pending clean re-review/integration
 Start: `2026-06-29 14:52 WEST`
-End: `2026-06-29 17:52 WEST`
+End: `2026-06-29 18:03 WEST`
 Baseline commit: `1d939d7`
 Task log path: `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
 Branch: `task/T-0009d1-set-once-transition-validation`
@@ -342,6 +342,13 @@ Out of scope:
   `corepack pnpm docs:check` passed on `2026-06-29 17:42 WEST` with the known
   TypeDoc invalid-origin warning and expected API export counts. The final
   `corepack pnpm typecheck` passed on `2026-06-29 17:43 WEST`.
+- Fix-round 9 docs/log verification: `corepack pnpm format:check` initially
+  failed on `build-protocol/work-logs/T-0009d1.md`; after
+  `corepack pnpm exec prettier --write build-protocol/work-logs/T-0009d1.md`,
+  `corepack pnpm format:check` passed on `2026-06-29 17:55 WEST`.
+  `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts; `corepack pnpm typecheck` passed;
+  `git diff --check` passed.
 
 ## Coverage Result
 
@@ -457,6 +464,22 @@ functions 100%, lines 97.28%.
   `/private/tmp/spine-research/core-jvm/server` checkout is present, and cleans
   remaining D-0038/report/work-log/review-log evidence drift without changing
   runtime code.
+- Fix round 10 addresses round-9 maintainability/reliability review findings.
+  It inspects actual Spine `core-jvm` `server` source files:
+  `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/Transaction.java`
+  lines 54-111 and 327-408,
+  `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/TransactionalEntity.java`
+  lines 40-147,
+  `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/AbstractEntity.java`
+  lines 302-349, and
+  `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/InvalidEntityStateException.java`
+  lines 50-90. The source confirms the JVM server keeps state mutation behind
+  a transaction-owned validating builder and validates replacement state during
+  transaction commit/update. The implementation impact is to keep T-0009d.1 as
+  a narrow transition-validation boundary for future transaction/runtime code,
+  rather than adding a speculative TypeScript transaction stack in this slice.
+  This round also refreshes the final task end timestamp and the Tests Run
+  section for fix-round 9 verification evidence.
 
 ## Completion Checklist
 
