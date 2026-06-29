@@ -12,6 +12,8 @@ Requirements splitter:
 `019f1531-96a3-7870-bb40-b24fc9a456c8` (Goodall the 3rd, closed)
 Authoring sub-agent: pending
 Reviewer sub-agents: pending
+Baseline verification evidence: `CI=true corepack pnpm verify` passed on
+`2026-06-29 22:12 WEST`
 
 ## Objective
 
@@ -128,7 +130,13 @@ Skipped relevant-looking skills:
 
 ## Tests Run
 
-- Pending dependency hydration and baseline verification.
+- Dependency hydration: escalated `corepack pnpm install` passed for the fresh
+  worktree using the existing lockfile/store.
+- Baseline `CI=true corepack pnpm verify` passed on
+  `2026-06-29 22:12 WEST`: 14 test files / 129 tests; coverage statements
+  97.61%, branches 90.51%, functions 100%, lines 97.56%; TypeDoc/API reported
+  100 proto, 28 core, 59 server, and 26 storage expected exports; proto
+  lint/generate/check passed with generated output clean.
 
 ## Review Rounds
 
@@ -137,4 +145,6 @@ Skipped relevant-looking skills:
 ## Current State
 
 - Branch/worktree exists from `2ca23fd`.
-- Durable setup logs are being created before implementation delegation.
+- Durable setup logs are committed at `d9c5494`.
+- Baseline verification passed on `2026-06-29 22:12 WEST`.
+- Implementation delegation is next.
