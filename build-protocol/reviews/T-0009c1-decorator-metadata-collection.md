@@ -80,4 +80,23 @@ Round 1 fix outcome: ready for re-review.
 
 ## Follow-Up Rounds
 
-Next step: re-run all five reviewer roles against the fix range.
+### Round 2
+
+Range reviewed: `a6ce7e9..8a64dde`
+
+Review package:
+`.superpowers/sdd/review-a6ce7e9..8a64dde.diff`
+
+Reviewer sub-agents:
+
+| Role                       | Agent                                  | Result                                                                                                                                                                                                    | Disposition |
+| -------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| Code style/maintainability | `019f1389-33cc-7600-8367-7c8e2a71ad41` | P2 remaining class-owned metadata gap: `readClassDecoratorMetadata()` reads inherited `Symbol.metadata`, allowing an undecorated subclass override to borrow base-class handler metadata.                 | Fix needed. |
+| Documentation              | `019f1389-3467-7981-bd2a-63f56ac7a00c` | P3 stale coverage values remain in `TASK.md` coverage section; the tests-run section and fix report have the correct Round 1 final verification coverage.                                                 | Fix needed. |
+| TypeScript/API docs        | `019f1389-34d5-73f3-aab1-b3257d9a7aac` | CLEAN: Round 1 P1 is fixed; generic decorator public types support normally typed handlers and semantic compiler tests cover the path.                                                                    | Clean.      |
+| Security                   | `019f1389-3551-7a53-8e51-e026cf015e2e` | CLEAN: no security findings; metadata-only behavior preserved and compiler/temp-file/dynamic-import usage remains test-only.                                                                              | Clean.      |
+| Performance/reliability    | `019f1389-35de-7422-9e93-cde7426c1e13` | CLEAN: copied/reused method-function borrowing is fixed; deterministic order, class isolation, fallback parity, and registry compatibility are covered; no runtime/transport/storage behavior introduced. | Clean.      |
+
+Round 2 outcome: not clean. Dispatch a focused fixer for the inherited
+`Symbol.metadata` own-property guard and stale coverage values, then re-review
+the fix.
