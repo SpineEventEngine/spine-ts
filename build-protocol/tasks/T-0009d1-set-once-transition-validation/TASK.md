@@ -11,6 +11,7 @@ Requirements splitter: `019f13a4-a6f5-7302-94e0-7b16366b0701` (Popper)
 Branch setup commit: `88cb0f3`
 Authoring sub-agent: TBD
 Reviewer sub-agents: TBD
+Baseline verification evidence commit: TBD
 
 ## Objective
 
@@ -132,7 +133,15 @@ TBD
 
 ## Tests Run
 
-- Branch setup is based on `88cb0f3`; baseline verification is pending.
+- Branch setup is based on `88cb0f3`.
+- `corepack pnpm install --offline` failed because
+  `@bufbuild/protoc-gen-es@2.12.1` was missing from the local pnpm store.
+- `corepack pnpm install` passed with the existing lockfile and hydrated the new
+  worktree dependency metadata.
+- Baseline `CI=true corepack pnpm verify` passed on `2026-06-29 14:57 WEST`:
+  12 test files / 83 tests passed; coverage statements 98.72%, branches
+  91.16%, functions 100%, lines 98.69%; docs/API and proto checks passed with
+  the known TypeDoc invalid-origin warning.
 
 ## Coverage Result
 
@@ -173,7 +182,7 @@ TBD
 
 ## Completion Checklist
 
-- [ ] Baseline verification captured in the task worktree.
+- [x] Baseline verification captured in the task worktree.
 - [ ] Authoring sub-agent report captured and closed.
 - [ ] Five reviewer sub-agents completed and closed.
 - [ ] Review comments either fixed and re-reviewed or technically resolved.
