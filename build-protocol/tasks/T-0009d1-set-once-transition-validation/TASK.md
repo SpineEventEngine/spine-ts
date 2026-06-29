@@ -1,6 +1,6 @@
 # T-0009d.1: Built-In Set-Once Transition Validation
 
-Status: Complete through fix round 3
+Status: Complete through fix round 4
 Start: `2026-06-29 14:52 WEST`
 End: `2026-06-29 16:00 WEST`
 Baseline commit: `1d939d7`
@@ -135,6 +135,7 @@ Out of scope:
 - `build-protocol/DEVELOPER_API.md`
 - `build-protocol/reviews/T-0009d1-set-once-transition-validation.md`
 - `build-protocol/tasks/T-0009d1-set-once-transition-validation/IMPLEMENTATION_REPORT.md`
+- `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
 - `build-protocol/work-logs/T-0009d1.md`
 - `docs/USER_GUIDE.md`
 - `docs/api/README.md`
@@ -239,6 +240,31 @@ Out of scope:
   files / 96 tests; coverage statements 97.34%, branches 90.72%, functions
   100%, lines 97.26%; docs/API and proto checks passed with the known TypeDoc
   invalid-origin warning.
+- RED fix-round 4
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  failed as expected on `2026-06-29 16:15 WEST`: 3 tests failed because
+  top-level and nested proxy-forged descriptors could hide changed set-once
+  values and same-reference unsupported values bypassed shape validation.
+- GREEN fix-round 4
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-29 16:25 WEST`: 2 test files / 28 tests.
+- Fix-round 4 `corepack pnpm typecheck` passed on `2026-06-29 16:19 WEST`.
+- Fix-round 4 `corepack pnpm docs:check` passed on `2026-06-29 16:19 WEST`
+  with the known TypeDoc invalid-origin warning and expected API export counts.
+- Fix-round 4 lint/format cleanup: `corepack pnpm lint` and
+  `corepack pnpm format:check` initially failed on a validator type assertion
+  and Prettier formatting. After cleanup, focused tests, lint, and format check
+  passed on `2026-06-29 16:19 WEST`.
+- Fix-round 4 full verification initially failed on branch coverage after the
+  canonicalization helpers were added. After adding symbol-keyed repeated
+  collection, throwing nested proxy, and subclassed bytes coverage,
+  `corepack pnpm test:coverage` passed on `2026-06-29 16:25 WEST`: 13 test
+  files / 102 tests; coverage statements 96.79%, branches 90.09%, functions
+  100%, lines 96.71%.
+- Final fix-round 4 `CI=true corepack pnpm verify` passed on
+  `2026-06-29 16:29 WEST`: 13 test files / 102 tests; coverage statements
+  96.79%, branches 90.09%, functions 100%, lines 96.71%; docs/API and proto
+  checks passed with the known TypeDoc invalid-origin warning.
 
 ## Coverage Result
 
@@ -289,9 +315,15 @@ functions 100%, lines 97.26%.
 - Round 3 reviewed `01cfb47` through review package
   `.superpowers/sdd/review-cd98ca3..01cfb47.diff`; findings required hardened
   bytes/repeated collection comparison plus durable-doc consistency cleanup.
-  This fix round added RED/GREEN forged collection coverage, hardened
-  descriptor-safe comparison, refreshed durable logs, and reran required
-  verification.
+- Fix round 3 was committed as `3ccca04` with hardened bytes/repeated
+  collection comparison and durable-doc cleanup.
+- Round 4 reviewed `3ccca04` through review package
+  `.superpowers/sdd/review-cd98ca3..3ccca04.diff`; findings required
+  canonical set-once field comparison for proxy-forged top-level and nested
+  state, same-reference object/collection validation before equality
+  short-circuiting, direct singular message presence transition coverage,
+  bytes comparison without number-array materialization, and final durable-doc
+  cleanup.
 
 ## Completion Checklist
 

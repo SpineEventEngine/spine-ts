@@ -1,4 +1,4 @@
-import { create, type MessageShape } from "@bufbuild/protobuf";
+import { create, fromBinary, ScalarType, toBinary, type MessageShape } from "@bufbuild/protobuf";
 import {
   type TransitionValidationResult,
   type TransitionValidationRule,
@@ -64,6 +64,11 @@ interface FieldReadResult {
   readonly value?: unknown;
 }
 
+interface FieldPropertyReadResult {
+  readonly safe: boolean;
+  readonly value?: unknown;
+}
+
 interface SafeArrayLengthDescriptor {
   readonly enumerable: false;
   readonly value: number;
@@ -79,8 +84,12 @@ function createSetOnceTransitionRule<Schema extends DescriptorMessageSchema>(
       }
 
       return setOnceFields.flatMap((field) => {
-        const previousValue = readFieldValue(request.previous as Record<string, unknown>, field);
-        const nextValue = readFieldValue(request.next, field);
+        const previousValue = readFieldValue(
+          request.schema,
+          request.previous as Record<string, unknown>,
+          field,
+        );
+        const nextValue = readFieldValue(request.schema, request.next, field);
 
         return previousValue.safe &&
           nextValue.safe &&
@@ -94,20 +103,94 @@ function createSetOnceTransitionRule<Schema extends DescriptorMessageSchema>(
 }
 
 function readFieldValue(
+  schema: DescriptorMessageSchema,
   message: Record<string, unknown>,
   field: DescriptorFieldMetadata,
 ): FieldReadResult {
   const descriptor = Object.getOwnPropertyDescriptor(message, field.localName);
 
   if (descriptor === undefined) {
-    return { safe: !(field.localName in message), present: false };
+    const property = readFieldProperty(message, field);
+
+    return property.safe && property.value === undefined
+      ? { safe: true, present: false }
+      : { safe: false, present: false };
   }
 
   if (!isSafeDataDescriptor(descriptor)) {
     return { safe: false, present: false };
   }
 
-  return { safe: true, present: true, value: descriptor.value };
+  const property = readFieldProperty(message, field);
+
+  if (
+    !property.safe ||
+    property.value === undefined ||
+    !fieldValueShapeIsSafe(field, property.value)
+  ) {
+    return { safe: false, present: false };
+  }
+
+  const canonicalValue = canonicalizeFieldValue(schema, field, property.value);
+
+  return canonicalValue.safe
+    ? { safe: true, present: true, value: canonicalValue.value }
+    : { safe: false, present: false };
+}
+
+function readFieldProperty(
+  message: Record<string, unknown>,
+  field: DescriptorFieldMetadata,
+): FieldPropertyReadResult {
+  try {
+    return { safe: true, value: message[field.localName] };
+  } catch {
+    return { safe: false };
+  }
+}
+
+function canonicalizeFieldValue(
+  schema: DescriptorMessageSchema,
+  field: DescriptorFieldMetadata,
+  value: unknown,
+): FieldPropertyReadResult {
+  try {
+    const initialized = create(schema, {
+      [field.localName]: value,
+    });
+    const canonical = fromBinary(
+      schema,
+      toBinary(schema, initialized, { writeUnknownFields: false }),
+    ) as Record<string, unknown>;
+    const descriptor = Object.getOwnPropertyDescriptor(canonical, field.localName);
+
+    return isSafeDataDescriptor(descriptor)
+      ? { safe: true, value: descriptor.value }
+      : { safe: false };
+  } catch {
+    return { safe: false };
+  }
+}
+
+function fieldValueShapeIsSafe(field: DescriptorFieldMetadata, value: unknown): boolean {
+  const descriptor = field.descriptor;
+
+  switch (descriptor.fieldKind) {
+    case "scalar":
+      if (descriptor.scalar === ScalarType.BYTES) {
+        return value instanceof Uint8Array && readSafeUint8ArrayBytes(value) !== undefined;
+      }
+
+      return descriptor.scalar !== ScalarType.STRING || typeof value === "string";
+    case "enum":
+      return Number.isInteger(value);
+    case "message":
+      return isRecord(value);
+    case "list":
+      return Array.isArray(value) && readSafeArrayElements(value) !== undefined;
+    case "map":
+      return false;
+  }
 }
 
 function valuesAreEqual(
@@ -116,7 +199,7 @@ function valuesAreEqual(
   depth = 0,
   activePairs: WeakMap<object, WeakSet<object>> = new WeakMap<object, WeakSet<object>>(),
 ): boolean {
-  if (Object.is(previousValue, nextValue)) {
+  if (primitiveValuesAreIdentical(previousValue, nextValue)) {
     return true;
   }
 
@@ -245,7 +328,15 @@ function isSafeDataDescriptor(
   return descriptor?.enumerable === true && Object.hasOwn(descriptor, "value");
 }
 
-function readSafeUint8ArrayBytes(value: Uint8Array): readonly number[] | undefined {
+function primitiveValuesAreIdentical(previousValue: unknown, nextValue: unknown): boolean {
+  return (
+    Object.is(previousValue, nextValue) &&
+    (previousValue === null ||
+      (typeof previousValue !== "object" && typeof previousValue !== "function"))
+  );
+}
+
+function readSafeUint8ArrayBytes(value: Uint8Array): Uint8Array | undefined {
   if (Object.getPrototypeOf(value) !== Uint8Array.prototype) {
     return undefined;
   }
@@ -262,8 +353,6 @@ function readSafeUint8ArrayBytes(value: Uint8Array): readonly number[] | undefin
     return undefined;
   }
 
-  const bytes: number[] = [];
-
   for (let index = 0; index < copy.length; index += 1) {
     const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
     const byte = copy[index];
@@ -271,11 +360,9 @@ function readSafeUint8ArrayBytes(value: Uint8Array): readonly number[] | undefin
     if (byte === undefined || !isSafeDataDescriptor(descriptor) || descriptor.value !== byte) {
       return undefined;
     }
-
-    bytes.push(byte);
   }
 
-  return bytes;
+  return copy;
 }
 
 function readSafeArrayElements(value: readonly unknown[]): readonly unknown[] | undefined {
@@ -300,7 +387,7 @@ function readSafeArrayElements(value: readonly unknown[]): readonly unknown[] | 
   for (let index = 0; index < length; index += 1) {
     const descriptor = Object.getOwnPropertyDescriptor(value, String(index));
 
-    if (!isSafeDataDescriptor(descriptor)) {
+    if (!isSafeDataDescriptor(descriptor) || descriptor.value !== value[index]) {
       return undefined;
     }
 

@@ -232,3 +232,55 @@ Fix-round 3 commands run:
   `CI=true corepack pnpm verify` passed with 13 test files / 96 tests; coverage
   statements 97.34%, branches 90.72%, functions 100%, lines 97.26%; docs/API
   and proto checks passed with the known TypeDoc invalid-origin warning.
+
+## Fix Round 4
+
+Addressed round-4 findings from review package
+`.superpowers/sdd/review-cd98ca3..3ccca04.diff` and the fix-agent handoff:
+
+- Security proxy/reflection bypass: set-once field comparison now uses the
+  Protobuf-ES field read path and canonicalizes each set-once field through a
+  binary round-trip before comparison. Top-level descriptors still gate unsafe
+  inherited/accessor shapes, but descriptor values no longer decide equality.
+- Security nested message proxy bypass: nested message set-once values are
+  compared after per-field Protobuf canonicalization, so forged nested
+  descriptors cannot hide values that Protobuf serialization reads.
+- Reliability same-reference validation: object and collection values no longer
+  return equal solely because they are the same reference; unsupported objects
+  and forged/sparse collections still pass through shape validation.
+- Performance: bytes comparison now compares safe `Uint8Array` copies directly
+  and avoids materializing JS `number[]` arrays.
+- Coverage: added direct absent-to-present and present-to-absent singular
+  message set-once transition tests, plus proxy-forged top-level/nested and
+  same-reference unsupported-shape regression tests.
+- Durable docs/logs: recorded `3ccca04` as the committed fix-round 3 commit in
+  `TASK.md`, added round-4 review/fix notes to the review log, updated the work
+  log current state, and kept `TASK.md` in the task file inventory.
+
+Fix-round 4 commands run:
+
+- RED:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  failed as expected with 3 failing tests for top-level proxy, nested proxy, and
+  same-reference unsupported values.
+- GREEN:
+  `corepack pnpm vitest run packages/server/src/entity-transition-validation.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 28 tests after adding coverage for throwing nested
+  proxies and subclassed bytes.
+- Required verification:
+  `corepack pnpm typecheck` passed; `corepack pnpm docs:check` passed with the
+  known TypeDoc invalid-origin warning and expected API export counts.
+- Cleanup verification:
+  `corepack pnpm lint` and `corepack pnpm format:check` initially failed on a
+  validator type assertion and Prettier formatting; after cleanup, focused
+  tests, lint, and format check passed.
+- Coverage recovery:
+  `CI=true corepack pnpm verify` first failed on global branch coverage after
+  the canonicalization helpers were added; after focused coverage for
+  symbol-keyed repeated collections, throwing nested proxies, and subclassed
+  bytes, `corepack pnpm test:coverage` passed with 13 test files / 102 tests and
+  coverage statements 96.79%, branches 90.09%, functions 100%, lines 96.71%.
+- Full verification:
+  `CI=true corepack pnpm verify` passed with 13 test files / 102 tests; coverage
+  statements 96.79%, branches 90.09%, functions 100%, lines 96.71%; docs/API
+  and proto checks passed with the known TypeDoc invalid-origin warning.

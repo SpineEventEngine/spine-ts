@@ -64,6 +64,10 @@ const ProjectionStateSchema = messageDesc(
   0,
 ) as GenMessage<ProjectionState>;
 const GenericStateSchema = messageDesc(fileEntityMetadataFixture, 2) as GenMessage<GenericState>;
+const SetOnceDetailsSchema = messageDesc(
+  fileEntityMetadataFixture,
+  3,
+) as GenMessage<SetOnceDetails>;
 const RichSetOnceStateSchema = messageDesc(
   fileEntityMetadataFixture,
   4,
@@ -281,6 +285,191 @@ describe("entity state transition validation", () => {
     ).toBe(true);
   });
 
+  it("rejects descriptor-valid singular message set-once fields moving absent to present", () => {
+    const previous = create(RichSetOnceStateSchema, {
+      id: "rich-1",
+      fingerprint: new Uint8Array([1, 2]),
+      tags: ["alpha", "beta"],
+      mutableNote: "before",
+    });
+    const next = create(RichSetOnceStateSchema, {
+      id: "rich-1",
+      fingerprint: new Uint8Array([1, 2]),
+      tags: ["alpha", "beta"],
+      details: { value: "now-present" },
+      mutableNote: "after",
+    });
+
+    expectSetOnceViolation(
+      validateEntityStateTransition({
+        schema: RichSetOnceStateSchema,
+        previous,
+        next,
+      }),
+      "details",
+    );
+  });
+
+  it("rejects descriptor-valid singular message set-once fields moving present to absent", () => {
+    const previous = create(RichSetOnceStateSchema, {
+      id: "rich-1",
+      fingerprint: new Uint8Array([1, 2]),
+      tags: ["alpha", "beta"],
+      details: { value: "was-present" },
+      mutableNote: "before",
+    });
+    const next = create(RichSetOnceStateSchema, {
+      id: "rich-1",
+      fingerprint: new Uint8Array([1, 2]),
+      tags: ["alpha", "beta"],
+      mutableNote: "after",
+    });
+
+    expectSetOnceViolation(
+      validateEntityStateTransition({
+        schema: RichSetOnceStateSchema,
+        previous,
+        next,
+      }),
+      "details",
+    );
+  });
+
+  it("uses canonical protobuf values instead of proxy-forged top-level descriptors", () => {
+    const previous = create(ProjectionStateSchema, {
+      id: "private-previous-proxy-id",
+      name: "Draft",
+      priority: 1,
+    });
+    const changedNext = create(ProjectionStateSchema, {
+      id: "private-next-proxy-id",
+      name: "Draft",
+      priority: 1,
+    });
+    const next = new Proxy(changedNext, {
+      getOwnPropertyDescriptor(target, property) {
+        if (property === "id") {
+          return {
+            configurable: true,
+            enumerable: true,
+            value: "private-previous-proxy-id",
+            writable: true,
+          };
+        }
+
+        return Reflect.getOwnPropertyDescriptor(target, property);
+      },
+    });
+
+    const result = validateEntityStateTransition({
+      schema: ProjectionStateSchema,
+      previous,
+      next,
+    });
+
+    expectSetOnceViolation(result, "id");
+    expectNoValueLeak(result, "private-previous-proxy-id", "private-next-proxy-id");
+  });
+
+  it("uses canonical protobuf values instead of proxy-forged nested descriptors", () => {
+    const previous = createRichSetOnceState({
+      details: { value: "private-previous-details" },
+      mutableNote: "secret-previous-nested-proxy",
+    });
+    const changedDetails = create(SetOnceDetailsSchema, { value: "private-next-details" });
+    const next = createRichSetOnceState({
+      details: new Proxy(changedDetails, {
+        getOwnPropertyDescriptor(target, property) {
+          if (property === "value") {
+            return {
+              configurable: true,
+              enumerable: true,
+              value: "private-previous-details",
+              writable: true,
+            };
+          }
+
+          return Reflect.getOwnPropertyDescriptor(target, property);
+        },
+      }),
+      mutableNote: "secret-next-nested-proxy",
+    });
+
+    const result = validateEntityStateTransition({
+      schema: RichSetOnceStateSchema,
+      previous,
+      next,
+    });
+
+    expectSetOnceViolation(result, "details");
+    expectNoValueLeak(
+      result,
+      "private-previous-details",
+      "private-next-details",
+      "secret-previous-nested-proxy",
+      "secret-next-nested-proxy",
+    );
+  });
+
+  it("fails closed when nested message canonicalization cannot read protobuf values", () => {
+    const previous = createRichSetOnceState({
+      details: { value: "private-previous-throwing-details" },
+      mutableNote: "secret-previous-throwing-nested",
+    });
+    const throwingDetails = new Proxy(
+      create(SetOnceDetailsSchema, { value: "private-next-throwing-details" }),
+      {
+        get(target, property, receiver): unknown {
+          if (property === "value") {
+            throw new Error("boom");
+          }
+
+          return Reflect.get(target, property, receiver) as unknown;
+        },
+      },
+    );
+    const result = validateEntityStateTransition({
+      schema: RichSetOnceStateSchema,
+      previous,
+      next: createRichSetOnceState({
+        details: throwingDetails,
+        mutableNote: "secret-next-throwing-nested",
+      }),
+    });
+
+    expectSetOnceViolation(result, "details");
+    expectNoValueLeak(
+      result,
+      "private-previous-throwing-details",
+      "private-next-throwing-details",
+      "secret-previous-throwing-nested",
+      "secret-next-throwing-nested",
+    );
+  });
+
+  it("fails closed for same-reference unsupported set-once object and collection values", () => {
+    const sameCustomObject = new Date(0);
+    expectSetOnceViolation(validateForgedSetOnceId(sameCustomObject, sameCustomObject), "id");
+
+    const sameSparseTags = [] as string[];
+    sameSparseTags.length = 1;
+
+    expectSetOnceViolation(
+      validateEntityStateTransition({
+        schema: RichSetOnceStateSchema,
+        previous: createRichSetOnceState({
+          tags: sameSparseTags,
+          mutableNote: "secret-previous-same-tags",
+        }),
+        next: createRichSetOnceState({
+          tags: sameSparseTags,
+          mutableNote: "secret-next-same-tags",
+        }),
+      }),
+      "tags",
+    );
+  });
+
   it("fails closed for forged set-once bytes collections", () => {
     const previousWithOverriddenMethod = createRichSetOnceState({
       fingerprint: new Uint8Array([1, 2]),
@@ -334,6 +523,24 @@ describe("entity state transition validation", () => {
 
     expectSetOnceViolation(proxyResult, "fingerprint");
     expectNoValueLeak(proxyResult, "secret-previous-bytes-proxy", "secret-next-bytes-proxy");
+
+    class SubclassedBytes extends Uint8Array {}
+    const changedPrototypeBytes = new SubclassedBytes([1, 2]);
+    const changedPrototypeResult = validateEntityStateTransition({
+      schema: RichSetOnceStateSchema,
+      previous: createRichSetOnceState({ mutableNote: "secret-previous-bytes-prototype" }),
+      next: createRichSetOnceState({
+        fingerprint: changedPrototypeBytes,
+        mutableNote: "secret-next-bytes-prototype",
+      }),
+    });
+
+    expectSetOnceViolation(changedPrototypeResult, "fingerprint");
+    expectNoValueLeak(
+      changedPrototypeResult,
+      "secret-previous-bytes-prototype",
+      "secret-next-bytes-prototype",
+    );
   });
 
   it("fails closed for forged set-once repeated collections", () => {
@@ -435,6 +642,28 @@ describe("entity state transition validation", () => {
       accessorIndexResult,
       "secret-previous-tags-accessor",
       "secret-next-tags-accessor",
+    );
+
+    const symbolKeyTags = ["alpha"];
+    Object.defineProperty(symbolKeyTags, Symbol("hidden"), {
+      enumerable: true,
+      value: "private-next-symbol-tag",
+    });
+    const symbolKeyResult = validateEntityStateTransition({
+      schema: RichSetOnceStateSchema,
+      previous: createRichSetOnceState({ mutableNote: "secret-previous-tags-symbol" }),
+      next: createRichSetOnceState({
+        tags: symbolKeyTags,
+        mutableNote: "secret-next-tags-symbol",
+      }),
+    });
+
+    expectSetOnceViolation(symbolKeyResult, "tags");
+    expectNoValueLeak(
+      symbolKeyResult,
+      "secret-previous-tags-symbol",
+      "secret-next-tags-symbol",
+      "private-next-symbol-tag",
     );
   });
 
