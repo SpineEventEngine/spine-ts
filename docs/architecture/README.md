@@ -170,8 +170,9 @@ later runtime fan-out remains possible.
 The standard decorator adapter is metadata-only syntax over the same explicit
 contract. `@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply` require
 explicit generated Protobuf-ES schemas, collect declarations from public
-instance methods, and `materializeDecoratedEntityHandlers()` scans the entity
-class's own prototype methods to produce ordinary `EntityHandlersMetadata`.
+instance methods into standard per-class decorator metadata, and
+`materializeDecoratedEntityHandlers()` confirms the recorded handler names are
+still own prototype methods before producing ordinary `EntityHandlersMetadata`.
 This keeps decorated classes compatible with `HandlerMetadataRegistry` and
 preserves `defineEntityHandlers()` as the canonical fallback for environments
 that avoid decorators. The adapter does not use legacy `emitDecoratorMetadata`,

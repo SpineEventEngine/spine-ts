@@ -28,8 +28,9 @@ Public additions:
 - `materializeDecoratedEntityHandlers(entityType, stateSchema)`
 
 Decorators require explicit generated Protobuf-ES schemas and collect metadata
-only. `materializeDecoratedEntityHandlers()` scans the requested entity class's
-own prototype methods and returns the same frozen `EntityHandlersMetadata`
+only. `materializeDecoratedEntityHandlers()` materializes the requested entity
+class's decorator records after confirming the recorded handler names are still
+own prototype methods, and returns the same frozen `EntityHandlersMetadata`
 shape produced by `defineEntityHandlers()` and accepted by
 `HandlerMetadataRegistry`.
 
@@ -110,10 +111,9 @@ canonical fallback.
 ## Concerns And Follow-Up
 
 - Reviewer sub-agents were not spawned by this implementation sub-agent because
-  the handoff explicitly said not to spawn sub-agents. Round 1 review remains
-  pending for the orchestrator/review phase.
-- The implementation uses a module-private `WeakMap` keyed by decorated method
-  functions to remember decorator records, then materializes only records found
-  on the requested class's own prototype. This is not an exposed handler
-  registry and does not register classes globally, but reviewers should inspect
-  this choice against the D-0037 class-owned metadata intent.
+  the handoff explicitly said not to spawn sub-agents. Round 1 review found the
+  original module-private method-function `WeakMap` was not truly class-owned
+  when decorated methods were copied between prototypes.
+- The Round 1 fix replaces that storage with standard per-class decorator
+  metadata and adds copied-method regression coverage. Re-review is the next
+  protocol step.

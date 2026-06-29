@@ -3,10 +3,24 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { CommandSchema, EventSchema, file_spine_options } from "@spine-ts/proto";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { transpileModule, ModuleKind, ScriptTarget } from "typescript";
+import { join, relative } from "node:path";
+import {
+  createCompilerHost,
+  createProgram,
+  createSourceFile,
+  flattenDiagnosticMessageText,
+  getPreEmitDiagnostics,
+  ModuleKind,
+  parseJsonConfigFileContent,
+  readConfigFile,
+  ScriptTarget,
+  sys,
+  transpileModule,
+  type CompilerOptions,
+  type Diagnostic,
+} from "typescript";
 import { describe, expect, it } from "vitest";
 import { serverEntityMetadataTestFixtures } from "../test-fixtures/entity-metadata-fixtures.js";
 
@@ -79,6 +93,8 @@ interface DecoratedClassFactoryOutput {
   readonly DecoratedFallbackProjection: new () => object;
   readonly FirstDecoratedProjection: new () => object;
   readonly SecondDecoratedProjection: new () => object;
+  readonly SourceCopiedProjection: new () => object;
+  readonly BorrowingProjection: new () => object;
 }
 
 async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
@@ -157,12 +173,29 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
         }
       }
 
+      class SourceCopiedProjection {
+        @Assign(CommandSchema)
+        assignCreate(command) {
+          void command;
+        }
+      }
+
+      class BorrowingProjection {}
+
+      Object.defineProperty(
+        BorrowingProjection.prototype,
+        "assignCreate",
+        Object.getOwnPropertyDescriptor(SourceCopiedProjection.prototype, "assignCreate"),
+      );
+
       return {
         DecoratedProjection,
         DecoratedAggregate,
         DecoratedFallbackProjection,
         FirstDecoratedProjection,
         SecondDecoratedProjection,
+        SourceCopiedProjection,
+        BorrowingProjection,
       };
     }
   `;
@@ -190,7 +223,88 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
   });
 }
 
+function createFixtureCompilerOptions(): CompilerOptions {
+  const configPath = join(process.cwd(), "tsconfig.base.json");
+  const configFile = readConfigFile(configPath, (fileName) => readFileSync(fileName, "utf8"));
+
+  if (configFile.error !== undefined) {
+    throw new Error(formatDiagnostic(configFile.error));
+  }
+
+  const parsed = parseJsonConfigFileContent(configFile.config, sys, process.cwd());
+
+  return {
+    ...parsed.options,
+    noEmit: true,
+  };
+}
+
+function compileSemanticTypeScriptFixture(source: string): readonly string[] {
+  const fixturePath = join(
+    process.cwd(),
+    "packages/server/src/typed-decorator-semantic-fixture.ts",
+  );
+  const options = createFixtureCompilerOptions();
+  const host = createCompilerHost(options);
+  const hostReadFile = host.readFile.bind(host);
+  const hostFileExists = host.fileExists.bind(host);
+  const hostGetSourceFile = host.getSourceFile.bind(host);
+
+  host.readFile = (fileName) => (fileName === fixturePath ? source : hostReadFile(fileName));
+  host.fileExists = (fileName) => fileName === fixturePath || hostFileExists(fileName);
+  host.getSourceFile = (fileName, languageVersion, onError, shouldCreateNewSourceFile) =>
+    fileName === fixturePath
+      ? createSourceFile(fileName, source, languageVersion, true)
+      : hostGetSourceFile(fileName, languageVersion, onError, shouldCreateNewSourceFile);
+
+  const program = createProgram([fixturePath], options, host);
+
+  return getPreEmitDiagnostics(program).map(formatDiagnostic);
+}
+
+function formatDiagnostic(diagnostic: Diagnostic): string {
+  const message = flattenDiagnosticMessageText(diagnostic.messageText, "\n");
+  const diagnosticCode = String(diagnostic.code);
+
+  if (diagnostic.file === undefined || diagnostic.start === undefined) {
+    return `TS${diagnosticCode}: ${message}`;
+  }
+
+  const position = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start);
+  const line = String(position.line + 1);
+  const character = String(position.character + 1);
+
+  return `${relative(
+    process.cwd(),
+    diagnostic.file.fileName,
+  )}:${line}:${character} TS${diagnosticCode}: ${message}`;
+}
+
 describe("handler decorators", () => {
+  it("semantically compiles typed decorated handler methods under the repo compiler", () => {
+    const diagnostics = compileSemanticTypeScriptFixture(`
+      import { Assign } from "./handler-decorators.js";
+      import type { DescriptorMessageSchema } from "./entity-metadata.js";
+
+      declare const CommandSchema: DescriptorMessageSchema;
+
+      interface CreateTask {
+        readonly taskId: string;
+      }
+
+      class TypedAggregate {
+        @Assign(CommandSchema)
+        create(command: CreateTask): void {
+          void command.taskId;
+        }
+      }
+
+      void TypedAggregate;
+    `);
+
+    expect(diagnostics).toEqual([]);
+  });
+
   it("materializes every decorator kind into frozen handler metadata in declaration order", async () => {
     const { DecoratedProjection } = await createDecoratedClasses();
 
@@ -262,6 +376,22 @@ describe("handler decorators", () => {
     expect(first.handlers.map((handler) => handler.methodName)).toEqual(["assignCreate"]);
     expect(second.handlers.map((handler) => handler.methodName)).toEqual(["applyCreated"]);
     expect(new HandlerMetadataRegistry().listHandlers()).toEqual([]);
+  });
+
+  it("does not borrow decorator metadata from a copied method function", async () => {
+    const { BorrowingProjection, SourceCopiedProjection } = await createDecoratedClasses();
+
+    const source = materializeDecoratedEntityHandlers(
+      SourceCopiedProjection,
+      ProjectionStateSchema,
+    );
+    const borrowing = materializeDecoratedEntityHandlers(
+      BorrowingProjection,
+      ProjectionStateSchema,
+    );
+
+    expect(source.handlers.map((handler) => handler.methodName)).toEqual(["assignCreate"]);
+    expect(borrowing.handlers).toEqual([]);
   });
 
   it("uses the same duplicate policy as explicit handler metadata", async () => {

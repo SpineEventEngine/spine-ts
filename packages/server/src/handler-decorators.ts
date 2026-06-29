@@ -19,18 +19,24 @@ interface DecoratedHandlerRecord {
 }
 
 /** Standard TypeScript method decorator accepted by Spine handler declarations. */
-export type HandlerMethodDecorator = (
-  value: HandlerMethodValue,
-  context: ClassMethodDecoratorContext<object, HandlerMethodValue>,
+export type HandlerMethodDecorator = <
+  This extends object,
+  Parameters extends readonly unknown[],
+  Return,
+>(
+  value: HandlerMethodValue<This, Parameters, Return>,
+  context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
 ) => void;
 
 /** Instance method shape accepted by public handler decorators. */
-export type HandlerMethodValue = (this: object, ...parameters: readonly unknown[]) => unknown;
+export type HandlerMethodValue<
+  This extends object = object,
+  Parameters extends readonly unknown[] = readonly unknown[],
+  Return = unknown,
+> = (this: This, ...parameters: Parameters) => Return;
 
-const decoratedHandlersByMethod = new WeakMap<
-  HandlerMethodValue,
-  readonly DecoratedHandlerRecord[]
->();
+const handlerDecoratorMetadataKey = Symbol("@spine-ts/server.handlerDecorators");
+const decoratorMetadataSymbol = installDecoratorMetadataSymbol();
 
 /**
  * Declare a command assignee method with an explicit Protobuf-ES command schema.
@@ -133,7 +139,10 @@ function createHandlerDecorator(
   schema: DescriptorMessageSchema,
   options: EventApplicationOptions = {},
 ): HandlerMethodDecorator {
-  return (value, context) => {
+  return <This extends object, Parameters extends readonly unknown[], Return>(
+    _value: HandlerMethodValue<This, Parameters, Return>,
+    context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
+  ): void => {
     if (context.static || context.private) {
       throw new TypeError("Spine handler decorators must be applied to public instance methods.");
     }
@@ -142,7 +151,6 @@ function createHandlerDecorator(
       throw new TypeError("Spine handler decorators require string-named methods.");
     }
 
-    const previous = decoratedHandlersByMethod.get(value) ?? [];
     const record: DecoratedHandlerRecord = Object.freeze({
       kind,
       schema,
@@ -150,28 +158,87 @@ function createHandlerDecorator(
       ...(kind === "event-application" ? { allowImport: options.allowImport ?? false } : {}),
     });
 
-    decoratedHandlersByMethod.set(value, Object.freeze([...previous, record]));
+    const metadata = requireDecoratorMetadata(context);
+    const previous = readDecoratedHandlers(metadata);
+
+    Object.defineProperty(metadata, handlerDecoratorMetadataKey, {
+      configurable: true,
+      enumerable: false,
+      value: Object.freeze([...previous, record]),
+      writable: true,
+    });
   };
 }
 
 function collectOwnDecoratedHandlers<Instance extends object>(
   entityType: EntityClass<Instance>,
 ): readonly DecoratedHandlerRecord[] {
-  const records: DecoratedHandlerRecord[] = [];
+  const metadata = readClassDecoratorMetadata(entityType);
 
-  for (const methodName of Object.getOwnPropertyNames(entityType.prototype)) {
-    if (methodName === "constructor") {
-      continue;
-    }
-
-    const descriptor = Object.getOwnPropertyDescriptor(entityType.prototype, methodName);
-
-    if (typeof descriptor?.value !== "function") {
-      continue;
-    }
-
-    records.push(...(decoratedHandlersByMethod.get(descriptor.value as HandlerMethodValue) ?? []));
+  if (metadata === undefined) {
+    return Object.freeze([]);
   }
 
+  const records = readDecoratedHandlers(metadata).filter((record) => {
+    const descriptor = Object.getOwnPropertyDescriptor(entityType.prototype, record.methodName);
+
+    return typeof descriptor?.value === "function";
+  });
+
   return Object.freeze(records);
+}
+
+function installDecoratorMetadataSymbol(): symbol {
+  const existingMetadata = Reflect.get(Symbol, "metadata");
+
+  if (typeof existingMetadata === "symbol") {
+    return existingMetadata;
+  }
+
+  const metadata = Symbol("Symbol.metadata");
+
+  Object.defineProperty(Symbol, "metadata", {
+    configurable: true,
+    enumerable: false,
+    value: metadata,
+    writable: false,
+  });
+
+  return metadata;
+}
+
+function requireDecoratorMetadata(context: {
+  readonly metadata: Record<PropertyKey, unknown> | undefined;
+}): Record<PropertyKey, unknown> {
+  if (context.metadata === undefined) {
+    throw new TypeError("Spine handler decorators require standard decorator metadata support.");
+  }
+
+  return context.metadata;
+}
+
+function readClassDecoratorMetadata<Instance extends object>(
+  entityType: EntityClass<Instance>,
+): Record<PropertyKey, unknown> | undefined {
+  const metadata = (entityType as unknown as Readonly<Record<symbol, unknown>>)[
+    decoratorMetadataSymbol
+  ];
+
+  if (metadata === null || typeof metadata !== "object") {
+    return undefined;
+  }
+
+  return metadata as Record<PropertyKey, unknown>;
+}
+
+function readDecoratedHandlers(
+  metadata: Record<PropertyKey, unknown>,
+): readonly DecoratedHandlerRecord[] {
+  if (!Object.hasOwn(metadata, handlerDecoratorMetadataKey)) {
+    return [];
+  }
+
+  const value = metadata[handlerDecoratorMetadataKey];
+
+  return Array.isArray(value) ? (value as readonly DecoratedHandlerRecord[]) : [];
 }

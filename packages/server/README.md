@@ -68,12 +68,12 @@ instance fields are rejected without invoking user code. The API does not
 invoke handlers, enforce transactions or `(set_once)`, build repositories, write
 storage, register buses, start transport, or implement gRPC services.
 
-The decorator API is an adapter over that explicit contract. Decorators collect
-metadata from public instance methods only, require explicit generated schemas,
-and are materialized by scanning the entity class's own prototype methods.
-Decorators do not use `emitDecoratorMetadata`, `reflect-metadata`, parameter
-decorators, inferred message types, a global handler registry, or handler
-invocation.
+The decorator API is an adapter over that explicit contract. Decorators record
+standard per-class metadata from public instance methods only, require explicit
+generated schemas, and materialize after confirming the handler names still
+refer to the entity class's own prototype methods. Decorators do not use
+`emitDecoratorMetadata`, `reflect-metadata`, parameter decorators, inferred
+message types, a global handler registry, or handler invocation.
 
 `HandlerMetadataRegistry` registers existing `EntityHandlersMetadata` objects
 and exposes frozen listing/lookup arrays by entity state full type name, handler

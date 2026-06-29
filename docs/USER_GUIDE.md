@@ -309,13 +309,13 @@ registry.findEventApplication(TaskStateSchema.typeName, TaskCreatedSchema.typeNa
   .methodName; // "onCreated"
 ```
 
-`@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply` collect metadata
-from public instance methods only. `materializeDecoratedEntityHandlers()` scans
-the entity class's own prototype methods and returns the same frozen
-`EntityHandlersMetadata` shape as `defineEntityHandlers()`. Decorators do not
-instantiate the entity, invoke methods, unpack payloads, register in a global
-handler registry, validate transactions, write storage, start buses, or start
-transport.
+`@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply` record standard
+per-class metadata from public instance methods only.
+`materializeDecoratedEntityHandlers()` confirms the recorded handler names are
+still own prototype methods and returns the same frozen `EntityHandlersMetadata`
+shape as `defineEntityHandlers()`. Decorators do not instantiate the entity,
+invoke methods, unpack payloads, register in a global handler registry, validate
+transactions, write storage, start buses, or start transport.
 
 Use `HandlerMetadataRegistry` when application assembly or tests need a
 caller-owned lookup view over one or more `EntityHandlersMetadata` objects:

@@ -35,8 +35,9 @@ prototype data methods declared with normal class method syntax. Decorator
 adapter exports include `@Assign`, `@Command`, `@Subscribe`, `@React`,
 `@Apply`, `materializeDecoratedEntityHandlers()`, `HandlerMethodDecorator`, and
 `HandlerMethodValue`. Decorators require explicit Protobuf-ES schema arguments
-and materialize into the same `EntityHandlersMetadata` contract as explicit
-registration. The server registry exports include `HandlerMetadataRegistry`,
+and record standard per-class metadata that materializes into the same
+`EntityHandlersMetadata` contract as explicit registration. The server registry
+exports include `HandlerMetadataRegistry`,
 `HandlerMetadataRegistryLookup`, `RegisteredHandlerMetadata`, and
 `HandlerMetadataRegistryError` for caller-owned lookup-only registration and
 duplicate-policy validation. These APIs are metadata-only and do not execute
