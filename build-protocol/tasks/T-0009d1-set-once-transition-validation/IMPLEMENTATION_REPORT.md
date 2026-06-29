@@ -520,6 +520,22 @@ All five required reviewer roles reported CLEAN on review package
 All reviewer agents were closed after report capture. No further T-0009d.1 fix
 comments remain before integration.
 
+## Main Integration
+
+Merged `task/T-0009d1-set-once-transition-validation` into `main` and ran full
+main verification.
+
+Verification:
+
+- Initial `CI=true corepack pnpm verify` stopped because `node_modules` was not
+  up to date with the merged lockfile.
+- Sandboxed `corepack pnpm install` failed on registry DNS after recreating
+  `node_modules`; escalated `corepack pnpm install` restored dependencies.
+- `CI=true corepack pnpm verify` passed on `main`: typecheck, lint, format,
+  tests, coverage, docs/API, proto lint, proto generate, and generated
+  cleanliness checks passed. Coverage statements 97.38%, branches 90.78%,
+  functions 100%, lines 97.31%.
+
 ## Fix Round 10
 
 Addressed round-9 maintainability/reliability review findings without changing

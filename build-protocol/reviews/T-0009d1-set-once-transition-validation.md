@@ -446,6 +446,24 @@ Disposition:
 - All reviewer agents were closed after their reports were captured.
 - No further fix comments remain for T-0009d.1 before integration.
 
+## Main Integration Verification
+
+Integration:
+
+- Merged `task/T-0009d1-set-once-transition-validation` into `main` with merge
+  commit message `Merge T-0009d.1 set-once transition validation`.
+
+Verification:
+
+- First `CI=true corepack pnpm verify` stopped because `node_modules` was not
+  up to date with the merged lockfile.
+- Sandboxed `corepack pnpm install` failed on registry DNS after recreating
+  `node_modules`; escalated `corepack pnpm install` restored dependencies.
+- `CI=true corepack pnpm verify` then passed on `main`: typecheck, lint,
+  format, tests, coverage, docs/API, proto lint, proto generate, and generated
+  cleanliness checks all passed. Coverage: statements 97.38%, branches 90.78%,
+  functions 100%, lines 97.31%.
+
 ## Round 9 Review
 
 Review package `.superpowers/sdd/review-cd98ca3..0d05294.diff` was reviewed by

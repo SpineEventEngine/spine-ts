@@ -1,8 +1,8 @@
 # T-0009d.1: Built-In Set-Once Transition Validation
 
-Status: Round 20 clean re-review complete; ready for integration
+Status: Complete and integrated to `main`
 Start: `2026-06-29 14:52 WEST`
-End: `2026-06-29 19:39 WEST`
+End: `2026-06-29 19:54 WEST`
 Baseline commit: `1d939d7`
 Task log path: `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
 Branch: `task/T-0009d1-set-once-transition-validation`
@@ -636,6 +636,10 @@ functions 100%, lines 97.31%.
 - Round 20 clean re-review completed with all five role reviewers clean for
   maintainability, documentation, TypeScript/API docs, security, and
   performance/reliability. The task is ready for integration.
+- Integration to `main` completed with merge commit and full main-branch
+  verification passing: 13 test files / 111 tests, coverage statements 97.38%,
+  branches 90.78%, functions 100%, lines 97.31%; docs/API and proto workflow
+  checks passed.
 
 ## Completion Checklist
 
@@ -645,6 +649,6 @@ functions 100%, lines 97.31%.
       captured review round.
 - [x] Review comments either fixed and re-reviewed or technically resolved.
 - [x] Full verification passed on the task branch.
-- [ ] Task branch merged back to `main`.
-- [ ] Full verification passed on `main`.
+- [x] Task branch merged back to `main`.
+- [x] Full verification passed on `main`.
 - [x] Durable task/work/review logs updated with final commits and verification.
