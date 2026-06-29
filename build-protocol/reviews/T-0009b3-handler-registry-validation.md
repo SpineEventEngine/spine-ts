@@ -4,12 +4,12 @@ Task log: `build-protocol/tasks/T-0009b3-handler-registry-validation/TASK.md`
 Work log: `build-protocol/work-logs/T-0009b3.md`
 Branch: `task/T-0009b3-handler-registry-validation`
 Baseline commit: `3ecdaf0`
-Reviewed commit/diff basis: Implementation diff before final commit
+Reviewed commit/diff basis: `6a993212a5fa436a19214fc03ac52901a4035bdd..2c03b6a82902e4abdc066c67703354bf9140944f`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b3-handler-registry-validation`
 Reviewer roles: code style/maintainability; documentation; TypeScript/API docs; security; performance/reliability
-Reviewer sub-agents: Pending
+Reviewer sub-agents: Round 1 completed
 Review timestamp: `2026-06-29 13:02 WEST`
-Status: Implementation self-verified; formal reviewer sub-agents pending
+Status: Round 1 requested a narrow durable-log/docs follow-up; no production-code change requested here
 
 ## Scope To Review
 
@@ -43,4 +43,12 @@ Status: Implementation self-verified; formal reviewer sub-agents pending
     mutation are introduced.
   - Verification: final `CI=true corepack pnpm verify` passed with 11 test files
     / 75 tests and the known TypeDoc invalid-origin warning.
-- Formal role-specific reviewer sub-agents remain pending for the orchestrator.
+- Round 1 role-specific reviewers:
+  - Reviewed the immutable implementation range
+    `6a993212a5fa436a19214fc03ac52901a4035bdd..2c03b6a82902e4abdc066c67703354bf9140944f`.
+  - Required only durable-log/docs corrections: replace stale pending/final-HEAD
+    wording with the reviewed implementation commit/range, record round 1
+    outcomes, and include command reactions in the allowed fan-out scope.
+  - This review log is an audit record for the reviewed implementation range;
+    later follow-up commits should be recorded separately instead of changing
+    the reviewed range retroactively.

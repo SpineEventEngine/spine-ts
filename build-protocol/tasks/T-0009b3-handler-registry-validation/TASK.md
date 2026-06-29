@@ -9,11 +9,11 @@ Branch: `task/T-0009b3-handler-registry-validation`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b3-handler-registry-validation`
 Requirements splitter: `019f1334-c2a6-7463-ba98-6dbd12020957` (Parfit)
 Authoring sub-agent: T-0009b.3 implementation sub-agent
-Reviewer sub-agents: Pending
+Reviewer sub-agents: Round 1 completed; durable-log/docs follow-up requested
 Branch setup commit: `041dc61`
 Implementation baseline commit: `6a99321`
-Implementation commit: Pending final commit after log update
-Final branch HEAD: Pending final commit after log update
+Implementation commit reviewed in round 1: `2c03b6a82902e4abdc066c67703354bf9140944f`
+Final reviewed implementation HEAD: `2c03b6a82902e4abdc066c67703354bf9140944f`
 
 ## Objective
 
@@ -82,11 +82,11 @@ Selected skills read before task actions:
 
 Skills passed to sub-agents/reviewers:
 
-| Recipient           | Skills/Instructions Passed                                                          | Notes                                                                                         |
-| ------------------- | ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| Splitter            | Protocol/spec docs, T-0009b logs, current server sources, `epic-breakdown-advisor`. | Produced T-0009b.3 recommendation with no blockers; splitter was closed after result capture. |
-| Authoring sub-agent | TDD, JavaScript testing, TypeScript/API, ADR/domain, verification instructions.     | Implemented registry, tests, docs, API guard, and logs in this worktree.                      |
-| Reviewers           | Pending.                                                                            | Formal role-specific review remains for the orchestrator after this implementation commit.    |
+| Recipient           | Skills/Instructions Passed                                                          | Notes                                                                                                                      |
+| ------------------- | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Splitter            | Protocol/spec docs, T-0009b logs, current server sources, `epic-breakdown-advisor`. | Produced T-0009b.3 recommendation with no blockers; splitter was closed after result capture.                              |
+| Authoring sub-agent | TDD, JavaScript testing, TypeScript/API, ADR/domain, verification instructions.     | Implemented registry, tests, docs, API guard, and logs in this worktree.                                                   |
+| Reviewers           | Round 1 completed.                                                                  | Review found stale durable-log/docs metadata and one scope wording gap; this follow-up fixes only those docs/log findings. |
 
 Skipped relevant-looking skills:
 
@@ -111,8 +111,8 @@ In scope:
   registry.
 - Duplicate validation for one event applier per entity state/event type in one
   registry.
-- Many-to-one event subscribers/reactors where later event fan-out semantics need
-  it.
+- Many-to-one event subscribers/reactors and command reactions where later
+  fan-out semantics need it.
 - Focused TDD tests, public exports, TypeDoc comments, API docs guard, package
   README, framework user guide, API README, architecture notes, and durable logs.
 
@@ -236,9 +236,15 @@ Out of scope:
 
 ## Review Rounds
 
-- Implementation sub-agent self-verification is complete; formal reviewer
-  sub-agents remain pending for the orchestrator.
+- Implementation sub-agent self-verification completed against
+  `2c03b6a82902e4abdc066c67703354bf9140944f`.
+- Round 1 reviewers checked the implementation range
+  `6a993212a5fa436a19214fc03ac52901a4035bdd..2c03b6a82902e4abdc066c67703354bf9140944f`.
+  Their follow-up was limited to stale durable-log/docs metadata and the scope
+  wording for command reactions; this review-fix commit updates those records
+  without changing production code.
 
 ## Integration Result
 
-Implementation ready for review/merge by the orchestrator after final commit.
+Implementation range reviewed in round 1; this file is an audit record, not a
+live branch-HEAD indicator.
