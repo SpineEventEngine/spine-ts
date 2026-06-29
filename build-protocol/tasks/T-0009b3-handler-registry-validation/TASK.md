@@ -1,0 +1,191 @@
+# T-0009b.3: Handler Metadata Registry And Validation
+
+Status: In progress
+Start: `2026-06-29 12:49 WEST`
+End: Pending
+Baseline commit: `3ecdaf0`
+Task log path: `build-protocol/tasks/T-0009b3-handler-registry-validation/TASK.md`
+Branch: `task/T-0009b3-handler-registry-validation`
+Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009b3-handler-registry-validation`
+Requirements splitter: `019f1334-c2a6-7463-ba98-6dbd12020957` (Parfit)
+Authoring sub-agent: Pending
+Reviewer sub-agents: Pending
+Implementation commit: Pending branch commit
+Final branch HEAD: Pending branch commit
+
+## Objective
+
+Add the first caller-owned `@spine-ts/server` handler metadata registry over
+`EntityHandlersMetadata`. The registry must validate duplicate/conflicting
+handler declarations and expose deterministic frozen lookup/listing views for
+later decorator, transaction, repository, and runtime tasks. It must not invoke
+handlers, instantiate entities, mutate global process state, touch storage,
+start buses, or introduce ZeroMQ.
+
+## Splitter Result
+
+The requirements splitter selected `T-0009b.3 Handler Metadata Registry And
+Validation` as the next non-blocked implementable task after T-0009b.
+
+Staged roadmap:
+
+1. `T-0009b.3 Handler Metadata Registry And Validation`
+2. `T-0009b.4 Docs/API Guard For Handler Registry`
+3. `T-0009c` decorator adapter targeting the explicit metadata contract
+4. Transaction kernel and state-transition validation such as `(set_once)`
+5. Entity base classes and repository assembly skeleton
+
+No blocking questions were identified.
+
+## Required Inputs Read
+
+- `build-protocol/BUILD_PROTOCOL.md`
+- `build-protocol/TECHNICAL_SPEC.md`
+- `build-protocol/PROTOBUF_CONTRACT.md`
+- `build-protocol/RUNTIME_ARCHITECTURE.md`
+- `build-protocol/DEVELOPER_API.md`
+- `build-protocol/CODE_QUALITY.md`
+- `build-protocol/DECISION_LOG.md`
+- `build-protocol/tasks/T-0009b-handler-metadata/TASK.md`
+- `build-protocol/reviews/T-0009b-handler-metadata.md`
+- `packages/server/src/handler-metadata.ts`
+- `packages/server/src/handler-metadata.test.ts`
+- `packages/server/src/index.ts`
+- `packages/server/src/index.test.ts`
+- `docs/USER_GUIDE.md`
+- `docs/api/README.md`
+- `docs/architecture/README.md`
+- `packages/server/README.md`
+
+## Skill Applicability
+
+Canonical checklist: `BUILD_PROTOCOL.md#skills-and-tooling` remains governing.
+
+Selected skills read before task actions:
+
+| Skill                            | Source                                                     | Applicability                             | Instructions Applied                                                        |
+| -------------------------------- | ---------------------------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------- |
+| `subagent-driven-development`    | `~/.agents/skills/subagent-driven-development/SKILL.md`    | Required protocol execution model.        | Splitter, implementer, five reviewer roles, review loop, and agent closure. |
+| `using-git-worktrees`            | `~/.agents/skills/using-git-worktrees/SKILL.md`            | Required isolated worktree per task.      | Use project-local `.worktrees` branch/worktree and baseline verification.   |
+| `epic-breakdown-advisor`         | `~/.agents/skills/epic-breakdown-advisor/SKILL.md`         | Requirements splitting for next slice.    | Split T-0009 continuation into implementable stages.                        |
+| `requesting-code-review`         | `~/.agents/skills/requesting-code-review/SKILL.md`         | Mandatory review before task completion.  | Review every committed implementation/fix/doc slice.                        |
+| `receiving-code-review`          | `~/.agents/skills/receiving-code-review/SKILL.md`          | Required reviewer comment handling.       | Verify comments before fix dispatch; no performative acceptance.            |
+| `verification-before-completion` | `~/.agents/skills/verification-before-completion/SKILL.md` | Required before completion claims.        | Run and read verification before merge/completion.                          |
+| `api-design-principles`          | `~/.agents/skills/api-design-principles/SKILL.md`          | Public registry API design.               | Keep lookup API small, deterministic, and developer-friendly.               |
+| `architecture-decision-records`  | `~/.agents/skills/architecture-decision-records/SKILL.md`  | D-0036 duplicate-policy decision.         | Record context, decision, alternatives, consequences, and follow-up.        |
+| `domain-modeling`                | `~/.agents/skills/domain-modeling/SKILL.md`                | Handler terminology and duplicate policy. | Preserve Spine command/event handler vocabulary and role boundaries.        |
+| `typescript-advanced-types`      | `~/.agents/skills/typescript-advanced-types/SKILL.md`      | Typed registry and lookup contracts.      | Prefer useful generics without opaque conditional-type machinery.           |
+| `test-driven-development`        | `~/.agents/skills/test-driven-development/SKILL.md`        | New feature implementation.               | Authoring sub-agent must write failing tests before production code.        |
+| `javascript-testing-patterns`    | `~/.agents/skills/javascript-testing-patterns/SKILL.md`    | Vitest coverage and focused fixtures.     | Use behavior-level registry validation tests and full verification.         |
+
+Skills passed to sub-agents/reviewers:
+
+| Recipient           | Skills/Instructions Passed                                                          | Notes                                                                                                 |
+| ------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Splitter            | Protocol/spec docs, T-0009b logs, current server sources, `epic-breakdown-advisor`. | Produced T-0009b.3 recommendation with no blockers; splitter was closed after result capture.         |
+| Authoring sub-agent | Pending.                                                                            | Must receive TDD, TypeScript/API, ADR, worktree, verification, and no-runtime-execution instructions. |
+| Reviewers           | Pending.                                                                            | Must receive role-specific focus, diff package, and instruction to close after result capture.        |
+
+Skipped relevant-looking skills:
+
+| Skill                   | Source                                           | Reason Skipped                                                                           |
+| ----------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `cqrs-implementation`   | `~/.agents/skills/cqrs-implementation/SKILL.md`  | Registry validation is still metadata-only and does not implement read/write processing. |
+| `saga-orchestration`    | `~/.agents/skills/saga-orchestration/SKILL.md`   | No process-manager orchestration or compensating workflow is in scope.                   |
+| `event-store-design`    | `~/.agents/skills/event-store-design/SKILL.md`   | No event persistence, replay, or storage adapter work is in scope.                       |
+| `security-threat-model` | `~/.codex/skills/security-threat-model/SKILL.md` | No threat model requested; security reviewer will inspect the bounded diff.              |
+
+## Scope
+
+In scope:
+
+- Caller-owned `HandlerMetadataRegistry` or equivalent registry builder in
+  `@spine-ts/server`.
+- Registration of existing `EntityHandlersMetadata` objects produced by
+  `defineEntityHandlers()`.
+- Frozen deterministic listing and lookup views by entity state, handler kind,
+  and message full type name.
+- Duplicate validation for one command assignment per command type in one
+  registry.
+- Duplicate validation for one event applier per entity state/event type in one
+  registry.
+- Many-to-one event subscribers/reactors where later event fan-out semantics need
+  it.
+- Focused TDD tests, public exports, TypeDoc comments, API docs guard, package
+  README, framework user guide, API README, architecture notes, and durable logs.
+
+Out of scope:
+
+- Handler invocation.
+- Decorators or decorator metadata collection.
+- Transactions, repositories, storage writes, buses, inbox/delivery, gRPC,
+  ZeroMQ, or bounded-context runtime behavior.
+- Process-wide global registry mutation.
+- State-transition validation such as `(set_once)`.
+- Read-side query/subscription execution.
+
+## Decisions
+
+- D-0035: explicit handler registration before decorators.
+- D-0036: caller-owned handler registry and duplicate policy.
+
+## Human Questions And Answers
+
+- Blocking questions: none.
+- Non-blocking questions: none.
+
+## Files Changed
+
+- Pending.
+
+## Tests Run
+
+- Pending baseline verification in task worktree.
+
+## Coverage Result
+
+- Pending.
+
+## Documentation And Public API Impact
+
+| Area                             | Impact                                                                              |
+| -------------------------------- | ----------------------------------------------------------------------------------- |
+| Package README impact            | Expected: registry creation/lookup example and duplicate-policy notes.              |
+| TypeDoc/API docs impact          | Expected: new registry public types/functions with comments and API guard coverage. |
+| Public API additions/removals    | Expected: caller-owned registry and structured registry error exports.              |
+| Framework `USER_GUIDE.md` impact | Expected: handler registry usage and non-runtime boundary notes.                    |
+| Example `USER_GUIDE.md` impact   | N/A for this slice; to-do example is not implemented yet.                           |
+| API examples                     | Expected in server README and API overview.                                         |
+| Compatibility notes              | Expected: registry validates metadata before later decorators/runtime use it.       |
+
+## Security Impact
+
+| Area                    | Impact                                                              |
+| ----------------------- | ------------------------------------------------------------------- |
+| Dependencies            | No new dependencies expected.                                       |
+| Secrets and credentials | N/A; no secret handling.                                            |
+| IPC                     | N/A; no bus or transport in scope.                                  |
+| Validation              | Adds metadata-level duplicate/conflict validation only.             |
+| Tenant boundaries       | N/A; registry is caller-owned and not tenant-aware yet.             |
+| `Any`/deserialization   | N/A; registry stores schemas/metadata and does not unpack payloads. |
+| Logging                 | No payload logging or handler invocation.                           |
+
+## Verification
+
+- Pending.
+
+## Open Risks And Follow-Up Routing
+
+| Risk/Follow-Up                                                   | Owner               | Linked Task/Decision | Disposition                                                     | Next Review Point           |
+| ---------------------------------------------------------------- | ------------------- | -------------------- | --------------------------------------------------------------- | --------------------------- |
+| Registry API could imply runtime dispatch.                       | Author/reviewers    | T-0009b.3            | Keep lookup-only wording and no invocation tests.               | Maintainability/docs review |
+| Duplicate policy may need refinement for custom command routing. | Future routing task | D-0036               | First policy covers default one-effective-command-handler rule. | Repository/routing design   |
+| Decorator adapter must target this registry contract later.      | T-0009c             | D-0035               | Defer until registry semantics are stable.                      | T-0009c setup               |
+
+## Review Rounds
+
+- Pending.
+
+## Integration Result
+
+Pending.

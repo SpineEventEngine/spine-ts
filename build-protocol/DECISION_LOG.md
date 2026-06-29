@@ -727,3 +727,52 @@ Consequences:
 - Later decorators can remain syntax sugar over explicit registration.
 - Reviewers must verify that `T-0009b` does not implement handler invocation,
   transactions, repositories, buses, storage writes, or ZeroMQ transport.
+
+## D-0036: Use caller-owned handler registry with first duplicate policy
+
+Status: Accepted
+
+Date: 2026-06-29
+
+Context: `T-0009b.3 Handler Metadata Registry And Validation` follows the
+explicit handler metadata contract from D-0035. The runtime architecture states
+that a bounded context should have one effective handler per command message
+type unless transformation/splitting is explicitly modeled, while events must
+fan out to eligible subscribers/reactors/projections. The framework needs a
+validated registry surface before decorators, repositories, and transaction
+execution can consume handler metadata.
+
+Decision: Implement the first handler metadata registry as caller-owned,
+lookup-only data in `@spine-ts/server`. The registry registers existing
+`EntityHandlersMetadata` objects, freezes deterministic listing/lookup views,
+and rejects duplicate/conflicting declarations that would make later routing
+ambiguous. The first public policy is:
+
+- one command assignment per command message full type name in one registry;
+- one event application per entity state full type name and event message full
+  type name in one registry;
+- event subscriptions, event reactions, and command reactions may have multiple
+  handlers because later fan-out and process-manager behavior need many-to-one
+  metadata.
+
+The registry must not instantiate entities, invoke handlers, unpack payloads,
+write storage, start buses/transports, or mutate global process state.
+
+Alternatives considered:
+
+- Keep registry validation deferred until repositories. Rejected because
+  repositories and decorators would then each need ad hoc duplicate checks.
+- Use a global process-wide registry. Rejected because import-order and test
+  isolation would become observable before bounded-context assembly exists.
+- Reject duplicate event subscriptions/reactors. Rejected because event fan-out
+  is a core runtime requirement and would over-constrain projection/reactor
+  modeling.
+
+Consequences:
+
+- Later decorators can emit or adapt to the same explicit registry contract.
+- Later repository/routing tasks can rely on prevalidated command-assignee and
+  event-applier uniqueness.
+- Custom command routing or transformation/splitting may require a future
+  extension of the duplicate policy, but the first lookup-only registry remains
+  deterministic and conservative.
