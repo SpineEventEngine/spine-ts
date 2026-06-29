@@ -11,7 +11,7 @@ Implementation commit under review: `39008b7`
 
 Round 1 fix commit: `f84ca92`
 
-Round 2 fix commit: pending
+Round 2 fix commit: `e480a33`
 
 ## Findings Addressed
 

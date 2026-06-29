@@ -106,7 +106,7 @@ the fix.
 Fixer: focused Round 2 fix sub-agent for
 `T-0009c.1 Decorator Metadata Collection`
 
-Fix commit: pending
+Fix commit: `e480a33`
 
 Fix summary:
 
