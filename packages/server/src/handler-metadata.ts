@@ -250,12 +250,16 @@ function validateHandlerMethod<Instance extends object>(
   entityType: EntityClass<Instance>,
   methodName: HandlerMethodName<Instance>,
 ): void {
-  const member = Reflect.get(entityType.prototype, methodName) as unknown;
+  const descriptor = Object.getOwnPropertyDescriptor(entityType.prototype, methodName);
 
-  if (typeof member !== "function") {
+  if (
+    methodName === "constructor" ||
+    descriptor === undefined ||
+    typeof descriptor.value !== "function"
+  ) {
     throw new HandlerMetadataError(
       "UNKNOWN_HANDLER_METHOD",
-      `Handler method "${methodName}" must exist on the registered entity prototype.`,
+      `Handler method "${methodName}" must exist as an own prototype data method on the registered entity prototype.`,
     );
   }
 }

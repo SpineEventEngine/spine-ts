@@ -36,6 +36,19 @@ class TaskProjection {
   }
 }
 
+class AccessorProjection {
+  private static accessCount = 0;
+
+  static get getterAccessCount(): number {
+    return AccessorProjection.accessCount;
+  }
+
+  get accessorHandler(): () => void {
+    AccessorProjection.accessCount += 1;
+    return () => undefined;
+  }
+}
+
 function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
   const descriptorSet = fromBinary(
     FileDescriptorSetSchema,
@@ -123,6 +136,31 @@ describe("handler metadata", () => {
       defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
         builder.assign(CommandSchema, "missingMethod" as never),
       ]),
-    ).toThrow(/must exist on the registered entity prototype/);
+    ).toThrow(/must exist as an own prototype data method/);
+  });
+
+  it("rejects accessor properties without invoking getters during registration", () => {
+    expect(() =>
+      defineEntityHandlers(AccessorProjection, ProjectionStateSchema, (builder) => [
+        builder.assign(CommandSchema, "accessorHandler"),
+      ]),
+    ).toThrow(HandlerMetadataError);
+    expect(AccessorProjection.getterAccessCount).toBe(0);
+  });
+
+  it("rejects inherited built-ins as handler method names", () => {
+    expect(() =>
+      defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+        builder.assign(CommandSchema, "toString" as never),
+      ]),
+    ).toThrow(HandlerMetadataError);
+  });
+
+  it("rejects constructor as a handler method name", () => {
+    expect(() =>
+      defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+        builder.assign(CommandSchema, "constructor" as never),
+      ]),
+    ).toThrow(HandlerMetadataError);
   });
 });

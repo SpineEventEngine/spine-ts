@@ -12,8 +12,8 @@ Authoring sub-agent: `019f109d-ce8b-7b42-94d3-cc93b9ead054` (Russell the 2nd)
 Reviewer sub-agents: Pending
 Branch setup commit: `2b03b6b`
 Implementation baseline commit: `b1d158e`
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
+Implementation commit: `28d8e419918c14ac1d54079bc912931ce8b23bd9`
+Final branch HEAD: `28d8e419918c14ac1d54079bc912931ce8b23bd9` before round-1 fixes
 
 ## Objective
 
@@ -162,11 +162,20 @@ Out of scope:
 - `corepack pnpm test packages/server/src/index.test.ts packages/server/src/handler-metadata.test.ts`
   passed after formatting.
 - `CI=true corepack pnpm verify` passed.
+- Round 1 RED: `corepack pnpm test packages/server/src/handler-metadata.test.ts`
+  failed because accessor properties, inherited built-ins, and `constructor`
+  were accepted as handler method names.
+- Round 1 GREEN: `corepack pnpm test packages/server/src/handler-metadata.test.ts`
+  passed after switching handler method validation to own property descriptor
+  inspection.
+- Round 1 final: `CI=true corepack pnpm verify` passed after the review fixes.
 
 ## Coverage Result
 
 - Final `CI=true corepack pnpm verify` coverage: statements 99.44%, branches
   93.54%, functions 100%, lines 99.43%.
+- Round 1 `CI=true corepack pnpm verify` coverage: statements 99.44%, branches
+  93.7%, functions 100%, lines 99.43%.
 
 ## Documentation And Public API Impact
 
@@ -207,6 +216,12 @@ Out of scope:
 - Implementation `CI=true corepack pnpm verify` passed on
   `2026-06-29 00:53 WEST`: 11 test files / 67 tests passed; coverage statements
   99.44%, branches 93.54%, functions 100%, lines 99.43%; docs/API check
+  confirmed 100 proto exports, 28 core exports, 27 server exports, and 26
+  storage exports; proto lint/generate/check-generated passed; the known
+  TypeDoc invalid-origin source-link warning remains.
+- Round 1 fix `CI=true corepack pnpm verify` passed on
+  `2026-06-29 11:58 WEST`: 11 test files / 70 tests passed; coverage statements
+  99.44%, branches 93.7%, functions 100%, lines 99.43%; docs/API check
   confirmed 100 proto exports, 28 core exports, 27 server exports, and 26
   storage exports; proto lint/generate/check-generated passed; the known
   TypeDoc invalid-origin source-link warning remains.
