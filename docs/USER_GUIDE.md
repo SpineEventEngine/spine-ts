@@ -11,9 +11,10 @@ type metadata, framework users can validate one Protobuf message at a time, and
 callers can pack already-built domain messages into generated Spine
 `Command`/`Event` envelopes. `@spine-ts/server` now derives descriptor-backed
 entity metadata from `(entity)`, `(column)`, `(set_once)`, `(is)`, and
-`(every_is)` options and defines explicit handler metadata without invoking
-handlers or mutating global runtime state. It also exposes a caller-owned
-handler metadata registry for duplicate validation and lookup-only views.
+`(every_is)` options and defines explicit or decorator-collected handler
+metadata without invoking handlers or mutating global runtime state. It also
+exposes a caller-owned handler metadata registry for duplicate validation and
+lookup-only views.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
 deterministic in-memory adapter for tests/development. Entity runtime,
 transport, durable production storage, and the to-do application remain later
@@ -49,6 +50,9 @@ slices.
 - Server handler metadata helpers in `@spine-ts/server` that explicitly bind
   generated command/event schemas to entity method names for command assignment,
   command reaction, event subscription, event reaction, and event application.
+- Server standard method decorators in `@spine-ts/server` that collect
+  class-owned handler metadata with explicit generated schemas and materialize
+  into the same `EntityHandlersMetadata` shape as explicit registration.
 - A caller-owned server handler metadata registry that registers explicit
   entity handler metadata, rejects duplicate command assignments and duplicate
   event appliers for the same entity/event pair, and exposes frozen
@@ -240,7 +244,8 @@ ignored in this slice, matching the Spine option contract.
 ## Handler Metadata
 
 Use explicit handler metadata when an entity class needs to declare which
-methods later runtime slices should inspect:
+methods later runtime slices should inspect. This remains the canonical
+metadata contract and the fallback for codebases that avoid decorators:
 
 ```ts
 import { defineEntityHandlers } from "@spine-ts/server";
@@ -272,6 +277,45 @@ rejected without invoking user code. The builder exposes `assign()`,
 `command()`, `subscribe()`, `react()`, and `apply()` for the five first handler
 roles. `apply(..., { allowImport: true })` records importability for future
 event import/replay work.
+
+Use the standard decorators when TypeScript 5+ decorator syntax fits your
+project. Every decorator requires an explicit generated Protobuf-ES schema; the
+framework does not infer message types through `emitDecoratorMetadata`,
+`reflect-metadata`, or parameter decorators:
+
+```ts
+import {
+  Apply,
+  Assign,
+  HandlerMetadataRegistry,
+  materializeDecoratedEntityHandlers,
+} from "@spine-ts/server";
+import { CreateTaskSchema } from "./generated/task_commands_pb.js";
+import { TaskCreatedSchema, TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskAggregate {
+  @Assign(CreateTaskSchema)
+  create(command: unknown): void {}
+
+  @Apply(TaskCreatedSchema, { allowImport: true })
+  onCreated(event: unknown): void {}
+}
+
+const taskHandlers = materializeDecoratedEntityHandlers(TaskAggregate, TaskStateSchema);
+const registry = new HandlerMetadataRegistry([taskHandlers]);
+
+registry.findCommandAssignment(CreateTaskSchema.typeName)?.handler.methodName; // "create"
+registry.findEventApplication(TaskStateSchema.typeName, TaskCreatedSchema.typeName)?.handler
+  .methodName; // "onCreated"
+```
+
+`@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply` record standard
+per-class metadata from public instance methods only.
+`materializeDecoratedEntityHandlers()` confirms the recorded handler names are
+still own prototype methods and returns the same frozen `EntityHandlersMetadata`
+shape as `defineEntityHandlers()`. Decorators do not instantiate the entity,
+invoke methods, unpack payloads, register in a global handler registry, validate
+transactions, write storage, start buses, or start transport.
 
 Use `HandlerMetadataRegistry` when application assembly or tests need a
 caller-owned lookup view over one or more `EntityHandlersMetadata` objects:

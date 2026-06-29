@@ -164,7 +164,10 @@ const expectedStorageExports = [
   "InMemoryStorageAdapter",
 ];
 const expectedServerExports = [
+  "Apply",
+  "Assign",
   "BaseHandlerMetadata",
+  "Command",
   "CommandAssignmentHandlerMetadata",
   "CommandReactionHandlerMetadata",
   "DeclaredEntityVisibility",
@@ -190,12 +193,17 @@ const expectedServerExports = [
   "HandlerMetadataRegistryError",
   "HandlerMetadataRegistryErrorCode",
   "HandlerMetadataRegistryLookup",
+  "HandlerMethodDecorator",
   "HandlerMethodName",
+  "HandlerMethodValue",
   "HandlerRegistrationBuilder",
+  "React",
   "RegisteredHandlerMetadata",
+  "Subscribe",
   "defineEntityHandlers",
   "isEntitySchema",
   "describeEntityMetadata",
+  "materializeDecoratedEntityHandlers",
 ];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 

@@ -13,6 +13,17 @@ export {
 } from "./entity-metadata.js";
 
 export {
+  Apply,
+  Assign,
+  Command,
+  type HandlerMethodDecorator,
+  type HandlerMethodValue,
+  React,
+  Subscribe,
+  materializeDecoratedEntityHandlers,
+} from "./handler-decorators.js";
+
+export {
   type BaseHandlerMetadata,
   type CommandAssignmentHandlerMetadata,
   type CommandReactionHandlerMetadata,

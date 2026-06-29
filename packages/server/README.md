@@ -1,7 +1,7 @@
 # @spine-ts/server
 
-Descriptor-derived server metadata for Spine entity schemas and explicit handler
-metadata.
+Descriptor-derived server metadata for Spine entity schemas, explicit handler
+metadata, and standard decorator metadata adapters.
 
 Current slice exposes:
 
@@ -15,30 +15,49 @@ Current slice exposes:
   entity method names; and
 - `HandlerMetadataRegistry` for caller-owned metadata registration, deterministic
   lookup views, and duplicate command/applier validation.
+- `@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply` standard method
+  decorators that require explicit Protobuf-ES schemas and materialize into the
+  same handler metadata contract.
 
 ```ts
-import { HandlerMetadataRegistry, defineEntityHandlers } from "@spine-ts/server";
+import {
+  Apply,
+  Assign,
+  HandlerMetadataRegistry,
+  defineEntityHandlers,
+  materializeDecoratedEntityHandlers,
+} from "@spine-ts/server";
 import { CreateTaskSchema } from "./generated/task_commands_pb.js";
 import { TaskCreatedSchema, TaskStateSchema } from "./generated/tasks_pb.js";
 
 class TaskAggregate {
+  @Assign(CreateTaskSchema)
   create(command: unknown): void {}
 
+  @Apply(TaskCreatedSchema, { allowImport: true })
   onCreated(event: unknown): void {}
 }
 
-const taskHandlers = defineEntityHandlers(TaskAggregate, TaskStateSchema, ({ assign, apply }) => [
-  assign(CreateTaskSchema, "create"),
-  apply(TaskCreatedSchema, "onCreated", { allowImport: true }),
-]);
+const decoratedTaskHandlers = materializeDecoratedEntityHandlers(TaskAggregate, TaskStateSchema);
 
-taskHandlers.handlers.map((handler) => handler.kind);
-taskHandlers.eventApplications[0]?.allowImport; // true
+const explicitTaskHandlers = defineEntityHandlers(
+  TaskAggregate,
+  TaskStateSchema,
+  ({ assign, apply }) => [
+    assign(CreateTaskSchema, "create"),
+    apply(TaskCreatedSchema, "onCreated", { allowImport: true }),
+  ],
+);
 
-const registry = new HandlerMetadataRegistry([taskHandlers]);
+decoratedTaskHandlers.handlers.map((handler) => handler.kind);
+decoratedTaskHandlers.eventApplications[0]?.allowImport; // true
+
+const registry = new HandlerMetadataRegistry([decoratedTaskHandlers]);
 registry.findCommandAssignment(CreateTaskSchema.typeName)?.handler.methodName; // "create"
 registry.findEventApplication(TaskStateSchema.typeName, TaskCreatedSchema.typeName)?.handler
   .methodName; // "onCreated"
+
+explicitTaskHandlers.handlers.map((handler) => handler.methodName); // same contract
 ```
 
 The explicit registration API records command assignments, command reactions,
@@ -48,6 +67,13 @@ normal class method syntax; accessors, `constructor`, inherited methods, and
 instance fields are rejected without invoking user code. The API does not
 invoke handlers, enforce transactions or `(set_once)`, build repositories, write
 storage, register buses, start transport, or implement gRPC services.
+
+The decorator API is an adapter over that explicit contract. Decorators record
+standard per-class metadata from public instance methods only, require explicit
+generated schemas, and materialize after confirming the handler names still
+refer to the entity class's own prototype methods. Decorators do not use
+`emitDecoratorMetadata`, `reflect-metadata`, parameter decorators, inferred
+message types, a global handler registry, or handler invocation.
 
 `HandlerMetadataRegistry` registers existing `EntityHandlersMetadata` objects
 and exposes frozen listing/lookup arrays by entity state full type name, handler

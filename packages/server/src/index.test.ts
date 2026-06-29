@@ -117,13 +117,19 @@ describe("@spine-ts/server", () => {
   it("exports the descriptor-derived entity and handler metadata surface", () => {
     expect(Object.keys(serverRoot).sort()).toEqual(
       [
+        "Apply",
+        "Assign",
         "DescriptorMetadataError",
+        "Command",
         "HandlerMetadataError",
         "HandlerMetadataRegistry",
         "HandlerMetadataRegistryError",
+        "React",
+        "Subscribe",
         "defineEntityHandlers",
         "describeEntityMetadata",
         "isEntitySchema",
+        "materializeDecoratedEntityHandlers",
       ].sort(),
     );
   });
