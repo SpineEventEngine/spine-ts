@@ -1,6 +1,6 @@
 # T-0009b: Handler Metadata Contract And Explicit Registration API
 
-Status: Integrated into main; awaiting main verification
+Status: Complete and integrated
 Start: `2026-06-29 00:40 WEST`
 End: `2026-06-29 12:40 WEST`
 Baseline commit: `11a6c70`
@@ -18,6 +18,7 @@ Follow-up fix commit: `b6c8251a7404c974b073615b1a2aa888444bdac4`
 Durable-log correction checkpoint: `6b514ac2f2f44af40358bf66135097740befef69`
 Review closure checkpoint: `9d87aebf31fa347ba719910b18a29ac2152b54a6`
 Integration merge commit: `a536eed`
+Integration verification commit: `174c7f1`
 
 ## Objective
 
@@ -259,6 +260,11 @@ Out of scope:
   remains.
 - Integration: merged `task/T-0009b-handler-metadata` into `main` as
   `a536eed` on `2026-06-29 12:43 WEST`; main verification is the next gate.
+- Main verification: `CI=true corepack pnpm verify` passed on
+  `2026-06-29 12:44 WEST` at `174c7f1`: 11 test files / 70 tests passed;
+  coverage statements 99.44%, branches 93.7%, functions 100%, lines 99.43%;
+  docs/API check confirmed 100 proto exports, 28 core exports, 27 server
+  exports, and 26 storage exports; proto lint/generate/check-generated passed.
 
 ## Open Risks And Follow-Up Routing
 
