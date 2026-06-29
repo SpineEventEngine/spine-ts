@@ -766,3 +766,25 @@ Verification:
   `corepack pnpm exec prettier --write build-protocol/work-logs/T-0009d1.md`,
   `corepack pnpm format:check` passed.
 - `git diff --check` passed.
+
+## Fix Round 20
+
+Addressing round-19 re-review reviewer-metadata findings without changing
+runtime behavior, tests, or public API:
+
+- Kept top-level `TASK.md` reviewer metadata at the latest completed reviewer
+  round and changed the task status/end metadata to fix round 20 pending clean
+  re-review.
+- Updated work-log Current State to record the round-19 finding and this
+  metadata-only fix.
+- Recorded this follow-up in task, work, review, and implementation logs.
+
+Verification:
+
+- `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+  warning and expected API export counts.
+- `corepack pnpm format:check` initially failed on the review log and work log;
+  after
+  `corepack pnpm exec prettier --write build-protocol/reviews/T-0009d1-set-once-transition-validation.md build-protocol/work-logs/T-0009d1.md`,
+  `corepack pnpm format:check` passed.
+- `git diff --check` passed.

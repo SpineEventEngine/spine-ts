@@ -1,8 +1,8 @@
 # T-0009d.1: Built-In Set-Once Transition Validation
 
-Status: Complete through fix round 19 docs/log cleanup; pending clean re-review/integration
+Status: Complete through fix round 20 docs/log cleanup; pending clean re-review/integration
 Start: `2026-06-29 14:52 WEST`
-End: `2026-06-29 19:32 WEST`
+End: `2026-06-29 19:39 WEST`
 Baseline commit: `1d939d7`
 Task log path: `build-protocol/tasks/T-0009d1-set-once-transition-validation/TASK.md`
 Branch: `task/T-0009d1-set-once-transition-validation`
@@ -629,6 +629,10 @@ functions 100%, lines 97.31%.
   updating the top-level task end timestamp and reviewer metadata to match the
   latest completed verification/review evidence, with no runtime, public API, or
   test behavior change.
+- Fix round 20 addresses round-19 documentation findings by keeping top-level
+  reviewer metadata at the latest completed reviewer round while recording this
+  fix as pending clean re-review, with no runtime, public API, or test behavior
+  change.
 
 ## Completion Checklist
 
