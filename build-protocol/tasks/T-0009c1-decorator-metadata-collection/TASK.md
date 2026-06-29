@@ -1,8 +1,8 @@
 # T-0009c.1: Decorator Metadata Collection
 
-Status: In progress
+Status: Complete and integrated
 Start: `2026-06-29 13:37 WEST`
-End: TBD
+End: `2026-06-29 14:47 WEST`
 Baseline commit: `de0860f`
 Task log path: `build-protocol/tasks/T-0009c1-decorator-metadata-collection/TASK.md`
 Branch: `task/T-0009c1-decorator-metadata-collection`
@@ -17,6 +17,7 @@ Round 1 fix commit: `f84ca92`
 Round 2 fix commit: `e480a33`
 Final audit cleanup commit: `4611795`
 Review-closure checkpoint: `6d4a8d0`
+Integration merge commit: `f33690f`
 
 ## Objective
 
@@ -294,6 +295,11 @@ invalid-origin warning.
   coverage statements 98.72%, branches 91.16%, functions 100%, lines 98.69%;
   docs/API and proto checks passed with the known TypeDoc invalid-origin
   warning.
+- Main integration `CI=true corepack pnpm verify` passed on
+  `2026-06-29 14:46 WEST` at merge commit `f33690f`: 12 test files / 83 tests
+  passed; coverage statements 98.72%, branches 91.16%, functions 100%, lines
+  98.69%; docs/API and proto checks passed with the known TypeDoc
+  invalid-origin warning.
 
 ## Completion Checklist
 
@@ -302,8 +308,8 @@ invalid-origin warning.
 - [x] Five reviewer sub-agents completed and closed for Round 1.
 - [x] Review comments either fixed and re-reviewed or technically resolved.
 - [x] Full verification passed on the task branch.
-- [ ] Task branch merged back to `main`.
-- [ ] Full verification passed on `main`.
+- [x] Task branch merged back to `main`.
+- [x] Full verification passed on `main`.
 - [x] Durable task/work/review logs updated with Round 1 fix commit and
       verification.
 - [x] Durable task/work/review logs updated with Round 2 fix verification.
