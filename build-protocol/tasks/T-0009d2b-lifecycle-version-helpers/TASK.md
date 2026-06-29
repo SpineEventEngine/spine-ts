@@ -12,7 +12,8 @@ Requirements splitter: T-0009d.2 splitter
 `019f14c2-9605-7d11-b8c5-3f891b1880f7` (Sartre the 2nd, closed)
 Authoring sub-agent: pending
 Reviewer sub-agents: pending
-Baseline verification evidence: pending
+Baseline verification evidence: `CI=true corepack pnpm verify` passed on
+`2026-06-29 20:54 WEST`
 
 ## Objective
 
@@ -118,7 +119,13 @@ Out of scope:
 
 ## Tests Run
 
-- Baseline verification: pending.
+- Dependency hydration: escalated `corepack pnpm install` passed for the fresh
+  worktree using the existing lockfile/store.
+- Baseline `CI=true corepack pnpm verify` passed on
+  `2026-06-29 20:54 WEST`: 14 test files / 123 tests; coverage statements
+  97.51%, branches 90.28%, functions 100%, lines 97.46%; TypeDoc/API check
+  reported 100 proto, 28 core, 56 server, and 26 storage expected exports;
+  proto lint/generate/check passed.
 
 ## Review Rounds
 
@@ -127,6 +134,6 @@ Out of scope:
 ## Current State
 
 - Branch/worktree exists from `2127b86`.
-- Durable setup logs are being created before authoring implementation work.
-- Next step: commit setup logs, run baseline verification, then spawn the
-  implementation worker.
+- Durable setup logs are committed at `5cf23b6`.
+- Baseline verification passed.
+- Next step: spawn the implementation worker.

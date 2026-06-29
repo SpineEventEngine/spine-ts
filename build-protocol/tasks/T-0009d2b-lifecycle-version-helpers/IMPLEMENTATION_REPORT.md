@@ -27,7 +27,11 @@ phase/runtime-owned and therefore deferred.
 
 ## Verification
 
-- Pending baseline verification.
+- Baseline `CI=true corepack pnpm verify` passed on
+  `2026-06-29 20:54 WEST`: 14 test files / 123 tests; coverage statements
+  97.51%, branches 90.28%, functions 100%, lines 97.46%; TypeDoc/API check
+  reported 100 proto, 28 core, 56 server, and 26 storage expected exports;
+  proto lint/generate/check passed.
 
 ## Review
 
