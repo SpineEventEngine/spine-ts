@@ -22,13 +22,17 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 `PackEventInput`.
 
 Server exports include the abstract `Entity` shell, `EntityOptions`,
-`EntityVersionMetadata`, and `EntityLifecycleFlags` for local OOP entity state with identity,
+`EntityVersionMetadata`, `PlainEntityVersionMetadata`, and
+`EntityLifecycleFlags` for local OOP entity state with identity,
 descriptor-derived metadata, cloned Protobuf-ES state snapshots, caller-owned
-plain version metadata, lifecycle flags, and active/archive/delete accessors. The
-shell has protected hooks for future framework-owned subclasses, but no public
-state setters, transaction execution, repository/storage writes, handler
-invocation, dispatch, lifecycle events, automatic version increments, routing,
-query APIs, buses, transports, or global runtime state. Server metadata exports
+plain version metadata, lifecycle flags, and active/archive/delete accessors.
+`PlainEntityVersionMetadata<T>` is the compile-time plain-shape helper used by
+entity inputs so ordinary metadata interfaces can be accepted while non-plain
+types such as `Date` are rejected. The shell has protected hooks for future
+framework-owned subclasses, but no public state setters, transaction execution,
+repository/storage writes, handler invocation, dispatch, lifecycle events,
+automatic version increments, routing, query APIs, buses, transports, or global
+runtime state. Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field
 routing hints, field metadata, and the descriptor-derived `EntityMetadata`

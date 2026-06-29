@@ -123,12 +123,15 @@ The constructor derives metadata with `describeEntityMetadata(schema)`, snapshot
 the supplied Protobuf-ES state, defaults lifecycle flags to active/not deleted,
 and snapshots plain version metadata values. Version metadata accepts primitives,
 `null`, arrays, and plain objects; functions, typed arrays, buffers, dates,
-maps, sets, and class instances are rejected. State and version access return
-cloned snapshots so caller mutation does not mutate stored entity state.
-Protected replacement hooks exist only for later framework-owned subclasses;
-there are no public state setters, automatic version increments, transactions,
-handler invocation, repository writes, storage calls, lifecycle events, routing,
-queries, buses, transports, or global runtime state.
+maps, sets, class instances, and proxies are rejected. The exported
+`PlainEntityVersionMetadata<T>` type helper preserves ordinary plain metadata
+interfaces at entity input boundaries while rejecting known non-plain types such
+as `Date`. State and version access return cloned snapshots so caller mutation
+does not mutate stored entity state. Protected replacement hooks exist only for
+later framework-owned subclasses; there are no public state setters, automatic
+version increments, transactions, handler invocation, repository writes,
+storage calls, lifecycle events, routing, queries, buses, transports, or global
+runtime state.
 
 ## Entity State Transition Validation
 

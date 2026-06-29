@@ -367,9 +367,10 @@ Focused fix implemented on `2026-06-29 23:38 WEST`.
   rejection for `Date`.
 - GREEN: focused entity/root tests passed 2 files / 25 tests after proxies were
   rejected before reflective validation.
-- Final verification: `corepack pnpm typecheck`, `corepack pnpm lint`,
-  `corepack pnpm format:check`, and `corepack pnpm docs:check` passed after a
-  one-line unused-import cleanup and formatting rerun. Final full verify passed
+- Final verification: root-session focused entity/root tests, typecheck, lint,
+  format check, and docs check passed after replacing a non-typechecked
+  `node:util` import with the local `process.getBuiltinModule()` declaration and
+  adding `PlainEntityVersionMetadata` to the API gate. Final full verify passed
   with 15 test files / 145 tests, coverage 97.31% statements / 91.28% branches /
-  100% functions / 97.25% lines, TypeDoc/API and proto gates passed, and
-  generated proto output clean.
+  100% functions / 97.25% lines, 64 expected server exports, TypeDoc/API and
+  proto gates passed, and generated proto output clean.

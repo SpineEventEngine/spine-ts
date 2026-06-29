@@ -302,13 +302,15 @@ Skipped relevant-looking skills:
   replacing the bound with the recursive `PlainEntityVersionMetadata` input
   validator and rejecting proxies before reflection; focused entity/root tests
   passed 2 files / 25 tests.
-- Final Round 4 fix verification on `2026-06-29 23:41 WEST`: typecheck passed;
-  first lint failed on an unused `EntityVersionMetadata` test import and passed
-  after cleanup; format check passed after formatting the cleanup; docs check
-  passed with the expected broken-origin TypeDoc warning and 63 expected server
-  exports; final `CI=true corepack pnpm verify` passed with 15 test files / 145
-  tests, coverage 97.31% statements / 91.28% branches / 100% functions / 97.25%
-  lines, TypeDoc/API/proto gates passed, and generated proto output clean.
+- Final Round 4 fix verification on `2026-06-29 23:49 WEST`: root-session
+  focused entity/root tests, typecheck, lint, format check, and docs check
+  passed after replacing a non-typechecked `node:util` import with the local
+  `process.getBuiltinModule()` declaration and adding
+  `PlainEntityVersionMetadata` to the API gate. Docs check reported 64 expected
+  server exports. Final `CI=true corepack pnpm verify` passed with 15 test files
+  / 145 tests, coverage 97.31% statements / 91.28% branches / 100% functions /
+  97.25% lines, TypeDoc/API/proto gates passed, and generated proto output
+  clean.
 
 ## Current State
 

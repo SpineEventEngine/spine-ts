@@ -224,11 +224,11 @@ Implemented on `2026-06-29 23:38 WEST`.
   `"proxy trap invoked"`.
 - GREEN evidence: typecheck passed; focused entity/root tests passed 2 files /
   25 tests.
-- Final verification: `corepack pnpm typecheck` passed; `corepack pnpm lint`
-  passed after removing the unused test import exposed by the first lint run;
-  `corepack pnpm format:check` passed after formatting that cleanup;
-  `corepack pnpm docs:check` passed with the expected broken-origin TypeDoc
-  warning and 63 expected server exports; final `CI=true corepack pnpm verify`
-  passed with 15 test files / 145 tests, coverage 97.31% statements / 91.28%
-  branches / 100% functions / 97.25% lines, TypeDoc/API/proto gates passed, and
-  generated proto output clean.
+- Final verification: root-session focused entity/root tests, typecheck, lint,
+  format check, and docs check passed after replacing a non-typechecked
+  `node:util` import with the local `process.getBuiltinModule()` declaration and
+  adding `PlainEntityVersionMetadata` to the API gate. Docs check reported 64
+  expected server exports. Final `CI=true corepack pnpm verify` passed with 15
+  test files / 145 tests, coverage 97.31% statements / 91.28% branches / 100%
+  functions / 97.25% lines, TypeDoc/API/proto gates passed, and generated proto
+  output clean.
