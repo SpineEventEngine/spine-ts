@@ -9,9 +9,11 @@ Branch: `task/T-0009c1-decorator-metadata-collection`
 Worktree: `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009c1-decorator-metadata-collection`
 Requirements splitter: `019f135f-f815-7143-928f-8ba84237d0af` (Goodall)
 Branch setup commit: `e711edc`
-Authoring sub-agent: Codex implementation sub-agent
-Reviewer sub-agents: TBD
+Authoring sub-agent: `019f1368-7ce7-75b3-90e6-b20e86b54e1b`
+Reviewer sub-agents: Round 1 completed; see review log.
 Baseline verification evidence commit: `07e40c0`
+Implementation commit under review: `39008b7`
+Round 1 fix commit: `f84ca92`
 
 ## Objective
 
@@ -146,6 +148,7 @@ Out of scope:
 - `tsconfig.base.json`
 - `build-protocol/tasks/T-0009c1-decorator-metadata-collection/TASK.md`
 - `build-protocol/tasks/T-0009c1-decorator-metadata-collection/IMPLEMENTATION_REPORT.md`
+- `build-protocol/tasks/T-0009c1-decorator-metadata-collection/ROUND1_FIX_REPORT.md`
 - `build-protocol/work-logs/T-0009c1.md`
 - `build-protocol/reviews/T-0009c1-decorator-metadata-collection.md`
 
@@ -182,6 +185,21 @@ packages/server/src/handler-decorators.test.ts packages/server/src/index.test.ts
   test files / 80 tests passed; coverage statements 98.89%, branches 91.42%,
   functions 100%, lines 98.86%; docs/API, proto lint/generate, and generated
   output checks passed with the known TypeDoc invalid-origin warning.
+- Round 1 RED `corepack pnpm vitest run
+packages/server/src/handler-decorators.test.ts` failed with two expected
+  failures: semantic TypeScript reported TS1241 for a typed decorated handler,
+  and copied method materialization borrowed the source class handler metadata.
+- Round 1 GREEN `corepack pnpm vitest run
+packages/server/src/handler-decorators.test.ts` passed on
+  `2026-06-29 14:13 WEST`: 1 test file / 7 tests passed.
+- Round 1 `corepack pnpm typecheck` passed on `2026-06-29 14:14 WEST`.
+- Round 1 `corepack pnpm docs:check` passed on `2026-06-29 14:14 WEST` with
+  the known TypeDoc invalid-origin warning.
+- Round 1 final `CI=true corepack pnpm verify` passed on
+  `2026-06-29 14:14 WEST`: 12 test files / 82 tests passed; coverage
+  statements 98.72%, branches 91.16%, functions 100%, lines 98.69%;
+  docs/API, proto lint/generate, and generated output checks passed with the
+  known TypeDoc invalid-origin warning.
 
 ## Coverage Result
 
@@ -228,16 +246,29 @@ green.
 ## Review Rounds
 
 Implementation authored and verified. Reviewer sub-agents were not spawned by
-this implementation sub-agent per the handoff instruction. Round 1 remains
-pending for the orchestrator/review phase.
+this implementation sub-agent per the handoff instruction.
+
+Round 1 reviewed implementation commit `39008b7` and was not clean. Findings:
+
+- P1: public decorator types rejected normally typed handler methods under
+  strict TypeScript.
+- P2: method-function-keyed decorator storage allowed copied/reused method
+  functions to borrow another class's metadata.
+- P3: durable audit logs contained stale authoring-agent and next-step markers.
+
+Round 1 fix commit `f84ca92` addresses P1/P2 with semantic TypeScript and
+copied-method regression tests, class-owned standard decorator metadata, and
+generic decorator method types. Durable logs were updated in this report pass.
+Next protocol step: re-review the fix range.
 
 ## Completion Checklist
 
 - [x] Baseline verification captured in the task worktree.
 - [x] Authoring sub-agent report captured and closed.
-- [ ] Five reviewer sub-agents completed and closed.
+- [x] Five reviewer sub-agents completed and closed for Round 1.
 - [ ] Review comments either fixed and re-reviewed or technically resolved.
 - [x] Full verification passed on the task branch.
 - [ ] Task branch merged back to `main`.
 - [ ] Full verification passed on `main`.
-- [ ] Durable task/work/review logs updated with final commits and verification.
+- [x] Durable task/work/review logs updated with Round 1 fix commit and
+      verification.

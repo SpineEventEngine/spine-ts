@@ -2,7 +2,7 @@
 
 Status: DONE
 
-Authoring sub-agent: Codex implementation sub-agent
+Authoring sub-agent: `019f1368-7ce7-75b3-90e6-b20e86b54e1b`
 
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009c1-decorator-metadata-collection`
