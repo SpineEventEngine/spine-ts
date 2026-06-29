@@ -96,5 +96,14 @@ packages/server/src/entity-transaction.test.ts packages/server/src/index.test.ts
 ## Review
 
 - No reviewer sub-agents were spawned by this implementation role because the
-  prompt explicitly forbids spawning sub-agents. No review comments were
-  rejected, and no new decision beyond D-0042 was added.
+  prompt explicitly forbids spawning sub-agents.
+- The orchestrator spawned the required five separate reviewer sub-agents after
+  implementation commit `3bdf076`.
+- Round 1 completed clean on `2026-06-29 21:14 WEST`:
+  code style/maintainability, documentation, TypeScript/API docs, security, and
+  performance/reliability all reported no findings.
+- Reviewer IDs and evidence are recorded in
+  `build-protocol/reviews/T-0009d2b-lifecycle-version-helpers.md`.
+- All reviewer sub-agents were closed after result capture.
+- No review comments were rejected, no fix round was required, and no new
+  decision beyond D-0042 was added.
