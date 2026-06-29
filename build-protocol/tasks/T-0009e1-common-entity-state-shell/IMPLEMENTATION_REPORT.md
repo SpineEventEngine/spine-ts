@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.1 Common Entity State Shell
 
-Status: Round 2 Review Fix Implemented
+Status: Round 3 Review Fix Required
 Task log: `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e1.md`
 Review log: `build-protocol/reviews/T-0009e1-common-entity-state-shell.md`
@@ -156,3 +156,11 @@ Implementation impact:
   `structuredClone()` with explicit recursive plain-data validation/cloning,
   rejected shared-memory/prototype-bearing metadata, documented the public
   contract, and verified the focused and full gates.
+- Round 3 reviewed Round 2 fix commit `50a1802`; result: changes requested.
+- Accepted P2/API finding: constrain `Version` generics to
+  `EntityVersionMetadata`.
+- Accepted security/reliability findings: make array/object cloning
+  descriptor-safe without invoking caller accessors/species/prototype behavior,
+  preserve or reject array own properties instead of dropping them, reject deep
+  metadata with a domain error, and avoid caller-controlled constructor lookups
+  while formatting rejection labels.

@@ -192,3 +192,59 @@ Verification:
   files / 139 tests; coverage statements 97.69%, branches 91.24%, functions
   100%, lines 97.64%; TypeDoc/API/proto gates passed and generated proto output
   was clean.
+
+## Round 3
+
+Round 2 fix commit under review: `50a1802`.
+
+Review result captured on `2026-06-29 23:11 WEST`: changes requested.
+
+| Role                       | Reviewer ID                            | Result      | Closure |
+| -------------------------- | -------------------------------------- | ----------- | ------- |
+| Code style/maintainability | `019f156b-68f2-7963-a16b-068b1b817e9f` | Clean       | Closed  |
+| Documentation              | `019f156b-697e-7e81-b9e5-608e6bebac9d` | Clean       | Closed  |
+| TypeScript/API docs        | `019f156b-69f2-7241-a5f5-78af0bd16749` | P2 finding  | Closed  |
+| Security                   | `019f156b-6a75-7382-823a-ee56a5a4cb00` | Findings    | Closed  |
+| Performance/reliability    | `019f156b-6af3-7de1-9871-47eeda8c4fcd` | P2/P3 finds | Closed  |
+
+Findings:
+
+- P2: `Entity` and `EntityOptions` still leave `Version` unconstrained, so
+  callers can compile `Entity<Id, Schema, Date>` even though runtime rejects
+  non-plain version metadata. The public generic contract must enforce
+  `EntityVersionMetadata`.
+- Medium/P2: array version metadata cloning uses `Array.prototype.map()`, which
+  can consult caller-controlled species/constructor behavior and can execute
+  accessor elements. Array metadata must be validated and cloned through
+  descriptors without invoking caller code.
+- Medium/P2: plain-object cloning assigns `clone[key] = ...`, allowing an own
+  enumerable `__proto__` data property to mutate the clone prototype instead of
+  preserving plain snapshot data.
+- Low/Medium: rejection labels read `value.constructor.name`, which can execute
+  caller-controlled constructor getters for rejected objects.
+- P2: deep but otherwise plain metadata can throw a raw `RangeError` from JS
+  stack overflow. The clone must either be iterative or reject excessive nesting
+  with the same domain error.
+- P3: array own properties are silently dropped because the array branch does
+  not run descriptor validation for custom own keys.
+
+Clean-role evidence:
+
+- Code style/maintainability found the state shell still scoped to ID/schema,
+  metadata, state, version, lifecycle accessors, and protected replacement hooks
+  only, with no repository, dispatch, storage, handler invocation, routing, bus,
+  transaction, or global runtime expansion.
+- Documentation found no stale status, inaccurate docs, missing review-loop
+  evidence, or docs implying repository/runtime behavior.
+
+All findings are accepted. The fix route is to harden plain metadata cloning
+without adding new runtime surface:
+
+- constrain `Version` generics to `EntityVersionMetadata`;
+- validate arrays by descriptors, reject accessors/symbol keys/non-enumerable
+  props/custom own props, and clone elements without `map()`;
+- clone object properties with `Object.defineProperty()` or reject
+  prototype-affecting keys so own `__proto__` cannot change prototypes;
+- stop reading caller-controlled `constructor` properties for error labels;
+- add a maximum nesting-depth rejection or equivalent iterative clone;
+- add focused RED regressions for the accepted cases and rerun the review loop.

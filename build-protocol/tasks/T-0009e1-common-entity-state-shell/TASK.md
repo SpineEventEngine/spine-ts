@@ -1,6 +1,6 @@
 # T-0009e.1: Common Entity State Shell
 
-Status: Round 2 Review Fix Implemented
+Status: Round 3 Review Fix Required
 Start: `2026-06-29 22:06 WEST`
 Baseline commit: `2ca23fd`
 Task log path: `build-protocol/tasks/T-0009e1-common-entity-state-shell/TASK.md`
@@ -13,8 +13,10 @@ Requirements splitter:
 Authoring sub-agent: Codex implementation sub-agent in this thread
 Round 1 reviewer sub-agents: complete; changes requested and accepted.
 Round 2 reviewer sub-agents: complete; changes requested and accepted.
+Round 3 reviewer sub-agents: complete; changes requested and accepted.
 Review-fix implementation: second pass implemented for version metadata
-contract hardening.
+contract hardening; third pass queued for descriptor-safe cloning and generic
+constraint fixes.
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:12 WEST`
 
@@ -233,6 +235,18 @@ Skipped relevant-looking skills:
   `EntityVersionMetadata` plain snapshot data contract, rejects non-plain
   object graphs, and keeps nested plain metadata isolated at construction,
   read, and protected replacement boundaries.
+- Round 3 reviewed Round 2 fix commit `50a1802`; result: changes requested.
+- Accepted P2/API finding: `Version` generics must be constrained to
+  `EntityVersionMetadata` so compile-time API matches the runtime contract.
+- Accepted security/reliability findings: array cloning must avoid
+  `Array.prototype.map()` and descriptor/accessor execution, object cloning must
+  avoid `__proto__` prototype mutation, rejection labels must not read
+  caller-controlled constructors, deep metadata must reject with a domain error
+  instead of overflowing the stack, and array custom own properties must not be
+  silently dropped.
+- Fix route: harden descriptor-based plain metadata cloning, add focused RED
+  regressions, update logs/docs if public wording changes, verify, and rerun all
+  five review roles.
 
 ## Current State
 
@@ -246,3 +260,5 @@ Skipped relevant-looking skills:
 - Round 2 review was captured after commit `aef6297`; the accepted metadata
   contract findings have been addressed with focused regressions, docs/API
   updates, and full verification.
+- Round 3 review was captured after commit `50a1802`; the accepted findings
+  require another focused review-fix pass before completion.
