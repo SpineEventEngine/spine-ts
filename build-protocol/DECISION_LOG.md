@@ -4,6 +4,44 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+## D-0042: T-0009d.2b lifecycle and version helpers are draft metadata only
+
+Date: 2026-06-29
+
+Context: `T-0009d.2b` follows the minimal `EntityTransaction` kernel with
+small lifecycle and explicit version draft helpers. Spine JVM `Transaction`
+buffers `LifecycleFlags` and exposes `setArchived()` / `setDeleted()` only
+inside an active transaction. JVM version increments are tied to
+`VersionIncrement` and dispatch phases, which are not implemented in this TS
+slice.
+
+Decision: Add only draft metadata helpers in `@spine-ts/server` for lifecycle
+flags and caller-owned version metadata. Lifecycle helpers may set `archived`
+or `deleted` flags on the in-memory transaction draft, and `requireActive()`
+may guard active-only mutation based on those draft flags. Version helpers may
+replace explicit draft metadata supplied by the caller. The framework will not
+invent automatic increments, clocks, event versions, lifecycle events,
+repository filtering, storage writes, entity records, or dispatch-phase
+semantics in this task.
+
+Alternatives considered:
+
+- Implement JVM-style `VersionIncrement` now. Rejected because event/command
+  dispatch phases and event version policy are not available yet.
+- Emit lifecycle events or diagnostics from helpers. Rejected because storage,
+  entity records, lifecycle monitors, and buses are out of scope.
+- Treat archived/deleted flags as read-side filtering behavior. Rejected
+  because read-side query semantics belong to repository/storage/query tasks.
+
+Consequences:
+
+- The public helper names stay familiar to Spine JVM users without claiming
+  persistence/runtime behavior.
+- Later entity base classes can call these helpers inside framework-controlled
+  handling transactions.
+- Later runtime tasks must define how version increments and lifecycle
+  diagnostics are produced before storage/dispatch integration.
+
 ## D-0041: T-0009d.2a validation-rejected commits leave the draft transaction active
 
 Date: 2026-06-29
