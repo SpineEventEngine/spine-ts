@@ -2,7 +2,7 @@
 
 Status: Complete
 Start: `2026-06-29 20:50 WEST`
-End: `2026-06-29 21:05 WEST`
+End: `2026-06-29 21:17 WEST`
 Baseline commit: `2127b86`
 Task log path: `build-protocol/tasks/T-0009d2b-lifecycle-version-helpers/TASK.md`
 Branch: `task/T-0009d2b-lifecycle-version-helpers`
@@ -194,6 +194,11 @@ packages/server/src/entity-transaction.test.ts packages/server/src/index.test.ts
   files / 129 tests; coverage statements 97.61%, branches 90.51%, functions
   100%, lines 97.56%; TypeDoc/API and proto workflow passed with the known
   invalid-origin TypeDoc warning.
+- Final branch `CI=true corepack pnpm verify` passed on
+  `2026-06-29 21:17 WEST`: 14 test files / 129 tests; coverage statements
+  97.61%, branches 90.51%, functions 100%, lines 97.56%; TypeDoc/API reported
+  100 proto, 28 core, 59 server, and 26 storage expected exports; proto
+  lint/generate/check passed with generated output clean.
 
 ## Review Rounds
 
@@ -212,3 +217,4 @@ packages/server/src/entity-transaction.test.ts packages/server/src/index.test.ts
 - Branch/worktree exists from `2127b86`.
 - Durable setup logs are committed through baseline `7a9363e`.
 - Implementation and mandatory review loop are complete and clean.
+- Final branch verification passed on `2026-06-29 21:17 WEST`.
