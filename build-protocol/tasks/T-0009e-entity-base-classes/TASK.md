@@ -1,6 +1,6 @@
 # T-0009e: Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: Setup In Progress
+Status: T-0009e.1 Integrated; T-0009e.2 Pending
 Start: `2026-06-29 21:58 WEST`
 Baseline commit: `47eae4e`
 Task log path: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
@@ -9,8 +9,8 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009e-entity-base-classes`
 Requirements splitter:
 `019f1531-96a3-7870-bb40-b24fc9a456c8` (Goodall the 3rd, closed)
-Authoring sub-agent: pending
-Reviewer sub-agents: pending
+Authoring sub-agent: T-0009e.1 completed in subtask branch
+Reviewer sub-agents: T-0009e.1 Round 8 complete; all reviewers clean and closed
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:01 WEST`
 
@@ -151,6 +151,23 @@ Splitter JVM impact notes for `T-0009e.1`:
   `EntityClass`, return cloned Protobuf-ES snapshots, keep version metadata
   caller-owned for now, and avoid Java builders, recent history, transaction
   listeners, lifecycle system events, or repositories.
+
+## Subtask Integration
+
+`T-0009e.1 Common Entity State Shell` was merged into this parent branch on
+`2026-06-30 00:24 WEST` from
+`task/T-0009e1-common-entity-state-shell`.
+
+Integrated result:
+
+- abstract `Entity` state shell in `packages/server/src/entity.ts`;
+- focused entity/root tests and API export checks;
+- public docs and architecture/API/user guide updates;
+- durable task/report/work/review logs for all T-0009e.1 review rounds; and
+- Round 8 clean review across code style/maintainability, documentation,
+  TypeScript/API docs, security, and performance/reliability.
+
+Next parent subtask: `T-0009e.2 TransactionalEntity Scoped Draft Helpers`.
 
 ## Initial Scope Constraints
 

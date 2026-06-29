@@ -11,11 +11,12 @@ type metadata, framework users can validate one Protobuf message at a time, and
 callers can pack already-built domain messages into generated Spine
 `Command`/`Event` envelopes. `@spine-ts/server` now derives descriptor-backed
 entity metadata from `(entity)`, `(column)`, `(set_once)`, `(is)`, and
-`(every_is)` options and defines explicit or decorator-collected handler
-metadata without invoking handlers or mutating global runtime state. It also
-exposes built-in `(set_once)` entity state transition validation, a buffered
-entity transaction boundary, and a caller-owned handler metadata registry for
-duplicate validation and lookup-only views.
+`(every_is)` options, exposes a first common abstract entity state shell, and
+defines explicit or decorator-collected handler metadata without invoking
+handlers or mutating global runtime state. It also exposes built-in
+`(set_once)` entity state transition validation, a buffered entity transaction
+boundary, and a caller-owned handler metadata registry for duplicate validation
+and lookup-only views.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
 deterministic in-memory adapter for tests/development. Entity runtime,
 transport, durable production storage, and the to-do application remain later
@@ -48,6 +49,10 @@ slices.
   kind and visibility, expose first-field routing hints, surface `(column)`
   fields for projections/process managers, surface `(set_once)` fields for all
   entity kinds, and preserve semantic tags from `(is)` and `(every_is)`.
+- A common abstract server `Entity` shell that exposes identity,
+  descriptor-derived metadata, cloned Protobuf-ES state snapshots, caller-owned
+  plain version metadata, lifecycle flags, active/archive/delete accessors, and
+  sticky lifecycle-change tracking.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.
@@ -324,6 +329,45 @@ entity metadata from a non-entity schema or when the descriptor uses
 unsupported combinations such as repeated/map `(column)` fields on projections
 or process managers. Aggregate and generic entity `(column)` declarations are
 ignored in this slice, matching the Spine option contract.
+
+## Entity Shells
+
+Extend `Entity` when framework-owned code needs a local OOP holder for entity
+identity, state, plain version metadata, lifecycle flags, and descriptor
+metadata:
+
+```ts
+import { Entity } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskEntity extends Entity<string, typeof TaskStateSchema, number> {}
+
+const task = new TaskEntity({
+  id: "task-1",
+  schema: TaskStateSchema,
+  state: taskState,
+  version: 7,
+});
+
+task.metadata.kind;
+task.state; // cloned Protobuf-ES state snapshot
+task.isActive; // true unless archived or deleted
+```
+
+`Entity` snapshots supplied and returned state with Protobuf-ES binary cloning,
+so caller mutation does not mutate stored shell state. Version metadata is
+caller-owned plain snapshot data: primitives, `null`, arrays, and plain objects
+are cloned, while functions, typed arrays, buffers, dates, maps, sets, class
+instances, and other non-plain objects are rejected. The shell does not
+increment versions, compute timestamps, or derive producer/event metadata.
+Lifecycle flags default to active/not deleted, and `lifecycleFlagsChanged`
+becomes true only when future subclass/runtime code changes lifecycle flags
+through protected hooks.
+
+The shell is deliberately not a transaction or runtime. It does not expose
+public state setters, invoke handlers, write repositories or storage, emit
+lifecycle events, route IDs, query read models, start buses/transports, or use
+global runtime state.
 
 ## Handler Metadata
 

@@ -1,4 +1,12 @@
 export {
+  Entity,
+  type EntityLifecycleFlags,
+  type EntityOptions,
+  type EntityVersionMetadata,
+  type PlainEntityVersionMetadata,
+} from "./entity.js";
+
+export {
   type DeclaredEntityVisibility,
   type DescriptorFieldMetadata,
   DescriptorMetadataError,

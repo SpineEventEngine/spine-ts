@@ -197,6 +197,17 @@ set-once rule remains private; callers receive the core
 `TransitionValidationResult` shape with repo-local `spine.validation.*`
 messages, field paths, and no raw previous/next values.
 
+`Entity` is the first common OOP entity state shell. It binds a caller-supplied
+ID to one descriptor-backed Protobuf-ES state schema, derives and caches
+`EntityMetadata`, snapshots state on construction and read access, snapshots
+caller-owned plain version metadata without computing increments, and exposes
+lifecycle flags plus `isActive`, `isArchived`, `isDeleted`, and sticky
+`lifecycleFlagsChanged` accessors. Protected replacement hooks give future
+framework-owned subclasses a narrow place to apply accepted state/version or
+lifecycle evidence, but the public shell has no state setters and does not own
+transactions, repositories, handler invocation, storage, lifecycle events,
+routing, queries, buses, transports, or process-global runtime state.
+
 `EntityTransaction` is the first server-owned draft/result commit boundary over
 one entity state. It buffers a draft state, explicit previous/draft version
 metadata, lifecycle flags, and visible status (`active`, `committed`, or

@@ -1,0 +1,564 @@
+import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import { file_spine_options } from "@spine-ts/proto";
+import { serverEntityMetadataTestFixtures } from "../test-fixtures/entity-metadata-fixtures.js";
+
+import * as serverRoot from "./index.js";
+import { describeEntityMetadata, Entity, type EntityOptions } from "./index.js";
+
+type ProjectionState = Message<"ProjectionState"> & {
+  id: string;
+  name: string;
+  priority: number;
+};
+
+interface RevisionMetadata {
+  readonly revision: number;
+  readonly source: "server";
+  readonly labels?: readonly string[];
+}
+
+interface NestedRevisionMetadata extends RevisionMetadata {
+  readonly audit: {
+    readonly actor: string;
+    readonly checkpoints: readonly string[];
+  };
+  readonly history: readonly {
+    readonly stage: string;
+    readonly counters: readonly number[];
+  }[];
+}
+
+interface SizedRevisionMetadata {
+  readonly revision: number;
+  readonly size: number;
+}
+
+function createFixtureFileDescriptor(descriptorSetBase64: string) {
+  const descriptorSet = fromBinary(
+    FileDescriptorSetSchema,
+    Buffer.from(descriptorSetBase64, "base64"),
+  );
+  const descriptor = descriptorSet.file[0];
+
+  if (descriptor === undefined) {
+    throw new Error("Server entity fixture descriptor set is empty.");
+  }
+
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+  ]);
+}
+
+const fileEntityMetadataFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
+);
+const ProjectionStateSchema = messageDesc(
+  fileEntityMetadataFixture,
+  0,
+) as GenMessage<ProjectionState>;
+
+function createProjectionState(overrides: Partial<ProjectionState> = {}): ProjectionState {
+  return create(ProjectionStateSchema, {
+    id: "task-1",
+    name: "Draft",
+    priority: 1,
+    ...overrides,
+  });
+}
+
+class TestEntity extends Entity<string, typeof ProjectionStateSchema, RevisionMetadata> {
+  applyState(state: ProjectionState): void {
+    this.replaceState(state);
+  }
+
+  applyVersion(version: RevisionMetadata): void {
+    this.replaceVersionMetadata(version);
+  }
+
+  applyLifecycle(lifecycle: { readonly archived?: boolean; readonly deleted?: boolean }): void {
+    this.replaceLifecycleFlags(lifecycle);
+  }
+}
+
+class NestedVersionEntity extends Entity<
+  string,
+  typeof ProjectionStateSchema,
+  NestedRevisionMetadata
+> {
+  applyVersion(version: NestedRevisionMetadata): void {
+    this.replaceVersionMetadata(version);
+  }
+}
+
+describe("entities", () => {
+  it("exports the common entity base class from the server root", () => {
+    expect(serverRoot.Entity).toBe(Entity);
+  });
+
+  it("exposes identity, descriptor metadata, state snapshots, version, and active lifecycle defaults", () => {
+    const initialState = createProjectionState();
+    const entity = new TestEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: initialState,
+      version: { revision: 7, source: "server" },
+    });
+
+    initialState.name = "Caller-side mutation";
+
+    expect(entity.id).toBe("task-1");
+    expect(entity.schema).toBe(ProjectionStateSchema);
+    expect(entity.metadata).toEqual(describeEntityMetadata(ProjectionStateSchema));
+    expect(entity.state).toEqual(createProjectionState());
+    expect(entity.state).not.toBe(initialState);
+    expect(entity.version).toEqual({ revision: 7, source: "server" });
+    expect(entity.lifecycle).toEqual({ archived: false, deleted: false });
+    expect(entity.isActive).toBe(true);
+    expect(entity.isArchived).toBe(false);
+    expect(entity.isDeleted).toBe(false);
+    expect(entity.lifecycleFlagsChanged).toBe(false);
+    expectTypeOf(entity.id).toEqualTypeOf<string>();
+    expectTypeOf(entity.state).toEqualTypeOf<ProjectionState>();
+    expectTypeOf(entity.version).toEqualTypeOf<RevisionMetadata>();
+  });
+
+  it("returns cloned Protobuf-ES state snapshots so callers cannot mutate stored state", () => {
+    const entity = new TestEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    const returnedState = entity.state;
+    returnedState.name = "Mutated by caller";
+    returnedState.priority = 99;
+
+    expect(entity.state).toEqual(createProjectionState());
+    expect(entity.state).not.toBe(returnedState);
+  });
+
+  it("keeps constructor-provided version metadata isolated from caller mutations", () => {
+    const initialVersion = { revision: 1, source: "server" as const, labels: ["initial"] };
+    const entity = new TestEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: initialVersion,
+    });
+
+    initialVersion.revision = 2;
+    initialVersion.labels.push("caller mutation");
+
+    const returnedVersion = entity.version as unknown as {
+      revision: number;
+      labels: string[];
+    };
+    returnedVersion.revision = 3;
+    returnedVersion.labels.push("getter mutation");
+
+    expect(entity.version).toEqual({
+      revision: 1,
+      source: "server",
+      labels: ["initial"],
+    });
+    expect(entity.version).not.toBe(initialVersion);
+    expect(entity.version).not.toBe(returnedVersion);
+  });
+
+  it("rejects non-plain version metadata snapshots", () => {
+    class ClassBackedRevision {
+      revision = 1;
+      source = "server" as const;
+    }
+
+    const cyclicVersion = { revision: 1, source: "server" as const } as {
+      revision: number;
+      source: "server";
+      self?: unknown;
+    };
+    cyclicVersion.self = cyclicVersion;
+    const symbolKeyedVersion = {
+      revision: 1,
+      source: "server" as const,
+      [Symbol("trace")]: "caller",
+    };
+    const nonEnumerableVersion = { revision: 1, source: "server" as const };
+    Object.defineProperty(nonEnumerableVersion, "hidden", {
+      enumerable: false,
+      value: "caller",
+    });
+    const accessorVersion = { revision: 1, source: "server" as const };
+    Object.defineProperty(accessorVersion, "derived", {
+      enumerable: true,
+      get: () => "caller",
+    });
+    const invalidVersionInputs = [
+      { revision: 1, source: "server" as const, clock: new Date("2026-06-29T00:00:00.000Z") },
+      { revision: 1, source: "server" as const, seen: new Set(["task-1"]) },
+      { revision: 1, source: "server" as const, lookup: new Map([["task-1", 1]]) },
+      { revision: 1, source: "server" as const, bytes: new ArrayBuffer(1) },
+      { revision: 1, source: "server" as const, bytes: new SharedArrayBuffer(1) },
+      { revision: 1, source: "server" as const, bytes: new Uint8Array(new ArrayBuffer(1)) },
+      {
+        revision: 1,
+        source: "server" as const,
+        bytes: new Uint8Array(new SharedArrayBuffer(1)),
+      },
+      cyclicVersion,
+      symbolKeyedVersion,
+      nonEnumerableVersion,
+      accessorVersion,
+      new ClassBackedRevision(),
+      () => ({ revision: 1, source: "server" as const }),
+    ];
+
+    for (const version of invalidVersionInputs) {
+      expect(() => {
+        new TestEntity({
+          id: "task-1",
+          schema: ProjectionStateSchema,
+          state: createProjectionState(),
+          version: version as unknown as RevisionMetadata,
+        });
+      }).toThrow(/plain snapshot data/);
+    }
+
+    const entity = new TestEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+    expect(() => {
+      entity.applyVersion({
+        revision: 2,
+        source: "server",
+        bytes: new Uint8Array(new SharedArrayBuffer(1)),
+      } as unknown as RevisionMetadata);
+    }).toThrow(/plain snapshot data/);
+  });
+
+  it("rejects array version metadata with caller-controlled descriptor hazards", () => {
+    let speciesRead = false;
+    class CallerArray<T> extends Array<T> {
+      static override get [Symbol.species](): ArrayConstructor {
+        speciesRead = true;
+        return Array;
+      }
+    }
+
+    const speciesVersion = {
+      revision: 1,
+      source: "server" as const,
+      labels: new CallerArray("initial"),
+    };
+    expect(() => {
+      new TestEntity({
+        id: "task-1",
+        schema: ProjectionStateSchema,
+        state: createProjectionState(),
+        version: speciesVersion,
+      });
+    }).toThrow(/plain snapshot data/);
+    expect(speciesRead).toBe(false);
+
+    let accessorRead = false;
+    const accessorLabels = ["initial"];
+    Object.defineProperty(accessorLabels, "0", {
+      enumerable: true,
+      get: () => {
+        accessorRead = true;
+        return "caller";
+      },
+    });
+    expect(() => {
+      new TestEntity({
+        id: "task-1",
+        schema: ProjectionStateSchema,
+        state: createProjectionState(),
+        version: { revision: 1, source: "server", labels: accessorLabels },
+      });
+    }).toThrow(/plain snapshot data/);
+    expect(accessorRead).toBe(false);
+
+    const customPropertyLabels = ["initial"] as string[] & { extra?: string };
+    customPropertyLabels.extra = "caller";
+    expect(() => {
+      new TestEntity({
+        id: "task-1",
+        schema: ProjectionStateSchema,
+        state: createProjectionState(),
+        version: { revision: 1, source: "server", labels: customPropertyLabels },
+      });
+    }).toThrow(/plain snapshot data/);
+  });
+
+  it("clones JSON __proto__ version metadata without mutating clone prototypes", () => {
+    const version = JSON.parse(
+      '{"revision":1,"source":"server","__proto__":{"polluted":true}}',
+    ) as RevisionMetadata & { readonly __proto__: { readonly polluted: true } };
+
+    const entity = new TestEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version,
+    });
+
+    const returnedVersion = entity.version as RevisionMetadata & {
+      readonly __proto__: { readonly polluted: true };
+    };
+    expect(Object.prototype.hasOwnProperty.call(returnedVersion, "__proto__")).toBe(true);
+    expect(returnedVersion.__proto__).toEqual({ polluted: true });
+    expect(Object.getPrototypeOf(returnedVersion)).toBe(Object.prototype);
+    expect(({} as { readonly polluted?: true }).polluted).toBeUndefined();
+  });
+
+  it("does not invoke caller-controlled constructor getters while labeling rejected metadata", () => {
+    let constructorRead = false;
+    const rejectedVersion = Object.create({ arbitrary: true }) as RevisionMetadata;
+    Object.defineProperty(rejectedVersion, "constructor", {
+      enumerable: true,
+      get: () => {
+        constructorRead = true;
+        return { name: "CallerControlled" };
+      },
+    });
+
+    expect(() => {
+      new TestEntity({
+        id: "task-1",
+        schema: ProjectionStateSchema,
+        state: createProjectionState(),
+        version: rejectedVersion,
+      });
+    }).toThrow(/plain snapshot data/);
+    expect(constructorRead).toBe(false);
+  });
+
+  it("rejects proxy version metadata without invoking traps", () => {
+    let trapInvoked = false;
+    const trap = () => {
+      trapInvoked = true;
+      throw new Error("proxy trap invoked");
+    };
+    const proxiedVersion = new Proxy(
+      { revision: 1, source: "server" as const },
+      {
+        getPrototypeOf: trap,
+        getOwnPropertyDescriptor: trap,
+        ownKeys: trap,
+        get: trap,
+        has: trap,
+      },
+    );
+
+    expect(() => {
+      new TestEntity({
+        id: "task-1",
+        schema: ProjectionStateSchema,
+        state: createProjectionState(),
+        version: proxiedVersion,
+      });
+    }).toThrow(/plain snapshot data/);
+    expect(trapInvoked).toBe(false);
+  });
+
+  it("rejects excessively deep plain version metadata with the domain error", () => {
+    let deepVersion: unknown = { revision: 1, source: "server" };
+    for (let index = 0; index < 20_000; index += 1) {
+      deepVersion = { child: deepVersion };
+    }
+
+    expect(() => {
+      new TestEntity({
+        id: "task-1",
+        schema: ProjectionStateSchema,
+        state: createProjectionState(),
+        version: deepVersion as RevisionMetadata,
+      });
+    }).toThrow(/plain snapshot data/);
+  });
+
+  it("constrains entity version generics to plain metadata at compile time", () => {
+    expectTypeOf<TestEntity["version"]>().toEqualTypeOf<RevisionMetadata>();
+    expectTypeOf<
+      EntityOptions<string, typeof ProjectionStateSchema, SizedRevisionMetadata>["version"]
+    >().toEqualTypeOf<SizedRevisionMetadata>();
+
+    const dateVersionOptions: EntityOptions<string, typeof ProjectionStateSchema, Date> = {
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      // @ts-expect-error Date is non-plain metadata and must be rejected by EntityOptions.
+      version: new Date("2026-06-29T00:00:00.000Z"),
+    };
+
+    expectTypeOf(dateVersionOptions).not.toBeAny();
+  });
+
+  it("keeps nested plain version metadata isolated through construction, reads, and replacement", () => {
+    const initialVersion = {
+      revision: 1,
+      source: "server" as const,
+      audit: { actor: "creator", checkpoints: ["created"] },
+      history: [{ stage: "draft", counters: [1] }],
+    };
+    const entity = new NestedVersionEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: initialVersion,
+    });
+
+    initialVersion.audit.actor = "caller";
+    initialVersion.audit.checkpoints.push("caller mutation");
+    initialVersion.history[0]?.counters.push(2);
+
+    const returnedInitialVersion = entity.version as unknown as {
+      audit: { actor: string; checkpoints: string[] };
+      history: { counters: number[] }[];
+    };
+    returnedInitialVersion.audit.actor = "getter";
+    returnedInitialVersion.audit.checkpoints.push("getter mutation");
+    returnedInitialVersion.history[0]?.counters.push(3);
+
+    expect(entity.version).toEqual({
+      revision: 1,
+      source: "server",
+      audit: { actor: "creator", checkpoints: ["created"] },
+      history: [{ stage: "draft", counters: [1] }],
+    });
+
+    const replacementVersion = {
+      revision: 2,
+      source: "server" as const,
+      audit: { actor: "approver", checkpoints: ["accepted"] },
+      history: [{ stage: "ready", counters: [5] }],
+    };
+    entity.applyVersion(replacementVersion);
+
+    replacementVersion.audit.actor = "caller";
+    replacementVersion.audit.checkpoints.push("caller mutation");
+    replacementVersion.history[0]?.counters.push(6);
+
+    const returnedReplacementVersion = entity.version as unknown as {
+      audit: { actor: string; checkpoints: string[] };
+      history: { counters: number[] }[];
+    };
+    returnedReplacementVersion.audit.actor = "getter";
+    returnedReplacementVersion.audit.checkpoints.push("getter mutation");
+    returnedReplacementVersion.history[0]?.counters.push(7);
+
+    expect(entity.version).toEqual({
+      revision: 2,
+      source: "server",
+      audit: { actor: "approver", checkpoints: ["accepted"] },
+      history: [{ stage: "ready", counters: [5] }],
+    });
+    expect(entity.version).not.toBe(replacementVersion);
+    expect(entity.version).not.toBe(returnedReplacementVersion);
+  });
+
+  it("tracks lifecycle flags and keeps lifecycle-change tracking sticky after protected changes", () => {
+    const entity = new TestEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+      lifecycle: { archived: true },
+    });
+
+    expect(entity.lifecycle).toEqual({ archived: true, deleted: false });
+    expect(entity.isActive).toBe(false);
+    expect(entity.isArchived).toBe(true);
+    expect(entity.isDeleted).toBe(false);
+    expect(entity.lifecycleFlagsChanged).toBe(false);
+
+    const returnedLifecycle = entity.lifecycle as { archived: boolean };
+    returnedLifecycle.archived = false;
+
+    expect(entity.lifecycle).toEqual({ archived: true, deleted: false });
+
+    entity.applyLifecycle({ archived: false, deleted: true });
+
+    expect(entity.lifecycle).toEqual({ archived: false, deleted: true });
+    expect(entity.isActive).toBe(false);
+    expect(entity.isArchived).toBe(false);
+    expect(entity.isDeleted).toBe(true);
+    expect(entity.lifecycleFlagsChanged).toBe(true);
+
+    entity.applyLifecycle({ archived: true, deleted: false });
+
+    expect(entity.lifecycle).toEqual({ archived: true, deleted: false });
+    expect(entity.lifecycleFlagsChanged).toBe(true);
+  });
+
+  it("keeps lifecycle-change tracking false for no-op protected lifecycle replacements", () => {
+    const entity = new TestEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+      lifecycle: { deleted: true },
+    });
+
+    entity.applyLifecycle({});
+    entity.applyLifecycle({ deleted: true });
+
+    expect(entity.lifecycle).toEqual({ archived: false, deleted: true });
+    expect(entity.isActive).toBe(false);
+    expect(entity.lifecycleFlagsChanged).toBe(false);
+  });
+
+  it("lets protected subclass code replace state and caller-owned version metadata without auto-increments", () => {
+    const entity = new TestEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    entity.applyState(createProjectionState({ name: "Ready", priority: 2 }));
+    entity.applyVersion({ revision: 99, source: "server" });
+
+    expect(entity.state).toEqual(createProjectionState({ name: "Ready", priority: 2 }));
+    expect(entity.version).toEqual({ revision: 99, source: "server" });
+    expect(entity.lifecycleFlagsChanged).toBe(false);
+  });
+
+  it("keeps protected version metadata replacements isolated from caller mutations", () => {
+    const replacementVersion = { revision: 2, source: "server" as const, labels: ["accepted"] };
+    const entity = new TestEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    entity.applyVersion(replacementVersion);
+
+    replacementVersion.revision = 3;
+    replacementVersion.labels.push("caller mutation");
+
+    const returnedVersion = entity.version as unknown as {
+      revision: number;
+      labels: string[];
+    };
+    returnedVersion.revision = 4;
+    returnedVersion.labels.push("getter mutation");
+
+    expect(entity.version).toEqual({
+      revision: 2,
+      source: "server",
+      labels: ["accepted"],
+    });
+    expect(entity.version).not.toBe(replacementVersion);
+    expect(entity.version).not.toBe(returnedVersion);
+  });
+});

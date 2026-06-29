@@ -2,7 +2,7 @@ import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 import { CommandSchema, file_spine_options } from "@spine-ts/proto";
 import {
   serverEntityMetadataFixtureGeneration,
@@ -10,13 +10,30 @@ import {
 } from "../test-fixtures/entity-metadata-fixtures.js";
 
 import * as serverRoot from "./index.js";
-import { describeEntityMetadata, DescriptorMetadataError, isEntitySchema } from "./index.js";
+import {
+  describeEntityMetadata,
+  DescriptorMetadataError,
+  isEntitySchema,
+  type EntityVersionMetadata,
+  type PlainEntityVersionMetadata,
+} from "./index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
   name: string;
   priority: number;
 };
+
+interface ExportedRevisionMetadata {
+  readonly revision: number;
+  readonly source: "server";
+  readonly labels?: readonly string[];
+}
+
+interface ExportedSizedMetadata {
+  readonly revision: number;
+  readonly size: number;
+}
 
 type AggregateState = Message<"AggregateState"> & {
   id: string;
@@ -127,6 +144,7 @@ describe("@spine-ts/server", () => {
         "HandlerMetadataError",
         "HandlerMetadataRegistry",
         "HandlerMetadataRegistryError",
+        "Entity",
         "React",
         "Subscribe",
         "defineEntityHandlers",
@@ -137,6 +155,19 @@ describe("@spine-ts/server", () => {
         "validateEntityStateTransition",
       ].sort(),
     );
+
+    expectTypeOf<{
+      readonly revision: number;
+      readonly source: string;
+      readonly checkpoints: readonly (string | null)[];
+    }>().toExtend<EntityVersionMetadata>();
+    expectTypeOf<
+      PlainEntityVersionMetadata<ExportedRevisionMetadata>
+    >().toEqualTypeOf<ExportedRevisionMetadata>();
+    expectTypeOf<
+      PlainEntityVersionMetadata<ExportedSizedMetadata>
+    >().toEqualTypeOf<ExportedSizedMetadata>();
+    expectTypeOf<PlainEntityVersionMetadata<Date>>().toBeNever();
   });
 
   it("extracts entity kind, default visibility, routing hints, columns, set-once fields, and tags", () => {
