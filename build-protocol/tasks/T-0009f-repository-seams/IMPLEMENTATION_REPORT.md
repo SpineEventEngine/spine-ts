@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f Repository Seams And Bounded-Context Registration Skeleton
 
-Status: Third Subtask Integrated; Parent Verification Passed
+Status: Fourth Subtask Integrated; Parent Verification Passed
 Task log: `build-protocol/tasks/T-0009f-repository-seams/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f.md`
 Review log: `build-protocol/reviews/T-0009f-repository-seams.md`
@@ -49,6 +49,14 @@ T-0009f.4 setup created the isolated
 commit `855da4a` on `2026-06-30 13:30 WEST`, recorded the task/review/work logs,
 and confirmed the implementation scope as immutable built-context metadata
 snapshots plus public documentation/API closure only.
+T-0009f.4 then added the public `BuiltBoundedContextSnapshot` alias, kept the
+bounded-context surface metadata-only, completed one review-fix round, received
+clean documentation and TypeScript/API re-review, and merged into the parent
+branch on `2026-06-30 14:02 WEST` as merge commit `28cabb4`. Parent
+verification passed with 17 full-suite files / 212 tests, coverage 96.39%
+statements / 90.8% branches / 99.09% functions / 96.32% lines, clean
+TypeDoc/API counts 100 / 28 / 97 / 26, proto lint/generate checksum
+verification, and generated-output gates clean.
 
 ## JVM Research Used
 
@@ -165,3 +173,10 @@ construction.
   proto output clean.
 - T-0009f.4 setup started on `2026-06-30 13:30 WEST` from parent commit
   `855da4a`; implementation and required reviewer lanes are pending.
+- T-0009f.4 merged into parent branch `task/T-0009f-repository-seams` on
+  `2026-06-30 14:02 WEST` as merge commit `28cabb4`. Parent
+  `CI=true corepack pnpm verify` passed with 17 test files / 212 tests,
+  coverage 96.39% statements / 90.8% branches / 99.09% functions / 96.32%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 97 server / 26 storage
+  expected exports, proto lint/generate checksum verification, and generated
+  proto output clean.

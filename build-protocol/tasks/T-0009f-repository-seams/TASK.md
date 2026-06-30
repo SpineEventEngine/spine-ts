@@ -1,6 +1,6 @@
 # T-0009f: Repository Seams And Bounded-Context Registration Skeleton
 
-Status: Third Subtask Integrated; Parent Verification Passed
+Status: Fourth Subtask Integrated; Parent Verification Passed
 Start: `2026-06-30 05:21 WEST`
 Baseline commit: `ec70945`
 Task log path: `build-protocol/tasks/T-0009f-repository-seams/TASK.md`
@@ -11,9 +11,8 @@ Requirements splitter:
 `019f16c7-9335-72e3-ab82-7c4ce7fc8e9c` (Singer the 4th, closed)
 Authoring sub-agents: T-0009f.1, T-0009f.2, and T-0009f.3 implemented by Codex
 implementation sub-agents
-Reviewer sub-agents: completed T-0009f.1, T-0009f.2, and T-0009f.3 durable
-review/fix rounds recorded in review logs; T-0009f.4 setup complete and
-implementation pending
+Reviewer sub-agents: completed T-0009f.1 through T-0009f.4 durable review/fix
+rounds recorded in review logs; future subtasks pending
 
 ## Objective
 
@@ -266,6 +265,14 @@ pnpm verify` passed with 15 test files / 160 tests, coverage 97.25%
   commit `855da4a`; setup inspected task-relevant JVM `BoundedContext`,
   `BoundedContextBuilder`, and `Repository` source and scoped the task to
   immutable metadata snapshots and public closure docs/API only.
+- `T-0009f.4 Immutable Built Context Snapshot And Public Closure` merged into
+  parent branch `task/T-0009f-repository-seams` on `2026-06-30 14:02 WEST` with
+  merge commit `28cabb4` after all required reviewer lanes reported no
+  remaining findings. Parent `CI=true corepack pnpm verify` passed with 17 test
+  files / 212 tests, coverage 96.39% statements / 90.8% branches / 99.09%
+  functions / 96.32% lines, TypeDoc/API checks with 100 proto / 28 core / 97
+  server / 26 storage expected exports, proto lint/generate checksum
+  verification, and generated proto output clean.
 
 ## Human Questions And Answers
 
