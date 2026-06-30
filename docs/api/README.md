@@ -32,10 +32,10 @@ active/archive/delete accessors.
 `PlainEntityVersionMetadata<T>` is the compile-time plain-shape helper used by
 entity inputs so ordinary metadata interfaces can be accepted while non-plain
 types such as `Date` are rejected. The shell has protected hooks for future
-framework-owned subclasses, but no public state setters, transaction execution,
-repository/storage writes, handler invocation, dispatch, lifecycle events,
-automatic version increments, routing, query APIs, buses, transports, or global
-runtime state.
+framework-owned subclasses, but no public state setters, Java builders,
+transaction execution, repository/storage writes, handler invocation, dispatch,
+lifecycle events, automatic version increments, routing, query APIs, buses,
+transports, or global runtime state.
 `TransactionalEntity` adds only protected, scoped draft helpers over
 `EntityTransaction`: one active transaction can read/update draft state, replace
 draft version metadata, update draft lifecycle flags, commit accepted results

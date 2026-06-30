@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Pending
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Complete; Integration Pending
 Task log: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e.md`
 Review log: `build-protocol/reviews/T-0009e-entity-base-classes.md`
@@ -16,6 +16,16 @@ into the parent entity-base branch. The parent task remains bounded to OOP
 entity shells for
 `@spine-ts/server` while preserving the D-0044 boundary against repositories,
 dispatch, storage, buses, and unsupported family-specific runtime behavior.
+`T-0009e.4 Public API Closure And Verification` has completed its local closure
+audit in an isolated subtask branch. The audit found the parent API/docs/log
+surface coherent without runtime source, root export, or API-check changes, and
+added explicit public-doc wording that Java builders remain deferred.
+Orchestrator-spawned Round 1 review found stale review-status wording, Round 2
+found stale chronology wording that contradicted the public-doc Java-builder
+deferral updates, and Round 3 found missing durable verification-pass evidence
+for the Round 2 fix. Fixes were applied and verified. Round 4 returned clean
+across all five required reviewer lanes, and final verification passed. The
+subtask is ready for parent integration.
 
 ## JVM Research Used
 
@@ -51,6 +61,17 @@ Integrated from `task/T-0009e1-common-entity-state-shell`,
 - `build-protocol/work-logs/T-0009e3.md`
 - `build-protocol/reviews/T-0009e3-family-capability-marker-classes.md`
 - parent T-0009e integration logs
+
+Closure evidence from
+`task/T-0009e4-public-api-closure-and-verification`:
+
+- `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`
+- `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/IMPLEMENTATION_REPORT.md`
+- `build-protocol/work-logs/T-0009e4.md`
+- `build-protocol/reviews/T-0009e4-public-api-closure-and-verification.md`
+- parent T-0009e closure logs
+- public package/API/user/architecture documentation wording for deferred Java
+  builders
 
 ## Verification
 
@@ -89,6 +110,25 @@ Integrated from `task/T-0009e1-common-entity-state-shell`,
   files / 158 tests, coverage 97.25% statements / 91.41% branches / 99.16%
   functions / 97.19% lines, TypeDoc/API/proto gates passed with 72 expected
   server exports, and generated proto output clean.
+- T-0009e.4 focused closure verification passed on `2026-06-30 03:11 WEST`:
+  `corepack pnpm vitest run packages/server/src/entity.test.ts
+packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
+  `node scripts/check-api-docs.mjs` passed with 72 expected server exports.
+- T-0009e.4 full closure verification `CI=true corepack pnpm verify` passed on
+  `2026-06-30 03:11 WEST`: typecheck, lint, format check, 15 test files / 158
+  tests, coverage 97.25% statements / 91.41% branches / 99.16% functions /
+  97.19% lines, TypeDoc/API/proto gates passed with 72 expected server exports,
+  and generated proto output clean.
+- T-0009e.4 Round 2 stale chronology fix verification passed: required
+  stale-wording scan exited 1 with no matches, `node scripts/check-api-docs.mjs`
+  exited 0 with 100 proto / 28 core / 72 server / 26 storage expected exports,
+  and `CI=true corepack pnpm verify` exited 0 with 15 test files / 158 tests and
+  coverage/API/proto/generated gates clean.
+- T-0009e.4 final subtask verification passed on `2026-06-30 04:13 WEST`:
+  `CI=true corepack pnpm verify` passed with 15 test files / 158 tests, coverage
+  97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
+  TypeDoc/API checks with 72 expected server exports, proto lint/generate, and
+  generated-output clean.
 
 ## Review
 
@@ -113,3 +153,10 @@ Integrated from `task/T-0009e1-common-entity-state-shell`,
   TypeScript/API docs, security, and performance/reliability.
 - All T-0009e.3 Round 3 reviewer sub-agents were closed by the orchestrator.
 - Parent branch integration verification passed for the T-0009e.3 merge commit.
+- T-0009e.4 completed its local closure audit and verification in the subtask
+  branch. Orchestrator Round 1 review found stale review-status wording, Round 2
+  found stale chronology wording about public-doc changes, and Round 3 found
+  missing durable verification-pass evidence for the Round 2 fix. Fixes were
+  applied and verified. Round 4 returned clean across all five required lanes,
+  all Round 4 reviewer sub-agents were closed, and final subtask verification
+  passed.

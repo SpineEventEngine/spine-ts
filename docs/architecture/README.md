@@ -206,9 +206,10 @@ caller-owned plain version metadata without computing increments, and exposes
 lifecycle flags plus `isActive`, `isArchived`, `isDeleted`, and sticky
 `lifecycleFlagsChanged` accessors. Protected replacement hooks give future
 framework-owned subclasses a narrow place to apply accepted state/version or
-lifecycle evidence, but the public shell has no state setters and does not own
-transactions, repositories, handler invocation, storage, lifecycle events,
-routing, queries, buses, transports, or process-global runtime state.
+lifecycle evidence, but the public shell has no state setters or Java builders
+and does not own transactions, repositories, handler invocation, storage,
+lifecycle events, routing, queries, buses, transports, or process-global runtime
+state.
 
 `TransactionalEntity` is the protected OOP draft layer over `EntityTransaction`.
 It adds one active transaction slot per entity instance, scoped helpers for
@@ -223,9 +224,9 @@ accepted state changes or committed lifecycle flag changes without making
 repository storage decisions. Scope errors are deterministic
 `TransactionalEntityScopeError` instances for missing or duplicate active
 transactions. The layer still avoids handler invocation, repositories, storage,
-lifecycle events, automatic version increments, transaction listeners, recent
-history, async-local/global transaction state, and entity-family-specific
-aggregate/projection/process-manager behavior.
+lifecycle events, Java builders, automatic version increments, transaction
+listeners, recent history, async-local/global transaction state, and
+entity-family-specific aggregate/projection/process-manager behavior.
 
 `Aggregate`, `Projection`, and `ProcessManager` are now public abstract entity
 family markers. Each extends `TransactionalEntity<Id, Schema, Version>` and

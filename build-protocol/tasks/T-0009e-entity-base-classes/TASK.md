@@ -1,6 +1,6 @@
 # T-0009e: Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Pending
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Complete; Integration Pending
 Start: `2026-06-29 21:58 WEST`
 Baseline commit: `47eae4e`
 Task log path: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
@@ -9,9 +9,10 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009e-entity-base-classes`
 Requirements splitter:
 `019f1531-96a3-7870-bb40-b24fc9a456c8` (Goodall the 3rd, closed)
-Authoring sub-agent: T-0009e.1, T-0009e.2, and T-0009e.3 completed in subtask branches
+Authoring sub-agent: T-0009e.1, T-0009e.2, T-0009e.3, and T-0009e.4 completed in subtask branches
 Reviewer sub-agents: T-0009e.1 Round 8 clean and closed; T-0009e.2 Round 11
-clean and closed; T-0009e.3 Round 3 clean and closed
+clean and closed; T-0009e.3 Round 3 clean and closed; T-0009e.4 Round 4
+clean and closed, with final verification passed
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:01 WEST`
 
@@ -221,7 +222,24 @@ statements 97.25%, branches 91.41%, functions 99.16%, lines 97.19%;
 TypeDoc/API/proto gates passed with 72 expected server exports and generated
 proto output clean.
 
-Next parent subtask: `T-0009e.4 Public API Closure And Verification`.
+Current parent subtask: `T-0009e.4 Public API Closure And Verification`.
+
+`T-0009e.4` started on `2026-06-30 02:52 WEST` in isolated branch
+`task/T-0009e4-public-api-closure-and-verification` from parent commit
+`94dd6d1`. It is scoped to public API/docs/log closure and verification for the
+completed entity base-class task, with no new runtime behavior.
+
+The T-0009e.4 implementation audit on `2026-06-30 03:03 WEST` found the root
+exports, TypeDoc export check, public package/API/user/architecture docs, and
+entity/root tests coherent at the final T-0009e surface. Local audit cleanup
+added explicit public-doc mentions that Java builders remain deferred and parent
+closure logs record final verification evidence. No runtime source, root export,
+or API-check changes were needed. Orchestrator-spawned Round 1 review found
+stale review-status wording, Round 2 found stale chronology wording that
+contradicted the public-doc Java-builder deferral updates, and Round 3 found
+missing durable verification-pass evidence for the Round 2 fix. Fixes were
+applied and verified. Round 4 returned clean across all five required reviewer
+lanes, and final verification passed.
 
 ## Initial Scope Constraints
 
@@ -260,6 +278,14 @@ Out of scope until later tasks:
 - `build-protocol/work-logs/T-0009e.md`
 - `build-protocol/reviews/T-0009e-entity-base-classes.md`
 - `build-protocol/DECISION_LOG.md`
+- `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`
+- `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/IMPLEMENTATION_REPORT.md`
+- `build-protocol/work-logs/T-0009e4.md`
+- `build-protocol/reviews/T-0009e4-public-api-closure-and-verification.md`
+- `docs/api/README.md`
+- `docs/USER_GUIDE.md`
+- `docs/architecture/README.md`
+- `packages/server/README.md`
 
 ## Tests Run
 
@@ -278,6 +304,25 @@ Out of scope until later tasks:
   `2026-06-30 02:46 WEST`: 15 test files / 158 tests; coverage statements
   97.25%, branches 91.41%, functions 99.16%, lines 97.19%; TypeDoc/API/proto
   gates passed with 72 expected server exports and generated proto output clean.
+- T-0009e.4 focused closure verification passed on `2026-06-30 03:11 WEST`:
+  `corepack pnpm vitest run packages/server/src/entity.test.ts
+packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
+  `node scripts/check-api-docs.mjs` passed with 72 expected server exports.
+- T-0009e.4 full closure verification `CI=true corepack pnpm verify` passed on
+  `2026-06-30 03:11 WEST`: typecheck, lint, format check, 15 test files / 158
+  tests, coverage statements 97.25%, branches 91.41%, functions 99.16%, lines
+  97.19%; TypeDoc/API/proto gates passed with 72 expected server exports and
+  generated proto output clean.
+- T-0009e.4 Round 2 stale chronology fix verification passed: required
+  stale-wording scan exited 1 with no matches, `node scripts/check-api-docs.mjs`
+  exited 0 with 100 proto / 28 core / 72 server / 26 storage expected exports,
+  and `CI=true corepack pnpm verify` exited 0 with 15 test files / 158 tests and
+  coverage/API/proto/generated gates clean.
+- T-0009e.4 final subtask verification passed on `2026-06-30 04:13 WEST`:
+  `CI=true corepack pnpm verify` passed with 15 test files / 158 tests, coverage
+  97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
+  TypeDoc/API checks with 72 expected server exports, proto lint/generate, and
+  generated-output clean.
 
 ## Review Rounds
 
@@ -287,6 +332,12 @@ Out of scope until later tasks:
   five required reviewer lanes and all reviewers were closed.
 - T-0009e.3 completed three review rounds; Round 3 returned clean across all
   five required reviewer lanes and all reviewers were closed.
+- T-0009e.4 implementation completed its local closure audit and verification.
+  Orchestrator Round 1 review found stale review-status wording, Round 2 found
+  stale chronology wording about public-doc changes, and Round 3 found missing
+  durable verification-pass evidence for the Round 2 fix. Fixes were applied
+  and verified. Round 4 returned clean across all five required lanes, and all
+  Round 4 reviewer sub-agents were closed.
 
 ## Current State
 
@@ -308,5 +359,8 @@ Out of scope until later tasks:
   `2026-06-30 02:46 WEST`: 15 test files / 158 tests; coverage 97.25%
   statements, 91.41% branches, 99.16% functions, 97.19% lines; TypeDoc/API/proto
   gates passed with 72 expected server exports.
-- Next step: create isolated `T-0009e.4 Public API Closure And Verification`
-  branch/worktree.
+- T-0009e.4 closure verification passed in the isolated subtask branch.
+  Orchestrator Round 4 review returned clean across all five required lanes
+  after prior review-fix rounds, and all Round 4 reviewer sub-agents were
+  closed. Final subtask verification passed, so the subtask is ready for parent
+  integration.

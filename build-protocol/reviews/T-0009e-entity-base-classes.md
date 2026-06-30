@@ -134,3 +134,31 @@ passed on `2026-06-30 02:46 WEST`.
   97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
   TypeDoc/API/proto gates passed with 72 expected server exports, and generated
   proto output clean.
+
+## T-0009e.4 Subtask Review Summary
+
+`T-0009e.4 Public API Closure And Verification` started on
+`2026-06-30 02:52 WEST` in isolated branch
+`task/T-0009e4-public-api-closure-and-verification` from baseline `94dd6d1`.
+
+Round 1 review found stale durable-log wording that falsely implied protocol
+review completion. Round 2 review found stale chronology wording that
+contradicted the public-doc Java-builder deferral updates. Round 3 review found
+missing durable verification-pass evidence for the Round 2 fix. Each finding
+was fixed and verified before re-review.
+
+Round 4 reviewed the full subtask range through `7b602e4` and returned clean
+across all five required lanes.
+
+| Role                       | Reviewer ID                            | Result | Closure |
+| -------------------------- | -------------------------------------- | ------ | ------- |
+| Code style/maintainability | `019f167d-130e-7d73-a92d-62a098edf5f1` | Clean  | Closed  |
+| Documentation              | `019f167d-13a0-7ea3-b8b2-2cbf7c8a40df` | Clean  | Closed  |
+| TypeScript/API docs        | `019f167d-140e-79b2-8624-d15971f21c13` | Clean  | Closed  |
+| Security                   | `019f167d-149a-7720-8406-131ca8d9f61b` | Clean  | Closed  |
+| Performance/reliability    | `019f167d-151e-78f3-a0d7-2e5f88791cee` | Clean  | Closed  |
+
+Final verification passed on `2026-06-30 04:13 WEST`: `CI=true corepack pnpm
+verify` passed with 15 test files / 158 tests, coverage 97.25% statements /
+91.41% branches / 99.16% functions / 97.19% lines, TypeDoc/API checks with 72
+expected server exports, proto lint/generate, and generated output clean.

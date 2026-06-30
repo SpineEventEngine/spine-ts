@@ -134,10 +134,10 @@ maps, sets, class instances, and proxies are rejected. The exported
 interfaces at entity input boundaries while rejecting known non-plain types such
 as `Date`. State and version access return cloned snapshots so caller mutation
 does not mutate stored entity state. Protected replacement hooks exist only for
-later framework-owned subclasses; there are no public state setters, automatic
-version increments, transactions, handler invocation, repository writes,
-storage calls, lifecycle events, routing, queries, buses, transports, or global
-runtime state.
+later framework-owned subclasses; there are no public state setters, Java
+builders, automatic version increments, transactions, handler invocation,
+repository writes, storage calls, lifecycle events, routing, queries, buses,
+transports, or global runtime state.
 
 `TransactionalEntity` is the small protected draft layer for future
 framework-owned entity families. Subclasses can start one active transaction,
