@@ -1,6 +1,6 @@
 # T-0010.4: Command Registration Readiness
 
-Status: Review Fix Verified
+Status: Review Fix Verified; Re-Review Pending
 Parent task: `T-0010 Single-Process Async Runtime`
 Start: `2026-06-30 17:24 WEST`
 Baseline commit: `e5e7b1d`
@@ -10,7 +10,8 @@ Branch: `task/T-0010-4-command-registration-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0010-4-command-registration-readiness`
 Authoring sub-agent: Codex implementation sub-agent.
-Reviewer sub-agents: none spawned per handoff.
+Reviewer sub-agents: initial required review lanes completed; re-review pending
+for lanes with findings.
 
 ## Objective
 
@@ -143,6 +144,11 @@ pnpm verify` passed with 20 test files / 242 tests, coverage 95.94%
   return fresh frozen copies of nested handler, entity-handler, registered
   handler, and shallow entity metadata so caller mutation of returned assignee
   metadata cannot affect later lookups.
+- Initial documentation, TypeScript/API docs, and security review lanes had no
+  findings.
+- Initial code style/maintainability and performance/reliability review lanes
+  found the sorting determinism issue; performance/reliability also found the
+  nested copy-safety issue.
 
 ## Human Questions And Answers
 

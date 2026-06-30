@@ -1,6 +1,6 @@
 # Review Log: T-0010.4 Command Registration Readiness
 
-Status: Review Fix Verified
+Status: Review Fix Verified; Re-Review Pending
 
 ## Required Review Lanes
 
@@ -33,18 +33,18 @@ invocation, validation, storage, transport, or `Ack`.
 
 ## Reviewer Rounds
 
-No separate reviewer sub-agents were spawned per handoff. The implementation
-sub-agent completed the required lanes against the task scope:
+Initial required review lanes were run by separate reviewer sub-agents and then
+closed by the orchestrator:
 
-| Lane                       | Result                                                                                                                                                                                                                                     |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Code style/maintainability | Passed. The public surface is one small read-only class over `HandlerMetadataRegistryLookup`, with no command bus/service/dispatch behavior and no second duplicate policy. `eslint` and `prettier --check` passed in full verify.         |
-| Documentation              | Passed. `packages/server/README.md` and `docs/api/README.md` describe command registration readiness as metadata-only and list runtime exclusions.                                                                                         |
-| TypeScript/API docs        | Passed. Root exports and `scripts/check-api-docs.mjs` include `CommandRegistrationReadiness`, `CommandRegistrationReadinessLookup`, and `CommandRegistrationAssigneeMetadata`; TypeDoc JSON check passed with 119 expected server exports. |
-| Security                   | Passed. Readiness returns frozen fresh-copy arrays/values, does not inspect payloads or invoke user handlers, and delegates duplicate assignment validation to the existing registry.                                                      |
-| Performance/reliability    | Passed. Construction performs bounded metadata scans and deterministic sorting; lookups are map-backed; empty registries are valid. Full verify passed with coverage above the 90% task floor.                                             |
+| Lane                       | Reviewer sub-agent                     | Result                                                                                                                                                                                                                                                                      |
+| -------------------------- | -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Code style/maintainability | `019f1969-e89b-79c3-aa03-0733091721b9` | Minor finding: `localeCompare()` made command-name ordering depend on host/default locale and ICU behavior.                                                                                                                                                                 |
+| Documentation              | `019f196a-16c4-7860-a2b4-61968550b23e` | No findings.                                                                                                                                                                                                                                                                |
+| TypeScript/API docs        | `019f196a-3f93-75d1-8092-fb2719106ed0` | No findings.                                                                                                                                                                                                                                                                |
+| Security                   | `019f196a-681f-7583-ae34-99e0dde0d033` | No findings. The reviewer noted an edge around hostile custom `HandlerMetadataRegistryLookup` objects, but did not classify it as a finding for the intended frozen metadata path.                                                                                          |
+| Performance/reliability    | `019f196a-8e4e-7631-941c-733a7ad1d340` | Important findings: `localeCompare()` made command-name ordering locale-dependent, and returned assignee values copied only the outer object while nested `handler`, `entityHandlers`, and `registeredHandler` references could remain aliased from public lookup metadata. |
 
-Verification evidence:
+Implementation verification evidence:
 
 - RED: `corepack pnpm test packages/server/src/command-registration-readiness.test.ts`
   failed on `2026-06-30 17:34 WEST` because the new public API was absent.
