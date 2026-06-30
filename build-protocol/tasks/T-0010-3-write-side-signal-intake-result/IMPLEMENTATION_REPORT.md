@@ -1,6 +1,6 @@
 # Implementation Report: T-0010.3 Write-Side Signal Intake Result
 
-Status: Setup Baseline Verified; Implementation Handoff Pending
+Status: Ready For Review
 Task log:
 `build-protocol/tasks/T-0010-3-write-side-signal-intake-result/TASK.md`
 Work log: `build-protocol/work-logs/T-0010-3.md`
@@ -28,14 +28,31 @@ store-before-dispatch are explicitly larger than this subtask.
 
 ## Files Changed
 
-- `build-protocol/DECISION_LOG.md`
+- `packages/server/src/signal-intake.ts`
+- `packages/server/src/signal-intake.test.ts`
+- `packages/server/src/index.ts`
+- `packages/server/src/index.test.ts`
+- `packages/server/README.md`
+- `docs/api/README.md`
+- `scripts/check-api-docs.mjs`
 - `build-protocol/tasks/T-0010-3-write-side-signal-intake-result/TASK.md`
 - `build-protocol/tasks/T-0010-3-write-side-signal-intake-result/IMPLEMENTATION_REPORT.md`
 - `build-protocol/work-logs/T-0010-3.md`
 - `build-protocol/reviews/T-0010-3-write-side-signal-intake-result.md`
-- parent T-0010 task/report/work/review logs
 
-Implementation files are pending.
+## Implementation Notes
+
+- Added immutable `SignalIntakeResult` values with a `status` discriminant,
+  `signalKind` for command/event, accepted-for-async-work results, and
+  immediate failure results.
+- Added stable failure codes:
+  `"RUNTIME_NOT_ACCEPTING"`, `"MALFORMED_ENVELOPE"`, and
+  `"UNSUPPORTED_SIGNAL_KIND"`.
+- Added copy-safe scalar diagnostics that omit payload-shaped keys such as
+  `payload`, `message`, `signal`, and `envelope`.
+- Exported the seam from `@spine-ts/server` and updated the TypeDoc export gate.
+- Documented that accepted intake does not imply `Ack`, enqueueing, storage,
+  dispatch, delivery, handling, services, validation, or transport behavior.
 
 ## Verification
 
@@ -45,3 +62,22 @@ Implementation files are pending.
   lines, TypeDoc/API checks with 100 proto / 28 core / 106 server / 26 storage
   expected exports, proto lint/generate checksum verification, and generated
   proto output clean.
+- Red check on `2026-06-30 16:40 WEST`: `corepack pnpm exec vitest run
+packages/server/src/signal-intake.test.ts` failed because
+  `./signal-intake.js` did not exist.
+- Focused green check on `2026-06-30 16:41 WEST`: `corepack pnpm exec vitest
+run packages/server/src/signal-intake.test.ts` passed with 1 test file / 6
+  tests.
+- Focused export check on `2026-06-30 16:41 WEST`: `corepack pnpm exec vitest
+run packages/server/src/signal-intake.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 15 tests.
+- TypeScript check on `2026-06-30 16:42 WEST`: `corepack pnpm typecheck`
+  passed.
+- Lint/focused retry on `2026-06-30 16:44 WEST`: `corepack pnpm lint` passed
+  and `corepack pnpm exec vitest run packages/server/src/signal-intake.test.ts
+packages/server/src/index.test.ts` passed with 2 test files / 15 tests.
+- Final implementation verification on `2026-06-30 16:45 WEST`: `CI=true
+corepack pnpm verify` passed with 19 test files / 230 tests, coverage 96.26%
+  statements / 90.43% branches / 99.16% functions / 96.19% lines, TypeDoc/API
+  checks with 100 proto / 28 core / 116 server / 26 storage expected exports,
+  proto lint/generate checksum verification, and generated proto output clean.

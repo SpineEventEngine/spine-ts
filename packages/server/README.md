@@ -48,6 +48,10 @@ Current slice exposes:
 - `BoundedContextRuntime` for a context-scoped runtime handle that binds one
   built `BoundedContext` snapshot to a lifecycle without exposing queue intake,
   buses, storage, services, dispatch, or repository runtime registration.
+- `acceptSignalIntake()` / `failSignalIntake()` and `SignalIntakeResult` for
+  typed write-side command/event intake outcomes that distinguish
+  accepted-for-async-work from immediate intake failure without implementing
+  `Ack`, buses, filters, storage, dispatch, services, or transport.
 
 ```ts
 import {
@@ -160,6 +164,40 @@ is not a global singleton, process supervisor, generic job framework, command
 bus, event bus, import bus, repository dispatcher, event store, durable inbox,
 read-side stand, tenant index, integration broker, gRPC server, ZeroMQ
 transport, worker-process runtime, or storage-backed delivery mechanism.
+
+## Write-Side Signal Intake Results
+
+Use `SignalIntakeResult` when later command/event intake code needs to report
+whether a signal was accepted for future asynchronous runtime work or failed
+immediately at the intake edge:
+
+```ts
+import { acceptSignalIntake, failSignalIntake } from "@spine-ts/server";
+
+const accepted = acceptSignalIntake("command");
+accepted.status; // "accepted"
+accepted.acceptedFor; // "async-work"
+
+const failed = failSignalIntake("event", "RUNTIME_NOT_ACCEPTING", {
+  boundedContext: "Tasks",
+  runtimeState: "closed",
+});
+failed.failure.code; // "RUNTIME_NOT_ACCEPTING"
+```
+
+Accepted results are immutable values only. They mean the runtime accepted
+responsibility for later asynchronous work; they do not mean the signal was
+stored, dispatched, delivered, handled, acknowledged, or successfully applied.
+
+Failure results carry a stable `SignalIntakeFailureCode` and frozen scalar
+diagnostics. Diagnostic values are copied, limited to strings, numbers,
+booleans, or `null`, and payload-shaped keys such as `payload`, `message`,
+`signal`, and `envelope` are omitted. This keeps immediate intake evidence
+useful for later mapping without exposing full signal data.
+
+This seam deliberately does not call `SingleProcessServerRuntime.enqueue()`,
+create Spine `Ack` messages, validate tenants or messages, filter signals,
+store events, dispatch handlers, run services, or expose transport behavior.
 
 ## Bounded Context Runtime Handle
 

@@ -170,6 +170,21 @@ process-wide singleton, process supervisor, generic job framework,
 command/event/import bus, durable storage or inbox, read-side stand, repository
 dispatcher, integration broker, gRPC server, ZeroMQ transport, or worker-process
 runtime.
+Write-side signal intake exports include `SignalKind`, `SignalIntakeResult`,
+`SignalIntakeAccepted`, `SignalIntakeAcceptedFor`, `SignalIntakeFailure`,
+`SignalIntakeFailureCode`, `SignalIntakeFailureDetails`,
+`SignalIntakeFailureDiagnostics`, `acceptSignalIntake()`, and
+`failSignalIntake()`. These immutable result values distinguish command/event
+signals accepted for later asynchronous runtime work from immediate intake
+failures. Accepted results do not enqueue work, store, dispatch, deliver,
+handle, or acknowledge a signal. Failure results carry stable failure codes
+(`"RUNTIME_NOT_ACCEPTING"`, `"MALFORMED_ENVELOPE"`, and
+`"UNSUPPORTED_SIGNAL_KIND"`) plus frozen scalar diagnostic metadata. Diagnostics
+copy only strings, numbers, booleans, and `null`, and omit payload-shaped keys
+such as `payload`, `message`, `signal`, and `envelope`, so the seam can be used
+without leaking full signal data. The surface is not Spine `Ack`, a command bus,
+event bus, import bus, filter chain, storage write, dispatcher, delivery
+mechanism, tenant/message validator, service, transport, or handler invocation.
 
 Storage exports include `StorageAdapter`, `StorageRecord`,
 `WriteSideRecordStore`, `ReadSideRecordStore`, aggregate event history
