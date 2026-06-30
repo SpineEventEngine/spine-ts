@@ -5,8 +5,9 @@ TypeDoc is the canonical API documentation generator for this repository.
 Current status: the generated reference contains the curated `@spine-ts/proto`
 root API for copied Spine contracts, the `@spine-ts/core` metadata/type
 registry and validation facade APIs, the first `@spine-ts/server`
-descriptor-derived entity metadata, set-once transition validation, and
-explicit handler metadata APIs, and the first `@spine-ts/storage` contracts.
+descriptor-derived entity metadata, metadata-only `Repository` identity,
+set-once transition validation, and explicit handler metadata APIs, and the
+first `@spine-ts/storage` contracts.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
@@ -63,6 +64,23 @@ They do not add public transaction mutators, repositories, dispatch, aggregate
 event history, snapshots, subscriptions, command posting, query clients,
 process workflow execution, handler invocation, storage, buses, or lifecycle
 events.
+`Repository`, `RepositoryOptions`, `RepositoryEntityType`,
+`ConcreteRepositoryEntityType`, `RepositoryStateSchema`,
+`RepositoryIdentitySnapshot`, `RepositoryIdentityError`,
+`RepositoryIdentityErrorCode`, and `RepositoryIdentityErrorDetails` form the
+metadata-only repository identity seam. A repository identity records one
+entity constructor, the inferred aggregate/projection/process-manager family,
+the matching descriptor-backed state schema, descriptor metadata, state full
+type name, and ID-field metadata. Snapshots are frozen fresh-copy values for
+later bounded-context duplicate/conflict checks. The seam rejects unsupported
+constructors and entity-family/state-kind mismatches with structured
+`RepositoryIdentityError` details. Family inference trusts same-realm class
+constructor and instance prototype metadata, so alias imports, member
+expressions, intermediate domain base classes, and explicitly reparented ES
+classes with matching same-realm prototype chains are treated as metadata. It
+does not create/find/store entities, open storage, register contexts, route or
+dispatch messages, write inboxes, invoke handlers, manage caches, run catch-up,
+expose stands, or start buses/transports.
 Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field

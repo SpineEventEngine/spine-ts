@@ -193,6 +193,15 @@ const expectedServerExports = [
   "PlainEntityVersionMetadata",
   "ProcessManager",
   "Projection",
+  "ConcreteRepositoryEntityType",
+  "Repository",
+  "RepositoryEntityType",
+  "RepositoryIdentityError",
+  "RepositoryIdentityErrorCode",
+  "RepositoryIdentityErrorDetails",
+  "RepositoryIdentitySnapshot",
+  "RepositoryOptions",
+  "RepositoryStateSchema",
   "TransactionalEntity",
   "TransactionalEntityScopeError",
   "TransactionalEntityScopeErrorReason",
@@ -389,6 +398,32 @@ const missingExports = expectedProtoExports.filter((name) => !documentedNames.ha
 const missingCoreExports = expectedCoreExports.filter((name) => !documentedNames.has(name));
 const missingServerExports = expectedServerExports.filter((name) => !documentedNames.has(name));
 const missingStorageExports = expectedStorageExports.filter((name) => !documentedNames.has(name));
+const forbiddenTypeDocNames = [
+  "BuiltInEntityConstructor",
+  "BuiltInEntityConstructorBase",
+  "EntityConstructor",
+  "EntityStaticMarkerBase",
+  "EntityStaticMarkerBaseClass",
+  "HasErasedRepositoryConstructorParameters",
+  "RepositoryEntityTypeCarriesConcreteConstructorParameters",
+  "RepositoryEntityTypeConstraint",
+  "SingleConcreteRepositoryEntityType",
+  "RepositorySchemaForInstance",
+  "RepositoryConcreteEntityTypeConstraint",
+  "RepositorySchemaFromEntityInstance",
+  "repositoryEntityTypeConstraint",
+  "spineTsEntityConstructor",
+  "__repositoryEntityTypeMustBeASingleConcreteConstructor",
+  "__repositoryEntityTypeMustCarryConcreteStateSchema",
+  "__spineTsBuiltInEntityConstructor",
+  "__spineTsEntityConstructorBrand",
+  "EntityConstructorBrand",
+];
+const forbiddenTypeDocNamePatterns = [
+  /\bEntity\w*Marker\w*\b/u,
+  /\b\w*EntityConstructor\w*Brand\w*\b/u,
+  /\bspineTs\w*\b/u,
+];
 
 if (missingExports.length > 0) {
   console.error(
@@ -422,6 +457,24 @@ if (forbiddenMatches.length > 0) {
   console.error(
     `TypeDoc JSON exposes removed or non-public @spine-ts/server API surface: ${[
       ...new Set(forbiddenMatches),
+    ].join(", ")}`,
+  );
+  process.exit(1);
+}
+
+const apiDocsText = JSON.stringify(apiDocs);
+const forbiddenTypeDocNameMatches = forbiddenTypeDocNames.filter((name) =>
+  apiDocsText.includes(name),
+);
+const forbiddenTypeDocPatternMatches = forbiddenTypeDocNamePatterns
+  .filter((pattern) => pattern.test(apiDocsText))
+  .map((pattern) => pattern.toString());
+
+if (forbiddenTypeDocNameMatches.length > 0 || forbiddenTypeDocPatternMatches.length > 0) {
+  console.error(
+    `TypeDoc JSON exposes internal @spine-ts/server repository type machinery: ${[
+      ...forbiddenTypeDocNameMatches,
+      ...forbiddenTypeDocPatternMatches,
     ].join(", ")}`,
   );
   process.exit(1);

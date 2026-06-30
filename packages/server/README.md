@@ -20,6 +20,9 @@ Current slice exposes:
 - `Aggregate`, `Projection`, and `ProcessManager` abstract family marker classes
   over `TransactionalEntity`, each exposing a stable `entityFamily` identity;
   and
+- `new Repository({ entityType, schema })` for metadata-only repository identity
+  over one entity constructor and matching entity state schema;
+  and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
 - first-field routing hints from descriptor order;
@@ -201,6 +204,42 @@ lifecycle accessors, `changed`, and protected transaction helpers from
 `TransactionalEntity`. They do not add public transaction mutators, command
 posting, event history, snapshots, subscriptions, query clients, process
 workflow execution, handler invocation, storage, buses, or lifecycle events.
+
+## Repository Identity
+
+Use `Repository` when later bounded-context builder code needs to record that
+one entity constructor owns one descriptor-backed state schema:
+
+```ts
+import { Aggregate, Repository } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
+
+const repository = new Repository({
+  entityType: TaskAggregate,
+  schema: TaskStateSchema,
+});
+
+repository.entityFamily; // "aggregate"
+repository.stateFullTypeName; // TaskStateSchema.typeName
+repository.snapshot.stateFullTypeName; // immutable fresh-copy snapshot
+```
+
+The constructor derives descriptor metadata with `describeEntityMetadata()` and
+infers the entity family from same-realm constructor and instance prototype
+chains reaching `Aggregate`, `Projection`, or `ProcessManager`. Alias imports,
+namespace/member base-class expressions, and intermediate domain base classes
+are accepted. Explicitly reparented same-realm ES classes are trusted as
+metadata; this is not a sandbox boundary. The API rejects constructors outside
+those families and rejects mismatched family/schema pairs, such as an aggregate
+class with a projection state schema, with structured `RepositoryIdentityError`
+codes and details. This identity seam follows Spine `core-jvm` `Repository`
+identity concepts closely while deferring runtime behavior. This API is
+metadata-only: it does not create, find, or store
+entities; open storage; register with a bounded context; route messages; invoke
+handlers; write inboxes; manage caches; emit lifecycle events; start buses; or
+touch transport.
 
 ## Entity State Transition Validation
 

@@ -2,8 +2,8 @@
 
 Current status: early framework guide for the descriptor registry,
 single-message validation facade, core envelope construction helpers, the first
-server entity and handler metadata layers, and the first storage contracts with
-an in-memory adapter.
+server entity, handler, repository identity, and bounded-context metadata
+layers, and the first storage contracts with an in-memory adapter.
 
 This guide covers the runnable behavior available now: Spine proto descriptors
 are exposed through curated packages, `@spine-ts/core` can derive and look up
@@ -17,7 +17,8 @@ handlers or mutating global runtime state. It also exposes built-in
 `(set_once)` entity state transition validation, a buffered entity transaction
 boundary, thin aggregate/projection/process-manager family base classes, a
 caller-owned handler metadata registry for duplicate validation and lookup-only
-views, and a first metadata-only bounded-context builder shell.
+views, a metadata-only repository identity seam, and a first metadata-only
+bounded-context builder shell.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
 deterministic in-memory adapter for tests/development. Entity runtime,
 transport, durable production storage, and the to-do application remain later
@@ -59,6 +60,10 @@ slices.
   the entity shell.
 - Thin abstract `Aggregate`, `Projection`, and `ProcessManager` family marker
   classes over `TransactionalEntity`, each with stable `entityFamily` identity.
+- A metadata-only `Repository` identity API that binds one aggregate,
+  projection, or process-manager constructor to one matching entity state
+  schema and returns immutable fresh-copy snapshots for later registration
+  checks.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.
@@ -98,10 +103,11 @@ slices.
   registries. The server metadata APIs preserve entity tags and explicit
   handler declarations now, but no runtime registry consumes them yet.
 - gRPC service implementations.
-- Repository registration, handler invocation, entity runtime dispatch, system
-  context construction, bus/stand execution, tenant index persistence, gRPC
-  service implementations, transport integration, durable production storage,
-  and to-do domain runtime behavior.
+- Runtime repository registration, repository duplicate/conflict policy,
+  handler invocation, entity runtime dispatch, system context construction,
+  bus/stand execution, tenant index persistence, gRPC service implementations,
+  transport integration, durable production storage, and to-do domain runtime
+  behavior.
 
 ## Type Registry
 
@@ -323,6 +329,43 @@ family identity through `entityFamily`. They do not add public transaction
 mutators, Java builders, event history, snapshots, subscriptions, command
 posting, query clients, process workflow execution, handler invocation, storage,
 buses, or lifecycle events.
+
+## Repository Identity
+
+Use `Repository` when code needs to record entity ownership metadata before
+runtime bounded-context registration exists:
+
+```ts
+import { Aggregate, Repository } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
+
+const repository = new Repository({
+  entityType: TaskAggregate,
+  schema: TaskStateSchema,
+});
+
+repository.entityFamily; // "aggregate"
+repository.metadata.fullTypeName; // TaskStateSchema.typeName
+repository.snapshot.idField.name; // "id"
+```
+
+`Repository` infers the family from the constructor and instance prototype
+chains reaching the built-in family marker base class and checks it against the
+state schema's `(entity).kind`. Alias imports, namespace/member base-class
+expressions, and intermediate domain base classes are accepted. This is a
+same-realm metadata boundary: code that explicitly reparents an ES class onto an
+entity family is trusted as entity metadata, not rejected as an adversarial
+sandbox escape. Mismatches, such as an aggregate constructor paired with a
+projection state schema, throw `RepositoryIdentityError` with stable codes and
+structured details. `snapshot` returns a frozen fresh copy suitable for later
+bounded-context duplicate and conflict checks.
+
+This is explicitly metadata-only. It does not create, find, or store entities;
+open storage; convert records; register with a bounded context; route or
+dispatch messages; write inboxes; invoke handlers; manage caches; run catch-up;
+emit lifecycle events; expose query stands; start buses; or use gRPC/transport.
 
 ## Envelope Packing
 

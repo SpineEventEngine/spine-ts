@@ -155,6 +155,8 @@ describe("@spine-ts/server", () => {
         "Entity",
         "ProcessManager",
         "Projection",
+        "Repository",
+        "RepositoryIdentityError",
         "TransactionalEntity",
         "TransactionalEntityScopeError",
         "React",

@@ -1206,3 +1206,38 @@ Consequences:
 - A later task may revisit repeated, map, or explicit optional support only
   after checking the JVM compatibility impact and deciding the relevant
   collection or presence canonicalization policy.
+
+## D-0047: Repository Identity Seam Remains Metadata-Only
+
+Status: Accepted
+
+Date: 2026-06-30
+
+Context: `T-0009f.2 Repository Identity And Entity Ownership Seam` introduces
+the repository identity and entity ownership seam for later bounded-context
+builder registration. Spine JVM `Repository.java` exposes entity ownership
+metadata such as ID class, entity class, and entity state type, but its
+registration, storage opening, stand type-supplier registration, routing failure
+reporting, and lifecycle behavior depend on a built `BoundedContext` and server
+runtime. Spine JVM `AggregateRepository`, `ProjectionRepository`, and
+`ProcessManagerRepository` add routing, inboxes, caches, catch-up, command and
+event bus registration, import, and dispatch behavior. Those are beyond the
+selected subtask. The human explicitly warned to inspect the corresponding
+Spine JVM server code closely and avoid over-inventing.
+
+Decision: Implement `T-0009f.2` as a metadata-only repository identity seam over
+entity constructors/state schemas and existing descriptor-derived entity
+metadata. Do not implement create/find/store, storage adapters, routing
+execution, inboxes, cache, query stand, context open/close lifecycle, handler
+invocation, or bus registration in this subtask. Reject mismatches between the
+entity family marker and the state schema kind, because later builder conflict
+checks must rely on deterministic ownership metadata.
+
+Consequences:
+
+- The public API stays close to the current JVM concept without pretending to
+  provide runtime repository behavior.
+- Later `T-0009f.3` can register and deduplicate repositories using immutable
+  identity snapshots.
+- Runtime behavior remains explicitly deferred to storage, routing, delivery,
+  and built-context tasks.
