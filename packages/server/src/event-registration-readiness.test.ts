@@ -227,6 +227,26 @@ describe("event registration readiness", () => {
     );
   });
 
+  it("rejects duplicate event applications from custom registry lookups", () => {
+    const first = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+      builder.apply(EventSchema, "applyCreated"),
+    ]);
+    const second = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+      builder.apply(EventSchema, "applyCreated"),
+    ]);
+    const customLookup = createRegistryLookupForEventHandlers([
+      createRegisteredEventHandler(first, first.eventApplications[0]),
+      createRegisteredEventHandler(second, second.eventApplications[0]),
+    ]);
+
+    expect(() => EventRegistrationReadiness.fromRegistry(customLookup)).toThrow(
+      HandlerMetadataRegistryError,
+    );
+    expect(() => EventRegistrationReadiness.fromRegistry(customLookup)).toThrow(
+      /Duplicate event application for entity "ProjectionState" and event "spine\.core\.Event"/,
+    );
+  });
+
   it("returns frozen copy-safe event lists and receiver values", () => {
     const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.subscribe(EventSchema, "subscribeCreated"),
@@ -332,6 +352,83 @@ describe("event registration readiness", () => {
     });
   });
 
+  it("keeps returned event schema and descriptor metadata from mutating later lookups", () => {
+    const mutableSchema = { ...EventSchema };
+    const mutableDescriptor = { ...EventSchema };
+    const mutableHandler: EventSubscriptionHandlerMetadata = {
+      kind: "event-subscription",
+      schema: mutableSchema,
+      descriptor: mutableDescriptor,
+      messageFullTypeName: EventSchema.typeName,
+      methodName: "subscribeCreated",
+    };
+    const mutableEntityHandlers: EntityHandlersMetadata = {
+      entityType: TaskProjection,
+      entity: createProjectionEntityMetadata(),
+      handlers: [mutableHandler],
+      commandAssignments: [],
+      commandReactions: [],
+      eventSubscriptions: [mutableHandler],
+      eventReactions: [],
+      eventApplications: [],
+    };
+    const mutableRegisteredHandler: RegisteredHandlerMetadata<EventSubscriptionHandlerMetadata> = {
+      entityHandlers: mutableEntityHandlers,
+      entityType: TaskProjection,
+      entity: mutableEntityHandlers.entity,
+      handler: mutableHandler,
+    };
+    const readiness = EventRegistrationReadiness.fromRegistry(
+      createRegistryLookupForEventHandlers([mutableRegisteredHandler]),
+    );
+
+    const subscriber = readiness.findEventSubscribers(EventSchema.typeName)[0];
+
+    expect(Object.isFrozen(subscriber?.handler.schema)).toBe(true);
+    expect(Object.isFrozen(subscriber?.handler.descriptor)).toBe(true);
+    expect(() => {
+      (subscriber?.handler.schema as { typeName: string }).typeName = "example.MutatedEvent";
+    }).toThrow(TypeError);
+    expect(() => {
+      (subscriber?.handler.descriptor as { typeName: string }).typeName =
+        "example.MutatedEventDescriptor";
+    }).toThrow(TypeError);
+
+    expect(readiness.findEventSubscribers(EventSchema.typeName)[0]).toMatchObject({
+      handler: {
+        schema: { typeName: EventSchema.typeName },
+        descriptor: { typeName: EventSchema.typeName },
+      },
+    });
+  });
+
+  it("preserves entity field metadata identity in returned event metadata", () => {
+    const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+      builder.subscribe(EventSchema, "subscribeCreated"),
+      builder.apply(EventSchema, "applyCreated"),
+    ]);
+    const readiness = EventRegistrationReadiness.fromEntityHandlers([handlers]);
+
+    const subscriber = readiness.findEventSubscribers(EventSchema.typeName)[0];
+    const application = readiness.findEventApplications(EventSchema.typeName)[0];
+
+    expect(handlers.entity.idField).toBe(handlers.entity.firstFieldRoutingHint.field);
+    expect(subscriber?.entity.idField).toBe(subscriber?.entity.firstFieldRoutingHint.field);
+    expect(subscriber?.registeredHandler.entity.idField).toBe(
+      subscriber?.registeredHandler.entity.firstFieldRoutingHint.field,
+    );
+    expect(subscriber?.entityHandlers.entity.idField).toBe(
+      subscriber?.entityHandlers.entity.firstFieldRoutingHint.field,
+    );
+    expect(application?.entity.idField).toBe(application?.entity.firstFieldRoutingHint.field);
+    expect(application?.registeredHandler.entity.idField).toBe(
+      application?.registeredHandler.entity.firstFieldRoutingHint.field,
+    );
+    expect(application?.entityHandlers.entity.idField).toBe(
+      application?.entityHandlers.entity.firstFieldRoutingHint.field,
+    );
+  });
+
   it("does not expose bus, broker, import, storage, dispatch, delivery, or acknowledgement members", () => {
     const readiness = EventRegistrationReadiness.fromRegistry(new HandlerMetadataRegistry());
 
@@ -410,6 +507,22 @@ function createRegistryLookupForEventHandlers(
           entry.entity.fullTypeName === entityStateFullTypeName &&
           entry.handler.messageFullTypeName === eventFullTypeName,
       ),
+  };
+}
+
+function createRegisteredEventHandler<Handler extends EventHandlerMetadata>(
+  entityHandlers: EntityHandlersMetadata,
+  handler: Handler | undefined,
+): RegisteredHandlerMetadata<Handler> {
+  if (handler === undefined) {
+    throw new Error("Expected event handler metadata.");
+  }
+
+  return {
+    entityHandlers,
+    entityType: entityHandlers.entityType,
+    entity: entityHandlers.entity,
+    handler,
   };
 }
 

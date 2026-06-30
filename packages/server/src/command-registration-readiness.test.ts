@@ -257,6 +257,74 @@ describe("command registration readiness", () => {
     });
   });
 
+  it("keeps returned assignee schema and descriptor metadata from mutating later lookups", () => {
+    const mutableSchema = { ...CommandSchema };
+    const mutableDescriptor = { ...CommandSchema };
+    const mutableHandler: CommandAssignmentHandlerMetadata = {
+      kind: "command-assignment",
+      schema: mutableSchema,
+      descriptor: mutableDescriptor,
+      messageFullTypeName: CommandSchema.typeName,
+      methodName: "assignCreate",
+    };
+    const mutableEntityHandlers: EntityHandlersMetadata = {
+      entityType: TaskProjection,
+      entity: createProjectionEntityMetadata(),
+      handlers: [mutableHandler],
+      commandAssignments: [mutableHandler],
+      commandReactions: [],
+      eventSubscriptions: [],
+      eventReactions: [],
+      eventApplications: [],
+    };
+    const mutableRegisteredHandler: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> = {
+      entityHandlers: mutableEntityHandlers,
+      entityType: TaskProjection,
+      entity: mutableEntityHandlers.entity,
+      handler: mutableHandler,
+    };
+    const readiness = CommandRegistrationReadiness.fromRegistry(
+      createRegistryLookupForAssignments([mutableRegisteredHandler]),
+    );
+
+    const assignee = readiness.findCommandAssignee(CommandSchema.typeName);
+
+    expect(Object.isFrozen(assignee?.handler.schema)).toBe(true);
+    expect(Object.isFrozen(assignee?.handler.descriptor)).toBe(true);
+    expect(() => {
+      (assignee?.handler.schema as { typeName: string }).typeName = "example.MutatedCommand";
+    }).toThrow(TypeError);
+    expect(() => {
+      (assignee?.handler.descriptor as { typeName: string }).typeName =
+        "example.MutatedCommandDescriptor";
+    }).toThrow(TypeError);
+
+    expect(readiness.findCommandAssignee(CommandSchema.typeName)).toMatchObject({
+      handler: {
+        schema: { typeName: CommandSchema.typeName },
+        descriptor: { typeName: CommandSchema.typeName },
+      },
+    });
+  });
+
+  it("preserves entity field metadata identity in returned assignee metadata", () => {
+    const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+      builder.assign(CommandSchema, "assignCreate"),
+    ]);
+    const readiness = CommandRegistrationReadiness.fromEntityHandlers([handlers]);
+
+    const assignee = readiness.findCommandAssignee(CommandSchema.typeName);
+
+    expect(handlers.entity.idField).toBe(handlers.entity.firstFieldRoutingHint.field);
+    expect(assignee?.entity.idField).toBe(assignee?.entity.firstFieldRoutingHint.field);
+    expect(assignee?.registeredHandler.entity.idField).toBe(
+      assignee?.registeredHandler.entity.firstFieldRoutingHint.field,
+    );
+    expect(assignee?.entityHandlers.entity.idField).toBe(
+      assignee?.entityHandlers.entity.firstFieldRoutingHint.field,
+    );
+  });
+
   it("does not expose bus, service, dispatch, posting, routing, or acknowledgement members", () => {
     const readiness = CommandRegistrationReadiness.fromRegistry(new HandlerMetadataRegistry());
 

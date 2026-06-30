@@ -1,14 +1,26 @@
 # T-0010.5: Event Registration Readiness
 
-Status: Implementation Complete; Verification Passed
+Status: Review Fixes Complete; Verification Passed
 Parent task: `T-0010 Single-Process Async Runtime`
 Start: `2026-06-30 18:12 WEST`
 Baseline commit: `20aaad1`
 Branch: `task/T-0010-5-event-registration-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0010-5-event-registration-readiness`
-Authoring sub-agent: Codex implementation sub-agent.
-Reviewer sub-agents: pending.
+Authoring sub-agent: `019f198d-7dc2-7641-9abb-4c49d776e370`.
+Reviewer sub-agents:
+
+- Maintainability reviewer `019f1999-9c26-7c80-868d-1c54f56daa6e`:
+  Important shared helper duplication.
+- Documentation reviewer `019f1999-cfd4-7ed3-a88a-f23f3a75c943`:
+  Important missing authoring sub-agent ID; Minor stale review log.
+- TypeScript/API reviewer `019f199a-0079-7cf3-ab60-78f8c7286dac`:
+  clean.
+- Security reviewer `019f199a-38dc-7a90-bc98-5a3a08efd62e`:
+  Important schema/descriptor mutation poisoning.
+- Performance/reliability reviewer
+  `019f199a-6696-7061-b129-bdc51f12ef81`: Important custom lookup duplicate
+  application bypass; Important entity field identity; Minor repeated cloning.
 
 ## Objective
 
@@ -121,8 +133,16 @@ Implementation skill applicability check on `2026-06-30 18:28 WEST`:
 - Exposed event applications grouped by event type and left duplicate
   per-entity-state/per-event validation with `HandlerMetadataRegistry`.
 - Ordered event message full type names with explicit code-unit comparison.
-- Returned fresh frozen arrays and copied/frozen nested metadata values,
-  matching the T-0010.4 command readiness style.
+- Returned fresh frozen arrays and fresh outer metadata values backed by
+  immutable nested readiness metadata snapshots shared safely across lookups.
+- Extracted the deterministic comparator and readiness metadata cloning helpers
+  into the private server module
+  `packages/server/src/registration-readiness-metadata.ts`, shared by command
+  and event readiness and not exported from the package index.
+- Canonicalized event readiness `fromRegistry()` through
+  `HandlerMetadataRegistry(registry.listEntityHandlers())` before building
+  event lookup indexes, preserving public API shape while enforcing event
+  application uniqueness for custom lookup implementations.
 - Documented domestic/external event classification and integration-broker
   wanted-event publication as deferred because current TS metadata has no
   external-event marker.
@@ -160,6 +180,29 @@ packages/server/src/index.test.ts` passed with 2 test files / 18 tests.
   branches / 97.78% functions / 95.89% lines, TypeDoc/API checks with 100
   proto / 28 core / 124 server / 26 storage expected exports, proto
   lint/generate checksum verification, and generated proto output clean.
+- Review-fix RED on `2026-06-30 18:42 WEST`: `corepack pnpm test
+packages/server/src/command-registration-readiness.test.ts
+packages/server/src/event-registration-readiness.test.ts` failed as expected
+  with 5 focused regressions: schema/descriptor metadata was not frozen,
+  entity field metadata identity was split, and a custom event registry lookup
+  with duplicate event applications did not throw.
+- Review-fix focused GREEN on `2026-06-30 18:45 WEST`: `corepack pnpm test
+packages/server/src/command-registration-readiness.test.ts
+packages/server/src/event-registration-readiness.test.ts` passed with 2 test
+  files / 22 tests.
+- Review-fix typecheck on `2026-06-30 18:45 WEST`: `corepack pnpm typecheck`
+  passed with `tsc -b` and `tsc --noEmit -p tsconfig.eslint.json`.
+- Review-fix full verification attempts on `2026-06-30 18:46-18:47 WEST`:
+  `CI=true corepack pnpm verify` first failed on one ESLint
+  `no-unsafe-argument` finding in the helper clone utility; after switching to
+  `Reflect.getPrototypeOf()`, it failed on Prettier formatting for
+  `build-protocol/work-logs/T-0010-5.md`; formatting the touched durable logs
+  resolved it.
+- Review-fix full verification on `2026-06-30 18:50 WEST`: `CI=true corepack
+pnpm verify` passed with 21 test files / 256 tests, coverage 96.45%
+  statements / 90.55% branches / 99.24% functions / 96.39% lines, TypeDoc/API
+  checks with 100 proto / 28 core / 124 server / 26 storage expected exports,
+  proto lint/generate checksum verification, and generated proto output clean.
 
 ## Human Questions And Answers
 

@@ -5,11 +5,16 @@ import {
   type EventApplicationHandlerMetadata,
   type EventReactionHandlerMetadata,
   type EventSubscriptionHandlerMetadata,
-  type HandlerMetadata,
   type HandlerMetadataRegistryLookup,
   type RegisteredHandlerMetadata,
 } from "./handler-metadata.js";
 import type { EntityMetadata } from "./entity-metadata.js";
+import {
+  compareFullTypeNames,
+  copyMetadataArrayMap,
+  copyReadinessMetadataFields,
+  createReadinessMetadataFields,
+} from "./registration-readiness-metadata.js";
 
 /** Event subscriber entry exposed by event registration readiness lookups. */
 export interface EventRegistrationSubscriberMetadata {
@@ -124,6 +129,7 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
 
   /** Build readiness from an already validated handler metadata registry lookup. */
   static fromRegistry(registry: HandlerMetadataRegistryLookup): EventRegistrationReadiness {
+    const validatedRegistry = new HandlerMetadataRegistry(registry.listEntityHandlers());
     const eventFullTypeNames = new Set<string>();
     const subscribersByEventFullTypeName = new Map<string, EventRegistrationSubscriberMetadata[]>();
     const reactorsByEventFullTypeName = new Map<string, EventRegistrationReactorMetadata[]>();
@@ -132,7 +138,7 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
       EventRegistrationApplicationMetadata[]
     >();
 
-    for (const entry of registry.findHandlersByKind("event-subscription")) {
+    for (const entry of validatedRegistry.findHandlersByKind("event-subscription")) {
       const eventFullTypeName = entry.handler.messageFullTypeName;
 
       eventFullTypeNames.add(eventFullTypeName);
@@ -143,7 +149,7 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
       );
     }
 
-    for (const entry of registry.findHandlersByKind("event-reaction")) {
+    for (const entry of validatedRegistry.findHandlersByKind("event-reaction")) {
       const eventFullTypeName = entry.handler.messageFullTypeName;
 
       eventFullTypeNames.add(eventFullTypeName);
@@ -154,7 +160,7 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
       );
     }
 
-    for (const entry of registry.findHandlersByKind("event-application")) {
+    for (const entry of validatedRegistry.findHandlersByKind("event-application")) {
       const eventFullTypeName = entry.handler.messageFullTypeName;
 
       eventFullTypeNames.add(eventFullTypeName);
@@ -218,204 +224,75 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
   }
 }
 
-function compareFullTypeNames(left: string, right: string): number {
-  if (left < right) {
-    return -1;
-  }
-
-  if (left > right) {
-    return 1;
-  }
-
-  return 0;
-}
-
 function createSubscriberMetadata(
   eventFullTypeName: string,
   registeredHandler: RegisteredHandlerMetadata<EventSubscriptionHandlerMetadata>,
 ): EventRegistrationSubscriberMetadata {
-  const clonedHandlers = new Map<HandlerMetadata, HandlerMetadata>();
-  const handler = cloneHandlerMetadata(registeredHandler.handler, clonedHandlers);
-  const entity = cloneEntityMetadata(registeredHandler.entity);
-  const entityHandlers = cloneEntityHandlers(
-    registeredHandler.entityHandlers,
-    clonedHandlers,
-    entity,
-  );
-  const registeredHandlerCopy: RegisteredHandlerMetadata<EventSubscriptionHandlerMetadata> =
-    Object.freeze({
-      entityHandlers,
-      entityType: registeredHandler.entityType,
-      entity,
-      handler,
-    });
+  const fields = createReadinessMetadataFields(registeredHandler);
 
   return Object.freeze({
     eventFullTypeName,
-    entityHandlers,
-    entityType: registeredHandler.entityType,
-    entity,
-    handler,
-    registeredHandler: registeredHandlerCopy,
+    ...fields,
   });
 }
 
 function copySubscriberMetadata(
   subscriber: EventRegistrationSubscriberMetadata,
 ): EventRegistrationSubscriberMetadata {
-  return createSubscriberMetadata(subscriber.eventFullTypeName, subscriber.registeredHandler);
+  const fields = copyReadinessMetadataFields(subscriber.registeredHandler);
+
+  return Object.freeze({
+    eventFullTypeName: subscriber.eventFullTypeName,
+    ...fields,
+  });
 }
 
 function createReactorMetadata(
   eventFullTypeName: string,
   registeredHandler: RegisteredHandlerMetadata<EventReactionHandlerMetadata>,
 ): EventRegistrationReactorMetadata {
-  const clonedHandlers = new Map<HandlerMetadata, HandlerMetadata>();
-  const handler = cloneHandlerMetadata(registeredHandler.handler, clonedHandlers);
-  const entity = cloneEntityMetadata(registeredHandler.entity);
-  const entityHandlers = cloneEntityHandlers(
-    registeredHandler.entityHandlers,
-    clonedHandlers,
-    entity,
-  );
-  const registeredHandlerCopy: RegisteredHandlerMetadata<EventReactionHandlerMetadata> =
-    Object.freeze({
-      entityHandlers,
-      entityType: registeredHandler.entityType,
-      entity,
-      handler,
-    });
+  const fields = createReadinessMetadataFields(registeredHandler);
 
   return Object.freeze({
     eventFullTypeName,
-    entityHandlers,
-    entityType: registeredHandler.entityType,
-    entity,
-    handler,
-    registeredHandler: registeredHandlerCopy,
+    ...fields,
   });
 }
 
 function copyReactorMetadata(
   reactor: EventRegistrationReactorMetadata,
 ): EventRegistrationReactorMetadata {
-  return createReactorMetadata(reactor.eventFullTypeName, reactor.registeredHandler);
+  const fields = copyReadinessMetadataFields(reactor.registeredHandler);
+
+  return Object.freeze({
+    eventFullTypeName: reactor.eventFullTypeName,
+    ...fields,
+  });
 }
 
 function createApplicationMetadata(
   eventFullTypeName: string,
   registeredHandler: RegisteredHandlerMetadata<EventApplicationHandlerMetadata>,
 ): EventRegistrationApplicationMetadata {
-  const clonedHandlers = new Map<HandlerMetadata, HandlerMetadata>();
-  const handler = cloneHandlerMetadata(registeredHandler.handler, clonedHandlers);
-  const entity = cloneEntityMetadata(registeredHandler.entity);
-  const entityHandlers = cloneEntityHandlers(
-    registeredHandler.entityHandlers,
-    clonedHandlers,
-    entity,
-  );
-  const registeredHandlerCopy: RegisteredHandlerMetadata<EventApplicationHandlerMetadata> =
-    Object.freeze({
-      entityHandlers,
-      entityType: registeredHandler.entityType,
-      entity,
-      handler,
-    });
+  const fields = createReadinessMetadataFields(registeredHandler);
 
   return Object.freeze({
     eventFullTypeName,
-    entityStateFullTypeName: entity.fullTypeName,
-    entityHandlers,
-    entityType: registeredHandler.entityType,
-    entity,
-    handler,
-    registeredHandler: registeredHandlerCopy,
+    entityStateFullTypeName: fields.entity.fullTypeName,
+    ...fields,
   });
 }
 
 function copyApplicationMetadata(
   application: EventRegistrationApplicationMetadata,
 ): EventRegistrationApplicationMetadata {
-  return createApplicationMetadata(application.eventFullTypeName, application.registeredHandler);
-}
+  const fields = copyReadinessMetadataFields(application.registeredHandler);
 
-function cloneEntityHandlers(
-  entityHandlers: EntityHandlersMetadata,
-  clonedHandlers: Map<HandlerMetadata, HandlerMetadata>,
-  entity: EntityMetadata,
-): EntityHandlersMetadata {
   return Object.freeze({
-    entityType: entityHandlers.entityType,
-    entity,
-    handlers: Object.freeze(
-      entityHandlers.handlers.map((handler) => cloneHandlerMetadata(handler, clonedHandlers)),
-    ),
-    commandAssignments: Object.freeze(
-      entityHandlers.commandAssignments.map((handler) =>
-        cloneHandlerMetadata(handler, clonedHandlers),
-      ),
-    ),
-    commandReactions: Object.freeze(
-      entityHandlers.commandReactions.map((handler) =>
-        cloneHandlerMetadata(handler, clonedHandlers),
-      ),
-    ),
-    eventSubscriptions: Object.freeze(
-      entityHandlers.eventSubscriptions.map((handler) =>
-        cloneHandlerMetadata(handler, clonedHandlers),
-      ),
-    ),
-    eventReactions: Object.freeze(
-      entityHandlers.eventReactions.map((handler) => cloneHandlerMetadata(handler, clonedHandlers)),
-    ),
-    eventApplications: Object.freeze(
-      entityHandlers.eventApplications.map((handler) =>
-        cloneHandlerMetadata(handler, clonedHandlers),
-      ),
-    ),
+    eventFullTypeName: application.eventFullTypeName,
+    entityStateFullTypeName: application.entityStateFullTypeName,
+    ...fields,
   });
-}
-
-function cloneHandlerMetadata<Handler extends HandlerMetadata>(
-  handler: Handler,
-  clonedHandlers: Map<HandlerMetadata, HandlerMetadata>,
-): Handler {
-  const existing = clonedHandlers.get(handler);
-
-  if (existing !== undefined) {
-    return existing as Handler;
-  }
-
-  const clone = Object.freeze({ ...handler }) as unknown as Handler;
-
-  clonedHandlers.set(handler, clone);
-  return clone;
-}
-
-function cloneEntityMetadata(entity: EntityMetadata): EntityMetadata {
-  return Object.freeze({
-    ...entity,
-    idField: Object.freeze({ ...entity.idField }),
-    firstFieldRoutingHint: Object.freeze({
-      ...entity.firstFieldRoutingHint,
-      field: Object.freeze({ ...entity.firstFieldRoutingHint.field }),
-    }),
-    columns: Object.freeze(entity.columns.map((field) => Object.freeze({ ...field }))),
-    setOnceFields: Object.freeze(entity.setOnceFields.map((field) => Object.freeze({ ...field }))),
-    semanticTags: Object.freeze([...entity.semanticTags]),
-  });
-}
-
-function copyMetadataArrayMap<Value>(
-  map: ReadonlyMap<string, readonly Value[]>,
-): ReadonlyMap<string, readonly Value[]> {
-  const copy = new Map<string, readonly Value[]>();
-
-  for (const [key, values] of map) {
-    copy.set(key, Object.freeze([...values]));
-  }
-
-  return copy;
 }
 
 function pushMapValue<Key, Value>(map: Map<Key, Value[]>, key: Key, value: Value): void {
