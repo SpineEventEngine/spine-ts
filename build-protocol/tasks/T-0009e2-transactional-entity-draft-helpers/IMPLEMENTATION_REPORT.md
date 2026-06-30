@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.2 TransactionalEntity Scoped Draft Helpers
 
-Status: Implementation Complete; Round 9 Docs Follow-Up In Progress
+Status: Implementation Complete; Review Loop Active
 Task log:
 `build-protocol/tasks/T-0009e2-transactional-entity-draft-helpers/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e2.md`
@@ -153,4 +153,14 @@ repositories, handlers, phase propagation, storage, and lifecycle events.
 - Round 8 reviewed committed range `b9456dc..f3a067d`; maintainability and
   documentation requested chronology/fix-evidence cleanup, while
   TypeScript/API, security, and performance/reliability returned clean. The
-  accepted docs-only cleanup is implemented and awaiting verification.
+  accepted docs-only cleanup was verified on `2026-06-30 01:36 WEST`.
+- Round 9 reviewed committed range `f3a067d..8be4571`; documentation requested
+  task/report/work-summary cleanup, while all other lanes returned clean. Round
+  9 docs-only cleanup was verified on `2026-06-30 01:40 WEST`.
+- Round 10 reviewed committed range `8be4571..808760f`; documentation requested
+  latest-round summary cleanup, while all other lanes returned clean. The
+  accepted docs-only cleanup was verified on `2026-06-30 01:44 WEST` with full
+  `CI=true corepack pnpm verify`: 15 test files / 152 tests, coverage 97.23%
+  statements / 91.41% branches / 99.15% functions / 97.17% lines,
+  TypeDoc/API/proto gates passed with 68 expected server exports, and generated
+  proto output clean.

@@ -1,6 +1,6 @@
 # T-0009e.2: TransactionalEntity Scoped Draft Helpers
 
-Status: Implementation Complete; Round 9 Docs Follow-Up In Progress
+Status: Implementation Complete; Review Loop Active
 Start: `2026-06-30 00:28 WEST`
 Baseline commit: `bd8d02e`
 Task log path:
@@ -13,9 +13,8 @@ Requirements splitter:
 `019f1531-96a3-7870-bb40-b24fc9a456c8` (Goodall the 3rd, closed)
 Authoring sub-agent:
 `019f15ba-f2f2-7f21-a244-bd61564e0eb6` (Aquinas the 3rd)
-Reviewer sub-agents: Round 1 closed; Round 2 closed; Round 3 closed; Round 4
-closed; Round 5 clean and closed; Round 6 closed; Round 7 closed; Round 8
-closed with docs-only follow-up
+Reviewer sub-agents: Round 1 through latest review closed; see review log for
+round-by-round outcomes and any current docs-only follow-up
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-30 00:31 WEST`
 
@@ -195,5 +194,9 @@ Skipped relevant-looking skills:
   TypeScript/API, security, and performance/reliability returned clean.
 - Round 8 reviewed committed range `b9456dc..f3a067d`; maintainability and
   documentation requested chronology/fix-evidence cleanup, while
-  TypeScript/API, security, and performance/reliability returned clean. The
-  accepted docs-only cleanup is implemented and awaiting verification.
+  TypeScript/API, security, and performance/reliability returned clean.
+- Round 9 reviewed committed range `f3a067d..8be4571`; documentation requested
+  task/report/work-summary cleanup, while all other lanes returned clean.
+- Round 10 reviewed committed range `8be4571..808760f`; documentation requested
+  latest-round summary cleanup, while all other lanes returned clean. The
+  accepted docs-only cleanup was verified on `2026-06-30 01:44 WEST`.

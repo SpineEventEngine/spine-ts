@@ -462,3 +462,70 @@ All findings are accepted. The fix route is docs-only:
   through Round 8;
 - run Markdown formatting, full verification, and the required confirmation
   review.
+
+## Round 9 Fix Evidence
+
+Docs-only cleanup implemented and verified on `2026-06-30 01:40 WEST`.
+
+- Task and implementation report status/chonology now include Round 7 and Round
+  8 review activity.
+- Work-log current state no longer overstates Round 5 finality while later docs
+  cleanup rounds are active.
+- `CI=true corepack pnpm verify` passed with 15 test files / 152 tests, coverage
+  97.23% statements / 91.41% branches / 99.15% functions / 97.17% lines,
+  TypeDoc/API/proto gates passed with 68 expected server exports, and generated
+  proto output clean.
+
+## Round 10
+
+Round 9 docs-only cleanup commit under review: `808760f`.
+
+Review result captured on `2026-06-30 01:43 WEST`: documentation cleanup
+requested.
+
+| Role                       | Reviewer ID                            | Result     | Closure |
+| -------------------------- | -------------------------------------- | ---------- | ------- |
+| Code style/maintainability | `019f15f9-67bc-7a63-94f3-846b4ea73001` | Clean      | Closed  |
+| Documentation              | `019f15f9-6826-7282-a38e-85a0a991a86e` | P3 finding | Closed  |
+| TypeScript/API docs        | `019f15f9-689f-7591-81f2-e38868b960ef` | Clean      | Closed  |
+| Security                   | `019f15f9-690d-7113-99ae-ceac7798f1fb` | Clean      | Closed  |
+| Performance/reliability    | `019f15f9-6990-7532-aa9d-fc880902700a` | Clean      | Closed  |
+
+Findings:
+
+- P3: task header/current-state summary stopped before Round 9, while the
+  review log recorded Round 9.
+- P3: implementation report chronology stopped before Round 9 and did not
+  explain the current Round 9 follow-up.
+- P3: work-log current state stopped before Round 9 and did not mention the
+  current follow-up.
+
+Clean-role evidence:
+
+- Maintainability confirmed the Round 9 accepted findings are resolved and no
+  status/chronology conflict remains in the reviewed range.
+- TypeScript/API confirmed no TypeScript/API/export-bearing files changed and
+  API evidence remains consistent.
+- Security confirmed the reviewed range is docs-only, with no secrets or runtime
+  security behavior changes.
+- Performance/reliability confirmed no runtime/performance behavior changed and
+  interruption-resume state is coherent.
+
+All findings are accepted. The fix route is docs-only:
+
+- make task/report top-level statuses durable across review rounds;
+- update task/report/work summaries through Round 10;
+- run Markdown formatting, full verification, and the required confirmation
+  review.
+
+## Round 10 Fix Evidence
+
+Docs-only cleanup implemented and verified on `2026-06-30 01:44 WEST`.
+
+- Task/report top-level statuses no longer encode a specific latest round.
+- Task/report/work summaries now record Round 10 outcomes and docs-only
+  cleanup.
+- `CI=true corepack pnpm verify` passed with 15 test files / 152 tests, coverage
+  97.23% statements / 91.41% branches / 99.15% functions / 97.17% lines,
+  TypeDoc/API/proto gates passed with 68 expected server exports, and generated
+  proto output clean.
