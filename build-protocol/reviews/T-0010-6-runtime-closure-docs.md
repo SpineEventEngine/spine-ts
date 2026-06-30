@@ -16,7 +16,7 @@ security `019f19ce-44f2-7980-a126-178a3350a124` (closed, CLEAN);
 performance/reliability `019f19ce-4580-7dd3-9b87-c1476529a214` (closed,
 CLEAN)
 Review timestamp: `2026-06-30`, after implementation commit `d94bb39`
-Status: Final log-cleanup recorded for commit
+Status: Chronology log-fix recorded for commit
 
 ## Scope Reviewed
 
@@ -75,7 +75,11 @@ Status: Final log-cleanup recorded for commit
   review-fix commit `a82655d`, clarify the second review-fix chronology, and
   record this cleanup activity. The final log-cleanup worker id is pending
   orchestrator fill-in because this worker cannot know its orchestrator-assigned
-  id.
+  id. It was committed as `cbff7f5`.
+- Chronology log-fix updated only durable T-0010.6 logs after `cbff7f5` to
+  remove inconsistent review-fix wall-clock timestamps and use commit-order
+  chronology labels instead. The chronology log-fix worker is recorded as
+  `chronology log-fix sub-agent; id pending orchestrator fill-in`.
 
 ## Review-Fix Verification Evidence
 
@@ -84,13 +88,16 @@ Status: Final log-cleanup recorded for commit
   `corepack pnpm prettier --write ...` passed,
   `corepack pnpm prettier --check ...` passed, `git diff --check` passed, and
   `git status --short` was clean after commit `bf92cd8`.
-- Second review-fix verification on `2026-06-30 19:40 WEST`:
+- Second review-fix verification after first review-fix commit `bf92cd8` and
+  before second review-fix commit `a82655d`:
   `corepack pnpm prettier --write build-protocol/reviews/T-0010-6-runtime-closure-docs.md build-protocol/tasks/T-0010-6-runtime-closure-docs/TASK.md build-protocol/work-logs/T-0010-6.md`
   passed.
-- Second review-fix verification on `2026-06-30 19:40 WEST`:
+- Second review-fix verification after first review-fix commit `bf92cd8` and
+  before second review-fix commit `a82655d`:
   `corepack pnpm prettier --check build-protocol/reviews/T-0010-6-runtime-closure-docs.md build-protocol/tasks/T-0010-6-runtime-closure-docs/TASK.md build-protocol/work-logs/T-0010-6.md`
   passed.
-- Second review-fix verification on `2026-06-30 19:40 WEST`:
+- Second review-fix verification after first review-fix commit `bf92cd8` and
+  before second review-fix commit `a82655d`:
   `git diff --check` passed.
 
 ## Outcome
@@ -102,9 +109,10 @@ performance/reliability CLEAN.
 First review-fix outcome: committed as `bf92cd8`, with documentation re-review
 finding that verification evidence was requested but not recorded.
 
-Second review-fix outcome: durable log correction complete and ready to commit.
-Committed as `a82655d`.
+Second review-fix outcome: committed as `a82655d`.
 
-Final log-cleanup outcome: durable log correction recorded for the final
-log-correction commit.
+Final log-cleanup outcome: committed as `cbff7f5`.
+
+Chronology log-fix outcome: durable log chronology correction recorded for the
+chronology log-fix commit.
 Not final integrated.

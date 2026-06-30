@@ -1,6 +1,6 @@
 # T-0010.6: Runtime Closure And User-Facing Docs
 
-Status: Final log-cleanup recorded for commit
+Status: Chronology log-fix recorded for commit
 Start: `2026-06-30 19:10 WEST`
 End: `2026-06-30 19:28 WEST`
 Baseline commit: `94a28bf`
@@ -27,6 +27,9 @@ pending orchestrator fill-in)
 Second review-fix commit: `a82655d` (`Record T-0010.6 review-fix verification`)
 Final log-cleanup worker: T-0010.6 final log-cleanup sub-agent (this worker; id
 pending orchestrator fill-in)
+Final log-cleanup commit: `cbff7f5` (`Record T-0010.6 final log cleanup`)
+Chronology log-fix worker: chronology log-fix sub-agent; id pending orchestrator
+fill-in
 
 ## Objective
 
@@ -180,13 +183,18 @@ Out of scope:
   formatting/checks and `git diff --check` but did not record actual outcomes.
   This second review-fix updated only durable T-0010.6 logs and records the
   first review-fix commit `bf92cd8`; it was committed as `a82655d`. The earlier
-  `2026-06-30 19:40 WEST` timestamp for this entry was a durable-log error
-  because the activity occurred after the first review-fix entry.
-- `2026-06-30 19:45 WEST`: Final log-cleanup sub-agent updated durable
-  T-0010.6 logs only to record second review-fix commit `a82655d`, clarify the
-  corrected second review-fix chronology, and prepare the final log correction
-  commit. Worker id is pending orchestrator fill-in; this cleanup is recorded
-  in the final log-correction commit.
+  wall-clock timestamp for this entry was a durable-log error because the
+  activity occurred after the first review-fix entry.
+- After second review-fix commit `a82655d`: Final log-cleanup sub-agent updated
+  durable T-0010.6 logs only to record second review-fix commit `a82655d`,
+  clarify the corrected second review-fix chronology, and record the final
+  log-cleanup activity. Worker id is pending orchestrator fill-in; this cleanup
+  was committed as `cbff7f5`.
+- After final log-cleanup commit `cbff7f5`: Chronology log-fix sub-agent
+  updated durable T-0010.6 logs only to replace inconsistent review-fix
+  wall-clock timestamps with commit-order chronology labels and remove stale
+  already-committed outcome wording. Worker id is pending orchestrator fill-in;
+  this cleanup is recorded for the chronology log-fix commit.
 
 ## Decisions
 
