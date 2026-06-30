@@ -87,7 +87,7 @@ Required implementation verification passed on `2026-06-30 22:18-22:21 WEST`:
 - Documentation review asked for the local IPC sandbox permission note, which
   is now recorded in the package, architecture, and API docs.
 - The task log now records the completed implementation sub-agent ID and the
-  round 1 reviewer state.
+  round 1 reviewer state plus reviewer IDs `019f1a6b-a851-71d3-91d7-3899e5b86b05`, `019f1a6b-a8df-77f2-80b1-a99036203f99`, `019f1a6b-a96f-79e1-a847-2c2e49e66936`, `019f1a6b-a9db-7d52-a7b9-4318a47d8b13`, and `019f1a6b-aa60-7901-a2d9-46255fecc2bf`.
 
 ## Open Items
 

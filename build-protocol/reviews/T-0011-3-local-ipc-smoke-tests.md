@@ -62,4 +62,4 @@ external review lanes must complete before parent integration.
 - Documentation follow-up: the package, architecture, and API docs now record
   the managed-sandbox `ipc://` / `EPERM` constraint, and the task/work logs now
   capture the reviewer round 1 state plus the completed implementation
-  sub-agent ID.
+  sub-agent ID and reviewer IDs `019f1a6b-a851-71d3-91d7-3899e5b86b05`, `019f1a6b-a8df-77f2-80b1-a99036203f99`, `019f1a6b-a96f-79e1-a847-2c2e49e66936`, `019f1a6b-a9db-7d52-a7b9-4318a47d8b13`, and `019f1a6b-aa60-7901-a2d9-46255fecc2bf`.

@@ -9,7 +9,7 @@ Branch: `task/T-0011-3-local-ipc-smoke-tests`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-3-local-ipc-smoke-tests`
 Authoring sub-agent: 019f1a60-020b-72e2-b9a4-661b1b25b57d
-Reviewer sub-agents: round 1 complete; maintainability note logged and docs follow-up recorded
+Reviewer sub-agents: round 1 complete; code style/maintainability `019f1a6b-a851-71d3-91d7-3899e5b86b05`, documentation `019f1a6b-a8df-77f2-80b1-a99036203f99`, TypeScript/API docs `019f1a6b-a96f-79e1-a847-2c2e49e66936`, security `019f1a6b-a9db-7d52-a7b9-4318a47d8b13`, and performance/reliability `019f1a6b-aa60-7901-a2d9-46255fecc2bf`; maintainability note logged and docs follow-up recorded
 
 ## Objective
 
