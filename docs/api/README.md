@@ -8,8 +8,8 @@ registry and validation facade APIs, the first `@spine-ts/server`
 descriptor-derived entity metadata, metadata-only `Repository` identity,
 set-once transition validation, explicit handler metadata APIs, and the first
 server runtime lifecycle/async queue kernel with a bounded-context runtime
-handle, write-side signal intake result exports, and the first
-`@spine-ts/storage` contracts.
+handle, write-side signal intake result exports, the first
+`@spine-ts/transport` contracts, and the first `@spine-ts/storage` contracts.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
@@ -235,6 +235,20 @@ contracts, tenant/diagnostic stores, `StorageVersionConflictError`,
 checks, safe structured-clone failure reporting, write-side/read-side
 segregation, deterministic in-memory behavior, and non-durability.
 
+Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
+`TransportTopicInput`, `TransportTopic`, `TransportRoutingDescriptor`,
+`TransportSubscriptionInput`, `TransportSubscription`, `TransportSubscriptionMode`,
+`PublishTransportOperation`, `RequestTransportOperation`,
+`PublishTransportHandler`, `RequestTransportHandler`, `AsyncCloseable`,
+`TransportSubscriptionHandle`, `SignalTransport`,
+`createTransportTopic()`, and `createTransportSubscription()`. This surface is
+contract-only: it defines immutable topic/subscription value objects,
+deterministic adapter-agnostic routing keys, publish/request operation shapes,
+handler callback signatures, and graceful async close behavior. It does not
+expose ZeroMQ socket types, endpoint strings, multipart frames, broker
+processes, worker registration, delivery retries, or runtime handler
+invocation.
+
 The generated Protobuf-ES implementation files themselves remain excluded from
 TypeDoc output and are not broadly re-exported from the package root.
 
@@ -248,6 +262,7 @@ pnpm docs:check
 Generated output is written to `docs/api/reference`.
 
 `docs:check` also emits temporary TypeDoc JSON, verifies that expected
-`@spine-ts/proto`, `@spine-ts/core`, `@spine-ts/server`, and
-`@spine-ts/storage` entry-point exports are present in the API model, and
-rejects broad generated wildcard re-exports from the proto package root.
+`@spine-ts/proto`, `@spine-ts/core`, `@spine-ts/server`,
+`@spine-ts/transport`, and `@spine-ts/storage` entry-point exports are present
+in the API model, and rejects broad generated wildcard re-exports from the
+proto package root.

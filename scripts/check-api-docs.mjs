@@ -163,6 +163,25 @@ const expectedStorageExports = [
   "createInMemoryStorageAdapter",
   "InMemoryStorageAdapter",
 ];
+const expectedTransportExports = [
+  "AsyncCloseable",
+  "PublishTransportHandler",
+  "PublishTransportOperation",
+  "RequestTransportHandler",
+  "RequestTransportOperation",
+  "SignalTransport",
+  "TransportRoutingDescriptor",
+  "TransportSemanticTag",
+  "TransportSignalKind",
+  "TransportSubscription",
+  "TransportSubscriptionHandle",
+  "TransportSubscriptionInput",
+  "TransportSubscriptionMode",
+  "TransportTopic",
+  "TransportTopicInput",
+  "createTransportSubscription",
+  "createTransportTopic",
+];
 const expectedServerExports = [
   "Aggregate",
   "Apply",
@@ -433,6 +452,9 @@ const missingExports = expectedProtoExports.filter((name) => !documentedNames.ha
 const missingCoreExports = expectedCoreExports.filter((name) => !documentedNames.has(name));
 const missingServerExports = expectedServerExports.filter((name) => !documentedNames.has(name));
 const missingStorageExports = expectedStorageExports.filter((name) => !documentedNames.has(name));
+const missingTransportExports = expectedTransportExports.filter(
+  (name) => !documentedNames.has(name),
+);
 const forbiddenTypeDocNames = [
   "BuiltInEntityConstructor",
   "BuiltInEntityConstructorBase",
@@ -484,6 +506,13 @@ if (missingServerExports.length > 0) {
 if (missingStorageExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-ts/storage exports: ${missingStorageExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingTransportExports.length > 0) {
+  console.error(
+    `TypeDoc JSON is missing expected @spine-ts/transport exports: ${missingTransportExports.join(", ")}`,
   );
   process.exit(1);
 }
