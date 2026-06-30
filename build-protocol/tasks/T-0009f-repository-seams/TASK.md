@@ -1,6 +1,6 @@
 # T-0009f: Repository Seams And Bounded-Context Registration Skeleton
 
-Status: T-0009f.5 Closure Complete; Final Verification Passed
+Status: Complete; Parent Verification Passed
 Start: `2026-06-30 05:21 WEST`
 Baseline commit: `ec70945`
 Task log path: `build-protocol/tasks/T-0009f-repository-seams/TASK.md`
@@ -11,9 +11,8 @@ Requirements splitter:
 `019f16c7-9335-72e3-ab82-7c4ce7fc8e9c` (Singer the 4th, closed)
 Authoring sub-agents: T-0009f.1 through T-0009f.5 implemented by Codex
 implementation sub-agents.
-Reviewer sub-agents: completed T-0009f.1 through T-0009f.4 durable review/fix
-rounds recorded in review logs; T-0009f.5 closure review recorded in-thread
-under the explicit no-sub-agents prompt constraint.
+Reviewer sub-agents: completed T-0009f.1 through T-0009f.5 durable review/fix
+rounds recorded in review logs.
 
 ## Objective
 
@@ -283,6 +282,19 @@ WEST` with no server runtime/API code changes. Focused tests passed 2 files /
   expected exports, and `CI=true corepack pnpm verify` passed with 17 files /
   212 tests, coverage 96.39% statements / 90.8% branches / 99.09% functions /
   96.32% lines, clean TypeDoc/API, proto, and generated-output gates.
+- `T-0009f.5 Verification And Review Closure` merged into parent branch
+  `task/T-0009f-repository-seams` on `2026-06-30 14:48 WEST` with merge commit
+  `7613ff3`. Parent `CI=true corepack pnpm verify` passed with 17 test files /
+  212 tests, coverage 96.39% statements / 90.8% branches / 99.09% functions /
+  96.32% lines, TypeDoc/API checks with 100 proto / 28 core / 97 server / 26
+  storage expected exports, proto lint/generate checksum verification, and
+  generated proto output clean.
+- Final post-log-format parent verification passed on `2026-06-30 14:52 WEST`:
+  `CI=true corepack pnpm verify` passed with 17 test files / 212 tests,
+  coverage 96.39% statements / 90.8% branches / 99.09% functions / 96.32%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 97 server / 26 storage
+  expected exports, proto lint/generate checksum verification, and generated
+  proto output clean.
 
 ## Human Questions And Answers
 
