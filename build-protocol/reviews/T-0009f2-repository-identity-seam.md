@@ -1,6 +1,6 @@
 # Review Log: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-5 findings fixed - Pending Re-review
+Status: Round-6 findings fixed - Pending Re-review
 
 ## Required Review Lanes
 
@@ -132,8 +132,30 @@ Status: Round-5 findings fixed - Pending Re-review
     typecheck passed, `corepack pnpm lint` passed, and
     `node scripts/check-api-docs.mjs` passed after the fixes. Full
     `CI=true corepack pnpm verify` passed with 17 test files and 178 tests.
+- Sixth-round reviewer findings received by the review-fix sub-agent:
+  - Code style/maintainability P2: `hasEntityFamilyInheritance` checked both
+    static and instance prototype chains, but an ordinary function could spoof
+    both with `Object.setPrototypeOf(Forged, Aggregate)` and
+    `Object.setPrototypeOf(Forged.prototype, Aggregate.prototype)`.
+  - TypeScript/API P2: family-specific broad generic bindings such as
+    `RepositoryEntityType<Aggregate<unknown, DescriptorMessageSchema, number>>`
+    could still erase the constructor-carried state schema for
+    `RepositoryOptions` and `Repository` subclasses.
+- Round-6 fix status:
+  - Fixed: repository identity now requires a runtime ES class constructor
+    before family resolution, so ordinary functions cannot spoof both
+    inheritance chains.
+  - Fixed: exported repository generic constraints now reject broad extracted
+    schemas in addition to exact broad and union entity constructor bindings.
+  - Fixed: regression tests cover the static-plus-prototype forged function
+    case, family-broad `RepositoryOptions`, and family-broad subclass bindings.
+  - Verified: focused RED reproduced the forged runtime acceptance and unused
+    family-broad type assertions; focused Vitest passed with 19 tests and
+    `corepack pnpm typecheck:tooling` passed after the fixes. API docs guard
+    passed, and full `CI=true corepack pnpm verify` passed with 17 test files
+    and 178 tests.
 
 ## Current Review State
 
-- First-, second-, third-, fourth-, and fifth-round comments are fixed. Orchestrator reviewer lanes
+- First-, second-, third-, fourth-, fifth-, and sixth-round comments are fixed. Orchestrator reviewer lanes
   should re-run before integration.

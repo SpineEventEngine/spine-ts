@@ -83,7 +83,7 @@ const ProcessManagerStateSchema = messageDesc(
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {}
 class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {}
-class RuntimeCheckedAggregate extends Aggregate<string, DescriptorMessageSchema, number> {}
+class RuntimeCheckedAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
 class PlainEntityClass {
   noop(): string {
     return "plain";
@@ -125,14 +125,14 @@ describe("repository identity", () => {
       () =>
         new Repository({
           entityType: RuntimeCheckedAggregate,
-          schema: ProjectionStateSchema,
+          schema: ProjectionStateSchema as unknown as typeof AggregateStateSchema,
         }),
     ).toThrow(RepositoryIdentityError);
 
     try {
       new Repository({
         entityType: RuntimeCheckedAggregate,
-        schema: ProjectionStateSchema,
+        schema: ProjectionStateSchema as unknown as typeof AggregateStateSchema,
       });
       throw new Error("Expected repository identity construction to fail.");
     } catch (error) {
@@ -150,11 +150,18 @@ describe("repository identity", () => {
 
   it("rejects generic entity schemas and non-family constructors with structured errors", () => {
     expect(
-      () => new Repository({ entityType: RuntimeCheckedAggregate, schema: GenericStateSchema }),
+      () =>
+        new Repository({
+          entityType: RuntimeCheckedAggregate,
+          schema: GenericStateSchema as unknown as typeof AggregateStateSchema,
+        }),
     ).toThrow(RepositoryIdentityError);
 
     try {
-      new Repository({ entityType: RuntimeCheckedAggregate, schema: GenericStateSchema });
+      new Repository({
+        entityType: RuntimeCheckedAggregate,
+        schema: GenericStateSchema as unknown as typeof AggregateStateSchema,
+      });
       throw new Error("Expected generic state schema to fail.");
     } catch (error) {
       expect(error).toBeInstanceOf(RepositoryIdentityError);
@@ -213,6 +220,7 @@ describe("repository identity", () => {
     function ForgedAggregateConstructor() {
       return undefined;
     }
+    Object.setPrototypeOf(ForgedAggregateConstructor, Aggregate);
     Object.setPrototypeOf(ForgedAggregateConstructor.prototype, Aggregate.prototype);
 
     try {
@@ -412,6 +420,15 @@ describe("repository identity", () => {
         schema: ProjectionStateSchema,
       };
       void broadAnnotatedOptions;
+      type BroadAggregateEntityType = RepositoryEntityType<
+        Aggregate<unknown, DescriptorMessageSchema, number>
+      >;
+      // @ts-expect-error family-broad repository options must not erase extracted state schemas.
+      const familyBroadAnnotatedOptions: RepositoryOptions<BroadAggregateEntityType> = {
+        entityType: TaskAggregate,
+        schema: ProjectionStateSchema,
+      };
+      void familyBroadAnnotatedOptions;
       // @ts-expect-error union repository options must not erase constructor/schema pairing.
       const unionAnnotatedOptions: RepositoryOptions<typeof TaskAggregate | typeof TaskProjection> =
         {
@@ -425,6 +442,11 @@ describe("repository identity", () => {
       // @ts-expect-error subclasses must not bind the broad repository entity constructor type.
       abstract class BroadRepositorySubclass extends Repository<RepositoryEntityType> {}
       void BroadRepositorySubclass;
+      abstract class FamilyBroadRepositorySubclass extends Repository<
+        // @ts-expect-error subclasses must not bind family-broad repository entity constructor types.
+        BroadAggregateEntityType
+      > {}
+      void FamilyBroadRepositorySubclass;
       abstract class UnionRepositorySubclass extends Repository<
         // @ts-expect-error subclasses must not bind a union of repository entity constructor types.
         typeof TaskAggregate | typeof TaskProjection

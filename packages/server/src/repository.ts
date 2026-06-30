@@ -40,12 +40,18 @@ interface RepositoryConcreteEntityTypeError {
   readonly __repositoryEntityTypeMustBeASingleConcreteConstructor: never;
 }
 
+interface RepositoryConcreteStateSchemaError {
+  readonly __repositoryEntityTypeMustCarryConcreteStateSchema: never;
+}
+
 type RepositoryEntityTypeArgumentGuard<EntityType extends RepositoryEntityType> =
   IsUnion<EntityType> extends true
     ? RepositoryConcreteEntityTypeError
     : RepositoryEntityType extends EntityType
       ? RepositoryConcreteEntityTypeError
-      : unknown;
+      : DescriptorMessageSchema extends RepositoryEntitySchema<EntityType>
+        ? RepositoryConcreteStateSchemaError
+        : unknown;
 
 interface RuntimeRepositoryEntityType {
   readonly prototype: object;
@@ -157,7 +163,7 @@ export class Repository<
     const entityType = options.entityType;
     const schema = options.schema;
 
-    if (typeof entityType !== "function") {
+    if (typeof entityType !== "function" || !isClassConstructor(entityType)) {
       throw new RepositoryIdentityError(
         "UNSUPPORTED_ENTITY_TYPE",
         `Repository entity type "${entityTypeName(entityType)}" must be a class constructor extending Aggregate, Projection, or ProcessManager.`,
@@ -246,6 +252,10 @@ export class Repository<
 
 function isRepositoryOptionsObject(options: unknown): options is object {
   return typeof options === "object" && options !== null;
+}
+
+function isClassConstructor(entityType: object): boolean {
+  return Function.prototype.toString.call(entityType).startsWith("class ");
 }
 
 function resolveEntityFamily(entityType: RuntimeRepositoryEntityType): EntityFamily | undefined {

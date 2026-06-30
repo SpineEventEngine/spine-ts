@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-5 Review Fixes Complete - Pending Re-review
+Status: Round-6 Review Fixes Complete - Pending Re-review
 Task log: `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f2.md`
 Review log: `build-protocol/reviews/T-0009f2-repository-identity-seam.md`
@@ -75,6 +75,10 @@ Implementation research inspected and used:
   detection, wrap malformed supported-entity schemas in
   `RepositoryIdentityError`, and reject broad or union repository generics for
   both `RepositoryOptions` and subclasses.
+- Sixth-round review fixes add an ES class constructor check so ordinary
+  functions cannot spoof both static and instance entity family inheritance,
+  and reject family-specific repository generic bindings whose extracted state
+  schema is still broad `DescriptorMessageSchema`.
 - Public root exports, TypeDoc export guard, package README, API docs, user
   guide, and architecture notes now describe the metadata-only boundary.
 
@@ -147,9 +151,23 @@ Implementation research inspected and used:
 - Round-5 full verification: `CI=true corepack pnpm verify` passed with 17
   test files, 178 tests, coverage, docs check, proto lint/generate, and
   generated-clean.
+- Round-6 RED: focused Vitest failed because an ordinary function with both
+  `Object.setPrototypeOf(Forged, Aggregate)` and
+  `Object.setPrototypeOf(Forged.prototype, Aggregate.prototype)` was accepted;
+  `corepack pnpm typecheck:tooling` failed with unused `@ts-expect-error`
+  directives for family-broad `RepositoryOptions` and `Repository` subclass
+  bindings.
+- Round-6 GREEN: focused Vitest passed with 2 files and 19 tests;
+  `corepack pnpm typecheck:tooling` passed after adding the class-constructor
+  guard and broad extracted-schema generic guard.
+- Round-6 API docs guard: `node scripts/check-api-docs.mjs` passed and
+  reported 87 expected `@spine-ts/server` exports.
+- Round-6 full verification: `CI=true corepack pnpm verify` passed with 17
+  test files, 178 tests, coverage, docs check, proto lint/generate, and
+  generated-clean.
 
 ## Review
 
-- First-, second-, third-, fourth-, and fifth-round reviewer findings were applied by review-fix
+- First-, second-, third-, fourth-, fifth-, and sixth-round reviewer findings were applied by review-fix
   sub-agents.
   Re-review by the orchestrator lanes remains pending.
