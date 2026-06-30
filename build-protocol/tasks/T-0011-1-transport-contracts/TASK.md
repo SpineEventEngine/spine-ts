@@ -1,6 +1,6 @@
 # T-0011.1: Transport Contracts, Topics, And Envelope Routing Keys
 
-Status: Setup Baseline Verified; Implementation Pending
+Status: Implementation Complete; Review Pending
 Parent task: `T-0011 Transport Foundation`
 Start: `2026-06-30 20:45 WEST`
 Baseline commit: `7b54d6c`
@@ -8,7 +8,7 @@ Task log path: `build-protocol/tasks/T-0011-1-transport-contracts/TASK.md`
 Branch: `task/T-0011-1-transport-contracts`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-1-transport-contracts`
-Authoring sub-agent: pending
+Authoring sub-agent: complete
 Reviewer sub-agents: pending
 
 ## Objective

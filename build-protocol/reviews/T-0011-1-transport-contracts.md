@@ -1,6 +1,6 @@
 # Review Log: T-0011.1 Transport Contracts, Topics, And Envelope Routing Keys
 
-Status: Setup Baseline Verified; Implementation Pending
+Status: Ready For Review
 
 ## Required Review Lanes
 
@@ -25,8 +25,9 @@ clean.
 
 ## Current Review Gate
 
-Setup verification passed. Implementation worker pending.
+Setup verification passed. Implementation is complete; review lanes remain
+required before integration.
 
 ## Reviewer Rounds
 
-None yet.
+Pending reviewer round after implementation commit.

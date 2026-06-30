@@ -397,3 +397,28 @@ preserves byte arrays used by packed Protobuf `Any` payloads. Diagnostics are
 intended for safe framework metadata only; storage errors and diagnostics must
 not include credentials, auth headers, packed bytes, or sensitive payload
 contents.
+
+## Transport Boundary
+
+`@spine-ts/transport` now owns the first adapter-agnostic routing contract for
+local multi-process work. The package does not import `@spine-ts/server`
+runtime code or install ZeroMQ. Instead it defines immutable value objects and
+interfaces that later adapters can implement:
+
+- `TransportSignalKind` names framework-level signal families (`command`,
+  `event`, `query`, `subscription`, `delivery`, and `system`);
+- `createTransportTopic()` builds immutable topics from a signal kind, a payload
+  type URL, and optional semantic tags;
+- `TransportRoutingDescriptor.routingKey` is derived deterministically from the
+  signal kind, payload type URL, and sorted unique semantic tags;
+- `createTransportSubscription()` builds immutable logical subscription
+  descriptors from a topic, a logical subscriber ID, and a transport delivery
+  mode; and
+- `SignalTransport` plus publish/request handler contracts define the minimal
+  adapter seam for later runtime integration and graceful async close behavior.
+
+The boundary is intentionally smaller than a bus implementation. It does not
+choose ZeroMQ socket topology, endpoint naming, broker lifecycle, durable
+delivery, retries, process supervision, handler invocation, repository
+dispatch, or read-side execution policy. Those decisions remain in later
+transport and runtime tasks.

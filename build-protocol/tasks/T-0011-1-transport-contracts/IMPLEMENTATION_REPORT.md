@@ -1,6 +1,6 @@
 # Implementation Report: T-0011.1 Transport Contracts, Topics, And Envelope Routing Keys
 
-Status: Setup Baseline Verified; Implementation Pending
+Status: Implementation Complete; Review Pending
 Task log: `build-protocol/tasks/T-0011-1-transport-contracts/TASK.md`
 Work log: `build-protocol/work-logs/T-0011-1.md`
 Review log: `build-protocol/reviews/T-0011-1-transport-contracts.md`
@@ -15,6 +15,30 @@ transport implementation slice and must remain adapter-agnostic. It should
 replace the `@spine-ts/transport` skeleton export with focused transport
 contracts, tests, docs, and API export checks, without adding ZeroMQ or runtime
 behavior.
+
+## Implemented Surface
+
+Implemented in this branch:
+
+- immutable `TransportTopic` values created by `createTransportTopic()` from
+  `signalKind`, payload `messageTypeUrl`, and optional semantic tags;
+- immutable `TransportSubscription` descriptors created by
+  `createTransportSubscription()` from a topic, logical `subscriberId`, and a
+  delivery mode;
+- deterministic transport-owned routing keys derived from signal kind, type
+  URL, and sorted unique semantic tags;
+- publish/request operation contracts, handler callback types,
+  `TransportSubscriptionHandle`, `SignalTransport`, and `AsyncCloseable`; and
+- package/API/architecture docs plus TypeDoc export checks updated for the new
+  public surface.
+
+Still deferred:
+
+- ZeroMQ installation and adapter wiring;
+- socket types, broker endpoints, multipart frames, or worker registration;
+- request routing policy beyond the contract seam;
+- durable delivery, retries, storage coupling, or handler invocation/runtime
+  execution.
 
 ## Expected Files
 
@@ -31,7 +55,7 @@ Likely changed files:
 
 ## Verification
 
-Setup verification is pending. The fresh worktree required
+Setup verification is complete. The fresh worktree required
 `corepack pnpm install --frozen-lockfile`; the sandboxed install hit npm
 registry `ENOTFOUND`, and the escalated frozen install passed with the lockfile
 unchanged.
@@ -43,7 +67,19 @@ TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage expected
 exports, copied Spine proto checksum verification, generated proto output
 clean, and generated files clean.
 
+Implementation verification passed on `2026-06-30 20:58 WEST`:
+
+- `corepack pnpm vitest run packages/transport/src/index.test.ts` passed with 1
+  file / 4 tests.
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm docs:check` passed. TypeDoc reported the existing warning that
+  the local `origin` remote is not valid for source links; no doc/API errors
+  occurred.
+- `CI=true corepack pnpm verify` passed with 21 test files / 261 tests,
+  coverage 96.37% statements / 90.39% branches / 99.26% functions / 96.31%
+  lines, plus proto lint/generate/generated-clean checks.
+- `git diff --check` passed.
+
 ## Open Items
 
-- Implementation worker pending.
 - Required five-lane review pending.
