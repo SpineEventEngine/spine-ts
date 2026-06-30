@@ -1,6 +1,6 @@
 # T-0010: Single-Process Async Runtime
 
-Status: `T-0010.2` Integrated; Next Subtask Selected
+Status: `T-0010.3` Integrated; Next Subtask Selected
 Start: `2026-06-30 14:57 WEST`
 Baseline commit: `169af02`
 Task log path: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
@@ -189,6 +189,12 @@ deferred to a later transport-adapter task.
   functions / 96.15% lines, TypeDoc/API checks with 100 proto / 28 core / 106
   server / 26 storage expected exports, proto lint/generate checksum
   verification, and generated proto output clean.
+- Parent integration verification after merge commit `575e1d3` passed on
+  `2026-06-30 17:20 WEST`: `CI=true corepack pnpm verify` passed with 19 test
+  files / 234 tests, coverage 96.21% statements / 90.38% branches / 99.16%
+  functions / 96.14% lines, TypeDoc/API checks with 100 proto / 28 core / 116
+  server / 26 storage expected exports, proto lint/generate checksum
+  verification, and generated proto output clean.
 
 ## Human Questions And Answers
 
@@ -220,4 +226,9 @@ deferred to a later transport-adapter task.
   `2026-06-30 16:31 WEST` from parent commit `4d58ba8`. Setup logs are
   created; setup baseline verification passed on `2026-06-30 16:35 WEST` with
   18 test files / 224 tests and clean TypeDoc/API, proto, and generated-output
-  gates. Implementation handoff is pending.
+  gates. Implementation, review fixes, and clean re-review completed on branch
+  `task/T-0010-3-write-side-signal-intake-result`; all participating
+  sub-agents were closed. The subtask was merged into the parent branch as
+  `575e1d3 Integrate T-0010.3 write-side signal intake result`.
+- Next selected subtask:
+  `T-0010.4 Command Registration Readiness`.

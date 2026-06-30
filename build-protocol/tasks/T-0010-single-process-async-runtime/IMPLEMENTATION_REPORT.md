@@ -1,6 +1,6 @@
 # Implementation Report: T-0010 Single-Process Async Runtime
 
-Status: `T-0010.2` Integrated; Next Subtask Selected
+Status: `T-0010.3` Integrated; Next Subtask Selected
 Task log: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
 Work log: `build-protocol/work-logs/T-0010.md`
 Review log: `build-protocol/reviews/T-0010-single-process-async-runtime.md`
@@ -47,7 +47,22 @@ lifecycle/queue kernel, tests, README/API documentation, and updated API export
 checks. All participating implementer, fixer, and reviewer sub-agents were
 closed.
 
-Next selected subtask: `T-0010.2 Bounded Context Runtime Handle`.
+`T-0010.2 Bounded Context Runtime Handle` was merged into the parent branch as
+`d8ce736 Integrate T-0010.2 bounded context runtime handle` after a clean
+security re-review. It introduced a lightweight runtime handle for built
+bounded-context snapshots without changing builder semantics. All participating
+implementer, fixer, and reviewer sub-agents were closed.
+
+`T-0010.3 Write-Side Signal Intake Result` was merged into the parent branch as
+`575e1d3 Integrate T-0010.3 write-side signal intake result` after
+documentation, API, and security review fixes plus a clean final security
+re-review. It introduced typed accepted/immediate-failure intake result values,
+stable failure codes, copy-safe diagnostics, package exports, tests, and
+README/API documentation without adding buses, `Ack`, storage, dispatch,
+services, validation, or transport behavior. All participating implementer,
+fixer, and reviewer sub-agents were closed.
+
+Next selected subtask: `T-0010.4 Command Registration Readiness`.
 
 ## Files Changed
 
@@ -88,6 +103,12 @@ Next selected subtask: `T-0010.2 Bounded Context Runtime Handle`.
   functions / 96.15% lines, TypeDoc/API checks with 100 proto / 28 core / 106
   server / 26 storage expected exports, proto lint/generate checksum
   verification, and generated proto output clean.
+- Parent integration verification after merge commit `575e1d3` passed on
+  `2026-06-30 17:20 WEST`: `CI=true corepack pnpm verify` passed with 19 test
+  files / 234 tests, coverage 96.21% statements / 90.38% branches / 99.16%
+  functions / 96.14% lines, TypeDoc/API checks with 100 proto / 28 core / 116
+  server / 26 storage expected exports, proto lint/generate checksum
+  verification, and generated proto output clean.
 
 ## Subtask Progress
 
@@ -120,3 +141,9 @@ context runtime handle` and verified cleanly.
   18 test files / 224 tests, coverage 96.22% statements / 90.3% branches /
   99.15% functions / 96.15% lines, TypeDoc/API, proto, and generated-output
   gates clean.
+- `T-0010.3` implementation, review fixes, clean final security re-review, and
+  review closure completed on `2026-06-30 17:09 WEST`; the child branch was
+  merged into the parent task branch as `575e1d3 Integrate T-0010.3 write-side
+signal intake result` and verified cleanly.
+- `T-0010.4 Command Registration Readiness` is the next selected non-blocked
+  subtask.

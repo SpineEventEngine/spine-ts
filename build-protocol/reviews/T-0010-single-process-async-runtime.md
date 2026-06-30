@@ -1,6 +1,6 @@
 # Review Log: T-0010 Single-Process Async Runtime
 
-Status: `T-0010.2` Integrated; Next Subtask Selected
+Status: `T-0010.3` Integrated; Next Subtask Selected
 
 ## Required Review Lanes
 
@@ -53,7 +53,10 @@ verification, and generated proto output clean.
   security re-review completed on `2026-06-30 16:23 WEST`, and all review lanes
   are clean. The subtask was merged into the parent task branch as `d8ce736`
   and parent verification passed on `2026-06-30 16:28 WEST`.
-- `T-0010.3 Write-Side Signal Intake Result`: pending.
 - `T-0010.3 Write-Side Signal Intake Result`: setup logs created on
   `2026-06-30 16:31 WEST`; setup baseline verification passed on
-  `2026-06-30 16:35 WEST`; implementation review rounds are pending.
+  `2026-06-30 16:35 WEST`; documentation, TypeScript/API, and security review
+  findings were fixed; final security re-review completed clean on
+  `2026-06-30 17:09 WEST`; all review lanes are clean. The subtask was merged
+  into the parent task branch as `575e1d3` and parent verification passed on
+  `2026-06-30 17:20 WEST`.
