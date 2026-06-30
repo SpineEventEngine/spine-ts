@@ -1,13 +1,14 @@
 # T-0010: Single-Process Async Runtime
 
-Status: Setup Complete; Requirements Splitting Pending
+Status: Requirements Split Complete; First Subtask Selected
 Start: `2026-06-30 14:57 WEST`
 Baseline commit: `169af02`
 Task log path: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
 Branch: `task/T-0010-single-process-async-runtime`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0010-single-process-async-runtime`
-Requirements splitter: pending.
+Requirements splitter:
+`019f18d6-f12d-7640-9c9e-be8943200c99` (Plato the 6th, closed)
 Authoring sub-agents: pending splitter output.
 Reviewer sub-agents: pending implementation subtask selection.
 
@@ -112,6 +113,55 @@ The requirements-splitting sub-agent must produce a staged roadmap for T-0010
 and select the first non-blocked implementable subtask. It must keep the first
 runtime slice smaller than the JVM server graph, avoid gRPC/ZeroMQ/storage
 delivery/read-side execution, and identify which future tasks own those pieces.
+
+## Splitter Result
+
+Requirements splitter `019f18d6-f12d-7640-9c9e-be8943200c99` completed on
+`2026-06-30 15:01 WEST` and was closed by the orchestrator. Blocking questions:
+none.
+
+Roadmap:
+
+1. `T-0010.1 Runtime Lifecycle And Async Queue Kernel`: add the smallest
+   server-owned async lifecycle/queue primitive with explicit `start()`,
+   `close()`, status, idempotent close, and queued work that runs after intake
+   returns.
+2. `T-0010.2 Bounded Context Runtime Handle`: build a runtime-facing handle
+   from a built `BoundedContext` snapshot without changing builder semantics.
+3. `T-0010.3 Write-Side Signal Intake Result`: introduce internal command/event
+   intake result types that preserve accepted-for-async-work versus immediate
+   intake failure without depending on `Ack` yet.
+4. `T-0010.4 Command Registration Readiness`: use handler metadata to compute
+   command-assignment ownership/readiness and enforce one effective assignee
+   per command type.
+5. `T-0010.5 Event Registration Readiness`: compute event-side readiness from
+   metadata for subscriptions, reactions, applications, and domestic/external
+   deferral notes.
+6. `T-0010.6 Runtime Closure And User-Facing Docs`: close T-0010 with API docs,
+   compatibility notes, and a tiny bounded-context runtime assembly smoke test.
+
+First selected non-blocked subtask:
+`T-0010.1 Runtime Lifecycle And Async Queue Kernel`.
+
+Acceptance criteria for `T-0010.1`:
+
+- public or narrowly exported server runtime lifecycle contract has `start()`
+  and `close()` with deterministic state transitions;
+- closing is idempotent and prevents new queued work;
+- queued work is not executed synchronously during intake;
+- no global singleton, import-time registration, process supervision, gRPC,
+  ZeroMQ, durable storage, read-side stand, or repository dispatch;
+- README/TypeDoc explain that this is a single-process async kernel only;
+- implementer follows TDD and reviewers run all five lanes.
+
+Out of scope for `T-0010.1`: `CommandBus`, `EventBus`, `ImportBus`, `Stand`,
+`Server`, `CommandService`, `Ack`, delivery inbox, event store, tenant index,
+system context, integration broker, ZeroMQ, worker processes, and full
+repository dispatch.
+
+Tooling/dependency decision: no new dependencies are needed for T-0010.1; use
+existing TypeScript, Vitest, TypeDoc, and current server tests. ZeroMQ remains
+deferred to a later transport-adapter task.
 
 ## Verification
 

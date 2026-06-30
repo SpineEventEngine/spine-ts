@@ -1,6 +1,6 @@
 # Implementation Report: T-0010 Single-Process Async Runtime
 
-Status: Setup Complete; Requirements Splitting Pending
+Status: Requirements Split Complete; First Subtask Selected
 Task log: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
 Work log: `build-protocol/work-logs/T-0010.md`
 Review log: `build-protocol/reviews/T-0010-single-process-async-runtime.md`
@@ -15,8 +15,13 @@ branch starts from `169af02`. The initial scope is a first single-process async
 runtime slice, not a full server, gRPC surface, ZeroMQ transport, durable
 delivery engine, read-side stand, or repository dispatch implementation.
 
-The requirements splitter is pending and must produce the staged T-0010
-roadmap before implementation begins.
+Requirements splitter `019f18d6-f12d-7640-9c9e-be8943200c99` completed on
+`2026-06-30 15:01 WEST`, found no blockers, and selected
+`T-0010.1 Runtime Lifecycle And Async Queue Kernel` as the first non-blocked
+subtask. The splitter recommended six T-0010 subtasks: runtime lifecycle/queue
+kernel, bounded-context runtime handle, write-side signal intake result,
+command registration readiness, event registration readiness, and runtime
+closure/docs.
 
 ## JVM Research Used
 

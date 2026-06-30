@@ -1,6 +1,6 @@
 # Review Log: T-0010 Single-Process Async Runtime
 
-Status: Setup Complete; Requirements Splitting Pending
+Status: Requirements Split Complete; First Subtask Selected
 
 ## Required Review Lanes
 
@@ -21,7 +21,11 @@ T-0010 setup started on `2026-06-30 14:57 WEST` from baseline commit
 99.09% functions / 96.32% lines, TypeDoc/API checks with 100 proto / 28 core /
 97 server / 26 storage expected exports, proto lint/generate checksum
 verification, and generated proto output clean. Requirements splitting is
-pending.
+complete.
+
+Requirements splitter `019f18d6-f12d-7640-9c9e-be8943200c99` completed on
+`2026-06-30 15:01 WEST`, found no blockers, selected `T-0010.1 Runtime
+Lifecycle And Async Queue Kernel`, and was closed by the orchestrator.
 
 ## Reviewer Rounds
 
