@@ -172,6 +172,9 @@ export abstract class Entity<
   Schema extends DescriptorMessageSchema,
   Version = EntityVersionMetadata,
 > {
+  /** @hidden */
+  declare protected static readonly spineTsEntityConstructor: true;
+
   readonly #id: Id;
   readonly #schema: Schema;
   readonly #metadata: EntityMetadata<Schema>;

@@ -11,9 +11,18 @@ import {
 
 import * as serverRoot from "./index.js";
 import {
+  BoundedContext,
   describeEntityMetadata,
   DescriptorMetadataError,
   isEntitySchema,
+  type BuiltBoundedContextSnapshot,
+  type BoundedContextName,
+  type BoundedContextSnapshot,
+  type BoundedContextRepositoryRegistrationConflictErrorDetails,
+  type BoundedContextRepositoryRegistrationErrorDetails,
+  type BoundedContextRepositoryRegistrationOperation,
+  type BoundedContextRepositorySnapshotErrorDetails,
+  type TenantMode,
   type EntityVersionMetadata,
   type PlainEntityVersionMetadata,
 } from "./index.js";
@@ -137,9 +146,14 @@ describe("@spine-ts/server", () => {
         "Aggregate",
         "Apply",
         "Assign",
+        "BoundedContext",
+        "BoundedContextBuilder",
+        "BoundedContextNameError",
+        "BoundedContextRepositoryRegistrationError",
         "EntityTransactionDraftStateError",
         "EntityTransaction",
         "EntityTransactionStateError",
+        "ContextSpec",
         "DescriptorMetadataError",
         "Command",
         "HandlerMetadataError",
@@ -148,6 +162,8 @@ describe("@spine-ts/server", () => {
         "Entity",
         "ProcessManager",
         "Projection",
+        "Repository",
+        "RepositoryIdentityError",
         "TransactionalEntity",
         "TransactionalEntityScopeError",
         "React",
@@ -173,6 +189,18 @@ describe("@spine-ts/server", () => {
       PlainEntityVersionMetadata<ExportedSizedMetadata>
     >().toEqualTypeOf<ExportedSizedMetadata>();
     expectTypeOf<PlainEntityVersionMetadata<Date>>().toBeNever();
+    expectTypeOf<BoundedContextName>().toEqualTypeOf<{ readonly value: string }>();
+    expectTypeOf<TenantMode>().toEqualTypeOf<"single-tenant" | "multitenant">();
+    expectTypeOf<BuiltBoundedContextSnapshot>().toEqualTypeOf<BoundedContextSnapshot>();
+    expectTypeOf(
+      BoundedContext.singleTenant("Exports").build().snapshot,
+    ).toEqualTypeOf<BuiltBoundedContextSnapshot>();
+    expectTypeOf<BoundedContextRepositoryRegistrationOperation>().toEqualTypeOf<"add" | "remove">();
+    expectTypeOf<BoundedContextRepositoryRegistrationErrorDetails>().toEqualTypeOf<
+      | BoundedContextRepositoryRegistrationConflictErrorDetails
+      | BoundedContextRepositorySnapshotErrorDetails
+    >();
+    expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
   });
 
   it("extracts entity kind, default visibility, routing hints, columns, set-once fields, and tags", () => {

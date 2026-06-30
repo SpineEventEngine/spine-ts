@@ -168,9 +168,23 @@ const expectedServerExports = [
   "Apply",
   "Assign",
   "BaseHandlerMetadata",
+  "BoundedContext",
+  "BoundedContextBuilder",
+  "BuiltBoundedContextSnapshot",
+  "BoundedContextName",
+  "BoundedContextNameError",
+  "BoundedContextRepositoryRegistrationError",
+  "BoundedContextRepositoryRegistrationConflictErrorDetails",
+  "BoundedContextRepositoryRegistrationErrorCode",
+  "BoundedContextRepositoryRegistrationErrorDetails",
+  "BoundedContextRepositoryRegistrationOperation",
+  "BoundedContextRepositorySnapshotErrorDetails",
+  "BoundedContextSnapshot",
   "Command",
   "CommandAssignmentHandlerMetadata",
   "CommandReactionHandlerMetadata",
+  "ContextSpec",
+  "ContextSpecSnapshot",
   "DeclaredEntityVisibility",
   "DescriptorFieldMetadata",
   "DescriptorMessageSchema",
@@ -186,10 +200,21 @@ const expectedServerExports = [
   "PlainEntityVersionMetadata",
   "ProcessManager",
   "Projection",
+  "ConcreteRepositoryEntityType",
+  "Repository",
+  "RepositoryEntityType",
+  "RepositoryIdentityError",
+  "RepositoryIdentityErrorCode",
+  "RepositoryIdentityErrorDetails",
+  "RepositoryIdentitySnapshot",
+  "RepositoryOptions",
+  "RepositoryRegistrationConflictDetails",
+  "RepositoryStateSchema",
   "TransactionalEntity",
   "TransactionalEntityScopeError",
   "TransactionalEntityScopeErrorReason",
   "TransactionalEntityScopeOperation",
+  "TenantMode",
   "EntityTransaction",
   "EntityTransactionAcceptedCommit",
   "EntityTransactionCommitResult",
@@ -293,10 +318,120 @@ function collectNames(value) {
 
 collectNames(apiDocs);
 
+const forbiddenPublicMembers = [
+  {
+    owner: "BoundedContext",
+    member: "constructor",
+    reason: "public constructor",
+    matches: (value) => value.flags?.isProtected !== true && value.flags?.isPrivate !== true,
+  },
+  {
+    owner: "BoundedContextBuilder",
+    member: "constructor",
+    reason: "public constructor",
+    matches: (value) => value.flags?.isProtected !== true && value.flags?.isPrivate !== true,
+  },
+  {
+    owner: "ContextSpec",
+    member: "constructor",
+    reason: "public constructor",
+    matches: (value) => value.flags?.isProtected !== true && value.flags?.isPrivate !== true,
+  },
+  {
+    owner: "BoundedContext",
+    member: "fromSpecSnapshot",
+    reason: "removed factory",
+    matches: (value) => Array.isArray(value.signatures),
+  },
+  {
+    owner: "BoundedContextBuilder",
+    member: "rename",
+    reason: "removed builder method",
+    matches: (value) => Array.isArray(value.signatures),
+  },
+  {
+    owner: "ContextSpec",
+    member: "singleTenant",
+    reason: "removed factory",
+    matches: (value) => value.flags?.isStatic === true && Array.isArray(value.signatures),
+  },
+  {
+    owner: "ContextSpec",
+    member: "multitenant",
+    reason: "removed factory",
+    matches: (value) => value.flags?.isStatic === true && Array.isArray(value.signatures),
+  },
+];
+
+function collectForbiddenMembers(value, ownerName, matches) {
+  if (Array.isArray(value)) {
+    for (const child of value) {
+      collectForbiddenMembers(child, ownerName, matches);
+    }
+    return;
+  }
+
+  if (value === null || typeof value !== "object") {
+    return;
+  }
+
+  const nextOwnerName =
+    typeof value.kind === "number" &&
+    typeof value.name === "string" &&
+    ["BoundedContext", "BoundedContextBuilder", "ContextSpec"].includes(value.name)
+      ? value.name
+      : ownerName;
+
+  if (typeof value.name === "string" && nextOwnerName !== undefined) {
+    for (const forbidden of forbiddenPublicMembers) {
+      if (
+        forbidden.owner === nextOwnerName &&
+        forbidden.member === value.name &&
+        forbidden.matches(value)
+      ) {
+        matches.push(`${forbidden.owner}.${forbidden.member} (${forbidden.reason})`);
+      }
+    }
+  }
+
+  for (const child of Object.values(value)) {
+    collectForbiddenMembers(child, nextOwnerName, matches);
+  }
+}
+
+const forbiddenMatches = [];
+collectForbiddenMembers(apiDocs, undefined, forbiddenMatches);
+
 const missingExports = expectedProtoExports.filter((name) => !documentedNames.has(name));
 const missingCoreExports = expectedCoreExports.filter((name) => !documentedNames.has(name));
 const missingServerExports = expectedServerExports.filter((name) => !documentedNames.has(name));
 const missingStorageExports = expectedStorageExports.filter((name) => !documentedNames.has(name));
+const forbiddenTypeDocNames = [
+  "BuiltInEntityConstructor",
+  "BuiltInEntityConstructorBase",
+  "EntityConstructor",
+  "EntityStaticMarkerBase",
+  "EntityStaticMarkerBaseClass",
+  "HasErasedRepositoryConstructorParameters",
+  "RepositoryEntityTypeCarriesConcreteConstructorParameters",
+  "RepositoryEntityTypeConstraint",
+  "SingleConcreteRepositoryEntityType",
+  "RepositorySchemaForInstance",
+  "RepositoryConcreteEntityTypeConstraint",
+  "RepositorySchemaFromEntityInstance",
+  "repositoryEntityTypeConstraint",
+  "spineTsEntityConstructor",
+  "__repositoryEntityTypeMustBeASingleConcreteConstructor",
+  "__repositoryEntityTypeMustCarryConcreteStateSchema",
+  "__spineTsBuiltInEntityConstructor",
+  "__spineTsEntityConstructorBrand",
+  "EntityConstructorBrand",
+];
+const forbiddenTypeDocNamePatterns = [
+  /\bEntity\w*Marker\w*\b/u,
+  /\b\w*EntityConstructor\w*Brand\w*\b/u,
+  /\bspineTs\w*\b/u,
+];
 
 if (missingExports.length > 0) {
   console.error(
@@ -322,6 +457,33 @@ if (missingServerExports.length > 0) {
 if (missingStorageExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-ts/storage exports: ${missingStorageExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (forbiddenMatches.length > 0) {
+  console.error(
+    `TypeDoc JSON exposes removed or non-public @spine-ts/server API surface: ${[
+      ...new Set(forbiddenMatches),
+    ].join(", ")}`,
+  );
+  process.exit(1);
+}
+
+const apiDocsText = JSON.stringify(apiDocs);
+const forbiddenTypeDocNameMatches = forbiddenTypeDocNames.filter((name) =>
+  apiDocsText.includes(name),
+);
+const forbiddenTypeDocPatternMatches = forbiddenTypeDocNamePatterns
+  .filter((pattern) => pattern.test(apiDocsText))
+  .map((pattern) => pattern.toString());
+
+if (forbiddenTypeDocNameMatches.length > 0 || forbiddenTypeDocPatternMatches.length > 0) {
+  console.error(
+    `TypeDoc JSON exposes internal @spine-ts/server repository type machinery: ${[
+      ...forbiddenTypeDocNameMatches,
+      ...forbiddenTypeDocPatternMatches,
+    ].join(", ")}`,
   );
   process.exit(1);
 }

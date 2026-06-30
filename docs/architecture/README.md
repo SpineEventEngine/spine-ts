@@ -241,6 +241,26 @@ repository hooks, dispatch APIs, command posting, query clients, aggregate event
 history, snapshots, process workflow execution, idempotency guards, lifecycle
 events, handler invocation, or async-local/global transaction state.
 
+`Repository` is now the metadata-only entity ownership seam for later
+bounded-context registration. It accepts one entity constructor and one
+descriptor-backed state schema, infers the family from a declared ES class
+constructor whose constructor and instance prototype chains reach `Aggregate`,
+`Projection`, or `ProcessManager`, and verifies that the state schema's
+`(entity).kind` matches that family. Alias imports, namespace/member base-class
+expressions, and intermediate domain base classes are valid because the runtime
+trusts the actual same-realm prototype metadata rather than parsing source base
+names. This is a metadata boundary, not a sandbox boundary: same-realm code that
+explicitly reparents an ES class onto an entity family is trusted as an entity
+constructor. The snapshot surface records only immutable identity facts:
+constructor identity, family, state schema, descriptor metadata, state full type
+name, and ID-field metadata.
+This follows the JVM `Repository` identity surface (`entityClass()`,
+`idClass()`, and `entityStateType()`) without implementing its lifecycle or
+runtime methods. The TypeScript seam deliberately omits `create`, `find`,
+`store`, storage adapters, record conversion, bounded-context registration,
+stand registration, routing, inboxes, caches, lifecycle monitors, catch-up,
+handler invocation, buses, and transport.
+
 `EntityTransaction` is the first server-owned draft/result commit boundary over
 one entity state. It buffers a draft state, explicit previous/draft version
 metadata, lifecycle flags, and visible status (`active`, `committed`, or
@@ -269,6 +289,53 @@ handlers, instantiate entities, deserialize `Any` payloads, assemble
 repositories, mutate storage, register buses, mutate a global registry, provide
 async-local transaction state, or start transport.
 
+## Server Bounded-Context Shell
+
+`@spine-ts/server` now exposes the first bounded-context assembly shell for
+server metadata. It follows the Spine JVM entry points closely while keeping
+the implementation boundary deliberately smaller than the eventual runtime.
+
+Current bounded-context scope is intentionally limited to immutable metadata:
+
+- `BoundedContext.singleTenant(name)` and
+  `BoundedContext.multitenant(name)` are the only public entry points for
+  starting context assembly;
+- `ContextSpec` is a framework-owned immutable value exposed through
+  `builder.spec` and `context.spec`; it carries the validated bounded-context
+  name, tenant mode, and event-storage metadata for future runtime work;
+- `BoundedContextBuilder.add(repository)` and `remove(repository)` record
+  explicit metadata-only `Repository` identities and expose fresh frozen
+  repository snapshots from the builder and built context;
+- repeated registration of the same repository identity is idempotent, while
+  conflicting entity-constructor/state-schema ownership and state-type
+  ownership are rejected before runtime assembly;
+- `BoundedContextBuilder.build()` is the only supported path for constructing a
+  built `BoundedContext`; and
+- built contexts expose frozen metadata only: name, tenant mode, spec,
+  repository identities, and a copy-safe snapshot of that shell state.
+  `BuiltBoundedContextSnapshot` is the public name for this closed built-context
+  registration contract and is intentionally equivalent to
+  `BoundedContextSnapshot`.
+
+This keeps the TypeScript API JVM-familiar without pretending that later
+runtime collaborators already exist. Application code does not subclass
+`BoundedContext`, directly instantiate shell classes, or reach runtime parts
+such as command buses, event buses, stands, tenant indexes, storage, or
+transport from this slice. Runtime constructor guards also reject direct
+JavaScript escape hatches so callers cannot bypass name validation or the
+builder-only build path by passing ad hoc objects.
+
+The following runtime pieces are still deferred to later explicit tasks:
+
+- runtime repository registration, default repository construction from entity
+  classes, storage opening, visibility/type-supplier registration, and
+  lifecycle callbacks over the repository identity seam;
+- handler invocation and command/event routing;
+- inbox, delivery, storage, and tenant-index persistence;
+- stand/query/subscription execution;
+- system-context pairing and server/gRPC services; and
+- ZeroMQ and other transport integration.
+
 ## Storage Boundary
 
 `@spine-ts/storage` now owns the first framework storage seam. The package
@@ -290,7 +357,10 @@ interface rather than to each read call, so package-level storage defaults to
 histories append ordered stream records with expected stream versions and
 adapter-local global positions. Empty appends validate the expected stream
 version but do not retain an empty stream. These metadata fields provide the
-future repository seam without introducing repository classes in this slice.
+future repository runtime/storage seam. The server package now has a
+metadata-only `Repository` identity class for entity/schema ownership, but
+create/find/store behavior, storage opening, and repository runtime classes
+remain deferred.
 
 `InMemoryStorageAdapter` is a test/development adapter. Each instance is
 isolated, keeps deterministic counters, snapshots values on write/read with

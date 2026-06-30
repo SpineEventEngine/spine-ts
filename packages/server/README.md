@@ -5,6 +5,12 @@ metadata, and standard decorator metadata adapters.
 
 Current slice exposes:
 
+- `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)` for
+  creating metadata-only builder shells with immutable context names,
+  `ContextSpec` values exposed through `builder.spec` and `context.spec`, tenant
+  mode metadata, explicit `Repository` identity registration, deterministic
+  repository ownership conflict checks, and copy-safe built context snapshots;
+  and
 - `Entity<Id, Schema, Version>` for a common abstract OOP state shell with
   identity, descriptor-derived metadata, cloned Protobuf-ES state snapshots,
   caller-owned plain version metadata, lifecycle flags, and
@@ -14,6 +20,9 @@ Current slice exposes:
   and
 - `Aggregate`, `Projection`, and `ProcessManager` abstract family marker classes
   over `TransactionalEntity`, each exposing a stable `entityFamily` identity;
+  and
+- `new Repository({ entityType, schema })` for metadata-only repository identity
+  over one entity constructor and matching entity state schema;
   and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
@@ -101,6 +110,55 @@ metadata-only: constructing or registering it does not instantiate entities,
 invoke methods, unpack payloads, mutate global process state, write storage, or
 start buses/transports.
 
+## Bounded Context Shell
+
+Create a bounded-context shell through the JVM-familiar entry points:
+
+```ts
+import { BoundedContext } from "@spine-ts/server";
+
+const tasks = BoundedContext.singleTenant("Tasks").build();
+const customers = BoundedContext.multitenant("Customers").build();
+
+tasks.name.value; // "Tasks"
+tasks.tenantMode; // "single-tenant"
+customers.isMultitenant; // true
+```
+
+Names must be non-empty and non-blank. `ContextSpec` is a framework-owned
+immutable value exposed from the builder and built context, `build()` returns a
+frozen metadata-only `BoundedContext`, and `.snapshot` returns a copy-safe
+immutable `BuiltBoundedContextSnapshot` / `BoundedContextSnapshot`. Builders
+accept explicit metadata-only `Repository` identity objects:
+
+```ts
+import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
+
+const taskRepository = new Repository({
+  entityType: TaskAggregate,
+  schema: TaskStateSchema,
+});
+
+const tasks = BoundedContext.singleTenant("Tasks").add(taskRepository).build();
+
+tasks.repositories[0]?.stateFullTypeName; // TaskStateSchema.typeName
+```
+
+Adding the same repository identity repeatedly is idempotent. The builder
+rejects conflicting ownership when one entity constructor is paired with a
+different state schema identity, or when one state type is claimed by multiple
+entity constructors. Returned repository arrays and built context snapshots are
+fresh frozen copies. `BuiltBoundedContextSnapshot` is a public name for this
+closed registration contract; it is not a runtime context handle.
+
+This slice deliberately does not create default repositories from entity
+classes, perform runtime repository registration, invoke handlers, open storage,
+construct system contexts, start command/event/query/subscription buses, write
+tenant indexes, expose gRPC services, or integrate transports.
+
 ## Entity State Shell
 
 Extend `Entity` when framework-owned code needs a common base for local entity
@@ -173,6 +231,48 @@ lifecycle accessors, `changed`, and protected transaction helpers from
 `TransactionalEntity`. They do not add public transaction mutators, command
 posting, event history, snapshots, subscriptions, query clients, process
 workflow execution, handler invocation, storage, buses, or lifecycle events.
+
+## Repository Identity
+
+Use `Repository` when a `BoundedContextBuilder` needs to record that one entity
+constructor owns one descriptor-backed state schema:
+
+```ts
+import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
+
+const repository = new Repository({
+  entityType: TaskAggregate,
+  schema: TaskStateSchema,
+});
+
+repository.entityFamily; // "aggregate"
+repository.stateFullTypeName; // TaskStateSchema.typeName
+repository.snapshot.stateFullTypeName; // immutable fresh-copy snapshot
+
+const tasks = BoundedContext.singleTenant("Tasks").add(repository).build();
+tasks.repositories[0]?.stateFullTypeName; // TaskStateSchema.typeName
+```
+
+The constructor derives descriptor metadata with `describeEntityMetadata()` and
+infers the entity family from same-realm constructor and instance prototype
+chains reaching `Aggregate`, `Projection`, or `ProcessManager`. Alias imports,
+namespace/member base-class expressions, and intermediate domain base classes
+are accepted. Explicitly reparented same-realm ES classes are trusted as
+metadata; this is not a sandbox boundary. The API rejects constructors outside
+those families and rejects mismatched family/schema pairs, such as an aggregate
+class with a projection state schema, with structured `RepositoryIdentityError`
+codes and details. `BoundedContextBuilder.add(repository)` uses these
+metadata-only identities for duplicate and conflict checks before
+`builder.build()` creates an immutable bounded-context snapshot. Runtime
+context registration remains deferred. This identity seam follows Spine
+`core-jvm` `Repository` identity concepts closely. This API is
+metadata-only: it does not create, find, or store
+entities; open storage; register with a bounded context; route messages; invoke
+handlers; write inboxes; manage caches; emit lifecycle events; start buses; or
+touch transport.
 
 ## Entity State Transition Validation
 
