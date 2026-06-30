@@ -1,6 +1,6 @@
 # Implementation Report: T-0011 Transport Foundation
 
-Status: T-0011.2 Integrated
+Status: T-0011.3 Integrated
 Task log: `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
 Work log: `build-protocol/work-logs/T-0011.md`
 Review log: `build-protocol/reviews/T-0011-transport-foundation.md`
@@ -35,6 +35,12 @@ read-side behavior.
 adapter-private local IPC configuration helper and tests, and documents the
 native/local IPC constraints without exporting ZeroMQ through the public
 transport API.
+
+`T-0011.3` was integrated into this parent branch by merge commit `6f5c53c` on
+`2026-06-30 22:48 WEST`. The integrated slice adds adapter-private live ZeroMQ
+local IPC smoke tests for publish/subscribe and request/reply flows, records
+managed-sandbox `ipc://` / `EPERM` behavior, and keeps broker, worker,
+delivery/retry, and server runtime wiring deferred to later subtasks.
 
 ## Scope Guardrails
 
@@ -77,6 +83,16 @@ transport API.
   storage expected exports, copied Spine proto checksum verification, proto
   lint/generate, generated proto output clean, and generated files clean.
   TypeDoc emitted the existing invalid-`origin` warning only.
+- Parent verification after integrating T-0011.3 passed on
+  `2026-06-30 22:48 WEST`: `CI=true corepack pnpm verify` passed with 23 test
+  files / 268 tests, coverage 96.34% statements / 90.48% branches / 99.27%
+  functions / 96.28% lines, TypeDoc/API checks with 100 proto / 28 core / 124
+  server / 26 storage expected exports, copied Spine proto checksum
+  verification, proto lint/generate, generated proto output clean, and
+  generated files clean. TypeDoc emitted the existing invalid-`origin` warning
+  only. The command ran with native IPC access because the merged ZeroMQ smoke
+  test binds `ipc://` endpoints and the managed sandbox rejects those binds
+  with `EPERM`.
 
 ## Splitter Research And Recommendation
 
@@ -111,8 +127,12 @@ performs native smoke tests.
   files, lockfile/workspace build policy, package/API docs, architecture docs,
   and T-0011.2 durable logs. See
   `build-protocol/tasks/T-0011-2-zmq-adapter-package-wiring/IMPLEMENTATION_REPORT.md`.
+- T-0011.3 integration changed adapter-private ZeroMQ IPC smoke tests, package
+  docs, architecture/API docs, and T-0011.3 durable logs. See
+  `build-protocol/tasks/T-0011-3-local-ipc-smoke-tests/IMPLEMENTATION_REPORT.md`.
 
 ## Open Items
 
-- `T-0011.3 Local IPC Smoke Tests` is next.
-- Live ZeroMQ socket and IPC behavior remains deferred to T-0011.3.
+- `T-0011.4 Broker And Worker Lifecycle Seam` is next.
+- Broker/worker startup, registration, readiness, and graceful close remain
+  deferred to T-0011.4.

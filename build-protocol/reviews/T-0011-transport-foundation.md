@@ -1,6 +1,6 @@
 # Review Log: T-0011 Transport Foundation
 
-Status: T-0011.2 Integrated
+Status: T-0011.3 Integrated
 
 ## Required Review Lanes
 
@@ -32,8 +32,11 @@ branch by merge commit `6c86ad1`. Parent verification passed after merge on
 `2026-06-30 21:28 WEST`. `T-0011.2 ZeroMQ Adapter Package Wiring And
 Dependency Pin` completed all five required review lanes and was integrated
 into the parent branch by merge commit `e9d14c3`. Parent dependency refresh and
-verification passed after merge on `2026-06-30 22:05 WEST`. Next review gate:
-`T-0011.3 Local IPC Smoke Tests`.
+verification passed after merge on `2026-06-30 22:05 WEST`. `T-0011.3 Local
+IPC Smoke Tests` completed all five required review lanes after documentation
+follow-up and was integrated into the parent branch by merge commit `6f5c53c`.
+Parent native IPC verification passed after merge on `2026-06-30 22:48 WEST`.
+Next review gate: `T-0011.4 Broker And Worker Lifecycle Seam`.
 
 ## Reviewer Rounds
 
@@ -56,3 +59,14 @@ verification passed after merge on `2026-06-30 22:05 WEST`. Next review gate:
   / 124 server / 26 storage expected exports, copied Spine proto checksum
   verification, proto lint/generate, and generated-clean checks. TypeDoc
   emitted the existing invalid-`origin` warning only.
+- T-0011.3 required-lane reviews completed in
+  `build-protocol/reviews/T-0011-3-local-ipc-smoke-tests.md`.
+- Parent integration verification passed after merge commit `6f5c53c`:
+  `CI=true corepack pnpm verify` passed with 23 test files / 268 tests,
+  coverage 96.34% statements / 90.48% branches / 99.27% functions / 96.28%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
+  expected exports, copied Spine proto checksum verification, proto
+  lint/generate, and generated-clean checks. TypeDoc emitted the existing
+  invalid-`origin` warning only. The command ran with native IPC access because
+  the merged ZeroMQ smoke test binds `ipc://` endpoints and the managed sandbox
+  rejects those binds with `EPERM`.

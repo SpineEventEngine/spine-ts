@@ -1,6 +1,6 @@
 # T-0011: Transport Foundation
 
-Status: T-0011.2 Integrated
+Status: T-0011.3 Integrated
 Start: `2026-06-30 20:32 WEST`
 Baseline commit: `194ce9e`
 Task log path: `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
@@ -9,8 +9,8 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-transport-foundation`
 Requirements splitter:
 `2026-06-30 20:40 WEST` splitter session (closed by orchestrator after handoff)
-Authoring sub-agents: T-0011.1 and T-0011.2 complete; later subtasks pending
-Reviewer sub-agents: T-0011.1 and T-0011.2 complete; later subtasks pending
+Authoring sub-agents: T-0011.1, T-0011.2, and T-0011.3 complete; later subtasks pending
+Reviewer sub-agents: T-0011.1, T-0011.2, and T-0011.3 complete; later subtasks pending
 
 ## Objective
 
@@ -231,6 +231,17 @@ side execution.
   lint/generate, generated proto output clean, and generated files clean.
   TypeDoc emitted the existing invalid-`origin` warning only.
 
+- T-0011.3 parent integration verification passed on `2026-06-30 22:48 WEST`
+  after merge commit `6f5c53c`:
+  `CI=true corepack pnpm verify` passed with 23 test files / 268 tests,
+  coverage 96.34% statements / 90.48% branches / 99.27% functions / 96.28%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
+  expected exports, copied Spine proto checksum verification, proto
+  lint/generate, generated proto output clean, and generated files clean.
+  TypeDoc emitted the existing invalid-`origin` warning only. The command ran
+  with native IPC access because the merged ZeroMQ smoke test binds
+  `ipc://` endpoints and the managed sandbox rejects those binds with `EPERM`.
+
 ## Integrated Subtasks
 
 - `T-0011.1 Transport Contracts, Topics, And Envelope Routing Keys`: integrated
@@ -241,7 +252,11 @@ side execution.
   merge commit `e9d14c3` on `2026-06-30 22:01 WEST`. Required five-lane review
   clean; final subtask verification passed; parent dependency refresh and
   verification passed after merge.
+- `T-0011.3 Local IPC Smoke Tests`: integrated by merge commit `6f5c53c` on
+  `2026-06-30 22:48 WEST`. Required five-lane review clean after documentation
+  follow-up; final subtask verification passed; parent native IPC verification
+  passed after merge.
 
 ## Next Subtask
 
-- `T-0011.3 Local IPC Smoke Tests`.
+- `T-0011.4 Broker And Worker Lifecycle Seam`.
