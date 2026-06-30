@@ -1,6 +1,6 @@
 # T-0010.6: Runtime Closure And User-Facing Docs
 
-Status: Complete, pending commit handoff
+Status: Review-fix ready for documentation re-review
 Start: `2026-06-30 19:10 WEST`
 End: `2026-06-30 19:28 WEST`
 Baseline commit: `94a28bf`
@@ -8,10 +8,19 @@ Task log path: `build-protocol/tasks/T-0010-6-runtime-closure-docs/TASK.md`
 Branch: `task/T-0010-6-runtime-closure-docs`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0010-6-runtime-closure-docs`
-Authoring sub-agent: Pending
-Reviewer sub-agents: Pending
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
+Authoring sub-agent:
+`019f19c2-19e5-7762-9d62-edc7c336018f` (closed)
+Reviewer sub-agents: maintainability
+`019f19ce-435e-7fa0-97b9-3d9653288000` (closed, CLEAN);
+documentation `019f19ce-4406-78c1-af05-bbd32c1e5c10` (closed, COMMENTS);
+TypeScript/API `019f19ce-447e-7ae0-b2e7-b06466ada00d` (closed, CLEAN);
+security `019f19ce-44f2-7980-a126-178a3350a124` (closed, CLEAN);
+performance/reliability `019f19ce-4580-7dd3-9b87-c1476529a214` (closed,
+CLEAN)
+Implementation commit: `d94bb39` (`Close T-0010.6 runtime docs`)
+Final implementation branch HEAD before review-fix: `d94bb39`
+Review-fix worker: review-fix sub-agent (this worker; id pending orchestrator
+fill-in)
 
 ## Objective
 
@@ -155,6 +164,11 @@ Out of scope:
 - `2026-06-30 19:28 WEST`: Full `CI=true corepack pnpm verify` passed after
   implementation and log updates, with 21 test files / 257 tests and clean
   TypeDoc/API, proto, and generated-output checks.
+- `2026-06-30 20:00 WEST`: Documentation review reported an Important finding
+  that durable T-0010.6 logs still contained stale `Pending` placeholders after
+  implementation commit `d94bb39`. This review-fix updates the task and review
+  logs with the closed author/reviewer state and marks the branch ready for
+  documentation re-review, not final integration.
 
 ## Decisions
 
@@ -265,8 +279,13 @@ Out of scope:
 
 ## Review Rounds
 
-- Pending.
+- Initial review round closed after implementation commit `d94bb39`:
+  maintainability CLEAN; documentation COMMENTS with an Important stale-log
+  finding; TypeScript/API CLEAN; security CLEAN; performance/reliability CLEAN.
+- Review-fix updated only the durable T-0010.6 task/review logs and is ready
+  for documentation re-review.
 
 ## Integration Result
 
-Pending.
+Not final integrated. Branch is ready for documentation re-review after the
+review-fix commit.
