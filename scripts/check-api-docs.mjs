@@ -399,10 +399,20 @@ const missingCoreExports = expectedCoreExports.filter((name) => !documentedNames
 const missingServerExports = expectedServerExports.filter((name) => !documentedNames.has(name));
 const missingStorageExports = expectedStorageExports.filter((name) => !documentedNames.has(name));
 const forbiddenTypeDocNames = [
+  "BuiltInEntityConstructor",
+  "BuiltInEntityConstructorBase",
+  "HasErasedRepositoryConstructorParameters",
+  "RepositoryEntityTypeCarriesConcreteConstructorParameters",
+  "RepositoryEntityTypeConstraint",
   "SingleConcreteRepositoryEntityType",
   "RepositorySchemaForInstance",
   "RepositoryConcreteEntityTypeConstraint",
   "RepositorySchemaFromEntityInstance",
+  "repositoryEntityTypeConstraint",
+  "spineTsEntityConstructor",
+  "__repositoryEntityTypeMustBeASingleConcreteConstructor",
+  "__repositoryEntityTypeMustCarryConcreteStateSchema",
+  "__spineTsBuiltInEntityConstructor",
   "__spineTsEntityConstructorBrand",
   "EntityConstructorBrand",
 ];

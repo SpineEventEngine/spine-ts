@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-10 Review Fixes Complete - Pending Re-review
+Status: Round-11 Review Fixes Complete - Pending Re-review
 Task log: `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f2.md`
 Review log: `build-protocol/reviews/T-0009f2-repository-identity-seam.md`
@@ -111,6 +111,15 @@ Implementation research inspected and used:
 - Tenth-round docs note that the repository identity seam follows Spine
   `core-jvm` `Repository` identity concepts closely while deferring runtime
   behavior.
+- Eleventh-round review fixes make the inherited entity-constructor marker
+  declaration-only so it does not emit a runtime static brand property, reshape
+  `ConcreteRepositoryEntityType` around `never` invalid branches and
+  `ConstructorParameters` so TypeDoc no longer renders diagnostic
+  pseudo-properties or custom helper names, and expand the API-doc guard for
+  those leaks.
+- Eleventh-round reliability hardening captures the repository entity type
+  display name once per validation failure path and reuses it for both the
+  thrown message and structured details.
 - Public root exports, TypeDoc export guard, package README, API docs, user
   guide, and architecture notes now describe the metadata-only boundary.
 
@@ -253,9 +262,25 @@ Implementation research inspected and used:
 - Round-10 full verification: `CI=true corepack pnpm verify` passed with 17
   test files, 182 tests, coverage, docs check, proto lint/generate, and
   generated-clean.
+- Round-11 RED: focused Vitest failed because the constructor marker was
+  observable at runtime and volatile entity-type names differed between message
+  and details; `node scripts/check-api-docs.mjs` failed after adding guards for
+  `BuiltInEntityConstructor`, `BuiltInEntityConstructorBase`,
+  `HasErasedRepositoryConstructorParameters`, and the repository diagnostic
+  pseudo-property names.
+- Round-11 GREEN: focused Vitest passed with 2 files and 25 tests;
+  `corepack pnpm typecheck:tooling` passed after the marker/type reshaping and
+  redundant schema-side `@ts-expect-error` comments were removed.
+- Round-11 API docs guard: `node scripts/check-api-docs.mjs` passed and now
+  rejects the round-11 leaked names plus replacement constraint-marker names
+  from TypeDoc JSON.
+- Round-11 full verification: `CI=true corepack pnpm verify` passed with 17
+  test files, 184 tests, coverage, docs check, proto lint/generate, and
+  generated-clean.
 
 ## Review
 
 - First-, second-, third-, fourth-, fifth-, sixth-, seventh-, eighth-, ninth-,
-  and tenth-round reviewer findings were applied by review-fix sub-agents.
+  tenth-, and eleventh-round reviewer findings were applied by review-fix
+  sub-agents.
   Re-review by the orchestrator lanes remains pending.

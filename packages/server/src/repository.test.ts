@@ -325,6 +325,38 @@ describe("repository identity", () => {
     }
   });
 
+  it("keeps internal constructor markers out of the runtime constructor shape", () => {
+    expect("__spineTsBuiltInEntityConstructor" in Aggregate).toBe(false);
+    expect("__spineTsBuiltInEntityConstructor" in Projection).toBe(false);
+    expect("__spineTsBuiltInEntityConstructor" in ProcessManager).toBe(false);
+  });
+
+  it("uses one captured entity type display name per rejected identity diagnostic", () => {
+    let nameReadCount = 0;
+    const volatileNamedEntityType = {
+      get name(): string {
+        nameReadCount += 1;
+        return `VolatileEntityType${String(nameReadCount)}`;
+      },
+    };
+
+    try {
+      new Repository({
+        entityType: volatileNamedEntityType as unknown as typeof RuntimeCheckedAggregate,
+        schema: AggregateStateSchema,
+      });
+      throw new Error("Expected volatile named entity type to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(RepositoryIdentityError);
+      const identityError = error as RepositoryIdentityError;
+      expect(identityError.message).toContain('"VolatileEntityType1"');
+      expect(identityError.details).toEqual({
+        entityTypeName: "VolatileEntityType1",
+      });
+      expect(nameReadCount).toBe(1);
+    }
+  });
+
   it("rejects missing or malformed schemas for supported entity types with structured errors", () => {
     for (const schema of [undefined, null, {}, { typeName: "BrokenState" }, { typeName: "" }]) {
       try {
@@ -567,7 +599,6 @@ describe("repository identity", () => {
       new Repository({
         // @ts-expect-error plain classes are not valid repository entity constructors.
         entityType: PlainEntityClass,
-        // @ts-expect-error invalid entity constructors do not carry a repository state schema.
         schema: ProjectionStateSchema,
       });
       new Repository({
@@ -576,7 +607,6 @@ describe("repository identity", () => {
           name: "ObjectLiteralAggregate",
           prototype: TaskAggregate.prototype,
         },
-        // @ts-expect-error invalid entity constructors do not carry a repository state schema.
         schema: AggregateStateSchema,
       });
       // @ts-expect-error bare RepositoryOptions annotations must not erase the constructor-carried schema.

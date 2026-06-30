@@ -1,6 +1,6 @@
 import {
   Aggregate,
-  type BuiltInEntityConstructor,
+  type EntityConstructor,
   ProcessManager,
   Projection,
   type EntityFamily,
@@ -50,23 +50,16 @@ type IsUnion<Type, Union = Type> = Type extends unknown
  */
 export type ConcreteRepositoryEntityType<EntityType extends RepositoryEntityType> =
   IsUnion<EntityType> extends true
-    ? { readonly __repositoryEntityTypeMustBeASingleConcreteConstructor: never }
+    ? never
     : RepositoryEntityType extends EntityType
-      ? { readonly __repositoryEntityTypeMustBeASingleConcreteConstructor: never }
-      : HasErasedRepositoryConstructorParameters<EntityType> extends true
-        ? { readonly __repositoryEntityTypeMustBeASingleConcreteConstructor: never }
+      ? never
+      : [ConstructorParameters<EntityType>] extends [never[]]
+        ? never
         : IsUnion<RepositoryStateSchema<EntityType>> extends true
-          ? { readonly __repositoryEntityTypeMustCarryConcreteStateSchema: never }
+          ? never
           : DescriptorMessageSchema extends RepositoryStateSchema<EntityType>
-            ? { readonly __repositoryEntityTypeMustCarryConcreteStateSchema: never }
+            ? never
             : unknown;
-
-type HasErasedRepositoryConstructorParameters<EntityType extends RepositoryEntityType> =
-  EntityType extends abstract new (...args: infer Args) => RepositoryEntityInstance
-    ? [Args] extends [never[]]
-      ? true
-      : false
-    : true;
 
 interface RuntimeRepositoryEntityType {
   readonly prototype: object;
@@ -77,7 +70,7 @@ interface RuntimeRepositoryEntityType {
 export type RepositoryEntityType<
   Instance extends RepositoryEntityInstance = RepositoryEntityInstance,
 > = (abstract new (...args: never[]) => Instance) &
-  BuiltInEntityConstructor & {
+  typeof EntityConstructor & {
     /** Prototype inspected for built-in entity family marker inheritance. */
     readonly prototype: Instance;
     /** Constructor name used in structured diagnostics. */
@@ -192,13 +185,14 @@ export class Repository<
     }
 
     const entityType = readRepositoryEntityTypeOption(options);
+    const entityTypeDisplayName = entityTypeName(entityType);
 
     if (typeof entityType !== "function" || !isClassConstructor(entityType)) {
       throw new RepositoryIdentityError(
         "UNSUPPORTED_ENTITY_TYPE",
-        `Repository entity type "${entityTypeName(entityType)}" must be a class constructor extending Aggregate, Projection, or ProcessManager.`,
+        `Repository entity type "${entityTypeDisplayName}" must be a class constructor extending Aggregate, Projection, or ProcessManager.`,
         {
-          entityTypeName: entityTypeName(entityType),
+          entityTypeName: entityTypeDisplayName,
         },
       );
     }
@@ -208,27 +202,27 @@ export class Repository<
     if (entityFamily === undefined) {
       throw new RepositoryIdentityError(
         "UNSUPPORTED_ENTITY_TYPE",
-        `Repository entity type "${entityTypeName(entityType)}" must extend Aggregate, Projection, or ProcessManager.`,
+        `Repository entity type "${entityTypeDisplayName}" must extend Aggregate, Projection, or ProcessManager.`,
         {
-          entityTypeName: entityTypeName(entityType),
+          entityTypeName: entityTypeDisplayName,
         },
       );
     }
 
     const schema = readRepositorySchemaOption(
       options,
-      entityType,
+      entityTypeDisplayName,
       entityFamily,
     ) as RepositoryStateSchema<EntityType>;
 
-    const metadata = describeRepositoryEntityMetadata(entityType, entityFamily, schema);
+    const metadata = describeRepositoryEntityMetadata(entityTypeDisplayName, entityFamily, schema);
 
     if (metadata.kind !== entityFamily) {
       throw new RepositoryIdentityError(
         "ENTITY_SCHEMA_KIND_MISMATCH",
-        `Repository entity type "${entityTypeName(entityType)}" is a ${entityFamily}, but state schema "${metadata.fullTypeName}" declares entity kind "${metadata.kind}".`,
+        `Repository entity type "${entityTypeDisplayName}" is a ${entityFamily}, but state schema "${metadata.fullTypeName}" declares entity kind "${metadata.kind}".`,
         {
-          entityTypeName: entityTypeName(entityType),
+          entityTypeName: entityTypeDisplayName,
           entityFamily,
           stateFullTypeName: metadata.fullTypeName,
           stateKind: metadata.kind,
@@ -306,7 +300,7 @@ function readRepositoryEntityTypeOption(options: object): unknown {
 
 function readRepositorySchemaOption(
   options: object,
-  entityType: RuntimeRepositoryEntityType,
+  entityTypeDisplayName: string,
   entityFamily: EntityFamily,
 ): unknown {
   try {
@@ -314,9 +308,9 @@ function readRepositorySchemaOption(
   } catch {
     throw new RepositoryIdentityError(
       "ENTITY_SCHEMA_KIND_MISMATCH",
-      `Repository entity type "${entityTypeName(entityType)}" is a ${entityFamily}, but the supplied state schema could not be read.`,
+      `Repository entity type "${entityTypeDisplayName}" is a ${entityFamily}, but the supplied state schema could not be read.`,
       {
-        entityTypeName: entityTypeName(entityType),
+        entityTypeName: entityTypeDisplayName,
         entityFamily,
       },
     );
@@ -384,7 +378,7 @@ function safeStringProperty(value: object, propertyName: "name" | "typeName"): s
 }
 
 function describeRepositoryEntityMetadata<Schema extends DescriptorMessageSchema>(
-  entityType: RuntimeRepositoryEntityType,
+  entityTypeDisplayName: string,
   entityFamily: EntityFamily,
   schema: Schema,
 ): EntityMetadata<Schema> {
@@ -393,9 +387,9 @@ function describeRepositoryEntityMetadata<Schema extends DescriptorMessageSchema
   } catch {
     throw new RepositoryIdentityError(
       "ENTITY_SCHEMA_KIND_MISMATCH",
-      `Repository entity type "${entityTypeName(entityType)}" is a ${entityFamily}, but the supplied state schema does not expose supported entity metadata.`,
+      `Repository entity type "${entityTypeDisplayName}" is a ${entityFamily}, but the supplied state schema does not expose supported entity metadata.`,
       {
-        entityTypeName: entityTypeName(entityType),
+        entityTypeName: entityTypeDisplayName,
         entityFamily,
         ...schemaNameDetails(schema),
       },

@@ -160,17 +160,14 @@ export type EntityFamily = "aggregate" | "projection" | "process-manager";
 
 /** @hidden */
 // eslint-disable-next-line @typescript-eslint/no-extraneous-class
-abstract class BuiltInEntityConstructorBase {
+export abstract class EntityConstructor {
   /** @hidden */
-  protected static readonly __spineTsBuiltInEntityConstructor: true;
+  declare protected static readonly spineTsEntityConstructor: true;
 
   protected constructor(...args: never[]) {
     void args;
   }
 }
-
-/** @hidden */
-export type BuiltInEntityConstructor = typeof BuiltInEntityConstructorBase;
 
 /**
  * Common in-memory OOP shell for one server-side entity state.
@@ -185,7 +182,7 @@ export abstract class Entity<
   Id,
   Schema extends DescriptorMessageSchema,
   Version = EntityVersionMetadata,
-> extends BuiltInEntityConstructorBase {
+> extends EntityConstructor {
   readonly #id: Id;
   readonly #schema: Schema;
   readonly #metadata: EntityMetadata<Schema>;

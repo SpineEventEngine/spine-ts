@@ -1,6 +1,6 @@
 # Review Log: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-10 findings fixed - Pending Re-review
+Status: Round-11 findings fixed - Pending Re-review
 
 ## Required Review Lanes
 
@@ -280,9 +280,36 @@ Status: Round-10 findings fixed - Pending Re-review
     tests, `corepack pnpm typecheck:tooling` passed, and
     `node scripts/check-api-docs.mjs` passed after the fixes. Full
     `CI=true corepack pnpm verify` passed with 17 test files and 182 tests.
+- Eleventh-round reviewer findings received by the review-fix sub-agent:
+  - Code style P2: the protected static constructor marker in the built-in
+    entity constructor base was not declaration-only under the ES2024 target
+    and emitted a runtime static field.
+  - Code style P3 / TypeScript/API P2: generated TypeDoc still exposed
+    repository type-internal diagnostic pseudo-properties and helper names.
+  - Reliability Low: repository diagnostics called `entityTypeName(entityType)`
+    multiple times in single failure paths, allowing volatile `name` accessors
+    to produce inconsistent messages and details.
+- Round-11 fix status:
+  - Fixed: renamed the nominal constructor-side marker base to
+    `EntityConstructor` and changed the inherited marker to a `declare`
+    protected static field, preserving the type-only guard without a runtime
+    brand property.
+  - Fixed: `ConcreteRepositoryEntityType` now uses `never` invalid branches and
+    the built-in `ConstructorParameters` helper, removing the leaked diagnostic
+    pseudo-properties and custom helper names from TypeDoc.
+  - Fixed: `scripts/check-api-docs.mjs` now rejects the round-11 leaked names
+    and replacement constraint-marker names from TypeDoc JSON.
+  - Fixed: `Repository` captures the entity type display name once after the
+    guarded option read and reuses it in unsupported-type, unreadable-schema,
+    malformed-schema, and schema-kind mismatch diagnostics.
+  - Verified: focused RED reproduced the runtime marker leak, volatile
+    diagnostic mismatch, and TypeDoc leaks. Focused Vitest passed with 25
+    tests, tooling typecheck passed, and `node scripts/check-api-docs.mjs`
+    passed after the fixes. Full `CI=true corepack pnpm verify` passed with 17
+    test files and 184 tests.
 
 ## Current Review State
 
 - First-, second-, third-, fourth-, fifth-, sixth-, seventh-, eighth-, ninth-,
-  and tenth-round comments are fixed. Orchestrator reviewer lanes should
-  re-run before integration.
+  tenth-, and eleventh-round comments are fixed. Orchestrator reviewer lanes
+  should re-run before integration.
