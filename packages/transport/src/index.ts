@@ -2,6 +2,16 @@
 export type TransportSignalKind =
   "command" | "delivery" | "event" | "query" | "subscription" | "system";
 
+const transportSignalKinds = [
+  "command",
+  "delivery",
+  "event",
+  "query",
+  "subscription",
+  "system",
+] as const;
+const transportSignalKindSet = new Set<string>(transportSignalKinds);
+
 /** Semantic tag copied from descriptor metadata for later adapter matching. */
 export type TransportSemanticTag = string;
 
@@ -41,6 +51,9 @@ export interface TransportTopic<
 
 /** Subscription behavior expected by the transport adapter, without socket details. */
 export type TransportSubscriptionMode = "competing-consumer" | "fan-out";
+
+const transportSubscriptionModes = ["competing-consumer", "fan-out"] as const;
+const transportSubscriptionModeSet = new Set<string>(transportSubscriptionModes);
 
 /** Input for defining one immutable transport subscription descriptor. */
 export interface TransportSubscriptionInput<
@@ -86,12 +99,6 @@ export interface RequestTransportOperation<
   readonly topic: TransportTopic<Kind>;
   /** Caller-owned request envelope already shaped by an upstream package. */
   readonly envelope: RequestEnvelope;
-  /**
-   * Optional response topic hint for adapters that need a stable return route.
-   *
-   * Omitting it leaves reply addressing to the concrete adapter implementation.
-   */
-  readonly responseTopic?: TransportTopic;
 }
 
 /** Handler for one publish-style operation. */
@@ -149,8 +156,8 @@ export interface SignalTransport extends AsyncCloseable {
 export function createTransportTopic<Kind extends TransportSignalKind>(
   input: TransportTopicInput<Kind>,
 ): TransportTopic<Kind> {
-  const signalKind = input.signalKind;
-  const messageTypeUrl = normalizeRequiredText(input.messageTypeUrl, "messageTypeUrl");
+  const signalKind = normalizeTransportSignalKind(input.signalKind);
+  const messageTypeUrl = normalizeMessageTypeUrl(input.messageTypeUrl);
   const semanticTags = normalizeSemanticTags(input.semanticTags);
   const routing = Object.freeze({
     signalKind,
@@ -173,7 +180,7 @@ export function createTransportSubscription<Kind extends TransportSignalKind>(
 ): TransportSubscription<Kind> {
   const subscriberId = normalizeRequiredText(input.subscriberId, "subscriberId");
   const topic = createTransportTopic(input.topic);
-  const mode = input.mode ?? "fan-out";
+  const mode = normalizeTransportSubscriptionMode(input.mode ?? "fan-out");
 
   return Object.freeze({
     subscriberId,
@@ -193,6 +200,41 @@ function normalizeRequiredText(value: string, name: string): string {
   return normalized;
 }
 
+function normalizeTransportSignalKind<Kind extends TransportSignalKind>(value: Kind): Kind {
+  const signalKind = normalizeRequiredText(value, "signalKind");
+
+  if (!transportSignalKindSet.has(signalKind)) {
+    throw new Error(`Transport signalKind must be one of: ${transportSignalKinds.join(", ")}.`);
+  }
+
+  return signalKind as Kind;
+}
+
+function normalizeTransportSubscriptionMode(value: string): TransportSubscriptionMode {
+  const mode = normalizeRequiredText(value, "mode");
+
+  if (!transportSubscriptionModeSet.has(mode)) {
+    throw new Error(`Transport mode must be one of: ${transportSubscriptionModes.join(", ")}.`);
+  }
+
+  return mode as TransportSubscriptionMode;
+}
+
+function normalizeMessageTypeUrl(value: string): string {
+  const messageTypeUrl = normalizeRequiredText(value, "messageTypeUrl");
+  const separatorIndex = messageTypeUrl.indexOf("/");
+
+  if (
+    separatorIndex <= 0 ||
+    separatorIndex === messageTypeUrl.length - 1 ||
+    /\s/u.test(messageTypeUrl)
+  ) {
+    throw new Error("Transport messageTypeUrl must use canonical 'prefix/type.name' format.");
+  }
+
+  return messageTypeUrl;
+}
+
 function normalizeSemanticTags(
   semanticTags: readonly TransportSemanticTag[] | undefined,
 ): readonly TransportSemanticTag[] {
@@ -202,7 +244,7 @@ function normalizeSemanticTags(
 
   const normalized = [
     ...new Set(semanticTags.map((tag) => normalizeRequiredText(tag, "semanticTag"))),
-  ].sort((left, right) => left.localeCompare(right));
+  ].sort(compareTransportStrings);
 
   return Object.freeze(normalized);
 }
@@ -223,4 +265,16 @@ function createRoutingKey(
 
 function encodeRoutingSegment(value: string): string {
   return encodeURIComponent(value);
+}
+
+function compareTransportStrings(left: string, right: string): number {
+  if (left < right) {
+    return -1;
+  }
+
+  if (left > right) {
+    return 1;
+  }
+
+  return 0;
 }

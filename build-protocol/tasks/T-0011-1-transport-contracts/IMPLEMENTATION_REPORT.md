@@ -1,6 +1,6 @@
 # Implementation Report: T-0011.1 Transport Contracts, Topics, And Envelope Routing Keys
 
-Status: Implementation Complete; Review Pending
+Status: Review Fixes Verified
 Task log: `build-protocol/tasks/T-0011-1-transport-contracts/TASK.md`
 Work log: `build-protocol/work-logs/T-0011-1.md`
 Review log: `build-protocol/reviews/T-0011-1-transport-contracts.md`
@@ -83,3 +83,31 @@ Implementation verification passed on `2026-06-30 20:58 WEST`:
 ## Open Items
 
 - Required five-lane review pending.
+
+## Review Fix Round
+
+Reviewer findings accepted for this round:
+
+- `RequestTransportOperation` exposed `responseTopic` too early for this first
+  contract slice and needed that reply-route policy removed.
+- `createTransportTopic()` and `createTransportSubscription()` trusted compile-time
+  union types and needed runtime rejection for unknown signal kinds or modes.
+- `messageTypeUrl` validation needed a small canonical format guard beyond
+  blank-string rejection.
+- semantic-tag sorting used default-locale `localeCompare()` and needed
+  deterministic locale-independent ordering for routing keys.
+- `docs/api/README.md` needed `TransportSemanticTag` added to the transport
+  export summary.
+
+Fresh verification passed on `2026-06-30 21:11 WEST`:
+
+- `corepack pnpm vitest run packages/transport/src/index.test.ts`: passed with
+  1 file / 5 tests.
+- `corepack pnpm typecheck`: passed.
+- `corepack pnpm docs:check`: passed with the existing TypeDoc warning that the
+  local `origin` remote is not valid for source links.
+- `CI=true corepack pnpm verify`: passed with 21 test files / 262 tests,
+  coverage 96.49% statements / 90.72% branches / 99.26% functions / 96.44%
+  lines, TypeDoc/API export checks, copied proto checksum verification, proto
+  lint/generate, and generated-clean checks.
+- `git diff --check`: passed.

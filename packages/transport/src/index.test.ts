@@ -25,6 +25,16 @@ describe("@spine-ts/transport", () => {
       messageTypeUrl: "type.spine.io/example.TaskCreated",
       semanticTags: ["event", "tenant"],
     });
+    const reorderedTopic = createTransportTopic({
+      signalKind: "event",
+      messageTypeUrl: "type.spine.io/example.TaskCreated",
+      semanticTags: ["event.alpha", "event0", "event_Alpha"],
+    });
+    const reorderedSameTopic = createTransportTopic({
+      signalKind: "event",
+      messageTypeUrl: "type.spine.io/example.TaskCreated",
+      semanticTags: ["event_Alpha", "event.alpha", "event0"],
+    });
 
     expect(topic).toEqual({
       signalKind: "event",
@@ -42,6 +52,8 @@ describe("@spine-ts/transport", () => {
     expect(topic.semanticTags).toEqual(["event", "tenant"]);
     expect(Object.isFrozen(topic)).toBe(true);
     expect(Object.isFrozen(topic.routing)).toBe(true);
+    expect(reorderedTopic.semanticTags).toEqual(["event.alpha", "event0", "event_Alpha"]);
+    expect(reorderedTopic.routing.routingKey).toBe(reorderedSameTopic.routing.routingKey);
   });
 
   it("creates copy-safe subscription descriptors with deterministic keys", () => {
@@ -78,13 +90,31 @@ describe("@spine-ts/transport", () => {
     expect(Object.isFrozen(subscription)).toBe(true);
   });
 
-  it("rejects empty routing inputs", () => {
+  it("rejects malformed routing inputs", () => {
     expect(() =>
       createTransportTopic({
         signalKind: "command",
         messageTypeUrl: " ",
       }),
     ).toThrow(/messageTypeUrl/);
+    expect(() =>
+      createTransportTopic({
+        signalKind: "command",
+        messageTypeUrl: "type.spine.io",
+      }),
+    ).toThrow(/prefix\/type\.name/);
+    expect(() =>
+      createTransportTopic({
+        signalKind: "command",
+        messageTypeUrl: "/example.TaskCreated",
+      }),
+    ).toThrow(/prefix\/type\.name/);
+    expect(() =>
+      createTransportTopic({
+        signalKind: "command",
+        messageTypeUrl: "type.spine.io/ example.TaskCreated",
+      }),
+    ).toThrow(/prefix\/type\.name/);
 
     expect(() =>
       createTransportSubscription({
@@ -95,6 +125,26 @@ describe("@spine-ts/transport", () => {
         },
       }),
     ).toThrow(/subscriberId/);
+  });
+
+  it("rejects unknown runtime signal kinds and subscription modes", () => {
+    expect(() =>
+      createTransportTopic({
+        signalKind: "side-channel" as TransportSignalKind,
+        messageTypeUrl: "type.spine.io/example.TaskCreated",
+      }),
+    ).toThrow(/signalKind/);
+
+    expect(() =>
+      createTransportSubscription({
+        subscriberId: "projection-worker",
+        mode: "round-robin" as never,
+        topic: {
+          signalKind: "event",
+          messageTypeUrl: "type.spine.io/example.TaskCreated",
+        },
+      }),
+    ).toThrow(/mode/);
   });
 
   it("exposes adapter-agnostic operation, handler, and close type contracts", () => {

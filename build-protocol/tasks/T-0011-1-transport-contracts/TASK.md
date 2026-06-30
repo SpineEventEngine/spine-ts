@@ -1,6 +1,6 @@
 # T-0011.1: Transport Contracts, Topics, And Envelope Routing Keys
 
-Status: Implementation Complete; Review Pending
+Status: Review Fixes Verified
 Parent task: `T-0011 Transport Foundation`
 Start: `2026-06-30 20:45 WEST`
 Baseline commit: `7b54d6c`
@@ -83,3 +83,31 @@ Skipped relevant-looking skills:
   lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
   expected exports, copied Spine proto checksum verification, generated proto
   output clean, and generated files clean.
+
+## Review Fix Scope
+
+Current review-fix round must resolve these findings in one coherent patch:
+
+- remove `responseTopic` from `RequestTransportOperation` until a later
+  request/reply adapter task defines reply-route policy;
+- reject unknown runtime `TransportSignalKind` and
+  `TransportSubscriptionMode` values in the topic/subscription factories;
+- apply a minimal canonical `messageTypeUrl` format guard that rejects blank or
+  malformed values without a `prefix/type.name` separator;
+- replace default-locale semantic-tag sorting with deterministic
+  locale-independent ordering for routing materialization; and
+- update transport API docs/export summaries plus durable logs with the review
+  findings and fresh verification evidence.
+
+Review-fix verification passed on `2026-06-30 21:11 WEST`:
+
+- `corepack pnpm vitest run packages/transport/src/index.test.ts`: passed with
+  1 file / 5 tests.
+- `corepack pnpm typecheck`: passed.
+- `corepack pnpm docs:check`: passed with the existing TypeDoc warning that the
+  local `origin` remote is not valid for source links.
+- `CI=true corepack pnpm verify`: passed with 21 test files / 262 tests,
+  coverage 96.49% statements / 90.72% branches / 99.26% functions / 96.44%
+  lines, TypeDoc/API export checks, copied proto checksum verification, proto
+  lint/generate, and generated-clean checks.
+- `git diff --check`: passed.

@@ -235,9 +235,9 @@ contracts, tenant/diagnostic stores, `StorageVersionConflictError`,
 checks, safe structured-clone failure reporting, write-side/read-side
 segregation, deterministic in-memory behavior, and non-durability.
 
-Transport exports include `TransportSignalKind`, `TransportTopicInput`,
-`TransportTopic`, `TransportRoutingDescriptor`, `TransportSubscriptionInput`,
-`TransportSubscription`, `TransportSubscriptionMode`,
+Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
+`TransportTopicInput`, `TransportTopic`, `TransportRoutingDescriptor`,
+`TransportSubscriptionInput`, `TransportSubscription`, `TransportSubscriptionMode`,
 `PublishTransportOperation`, `RequestTransportOperation`,
 `PublishTransportHandler`, `RequestTransportHandler`, `AsyncCloseable`,
 `TransportSubscriptionHandle`, `SignalTransport`,
