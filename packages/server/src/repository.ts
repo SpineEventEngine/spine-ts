@@ -30,6 +30,23 @@ type RepositorySchemaFromEntityParts<Id, Schema, Version> = [Id, Version] extend
   ? Schema
   : never;
 
+type IsUnion<Type, Union = Type> = Type extends unknown
+  ? [Union] extends [Type]
+    ? false
+    : true
+  : false;
+
+interface RepositoryConcreteEntityTypeError {
+  readonly __repositoryEntityTypeMustBeASingleConcreteConstructor: never;
+}
+
+type RepositoryEntityTypeArgumentGuard<EntityType extends RepositoryEntityType> =
+  IsUnion<EntityType> extends true
+    ? RepositoryConcreteEntityTypeError
+    : RepositoryEntityType extends EntityType
+      ? RepositoryConcreteEntityTypeError
+      : unknown;
+
 interface RuntimeRepositoryEntityType {
   readonly prototype: object;
   readonly name: string;
@@ -46,7 +63,9 @@ export type RepositoryEntityType<
 };
 
 /** Options for constructing metadata-only repository identity. */
-export interface RepositoryOptions<EntityType extends RepositoryEntityType> {
+export interface RepositoryOptions<
+  EntityType extends RepositoryEntityType & RepositoryEntityTypeArgumentGuard<EntityType>,
+> {
   /** Entity constructor owned by this repository identity. */
   readonly entityType: EntityType;
   /** Generated Protobuf-ES schema for the entity state owned by this repository identity. */
@@ -116,7 +135,9 @@ export class RepositoryIdentityError extends Error {
  * store records, open storage, register with a context, route messages, invoke
  * handlers, manage caches, emit lifecycle events, or start buses/transports.
  */
-export class Repository<EntityType extends RepositoryEntityType> {
+export class Repository<
+  EntityType extends RepositoryEntityType & RepositoryEntityTypeArgumentGuard<EntityType>,
+> {
   readonly #entityType: EntityType;
   readonly #entityFamily: EntityFamily;
   readonly #metadata: EntityMetadata<RepositoryEntitySchema<EntityType>>;
@@ -146,7 +167,6 @@ export class Repository<EntityType extends RepositoryEntityType> {
       );
     }
 
-    const metadata = describeEntityMetadata(schema);
     const entityFamily = resolveEntityFamily(entityType);
 
     if (entityFamily === undefined) {
@@ -155,11 +175,11 @@ export class Repository<EntityType extends RepositoryEntityType> {
         `Repository entity type "${entityTypeName(entityType)}" must extend Aggregate, Projection, or ProcessManager.`,
         {
           entityTypeName: entityTypeName(entityType),
-          stateFullTypeName: metadata.fullTypeName,
-          stateKind: metadata.kind,
         },
       );
     }
+
+    const metadata = describeRepositoryEntityMetadata(entityType, entityFamily, schema);
 
     if (metadata.kind !== entityFamily) {
       throw new RepositoryIdentityError(
@@ -229,19 +249,28 @@ function isRepositoryOptionsObject(options: unknown): options is object {
 }
 
 function resolveEntityFamily(entityType: RuntimeRepositoryEntityType): EntityFamily | undefined {
-  const prototype = entityType.prototype;
-
-  if (Object.prototype.isPrototypeOf.call(Aggregate.prototype, prototype)) {
+  if (hasEntityFamilyInheritance(entityType, Aggregate, Aggregate.prototype)) {
     return "aggregate";
   }
-  if (Object.prototype.isPrototypeOf.call(Projection.prototype, prototype)) {
+  if (hasEntityFamilyInheritance(entityType, Projection, Projection.prototype)) {
     return "projection";
   }
-  if (Object.prototype.isPrototypeOf.call(ProcessManager.prototype, prototype)) {
+  if (hasEntityFamilyInheritance(entityType, ProcessManager, ProcessManager.prototype)) {
     return "process-manager";
   }
 
   return undefined;
+}
+
+function hasEntityFamilyInheritance(
+  entityType: RuntimeRepositoryEntityType,
+  familyConstructor: object,
+  familyPrototype: object,
+): boolean {
+  return (
+    Object.prototype.isPrototypeOf.call(familyConstructor, entityType) &&
+    Object.prototype.isPrototypeOf.call(familyPrototype, entityType.prototype)
+  );
 }
 
 function entityTypeName(entityType: unknown): string {
@@ -251,6 +280,37 @@ function entityTypeName(entityType: unknown): string {
 
   const name = (entityType as { readonly name?: unknown }).name;
   return typeof name === "string" && name.length > 0 ? name : "(anonymous)";
+}
+
+function describeRepositoryEntityMetadata<Schema extends DescriptorMessageSchema>(
+  entityType: RuntimeRepositoryEntityType,
+  entityFamily: EntityFamily,
+  schema: Schema,
+): EntityMetadata<Schema> {
+  try {
+    return describeEntityMetadata(schema);
+  } catch {
+    throw new RepositoryIdentityError(
+      "ENTITY_SCHEMA_KIND_MISMATCH",
+      `Repository entity type "${entityTypeName(entityType)}" is a ${entityFamily}, but the supplied state schema does not expose supported entity metadata.`,
+      {
+        entityTypeName: entityTypeName(entityType),
+        entityFamily,
+        ...schemaNameDetails(schema),
+      },
+    );
+  }
+}
+
+function schemaNameDetails(
+  schema: unknown,
+): Pick<RepositoryIdentityErrorDetails, "stateFullTypeName"> {
+  if ((typeof schema !== "object" && typeof schema !== "function") || schema === null) {
+    return {};
+  }
+
+  const typeName = (schema as { readonly typeName?: unknown }).typeName;
+  return typeof typeName === "string" && typeName.length > 0 ? { stateFullTypeName: typeName } : {};
 }
 
 function cloneEntityMetadata<Schema extends DescriptorMessageSchema>(

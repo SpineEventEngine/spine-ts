@@ -1,6 +1,6 @@
 # Review Log: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-4 findings fixed - Pending Re-review
+Status: Round-5 findings fixed - Pending Re-review
 
 ## Required Review Lanes
 
@@ -103,8 +103,37 @@ Status: Round-4 findings fixed - Pending Re-review
     subclass `@ts-expect-error`; focused Vitest passed with 18 tests, tooling
     typecheck passed, `node scripts/check-api-docs.mjs` passed, and full verify
     passed.
+- Fifth-round reviewer findings received by the review-fix sub-agent:
+  - Performance/reliability Medium: `repository.ts` called
+    `describeEntityMetadata(schema)` before any schema guard, allowing
+    missing/malformed schemas from JS/cast callers to escape through raw
+    descriptor/`TypeError` paths.
+  - Security Medium: `repository.ts` introspected schemas before proving the
+    constructor was a supported aggregate/projection/process-manager type.
+  - Security Low: `resolveEntityFamily` trusted only the instance prototype
+    chain, so an ordinary function with a forged `.prototype` chain could look
+    like a repository entity family.
+  - TypeScript/API P2: broad and union repository generic bindings still erased
+    constructor/schema pairing for `RepositoryOptions` and subclasses.
+- Round-5 fix status:
+  - Fixed: `Repository` now validates the options container and function shape,
+    resolves the supported family, and rejects unsupported entity types before
+    any schema introspection.
+  - Fixed: supported entity types with missing or malformed schemas now receive
+    deterministic `RepositoryIdentityError` details instead of raw descriptor or
+    `TypeError` exceptions.
+  - Fixed: family detection now requires both static constructor inheritance and
+    prototype inheritance for `Aggregate`, `Projection`, or `ProcessManager`.
+  - Fixed: exported repository generic constraints reject broad
+    `RepositoryEntityType` and union constructor bindings for both
+    `RepositoryOptions` and `Repository` subclasses.
+  - Verified: focused RED reproduced the raw schema exceptions and unused
+    broad/union type assertions; focused Vitest passed with 19 tests, tooling
+    typecheck passed, `corepack pnpm lint` passed, and
+    `node scripts/check-api-docs.mjs` passed after the fixes. Full
+    `CI=true corepack pnpm verify` passed with 17 test files and 178 tests.
 
 ## Current Review State
 
-- First-, second-, third-, and fourth-round comments are fixed. Orchestrator reviewer lanes
+- First-, second-, third-, fourth-, and fifth-round comments are fixed. Orchestrator reviewer lanes
   should re-run before integration.

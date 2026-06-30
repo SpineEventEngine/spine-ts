@@ -16,6 +16,7 @@ import {
   type DescriptorMessageSchema,
   type EntityFamily,
   type EntityMetadata,
+  type RepositoryEntityType,
   type RepositoryIdentitySnapshot,
   type RepositoryOptions,
 } from "./index.js";
@@ -172,8 +173,20 @@ describe("repository identity", () => {
       expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
       expect((error as RepositoryIdentityError).details).toEqual({
         entityTypeName: "PlainEntityClass",
-        stateFullTypeName: ProjectionStateSchema.typeName,
-        stateKind: "projection",
+      });
+    }
+
+    try {
+      new Repository({
+        entityType: PlainEntityClass as unknown as typeof TaskProjection,
+        schema: undefined as unknown as typeof ProjectionStateSchema,
+      });
+      throw new Error("Expected unsupported entity type to fail before schema introspection.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(RepositoryIdentityError);
+      expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
+      expect((error as RepositoryIdentityError).details).toEqual({
+        entityTypeName: "PlainEntityClass",
       });
     }
 
@@ -196,6 +209,25 @@ describe("repository identity", () => {
         entityTypeName: "FakeAggregate",
       });
     }
+
+    function ForgedAggregateConstructor() {
+      return undefined;
+    }
+    Object.setPrototypeOf(ForgedAggregateConstructor.prototype, Aggregate.prototype);
+
+    try {
+      new Repository({
+        entityType: ForgedAggregateConstructor as unknown as typeof RuntimeCheckedAggregate,
+        schema: AggregateStateSchema,
+      });
+      throw new Error("Expected forged function entity type to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(RepositoryIdentityError);
+      expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
+      expect((error as RepositoryIdentityError).details).toEqual({
+        entityTypeName: "ForgedAggregateConstructor",
+      });
+    }
   });
 
   it("rejects malformed nameless entity types with structured errors", () => {
@@ -213,6 +245,40 @@ describe("repository identity", () => {
           entityTypeName: "(anonymous)",
         });
       }
+    }
+  });
+
+  it("rejects missing or malformed schemas for supported entity types with structured errors", () => {
+    for (const schema of [undefined, null, {}, { typeName: "BrokenState" }, { typeName: "" }]) {
+      try {
+        new Repository({
+          entityType: RuntimeCheckedAggregate,
+          schema: schema as unknown as typeof AggregateStateSchema,
+        });
+        throw new Error("Expected malformed repository schema to fail.");
+      } catch (error) {
+        expect(error).toBeInstanceOf(RepositoryIdentityError);
+        expect((error as RepositoryIdentityError).code).toBe("ENTITY_SCHEMA_KIND_MISMATCH");
+        expect((error as RepositoryIdentityError).details.entityTypeName).toBe(
+          "RuntimeCheckedAggregate",
+        );
+        expect((error as RepositoryIdentityError).details.entityFamily).toBe("aggregate");
+      }
+    }
+
+    try {
+      new Repository({
+        entityType: RuntimeCheckedAggregate,
+        schema: { typeName: "BrokenState" } as unknown as typeof AggregateStateSchema,
+      });
+      throw new Error("Expected malformed named schema to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(RepositoryIdentityError);
+      expect((error as RepositoryIdentityError).details).toEqual({
+        entityTypeName: "RuntimeCheckedAggregate",
+        entityFamily: "aggregate",
+        stateFullTypeName: "BrokenState",
+      });
     }
   });
 
@@ -340,9 +406,30 @@ describe("repository identity", () => {
         schema: ProjectionStateSchema,
       };
       expectTypeOf(mismatchedAnnotatedOptions).not.toBeAny();
+      // @ts-expect-error broad repository options must not erase constructor/schema pairing.
+      const broadAnnotatedOptions: RepositoryOptions<RepositoryEntityType> = {
+        entityType: TaskAggregate,
+        schema: ProjectionStateSchema,
+      };
+      void broadAnnotatedOptions;
+      // @ts-expect-error union repository options must not erase constructor/schema pairing.
+      const unionAnnotatedOptions: RepositoryOptions<typeof TaskAggregate | typeof TaskProjection> =
+        {
+          entityType: TaskAggregate,
+          schema: ProjectionStateSchema,
+        };
+      void unionAnnotatedOptions;
       // @ts-expect-error subclasses must bind the repository entity constructor type explicitly.
       abstract class UnboundRepositorySubclass extends Repository {}
       void UnboundRepositorySubclass;
+      // @ts-expect-error subclasses must not bind the broad repository entity constructor type.
+      abstract class BroadRepositorySubclass extends Repository<RepositoryEntityType> {}
+      void BroadRepositorySubclass;
+      abstract class UnionRepositorySubclass extends Repository<
+        // @ts-expect-error subclasses must not bind a union of repository entity constructor types.
+        typeof TaskAggregate | typeof TaskProjection
+      > {}
+      void UnionRepositorySubclass;
       class MismatchedRepositorySubclass extends Repository<typeof TaskProjection> {
         constructor() {
           super({

@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-4 Review Fixes Complete - Pending Re-review
+Status: Round-5 Review Fixes Complete - Pending Re-review
 Task log: `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f2.md`
 Review log: `build-protocol/reviews/T-0009f2-repository-identity-seam.md`
@@ -70,6 +70,11 @@ Implementation research inspected and used:
   generic from `Repository`, required subclasses to bind their entity
   constructor type explicitly, and refreshed user-guide status wording for the
   repository identity seam.
+- Fifth-round review fixes resolve entity family before schema introspection,
+  require both constructor/static and prototype inheritance for family
+  detection, wrap malformed supported-entity schemas in
+  `RepositoryIdentityError`, and reject broad or union repository generics for
+  both `RepositoryOptions` and subclasses.
 - Public root exports, TypeDoc export guard, package README, API docs, user
   guide, and architecture notes now describe the metadata-only boundary.
 
@@ -127,9 +132,24 @@ Implementation research inspected and used:
 - Round-4 full verification: `CI=true corepack pnpm verify` passed with 17
   test files, 177 tests, coverage, docs check, proto lint/generate, and
   generated-clean.
+- Round-5 RED: focused Vitest failed because unsupported entity classes and
+  supported entities with malformed schemas could throw raw `TypeError` from
+  schema introspection; `corepack pnpm typecheck:tooling` failed with unused
+  `@ts-expect-error` directives for broad/union `RepositoryOptions` and
+  subclass generics.
+- Round-5 GREEN: focused Vitest passed with 2 files and 19 tests;
+  `corepack pnpm typecheck:tooling` passed after moving family resolution
+  before schema introspection, adding static constructor-chain checks, wrapping
+  malformed supported schemas, and rejecting broad/union repository generic
+  bindings.
+- Round-5 API docs guard: `node scripts/check-api-docs.mjs` passed and
+  reported 87 expected `@spine-ts/server` exports.
+- Round-5 full verification: `CI=true corepack pnpm verify` passed with 17
+  test files, 178 tests, coverage, docs check, proto lint/generate, and
+  generated-clean.
 
 ## Review
 
-- First-, second-, third-, and fourth-round reviewer findings were applied by review-fix
+- First-, second-, third-, fourth-, and fifth-round reviewer findings were applied by review-fix
   sub-agents.
   Re-review by the orchestrator lanes remains pending.
