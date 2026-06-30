@@ -1,6 +1,6 @@
 # T-0009e.4: Public API Closure And Verification
 
-Status: Implemented; Orchestrator Review Pending
+Status: Implemented; Round 1 Review Fix Verified; Re-review Pending
 Parent task: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Task log path:
 `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`
@@ -79,7 +79,7 @@ None known.
 
 ## Closure Audit
 
-Implementation audit on `2026-06-30 03:03 WEST`, with Round 1 review fixes
+Implementation audit on `2026-06-30 03:03 WEST`, with local audit fixes
 applied afterward, found the integrated T-0009e public surface coherent without
 runtime source changes:
 
@@ -102,3 +102,24 @@ runtime source changes:
 - No additional runtime behavior, repository seam, dispatch behavior, storage
   integration, lifecycle event behavior, or source-level JVM compatibility
   claim was added by this closure subtask.
+
+## Round 1 Review Fix
+
+Orchestrator-spawned Round 1 review found stale review-status wording only
+across maintainability, documentation, security, TypeScript/API docs, and
+performance/reliability lanes. No runtime, root export, TypeDoc export-check,
+API-doc, public-doc content, security, performance, or reliability issue was
+reported beyond the false protocol-review status wording.
+
+Review-fix verification passed on `2026-06-30 03:40 WEST`:
+
+- `corepack pnpm vitest run packages/server/src/entity.test.ts
+packages/server/src/index.test.ts` passed with 2 test files / 38 tests.
+- `node scripts/check-api-docs.mjs` passed with 100 expected proto exports, 28
+  core exports, 72 server exports, and 26 storage exports.
+- `CI=true corepack pnpm verify` passed: node check, typecheck, lint, format
+  check, 15 test files / 158 tests, coverage statements 97.25%, branches
+  91.41%, functions 99.16%, lines 97.19%, TypeDoc/API checks, proto
+  lint/generate, and generated-output clean.
+
+Re-review is pending; the protocol review loop is not clean or closed yet.

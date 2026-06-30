@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.4 Public API Closure And Verification
 
-Status: Implemented; Orchestrator Review Pending
+Status: Implemented; Round 1 Review Fix Verified; Re-review Pending
 Task log:
 `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e4.md`
@@ -15,12 +15,14 @@ Baseline commit: `94dd6d1`
 
 The closure audit found the T-0009e public API, TypeDoc export check, package
 README, API guide, user guide, and architecture notes coherent at the parent
-surface integrated by T-0009e.1, T-0009e.2, and T-0009e.3. Round 1 review
-requested explicit public-doc mentions that Java builders remain deferred, so
-this subtask updates that wording plus durable task/report/work/review logs.
-Local implementation audit passes found parent closure evidence gaps, which are
-also corrected. No runtime source, root export, or API-check changes were
-needed. Required orchestrator-spawned review is pending.
+surface integrated by T-0009e.1, T-0009e.2, and T-0009e.3. Local audit passes
+identified missing explicit public-doc mentions that Java builders remain
+deferred, so this subtask updates that wording plus durable task/report/work/
+review logs. Local implementation audit passes found parent closure evidence
+gaps, which are also corrected. No runtime source, root export, or API-check
+changes were needed. Orchestrator-spawned Round 1 review later found stale
+review-status wording in durable logs only; review-fix updates and verification
+passed, and re-review is pending.
 
 ## Files Changed
 
@@ -55,8 +57,27 @@ packages/server/src/index.test.ts` passed on `2026-06-30 03:11 WEST`: 2 test
   97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
   TypeDoc/API checks with 72 expected server exports, proto lint/generate, and
   generated-output clean.
+- Round 1 review-fix verification first exposed markdown formatting drift in
+  `build-protocol/reviews/T-0009e4-public-api-closure-and-verification.md`,
+  `build-protocol/work-logs/T-0009e.md`, and
+  `build-protocol/work-logs/T-0009e4.md`; targeted Prettier formatting fixed
+  those files.
+- Final review-fix focused `corepack pnpm vitest run
+packages/server/src/entity.test.ts packages/server/src/index.test.ts` passed on
+  `2026-06-30 03:40 WEST`: 2 test files / 38 tests.
+- Final review-fix `node scripts/check-api-docs.mjs` passed on
+  `2026-06-30 03:40 WEST`: TypeDoc JSON included 100 expected proto exports, 28
+  core exports, 72 server exports, and 26 storage exports.
+- Final review-fix full `CI=true corepack pnpm verify` passed on
+  `2026-06-30 03:40 WEST`: node check, typecheck, lint, format check, 15 test
+  files / 158 tests, coverage 97.25% statements / 91.41% branches / 99.16%
+  functions / 97.19% lines, TypeDoc/API checks with 72 expected server exports,
+  proto lint/generate, and generated-output clean.
 
 ## Review
 
-The implementation sub-agent recorded local audit/fix passes. Required
-orchestrator-spawned review is pending in the review log.
+The implementation sub-agent recorded local audit/fix passes.
+Orchestrator-spawned Round 1 review found stale review-status wording only,
+with no runtime, API, public-doc content, security, or reliability issues
+beyond that wording. Review-fix verification passed, and re-review is pending
+in the review log.

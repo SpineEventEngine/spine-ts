@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Implemented; Orchestrator Review Pending
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Round 1 Review Fix Verified; Re-review Pending
 Task log: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e.md`
 Review log: `build-protocol/reviews/T-0009e-entity-base-classes.md`
@@ -19,8 +19,9 @@ dispatch, storage, buses, and unsupported family-specific runtime behavior.
 `T-0009e.4 Public API Closure And Verification` has completed its local closure
 audit in an isolated subtask branch. The audit found the parent API/docs/log
 surface coherent without runtime source, root export, or API-check changes, and
-added explicit public-doc wording that Java builders remain deferred. Required
-orchestrator-spawned review is pending.
+added explicit public-doc wording that Java builders remain deferred.
+Orchestrator-spawned Round 1 review found stale review-status wording only;
+fixes were applied and verified, with re-review pending.
 
 ## JVM Research Used
 
@@ -139,4 +140,5 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
 - All T-0009e.3 Round 3 reviewer sub-agents were closed by the orchestrator.
 - Parent branch integration verification passed for the T-0009e.3 merge commit.
 - T-0009e.4 completed its local closure audit and verification in the subtask
-  branch. Required orchestrator-spawned review is pending.
+  branch. Orchestrator Round 1 review found stale review-status wording only;
+  fixes were applied and verified, with re-review pending.
