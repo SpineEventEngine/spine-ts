@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Review Complete - Pending Integration
+Status: Integrated Into Parent; Parent Verification Passed
 Task log: `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f2.md`
 Review log: `build-protocol/reviews/T-0009f2-repository-identity-seam.md`
@@ -327,5 +327,7 @@ EntityConstructor`.
 - Fourteenth-round code style/maintainability, documentation, TypeScript/API
   docs, security, and performance/reliability reviewer lanes reported no
   remaining comments.
-- Integration into the parent `task/T-0009f-repository-seams` branch remains
-  pending final subtask verification.
+- Integration into the parent `task/T-0009f-repository-seams` branch completed
+  on `2026-06-30 11:28 WEST` as merge commit `748798b`, followed by parent
+  verification with 17 files / 184 tests and clean TypeDoc/API, proto, and
+  generated-output gates.
