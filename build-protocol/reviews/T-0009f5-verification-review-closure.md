@@ -85,3 +85,7 @@ WEST` with 100 proto / 28 core / 97 server / 26 storage expected exports and
 WEST` with 17 test files / 212 tests, coverage 96.39% statements / 90.8%
   branches / 99.09% functions / 96.32% lines, formatting check clean, clean
   TypeDoc/API, proto, and generated-output gates.
+- Final pointer-fix `CI=true corepack pnpm verify` passed on `2026-06-30 14:45
+WEST` with 17 test files / 212 tests, coverage 96.39% statements / 90.8%
+  branches / 99.09% functions / 96.32% lines, formatting check clean, clean
+  TypeDoc/API, proto, and generated-output gates.
