@@ -13,7 +13,7 @@ Requirements splitter:
 `019f1531-96a3-7870-bb40-b24fc9a456c8` (Goodall the 3rd, closed)
 Authoring sub-agent:
 `019f15ba-f2f2-7f21-a244-bd61564e0eb6` (Aquinas the 3rd)
-Reviewer sub-agents: pending
+Reviewer sub-agents: Round 1 closed; Round 2 closed with docs-only follow-up
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-30 00:31 WEST`
 
@@ -158,3 +158,7 @@ Skipped relevant-looking skills:
 - Round 1 review requested changes for rejected commit version result snapshot
   isolation and stale durable status wording. The focused fix is implemented,
   verified, and ready for Round 2 review.
+- Round 2 reviewed committed range `a7acaca..4246385`; four lanes returned
+  clean and documentation requested one header-status cleanup. All Round 2
+  reviewers were closed. The docs-only cleanup is verified and ready for Round 3
+  review.
