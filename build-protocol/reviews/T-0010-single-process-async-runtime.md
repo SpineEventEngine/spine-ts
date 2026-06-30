@@ -1,6 +1,6 @@
 # Review Log: T-0010 Single-Process Async Runtime
 
-Status: Complete
+Status: Complete and integrated
 
 ## Required Review Lanes
 
@@ -150,6 +150,13 @@ Final closure verification first reached `format:check` on
 `2026-06-30 20:24 WEST` and failed because Prettier needed to rewrite
 `build-protocol/work-logs/T-0010.md`; the Prettier write passed. Rerunning
 `CI=true corepack pnpm verify` passed on `2026-06-30 20:24 WEST` with 21 test
+files / 258 tests, coverage 96.45% statements / 90.55% branches / 99.24%
+functions / 96.39% lines, TypeDoc/API counts 100 / 28 / 124 / 26, copied Spine
+proto checksum verification, generated proto output clean, and generated files
+clean.
+
+Main integration verification passed after merge commit `34afaf6` on
+`2026-06-30 20:29 WEST`: `CI=true corepack pnpm verify` passed with 21 test
 files / 258 tests, coverage 96.45% statements / 90.55% branches / 99.24%
 functions / 96.39% lines, TypeDoc/API counts 100 / 28 / 124 / 26, copied Spine
 proto checksum verification, generated proto output clean, and generated files

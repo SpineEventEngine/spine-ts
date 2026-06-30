@@ -1,6 +1,6 @@
 # T-0010: Single-Process Async Runtime
 
-Status: Complete
+Status: Complete and integrated
 Start: `2026-06-30 14:57 WEST`
 Baseline commit: `169af02`
 Task log path: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`

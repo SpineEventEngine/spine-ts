@@ -1,6 +1,6 @@
 # Implementation Report: T-0010 Single-Process Async Runtime
 
-Status: Complete
+Status: Complete and integrated
 Task log: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
 Work log: `build-protocol/work-logs/T-0010.md`
 Review log: `build-protocol/reviews/T-0010-single-process-async-runtime.md`
@@ -121,7 +121,9 @@ registry lookup implementations. It also updates stale T-0010.6 child logs and
 parent T-0010 logs with the recorded parent merge/verification evidence.
 Post-fix re-review completed clean after the documentation current-state
 wording fix in `8c60054`. Final full verification passed on
-`2026-06-30 20:24 WEST`.
+`2026-06-30 20:24 WEST`. T-0010 was merged into `main` as `34afaf6 Merge
+T-0010 single-process async runtime`; main verification passed on
+`2026-06-30 20:29 WEST`.
 
 ## Files Changed (Whole Branch Since 169af02)
 
@@ -253,6 +255,12 @@ Server runtime, readiness, and package-root code/tests:
   lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
   expected exports, copied Spine proto checksum verification, generated proto
   output clean, and generated files clean.
+- Main integration verification passed after merge commit `34afaf6` on
+  `2026-06-30 20:29 WEST`: `CI=true corepack pnpm verify` passed with 21 test
+  files / 258 tests, coverage 96.45% statements / 90.55% branches / 99.24%
+  functions / 96.39% lines, TypeDoc/API checks with 100 proto / 28 core / 124
+  server / 26 storage expected exports, copied Spine proto checksum
+  verification, generated proto output clean, and generated files clean.
 
 ## Subtask Progress
 
@@ -318,3 +326,5 @@ registration readiness` and verified cleanly.
   verification on `2026-06-30 20:14 WEST`.
 - Final whole-branch re-review is clean and final closure verification passed
   on `2026-06-30 20:24 WEST`.
+- T-0010 is integrated into `main` at merge commit `34afaf6`; main
+  verification passed on `2026-06-30 20:29 WEST`.
