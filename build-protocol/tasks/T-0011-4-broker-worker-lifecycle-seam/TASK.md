@@ -1,6 +1,6 @@
 # T-0011.4: Broker And Worker Lifecycle Seam
 
-Status: Round 3 Clean; Final Verification Pending
+Status: Complete; Final Verification Passed
 Parent task: `T-0011 Transport Foundation`
 Start: `2026-06-30 22:52 WEST`
 Baseline commit: `4ed7db6`
@@ -181,3 +181,12 @@ Skipped relevant-looking skills:
   `corepack pnpm typecheck`, and `git diff --check` passed after restoring
   runtime worker validation through an internal type guard and removing a
   non-null assertion.
+- Final branch-tip verification passed on `2026-06-30 23:43 WEST`:
+  `CI=true corepack pnpm verify` passed with 23 test files / 276 tests,
+  coverage 96.60% statements / 91.06% branches / 99.30% functions / 96.54%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
+  / 31 transport expected exports, copied Spine proto checksum verification,
+  proto lint/generate, generated proto output clean, and generated files clean.
+  TypeDoc emitted the existing invalid-`origin` warning only. The command ran
+  with native IPC access because ZeroMQ smoke tests bind `ipc://` endpoints and
+  the managed sandbox rejects those binds with `EPERM`.

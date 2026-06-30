@@ -1,6 +1,6 @@
 # Implementation Report: T-0011.4 Broker And Worker Lifecycle Seam
 
-Status: Round 3 Clean; Final Verification Pending
+Status: Complete; Final Verification Passed
 Task log: `build-protocol/tasks/T-0011-4-broker-worker-lifecycle-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0011-4.md`
 Review log: `build-protocol/reviews/T-0011-4-broker-worker-lifecycle-seam.md`
@@ -60,8 +60,7 @@ sandbox rejects those binds with `EPERM`.
 
 ## Open Items
 
-- Required re-review lanes still need to confirm the round 2 fix before parent
-  integration.
+- None for T-0011.4.
 
 ## Result
 
@@ -89,3 +88,10 @@ sandbox rejects those binds with `EPERM`.
 - Final verification found and fixed two lint/type issues in the round 2 fix:
   an always-false worker-kind check and a non-null assertion. Focused lint,
   transport tests, typecheck, and whitespace checks passed after the follow-up.
+- Final branch-tip verification passed on `2026-06-30 23:43 WEST`:
+  `CI=true corepack pnpm verify` passed with 23 test files / 276 tests,
+  coverage 96.60% statements / 91.06% branches / 99.30% functions / 96.54%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
+  / 31 transport expected exports, copied Spine proto checksum verification,
+  proto lint/generate, generated proto output clean, and generated files clean.
+  TypeDoc emitted the existing invalid-`origin` warning only.
