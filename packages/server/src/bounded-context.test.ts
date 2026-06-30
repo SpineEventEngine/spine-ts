@@ -646,6 +646,44 @@ describe("BoundedContext builder shell", () => {
           }),
         }),
     ],
+    [
+      "non-array metadata columns",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          metadata: Object.freeze({
+            ...snapshot.metadata,
+            columns: {
+              map() {
+                return {
+                  forEach() {
+                    // Hostile array-like value that used to bypass validation.
+                  },
+                };
+              },
+            } as never,
+          }),
+        }),
+    ],
+    [
+      "non-array metadata set-once fields",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          metadata: Object.freeze({
+            ...snapshot.metadata,
+            setOnceFields: {
+              map() {
+                return {
+                  forEach() {
+                    // Hostile array-like value that used to bypass validation.
+                  },
+                };
+              },
+            } as never,
+          }),
+        }),
+    ],
   ] satisfies readonly [
     string,
     (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) => unknown,

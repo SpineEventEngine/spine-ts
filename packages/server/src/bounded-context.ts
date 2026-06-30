@@ -41,10 +41,10 @@ export type BoundedContextRepositoryRegistrationErrorCode =
   "ENTITY_TYPE_CONFLICT" | "STATE_TYPE_CONFLICT" | "INVALID_REPOSITORY_SNAPSHOT";
 
 /** Builder operation that rejected repository registration metadata. */
-type BoundedContextRepositoryRegistrationOperation = "add" | "remove";
+export type BoundedContextRepositoryRegistrationOperation = "add" | "remove";
 
 /** Stable repository ownership conflict details included in registration errors. */
-interface BoundedContextRepositoryRegistrationConflictErrorDetails {
+export interface BoundedContextRepositoryRegistrationConflictErrorDetails {
   /** Name of the bounded context receiving the repository. */
   readonly contextName: string;
   /** Already registered repository ownership facts. */
@@ -54,7 +54,7 @@ interface BoundedContextRepositoryRegistrationConflictErrorDetails {
 }
 
 /** Stable unreadable or malformed repository snapshot details included in registration errors. */
-interface BoundedContextRepositorySnapshotErrorDetails {
+export interface BoundedContextRepositorySnapshotErrorDetails {
   /** Name of the bounded context receiving the repository. */
   readonly contextName: string;
   /** Builder operation that attempted to read the repository snapshot. */
@@ -363,7 +363,7 @@ function createBoundedContext(
       name: specSnapshot.name,
       tenantMode: toTenantMode(specSnapshot.multitenant),
       spec: specSnapshot,
-      repositories: cloneRepositorySnapshots(repositorySnapshots),
+      repositories: repositorySnapshots,
     },
     frameworkConstructionToken,
   );
@@ -419,7 +419,9 @@ function cloneContextSnapshot(snapshot: BoundedContextSnapshot): BoundedContextS
 function cloneRepositorySnapshots(
   snapshots: readonly RepositoryIdentitySnapshot[],
 ): RepositoryIdentitySnapshot[] {
-  return Object.freeze(snapshots.map(cloneRepositorySnapshot)) as RepositoryIdentitySnapshot[];
+  return Object.freeze(
+    mapArray(snapshots, cloneRepositorySnapshot),
+  ) as RepositoryIdentitySnapshot[];
 }
 
 function cloneRepositorySnapshot<EntityType extends RepositoryEntityType>(
@@ -440,8 +442,14 @@ function cloneRepositorySnapshot<EntityType extends RepositoryEntityType>(
       strategy: snapshot.metadata.firstFieldRoutingHint.strategy,
       field: cloneRepositoryFieldMetadata(snapshot.metadata.firstFieldRoutingHint.field),
     }),
-    columns: Object.freeze(snapshot.metadata.columns.map(cloneRepositoryFieldMetadata)),
-    setOnceFields: Object.freeze(snapshot.metadata.setOnceFields.map(cloneRepositoryFieldMetadata)),
+    columns: cloneRepositoryFieldMetadataList(
+      snapshot.metadata.columns,
+      "Repository snapshot metadata.columns",
+    ),
+    setOnceFields: cloneRepositoryFieldMetadataList(
+      snapshot.metadata.setOnceFields,
+      "Repository snapshot metadata.setOnceFields",
+    ),
     semanticTags: Object.freeze([...snapshot.metadata.semanticTags]),
   });
 
@@ -453,6 +461,21 @@ function cloneRepositorySnapshot<EntityType extends RepositoryEntityType>(
     stateFullTypeName: snapshot.stateFullTypeName,
     idField: cloneRepositoryFieldMetadata(snapshot.idField),
   });
+}
+
+function cloneRepositoryFieldMetadataList(
+  fields: unknown,
+  owner: string,
+): readonly RepositoryIdentitySnapshot["idField"][] {
+  if (!Array.isArray(fields)) {
+    throw new TypeError(`${owner} must be an array.`);
+  }
+
+  return Object.freeze(
+    mapArray(fields, (field) =>
+      cloneRepositoryFieldMetadata(field as RepositoryIdentitySnapshot["idField"]),
+    ),
+  );
 }
 
 function cloneRepositoryFieldMetadata(
@@ -473,6 +496,13 @@ function freezeName(name: BoundedContextName): BoundedContextName {
 
 function isRecord(value: unknown): value is Record<PropertyKey, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function mapArray<Value, Result>(
+  values: readonly Value[],
+  mapper: (value: Value, index: number) => Result,
+): Result[] {
+  return Array.prototype.map.call(values, mapper) as Result[];
 }
 
 function validateNameSnapshot(name: unknown, owner: string): BoundedContextName {
@@ -549,13 +579,15 @@ function validateRepositorySnapshots(
     throw new TypeError(`${owner} must be an array.`);
   }
 
-  return snapshots.map((snapshot, index) => {
-    if (!isRecord(snapshot)) {
-      throw new TypeError(`${owner}[${String(index)}] must be a repository identity snapshot.`);
-    }
+  return Object.freeze(
+    mapArray(snapshots, (snapshot, index) => {
+      if (!isRecord(snapshot)) {
+        throw new TypeError(`${owner}[${String(index)}] must be a repository identity snapshot.`);
+      }
 
-    return cloneRepositorySnapshot(snapshot as unknown as RepositoryIdentitySnapshot);
-  });
+      return cloneRepositorySnapshot(snapshot as unknown as RepositoryIdentitySnapshot);
+    }),
+  );
 }
 
 function freezeSpecSnapshot(snapshot: ContextSpecSnapshot): ContextSpecSnapshot {
@@ -568,10 +600,10 @@ function freezeSpecSnapshot(snapshot: ContextSpecSnapshot): ContextSpecSnapshot 
 
 function freezeContextSnapshot(snapshot: BoundedContextSnapshot): BoundedContextSnapshot {
   return Object.freeze({
-    name: cloneName(snapshot.name),
+    name: snapshot.name,
     tenantMode: snapshot.tenantMode,
-    spec: cloneSpecSnapshot(snapshot.spec),
-    repositories: cloneRepositorySnapshots(snapshot.repositories),
+    spec: snapshot.spec,
+    repositories: snapshot.repositories,
   });
 }
 
@@ -767,8 +799,12 @@ function validateRepositoryFieldMetadata(field: unknown, owner: string): void {
   }
 }
 
-function validateRepositoryFieldMetadataList(fields: readonly unknown[], owner: string): void {
-  fields.forEach((field, index) => {
+function validateRepositoryFieldMetadataList(fields: unknown, owner: string): void {
+  if (!Array.isArray(fields)) {
+    throw new TypeError(`${owner} must be an array.`);
+  }
+
+  Array.prototype.forEach.call(fields, (field: unknown, index: number) => {
     validateRepositoryFieldMetadata(field, `${owner}[${String(index)}]`);
   });
 }
@@ -785,5 +821,5 @@ function safeEntityTypeName(entityType: RepositoryIdentitySnapshot["entityType"]
 function copyRepositorySnapshots(
   snapshots: readonly RepositoryIdentitySnapshot[],
 ): RepositoryIdentitySnapshot[] {
-  return snapshots.map(cloneRepositorySnapshot);
+  return mapArray(snapshots, cloneRepositorySnapshot);
 }

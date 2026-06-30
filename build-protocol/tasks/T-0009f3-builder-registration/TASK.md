@@ -1,6 +1,6 @@
 # T-0009f.3: Builder Repository Registration And Conflict Checks
 
-Status: Review Fix Implemented And Verified
+Status: Round 2 Review Fix Implemented And Verified
 Start: `2026-06-30 11:34 WEST`
 Parent task: `T-0009f Repository Seams And Bounded-Context Registration Skeleton`
 Parent branch: `task/T-0009f-repository-seams`
@@ -97,6 +97,29 @@ Expected boundary from current research:
 - [x] Documentation P3: the work log now records reviewed implementation commit
       `108d5fa` instead of saying the commit is still in progress.
 - [x] Required focused and full verification pass for the review-fix commit.
+
+## Review Round 2 Fixes
+
+- [x] Documentation P3: corrected the implementation report's first-round
+      review-fix bounded-context GREEN evidence from 20 tests to the actual
+      16-test run recorded in the work log; the later focused trio still
+      passed 45 tests.
+- [x] TypeScript/API P3: exported
+      `BoundedContextRepositoryRegistrationOperation`,
+      `BoundedContextRepositoryRegistrationConflictErrorDetails`, and
+      `BoundedContextRepositorySnapshotErrorDetails` from the module/root
+      surface and updated the API-doc guard expected server exports.
+- [x] Reliability P2: added RED/GREEN coverage for hostile repository
+      snapshots whose `metadata.columns` or `metadata.setOnceFields` are not
+      arrays and whose custom `map()` returns a non-array with no-op
+      `forEach()`.
+- [x] Reliability P2: repository snapshot cloning and validation now assert
+      metadata lists with `Array.isArray()` before accepting them.
+- [x] Reliability P3: reduced `build()` clone churn by letting
+      `BoundedContext` constructor validation own the repository-snapshot clone
+      and by freezing already-validated context snapshot children instead of
+      cloning them again.
+- [x] Required focused and full verification pass for the round-2 fix commit.
 
 ## Implementation Evidence
 

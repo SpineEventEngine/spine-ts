@@ -16,6 +16,10 @@ import {
   DescriptorMetadataError,
   isEntitySchema,
   type BoundedContextName,
+  type BoundedContextRepositoryRegistrationConflictErrorDetails,
+  type BoundedContextRepositoryRegistrationErrorDetails,
+  type BoundedContextRepositoryRegistrationOperation,
+  type BoundedContextRepositorySnapshotErrorDetails,
   type TenantMode,
   type EntityVersionMetadata,
   type PlainEntityVersionMetadata,
@@ -185,6 +189,11 @@ describe("@spine-ts/server", () => {
     expectTypeOf<PlainEntityVersionMetadata<Date>>().toBeNever();
     expectTypeOf<BoundedContextName>().toEqualTypeOf<{ readonly value: string }>();
     expectTypeOf<TenantMode>().toEqualTypeOf<"single-tenant" | "multitenant">();
+    expectTypeOf<BoundedContextRepositoryRegistrationOperation>().toEqualTypeOf<"add" | "remove">();
+    expectTypeOf<BoundedContextRepositoryRegistrationErrorDetails>().toEqualTypeOf<
+      | BoundedContextRepositoryRegistrationConflictErrorDetails
+      | BoundedContextRepositorySnapshotErrorDetails
+    >();
     expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
   });
 

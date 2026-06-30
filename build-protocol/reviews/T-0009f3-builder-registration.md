@@ -1,6 +1,6 @@
 # Review Log: T-0009f.3 Builder Repository Registration And Conflict Checks
 
-Status: Review Round 1 Fixes Implemented And Verified
+Status: Round 2 Review Fix Implemented And Verified
 
 ## Required Review Lanes
 
@@ -52,4 +52,50 @@ lanes before integration:
   `node scripts/check-api-docs.mjs` passed with one TypeDoc source-link warning
   for invalid local `origin`; `CI=true corepack pnpm verify` passed 17 test
   files / 196 tests plus coverage, docs, proto lint/generate, and
+  generated-clean.
+
+## Round 2 Review State
+
+- Second external review round reported four findings:
+  - Documentation P3: `IMPLEMENTATION_REPORT.md` said the first-round
+    review-fix bounded-context GREEN run passed 20 tests, while the work log
+    and reviewed test file showed 16 tests for that bounded-context-only run.
+  - TypeScript/API P3: the exported
+    `BoundedContextRepositoryRegistrationErrorDetails` union referenced
+    private branch detail interfaces and a private registration operation type
+    in emitted declaration/API docs.
+  - Reliability P2: repository snapshot metadata-list cloning trusted
+    caller-controlled `.map()` and did not assert `metadata.columns` or
+    `metadata.setOnceFields` were arrays before accepting the cloned shape.
+  - Reliability P3: `build()` deep-cloned repository snapshots in multiple
+    layers.
+- Already clean review lanes from the second round: code style and security.
+
+## Round 2 Fix State
+
+- Corrected the implementation report's first-round review-fix bounded-context
+  GREEN evidence from 20 tests to 16 tests and recorded that the later focused
+  trio passed 45 tests.
+- Exported
+  `BoundedContextRepositoryRegistrationOperation`,
+  `BoundedContextRepositoryRegistrationConflictErrorDetails`, and
+  `BoundedContextRepositorySnapshotErrorDetails` from `bounded-context.ts` and
+  the root `@spine-ts/server` export.
+- Updated `scripts/check-api-docs.mjs` to expect the new public server type
+  exports.
+- Added RED/GREEN coverage for hostile repository snapshots whose metadata
+  lists are not arrays but expose deceptive `map()` / `forEach()` methods.
+- Added `Array.isArray()` checks before cloning or validating repository
+  metadata lists and avoided caller-controlled array `map()`/`forEach()` in
+  the affected paths.
+- Reduced build-time clone churn by letting `BoundedContext` constructor
+  validation own the repository snapshot clone and by freezing already
+  validated context snapshot children without cloning them again.
+- Required focused and full verification passed before committing the round-2
+  fix:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts packages/server/src/repository.test.ts packages/server/src/index.test.ts`
+  passed 47 tests; `corepack pnpm typecheck:tooling` passed;
+  `node scripts/check-api-docs.mjs` passed with one TypeDoc source-link warning
+  for invalid local `origin`; `CI=true corepack pnpm verify` passed 17 test
+  files / 198 tests plus coverage, docs, proto lint/generate, and
   generated-clean.
