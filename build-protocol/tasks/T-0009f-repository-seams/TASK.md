@@ -1,6 +1,6 @@
 # T-0009f: Repository Seams And Bounded-Context Registration Skeleton
 
-Status: First Subtask Integrated; Parent Verification Passed
+Status: Second Subtask Integrated; Parent Verification Passed
 Start: `2026-06-30 05:21 WEST`
 Baseline commit: `ec70945`
 Task log path: `build-protocol/tasks/T-0009f-repository-seams/TASK.md`
@@ -9,8 +9,10 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009f-repository-seams`
 Requirements splitter:
 `019f16c7-9335-72e3-ab82-7c4ce7fc8e9c` (Singer the 4th, closed)
-Authoring sub-agent: T-0009f.1 implemented by Codex implementation sub-agent
-Reviewer sub-agents: completed T-0009f.1 durable review/fix rounds recorded in review logs; future subtasks pending
+Authoring sub-agents: T-0009f.1 and T-0009f.2 implemented by Codex
+implementation sub-agents
+Reviewer sub-agents: completed T-0009f.1 and T-0009f.2 durable review/fix
+rounds recorded in review logs; future subtasks pending
 
 ## Objective
 
@@ -165,6 +167,9 @@ Staged subtasks:
   runtime/API code, avoid over-inventing, and defer unsupported behavior.
 - D-0046: T-0009f starts with repository and bounded-context registration seams,
   not dispatch/storage execution.
+- D-0047: T-0009f.2 repository identity remains metadata-only and defers
+  create/find/store, routing, inboxes, cache, stand, context lifecycle, handler
+  invocation, and bus registration.
 
 ## Files Changed
 
@@ -234,6 +239,14 @@ pnpm verify` passed with 15 test files / 160 tests, coverage 97.25%
   lines, TypeDoc/API checks with 100 proto / 28 core / 80 server / 26 storage
   expected exports, proto lint/generate checksum verification, and generated
   proto output clean.
+- `T-0009f.2 Repository Identity And Entity Ownership Seam` merged into parent
+  branch `task/T-0009f-repository-seams` on `2026-06-30 11:28 WEST` with merge
+  commit `748798b` after all required reviewer lanes reported no remaining
+  findings. Parent `CI=true corepack pnpm verify` passed with 17 test files /
+  184 tests, coverage 96.87% statements / 91.08% branches / 99% functions /
+  96.81% lines, TypeDoc/API checks with 100 proto / 28 core / 89 server / 26
+  storage expected exports, proto lint/generate checksum verification, and
+  generated proto output clean.
 
 ## Human Questions And Answers
 
