@@ -177,6 +177,15 @@ class TestTransactionalEntity extends TransactionalEntity<
   }
 }
 
+class GetterCountingTransactionalEntity extends TestTransactionalEntity {
+  stateReads = 0;
+
+  override get state(): ProjectionState {
+    this.stateReads += 1;
+    return super.state;
+  }
+}
+
 class TestAggregate extends Aggregate<string, typeof ProjectionStateSchema, RevisionMetadata> {
   start(): void {
     this.startTransaction();
@@ -706,6 +715,20 @@ describe("entities", () => {
     expect(() => {
       entity.start();
     }).toThrow(/already has an active transaction/);
+  });
+
+  it("starts transactions without reading the public state snapshot getter", () => {
+    const entity = new GetterCountingTransactionalEntity({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    entity.start();
+
+    expect(entity.stateReads).toBe(0);
+    expect(entity.draft()).toEqual(createProjectionState());
   });
 
   it("commits accepted draft state, version metadata, and lifecycle flags back to the entity", () => {

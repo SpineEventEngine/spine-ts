@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.4 Public API Closure And Verification
 
-Status: Complete; Integration Pending
+Status: Complete; Integrated into parent branch as `f499ca8`; Parent Integration Verified
 Task log:
 `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e4.md`
@@ -25,7 +25,9 @@ review-status wording in durable logs only; Round 2 found stale chronology that
 contradicted the public-doc Java-builder deferral updates. Review-fix updates
 were applied and Round 2 fix verification passed. Round 4 re-review returned
 clean across all five required lanes. Final verification passed, and the
-subtask is ready for parent integration.
+subtask was merged into the parent branch as `f499ca8`, and parent integration
+verification passed. Final parent review remains pending after the follow-up
+final-parent-review fixes.
 
 ## Files Changed
 
@@ -86,6 +88,13 @@ packages/server/src/entity.test.ts packages/server/src/index.test.ts` passed on
   statements / 91.41% branches / 99.16% functions / 97.19% lines, TypeDoc/API
   checks with 72 expected server exports, proto lint/generate, and
   generated-output clean.
+- Final-parent-review fix verification passed on `2026-06-30 04:30 WEST`:
+  focused entity/root tests passed with 2 files / 39 tests; API docs check
+  passed with 100 proto / 28 core / 72 server / 26 storage expected exports;
+  full `CI=true corepack pnpm verify` passed with 15 test files / 159 tests,
+  coverage 97.26% statements / 91.41% branches / 99.17% functions / 97.2%
+  lines, TypeDoc/API/proto/generated gates clean; and the required
+  stale-terminal-wording scan exited 1 with no matches.
 
 ## Review
 
@@ -97,5 +106,7 @@ the public docs set was unchanged, contradicting the Java-builder deferral
 wording that was added to public docs. Review-fix updates corrected that
 chronology and Round 2 fix verification passed. Round 4 re-review returned
 clean across all five required lanes, and all Round 4 reviewer sub-agents were
-closed by the orchestrator. Final verification passed, and the subtask is ready
-for parent integration.
+closed by the orchestrator. Final verification passed, the subtask was merged
+into the parent branch as `f499ca8`, and parent integration verification passed.
+Final parent review remains pending after the follow-up final-parent-review
+fixes.

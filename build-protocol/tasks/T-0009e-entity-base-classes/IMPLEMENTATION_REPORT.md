@@ -135,6 +135,13 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
   97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
   TypeDoc/API checks with 72 expected server exports, proto lint/generate, and
   generated-output clean.
+- Final-parent-review fix verification passed on `2026-06-30 04:30 WEST`:
+  focused entity/root tests passed with 2 files / 39 tests; API docs check
+  passed with 100 proto / 28 core / 72 server / 26 storage expected exports;
+  full `CI=true corepack pnpm verify` passed with 15 test files / 159 tests,
+  coverage 97.26% statements / 91.41% branches / 99.17% functions / 97.2%
+  lines, TypeDoc/API/proto/generated gates clean; and the required
+  stale-terminal-wording scan exited 1 with no matches.
 
 ## Review
 
@@ -167,4 +174,6 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
   all Round 4 reviewer sub-agents were closed, and final subtask verification
   passed.
 - T-0009e.4 was merged into the parent branch as `f499ca8`, and parent
-  integration verification passed. Final parent review is pending.
+  integration verification passed. Final parent review findings have been
+  addressed in this branch, and final parent re-review remains pending.
+- Final-parent-review fix verification passed on `2026-06-30 04:30 WEST`.

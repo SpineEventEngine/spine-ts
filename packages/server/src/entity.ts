@@ -213,6 +213,17 @@ export abstract class Entity<
     return cloneState(this.#schema, this.#state);
   }
 
+  /**
+   * Read the framework-owned stored state at an internal clone boundary.
+   *
+   * The callback must not retain or mutate the state reference.
+   */
+  protected withStoredState<Result>(
+    reader: (state: Readonly<MessageShape<Schema>>) => Result,
+  ): Result {
+    return reader(this.#state);
+  }
+
   /** Caller-owned plain version metadata snapshot. */
   get version(): Version {
     return cloneVersionMetadata(this.#version);
@@ -311,15 +322,18 @@ export abstract class TransactionalEntity<
     }
 
     const previousVersion = this.version;
-    this.#transaction = new EntityTransaction({
-      schema: this.schema,
-      previous: this.state,
-      version: {
-        previous: previousVersion,
-        draft: cloneVersionMetadata(previousVersion),
-      },
-      lifecycle: this.lifecycle,
-    });
+    this.#transaction = this.withStoredState(
+      (storedState) =>
+        new EntityTransaction({
+          schema: this.schema,
+          previous: storedState as MessageShape<Schema>,
+          version: {
+            previous: previousVersion,
+            draft: cloneVersionMetadata(previousVersion),
+          },
+          lifecycle: this.lifecycle,
+        }),
+    );
   }
 
   /**

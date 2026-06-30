@@ -155,4 +155,8 @@ verify` passed with 15 test files / 158 tests, coverage 97.25% statements /
 91.41% branches / 99.16% functions / 97.19% lines, TypeDoc/API checks with 72
 expected server exports, proto lint/generate, and generated output clean.
 
-The subtask is ready for parent integration.
+The subtask was merged into the parent branch as `f499ca8` on
+`2026-06-30 04:18 WEST`, and parent integration verification passed. Final
+parent re-review remains pending after the final-parent-review finding fixes.
+Final-parent-review fix verification passed on `2026-06-30 04:30 WEST`, and the
+required stale-terminal-wording scan exited 1 with no matches.

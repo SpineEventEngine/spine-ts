@@ -1,6 +1,6 @@
 # T-0009e.4: Public API Closure And Verification
 
-Status: Complete; Integration Pending
+Status: Complete; Integrated into parent branch as `f499ca8`; Parent Integration Verified
 Parent task: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Task log path:
 `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`
@@ -169,4 +169,7 @@ Final verification passed on `2026-06-30 04:13 WEST`:
 - TypeDoc/API checks passed with 72 expected `@spine-ts/server` exports.
 - Proto lint/generate and generated-output checks passed.
 
-This subtask is ready for parent integration.
+This subtask was merged into the parent branch as `f499ca8` on
+`2026-06-30 04:18 WEST`, and parent integration verification passed.
+Final-parent-review fix verification passed on `2026-06-30 04:30 WEST`, and
+final parent re-review remains pending.

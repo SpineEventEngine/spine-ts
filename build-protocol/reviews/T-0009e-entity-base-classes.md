@@ -178,3 +178,28 @@ passed on `2026-06-30 04:18 WEST`.
   generated output clean.
 
 Final parent review is pending before marking T-0009e complete.
+
+## Final Parent Review Fixes
+
+Final parent review found two follow-up issues after parent integration:
+
+- T-0009e.4 terminal durable logs still described the subtask as awaiting parent
+  integration even though the parent branch merged it as `f499ca8` and parent
+  integration verification passed.
+- `TransactionalEntity.startTransaction()` routed the previous-state input
+  through the public `state` getter, causing an avoidable full-state clone before
+  `EntityTransaction` cloned previous and draft snapshots.
+
+The fix worker updated the relevant parent/subtask logs to record the `f499ca8`
+merge and passing parent integration verification, and changed
+`startTransaction()` to read the framework-owned stored state at the transaction
+clone boundary without exposing public mutable state. Final parent re-review
+remains pending; this section does not claim a clean final parent review.
+
+Final-parent-review fix verification passed on `2026-06-30 04:30 WEST`:
+focused entity/root tests passed with 2 files / 39 tests; API docs check passed
+with 100 proto / 28 core / 72 server / 26 storage expected exports; full
+`CI=true corepack pnpm verify` passed with 15 test files / 159 tests, coverage
+97.26% statements / 91.41% branches / 99.17% functions / 97.2% lines,
+TypeDoc/API/proto/generated gates clean; and the required stale-terminal-wording
+scan exited 1 with no matches. Final parent re-review remains pending.
