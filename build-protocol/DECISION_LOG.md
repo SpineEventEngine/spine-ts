@@ -1424,3 +1424,36 @@ Consequences:
 - Public docs must describe the surface as event registration readiness and
   explicitly state that domestic/external classification is not available until
   a later metadata task introduces it.
+
+## D-0053: T-0010.6 Closes Runtime Slice With Docs And Smoke Test Only
+
+Status: Accepted
+
+Date: 2026-06-30
+
+Context: `T-0010.6 Runtime Closure And User-Facing Docs` follows the runtime
+lifecycle, bounded-context runtime handle, signal intake result, and
+registration-readiness subtasks. The Spine JVM `Server` class is a gRPC service
+container and lifecycle supervisor, while `BoundedContext` owns command,
+event, import, read-side, integration, tenant, system, repository, and close
+collaborators that the TypeScript slice has intentionally deferred. The human
+explicitly warned to inspect the Spine JVM `core-jvm/server` module closely and
+avoid over-inventing server-module work.
+
+Decision: T-0010.6 closes the first runtime slice with documentation and a tiny
+bounded-context runtime assembly smoke test over existing public APIs. It must
+not add a TypeScript `Server` facade, gRPC/service routing, command/event/import
+bus behavior, storage lifecycle, read-side stand/query/subscription execution,
+transport lifecycle, repository runtime registration, handler invocation,
+validation, delivery, integration broker behavior, or `Ack` mapping.
+
+Consequences:
+
+- Public docs may show how to compose the existing
+  `SingleProcessServerRuntime`, `BoundedContextRuntime`, signal intake result,
+  and registration-readiness metadata, but must describe the composition as a
+  first local runtime seam rather than a complete server.
+- Reviewers must flag new server/service/transport/storage/bus behavior in this
+  subtask as over-scoped unless a later task explicitly authorizes it.
+- To-do example docs remain non-runnable for runtime behavior until the example
+  implementation tasks introduce domain command/event/projection execution.

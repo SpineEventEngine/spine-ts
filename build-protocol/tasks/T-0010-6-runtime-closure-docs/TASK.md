@@ -1,0 +1,238 @@
+# T-0010.6: Runtime Closure And User-Facing Docs
+
+Status: In progress
+Start: `2026-06-30 19:10 WEST`
+End: Pending
+Baseline commit: `94a28bf`
+Task log path: `build-protocol/tasks/T-0010-6-runtime-closure-docs/TASK.md`
+Branch: `task/T-0010-6-runtime-closure-docs`
+Worktree:
+`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0010-6-runtime-closure-docs`
+Authoring sub-agent: Pending
+Reviewer sub-agents: Pending
+Implementation commit: Pending branch commit
+Final branch HEAD: Pending branch commit
+
+## Objective
+
+Close the T-0010 single-process async runtime slice with user-facing/API
+documentation and a tiny bounded-context runtime assembly smoke test. The
+smoke test should exercise the already implemented public runtime surfaces
+together without adding a `Server` facade, transport, bus, dispatch, storage,
+read-side execution, service, handler invocation, validation, or `Ack`
+behavior.
+
+## Required Inputs Read
+
+- `build-protocol/BUILD_PROTOCOL.md`
+- `build-protocol/CODE_QUALITY.md`
+- `build-protocol/DEVELOPER_API.md`
+- `build-protocol/RUNTIME_ARCHITECTURE.md`
+- `build-protocol/TODO_EXAMPLE_SPEC.md`
+- `spine-jvm-docs/spine-server-runtime-and-bounded-context.md`
+- `spine-jvm-docs/spine-routing-dispatch-and-delivery.md`
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/BoundedContext.java`
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/BoundedContextBuilder.java`
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/Server.java`
+- `packages/server/src/runtime.ts`
+- `packages/server/src/bounded-context.ts`
+- `packages/server/src/runtime.test.ts`
+- `packages/server/src/bounded-context.test.ts`
+- `packages/server/README.md`
+- `docs/USER_GUIDE.md`
+- `docs/api/README.md`
+- `docs/architecture/README.md`
+
+## JVM Server Guardrail
+
+The task-relevant Spine JVM source shows:
+
+- `BoundedContext` owns command/event/import buses, stand, tenant index,
+  integration broker, system client, aggregate-root directory, and close
+  callbacks.
+- `BoundedContext.close()` closes a much larger registered runtime graph than
+  the TypeScript T-0010 slice owns.
+- `Server` is a gRPC service container that starts the container, installs a
+  shutdown hook, exposes command/query/subscription services, and shuts the
+  container down before closing contexts.
+- `Server.Builder` builds bounded contexts lazily and wires them into
+  service-specific builders.
+
+Implementation impact: T-0010.6 must not introduce a TypeScript `Server`
+equivalent, service router, bus graph, storage lifecycle, system context, or
+transport lifecycle. It may only document the current runtime seams and add a
+smoke test that assembles `BoundedContext`, `BoundedContextRuntime`,
+`SingleProcessServerRuntime`, and registration-readiness metadata already in
+the package.
+
+## Skill Applicability
+
+Canonical checklist: `build-protocol/BUILD_PROTOCOL.md#skills-and-tooling`.
+
+Skill sources checked:
+
+| Source                                              | Scope Checked                                         | Evidence                                                                                                    |
+| --------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Session skill inventory                             | Task-relevant installed skills exposed in the prompt. | Selected subagent, worktree, review, verification, testing, TypeScript, and design skills.                  |
+| Task-provided skill names/paths                     | N/A                                                   | T-0010.6 has no task-specific skill path beyond the session inventory and parent T-0010 skill routing.      |
+| `build-protocol/skills/EXPECTED_SKILLS.md`          | Parent T-0010 previously checked.                     | Parent task log records expected skill use and routing.                                                     |
+| `~/.agents/skills/*/SKILL.md`                       | Selected skill files only.                            | Orchestrator read the selected skill instructions before setup and will pass task-fit skills to sub-agents. |
+| `~/.agents/.skill-lock.json` or equivalent manifest | Previously checked for T-0010 parent.                 | Parent T-0010 logs record installed skill evidence.                                                         |
+
+Selected skills read before task actions:
+
+| Skill                            | Source                                                     | Applicability                                                               | Instructions Applied                                                                            |
+| -------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `subagent-driven-development`    | `~/.agents/skills/subagent-driven-development/SKILL.md`    | Required by the user/protocol for per-subtask implementer and review loops. | Use fresh authoring sub-agent, required reviewers, durable reports, and continuous execution.   |
+| `using-git-worktrees`            | `~/.agents/skills/using-git-worktrees/SKILL.md`            | Required for isolated task branch/worktree.                                 | Detected existing parent worktree, verified `.worktrees` is ignored, created T-0010.6 worktree. |
+| `verification-before-completion` | `~/.agents/skills/verification-before-completion/SKILL.md` | Required before setup/implementation/completion claims.                     | Use fresh verification evidence before claiming task or integration state.                      |
+| `requesting-code-review`         | `~/.agents/skills/requesting-code-review/SKILL.md`         | Required before subtask completion and merge.                               | Run reviewer sub-agents after implementation and repeat until no comments remain.               |
+
+Skills passed to sub-agents/reviewers:
+
+| Recipient                           | Skills/Instructions Passed                                                                                                                                                        | Notes                                                                          |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Implementation sub-agent            | `test-driven-development`, `javascript-testing-patterns`, `typescript-advanced-types`, `codebase-design`, `verification-before-completion`, plus the server-module JVM guardrail. | T-0010.6 likely adds a smoke test and docs only; no new dependencies expected. |
+| Code style/maintainability reviewer | `code-review-excellence`, `codebase-design`, server-module JVM guardrail.                                                                                                         | Must flag over-engineered server/runtime additions.                            |
+| Documentation reviewer              | `doc-coauthoring`, protocol docs/user-guide requirements, server-module JVM guardrail.                                                                                            | Must check framework/user-facing docs and no false runtime claims.             |
+| TypeScript/API docs reviewer        | `typescript-advanced-types`, API docs/export check expectations.                                                                                                                  | Must check whether public API changed and whether TypeDoc/API docs match.      |
+| Security reviewer                   | `security-best-practices` guidance, protocol security checklist.                                                                                                                  | Must check no new IPC/secrets/deserialization/tenant-scope exposure.           |
+| Performance/reliability reviewer    | Runtime lifecycle/reliability focus and protocol coverage target.                                                                                                                 | Must check smoke test and docs do not mask lifecycle limitations.              |
+
+Skipped relevant-looking skills:
+
+| Skill                     | Source            | Reason Skipped                                                                             |
+| ------------------------- | ----------------- | ------------------------------------------------------------------------------------------ |
+| `event-store-design`      | Session inventory | T-0010.6 must not add durable event storage or event-store behavior.                       |
+| `projection-patterns`     | Session inventory | Read-side query/projection execution is out of scope.                                      |
+| `saga-orchestration`      | Session inventory | No distributed workflow or compensation behavior in this closure slice.                    |
+| `nodejs-backend-patterns` | Session inventory | No HTTP/gRPC/backend service implementation is in scope.                                   |
+| `cqrs-implementation`     | Session inventory | The existing docs must preserve segregation, but no new CQRS runtime is being implemented. |
+
+Conflict resolution: if an installed skill conflicts with `BUILD_PROTOCOL.md`,
+`CODE_QUALITY.md`, the task specification, sandbox/approval rules, or explicit
+human/orchestrator authorization, the project and authorization sources are
+authoritative.
+
+## Scope
+
+In scope:
+
+- Add a focused bounded-context runtime assembly smoke test over existing
+  public server APIs.
+- Update framework user guide, package README, architecture/API docs, and task
+  logs as needed.
+- Record compatibility notes that the T-0010 slice is not a JVM `Server`
+  equivalent.
+- Keep docs honest about deferred command/event/import buses, service routing,
+  read-side stand execution, storage, transport, delivery, validation, and
+  handler invocation.
+
+Out of scope:
+
+- New public runtime types unless a reviewer-approved smoke-test gap proves
+  they are necessary.
+- A TypeScript `Server` class or service facade.
+- gRPC, ZeroMQ, transport abstractions, multi-process execution, durable
+  delivery, storage adapters, query/subscription execution, handler invocation,
+  `Ack` mapping, validation, and repository runtime registration.
+- To-do application implementation beyond preserving its existing guide.
+
+## Work Log
+
+- `2026-06-30 19:10 WEST`: Created this task log after creating the isolated
+  worktree and after inspecting task-relevant Spine JVM server source.
+- `2026-06-30 19:16 WEST`: Setup dependency hydration and baseline verification
+  completed. The first sandboxed `corepack pnpm install --frozen-lockfile`
+  failed with npm registry DNS `fetch failed`; the same frozen install
+  succeeded with approved network escalation. The first full verify attempt
+  stopped at Prettier on the newly created Markdown logs; after formatting
+  those logs, full verify passed.
+
+## Decisions
+
+- `D-0053: T-0010.6 Closes Runtime Slice With Docs And Smoke Test Only`.
+
+## Human Questions And Answers
+
+- Blocking questions: none.
+- Non-blocking questions: none.
+
+## Files Changed
+
+- `build-protocol/DECISION_LOG.md`
+- `build-protocol/reviews/T-0010-6-runtime-closure-docs.md`
+- `build-protocol/reviews/T-0010-single-process-async-runtime.md`
+- `build-protocol/tasks/T-0010-6-runtime-closure-docs/TASK.md`
+- `build-protocol/tasks/T-0010-6-runtime-closure-docs/IMPLEMENTATION_REPORT.md`
+- `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
+- `build-protocol/tasks/T-0010-single-process-async-runtime/IMPLEMENTATION_REPORT.md`
+- `build-protocol/work-logs/T-0010-6.md`
+- `build-protocol/work-logs/T-0010.md`
+
+## Tests Run
+
+- `corepack pnpm install --frozen-lockfile` - failed in sandbox with npm
+  registry DNS `fetch failed`.
+- `corepack pnpm install --frozen-lockfile` with approved network escalation -
+  passed; reused the existing lockfile and added 194 packages to the child
+  worktree.
+- `CI=true corepack pnpm verify` - first attempt failed at `format:check` on
+  newly created Markdown logs.
+- `corepack pnpm prettier --write ...` - passed for setup Markdown logs.
+- `CI=true corepack pnpm verify` - passed on `2026-06-30 19:16 WEST`.
+
+## Coverage Result
+
+- Setup baseline coverage: 96.45% statements, 90.55% branches, 99.24%
+  functions, 96.39% lines.
+
+## Documentation And Public API Impact
+
+| Area                             | Impact                                                                                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Package README impact            | Yes. Clarify runtime closure/smoke-test scope if needed.                                                           |
+| TypeDoc/API docs impact          | Yes if docs mention the closure; API export changes are expected to be N/A unless implementation proves otherwise. |
+| Public API additions/removals    | Expected N/A. This task should use existing surfaces.                                                              |
+| Framework `USER_GUIDE.md` impact | Yes. Document T-0010 runtime assembly usage and deferred behavior.                                                 |
+| Example `USER_GUIDE.md` impact   | Expected N/A unless a stale claim is found; the to-do example remains placeholder/runtime-deferred.                |
+| API examples                     | Yes. Add or update a minimal existing-API runtime assembly example.                                                |
+| Compatibility notes              | Yes. State this is not a Spine JVM `Server` equivalent.                                                            |
+
+## Security Impact
+
+| Area                    | Impact                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------ |
+| Dependencies            | Expected N/A. No new dependency should be added.                                                 |
+| Secrets and credentials | N/A. No secret handling.                                                                         |
+| IPC                     | N/A. ZeroMQ and IPC remain deferred.                                                             |
+| Validation              | Documentation-only unless smoke test uses existing APIs; no validation behavior should be added. |
+| Tenant boundaries       | Documentation should keep tenant mode metadata separate from tenant validation/enforcement.      |
+| `Any`/deserialization   | N/A unless docs reference existing envelope APIs.                                                |
+| Logging                 | N/A. No new logging should be added.                                                             |
+
+## Verification
+
+- Setup baseline full verification passed on `2026-06-30 19:16 WEST`:
+  `CI=true corepack pnpm verify` ran node check, typecheck, lint, formatting,
+  Vitest, coverage, TypeDoc/API docs, proto lint/generate, and generated-output
+  cleanliness. Result: 21 test files / 256 tests, coverage 96.45% statements /
+  90.55% branches / 99.24% functions / 96.39% lines, TypeDoc/API docs with 100
+  proto / 28 core / 124 server / 26 storage expected exports, copied proto
+  checksum verification, and generated proto output clean.
+
+## Open Risks And Follow-Up Routing
+
+| Risk/Follow-Up                                                          | Owner            | Linked Task/Decision   | Disposition                                        | Next Review Point                    |
+| ----------------------------------------------------------------------- | ---------------- | ---------------------- | -------------------------------------------------- | ------------------------------------ |
+| Runtime closure could accidentally introduce a premature server facade. | Author/reviewers | D-0045 / D-0053        | Defer and document; smoke test existing APIs only. | Maintainability and API review       |
+| Docs could overstate accepted/intake/readiness as dispatch or handling. | Author/reviewers | T-0010 / D-0053        | Require explicit non-goal wording.                 | Documentation and reliability review |
+| Framework guide exists, but to-do app remains placeholder.              | Author/reviewers | `TODO_EXAMPLE_SPEC.md` | Do not imply to-do runtime usability in this task. | Documentation review                 |
+
+## Review Rounds
+
+- Pending.
+
+## Integration Result
+
+Pending.
