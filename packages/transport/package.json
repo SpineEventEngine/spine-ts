@@ -13,5 +13,8 @@
   "files": [
     "dist",
     "README.md"
-  ]
+  ],
+  "dependencies": {
+    "zeromq": "6.5.0"
+  }
 }

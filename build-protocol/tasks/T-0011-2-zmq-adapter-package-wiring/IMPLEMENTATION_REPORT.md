@@ -1,6 +1,6 @@
 # Implementation Report: T-0011.2 ZeroMQ Adapter Package Wiring And Dependency Pin
 
-Status: Implementation Handoff Ready
+Status: Implemented - Verification Passed
 Task log: `build-protocol/tasks/T-0011-2-zmq-adapter-package-wiring/TASK.md`
 Work log: `build-protocol/work-logs/T-0011-2.md`
 Review log: `build-protocol/reviews/T-0011-2-zmq-adapter-package-wiring.md`
@@ -16,18 +16,25 @@ wiring for the later ZeroMQ local IPC adapter. It must pin the maintained
 official `zeromq` package line and add only adapter-private configuration/type
 surface needed before live IPC smoke tests.
 
-## Expected Files
+Implementation pinned exact `zeromq@6.5.0` in `@spine-ts/transport`, approved
+its native install script in workspace pnpm configuration, and added a
+non-root-exported ZeroMQ adapter-private local IPC configuration helper. The
+public transport entry point remains unchanged and adapter-agnostic.
 
-Likely changed files:
+## Files Changed
 
-- `package.json` / `pnpm-lock.yaml` as required by the dependency pin;
-- `packages/transport/package.json`;
-- adapter-private files under `packages/transport/src`;
-- `packages/transport/src/index.test.ts` or adjacent focused tests;
-- `packages/transport/README.md`;
-- `docs/architecture/README.md` and/or `docs/api/README.md` if public docs need
-  dependency/runtime notes;
-- this task/report/work/review log set.
+- `packages/transport/package.json` and `pnpm-lock.yaml`: exact
+  `zeromq@6.5.0` dependency pin and lockfile entries.
+- `pnpm-workspace.yaml`: explicit `zeromq` build approval for pnpm native
+  install policy.
+- `packages/transport/src/zeromq-adapter-config.ts`: adapter-private local IPC
+  configuration/type helper with no socket creation.
+- `packages/transport/src/zeromq-adapter-config.test.ts`: focused tests for
+  normalization, validation, immutability, and private native typing.
+- `packages/transport/README.md`, `docs/architecture/README.md`, and
+  `docs/api/README.md`: local IPC/native runtime notes while preserving public
+  API boundaries.
+- T-0011.2 durable task/report/work logs.
 
 ## Guardrails
 
@@ -40,6 +47,34 @@ Likely changed files:
   logs and decision log references.
 
 ## Verification
+
+Implementation verification:
+
+- `corepack pnpm --filter @spine-ts/transport add zeromq@6.5.0 --save-exact`
+  updated the manifest and lockfile, then stopped at pnpm's build-script
+  approval gate for `zeromq@6.5.0`. The implementation added explicit
+  `zeromq` approval to `pnpm-workspace.yaml`.
+- `corepack pnpm install --frozen-lockfile` passed after approval and ran the
+  `zeromq@6.5.0` install script.
+- `corepack pnpm vitest run packages/transport/src/index.test.ts
+packages/transport/src/zeromq-adapter-config.test.ts` passed with 2 test
+  files and 9 tests.
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm docs:check` passed with only the existing invalid-`origin`
+  TypeDoc warning.
+- `CI=true corepack pnpm verify` initially exposed lint and formatting issues
+  in the new helper/test/log edits; those were fixed before final verification.
+- Final `corepack pnpm vitest run packages/transport/src/index.test.ts
+packages/transport/src/zeromq-adapter-config.test.ts` passed with 2 test
+  files and 9 tests.
+- Final `corepack pnpm typecheck` passed.
+- Final `corepack pnpm docs:check` passed with only the existing
+  invalid-`origin` TypeDoc warning.
+- Final `CI=true corepack pnpm verify` passed with 22 test files / 266 tests,
+  coverage 96.34% statements / 90.48% branches / 99.27% functions / 96.28%
+  lines, TypeDoc/API checks, copied Spine proto checksum verification, proto
+  lint/generate, generated proto output clean, and generated files clean.
+- `git diff --check` passed.
 
 Setup dependency install passed on `2026-06-30 21:33 WEST`:
 `corepack pnpm install --frozen-lockfile` passed with the lockfile unchanged,
@@ -55,4 +90,4 @@ existing invalid-`origin` warning only.
 
 ## Open Items
 
-- Dispatch the implementation sub-agent.
+- Commit remains pending.

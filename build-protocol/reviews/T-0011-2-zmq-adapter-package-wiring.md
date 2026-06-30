@@ -1,6 +1,6 @@
 # Review Log: T-0011.2 ZeroMQ Adapter Package Wiring And Dependency Pin
 
-Status: Implementation Handoff Ready
+Status: Implementation Ready For Review
 
 ## Required Review Lanes
 
@@ -26,8 +26,11 @@ invalid-`origin` warning only.
 
 ## Current Review Gate
 
-Setup dependency install and baseline verification passed. Implementation and
-the required review lanes must complete before parent integration.
+Setup dependency install and baseline verification passed. Implementation has
+pinned `zeromq@6.5.0`, added adapter-private local IPC configuration helpers,
+preserved the public transport root, and passed focused/type/docs/full
+verification. The required review lanes must complete before parent
+integration.
 
 ## Reviewer Rounds
 
