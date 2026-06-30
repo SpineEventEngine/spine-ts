@@ -96,10 +96,14 @@ passed on `2026-06-30 01:51 WEST`.
 `task/T-0009e3-family-capability-marker-classes` from baseline `26aa510`.
 Implementation completed at `3e0571e`, and Round 1 review produced findings in
 code style/maintainability, security, performance/reliability, and
-documentation. The active fix pass replaces runtime-mutable `readonly
-entityFamily` fields with getter-only family markers and updates durable log
-status drift. Those Round 1 fixes have been applied and verified by the
-review-fix worker.
+documentation. Round 1 fixes replaced runtime-mutable `readonly entityFamily`
+fields with getter-only family markers and updated durable log status drift.
+Those Round 1 fixes were applied and verified by the review-fix worker.
+
+Round 2 review then found inherited getter markers still forgeable through
+reflective own-property definition and prototype descriptor mutation, plus stale
+task status headers. Round 2 fixes install locked own family markers and update
+durable status text.
 
 T-0009e.3 follow-up review is still pending; this parent log does not claim a
 clean final review for the subtask.

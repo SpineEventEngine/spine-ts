@@ -923,9 +923,65 @@ describe("entities", () => {
     expect(Reflect.set(aggregate, "entityFamily", "projection")).toBe(false);
     expect(Reflect.set(projection, "entityFamily", "aggregate")).toBe(false);
     expect(Reflect.set(processManager, "entityFamily", "aggregate")).toBe(false);
+    expect(() => {
+      Object.defineProperty(aggregate, "entityFamily", { value: "projection" });
+    }).toThrow(TypeError);
+    expect(() => {
+      Object.defineProperty(projection, "entityFamily", { value: "aggregate" });
+    }).toThrow(TypeError);
+    expect(() => {
+      Object.defineProperty(processManager, "entityFamily", { value: "aggregate" });
+    }).toThrow(TypeError);
     expect(aggregate.entityFamily).toBe("aggregate");
     expect(projection.entityFamily).toBe("projection");
     expect(processManager.entityFamily).toBe("process-manager");
+  });
+
+  it("installs locked own family markers that ignore prototype descriptor tampering", () => {
+    const aggregate = new TestAggregate({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+    const originalAggregatePrototypeDescriptor = Object.getOwnPropertyDescriptor(
+      Aggregate.prototype,
+      "entityFamily",
+    );
+
+    expect(Object.getOwnPropertyDescriptor(aggregate, "entityFamily")).toMatchObject({
+      configurable: false,
+      enumerable: false,
+      value: "aggregate",
+      writable: false,
+    });
+
+    try {
+      Object.defineProperty(Aggregate.prototype, "entityFamily", {
+        configurable: true,
+        value: "projection",
+      });
+
+      const laterAggregate = new TestAggregate({
+        id: "task-2",
+        schema: ProjectionStateSchema,
+        state: createProjectionState(),
+        version: { revision: 1, source: "server" },
+      });
+
+      expect(aggregate.entityFamily).toBe("aggregate");
+      expect(laterAggregate.entityFamily).toBe("aggregate");
+    } finally {
+      if (originalAggregatePrototypeDescriptor === undefined) {
+        delete (Aggregate.prototype as { entityFamily?: unknown }).entityFamily;
+      } else {
+        Object.defineProperty(
+          Aggregate.prototype,
+          "entityFamily",
+          originalAggregatePrototypeDescriptor,
+        );
+      }
+    }
   });
 
   it("preserves transactional entity behavior through family marker classes", () => {

@@ -1,6 +1,6 @@
 # T-0009e: Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Started
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Implemented; Round 2 Fixes Applied; Follow-up Review Pending
 Start: `2026-06-29 21:58 WEST`
 Baseline commit: `47eae4e`
 Task log path: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
@@ -194,10 +194,10 @@ Current parent subtask: `T-0009e.3 Family Capability Marker Classes`.
 `T-0009e.3` started on `2026-06-30 01:57 WEST` in isolated branch
 `task/T-0009e3-family-capability-marker-classes` from parent commit `26aa510`.
 It is scoped to thin `Aggregate`, `Projection`, and `ProcessManager` family
-capability marker classes over `TransactionalEntity`. Before adding behavior,
-the authoring sub-agent and reviewers must inspect the corresponding Spine JVM
-`core-jvm/server` classes and avoid speculative repository, dispatch, query,
-process, bus, transport, or storage APIs.
+capability marker classes over `TransactionalEntity`. Implementation and Round
+2 fixes are applied in the subtask branch, with follow-up review still pending.
+The family classes install locked own family markers and avoid speculative
+repository, dispatch, query, process, bus, transport, or storage APIs.
 
 ## Initial Scope Constraints
 
@@ -257,6 +257,9 @@ Out of scope until later tasks:
   five required reviewer lanes and all reviewers were closed.
 - T-0009e.2 completed eleven review rounds; Round 11 returned clean across all
   five required reviewer lanes and all reviewers were closed.
+- T-0009e.3 completed implementation plus Round 1 and Round 2 fix passes.
+  Follow-up review is still pending, so this parent task does not claim a clean
+  T-0009e.3 review.
 
 ## Current State
 
@@ -272,5 +275,7 @@ Out of scope until later tasks:
   `2026-06-30 01:51 WEST`: 15 test files / 152 tests; coverage 97.23%
   statements, 91.41% branches, 99.15% functions, 97.17% lines; TypeDoc/API/proto
   gates passed with 68 expected server exports.
-- Next step: create the isolated
-  `T-0009e.3 Family Capability Marker Classes` branch/worktree.
+- `T-0009e.3 Family Capability Marker Classes` is implemented in its isolated
+  branch with Round 2 fixes applied.
+- Next step: run follow-up review for T-0009e.3; this parent task does not
+  claim the subtask is clean until reviewers return clean.

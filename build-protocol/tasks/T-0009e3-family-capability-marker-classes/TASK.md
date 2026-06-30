@@ -1,6 +1,6 @@
 # T-0009e.3: Family Capability Marker Classes
 
-Status: Started
+Status: Implemented; Round 2 Fixes Applied; Follow-up Review Pending
 Parent task: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Task log path:
 `build-protocol/tasks/T-0009e3-family-capability-marker-classes/TASK.md`

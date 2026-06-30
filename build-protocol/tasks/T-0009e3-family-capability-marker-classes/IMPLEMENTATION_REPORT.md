@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.3 Family Capability Marker Classes
 
-Status: Implemented; Round 1 Fixes Applied; Follow-up Review Pending
+Status: Implemented; Round 2 Fixes Applied; Follow-up Review Pending
 Task log:
 `build-protocol/tasks/T-0009e3-family-capability-marker-classes/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e3.md`
@@ -24,9 +24,9 @@ classes:
   marker union.
 
 Each family class is an abstract subclass of
-`TransactionalEntity<Id, Schema, Version>` and adds only a stable getter-only
-`entityFamily` property. No repository, storage, dispatch, command posting,
-query client, event history, snapshot, process workflow, handler invocation,
+`TransactionalEntity<Id, Schema, Version>` and adds only a stable locked own
+`entityFamily` marker. No repository, storage, dispatch, command posting, query
+client, event history, snapshot, process workflow, handler invocation,
 idempotency, lifecycle event, automatic version increment, or global transaction
 behavior was added.
 
@@ -94,6 +94,27 @@ The durable T-0009e.3 and parent T-0009e logs were also updated to reflect that
 implementation completed, Round 1 produced findings, and follow-up review is
 still pending.
 
+## Round 2 Fix Pass
+
+Round 2 review found that the inherited getter marker still allowed reflective
+own-property shadowing with `Object.defineProperty(instance, "entityFamily",
+...)`, and that the prototype accessor remained configurable. The family
+classes now install a non-configurable, non-writable own `entityFamily` marker
+from each base constructor while preserving the literal TypeScript type for each
+family.
+
+`packages/server/src/entity.test.ts` now covers:
+
+- `Reflect.set()` reassignment attempts;
+- `Object.defineProperty(instance, "entityFamily", { value: ... })` spoofing
+  attempts;
+- the locked own descriptor shape; and
+- prototype descriptor tampering not changing existing or newly constructed
+  aggregate markers.
+
+The durable T-0009e.3 and parent T-0009e status headers were updated to state
+that Round 2 fixes are applied and follow-up review is still pending.
+
 ## Files Changed
 
 - `packages/server/src/entity.ts`
@@ -130,6 +151,22 @@ still pending.
   files / 157 tests, coverage, TypeDoc/API export checks with 72 expected server
   exports, proto lint/generate, and generated-output clean checks. TypeDoc
   reported the existing invalid `origin` remote warning only.
+- Round 2 RED verification passed as a regression check on
+  `2026-06-30 02:31 WEST`: `corepack pnpm vitest run
+packages/server/src/entity.test.ts` failed with the expected
+  `Object.defineProperty()` spoofing and missing own-descriptor assertions.
+- Round 2 focused GREEN verification passed on `2026-06-30 02:31 WEST`:
+  `corepack pnpm vitest run packages/server/src/entity.test.ts` passed with 1
+  test file / 29 tests.
+- Round 2 required targeted verification passed on `2026-06-30 02:34 WEST`:
+  `corepack pnpm vitest run packages/server/src/entity.test.ts
+packages/server/src/index.test.ts` passed with 2 test files / 38 tests.
+- Round 2 required full verification passed on `2026-06-30 02:34 WEST`:
+  `CI=true corepack pnpm verify` passed typecheck, lint, format check, 15 test
+  files / 158 tests, coverage statements 97.25%, branches 91.41%, functions
+  99.16%, lines 97.19%, TypeDoc/API export checks with 72 expected server
+  exports, proto lint/generate, and generated-output clean checks. TypeDoc
+  reported the existing invalid `origin` remote warning only.
 
 ## Review
 
@@ -143,6 +180,11 @@ Round 1 review completed across the required lanes and produced findings:
 
 This report was updated as part of the Round 1 fix pass. A follow-up review
 round is still required before this subtask can be called clean.
+
+Round 2 review then found that inherited getter markers remained forgeable via
+reflective own-property definition and prototype mutation. The Round 2 fix is
+applied and awaiting follow-up review; this report does not claim a clean final
+review.
 
 ## Concerns
 

@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Round 1 Fixes Applied
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Round 2 Fixes Applied; Follow-up Review Pending
 Task log: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e.md`
 Review log: `build-protocol/reviews/T-0009e-entity-base-classes.md`
@@ -13,10 +13,10 @@ Worktree:
 `T-0009e.1 Common Entity State Shell` and `T-0009e.2 TransactionalEntity Scoped
 Draft Helpers` are integrated into the parent entity-base branch. `T-0009e.3
 Family Capability Marker Classes` is implemented in its isolated subtask branch,
-and a Round 1 fix pass has addressed review findings before follow-up review.
-The parent task remains bounded to OOP entity shells for `@spine-ts/server`
-while preserving the D-0044 boundary against repositories, dispatch, storage,
-buses, and unsupported family-specific runtime behavior.
+and Round 1 and Round 2 fix passes have addressed review findings before
+follow-up review. The parent task remains bounded to OOP entity shells for
+`@spine-ts/server` while preserving the D-0044 boundary against repositories,
+dispatch, storage, buses, and unsupported family-specific runtime behavior.
 
 ## JVM Research Used
 
@@ -90,5 +90,8 @@ Integrated from `task/T-0009e1-common-entity-state-shell` and
 - T-0009e.3 implementation completed at `3e0571e`; Round 1 review produced
   findings about runtime-mutable emitted `readonly entityFamily` fields and
   durable log status drift.
-- T-0009e.3 Round 1 fixes are applied and verified. Follow-up review is still
-  required before the subtask can be called clean.
+- T-0009e.3 Round 1 fixes are applied and verified.
+- T-0009e.3 Round 2 review found inherited getter markers remained forgeable
+  through reflective own-property definition and prototype descriptor mutation.
+  Round 2 fixes are applied and verified, with follow-up review still required
+  before the subtask can be called clean.

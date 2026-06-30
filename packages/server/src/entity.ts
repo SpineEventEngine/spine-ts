@@ -480,9 +480,12 @@ export abstract class Aggregate<
   Version = EntityVersionMetadata,
 > extends TransactionalEntity<Id, Schema, Version> {
   /** Stable server entity family identity. */
-  // eslint-disable-next-line @typescript-eslint/class-literal-property-style -- Getter-only marker remains non-writable at runtime.
-  get entityFamily(): "aggregate" {
-    return "aggregate";
+  declare readonly entityFamily: "aggregate";
+
+  /** Create an aggregate family shell from caller-provided state and metadata inputs. */
+  constructor(options: EntityOptions<Id, Schema, Version>) {
+    super(options);
+    defineEntityFamilyMarker(this, "aggregate");
   }
 }
 
@@ -499,9 +502,12 @@ export abstract class Projection<
   Version = EntityVersionMetadata,
 > extends TransactionalEntity<Id, Schema, Version> {
   /** Stable server entity family identity. */
-  // eslint-disable-next-line @typescript-eslint/class-literal-property-style -- Getter-only marker remains non-writable at runtime.
-  get entityFamily(): "projection" {
-    return "projection";
+  declare readonly entityFamily: "projection";
+
+  /** Create a projection family shell from caller-provided state and metadata inputs. */
+  constructor(options: EntityOptions<Id, Schema, Version>) {
+    super(options);
+    defineEntityFamilyMarker(this, "projection");
   }
 }
 
@@ -518,10 +524,22 @@ export abstract class ProcessManager<
   Version = EntityVersionMetadata,
 > extends TransactionalEntity<Id, Schema, Version> {
   /** Stable server entity family identity. */
-  // eslint-disable-next-line @typescript-eslint/class-literal-property-style -- Getter-only marker remains non-writable at runtime.
-  get entityFamily(): "process-manager" {
-    return "process-manager";
+  declare readonly entityFamily: "process-manager";
+
+  /** Create a process manager family shell from caller-provided state and metadata inputs. */
+  constructor(options: EntityOptions<Id, Schema, Version>) {
+    super(options);
+    defineEntityFamilyMarker(this, "process-manager");
   }
+}
+
+function defineEntityFamilyMarker(entity: object, family: EntityFamily): void {
+  Object.defineProperty(entity, "entityFamily", {
+    configurable: false,
+    enumerable: false,
+    value: family,
+    writable: false,
+  });
 }
 
 function cloneCommitResult<Schema extends DescriptorMessageSchema, Version>(

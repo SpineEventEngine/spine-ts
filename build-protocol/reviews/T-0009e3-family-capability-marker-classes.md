@@ -44,3 +44,32 @@ Findings returned to the review-fix worker:
 Round 1 fixes have been applied and verified by the review-fix worker. A
 follow-up review round is still required; this log does not claim a clean final
 review.
+
+### Round 2
+
+Round 2 review found two remaining issues:
+
+- Documentation: durable T-0009e.3 and parent T-0009e task headers still
+  understated the current state as started rather than implemented with fix
+  passes pending follow-up review.
+- Security: getter-only inherited `entityFamily` remained forgeable through
+  `Object.defineProperty(instance, "entityFamily", { value: ... })`, and the
+  inherited prototype accessor remained configurable.
+
+Round 2 fixes install a non-configurable, non-writable own `entityFamily`
+marker from each family base constructor, preserve literal TypeScript marker
+types, and add regression coverage for reflective own-property spoofing,
+descriptor shape, and prototype descriptor tampering. Durable status headers and
+parent logs now state that Round 2 fixes are applied and follow-up review is
+still pending.
+
+Required verification passed before the Round 2 fix commit:
+
+- `corepack pnpm vitest run packages/server/src/entity.test.ts
+packages/server/src/index.test.ts`: 2 test files / 38 tests passed.
+- `CI=true corepack pnpm verify`: typecheck, lint, format check, 15 test files /
+  158 tests, coverage, TypeDoc/API checks, proto lint/generate, and
+  generated-output clean passed.
+
+A follow-up review round is still required; this log does not claim a clean
+final review.
