@@ -14,6 +14,9 @@ import {
   BoundedContext,
   BoundedContextRuntime,
   type BoundedContextRuntimeOptions,
+  CommandRegistrationReadiness,
+  type CommandRegistrationAssigneeMetadata,
+  type CommandRegistrationReadinessLookup,
   describeEntityMetadata,
   DescriptorMetadataError,
   isEntitySchema,
@@ -163,6 +166,7 @@ describe("@spine-ts/server", () => {
         "BoundedContextNameError",
         "BoundedContextRepositoryRegistrationError",
         "BoundedContextRuntime",
+        "CommandRegistrationReadiness",
         "EntityTransactionDraftStateError",
         "EntityTransaction",
         "EntityTransactionStateError",
@@ -235,6 +239,21 @@ describe("@spine-ts/server", () => {
     expectTypeOf(failSignalIntake("event", "MALFORMED_ENVELOPE")).toExtend<SignalIntakeResult>();
     expect(acceptSignalIntake("command").acceptedFor).toBe("async-work");
     expect(failSignalIntake("event", "MALFORMED_ENVELOPE").failure.code).toBe("MALFORMED_ENVELOPE");
+    expectTypeOf<CommandRegistrationReadiness>().toExtend<CommandRegistrationReadinessLookup>();
+    expectTypeOf<CommandRegistrationAssigneeMetadata>().toExtend<{
+      readonly commandFullTypeName: string;
+    }>();
+    expect(
+      CommandRegistrationReadiness.fromRegistry({
+        listEntityHandlers: () => [],
+        listHandlers: () => [],
+        findEntityHandlersByState: () => [],
+        findHandlersByKind: () => [],
+        findHandlersByMessageFullTypeName: () => [],
+        findCommandAssignment: () => undefined,
+        findEventApplication: () => undefined,
+      }).registeredCommandMessageFullTypeNames(),
+    ).toEqual([]);
     expect(() => new SingleProcessServerRuntime().enqueue(() => undefined)).toThrow(
       ServerRuntimeStateError,
     );

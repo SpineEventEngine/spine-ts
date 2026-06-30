@@ -1,6 +1,6 @@
 # T-0010.4: Command Registration Readiness
 
-Status: Setup Baseline Verified; Implementation Pending
+Status: Implementation Verified
 Parent task: `T-0010 Single-Process Async Runtime`
 Start: `2026-06-30 17:24 WEST`
 Baseline commit: `e5e7b1d`
@@ -9,8 +9,8 @@ Task log path:
 Branch: `task/T-0010-4-command-registration-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0010-4-command-registration-readiness`
-Authoring sub-agent: pending.
-Reviewer sub-agents: pending.
+Authoring sub-agent: Codex implementation sub-agent.
+Reviewer sub-agents: none spawned per handoff.
 
 ## Objective
 
@@ -102,6 +102,20 @@ corepack pnpm verify` passed with 19 test files / 234 tests, coverage 96.21%
   statements / 90.38% branches / 99.16% functions / 96.14% lines, TypeDoc/API
   checks with 100 proto / 28 core / 116 server / 26 storage expected exports,
   proto lint/generate checksum verification, and generated proto output clean.
+- TDD RED on `2026-06-30 17:34 WEST`: `corepack pnpm test
+packages/server/src/command-registration-readiness.test.ts` failed as
+  expected because `CommandRegistrationReadiness` was undefined before
+  production code existed.
+- Focused GREEN on `2026-06-30 17:37 WEST`: `corepack pnpm test
+packages/server/src/command-registration-readiness.test.ts` passed 1 file /
+  6 tests, and `corepack pnpm test packages/server/src/index.test.ts` passed 1
+  file / 9 tests after export wiring.
+- Typecheck on `2026-06-30 17:37 WEST`: `corepack pnpm typecheck` passed.
+- Full verification on `2026-06-30 17:38 WEST`: `CI=true corepack pnpm verify`
+  passed with 20 test files / 240 tests, coverage 96.26% statements / 90.44%
+  branches / 99.18% functions / 96.20% lines, TypeDoc/API checks with 100
+  proto / 28 core / 119 server / 26 storage expected exports, proto
+  lint/generate checksum verification, and generated proto output clean.
 
 ## Human Questions And Answers
 

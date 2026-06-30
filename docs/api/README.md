@@ -147,6 +147,17 @@ exports include `HandlerMetadataRegistry`,
 `HandlerMetadataRegistryError` for caller-owned lookup-only registration and
 duplicate-policy validation. These APIs are metadata-only and do not execute
 handlers, access storage, dispatch buses, or start transport.
+Command registration readiness exports include
+`CommandRegistrationReadiness`, `CommandRegistrationReadinessLookup`, and
+`CommandRegistrationAssigneeMetadata`. The readiness view is built from an
+existing `HandlerMetadataRegistryLookup` or from `EntityHandlersMetadata`
+values by first constructing a `HandlerMetadataRegistry`, so duplicate command
+assignment enforcement remains the registry's policy. It reports deterministic
+registered command message full type names and frozen copy-safe metadata for
+the unique command assignee. It is not a command bus, command service,
+dispatcher, router, command posting API, validator, repository runtime
+registration hook, storage writer, transport adapter, handler invoker, or
+Spine `Ack` producer.
 Server runtime exports include `SingleProcessServerRuntime`,
 `ServerRuntimeLifecycle`, `ServerRuntimeState`, `ServerRuntimeWork`,
 `ServerRuntimeStateOperation`, `ServerRuntimeStateErrorCode`, and

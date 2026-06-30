@@ -1,6 +1,6 @@
 # Review Log: T-0010.4 Command Registration Readiness
 
-Status: Setup Baseline Verified; Implementation Pending
+Status: Implementation Verified
 
 ## Required Review Lanes
 
@@ -33,4 +33,25 @@ invocation, validation, storage, transport, or `Ack`.
 
 ## Reviewer Rounds
 
-- Pending implementation.
+No separate reviewer sub-agents were spawned per handoff. The implementation
+sub-agent completed the required lanes against the task scope:
+
+| Lane                       | Result                                                                                                                                                                                                                                     |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Code style/maintainability | Passed. The public surface is one small read-only class over `HandlerMetadataRegistryLookup`, with no command bus/service/dispatch behavior and no second duplicate policy. `eslint` and `prettier --check` passed in full verify.         |
+| Documentation              | Passed. `packages/server/README.md` and `docs/api/README.md` describe command registration readiness as metadata-only and list runtime exclusions.                                                                                         |
+| TypeScript/API docs        | Passed. Root exports and `scripts/check-api-docs.mjs` include `CommandRegistrationReadiness`, `CommandRegistrationReadinessLookup`, and `CommandRegistrationAssigneeMetadata`; TypeDoc JSON check passed with 119 expected server exports. |
+| Security                   | Passed. Readiness returns frozen fresh-copy arrays/values, does not inspect payloads or invoke user handlers, and delegates duplicate assignment validation to the existing registry.                                                      |
+| Performance/reliability    | Passed. Construction performs bounded metadata scans and deterministic sorting; lookups are map-backed; empty registries are valid. Full verify passed with coverage above the 90% task floor.                                             |
+
+Verification evidence:
+
+- RED: `corepack pnpm test packages/server/src/command-registration-readiness.test.ts`
+  failed on `2026-06-30 17:34 WEST` because the new public API was absent.
+- GREEN: focused readiness and root export tests passed on `2026-06-30 17:37
+WEST`.
+- Full: `CI=true corepack pnpm verify` passed on `2026-06-30 17:38 WEST` with
+  20 test files / 240 tests and coverage 96.26% statements / 90.44% branches /
+  99.18% functions / 96.20% lines.
+
+Concerns: none.

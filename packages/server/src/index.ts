@@ -98,6 +98,12 @@ export {
 } from "./signal-intake.js";
 
 export {
+  CommandRegistrationReadiness,
+  type CommandRegistrationAssigneeMetadata,
+  type CommandRegistrationReadinessLookup,
+} from "./command-registration-readiness.js";
+
+export {
   type ConcreteRepositoryEntityType,
   Repository,
   type RepositoryEntityType,

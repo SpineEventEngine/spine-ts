@@ -39,6 +39,10 @@ Current slice exposes:
   entity method names; and
 - `HandlerMetadataRegistry` for caller-owned metadata registration, deterministic
   lookup views, and duplicate command/applier validation.
+- `CommandRegistrationReadiness.fromRegistry()` /
+  `CommandRegistrationReadiness.fromEntityHandlers()` for deterministic,
+  metadata-only command type readiness over unique command assignments already
+  validated by `HandlerMetadataRegistry`.
 - `@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply` standard method
   decorators that require explicit Protobuf-ES schemas and materialize into the
   same handler metadata contract.
@@ -57,6 +61,7 @@ Current slice exposes:
 import {
   Apply,
   Assign,
+  CommandRegistrationReadiness,
   HandlerMetadataRegistry,
   defineEntityHandlers,
   materializeDecoratedEntityHandlers,
@@ -91,6 +96,10 @@ registry.findCommandAssignment(CreateTaskSchema.typeName)?.handler.methodName; /
 registry.findEventApplication(TaskStateSchema.typeName, TaskCreatedSchema.typeName)?.handler
   .methodName; // "onCreated"
 
+const readiness = CommandRegistrationReadiness.fromRegistry(registry);
+readiness.registeredCommandMessageFullTypeNames(); // [CreateTaskSchema.typeName]
+readiness.findCommandAssignee(CreateTaskSchema.typeName)?.handler.methodName; // "create"
+
 explicitTaskHandlers.handlers.map((handler) => handler.methodName); // same contract
 ```
 
@@ -119,6 +128,16 @@ handlers for the same message type. The registry is caller-owned and
 metadata-only: constructing or registering it does not instantiate entities,
 invoke methods, unpack payloads, mutate global process state, write storage, or
 start buses/transports.
+
+`CommandRegistrationReadiness` is a read-only command-registration view over
+the same handler metadata. It reports registered command message full type
+names in deterministic order and returns frozen copy-safe assignee metadata for
+the unique command assignment of a message type. Building from entity handler
+metadata first constructs a `HandlerMetadataRegistry`, so duplicate command
+assignment failures remain owned by the registry. This surface is not a command
+bus, command service, dispatcher, router, validator, repository runtime
+registration hook, storage writer, transport adapter, handler invoker, or
+Spine `Ack` producer.
 
 ## Single-Process Runtime Kernel
 
