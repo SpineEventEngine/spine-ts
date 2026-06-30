@@ -58,3 +58,5 @@ construction.
 ## Review
 
 - Requirements split complete; implementation subtasks pending.
+- `T-0009f.1 Context Spec And Builder Shell` setup logs were created on
+  `2026-06-30 05:31 WEST`; baseline verification and implementation are pending.
