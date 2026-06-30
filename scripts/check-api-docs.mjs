@@ -170,7 +170,15 @@ const expectedTransportExports = [
   "RequestTransportHandler",
   "RequestTransportOperation",
   "SignalTransport",
+  "TransportLifecycleParticipant",
+  "TransportLifecycleSnapshot",
+  "TransportLifecycleSnapshotInput",
+  "TransportLifecycleState",
+  "TransportParticipantIdentity",
+  "TransportParticipantIdentityInput",
+  "TransportParticipantKind",
   "TransportRoutingDescriptor",
+  "TransportReadinessState",
   "TransportSemanticTag",
   "TransportSignalKind",
   "TransportSubscription",
@@ -179,8 +187,14 @@ const expectedTransportExports = [
   "TransportSubscriptionMode",
   "TransportTopic",
   "TransportTopicInput",
+  "TransportWorkerRegistration",
+  "TransportWorkerRegistrationInput",
+  "TransportWorkerRole",
+  "createTransportLifecycleSnapshot",
+  "createTransportParticipantIdentity",
   "createTransportSubscription",
   "createTransportTopic",
+  "createTransportWorkerRegistration",
 ];
 const expectedServerExports = [
   "Aggregate",
@@ -554,5 +568,5 @@ if (/export\s+\*\s+from\s+["']\.\/generated\//.test(protoIndexSource)) {
 }
 
 console.log(
-  `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-ts/proto exports, ${expectedCoreExports.length} expected @spine-ts/core exports, ${expectedServerExports.length} expected @spine-ts/server exports, and ${expectedStorageExports.length} expected @spine-ts/storage exports.`,
+  `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-ts/proto exports, ${expectedCoreExports.length} expected @spine-ts/core exports, ${expectedServerExports.length} expected @spine-ts/server exports, ${expectedStorageExports.length} expected @spine-ts/storage exports, and ${expectedTransportExports.length} expected @spine-ts/transport exports.`,
 );
