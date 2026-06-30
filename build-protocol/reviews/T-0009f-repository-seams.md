@@ -1,6 +1,6 @@
 # Review Log: T-0009f Repository Seams And Bounded-Context Registration Skeleton
 
-Status: First Subtask Reviewed; T-0009f.1 Review Lanes Clean
+Status: First Subtask Integrated; T-0009f.1 Review Lanes Clean
 
 ## Required Review Lanes
 
@@ -33,6 +33,8 @@ Spec And Builder Shell` was the first selected subtask.
   orchestrator updated the parent report; no documentation findings remain for
   `T-0009f.1`.
 - Final post-review verification passed at `2026-06-30 07:23 WEST`.
+- T-0009f.1 merged into the parent branch at merge commit `341948e` on
+  `2026-06-30 07:28 WEST`, and parent verification passed.
 - Current parent review state: all required review lanes are clean for the
   first subtask. Later T-0009f subtasks remain pending implementation and their
   own review rounds.

@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f Repository Seams And Bounded-Context Registration Skeleton
 
-Status: First Subtask Implemented; T-0009f.1 Round-4 Fix Applied
+Status: First Subtask Integrated; Parent Verification Passed
 Task log: `build-protocol/tasks/T-0009f-repository-seams/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f.md`
 Review log: `build-protocol/reviews/T-0009f-repository-seams.md`
@@ -25,7 +25,10 @@ stricter TypeDoc API guard. The subsequent round-4 fix completed at
 `2026-06-30 07:05 WEST`, removed the leaked `.constructor` forgery path and
 internal subclass construction lattice, and the post-log-format rerun at
 `2026-06-30 07:08 WEST` passed with 2 focused test files / 17 tests and 16
-full-suite files / 168 tests.
+full-suite files / 168 tests. T-0009f.1 merged into the parent branch on
+`2026-06-30 07:28 WEST` as merge commit `341948e`, and parent verification
+passed with the same 16 full-suite files / 168 tests plus clean TypeDoc/API,
+proto, and generated-output gates.
 
 ## JVM Research Used
 
@@ -119,3 +122,10 @@ construction.
   100 / 28 / 80 / 26, and full verify 16 files / 168 tests with 96.84%
   statements / 90.49% branches / 98.93% functions / 96.78% lines, plus clean
   TypeDoc/API, proto, and generated-output gates.
+- T-0009f.1 merged into parent branch `task/T-0009f-repository-seams` on
+  `2026-06-30 07:28 WEST` as merge commit `341948e`. Parent
+  `CI=true corepack pnpm verify` passed with 16 test files / 168 tests,
+  coverage 96.84% statements / 90.49% branches / 98.93% functions / 96.78%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 80 server / 26 storage
+  expected exports, proto lint/generate checksum verification, and generated
+  proto output clean.
