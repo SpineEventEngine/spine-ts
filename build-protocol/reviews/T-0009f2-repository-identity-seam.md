@@ -1,6 +1,6 @@
 # Review Log: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-6 findings fixed - Pending Re-review
+Status: Round-7 findings fixed - Pending Re-review
 
 ## Required Review Lanes
 
@@ -154,8 +154,43 @@ Status: Round-6 findings fixed - Pending Re-review
     `corepack pnpm typecheck:tooling` passed after the fixes. API docs guard
     passed, and full `CI=true corepack pnpm verify` passed with 17 test files
     and 178 tests.
+- Seventh-round reviewer findings received by the review-fix sub-agent:
+  - Documentation Low: `IMPLEMENTATION_REPORT.md` and
+    `docs/architecture/README.md` still described repository family inference
+    as constructor/prototype-chain only.
+  - Security/performance: a forged ES class could still spoof both static and
+    prototype inheritance with `Object.setPrototypeOf(Fake, Aggregate)` and
+    `Object.setPrototypeOf(Fake.prototype, Aggregate.prototype)`.
+  - Security/performance: diagnostic helpers read malformed input `name` and
+    schema `typeName` directly, so accessor/proxy-backed values could throw raw
+    errors instead of structured `RepositoryIdentityError` diagnostics.
+  - TypeScript/API P2: schema-union entity bindings still erased the concrete
+    schema for `RepositoryOptions` and `Repository` subclasses.
+  - TypeScript/API P3: exported signatures needed public-facing docs for the
+    single concrete constructor/concrete state schema rule rather than exposing
+    helper constraints without explanation.
+- Round-7 fix status:
+  - Fixed: docs now describe family inference as a declared ES class subclass
+    relationship plus static and instance prototype-chain checks, and note that
+    this remains a metadata-only same-realm guard rather than a sandbox
+    boundary.
+  - Fixed: repository identity now rejects prototype-reparented ES classes that
+    do not declare a subclass relationship, covering the forged class pattern.
+  - Fixed: optional diagnostic reads now catch throwing `name` and `typeName`
+    accessors, falling back to `(anonymous)` and omitting
+    `stateFullTypeName`.
+  - Fixed: exported repository generic constraints now reject schema-union
+    extracted state schemas for both `RepositoryOptions` and `Repository`
+    subclasses.
+  - Fixed: `RepositoryOptions` and `Repository` type parameters have JSDoc
+    explaining the single concrete constructor and concrete state schema rule.
+  - Verified: focused RED reproduced the forged ES class, throwing diagnostic
+    accessors, and unused schema-union type assertions; focused Vitest passed
+    with 19 tests and `corepack pnpm typecheck:tooling` passed after the fixes.
+    API docs guard passed, and full `CI=true corepack pnpm verify` passed with
+    17 test files and 178 tests.
 
 ## Current Review State
 
-- First-, second-, third-, fourth-, fifth-, and sixth-round comments are fixed. Orchestrator reviewer lanes
+- First-, second-, third-, fourth-, fifth-, sixth-, and seventh-round comments are fixed. Orchestrator reviewer lanes
   should re-run before integration.

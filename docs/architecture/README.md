@@ -243,11 +243,14 @@ events, handler invocation, or async-local/global transaction state.
 
 `Repository` is now the metadata-only entity ownership seam for later
 bounded-context registration. It accepts one entity constructor and one
-descriptor-backed state schema, infers the family from the constructor's
-`Aggregate`, `Projection`, or `ProcessManager` prototype chain, and verifies
-that the state schema's `(entity).kind` matches that family. The snapshot
-surface records only immutable identity facts: constructor identity, family,
-state schema, descriptor metadata, state full type name, and ID-field metadata.
+descriptor-backed state schema, infers the family from a declared ES class
+subclass relationship plus the constructor and instance prototype chains for
+`Aggregate`, `Projection`, or `ProcessManager`, and verifies that the state
+schema's `(entity).kind` matches that family. This hardens malformed or
+prototype-reparented JavaScript inputs while staying within a metadata-only
+same-realm guard, not a sandbox boundary. The snapshot surface records only
+immutable identity facts: constructor identity, family, state schema,
+descriptor metadata, state full type name, and ID-field metadata.
 This follows the JVM `Repository` identity surface (`entityClass()`,
 `idClass()`, and `entityStateType()`) without implementing its lifecycle or
 runtime methods. The TypeScript seam deliberately omits `create`, `find`,

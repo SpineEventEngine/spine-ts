@@ -44,14 +44,16 @@ interface RepositoryConcreteStateSchemaError {
   readonly __repositoryEntityTypeMustCarryConcreteStateSchema: never;
 }
 
-type RepositoryEntityTypeArgumentGuard<EntityType extends RepositoryEntityType> =
+type SingleConcreteRepositoryEntityType<EntityType extends RepositoryEntityType> =
   IsUnion<EntityType> extends true
     ? RepositoryConcreteEntityTypeError
     : RepositoryEntityType extends EntityType
       ? RepositoryConcreteEntityTypeError
-      : DescriptorMessageSchema extends RepositoryEntitySchema<EntityType>
+      : IsUnion<RepositoryEntitySchema<EntityType>> extends true
         ? RepositoryConcreteStateSchemaError
-        : unknown;
+        : DescriptorMessageSchema extends RepositoryEntitySchema<EntityType>
+          ? RepositoryConcreteStateSchemaError
+          : unknown;
 
 interface RuntimeRepositoryEntityType {
   readonly prototype: object;
@@ -68,9 +70,15 @@ export type RepositoryEntityType<
   readonly name: string;
 };
 
-/** Options for constructing metadata-only repository identity. */
+/**
+ * Options for constructing metadata-only repository identity.
+ *
+ * @typeParam EntityType - A single concrete aggregate, projection, or process-manager constructor.
+ * The constructor's prototype must carry one concrete generated state schema; broad constructor,
+ * constructor-union, broad-schema, and schema-union bindings are rejected at compile time.
+ */
 export interface RepositoryOptions<
-  EntityType extends RepositoryEntityType & RepositoryEntityTypeArgumentGuard<EntityType>,
+  EntityType extends RepositoryEntityType & SingleConcreteRepositoryEntityType<EntityType>,
 > {
   /** Entity constructor owned by this repository identity. */
   readonly entityType: EntityType;
@@ -140,9 +148,13 @@ export class RepositoryIdentityError extends Error {
  * need for duplicate and conflict checks. It does not create entities, find or
  * store records, open storage, register with a context, route messages, invoke
  * handlers, manage caches, emit lifecycle events, or start buses/transports.
+ *
+ * @typeParam EntityType - A single concrete aggregate, projection, or process-manager constructor
+ * with one concrete generated state schema. Broad constructor, constructor-union, broad-schema, and
+ * schema-union bindings intentionally fail the public type constraint.
  */
 export class Repository<
-  EntityType extends RepositoryEntityType & RepositoryEntityTypeArgumentGuard<EntityType>,
+  EntityType extends RepositoryEntityType & SingleConcreteRepositoryEntityType<EntityType>,
 > {
   readonly #entityType: EntityType;
   readonly #entityFamily: EntityFamily;
@@ -163,7 +175,11 @@ export class Repository<
     const entityType = options.entityType;
     const schema = options.schema;
 
-    if (typeof entityType !== "function" || !isClassConstructor(entityType)) {
+    if (
+      typeof entityType !== "function" ||
+      !isClassConstructor(entityType) ||
+      !declaresSubclass(entityType)
+    ) {
       throw new RepositoryIdentityError(
         "UNSUPPORTED_ENTITY_TYPE",
         `Repository entity type "${entityTypeName(entityType)}" must be a class constructor extending Aggregate, Projection, or ProcessManager.`,
@@ -258,6 +274,10 @@ function isClassConstructor(entityType: object): boolean {
   return Function.prototype.toString.call(entityType).startsWith("class ");
 }
 
+function declaresSubclass(entityType: object): boolean {
+  return /\bextends\b/u.test(Function.prototype.toString.call(entityType));
+}
+
 function resolveEntityFamily(entityType: RuntimeRepositoryEntityType): EntityFamily | undefined {
   if (hasEntityFamilyInheritance(entityType, Aggregate, Aggregate.prototype)) {
     return "aggregate";
@@ -288,8 +308,17 @@ function entityTypeName(entityType: unknown): string {
     return "(anonymous)";
   }
 
-  const name = (entityType as { readonly name?: unknown }).name;
+  const name = safeStringProperty(entityType, "name");
   return typeof name === "string" && name.length > 0 ? name : "(anonymous)";
+}
+
+function safeStringProperty(value: object, propertyName: "name" | "typeName"): string | undefined {
+  try {
+    const property = (value as Record<typeof propertyName, unknown>)[propertyName];
+    return typeof property === "string" ? property : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function describeRepositoryEntityMetadata<Schema extends DescriptorMessageSchema>(
@@ -319,7 +348,7 @@ function schemaNameDetails(
     return {};
   }
 
-  const typeName = (schema as { readonly typeName?: unknown }).typeName;
+  const typeName = safeStringProperty(schema, "typeName");
   return typeof typeName === "string" && typeName.length > 0 ? { stateFullTypeName: typeName } : {};
 }
 

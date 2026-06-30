@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-6 Review Fixes Complete - Pending Re-review
+Status: Round-7 Review Fixes Complete - Pending Re-review
 Task log: `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f2.md`
 Review log: `build-protocol/reviews/T-0009f2-repository-identity-seam.md`
@@ -29,8 +29,9 @@ Implementation research inspected and used:
   scope.
 - `DefaultRepository.java`: family-based default repository selection is a
   convenience seam, not an invitation to build runtime repositories now. The TS
-  implementation uses constructor prototype inheritance only to infer family
-  identity.
+  implementation uses a metadata-only runtime guard over declared ES class
+  subclass shape plus constructor/prototype inheritance to infer family
+  identity, without instantiating repositories or entities.
 - `AggregateRepository.java`, `ProjectionRepository.java`, and
   `ProcessManagerRepository.java`: routing, inbox, cache, dispatch, catch-up,
   import, command bus, event bus, and query behavior are concrete repository
@@ -46,8 +47,8 @@ Implementation research inspected and used:
   `RepositoryIdentityError`, and structured error detail/code exports.
 - `Repository` derives descriptor metadata through `describeEntityMetadata()`,
   infers the entity family from `Aggregate`, `Projection`, or `ProcessManager`
-  prototype inheritance, and rejects unsupported constructors or schema-kind
-  mismatches.
+  declared class subclassing plus constructor/prototype inheritance, and
+  rejects unsupported constructors or schema-kind mismatches.
 - `snapshot` returns frozen fresh-copy metadata suitable for later
   bounded-context duplicate/conflict checks.
 - First-round review fixes removed base-instance freezing so repository
@@ -79,6 +80,11 @@ Implementation research inspected and used:
   functions cannot spoof both static and instance entity family inheritance,
   and reject family-specific repository generic bindings whose extracted state
   schema is still broad `DescriptorMessageSchema`.
+- Seventh-round review fixes reject prototype-reparented ES classes that do not
+  declare a subclass relationship, make optional diagnostic reads exception-safe
+  for accessor/proxy-backed `name` and `typeName` values, reject schema-union
+  repository bindings, and add public-facing TypeDoc type-parameter notes for
+  the single concrete constructor/state schema rule.
 - Public root exports, TypeDoc export guard, package README, API docs, user
   guide, and architecture notes now describe the metadata-only boundary.
 
@@ -165,9 +171,23 @@ Implementation research inspected and used:
 - Round-6 full verification: `CI=true corepack pnpm verify` passed with 17
   test files, 178 tests, coverage, docs check, proto lint/generate, and
   generated-clean.
+- Round-7 RED: focused Vitest failed because a prototype-reparented ES class
+  was accepted and throwing `name`/`typeName` accessors escaped structured
+  diagnostics; `corepack pnpm typecheck:tooling` failed with unused
+  `@ts-expect-error` directives for schema-union `RepositoryOptions` and
+  `Repository` subclass bindings.
+- Round-7 GREEN: focused Vitest passed with 2 files and 19 tests;
+  `corepack pnpm typecheck:tooling` passed after adding the declared-subclass
+  runtime guard, safe optional diagnostic reads, and the schema-union generic
+  guard.
+- Round-7 API docs guard: `node scripts/check-api-docs.mjs` passed and
+  reported 87 expected `@spine-ts/server` exports.
+- Round-7 full verification: `CI=true corepack pnpm verify` passed with 17
+  test files, 178 tests, coverage, docs check, proto lint/generate, and
+  generated-clean.
 
 ## Review
 
-- First-, second-, third-, fourth-, fifth-, and sixth-round reviewer findings were applied by review-fix
+- First-, second-, third-, fourth-, fifth-, sixth-, and seventh-round reviewer findings were applied by review-fix
   sub-agents.
   Re-review by the orchestrator lanes remains pending.
