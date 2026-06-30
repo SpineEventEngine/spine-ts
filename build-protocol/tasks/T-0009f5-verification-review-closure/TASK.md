@@ -1,6 +1,6 @@
 # T-0009f.5: Verification And Review Closure
 
-Status: Setup Complete; Baseline Verification Passed
+Status: Complete; Final Verification Passed
 Start: `2026-06-30 14:05 WEST`
 Baseline commit: `42f381f`
 Task log path:
@@ -9,8 +9,9 @@ Branch: `task/T-0009f5-verification-review-closure`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009f5-verification-review-closure`
 Parent task: `T-0009f Repository Seams And Bounded-Context Registration Skeleton`
-Authoring sub-agent: pending
-Reviewer sub-agents: pending
+Authoring sub-agent: Codex implementation sub-agent
+Reviewer sub-agents: not spawned for this closure pass by explicit prompt
+constraint
 
 ## Objective
 
@@ -76,6 +77,49 @@ Skipped relevant-looking skills:
   runtime/storage/projection work, not this closure task.
 - `nodejs-backend-patterns`: no HTTP/gRPC server implementation is in scope.
 
+Implementation sub-agent applicability check recorded at `2026-06-30 14:10
+WEST` before non-log task work:
+
+- Session inventory exposed applicable skills including `implement`,
+  `verification-before-completion`, `subagent-driven-development`,
+  `requesting-code-review`, `code-review-excellence`,
+  `test-driven-development`, `typescript-advanced-types`,
+  `architecture-patterns`, `cqrs-implementation`, `codebase-design`,
+  `planning-with-files`, `using-git-worktrees`, and
+  `nodejs-backend-patterns`.
+- Task-provided skill names/paths: none beyond the build-protocol requirement
+  to check `build-protocol/skills/EXPECTED_SKILLS.md`.
+- Repo-local expected-skill manifest checked:
+  `build-protocol/skills/EXPECTED_SKILLS.md`.
+- User-installed skill entrypoints enumerated with
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`
+  over the full readable installed-skill directory.
+- Installed-skill lock manifest checked at
+  `/Users/armiol/.agents/.skill-lock.json`; expected entries were reachable
+  for `subagent-driven-development`, `using-git-worktrees`,
+  `requesting-code-review`, `verification-before-completion`,
+  `planning-with-files`, `architecture-decision-records`,
+  `typescript-advanced-types`, and `nodejs-backend-patterns`.
+- Selected skills fully read before governed actions:
+  `/Users/armiol/.agents/skills/implement/SKILL.md` and
+  `/Users/armiol/.agents/skills/verification-before-completion/SKILL.md`.
+- `subagent-driven-development`, `requesting-code-review`, and
+  `code-review-excellence` are normally applicable to build-protocol closure
+  review, but this prompt explicitly forbids spawning sub-agents, so this pass
+  records a focused in-thread closure review instead.
+- `test-driven-development`, `typescript-advanced-types`,
+  `architecture-patterns`, `cqrs-implementation`, and `codebase-design` remain
+  guardrails only unless the docs/API consistency pass exposes a concrete
+  closure gap; no server runtime/API code changes are planned.
+- `nodejs-backend-patterns`, `event-store-design`, `projection-patterns`, and
+  `saga-orchestration` are skipped because HTTP/gRPC server behavior,
+  event-storage, projections, and saga/runtime orchestration are out of scope.
+
+No server runtime/API code changes are planned for this closure pass. If a
+concrete server-code defect appears, the implementation sub-agent must stop
+that path until inspecting the relevant JVM `core-jvm/server` source and
+recording the impact here.
+
 Repo expected-skill manifest:
 `build-protocol/skills/EXPECTED_SKILLS.md`.
 Installed-skill enumeration command for sub-agents to record:
@@ -101,6 +145,18 @@ Installed-skill lock manifest source:
 
 - Baseline verification passed on `2026-06-30 14:07 WEST`: `CI=true corepack
 pnpm verify` passed with 17 test files / 212 tests, coverage 96.39%
+  statements / 90.8% branches / 99.09% functions / 96.32% lines, TypeDoc/API
+  checks with 100 proto / 28 core / 97 server / 26 storage expected exports,
+  proto lint/generate checksum verification, and generated proto output clean.
+- Final focused verification passed on `2026-06-30 14:16 WEST`: `corepack pnpm
+test packages/server/src/index.test.ts packages/server/src/bounded-context.test.ts`
+  passed with 2 test files / 45 tests.
+- Final API docs guard passed on `2026-06-30 14:16 WEST`: `node
+scripts/check-api-docs.mjs` passed with 100 proto / 28 core / 97 server / 26
+  storage expected exports. TypeDoc emitted the existing invalid local `origin`
+  source-link warning with 0 errors.
+- Final full verification passed on `2026-06-30 14:16 WEST`: `CI=true
+corepack pnpm verify` passed with 17 test files / 212 tests, coverage 96.39%
   statements / 90.8% branches / 99.09% functions / 96.32% lines, TypeDoc/API
   checks with 100 proto / 28 core / 97 server / 26 storage expected exports,
   proto lint/generate checksum verification, and generated proto output clean.

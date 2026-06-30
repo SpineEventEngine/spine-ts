@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.3 Builder Repository Registration And Conflict Checks
 
-Status: Review Complete - Pending Integration
+Status: Integrated Into Parent; Parent Verification Passed
 Task log: `build-protocol/tasks/T-0009f3-builder-registration/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f3.md`
 Review log: `build-protocol/reviews/T-0009f3-builder-registration.md`
@@ -353,3 +353,6 @@ Impact:
 - Seventh external review round reported no remaining findings across code
   style/maintainability, documentation, TypeScript/API docs, security, and
   performance/reliability.
+- T-0009f.3 merged into the parent branch on `2026-06-30 13:27 WEST` as merge
+  commit `32a664e`, followed by parent verification with 17 files / 212 tests
+  and clean TypeDoc/API, proto, and generated-output gates.
