@@ -1,6 +1,6 @@
 # Review Log: T-0011.1 Transport Contracts, Topics, And Envelope Routing Keys
 
-Status: Review Fixes Verified
+Status: Complete
 
 ## Required Review Lanes
 
@@ -25,8 +25,8 @@ clean.
 
 ## Current Review Gate
 
-Setup verification passed. Implementation is complete; review lanes remain
-required before integration.
+Setup verification passed. Implementation, review fixes, required review lanes,
+and final full verification are complete. Parent T-0011 integration remains.
 
 ## Reviewer Rounds
 
@@ -80,3 +80,47 @@ Round 2 re-review results:
   normalization materializes a routing descriptor. Fix: normalize the
   subscription mode before creating the copy-safe topic and add regression
   coverage proving an invalid mode is rejected before a malformed topic.
+
+### Security Sequencing Fix After Commit `57665c9`
+
+Accepted finding:
+
+1. `createTransportSubscription()` needed to reject an invalid raw
+   `TransportSubscriptionMode` before normalizing the topic input, so a bad
+   mode cannot trigger routing descriptor construction from an otherwise
+   malformed topic.
+
+Focused verification passed on `2026-06-30 21:17 WEST`:
+
+- `corepack pnpm vitest run packages/transport/src/index.test.ts`: passed with
+  1 file / 5 tests.
+- `corepack pnpm typecheck`: passed.
+- `corepack pnpm docs:check`: passed with the existing TypeDoc invalid-`origin`
+  warning only.
+- `corepack pnpm prettier --check packages/transport/src/index.ts packages/transport/src/index.test.ts build-protocol/tasks/T-0011-1-transport-contracts/TASK.md build-protocol/tasks/T-0011-1-transport-contracts/IMPLEMENTATION_REPORT.md build-protocol/work-logs/T-0011-1.md build-protocol/reviews/T-0011-1-transport-contracts.md`:
+  passed.
+- `git diff --check`: passed.
+
+Final security re-review result:
+
+- Security reviewer `019f1a2f-3d51-79e2-967e-01dc736c4f74`: CLEAN.
+
+Required-lane closure:
+
+- code style/maintainability: CLEAN.
+- documentation: CLEAN.
+- TypeScript/API docs: CLEAN.
+- security: CLEAN.
+- performance/reliability: CLEAN.
+
+Final verification passed on `2026-06-30 21:25 WEST`:
+
+- `CI=true corepack pnpm verify`: passed with 21 test files / 262 tests,
+  coverage 96.35% statements / 90.43% branches / 99.26% functions / 96.29%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
+  expected exports, copied Spine proto checksum verification, proto
+  lint/generate, and generated-clean checks.
+- TypeDoc emitted the existing invalid-`origin` warning only.
+- `corepack pnpm prettier --check build-protocol/tasks/T-0011-1-transport-contracts/TASK.md build-protocol/tasks/T-0011-1-transport-contracts/IMPLEMENTATION_REPORT.md build-protocol/work-logs/T-0011-1.md build-protocol/reviews/T-0011-1-transport-contracts.md`:
+  passed.
+- `git diff --check`: passed.

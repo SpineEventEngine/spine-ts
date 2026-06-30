@@ -1,6 +1,6 @@
 # T-0011.1: Transport Contracts, Topics, And Envelope Routing Keys
 
-Status: Review Fixes Verified
+Status: Complete
 Parent task: `T-0011 Transport Foundation`
 Start: `2026-06-30 20:45 WEST`
 Baseline commit: `7b54d6c`
@@ -9,7 +9,7 @@ Branch: `task/T-0011-1-transport-contracts`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-1-transport-contracts`
 Authoring sub-agent: complete
-Reviewer sub-agents: pending
+Reviewer sub-agents: complete
 
 ## Objective
 
@@ -110,4 +110,32 @@ Review-fix verification passed on `2026-06-30 21:11 WEST`:
   coverage 96.49% statements / 90.72% branches / 99.26% functions / 96.44%
   lines, TypeDoc/API export checks, copied proto checksum verification, proto
   lint/generate, and generated-clean checks.
+- `git diff --check`: passed.
+
+Security sequencing fix verification passed on `2026-06-30 21:17 WEST`:
+
+- `corepack pnpm vitest run packages/transport/src/index.test.ts`: passed
+  with 1 file / 5 tests.
+- `corepack pnpm typecheck`: passed.
+- `corepack pnpm docs:check`: passed with the existing TypeDoc warning that
+  the local `origin` remote is not valid for source links.
+- `corepack pnpm prettier --check packages/transport/src/index.ts packages/transport/src/index.test.ts build-protocol/tasks/T-0011-1-transport-contracts/TASK.md build-protocol/tasks/T-0011-1-transport-contracts/IMPLEMENTATION_REPORT.md build-protocol/work-logs/T-0011-1.md build-protocol/reviews/T-0011-1-transport-contracts.md`:
+  passed.
+- `git diff --check`: passed.
+
+Final security re-review passed on `2026-06-30 21:19 WEST`:
+
+- Security reviewer `019f1a2f-3d51-79e2-967e-01dc736c4f74`: CLEAN.
+- No remaining review comments are open in the required lanes.
+
+Final verification passed on `2026-06-30 21:25 WEST`:
+
+- `CI=true corepack pnpm verify`: passed with 21 test files / 262 tests,
+  coverage 96.35% statements / 90.43% branches / 99.26% functions / 96.29%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
+  expected exports, copied Spine proto checksum verification, proto
+  lint/generate, generated proto output clean, and generated files clean.
+- TypeDoc emitted the existing invalid-`origin` warning only.
+- `corepack pnpm prettier --check build-protocol/tasks/T-0011-1-transport-contracts/TASK.md build-protocol/tasks/T-0011-1-transport-contracts/IMPLEMENTATION_REPORT.md build-protocol/work-logs/T-0011-1.md build-protocol/reviews/T-0011-1-transport-contracts.md`:
+  passed.
 - `git diff --check`: passed.
