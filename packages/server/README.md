@@ -12,6 +12,9 @@ Current slice exposes:
 - `TransactionalEntity<Id, Schema, Version>` for protected, scoped draft helpers
   over `EntityTransaction`, with one active in-memory transaction per entity;
   and
+- `Aggregate`, `Projection`, and `ProcessManager` abstract family marker classes
+  over `TransactionalEntity`, each exposing a stable `entityFamily` identity;
+  and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
 - first-field routing hints from descriptor order;
@@ -150,6 +153,26 @@ deterministically. Public state, version, and lifecycle accessors remain cloned
 snapshots, and the class still does not invoke handlers, write storage, emit
 events, increment versions, route messages, or provide async-local/global
 transaction state.
+
+`Aggregate`, `Projection`, and `ProcessManager` are the first public entity
+family base classes. They are thin abstract subclasses of `TransactionalEntity`
+with the same `<Id, Schema, Version>` generic pattern and a stable
+readonly `entityFamily` property returning `"aggregate"`, `"projection"`, or
+`"process-manager"`. Use them when application or framework-owned code needs
+the right OOP family type before repositories and dispatch runtime exist:
+
+```ts
+import { Aggregate } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
+```
+
+The family marker classes inherit identity, metadata, cloned snapshots,
+lifecycle accessors, `changed`, and protected transaction helpers from
+`TransactionalEntity`. They do not add public transaction mutators, command
+posting, event history, snapshots, subscriptions, query clients, process
+workflow execution, handler invocation, storage, buses, or lifecycle events.
 
 ## Entity State Transition Validation
 

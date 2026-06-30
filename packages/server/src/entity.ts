@@ -155,6 +155,9 @@ export interface EntityOptions<
   readonly lifecycle?: Partial<EntityLifecycleFlags>;
 }
 
+/** Public entity family marker exposed by Spine server entity base classes. */
+export type EntityFamily = "aggregate" | "projection" | "process-manager";
+
 /**
  * Common in-memory OOP shell for one server-side entity state.
  *
@@ -462,6 +465,54 @@ export abstract class TransactionalEntity<
 
     return transaction;
   }
+}
+
+/**
+ * Abstract aggregate family marker over the common transactional entity shell.
+ *
+ * This class intentionally adds only stable family identity. It does not add
+ * command dispatch, event history, snapshots, repositories, idempotency guards,
+ * or handler invocation.
+ */
+export abstract class Aggregate<
+  Id,
+  Schema extends DescriptorMessageSchema,
+  Version = EntityVersionMetadata,
+> extends TransactionalEntity<Id, Schema, Version> {
+  /** Stable server entity family identity. */
+  readonly entityFamily = "aggregate" as const;
+}
+
+/**
+ * Abstract projection family marker over the common transactional entity shell.
+ *
+ * This class intentionally adds only stable family identity. It does not add
+ * event subscriptions, event playing, repositories, version columns, query
+ * clients, or handler invocation.
+ */
+export abstract class Projection<
+  Id,
+  Schema extends DescriptorMessageSchema,
+  Version = EntityVersionMetadata,
+> extends TransactionalEntity<Id, Schema, Version> {
+  /** Stable server entity family identity. */
+  readonly entityFamily = "projection" as const;
+}
+
+/**
+ * Abstract process manager family marker over the common transactional entity shell.
+ *
+ * This class intentionally adds only stable family identity. It does not add
+ * process workflow execution, command posting, query clients, repositories,
+ * bounded-context injection, or handler invocation.
+ */
+export abstract class ProcessManager<
+  Id,
+  Schema extends DescriptorMessageSchema,
+  Version = EntityVersionMetadata,
+> extends TransactionalEntity<Id, Schema, Version> {
+  /** Stable server entity family identity. */
+  readonly entityFamily = "process-manager" as const;
 }
 
 function cloneCommitResult<Schema extends DescriptorMessageSchema, Version>(

@@ -134,6 +134,7 @@ describe("@spine-ts/server", () => {
   it("exports the descriptor-derived entity and handler metadata surface", () => {
     expect(Object.keys(serverRoot).sort()).toEqual(
       [
+        "Aggregate",
         "Apply",
         "Assign",
         "EntityTransactionDraftStateError",
@@ -145,6 +146,8 @@ describe("@spine-ts/server", () => {
         "HandlerMetadataRegistry",
         "HandlerMetadataRegistryError",
         "Entity",
+        "ProcessManager",
+        "Projection",
         "TransactionalEntity",
         "TransactionalEntityScopeError",
         "React",
