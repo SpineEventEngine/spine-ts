@@ -118,8 +118,10 @@ responsibilities remain with later runtime slices.
 following D-0034, the first explicit handler metadata layer, following D-0035,
 the caller-owned handler registry, following D-0036, the first standard
 decorator adapter, following D-0037, and built-in set-once transition
-validation, following D-0038. The package consumes curated option exports from
-`@spine-ts/proto` and delegates transition result shaping to `@spine-ts/core`.
+validation, following D-0038. It also owns the first thin entity-family marker
+classes over the transactional entity shell. The package consumes curated
+option exports from `@spine-ts/proto` and delegates transition result shaping
+to `@spine-ts/core`.
 
 Current server metadata is pure and deterministic:
 
@@ -224,6 +226,19 @@ transactions. The layer still avoids handler invocation, repositories, storage,
 lifecycle events, automatic version increments, transaction listeners, recent
 history, async-local/global transaction state, and entity-family-specific
 aggregate/projection/process-manager behavior.
+
+`Aggregate`, `Projection`, and `ProcessManager` are now public abstract entity
+family markers. Each extends `TransactionalEntity<Id, Schema, Version>` and
+adds only a stable readonly `entityFamily` property typed by the exported
+`EntityFamily` union. This follows the JVM family shape only as far as the
+current TypeScript runtime can support safely: JVM `Projection` directly
+extends `TransactionalEntity`, while JVM aggregate and process-manager behavior
+is mostly supplied by assignee, dispatch, event-history, repository, querying,
+and bounded-context collaborators that this slice has not implemented. The
+TypeScript family classes therefore do not expose public transaction mutators,
+repository hooks, dispatch APIs, command posting, query clients, aggregate event
+history, snapshots, process workflow execution, idempotency guards, lifecycle
+events, handler invocation, or async-local/global transaction state.
 
 `EntityTransaction` is the first server-owned draft/result commit boundary over
 one entity state. It buffers a draft state, explicit previous/draft version

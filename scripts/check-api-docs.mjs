@@ -164,6 +164,7 @@ const expectedStorageExports = [
   "InMemoryStorageAdapter",
 ];
 const expectedServerExports = [
+  "Aggregate",
   "Apply",
   "Assign",
   "BaseHandlerMetadata",
@@ -177,11 +178,14 @@ const expectedServerExports = [
   "DescriptorMetadataError",
   "Entity",
   "EntityClass",
+  "EntityFamily",
   "EntityHandlersMetadata",
   "EntityLifecycleFlags",
   "EntityOptions",
   "EntityVersionMetadata",
   "PlainEntityVersionMetadata",
+  "ProcessManager",
+  "Projection",
   "TransactionalEntity",
   "TransactionalEntityScopeError",
   "TransactionalEntityScopeErrorReason",

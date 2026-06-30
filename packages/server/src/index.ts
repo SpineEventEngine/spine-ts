@@ -1,9 +1,13 @@
 export {
+  Aggregate,
   Entity,
+  type EntityFamily,
   type EntityLifecycleFlags,
   type EntityOptions,
   type EntityVersionMetadata,
   type PlainEntityVersionMetadata,
+  ProcessManager,
+  Projection,
   TransactionalEntity,
   TransactionalEntityScopeError,
   type TransactionalEntityScopeErrorReason,

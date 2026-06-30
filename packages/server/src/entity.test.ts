@@ -8,11 +8,16 @@ import { serverEntityMetadataTestFixtures } from "../test-fixtures/entity-metada
 
 import * as serverRoot from "./index.js";
 import {
+  Aggregate,
   describeEntityMetadata,
   Entity,
+  ProcessManager,
+  Projection,
   TransactionalEntity,
   TransactionalEntityScopeError,
+  type EntityFamily,
   type EntityOptions,
+  type TransactionalEntityScopeOperation,
 } from "./index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -172,6 +177,35 @@ class TestTransactionalEntity extends TransactionalEntity<
   }
 }
 
+class TestAggregate extends Aggregate<string, typeof ProjectionStateSchema, RevisionMetadata> {
+  start(): void {
+    this.startTransaction();
+  }
+
+  renameDraft(name: string): ProjectionState {
+    return this.updateDraftState((draft) => ({
+      ...draft,
+      name,
+    }));
+  }
+
+  reviseDraft(revision: number): void {
+    this.updateDraftVersionMetadata({ revision, source: "server" });
+  }
+
+  commitForTest(): ReturnType<TestAggregate["commitTransaction"]> {
+    return this.commitTransaction();
+  }
+}
+
+class TestProjection extends Projection<string, typeof ProjectionStateSchema, RevisionMetadata> {}
+
+class TestProcessManager extends ProcessManager<
+  string,
+  typeof ProjectionStateSchema,
+  RevisionMetadata
+> {}
+
 describe("entities", () => {
   it("exports the common entity base class from the server root", () => {
     expect(serverRoot.Entity).toBe(Entity);
@@ -180,6 +214,12 @@ describe("entities", () => {
   it("exports the transactional entity base class and scope error from the server root", () => {
     expect(serverRoot.TransactionalEntity).toBe(TransactionalEntity);
     expect(serverRoot.TransactionalEntityScopeError).toBe(TransactionalEntityScopeError);
+  });
+
+  it("exports entity family marker classes from the server root", () => {
+    expect(serverRoot.Aggregate).toBe(Aggregate);
+    expect(serverRoot.Projection).toBe(Projection);
+    expect(serverRoot.ProcessManager).toBe(ProcessManager);
   });
 
   it("exposes identity, descriptor metadata, state snapshots, version, and active lifecycle defaults", () => {
@@ -817,5 +857,174 @@ describe("entities", () => {
     });
     expect(entity.state).toEqual(createProjectionState());
     expect(entity.version).toEqual({ revision: 1, source: "server" });
+  });
+
+  it("marks aggregate, projection, and process manager families with stable identity", () => {
+    const aggregate = new TestAggregate({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+    const projection = new TestProjection({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+    const processManager = new TestProcessManager({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    expect(aggregate).toBeInstanceOf(TransactionalEntity);
+    expect(projection).toBeInstanceOf(TransactionalEntity);
+    expect(processManager).toBeInstanceOf(TransactionalEntity);
+    expect(aggregate.entityFamily).toBe("aggregate");
+    expect(projection.entityFamily).toBe("projection");
+    expect(processManager.entityFamily).toBe("process-manager");
+    expectTypeOf(aggregate.entityFamily).toEqualTypeOf<"aggregate">();
+    expectTypeOf(projection.entityFamily).toEqualTypeOf<"projection">();
+    expectTypeOf(processManager.entityFamily).toEqualTypeOf<"process-manager">();
+    expectTypeOf<TestAggregate>().toExtend<
+      TransactionalEntity<string, typeof ProjectionStateSchema, RevisionMetadata>
+    >();
+    expectTypeOf<TestProjection>().toExtend<
+      TransactionalEntity<string, typeof ProjectionStateSchema, RevisionMetadata>
+    >();
+    expectTypeOf<TestProcessManager>().toExtend<
+      TransactionalEntity<string, typeof ProjectionStateSchema, RevisionMetadata>
+    >();
+    expectTypeOf<TestAggregate["entityFamily"]>().toExtend<EntityFamily>();
+  });
+
+  it("keeps family marker accessors stable under runtime reassignment attempts", () => {
+    const aggregate = new TestAggregate({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+    const projection = new TestProjection({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+    const processManager = new TestProcessManager({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    expect(Reflect.set(aggregate, "entityFamily", "projection")).toBe(false);
+    expect(Reflect.set(projection, "entityFamily", "aggregate")).toBe(false);
+    expect(Reflect.set(processManager, "entityFamily", "aggregate")).toBe(false);
+    expect(() => {
+      Object.defineProperty(aggregate, "entityFamily", { value: "projection" });
+    }).toThrow(TypeError);
+    expect(() => {
+      Object.defineProperty(projection, "entityFamily", { value: "aggregate" });
+    }).toThrow(TypeError);
+    expect(() => {
+      Object.defineProperty(processManager, "entityFamily", { value: "aggregate" });
+    }).toThrow(TypeError);
+    expect(aggregate.entityFamily).toBe("aggregate");
+    expect(projection.entityFamily).toBe("projection");
+    expect(processManager.entityFamily).toBe("process-manager");
+  });
+
+  it("installs locked own family markers that ignore prototype descriptor tampering", () => {
+    const aggregate = new TestAggregate({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+    const originalAggregatePrototypeDescriptor = Object.getOwnPropertyDescriptor(
+      Aggregate.prototype,
+      "entityFamily",
+    );
+
+    expect(Object.getOwnPropertyDescriptor(aggregate, "entityFamily")).toMatchObject({
+      configurable: false,
+      enumerable: false,
+      value: "aggregate",
+      writable: false,
+    });
+
+    try {
+      Object.defineProperty(Aggregate.prototype, "entityFamily", {
+        configurable: true,
+        value: "projection",
+      });
+
+      const laterAggregate = new TestAggregate({
+        id: "task-2",
+        schema: ProjectionStateSchema,
+        state: createProjectionState(),
+        version: { revision: 1, source: "server" },
+      });
+
+      expect(aggregate.entityFamily).toBe("aggregate");
+      expect(laterAggregate.entityFamily).toBe("aggregate");
+    } finally {
+      if (originalAggregatePrototypeDescriptor === undefined) {
+        delete (Aggregate.prototype as { entityFamily?: unknown }).entityFamily;
+      } else {
+        Object.defineProperty(
+          Aggregate.prototype,
+          "entityFamily",
+          originalAggregatePrototypeDescriptor,
+        );
+      }
+    }
+  });
+
+  it("preserves transactional entity behavior through family marker classes", () => {
+    const aggregate = new TestAggregate({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    aggregate.start();
+    const returnedDraft = aggregate.renameDraft("Ready");
+    returnedDraft.name = "Caller-side draft mutation";
+    aggregate.reviseDraft(2);
+
+    expect(aggregate.state).toEqual(createProjectionState());
+    expect(aggregate.version).toEqual({ revision: 1, source: "server" });
+    expect(aggregate.changed).toBe(false);
+
+    const result = aggregate.commitForTest();
+
+    expect(result.status).toBe("accepted");
+    expect(aggregate.state).toEqual(createProjectionState({ name: "Ready" }));
+    expect(aggregate.version).toEqual({ revision: 2, source: "server" });
+    expect(aggregate.changed).toBe(true);
+  });
+
+  it("keeps transaction mutators off the public family class types", () => {
+    type PublicAggregateTransactionOperations = Extract<
+      keyof TestAggregate,
+      TransactionalEntityScopeOperation
+    >;
+    type PublicProjectionTransactionOperations = Extract<
+      keyof TestProjection,
+      TransactionalEntityScopeOperation
+    >;
+    type PublicProcessManagerTransactionOperations = Extract<
+      keyof TestProcessManager,
+      TransactionalEntityScopeOperation
+    >;
+
+    expectTypeOf<PublicAggregateTransactionOperations>().toBeNever();
+    expectTypeOf<PublicProjectionTransactionOperations>().toBeNever();
+    expectTypeOf<PublicProcessManagerTransactionOperations>().toBeNever();
   });
 });

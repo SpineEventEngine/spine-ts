@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Pending
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Complete; Round 3 Clean
 Task log: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e.md`
 Review log: `build-protocol/reviews/T-0009e-entity-base-classes.md`
@@ -11,10 +11,12 @@ Worktree:
 ## Summary
 
 `T-0009e.1 Common Entity State Shell` and `T-0009e.2 TransactionalEntity Scoped
-Draft Helpers` are integrated into the parent entity-base branch. They introduce
-the abstract `Entity` state shell and protected transaction-backed draft helper
-layer for `@spine-ts/server` while preserving the D-0044 boundary against
-repositories, dispatch, storage, buses, and family-specific runtime behavior.
+Draft Helpers` are integrated into the parent entity-base branch. `T-0009e.3
+Family Capability Marker Classes` is complete in its isolated subtask branch,
+with Round 3 clean across all required reviewer lanes. The parent task remains
+bounded to OOP entity shells for
+`@spine-ts/server` while preserving the D-0044 boundary against repositories,
+dispatch, storage, buses, and unsupported family-specific runtime behavior.
 
 ## JVM Research Used
 
@@ -73,6 +75,11 @@ Integrated from `task/T-0009e1-common-entity-state-shell` and
   files / 152 tests, coverage 97.23% statements / 91.41% branches / 99.15%
   functions / 97.17% lines, TypeDoc/API/proto gates passed with 68 expected
   server exports, and generated proto output clean.
+- T-0009e.3 final subtask verification passed on `2026-06-30 02:40 WEST`:
+  `CI=true corepack pnpm verify` passed with 15 test files / 158 tests, coverage
+  97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
+  TypeDoc/API/proto gates passed with 72 expected server exports, and generated
+  proto output clean.
 
 ## Review
 
@@ -85,3 +92,14 @@ Integrated from `task/T-0009e1-common-entity-state-shell` and
   TypeScript/API docs, security, and performance/reliability.
 - All T-0009e.2 Round 11 reviewer sub-agents were closed by the orchestrator.
 - Parent branch integration verification passed for both subtask merge commits.
+- T-0009e.3 implementation completed at `3e0571e`; Round 1 review produced
+  findings about runtime-mutable emitted `readonly entityFamily` fields and
+  durable log status drift.
+- T-0009e.3 Round 1 fixes are applied and verified.
+- T-0009e.3 Round 2 review found inherited getter markers remained forgeable
+  through reflective own-property definition and prototype descriptor mutation.
+  Round 2 fixes are applied and verified.
+- T-0009e.3 completed three review rounds. Round 3 returned clean across all
+  required reviewer lanes: code style/maintainability, documentation,
+  TypeScript/API docs, security, and performance/reliability.
+- All T-0009e.3 Round 3 reviewer sub-agents were closed by the orchestrator.

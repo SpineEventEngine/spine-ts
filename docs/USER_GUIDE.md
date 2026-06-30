@@ -15,8 +15,9 @@ entity metadata from `(entity)`, `(column)`, `(set_once)`, `(is)`, and
 defines explicit or decorator-collected handler metadata without invoking
 handlers or mutating global runtime state. It also exposes built-in
 `(set_once)` entity state transition validation, a buffered entity transaction
-boundary, and a caller-owned handler metadata registry for duplicate validation
-and lookup-only views.
+boundary, thin aggregate/projection/process-manager family base classes, and a
+caller-owned handler metadata registry for duplicate validation and lookup-only
+views.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
 deterministic in-memory adapter for tests/development. Entity runtime,
 transport, durable production storage, and the to-do application remain later
@@ -56,6 +57,8 @@ slices.
 - A protected `TransactionalEntity` base that wraps the transaction kernel with
   one active scoped draft per entity and applies only accepted commits back to
   the entity shell.
+- Thin abstract `Aggregate`, `Projection`, and `ProcessManager` family marker
+  classes over `TransactionalEntity`, each with stable `entityFamily` identity.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.
@@ -289,6 +292,29 @@ whether a repository should store the entity. Missing or duplicate scopes throw
 `TransactionalEntityScopeError`. The base still does not invoke handlers, write
 storage, emit lifecycle events, increment versions automatically, dispatch
 messages, or create async-local/global transaction state.
+
+## Entity Family Marker Classes
+
+Extend `Aggregate`, `Projection`, or `ProcessManager` when code needs the
+server-side OOP family type now, before runtime repositories and dispatch are
+available:
+
+```ts
+import { Aggregate, Projection, ProcessManager } from "@spine-ts/server";
+import { TaskProjectionSchema, TaskStateSchema, TaskWorkflowSchema } from "./generated/tasks_pb.js";
+
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
+class TaskProjection extends Projection<string, typeof TaskProjectionSchema, number> {}
+class TaskWorkflow extends ProcessManager<string, typeof TaskWorkflowSchema, number> {}
+
+new TaskAggregate({ id, schema: TaskStateSchema, state, version: 1 }).entityFamily; // "aggregate"
+```
+
+These classes inherit `TransactionalEntity` behavior and expose only stable
+family identity through `entityFamily`. They do not add public transaction
+mutators, event history, snapshots, subscriptions, command posting, query
+clients, process workflow execution, handler invocation, storage, buses, or
+lifecycle events.
 
 ## Envelope Packing
 

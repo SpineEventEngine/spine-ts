@@ -88,3 +88,35 @@ passed on `2026-06-30 01:51 WEST`.
   97.23% statements / 91.41% branches / 99.15% functions / 97.17% lines,
   TypeDoc/API/proto gates passed with 68 expected server exports, and generated
   proto output clean.
+
+## T-0009e.3 Subtask Review Summary
+
+`T-0009e.3 Family Capability Marker Classes` started on
+`2026-06-30 01:57 WEST` in isolated branch
+`task/T-0009e3-family-capability-marker-classes` from baseline `26aa510`.
+Implementation completed at `3e0571e`, and Round 1 review produced findings in
+code style/maintainability, security, performance/reliability, and
+documentation. Round 1 fixes replaced runtime-mutable `readonly entityFamily`
+fields with getter-only family markers and updated durable log status drift.
+Those Round 1 fixes were applied and verified by the review-fix worker.
+
+Round 2 review then found inherited getter markers still forgeable through
+reflective own-property definition and prototype descriptor mutation, plus stale
+task status headers. Round 2 fixes install locked own family markers and update
+durable status text.
+
+Round 3 reviewed the full subtask range through `462e9a6` and returned clean
+across all five required lanes.
+
+| Role                       | Reviewer ID                            | Result | Closure |
+| -------------------------- | -------------------------------------- | ------ | ------- |
+| Code style/maintainability | `019f162f-6b28-7c70-851c-46fe7df1bf35` | Clean  | Closed  |
+| Documentation              | `019f162f-97e9-72c3-841a-015771638a00` | Clean  | Closed  |
+| TypeScript/API docs        | `019f162f-b985-7ca2-ba43-f208d2ce2975` | Clean  | Closed  |
+| Security                   | `019f162f-e309-7232-a6df-78bf8ffff6d0` | Clean  | Closed  |
+| Performance/reliability    | `019f1630-1526-73a3-a8d1-d2ceac94ae6f` | Clean  | Closed  |
+
+Final subtask verification passed on `2026-06-30 02:40 WEST` with 15 test files
+/ 158 tests, coverage 97.25% statements / 91.41% branches / 99.16% functions /
+97.19% lines, TypeDoc/API checks with 72 expected server exports, proto
+lint/generate, and generated-output clean.

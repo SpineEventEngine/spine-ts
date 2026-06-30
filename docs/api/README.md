@@ -22,6 +22,7 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 `PackEventInput`.
 
 Server exports include the abstract `Entity` shell, `TransactionalEntity`,
+`Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,
 `TransactionalEntityScopeOperation`, `EntityOptions`, `EntityVersionMetadata`,
 `PlainEntityVersionMetadata`, and `EntityLifecycleFlags` for local OOP entity
@@ -43,6 +44,13 @@ close the scope and update state/version/lifecycle; rejected commits keep the
 scope active for correction or explicit rollback and apply nothing. The
 `changed` signal reports accepted state changes or committed lifecycle flag
 changes, not repository storage policy.
+`Aggregate`, `Projection`, and `ProcessManager` are thin abstract family marker
+classes over `TransactionalEntity` with the same `<Id, Schema, Version>` generic
+shape and a stable readonly `entityFamily` property typed by `EntityFamily`.
+They do not add public transaction mutators, repositories, dispatch, aggregate
+event history, snapshots, subscriptions, command posting, query clients,
+process workflow execution, handler invocation, storage, buses, or lifecycle
+events.
 Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field
