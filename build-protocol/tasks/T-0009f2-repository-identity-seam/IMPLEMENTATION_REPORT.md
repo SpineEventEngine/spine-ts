@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-2 Review Fixes Complete - Pending Re-review
+Status: Round-3 Review Fixes Complete - Pending Re-review
 Task log: `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f2.md`
 Review log: `build-protocol/reviews/T-0009f2-repository-identity-seam.md`
@@ -60,6 +60,11 @@ Implementation research inspected and used:
   early runtime function/class-constructor guard for forged entity-type objects,
   and refreshed stale architecture wording around the now-present
   metadata-only `Repository` identity class.
+- Third-round review fixes made malformed nameless entity-type diagnostics
+  consistently produce `RepositoryIdentityError`, captured `entityType` and
+  `schema` once at constructor entry before validation/storage, and added an
+  abstract construct signature to `RepositoryEntityType` so non-function object
+  literals no longer type-check.
 - Public root exports, TypeDoc export guard, package README, API docs, user
   guide, and architecture notes now describe the metadata-only boundary.
 
@@ -92,9 +97,22 @@ Implementation research inspected and used:
 - Round-2 full verification: `CI=true corepack pnpm verify` passed with 17
   test files, 174 tests, coverage, docs check, proto lint/generate, and
   generated-clean.
+- Round-3 RED: focused Vitest failed because malformed entity types threw
+  `TypeError` and accessor-backed options could produce a validated/stored
+  constructor divergence; `corepack pnpm typecheck:tooling` failed with an
+  unused `@ts-expect-error` for a non-function object-literal entity type.
+- Round-3 GREEN: focused Vitest passed with 2 files and 17 tests;
+  `corepack pnpm typecheck:tooling` passed after capturing constructor inputs
+  once, hardening entity-type names for unknown values, and adding the
+  construct signature to `RepositoryEntityType`.
+- Round-3 API docs guard: `node scripts/check-api-docs.mjs` passed and
+  reported 87 expected `@spine-ts/server` exports.
+- Round-3 full verification: `CI=true corepack pnpm verify` passed with 17
+  test files, 176 tests, coverage, docs check, proto lint/generate, and
+  generated-clean.
 
 ## Review
 
-- First- and second-round reviewer findings were applied by review-fix
+- First-, second-, and third-round reviewer findings were applied by review-fix
   sub-agents.
   Re-review by the orchestrator lanes remains pending.

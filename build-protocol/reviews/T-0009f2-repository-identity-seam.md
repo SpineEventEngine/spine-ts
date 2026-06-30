@@ -1,6 +1,6 @@
 # Review Log: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-2 findings fixed - Pending Re-review
+Status: Round-3 findings fixed - Pending Re-review
 
 ## Required Review Lanes
 
@@ -59,8 +59,30 @@ Status: Round-2 findings fixed - Pending Re-review
   - Verified: focused RED reproduced the runtime and type holes; focused
     Vitest, `corepack pnpm typecheck:tooling`, `node scripts/check-api-docs.mjs`,
     and `CI=true corepack pnpm verify` passed after the fixes.
+- Third-round reviewer findings received by the review-fix sub-agent:
+  - Performance/reliability Medium: the non-function guard called
+    `entityTypeName(options.entityType)`, but `entityTypeName` assumed a string
+    `.name`, so malformed JS/cast inputs such as `null`, `undefined`, or `{}`
+    could throw `TypeError` instead of `RepositoryIdentityError`.
+  - Security Medium: the `Repository` constructor reread `options.entityType`
+    and `options.schema` after validation, allowing accessor/proxy-backed
+    options to diverge between the validated family and stored snapshot values.
+  - TypeScript/API P2: `RepositoryEntityType` lacked a construct signature, so
+    non-function object literals with a real prototype still type-checked.
+- Round-3 fix status:
+  - Fixed: `entityTypeName` now accepts `unknown` and falls back to
+    `(anonymous)` for nullish, non-object, nameless, or non-string-name values.
+  - Fixed: `Repository` captures `const entityType = options.entityType` and
+    `const schema = options.schema` once at constructor entry, then validates,
+    resolves family, and stores only those locals.
+  - Fixed: exported `RepositoryEntityType` is now an abstract construct
+    signature intersected with the existing `prototype`/`name` metadata, and
+    compile-time tests cover non-function object literals without casts.
+  - Verified: focused RED reproduced all three holes; focused Vitest,
+    `corepack pnpm typecheck:tooling`, `node scripts/check-api-docs.mjs`, and
+    `CI=true corepack pnpm verify` passed after the fixes.
 
 ## Current Review State
 
-- First- and second-round comments are fixed. Orchestrator reviewer lanes should re-run
-  before integration.
+- First-, second-, and third-round comments are fixed. Orchestrator reviewer lanes
+  should re-run before integration.

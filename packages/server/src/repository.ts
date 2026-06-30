@@ -36,14 +36,14 @@ interface RuntimeRepositoryEntityType {
 }
 
 /** Entity constructor value accepted by repository identity metadata. */
-export interface RepositoryEntityType<
+export type RepositoryEntityType<
   Instance extends RepositoryEntityInstance = RepositoryEntityInstance,
-> {
+> = (abstract new (...args: never[]) => Instance) & {
   /** Prototype inspected for built-in entity family marker inheritance. */
   readonly prototype: Instance;
   /** Constructor name used in structured diagnostics. */
   readonly name: string;
-}
+};
 
 /** Options for constructing metadata-only repository identity. */
 export interface RepositoryOptions<EntityType extends RepositoryEntityType> {
@@ -123,25 +123,28 @@ export class Repository<EntityType extends RepositoryEntityType = RepositoryEnti
 
   /** Create repository identity metadata for exactly one entity family/state schema pair. */
   constructor(options: RepositoryOptions<EntityType>) {
-    if (typeof options.entityType !== "function") {
+    const entityType = options.entityType;
+    const schema = options.schema;
+
+    if (typeof entityType !== "function") {
       throw new RepositoryIdentityError(
         "UNSUPPORTED_ENTITY_TYPE",
-        `Repository entity type "${entityTypeName(options.entityType)}" must be a class constructor extending Aggregate, Projection, or ProcessManager.`,
+        `Repository entity type "${entityTypeName(entityType)}" must be a class constructor extending Aggregate, Projection, or ProcessManager.`,
         {
-          entityTypeName: entityTypeName(options.entityType),
+          entityTypeName: entityTypeName(entityType),
         },
       );
     }
 
-    const metadata = describeEntityMetadata(options.schema);
-    const entityFamily = resolveEntityFamily(options.entityType);
+    const metadata = describeEntityMetadata(schema);
+    const entityFamily = resolveEntityFamily(entityType);
 
     if (entityFamily === undefined) {
       throw new RepositoryIdentityError(
         "UNSUPPORTED_ENTITY_TYPE",
-        `Repository entity type "${entityTypeName(options.entityType)}" must extend Aggregate, Projection, or ProcessManager.`,
+        `Repository entity type "${entityTypeName(entityType)}" must extend Aggregate, Projection, or ProcessManager.`,
         {
-          entityTypeName: entityTypeName(options.entityType),
+          entityTypeName: entityTypeName(entityType),
           stateFullTypeName: metadata.fullTypeName,
           stateKind: metadata.kind,
         },
@@ -151,9 +154,9 @@ export class Repository<EntityType extends RepositoryEntityType = RepositoryEnti
     if (metadata.kind !== entityFamily) {
       throw new RepositoryIdentityError(
         "ENTITY_SCHEMA_KIND_MISMATCH",
-        `Repository entity type "${entityTypeName(options.entityType)}" is a ${entityFamily}, but state schema "${metadata.fullTypeName}" declares entity kind "${metadata.kind}".`,
+        `Repository entity type "${entityTypeName(entityType)}" is a ${entityFamily}, but state schema "${metadata.fullTypeName}" declares entity kind "${metadata.kind}".`,
         {
-          entityTypeName: entityTypeName(options.entityType),
+          entityTypeName: entityTypeName(entityType),
           entityFamily,
           stateFullTypeName: metadata.fullTypeName,
           stateKind: metadata.kind,
@@ -161,7 +164,7 @@ export class Repository<EntityType extends RepositoryEntityType = RepositoryEnti
       );
     }
 
-    this.#entityType = options.entityType;
+    this.#entityType = entityType;
     this.#entityFamily = entityFamily;
     this.#metadata = metadata;
   }
@@ -227,8 +230,13 @@ function resolveEntityFamily(entityType: RuntimeRepositoryEntityType): EntityFam
   return undefined;
 }
 
-function entityTypeName(entityType: Pick<RuntimeRepositoryEntityType, "name">): string {
-  return entityType.name.length > 0 ? entityType.name : "(anonymous)";
+function entityTypeName(entityType: unknown): string {
+  if ((typeof entityType !== "object" && typeof entityType !== "function") || entityType === null) {
+    return "(anonymous)";
+  }
+
+  const name = (entityType as { readonly name?: unknown }).name;
+  return typeof name === "string" && name.length > 0 ? name : "(anonymous)";
 }
 
 function cloneEntityMetadata<Schema extends DescriptorMessageSchema>(

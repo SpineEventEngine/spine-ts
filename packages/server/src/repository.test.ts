@@ -198,6 +198,48 @@ describe("repository identity", () => {
     }
   });
 
+  it("rejects malformed nameless entity types with structured errors", () => {
+    for (const entityType of [null, undefined, {}, { name: undefined }, { name: "" }]) {
+      try {
+        new Repository({
+          entityType: entityType as unknown as typeof RuntimeCheckedAggregate,
+          schema: AggregateStateSchema,
+        });
+        throw new Error("Expected malformed entity type to fail.");
+      } catch (error) {
+        expect(error).toBeInstanceOf(RepositoryIdentityError);
+        expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
+        expect((error as RepositoryIdentityError).details).toEqual({
+          entityTypeName: "(anonymous)",
+        });
+      }
+    }
+  });
+
+  it("uses the validated entity type and schema values captured at construction entry", () => {
+    let entityTypeReadCount = 0;
+    let schemaReadCount = 0;
+    const options = {
+      get entityType() {
+        entityTypeReadCount += 1;
+        return entityTypeReadCount === 1 ? TaskAggregate : TaskProjection;
+      },
+      get schema() {
+        schemaReadCount += 1;
+        return schemaReadCount === 1 ? AggregateStateSchema : ProjectionStateSchema;
+      },
+    } as unknown as RepositoryOptions<typeof TaskAggregate>;
+
+    const repository = new Repository(options);
+
+    expect(repository.entityType).toBe(TaskAggregate);
+    expect(repository.entityFamily).toBe("aggregate");
+    expect(repository.stateSchema).toBe(AggregateStateSchema);
+    expect(repository.snapshot.entityType).toBe(TaskAggregate);
+    expect(entityTypeReadCount).toBe(1);
+    expect(schemaReadCount).toBe(1);
+  });
+
   it("returns frozen fresh snapshots for later builder duplicate and conflict checks", () => {
     const repository = new Repository({
       entityType: TaskProjection,
@@ -262,6 +304,14 @@ describe("repository identity", () => {
         // @ts-expect-error plain classes are not valid repository entity constructors.
         entityType: PlainEntityClass,
         schema: ProjectionStateSchema,
+      });
+      new Repository({
+        // @ts-expect-error non-function object literals are not valid repository entity constructors.
+        entityType: {
+          name: "ObjectLiteralAggregate",
+          prototype: TaskAggregate.prototype,
+        },
+        schema: AggregateStateSchema,
       });
       // @ts-expect-error bare RepositoryOptions annotations must not erase the constructor-carried schema.
       const erasedAnnotatedOptions: RepositoryOptions = {
