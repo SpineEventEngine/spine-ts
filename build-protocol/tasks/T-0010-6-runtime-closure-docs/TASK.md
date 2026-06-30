@@ -1,6 +1,6 @@
 # T-0010.6: Runtime Closure And User-Facing Docs
 
-Status: Review-fix ready for documentation re-review
+Status: Second review-fix complete, pending commit
 Start: `2026-06-30 19:10 WEST`
 End: `2026-06-30 19:28 WEST`
 Baseline commit: `94a28bf`
@@ -21,6 +21,10 @@ Implementation commit: `d94bb39` (`Close T-0010.6 runtime docs`)
 Final implementation branch HEAD before review-fix: `d94bb39`
 Review-fix worker: review-fix sub-agent (this worker; id pending orchestrator
 fill-in)
+First review-fix commit: `bf92cd8`
+Second review-fix worker: T-0010.6 second review-fix sub-agent (this worker; id
+pending orchestrator fill-in)
+Second review-fix commit: pending
 
 ## Objective
 
@@ -169,6 +173,11 @@ Out of scope:
   implementation commit `d94bb39`. This review-fix updates the task and review
   logs with the closed author/reviewer state and marks the branch ready for
   documentation re-review, not final integration.
+- `2026-06-30 19:40 WEST`: Second documentation review-fix addressed the minor
+  finding that the review log requested Markdown formatting/checks and
+  `git diff --check` but did not record actual outcomes. This second
+  review-fix updates only durable T-0010.6 logs and records the first
+  review-fix commit `bf92cd8`; the second review-fix commit is pending.
 
 ## Decisions
 
@@ -222,6 +231,16 @@ Out of scope:
   coverage 96.45% statements / 90.55% branches / 99.24% functions / 96.39%
   lines, TypeDoc/API counts 100 proto / 28 core / 124 server / 26 storage,
   proto checksum verification, and generated proto output clean.
+- First review-fix worker report: `corepack pnpm prettier --write ...` passed;
+  `corepack pnpm prettier --check ...` passed; `git diff --check` passed;
+  `git status --short` was clean after commit `bf92cd8`.
+- Second review-fix:
+  `corepack pnpm prettier --write build-protocol/reviews/T-0010-6-runtime-closure-docs.md build-protocol/tasks/T-0010-6-runtime-closure-docs/TASK.md build-protocol/work-logs/T-0010-6.md` -
+  passed.
+- Second review-fix:
+  `corepack pnpm prettier --check build-protocol/reviews/T-0010-6-runtime-closure-docs.md build-protocol/tasks/T-0010-6-runtime-closure-docs/TASK.md build-protocol/work-logs/T-0010-6.md` -
+  passed.
+- Second review-fix: `git diff --check` - passed.
 
 ## Coverage Result
 

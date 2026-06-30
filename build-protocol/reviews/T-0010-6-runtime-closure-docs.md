@@ -16,7 +16,7 @@ security `019f19ce-44f2-7980-a126-178a3350a124` (closed, CLEAN);
 performance/reliability `019f19ce-4580-7dd3-9b87-c1476529a214` (closed,
 CLEAN)
 Review timestamp: `2026-06-30`, after implementation commit `d94bb39`
-Status: Review-fix ready for documentation re-review
+Status: Second review-fix complete, pending commit
 
 ## Scope Reviewed
 
@@ -68,13 +68,25 @@ Status: Review-fix ready for documentation re-review
 - Review-fix updated only durable T-0010.6 logs. The review-fix worker id is
   recorded as pending orchestrator fill-in because this worker cannot know its
   orchestrator-assigned id.
+- Second review-fix updated only durable T-0010.6 logs to replace the prior
+  requested-verification wording with actual verification evidence and to make
+  the second review-fix state resumable.
 
-## Verification Requested
+## Review-Fix Verification Evidence
 
 - Final full `CI=true corepack pnpm verify` passed on `2026-06-30 19:28 WEST`.
-- Review-fix verification requested: format changed Markdown logs, run a
-  Markdown-focused format check, run `git diff --check`, and commit the log
-  fix.
+- First review-fix verification from the worker report:
+  `corepack pnpm prettier --write ...` passed,
+  `corepack pnpm prettier --check ...` passed, `git diff --check` passed, and
+  `git status --short` was clean after commit `bf92cd8`.
+- Second review-fix verification on `2026-06-30 19:40 WEST`:
+  `corepack pnpm prettier --write build-protocol/reviews/T-0010-6-runtime-closure-docs.md build-protocol/tasks/T-0010-6-runtime-closure-docs/TASK.md build-protocol/work-logs/T-0010-6.md`
+  passed.
+- Second review-fix verification on `2026-06-30 19:40 WEST`:
+  `corepack pnpm prettier --check build-protocol/reviews/T-0010-6-runtime-closure-docs.md build-protocol/tasks/T-0010-6-runtime-closure-docs/TASK.md build-protocol/work-logs/T-0010-6.md`
+  passed.
+- Second review-fix verification on `2026-06-30 19:40 WEST`:
+  `git diff --check` passed.
 
 ## Outcome
 
@@ -82,4 +94,8 @@ Initial review outcome: maintainability CLEAN; documentation COMMENTS with the
 Important stale-log finding above; TypeScript/API CLEAN; security CLEAN;
 performance/reliability CLEAN.
 
-Review-fix outcome: ready for documentation re-review. Not final integrated.
+First review-fix outcome: committed as `bf92cd8`, with documentation re-review
+finding that verification evidence was requested but not recorded.
+
+Second review-fix outcome: durable log correction complete and ready to commit.
+Not final integrated.
