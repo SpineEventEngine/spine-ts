@@ -290,8 +290,9 @@ scope without applying state, version, or lifecycle changes.
 lifecycle flags. It does not include version-only commits and does not decide
 whether a repository should store the entity. Missing or duplicate scopes throw
 `TransactionalEntityScopeError`. The base still does not invoke handlers, write
-storage, emit lifecycle events, increment versions automatically, dispatch
-messages, or create async-local/global transaction state.
+storage, expose Java builders, emit lifecycle events, increment versions
+automatically, dispatch messages, or create async-local/global transaction
+state.
 
 ## Entity Family Marker Classes
 
@@ -312,9 +313,9 @@ new TaskAggregate({ id, schema: TaskStateSchema, state, version: 1 }).entityFami
 
 These classes inherit `TransactionalEntity` behavior and expose only stable
 family identity through `entityFamily`. They do not add public transaction
-mutators, event history, snapshots, subscriptions, command posting, query
-clients, process workflow execution, handler invocation, storage, buses, or
-lifecycle events.
+mutators, Java builders, event history, snapshots, subscriptions, command
+posting, query clients, process workflow execution, handler invocation, storage,
+buses, or lifecycle events.
 
 ## Envelope Packing
 

@@ -1,6 +1,6 @@
 # T-0009e: Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Started
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Complete
 Start: `2026-06-29 21:58 WEST`
 Baseline commit: `47eae4e`
 Task log path: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
@@ -9,9 +9,10 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009e-entity-base-classes`
 Requirements splitter:
 `019f1531-96a3-7870-bb40-b24fc9a456c8` (Goodall the 3rd, closed)
-Authoring sub-agent: T-0009e.1, T-0009e.2, and T-0009e.3 completed in subtask branches
+Authoring sub-agent: T-0009e.1, T-0009e.2, T-0009e.3, and T-0009e.4 completed in subtask branches
 Reviewer sub-agents: T-0009e.1 Round 8 clean and closed; T-0009e.2 Round 11
-clean and closed; T-0009e.3 Round 3 clean and closed
+clean and closed; T-0009e.3 Round 3 clean and closed; T-0009e.4 Round 3
+clean and closed
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:01 WEST`
 
@@ -221,12 +222,20 @@ statements 97.25%, branches 91.41%, functions 99.16%, lines 97.19%;
 TypeDoc/API/proto gates passed with 72 expected server exports and generated
 proto output clean.
 
-Current parent subtask: `T-0009e.4 Public API Closure And Verification`.
+Completed parent subtask: `T-0009e.4 Public API Closure And Verification`.
 
 `T-0009e.4` started on `2026-06-30 02:52 WEST` in isolated branch
 `task/T-0009e4-public-api-closure-and-verification` from parent commit
 `94dd6d1`. It is scoped to public API/docs/log closure and verification for the
 completed entity base-class task, with no new runtime behavior.
+
+The T-0009e.4 implementation audit on `2026-06-30 03:03 WEST` found the root
+exports, TypeDoc export check, public package/API/user/architecture docs, and
+entity/root tests coherent at the final T-0009e surface. Review findings
+requested explicit public-doc mentions that Java builders remain deferred and
+parent closure logs record final verification/review evidence; those updates are
+applied. Round 3 returned clean. No runtime source, root export, or API-check
+changes were needed.
 
 ## Initial Scope Constraints
 
@@ -265,6 +274,14 @@ Out of scope until later tasks:
 - `build-protocol/work-logs/T-0009e.md`
 - `build-protocol/reviews/T-0009e-entity-base-classes.md`
 - `build-protocol/DECISION_LOG.md`
+- `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`
+- `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/IMPLEMENTATION_REPORT.md`
+- `build-protocol/work-logs/T-0009e4.md`
+- `build-protocol/reviews/T-0009e4-public-api-closure-and-verification.md`
+- `docs/api/README.md`
+- `docs/USER_GUIDE.md`
+- `docs/architecture/README.md`
+- `packages/server/README.md`
 
 ## Tests Run
 
@@ -283,6 +300,15 @@ Out of scope until later tasks:
   `2026-06-30 02:46 WEST`: 15 test files / 158 tests; coverage statements
   97.25%, branches 91.41%, functions 99.16%, lines 97.19%; TypeDoc/API/proto
   gates passed with 72 expected server exports and generated proto output clean.
+- T-0009e.4 focused closure verification passed on `2026-06-30 03:11 WEST`:
+  `corepack pnpm vitest run packages/server/src/entity.test.ts
+packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
+  `node scripts/check-api-docs.mjs` passed with 72 expected server exports.
+- T-0009e.4 full closure verification `CI=true corepack pnpm verify` passed on
+  `2026-06-30 03:11 WEST`: typecheck, lint, format check, 15 test files / 158
+  tests, coverage statements 97.25%, branches 91.41%, functions 99.16%, lines
+  97.19%; TypeDoc/API/proto gates passed with 72 expected server exports and
+  generated proto output clean.
 
 ## Review Rounds
 
@@ -291,6 +317,8 @@ Out of scope until later tasks:
 - T-0009e.2 completed eleven review rounds; Round 11 returned clean across all
   five required reviewer lanes and all reviewers were closed.
 - T-0009e.3 completed three review rounds; Round 3 returned clean across all
+  five required reviewer lanes and all reviewers were closed.
+- T-0009e.4 completed three review rounds; Round 3 returned clean across all
   five required reviewer lanes and all reviewers were closed.
 
 ## Current State
@@ -313,5 +341,5 @@ Out of scope until later tasks:
   `2026-06-30 02:46 WEST`: 15 test files / 158 tests; coverage 97.25%
   statements, 91.41% branches, 99.16% functions, 97.19% lines; TypeDoc/API/proto
   gates passed with 72 expected server exports.
-- Next step: create isolated `T-0009e.4 Public API Closure And Verification`
-  branch/worktree.
+- T-0009e.4 closure verification passed and review findings are fixed in the
+  isolated subtask branch.

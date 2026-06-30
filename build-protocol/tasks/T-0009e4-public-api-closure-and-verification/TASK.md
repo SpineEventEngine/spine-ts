@@ -1,6 +1,6 @@
 # T-0009e.4: Public API Closure And Verification
 
-Status: Started
+Status: Complete
 Parent task: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Task log path:
 `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`
@@ -76,3 +76,29 @@ must be closed after its role is complete.
 ## Blocking Questions
 
 None known.
+
+## Closure Audit
+
+Implementation audit on `2026-06-30 03:03 WEST`, with Round 1 review fixes
+applied afterward, found the integrated T-0009e public surface coherent without
+runtime source changes:
+
+- `packages/server/src/index.ts` exports the final entity shell,
+  transactional-entity, family-marker, transaction, transition-validation,
+  entity-metadata, decorator, handler-metadata, and registry surface.
+- `packages/server/src/index.test.ts` checks the value exports from the server
+  root and the public plain-version metadata type helpers.
+- `scripts/check-api-docs.mjs` lists 72 expected `@spine-ts/server` TypeDoc
+  exports, including `Entity`, `TransactionalEntity`, `Aggregate`,
+  `Projection`, `ProcessManager`, `EntityFamily`,
+  `PlainEntityVersionMetadata`, the transaction contracts, and the scope-error
+  contracts.
+- `docs/api/README.md`, `docs/USER_GUIDE.md`, `docs/architecture/README.md`,
+  and `packages/server/README.md` describe the entity base-class surface and
+  state that repositories, storage integration, handler invocation, dispatch,
+  buses, transports, process workflow, query clients, command posting, lifecycle
+  events, event history/snapshots, Java builders, automatic version increments,
+  and async-local/global transaction state are deferred.
+- No additional runtime behavior, repository seam, dispatch behavior, storage
+  integration, lifecycle event behavior, or source-level JVM compatibility
+  claim was added by this closure subtask.
