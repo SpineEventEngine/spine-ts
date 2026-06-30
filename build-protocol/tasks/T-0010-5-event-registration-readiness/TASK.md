@@ -1,13 +1,13 @@
 # T-0010.5: Event Registration Readiness
 
-Status: Setup Baseline Verified; Implementation Pending
+Status: Implementation Complete; Verification Passed
 Parent task: `T-0010 Single-Process Async Runtime`
 Start: `2026-06-30 18:12 WEST`
 Baseline commit: `20aaad1`
 Branch: `task/T-0010-5-event-registration-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0010-5-event-registration-readiness`
-Authoring sub-agent: pending.
+Authoring sub-agent: Codex implementation sub-agent.
 Reviewer sub-agents: pending.
 
 ## Objective
@@ -96,6 +96,40 @@ Implementation impact:
 - Review prompts must include the server-module `core-jvm` guardrail from
   `BUILD_PROTOCOL.md`.
 
+Implementation skill applicability check on `2026-06-30 18:28 WEST`:
+
+- Task prompt provided full bodies for `test-driven-development`,
+  `javascript-testing-patterns`, `typescript-advanced-types`,
+  `codebase-design`, and `verification-before-completion`; these were selected
+  and applied.
+- `subagent-driven-development` was listed by the setup brief, but the direct
+  human instruction for this implementation was "Do not spawn any sub-agents",
+  so it was not used.
+- Repo-local expected skills and user-installed skills were not re-enumerated
+  during implementation because the orchestrator prompt supplied the applicable
+  skill bodies and no additional skill was needed.
+- The server-module `core-jvm` guardrail was satisfied from the setup research
+  recorded above; implementation used the multicast/deferred-classification
+  constraints from those inspected JVM files and did not broaden runtime scope.
+
+## Implementation Notes
+
+- Added `EventRegistrationReadiness` as a metadata-only lookup over
+  `HandlerMetadataRegistryLookup` or iterable `EntityHandlersMetadata`.
+- Preserved event fan-out for subscribers and reactors by returning all
+  registered receivers for an event type.
+- Exposed event applications grouped by event type and left duplicate
+  per-entity-state/per-event validation with `HandlerMetadataRegistry`.
+- Ordered event message full type names with explicit code-unit comparison.
+- Returned fresh frozen arrays and copied/frozen nested metadata values,
+  matching the T-0010.4 command readiness style.
+- Documented domestic/external event classification and integration-broker
+  wanted-event publication as deferred because current TS metadata has no
+  external-event marker.
+- Added no event bus, integration broker, import bus, event store, delivery,
+  stand, subscription service, transport, handler invocation, validation,
+  repository runtime dispatch, command-result subscription, or `Ack`.
+
 ## Verification
 
 - Setup install on `2026-06-30 18:15 WEST`: initial sandboxed
@@ -108,6 +142,24 @@ pnpm verify` passed with 20 test files / 242 tests, coverage 95.94%
   statements / 90.38% branches / 98.15% functions / 95.87% lines, TypeDoc/API
   checks with 100 proto / 28 core / 119 server / 26 storage expected exports,
   proto lint/generate checksum verification, and generated proto output clean.
+- RED on `2026-06-30 18:24 WEST`: `corepack pnpm test
+packages/server/src/event-registration-readiness.test.ts` failed with 9/9
+  tests failing because `EventRegistrationReadiness` was not exported.
+- GREEN on `2026-06-30 18:26 WEST`: `corepack pnpm test
+packages/server/src/event-registration-readiness.test.ts` passed with 1 test
+  file / 9 tests.
+- Focused export GREEN on `2026-06-30 18:27 WEST`: `corepack pnpm test
+packages/server/src/event-registration-readiness.test.ts
+packages/server/src/index.test.ts` passed with 2 test files / 18 tests.
+- Typecheck on `2026-06-30 18:27 WEST`: first `corepack pnpm typecheck`
+  failed on one generic cast in the event readiness test helper; after the cast
+  was tightened through `unknown`, `corepack pnpm typecheck` passed with
+  `tsc -b` and `tsc --noEmit -p tsconfig.eslint.json`.
+- Full verification on `2026-06-30 18:31 WEST`: `CI=true corepack pnpm verify`
+  passed with 21 test files / 251 tests, coverage 95.95% statements / 90.43%
+  branches / 97.78% functions / 95.89% lines, TypeDoc/API checks with 100
+  proto / 28 core / 124 server / 26 storage expected exports, proto
+  lint/generate checksum verification, and generated proto output clean.
 
 ## Human Questions And Answers
 

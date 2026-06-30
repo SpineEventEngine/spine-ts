@@ -158,6 +158,24 @@ the unique command assignee. It is not a command bus, command service,
 dispatcher, router, command posting API, validator, repository runtime
 registration hook, storage writer, transport adapter, handler invoker, or
 Spine `Ack` producer.
+Event registration readiness exports include `EventRegistrationReadiness`,
+`EventRegistrationReadinessLookup`,
+`EventRegistrationSubscriberMetadata`, `EventRegistrationReactorMetadata`, and
+`EventRegistrationApplicationMetadata`. The readiness view is built from an
+existing `HandlerMetadataRegistryLookup` or from `EntityHandlersMetadata`
+values by first constructing a `HandlerMetadataRegistry`, so duplicate event
+application enforcement remains the registry's per-entity-state/per-event
+policy. It reports deterministic registered event message full type names and
+frozen copy-safe metadata for event subscribers, event reactors, and event
+applications grouped by event type. Subscriber and reactor lookups preserve
+Spine fan-out semantics and do not reject multiple receivers for the same event
+type. Domestic/external event classification and integration-broker
+wanted-event publication are deferred because the current TypeScript handler
+metadata has no external-event marker. It is not an event bus, integration
+broker, import bus, event store, delivery mechanism, stand, subscription
+service, command-result subscription, dispatcher, router, event posting API,
+validator, repository runtime registration hook, storage writer, transport
+adapter, handler invoker, or Spine `Ack` producer.
 Server runtime exports include `SingleProcessServerRuntime`,
 `ServerRuntimeLifecycle`, `ServerRuntimeState`, `ServerRuntimeWork`,
 `ServerRuntimeStateOperation`, `ServerRuntimeStateErrorCode`, and

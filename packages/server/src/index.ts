@@ -104,6 +104,14 @@ export {
 } from "./command-registration-readiness.js";
 
 export {
+  EventRegistrationReadiness,
+  type EventRegistrationApplicationMetadata,
+  type EventRegistrationReadinessLookup,
+  type EventRegistrationReactorMetadata,
+  type EventRegistrationSubscriberMetadata,
+} from "./event-registration-readiness.js";
+
+export {
   type ConcreteRepositoryEntityType,
   Repository,
   type RepositoryEntityType,
