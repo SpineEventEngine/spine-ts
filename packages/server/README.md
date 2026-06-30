@@ -233,11 +233,11 @@ workflow execution, handler invocation, storage, buses, or lifecycle events.
 
 ## Repository Identity
 
-Use `Repository` when later bounded-context builder code needs to record that
-one entity constructor owns one descriptor-backed state schema:
+Use `Repository` when a `BoundedContextBuilder` needs to record that one entity
+constructor owns one descriptor-backed state schema:
 
 ```ts
-import { Aggregate, Repository } from "@spine-ts/server";
+import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
 import { TaskStateSchema } from "./generated/tasks_pb.js";
 
 class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
@@ -250,6 +250,9 @@ const repository = new Repository({
 repository.entityFamily; // "aggregate"
 repository.stateFullTypeName; // TaskStateSchema.typeName
 repository.snapshot.stateFullTypeName; // immutable fresh-copy snapshot
+
+const tasks = BoundedContext.singleTenant("Tasks").add(repository).build();
+tasks.repositories[0]?.stateFullTypeName; // TaskStateSchema.typeName
 ```
 
 The constructor derives descriptor metadata with `describeEntityMetadata()` and
@@ -260,8 +263,11 @@ are accepted. Explicitly reparented same-realm ES classes are trusted as
 metadata; this is not a sandbox boundary. The API rejects constructors outside
 those families and rejects mismatched family/schema pairs, such as an aggregate
 class with a projection state schema, with structured `RepositoryIdentityError`
-codes and details. This identity seam follows Spine `core-jvm` `Repository`
-identity concepts closely while deferring runtime behavior. This API is
+codes and details. `BoundedContextBuilder.add(repository)` uses these
+metadata-only identities for duplicate and conflict checks before
+`builder.build()` creates an immutable bounded-context snapshot. Runtime
+context registration remains deferred. This identity seam follows Spine
+`core-jvm` `Repository` identity concepts closely. This API is
 metadata-only: it does not create, find, or store
 entities; open storage; register with a bounded context; route messages; invoke
 handlers; write inboxes; manage caches; emit lifecycle events; start buses; or

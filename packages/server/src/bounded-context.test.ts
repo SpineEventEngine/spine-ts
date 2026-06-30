@@ -784,6 +784,44 @@ describe("BoundedContext builder shell", () => {
           }),
         }),
     ],
+    [
+      "duplicate metadata semantic tags",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          metadata: Object.freeze({
+            ...snapshot.metadata,
+            semanticTags: ["example.tags.AggregateTag", "example.tags.AggregateTag"] as never,
+          }),
+        }),
+    ],
+    [
+      "unsorted metadata semantic tags",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          metadata: Object.freeze({
+            ...snapshot.metadata,
+            semanticTags: ["example.tags.ZetaTag", "example.tags.AlphaTag"] as never,
+          }),
+        }),
+    ],
+    [
+      "arbitrary entity constructor",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          entityType: (() => undefined) as never,
+        }),
+    ],
+    [
+      "mismatched entity constructor family",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          entityType: TaskProjection as never,
+        }),
+    ],
   ] satisfies readonly [
     string,
     (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) => unknown,

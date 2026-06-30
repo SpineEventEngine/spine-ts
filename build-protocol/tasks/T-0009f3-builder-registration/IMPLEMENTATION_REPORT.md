@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.3 Builder Repository Registration And Conflict Checks
 
-Status: Round 4 Review Fix Implemented And Verified
+Status: Round 5 Review Fix Implemented And Verified
 Task log: `build-protocol/tasks/T-0009f3-builder-registration/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f3.md`
 Review log: `build-protocol/reviews/T-0009f3-builder-registration.md`
@@ -77,10 +77,17 @@ Impact:
 - Repository snapshot cloning and validation require `metadata.semanticTags`
   entries to be non-empty canonical strings that do not need trimming, matching
   the descriptor-derived semantic-tag boundary for hostile snapshot input.
+- Repository snapshot cloning and validation require `metadata.semanticTags`
+  entries to be deduplicated and sorted, matching descriptor-derived canonical
+  tag ordering from `entity-metadata.ts`.
 - Repository snapshot validation directly verifies
   `stateSchema.typeName === stateFullTypeName`, so hostile snapshots cannot
   forge `stateFullTypeName` and `metadata.fullTypeName` while retaining a
   different schema object.
+- Repository snapshot validation verifies `entityType` is a supported
+  Aggregate/Projection/ProcessManager class and that the inferred family
+  matches `snapshot.entityFamily`, so hostile snapshots cannot substitute an
+  arbitrary function or cross-family constructor.
 - `BoundedContextBuilder.build()` no longer pre-clones repository snapshots
   before constructing `BoundedContext`; constructor validation performs the
   defensive copy once, and context snapshot freezing preserves already
@@ -218,6 +225,29 @@ Impact:
   `tsc -b`, tooling typecheck, ESLint, Prettier check, 17 Vitest files / 207
   tests, coverage over thresholds, TypeDoc/API guard, proto lint, proto
   generate, and generated-clean completed successfully.
+- Round-5 metadata RED:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts`
+  failed with four expected failures because duplicate semantic tags, unsorted
+  semantic tags, arbitrary function `entityType`, and entity constructor/family
+  mismatch snapshots were accepted instead of producing deterministic
+  `INVALID_REPOSITORY_SNAPSHOT` errors.
+- Round-5 bounded-context GREEN:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts`
+  passed 35 tests after canonical semantic-tag list validation and entity
+  constructor/family validation were added.
+- Round-5 required focused verification:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts packages/server/src/repository.test.ts packages/server/src/index.test.ts`
+  passed 3 test files and 60 tests.
+- Round-5 `corepack pnpm typecheck:tooling`:
+  passed.
+- Round-5 `node scripts/check-api-docs.mjs`:
+  passed. TypeDoc emitted one source-link warning because the local `origin`
+  remote is not valid; the API JSON guard passed.
+- Round-5 full verification:
+  `CI=true corepack pnpm verify` passed. Evidence: node version check,
+  `tsc -b`, tooling typecheck, ESLint, Prettier check, 17 Vitest files / 211
+  tests, coverage over thresholds, TypeDoc/API guard, proto lint, proto
+  generate, and generated-clean completed successfully.
 
 ## Review
 
@@ -261,3 +291,15 @@ Impact:
   match the snapshot's `stateFullTypeName` before accepting repository
   snapshots.
 - Required focused and full verification passed for the round-4 fix.
+- Fifth external review round reported one low-severity security finding, one
+  documentation finding, and one reliability finding.
+- Fixed round-5 security finding by requiring hostile snapshot semantic tags
+  to already be deduplicated and sorted.
+- Fixed round-5 documentation finding by updating the README repository
+  identity section to describe present-tense
+  `BoundedContextBuilder.add(repository)` usage while keeping runtime
+  registration deferred.
+- Fixed round-5 reliability finding by requiring snapshot `entityType` to be a
+  supported Aggregate/Projection/ProcessManager class and requiring its
+  inferred family to match `snapshot.entityFamily`.
+- Required focused and full verification passed for the round-5 fix.

@@ -169,3 +169,46 @@ lanes before integration:
   for invalid local `origin`; `CI=true corepack pnpm verify` passed 17 test
   files / 207 tests plus coverage, docs, proto lint/generate, and
   generated-clean.
+
+## Round 5 Review State
+
+- Fifth external review round reported three findings:
+  - Security Low: `cloneRepositorySemanticTags()` /
+    `validateRepositorySemanticTags()` rejected blank strings but still did
+    not enforce descriptor metadata's deduplicated and sorted semantic-tag
+    contract.
+  - Documentation P3: `packages/server/README.md` still said "later
+    bounded-context builder code" needs `Repository` even though
+    `BoundedContextBuilder.add(repository)` is implemented.
+  - Reliability P2: `validateRepositorySnapshot()` only checked
+    `snapshot.entityType` was a function and did not verify it is a supported
+    Aggregate/Projection/ProcessManager constructor whose inferred family
+    matches `snapshot.entityFamily`.
+- Already clean review lanes from the fifth round: code style and
+  TypeScript/API docs.
+
+## Round 5 Fix State
+
+- Added RED/GREEN coverage for duplicate and unsorted
+  `metadata.semanticTags`.
+- Added RED/GREEN coverage for hostile snapshots with an arbitrary function
+  `entityType` and with an entity constructor/family mismatch.
+- Repository snapshot cloning and validation now reject semantic tags that are
+  not already deduplicated and sorted.
+- Repository snapshot validation now verifies `entityType` is a supported
+  Aggregate/Projection/ProcessManager class and that the inferred family
+  matches `snapshot.entityFamily`.
+- README repository identity docs now describe present-tense
+  `BoundedContextBuilder.add(repository)` usage while keeping runtime
+  registration deferred.
+- Preserved the metadata-only builder boundary: no storage, routing, stand,
+  bus, handler, default runtime repository, or context runtime behavior was
+  added.
+- Required focused and full verification passed before committing the round-5
+  fix:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts packages/server/src/repository.test.ts packages/server/src/index.test.ts`
+  passed 60 tests; `corepack pnpm typecheck:tooling` passed;
+  `node scripts/check-api-docs.mjs` passed with one TypeDoc source-link warning
+  for invalid local `origin`; `CI=true corepack pnpm verify` passed 17 test
+  files / 211 tests plus coverage, docs, proto lint/generate, and
+  generated-clean.

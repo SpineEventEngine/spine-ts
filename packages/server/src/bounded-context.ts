@@ -4,6 +4,7 @@ import {
   type RepositoryEntityType,
   type RepositoryIdentitySnapshot,
 } from "./repository.js";
+import { Aggregate, ProcessManager, Projection } from "./entity.js";
 
 /** Tenant isolation mode declared by a bounded context specification. */
 export type TenantMode = "single-tenant" | "multitenant";
@@ -113,6 +114,10 @@ export class BoundedContextNameError extends Error {
 
 interface FrameworkConstructionToken {
   readonly frameworkConstructionToken: true;
+}
+
+interface RuntimeEntityConstructor {
+  readonly prototype: object;
 }
 
 const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
@@ -512,6 +517,8 @@ function cloneRepositorySemanticTags(tags: unknown, owner: string): readonly str
     clonedTags.push(tag);
   }
 
+  validateCanonicalRepositorySemanticTagList(clonedTags, owner);
+
   return Object.freeze(clonedTags);
 }
 
@@ -776,11 +783,17 @@ function throwInvalidRepositorySnapshot(
 }
 
 function validateRepositorySnapshot(snapshot: RepositoryIdentitySnapshot): void {
-  if (typeof snapshot.entityType !== "function") {
-    throw new TypeError("Repository snapshot entityType must be a constructor.");
+  const entityFamily = resolveRepositorySnapshotEntityFamily(snapshot.entityType);
+  if (entityFamily === undefined) {
+    throw new TypeError(
+      "Repository snapshot entityType must be a supported entity class constructor.",
+    );
   }
   if (!isEntityFamily(snapshot.entityFamily)) {
     throw new TypeError("Repository snapshot entityFamily must be supported.");
+  }
+  if (entityFamily !== snapshot.entityFamily) {
+    throw new TypeError("Repository snapshot entityType must match entityFamily.");
   }
   const stateSchema = snapshot.stateSchema as unknown;
   if (!isRecord(stateSchema)) {
@@ -876,6 +889,8 @@ function validateRepositorySemanticTags(tags: unknown, owner: string): void {
     }
     validateCanonicalRepositorySemanticTag(tag, `${owner}[${String(index)}]`);
   }
+
+  validateCanonicalRepositorySemanticTagList(tagValues as readonly string[], owner);
 }
 
 function validateCanonicalRepositorySemanticTag(tag: string, owner: string): void {
@@ -886,6 +901,67 @@ function validateCanonicalRepositorySemanticTag(tag: string, owner: string): voi
   }
   if (tag !== canonicalTag) {
     throw new TypeError(`${owner} must not require trimming.`);
+  }
+}
+
+function validateCanonicalRepositorySemanticTagList(tags: readonly string[], owner: string): void {
+  for (let index = 1; index < tags.length; index += 1) {
+    const previousTag = tags[index - 1];
+    const tag = tags[index];
+
+    if (previousTag === undefined || tag === undefined) {
+      throw new TypeError(`${owner} must be a dense array.`);
+    }
+    if (previousTag === tag) {
+      throw new TypeError(`${owner} must not contain duplicate tags.`);
+    }
+    if (previousTag > tag) {
+      throw new TypeError(`${owner} must be sorted.`);
+    }
+  }
+}
+
+function resolveRepositorySnapshotEntityFamily(
+  entityType: unknown,
+): RepositoryIdentitySnapshot["entityFamily"] | undefined {
+  if (typeof entityType !== "function" || !isClassConstructor(entityType)) {
+    return undefined;
+  }
+  const entityConstructor = entityType as RuntimeEntityConstructor;
+
+  if (hasEntityFamilyInheritance(entityConstructor, Aggregate, Aggregate.prototype)) {
+    return "aggregate";
+  }
+  if (hasEntityFamilyInheritance(entityConstructor, Projection, Projection.prototype)) {
+    return "projection";
+  }
+  if (hasEntityFamilyInheritance(entityConstructor, ProcessManager, ProcessManager.prototype)) {
+    return "process-manager";
+  }
+
+  return undefined;
+}
+
+function isClassConstructor(value: object): boolean {
+  try {
+    return Function.prototype.toString.call(value).startsWith("class ");
+  } catch {
+    return false;
+  }
+}
+
+function hasEntityFamilyInheritance(
+  entityType: RuntimeEntityConstructor,
+  familyConstructor: object,
+  familyPrototype: object,
+): boolean {
+  try {
+    return (
+      Object.prototype.isPrototypeOf.call(familyConstructor, entityType) &&
+      Object.prototype.isPrototypeOf.call(familyPrototype, entityType.prototype)
+    );
+  } catch {
+    return false;
   }
 }
 

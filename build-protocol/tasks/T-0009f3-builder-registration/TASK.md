@@ -151,6 +151,25 @@ Expected boundary from current research:
       snapshot.
 - [x] Required focused and full verification pass for the round-4 fix commit.
 
+## Review Round 5 Fixes
+
+- [x] Security Low: added RED/GREEN coverage for duplicate and unsorted
+      `metadata.semanticTags` values returned by hostile repository snapshots.
+- [x] Security Low: repository snapshot cloning and validation now require
+      semantic tags to match the descriptor metadata contract: dense,
+      non-empty, canonical, deduplicated, and sorted.
+- [x] Documentation P3: `packages/server/README.md` now describes
+      `BoundedContextBuilder.add(repository)` in present tense while keeping
+      runtime context registration deferred.
+- [x] Reliability P2: added RED/GREEN coverage for hostile snapshots whose
+      `entityType` is an arbitrary function or whose entity constructor
+      implies a family that does not match `snapshot.entityFamily`.
+- [x] Reliability P2: repository snapshot validation now verifies
+      `entityType` is a supported Aggregate/Projection/ProcessManager class
+      and that the inferred family matches the snapshot family before
+      accepting metadata.
+- [x] Required focused and full verification pass for the round-5 fix commit.
+
 ## Implementation Evidence
 
 - Inspected `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/BoundedContextBuilder.java`:
