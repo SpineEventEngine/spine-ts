@@ -200,3 +200,8 @@ deferred to a later transport-adapter task.
   `556c23a Integrate T-0010.1 runtime lifecycle queue`.
 - Next selected subtask:
   `T-0010.2 Bounded Context Runtime Handle`.
+- `T-0010.2 Bounded Context Runtime Handle` branch/worktree created on
+  `2026-06-30 15:52 WEST` from parent commit `d570bba`. Setup logs are
+  created; setup baseline verification passed on `2026-06-30 15:56 WEST` with
+  18 test files / 219 tests and clean TypeDoc/API, proto, and generated-output
+  gates. Implementation handoff is pending.

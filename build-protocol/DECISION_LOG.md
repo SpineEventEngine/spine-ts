@@ -1281,3 +1281,38 @@ Consequences:
   behavior that is not justified by the selected subtask.
 - The public API should prefer explicit, testable async lifecycle objects over
   hidden import-time registration or process-wide mutable state.
+
+## D-0049: T-0010.2 Adds Only A Bounded Context Runtime Handle
+
+Status: Accepted
+
+Date: 2026-06-30
+
+Context: `T-0010.2 Bounded Context Runtime Handle` follows the
+single-process runtime lifecycle/queue kernel. The corresponding Spine JVM
+`core-jvm/server` code is intentionally much larger: `BoundedContextBuilder`
+creates system and domain contexts, initializes tenant index, command bus, and
+stand, and registers repositories, command dispatchers, event dispatchers, and
+delivery dispatchers. `BoundedContext` owns command/event/import buses,
+integration broker, stand, tenant index, visibility guard, internal access, and
+close hooks. `Server.Builder` wires built contexts into command/query/
+subscription gRPC services. The human explicitly warned that server-module work
+should have a close look at Spine JVM `core-jvm/server` and avoid
+over-inventing.
+
+Decision: T-0010.2 adds only a lightweight runtime-facing handle for an already
+built TS `BoundedContext` snapshot and the existing `ServerRuntimeLifecycle`
+boundary. It must not recreate JVM's full server graph, service hosting, buses,
+stand, tenant index, system context, delivery registration, repository runtime
+registration, storage, transport, or handler invocation. The existing
+metadata-only `BoundedContext` build contract remains intact.
+
+Consequences:
+
+- Later command/event intake tasks can reference a context-scoped runtime
+  boundary without depending on service, bus, or storage abstractions.
+- Reviewers must reject extra runtime members that imply buses, dispatch,
+  read-side query execution, storage, transport, or repository runtime
+  registration in this subtask.
+- Public docs must state that the handle is not a JVM `Server` equivalent and
+  is not a running context graph.
