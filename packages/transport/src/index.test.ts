@@ -7,9 +7,20 @@ import {
   type RequestTransportHandler,
   type RequestTransportOperation,
   type SignalTransport,
+  type TransportLifecycleParticipant,
+  type TransportLifecycleState,
+  type TransportParticipantIdentity,
+  type TransportParticipantIdentityInput,
+  type TransportReadinessState,
   type TransportSignalKind,
+  type TransportWorkerRegistration,
+  createTransportParticipantIdentity,
   createTransportSubscription,
+  createTransportLifecycleSnapshot,
+  createTransportWorkerRegistration,
+  createBrokerTransportParticipant,
   createTransportTopic,
+  createTransportWorkerParticipant,
 } from "./index.js";
 
 describe("@spine-ts/transport", () => {
@@ -90,6 +101,172 @@ describe("@spine-ts/transport", () => {
     expect(Object.isFrozen(subscription)).toBe(true);
   });
 
+  it("creates stable broker and worker participant identities", () => {
+    const broker = createBrokerTransportParticipant({
+      participantId: " local-broker ",
+    });
+    const worker = createTransportWorkerParticipant({
+      participantId: " projections ",
+      workerRole: "projection-worker",
+    });
+
+    expect(broker).toEqual({
+      participantKind: "broker",
+      participantId: "local-broker",
+      participantKey: "broker#local-broker",
+    });
+    expect(worker).toEqual({
+      participantKind: "worker",
+      participantId: "projections",
+      participantKey: "worker#projection-worker#projections",
+      workerRole: "projection-worker",
+    });
+    expect(broker).not.toHaveProperty("endpoint");
+    expect(worker).not.toHaveProperty("socketType");
+    expect(worker).not.toHaveProperty("processId");
+    expect(Object.isFrozen(broker)).toBe(true);
+    expect(Object.isFrozen(worker)).toBe(true);
+  });
+
+  it("creates deterministic worker registrations from transport subscriptions", () => {
+    const registration = createTransportWorkerRegistration({
+      worker: {
+        participantId: "projection-a",
+        workerRole: "projection-worker",
+      },
+      subscriptions: [
+        {
+          subscriberId: "projection-a",
+          topic: {
+            signalKind: "event",
+            messageTypeUrl: "type.spine.io/example.TaskCreated",
+            semanticTags: ["projection", "tasks"],
+          },
+        },
+        {
+          subscriberId: "projection-a",
+          mode: "competing-consumer",
+          topic: {
+            signalKind: "subscription",
+            messageTypeUrl: "type.spine.io/example.TaskWatch",
+          },
+        },
+      ],
+    });
+
+    expect(registration).toEqual({
+      worker: {
+        participantKind: "worker",
+        participantId: "projection-a",
+        participantKey: "worker#projection-worker#projection-a",
+        workerRole: "projection-worker",
+      },
+      subscriptions: [
+        {
+          subscriberId: "projection-a",
+          mode: "fan-out",
+          topic: {
+            signalKind: "event",
+            messageTypeUrl: "type.spine.io/example.TaskCreated",
+            semanticTags: ["projection", "tasks"],
+            routing: {
+              signalKind: "event",
+              messageTypeUrl: "type.spine.io/example.TaskCreated",
+              semanticTags: ["projection", "tasks"],
+              routingKey: "event:type.spine.io%2Fexample.TaskCreated:projection,tasks",
+            },
+          },
+          descriptorKey:
+            "event:type.spine.io%2Fexample.TaskCreated:projection,tasks#fan-out#projection-a",
+        },
+        {
+          subscriberId: "projection-a",
+          mode: "competing-consumer",
+          topic: {
+            signalKind: "subscription",
+            messageTypeUrl: "type.spine.io/example.TaskWatch",
+            semanticTags: [],
+            routing: {
+              signalKind: "subscription",
+              messageTypeUrl: "type.spine.io/example.TaskWatch",
+              semanticTags: [],
+              routingKey: "subscription:type.spine.io%2Fexample.TaskWatch",
+            },
+          },
+          descriptorKey:
+            "subscription:type.spine.io%2Fexample.TaskWatch#competing-consumer#projection-a",
+        },
+      ],
+      signalKinds: ["event", "subscription"],
+      registrationKey:
+        "worker#projection-worker#projection-a#event:type.spine.io%2Fexample.TaskCreated:projection,tasks#fan-out#projection-a|subscription:type.spine.io%2Fexample.TaskWatch#competing-consumer#projection-a",
+    });
+    expect(registration.subscriptions[0]).not.toHaveProperty("frames");
+    expect(registration).not.toHaveProperty("retries");
+    expect(Object.isFrozen(registration)).toBe(true);
+  });
+
+  it("creates lifecycle snapshots with validated readiness and worker registrations", () => {
+    const workerRegistration = createTransportWorkerRegistration({
+      worker: {
+        participantId: "projection-a",
+        workerRole: "projection-worker",
+      },
+      subscriptions: [
+        {
+          subscriberId: "projection-a",
+          topic: {
+            signalKind: "event",
+            messageTypeUrl: "type.spine.io/example.TaskCreated",
+          },
+        },
+      ],
+    });
+    const snapshot = createTransportLifecycleSnapshot({
+      participant: workerRegistration.worker,
+      state: "running",
+      readiness: "ready",
+      workerRegistrations: [workerRegistration],
+    });
+
+    expect(snapshot).toEqual({
+      participant: {
+        participantKind: "worker",
+        participantId: "projection-a",
+        participantKey: "worker#projection-worker#projection-a",
+        workerRole: "projection-worker",
+      },
+      state: "running",
+      readiness: "ready",
+      workerRegistrations: [workerRegistration],
+    });
+    expect(snapshot).not.toHaveProperty("brokerEndpoint");
+    expect(snapshot).not.toHaveProperty("childProcess");
+    expect(Object.isFrozen(snapshot)).toBe(true);
+    expect(Object.isFrozen(snapshot.workerRegistrations)).toBe(true);
+  });
+
+  it("normalizes lifecycle snapshots from broker inputs without worker registrations", () => {
+    const snapshot = createTransportLifecycleSnapshot({
+      participant: {
+        participantId: " broker-a ",
+      },
+      state: "created",
+      readiness: "pending",
+    });
+
+    expect(snapshot).toEqual({
+      participant: {
+        participantKind: "broker",
+        participantId: "broker-a",
+        participantKey: "broker#broker-a",
+      },
+      state: "created",
+      readiness: "pending",
+      workerRegistrations: [],
+    });
+  });
+
   it("rejects malformed routing inputs", () => {
     expect(() =>
       createTransportTopic({
@@ -157,6 +334,174 @@ describe("@spine-ts/transport", () => {
     ).toThrow(/mode/);
   });
 
+  it("rejects invalid lifecycle participant and snapshot combinations", () => {
+    expect(() =>
+      createTransportParticipantIdentity({
+        participantKind: "broker",
+        participantId: "broker-a",
+        workerRole: "system-worker" as never,
+      }),
+    ).toThrow(/must not declare workerRole/);
+
+    expect(() =>
+      createTransportParticipantIdentity({
+        participantKind: "sidecar" as TransportParticipantIdentityInput["participantKind"],
+        participantId: "broker-a",
+      }),
+    ).toThrow(/participantKind/);
+
+    expect(() =>
+      createTransportWorkerParticipant({
+        participantId: "worker-a",
+        workerRole: "queue-pump" as never,
+      }),
+    ).toThrow(/workerRole/);
+
+    expect(() =>
+      createTransportWorkerRegistration({
+        worker: createBrokerTransportParticipant({
+          participantId: "broker-a",
+        }) as never,
+        subscriptions: [
+          {
+            subscriberId: "broker-a",
+            topic: {
+              signalKind: "event",
+              messageTypeUrl: "type.spine.io/example.TaskCreated",
+            },
+          },
+        ],
+      }),
+    ).toThrow(/must be a worker participant/);
+
+    expect(() =>
+      createTransportWorkerRegistration({
+        worker: {
+          participantId: "projection-a",
+          workerRole: "projection-worker",
+        },
+        subscriptions: [],
+      }),
+    ).toThrow(/subscriptions/);
+
+    expect(() =>
+      createTransportWorkerRegistration({
+        worker: {
+          participantId: "projection-a",
+          workerRole: "projection-worker",
+        },
+        subscriptions: [
+          {
+            subscriberId: "projection-b",
+            topic: {
+              signalKind: "event",
+              messageTypeUrl: "type.spine.io/example.TaskCreated",
+            },
+          },
+        ],
+      }),
+    ).toThrow(/must use the worker participantId as subscriberId/);
+
+    expect(() =>
+      createTransportLifecycleSnapshot({
+        participant: createBrokerTransportParticipant({ participantId: "broker-a" }),
+        state: "running",
+        readiness: "ready",
+        workerRegistrations: [
+          createTransportWorkerRegistration({
+            worker: {
+              participantId: "projection-a",
+              workerRole: "projection-worker",
+            },
+            subscriptions: [
+              {
+                subscriberId: "projection-a",
+                topic: {
+                  signalKind: "event",
+                  messageTypeUrl: "type.spine.io/example.TaskCreated",
+                },
+              },
+            ],
+          }),
+        ],
+      }),
+    ).toThrow(/brokers must not include worker registrations/);
+
+    expect(() =>
+      createTransportLifecycleSnapshot({
+        participant: {
+          participantKind: "worker",
+          participantId: "projection-a",
+          workerRole: "projection-worker",
+        },
+        state: "steady" as TransportLifecycleState,
+        readiness: "pending",
+      }),
+    ).toThrow(/state/);
+
+    expect(() =>
+      createTransportLifecycleSnapshot({
+        participant: {
+          participantKind: "worker",
+          participantId: "projection-a",
+          workerRole: "projection-worker",
+        },
+        state: "running",
+        readiness: "warming" as TransportReadinessState,
+      }),
+    ).toThrow(/readiness/);
+
+    expect(() =>
+      createTransportLifecycleSnapshot({
+        participant: createTransportWorkerParticipant({
+          participantId: "projection-a",
+          workerRole: "projection-worker",
+        }),
+        state: "created",
+        readiness: "ready",
+      }),
+    ).toThrow(/ready participants must be running/);
+
+    expect(() =>
+      createTransportLifecycleSnapshot({
+        participant: createTransportWorkerParticipant({
+          participantId: "projection-a",
+          workerRole: "projection-worker",
+        }),
+        state: "closed",
+        readiness: "ready",
+      }),
+    ).toThrow(/ready participants must be running/);
+
+    expect(() =>
+      createTransportLifecycleSnapshot({
+        participant: createTransportWorkerParticipant({
+          participantId: "projection-a",
+          workerRole: "projection-worker",
+        }),
+        state: "running",
+        readiness: "pending",
+        workerRegistrations: [
+          createTransportWorkerRegistration({
+            worker: {
+              participantId: "projection-b",
+              workerRole: "projection-worker",
+            },
+            subscriptions: [
+              {
+                subscriberId: "projection-b",
+                topic: {
+                  signalKind: "event",
+                  messageTypeUrl: "type.spine.io/example.TaskCreated",
+                },
+              },
+            ],
+          }),
+        ],
+      }),
+    ).toThrow(/worker registration participant must match snapshot participant/);
+  });
+
   it("exposes adapter-agnostic operation, handler, and close type contracts", () => {
     expectTypeOf<TransportSignalKind>().toEqualTypeOf<
       "command" | "delivery" | "event" | "query" | "subscription" | "system"
@@ -183,5 +528,21 @@ describe("@spine-ts/transport", () => {
     expectTypeOf<AsyncCloseable["close"]>().returns.toEqualTypeOf<Promise<void>>();
     expectTypeOf<SignalTransport["publish"]>().returns.toEqualTypeOf<Promise<void>>();
     expectTypeOf<SignalTransport["request"]>().returns.resolves.toEqualTypeOf<unknown>();
+    expectTypeOf<TransportParticipantIdentity>().toExtend<{
+      readonly participantKind: "broker" | "worker";
+      readonly participantId: string;
+      readonly participantKey: string;
+    }>();
+    expectTypeOf<TransportWorkerRegistration>().toExtend<{
+      readonly worker: object;
+      readonly subscriptions: readonly object[];
+      readonly signalKinds: readonly TransportSignalKind[];
+      readonly registrationKey: string;
+    }>();
+    expectTypeOf<TransportLifecycleParticipant>().toExtend<AsyncCloseable>();
+    expectTypeOf<TransportLifecycleParticipant["state"]>().toEqualTypeOf<TransportLifecycleState>();
+    expectTypeOf<
+      TransportLifecycleParticipant["readiness"]
+    >().toEqualTypeOf<TransportReadinessState>();
   });
 });

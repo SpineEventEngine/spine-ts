@@ -414,14 +414,23 @@ objects and interfaces that later adapters can implement:
 - `createTransportSubscription()` builds immutable logical subscription
   descriptors from a topic, a logical subscriber ID, and a transport delivery
   mode; and
+- `createBrokerTransportParticipant()`,
+  `createTransportWorkerParticipant()`,
+  `createTransportWorkerRegistration()`, and
+  `createTransportLifecycleSnapshot()` add the first adapter-agnostic
+  broker/worker lifecycle seam using stable participant identities, logical
+  worker roles, subscription-backed registrations, lifecycle states, and
+  readiness states only; and
 - `SignalTransport` plus publish/request handler contracts define the minimal
   adapter seam for later runtime integration and graceful async close behavior.
 
 The boundary is intentionally smaller than a bus implementation. It does not
 choose ZeroMQ socket topology, endpoint naming, broker lifecycle, durable
-delivery, retries, process supervision, handler invocation, repository
-dispatch, or read-side execution policy. Those decisions remain in later
-transport and runtime tasks.
+delivery, retries, process supervision, readiness probes over IPC, handler
+invocation, repository dispatch, storage lifecycle, or read-side execution
+policy. The lifecycle seam records helper state only; it does not start broker
+or worker processes, wire `@spine-ts/server`, or decide broker restart
+behavior. Those decisions remain in later transport and runtime tasks.
 
 The transport package now pins the maintained official `zeromq@6.5.0` line for
 the later local IPC adapter. That native dependency is adapter-private: current

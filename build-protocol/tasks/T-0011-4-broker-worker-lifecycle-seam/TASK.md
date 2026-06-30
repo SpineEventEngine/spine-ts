@@ -1,6 +1,6 @@
 # T-0011.4: Broker And Worker Lifecycle Seam
 
-Status: Setup; Implementation Pending
+Status: Complete
 Parent task: `T-0011 Transport Foundation`
 Start: `2026-06-30 22:52 WEST`
 Baseline commit: `4ed7db6`
@@ -125,3 +125,28 @@ Skipped relevant-looking skills:
 - `build-protocol/BUILD_PROTOCOL.md` already includes the human-requested
   server-module guardrail: any `@spine-ts/server` code must closely inspect
   Spine JVM `core-jvm/server` and avoid over-invention.
+- Implemented seam adds immutable broker/worker participant identities, logical
+  worker roles, subscription-backed worker registrations, lifecycle/readiness
+  snapshot helpers, and runtime-facing async-close participant typing in
+  `packages/transport/src/index.ts`.
+- The public API intentionally keeps ZeroMQ endpoints, socket classes,
+  multipart frames, process supervision, readiness probes over IPC, retries,
+  durable delivery/storage, handler invocation, and server wiring deferred.
+
+## Final Verification
+
+- `corepack pnpm test packages/transport/src/index.test.ts packages/transport/src/zeromq-adapter-config.test.ts`
+  passed on `2026-06-30 23:05 WEST` with 2 files and 14 tests passing.
+- `corepack pnpm typecheck` passed on `2026-06-30 23:03 WEST`.
+- `corepack pnpm docs:check` passed on `2026-06-30 23:03 WEST` with the
+  existing invalid-`origin` TypeDoc warning only.
+- `git diff --check` passed on `2026-06-30 23:03 WEST`.
+- `CI=true corepack pnpm verify` first failed in the managed sandbox on
+  `2026-06-30 23:04 WEST` because adapter-private ZeroMQ smoke tests hit
+  `Operation not permitted` while binding `ipc://` endpoints.
+- `CI=true corepack pnpm verify` passed on `2026-06-30 23:05 WEST` after
+  rerunning with native IPC access: 23 test files / 273 tests passed, coverage
+  reached 96.60% statements / 90.90% branches / 99.30% functions / 96.54%
+  lines, TypeDoc/API checks passed with the existing invalid-`origin` warning
+  only, copied-proto checksum verification passed, proto lint/generate passed,
+  and generated proto output remained clean.

@@ -1,6 +1,6 @@
 # Implementation Report: T-0011.4 Broker And Worker Lifecycle Seam
 
-Status: Setup; Implementation Pending
+Status: Complete
 Task log: `build-protocol/tasks/T-0011-4-broker-worker-lifecycle-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0011-4.md`
 Review log: `build-protocol/reviews/T-0011-4-broker-worker-lifecycle-seam.md`
@@ -60,4 +60,18 @@ sandbox rejects those binds with `EPERM`.
 
 ## Open Items
 
-- Implementation sub-agent handoff pending.
+- Required review lanes still need to be completed before parent integration if
+  the orchestrator keeps them as a separate gate.
+
+## Result
+
+- Added adapter-agnostic broker/worker lifecycle contracts to
+  `@spine-ts/transport`: stable participant identities, logical worker roles,
+  worker registrations over transport subscriptions, lifecycle/readiness
+  snapshots, and runtime-facing async-close participant typing.
+- Added deterministic tests for lifecycle helpers and validation failures
+  without opening sockets or starting processes.
+- Updated package/API/architecture docs and durable task logs to describe the
+  lifecycle seam and its explicit deferrals.
+- Required verification completed successfully. Full `verify` needed native IPC
+  access because existing ZeroMQ smoke tests bind `ipc://` endpoints.

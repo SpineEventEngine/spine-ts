@@ -8,6 +8,9 @@ Current scope:
   tags, and deterministic routing keys;
 - immutable subscription descriptors with logical subscriber IDs and delivery
   mode only;
+- immutable broker/worker participant identities, worker registrations, and
+  lifecycle/readiness snapshots expressed only in logical roles and transport
+  subscriptions;
 - publish/request operation contracts plus handler callback types; and
 - async close behavior for future transport implementations.
 
@@ -18,6 +21,14 @@ adapter-agnostic. ZeroMQ socket classes, endpoint strings, multipart frames,
 native binding types, broker processes, retries, durable delivery, worker
 lifecycle, and handler invocation are not exported from the public transport
 API.
+
+The lifecycle seam is contract-and-helper state only. It exposes stable broker
+and worker participant identities, logical worker roles, deterministic worker
+registrations over `TransportSubscription`, lifecycle states, readiness states,
+and async-close semantics for future lifecycle-managed participants. It does
+not open sockets, start child processes, supervise broker or worker lifecycles,
+probe readiness over IPC, invoke handlers, classify delivery failures, add
+durable inbox/outbox storage, or wire `@spine-ts/server`.
 
 ZeroMQ is reserved for local IPC on one host. The native binding install script
 is explicitly approved in the workspace pnpm configuration, and development or

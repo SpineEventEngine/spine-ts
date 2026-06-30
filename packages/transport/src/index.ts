@@ -152,6 +152,153 @@ export interface SignalTransport extends AsyncCloseable {
   ): Promise<TransportSubscriptionHandle<Kind>>;
 }
 
+/** Logical participant kinds supported by the transport lifecycle seam. */
+export type TransportParticipantKind = "broker" | "worker";
+
+const transportParticipantKinds = ["broker", "worker"] as const;
+const transportParticipantKindSet = new Set<string>(transportParticipantKinds);
+
+/** Stable logical worker roles for local transport participants. */
+export type TransportWorkerRole =
+  | "command-worker"
+  | "delivery-worker"
+  | "event-worker"
+  | "projection-worker"
+  | "query-worker"
+  | "subscription-worker"
+  | "system-worker";
+
+const transportWorkerRoles = [
+  "command-worker",
+  "delivery-worker",
+  "event-worker",
+  "projection-worker",
+  "query-worker",
+  "subscription-worker",
+  "system-worker",
+] as const;
+const transportWorkerRoleSet = new Set<string>(transportWorkerRoles);
+
+/** Deterministic lifecycle state for one broker or worker participant. */
+export type TransportLifecycleState = "created" | "starting" | "running" | "closing" | "closed";
+
+const transportLifecycleStates = ["created", "starting", "running", "closing", "closed"] as const;
+const transportLifecycleStateSet = new Set<string>(transportLifecycleStates);
+
+/** Readiness state derived from lifecycle/registration evidence. */
+export type TransportReadinessState = "pending" | "ready";
+
+const transportReadinessStates = ["pending", "ready"] as const;
+const transportReadinessStateSet = new Set<string>(transportReadinessStates);
+
+/** Input for one stable transport participant identity. */
+export interface TransportParticipantIdentityInput<
+  Kind extends TransportParticipantKind = TransportParticipantKind,
+> {
+  /** Stable logical participant kind. */
+  readonly participantKind: Kind;
+  /** Stable logical participant identity. */
+  readonly participantId: string;
+  /** Worker role when `participantKind` is `worker`. */
+  readonly workerRole?: Kind extends "worker" ? TransportWorkerRole : never;
+}
+
+/** Immutable transport participant identity. */
+export interface TransportParticipantIdentity<
+  Kind extends TransportParticipantKind = TransportParticipantKind,
+> {
+  /** Stable logical participant kind. */
+  readonly participantKind: Kind;
+  /** Stable logical participant identity. */
+  readonly participantId: string;
+  /** Stable deterministic participant key. */
+  readonly participantKey: string;
+  /** Worker role when `participantKind` is `worker`. */
+  readonly workerRole?: Kind extends "worker" ? TransportWorkerRole : never;
+}
+
+/** Input for one broker participant identity. */
+export interface BrokerTransportParticipantInput {
+  /** Stable logical participant identity. */
+  readonly participantId: string;
+}
+
+/** Input for one worker participant identity. */
+export interface TransportWorkerParticipantInput {
+  /** Stable logical participant identity. */
+  readonly participantId: string;
+  /** Stable logical worker role. */
+  readonly workerRole: TransportWorkerRole;
+}
+
+/** Immutable worker registration owned by the transport lifecycle seam. */
+export interface TransportWorkerRegistration {
+  /** Stable worker identity. */
+  readonly worker: TransportParticipantIdentity<"worker">;
+  /** Logical subscriptions owned by this worker. */
+  readonly subscriptions: readonly TransportSubscription[];
+  /** Deterministic sorted signal kinds covered by the subscriptions. */
+  readonly signalKinds: readonly TransportSignalKind[];
+  /** Deterministic worker registration key. */
+  readonly registrationKey: string;
+}
+
+/** Input for one worker registration. */
+export interface TransportWorkerRegistrationInput {
+  /** Stable worker identity or worker identity input. */
+  readonly worker:
+    | TransportWorkerParticipantInput
+    | TransportParticipantIdentityInput<"worker">
+    | TransportParticipantIdentity<"worker">;
+  /** Logical subscriptions covered by the worker. */
+  readonly subscriptions: readonly (TransportSubscriptionInput | TransportSubscription)[];
+}
+
+/** Immutable lifecycle snapshot for one broker or worker participant. */
+export interface TransportLifecycleSnapshot<
+  Kind extends TransportParticipantKind = TransportParticipantKind,
+> {
+  /** Stable logical participant identity. */
+  readonly participant: TransportParticipantIdentity<Kind>;
+  /** Current deterministic lifecycle state. */
+  readonly state: TransportLifecycleState;
+  /** Current readiness state. */
+  readonly readiness: TransportReadinessState;
+  /** Worker registrations attached to this snapshot. Empty for brokers. */
+  readonly workerRegistrations: readonly TransportWorkerRegistration[];
+}
+
+/** Input for one lifecycle snapshot. */
+export interface TransportLifecycleSnapshotInput<
+  Kind extends TransportParticipantKind = TransportParticipantKind,
+> {
+  /** Stable logical participant identity or input. */
+  readonly participant:
+    | TransportParticipantIdentityInput<Kind>
+    | TransportParticipantIdentity<Kind>
+    | (Kind extends "worker" ? TransportWorkerParticipantInput : BrokerTransportParticipantInput);
+  /** Current deterministic lifecycle state. */
+  readonly state: TransportLifecycleState;
+  /** Current readiness state. */
+  readonly readiness: TransportReadinessState;
+  /** Worker registrations attached to this snapshot. */
+  readonly workerRegistrations?: readonly (
+    TransportWorkerRegistrationInput | TransportWorkerRegistration
+  )[];
+}
+
+/** Runtime-facing lifecycle participant contract. */
+export interface TransportLifecycleParticipant<
+  Kind extends TransportParticipantKind = TransportParticipantKind,
+> extends AsyncCloseable {
+  /** Stable logical participant identity. */
+  readonly identity: TransportParticipantIdentity<Kind>;
+  /** Current lifecycle state. */
+  readonly state: TransportLifecycleState;
+  /** Current readiness state. */
+  readonly readiness: TransportReadinessState;
+}
+
 /** Create an immutable transport topic with a deterministic routing key. */
 export function createTransportTopic<Kind extends TransportSignalKind>(
   input: TransportTopicInput<Kind>,
@@ -190,6 +337,123 @@ export function createTransportSubscription<Kind extends TransportSignalKind>(
   });
 }
 
+/** Create an immutable broker participant identity. */
+export function createBrokerTransportParticipant(
+  input: BrokerTransportParticipantInput,
+): TransportParticipantIdentity<"broker"> {
+  return createTransportParticipantIdentity({
+    participantKind: "broker",
+    participantId: input.participantId,
+  });
+}
+
+/** Create an immutable worker participant identity. */
+export function createTransportWorkerParticipant(
+  input: TransportWorkerParticipantInput,
+): TransportParticipantIdentity<"worker"> {
+  return createTransportParticipantIdentity({
+    participantKind: "worker",
+    participantId: input.participantId,
+    workerRole: input.workerRole,
+  });
+}
+
+/** Create an immutable transport participant identity. */
+export function createTransportParticipantIdentity(
+  input: TransportParticipantIdentityInput<"broker">,
+): TransportParticipantIdentity<"broker">;
+/** Create an immutable transport participant identity. */
+export function createTransportParticipantIdentity(
+  input: TransportParticipantIdentityInput<"worker">,
+): TransportParticipantIdentity<"worker">;
+/** Create an immutable transport participant identity. */
+export function createTransportParticipantIdentity(
+  input: TransportParticipantIdentityInput,
+): TransportParticipantIdentity;
+/** Create an immutable transport participant identity. */
+export function createTransportParticipantIdentity(
+  input: TransportParticipantIdentityInput,
+): TransportParticipantIdentity {
+  const participantKind = normalizeTransportParticipantKind(input.participantKind);
+  const participantId = normalizeRequiredText(input.participantId, "participantId");
+
+  if (participantKind === "worker") {
+    const workerRole = normalizeTransportWorkerRole(input.workerRole);
+
+    return Object.freeze({
+      participantKind,
+      participantId,
+      participantKey: `${participantKind}#${encodeRoutingSegment(workerRole)}#${encodeRoutingSegment(participantId)}`,
+      workerRole,
+    });
+  }
+
+  if (input.workerRole !== undefined) {
+    throw new Error("Transport broker participants must not declare workerRole.");
+  }
+
+  return Object.freeze({
+    participantKind,
+    participantId,
+    participantKey: `${participantKind}#${encodeRoutingSegment(participantId)}`,
+  });
+}
+
+/** Create an immutable worker registration over transport subscriptions. */
+export function createTransportWorkerRegistration(
+  input: TransportWorkerRegistrationInput,
+): TransportWorkerRegistration {
+  const worker = normalizeWorkerParticipant(input.worker, "worker");
+  const subscriptions = normalizeWorkerSubscriptions(input.subscriptions, worker.participantId);
+  const signalKinds = Object.freeze(
+    [...new Set(subscriptions.map((subscription) => subscription.topic.signalKind))].sort(
+      compareTransportStrings,
+    ),
+  );
+
+  return Object.freeze({
+    worker,
+    subscriptions,
+    signalKinds,
+    registrationKey: `${worker.participantKey}#${subscriptions.map((subscription) => subscription.descriptorKey).join("|")}`,
+  });
+}
+
+/** Create an immutable lifecycle snapshot for one broker or worker participant. */
+export function createTransportLifecycleSnapshot<Kind extends TransportParticipantKind>(
+  input: TransportLifecycleSnapshotInput<Kind>,
+): TransportLifecycleSnapshot<Kind> {
+  const participant = normalizeTransportLifecycleParticipant(input.participant);
+  const state = normalizeTransportLifecycleState(input.state);
+  const readiness = normalizeTransportReadinessState(input.readiness);
+  const workerRegistrations = normalizeWorkerRegistrations(input.workerRegistrations);
+
+  if (readiness === "ready" && state !== "running") {
+    throw new Error("Transport ready participants must be running.");
+  }
+
+  if (participant.participantKind === "broker") {
+    if (workerRegistrations.length > 0) {
+      throw new Error("Transport brokers must not include worker registrations.");
+    }
+  } else {
+    for (const registration of workerRegistrations) {
+      if (registration.worker.participantKey !== participant.participantKey) {
+        throw new Error(
+          "Transport worker registration participant must match snapshot participant.",
+        );
+      }
+    }
+  }
+
+  return Object.freeze({
+    participant,
+    state,
+    readiness,
+    workerRegistrations,
+  }) as TransportLifecycleSnapshot<Kind>;
+}
+
 function normalizeRequiredText(value: string, name: string): string {
   const normalized = value.trim();
 
@@ -208,6 +472,54 @@ function normalizeTransportSignalKind<Kind extends TransportSignalKind>(value: K
   }
 
   return signalKind as Kind;
+}
+
+function normalizeTransportParticipantKind<Kind extends TransportParticipantKind>(
+  value: Kind,
+): Kind {
+  const participantKind = normalizeRequiredText(value, "participantKind");
+
+  if (!transportParticipantKindSet.has(participantKind)) {
+    throw new Error(
+      `Transport participantKind must be one of: ${transportParticipantKinds.join(", ")}.`,
+    );
+  }
+
+  return participantKind as Kind;
+}
+
+function normalizeTransportWorkerRole(value: string | undefined): TransportWorkerRole {
+  if (value === undefined) {
+    throw new Error(`Transport workerRole must be one of: ${transportWorkerRoles.join(", ")}.`);
+  }
+
+  const workerRole = normalizeRequiredText(value, "workerRole");
+
+  if (!transportWorkerRoleSet.has(workerRole)) {
+    throw new Error(`Transport workerRole must be one of: ${transportWorkerRoles.join(", ")}.`);
+  }
+
+  return workerRole as TransportWorkerRole;
+}
+
+function normalizeTransportLifecycleState(value: string): TransportLifecycleState {
+  const state = normalizeRequiredText(value, "state");
+
+  if (!transportLifecycleStateSet.has(state)) {
+    throw new Error(`Transport state must be one of: ${transportLifecycleStates.join(", ")}.`);
+  }
+
+  return state as TransportLifecycleState;
+}
+
+function normalizeTransportReadinessState(value: string): TransportReadinessState {
+  const readiness = normalizeRequiredText(value, "readiness");
+
+  if (!transportReadinessStateSet.has(readiness)) {
+    throw new Error(`Transport readiness must be one of: ${transportReadinessStates.join(", ")}.`);
+  }
+
+  return readiness as TransportReadinessState;
 }
 
 function normalizeTransportSubscriptionMode(value: string): TransportSubscriptionMode {
@@ -247,6 +559,91 @@ function normalizeSemanticTags(
   ].sort(compareTransportStrings);
 
   return Object.freeze(normalized);
+}
+
+function normalizeTransportLifecycleParticipant(
+  value:
+    | BrokerTransportParticipantInput
+    | TransportWorkerParticipantInput
+    | TransportParticipantIdentityInput
+    | TransportParticipantIdentity,
+): TransportParticipantIdentity {
+  if ("participantKey" in value) {
+    return value;
+  }
+
+  if ("participantKind" in value) {
+    return createTransportParticipantIdentity(value);
+  }
+
+  if ("workerRole" in value) {
+    return createTransportWorkerParticipant(value);
+  }
+
+  return createBrokerTransportParticipant(value);
+}
+
+function normalizeWorkerParticipant(
+  value:
+    | TransportWorkerParticipantInput
+    | TransportParticipantIdentityInput<"worker">
+    | TransportParticipantIdentity<"worker">,
+  name: string,
+): TransportParticipantIdentity<"worker"> {
+  const participant = normalizeTransportLifecycleParticipant(value);
+
+  if (!isTransportWorkerParticipant(participant)) {
+    throw new Error(`Transport ${name} must be a worker participant.`);
+  }
+
+  return participant;
+}
+
+function normalizeWorkerSubscriptions(
+  subscriptions: readonly (TransportSubscriptionInput | TransportSubscription)[],
+  workerId: string,
+): readonly TransportSubscription[] {
+  if (subscriptions.length === 0) {
+    throw new Error("Transport subscriptions must not be empty.");
+  }
+
+  return Object.freeze(
+    subscriptions.map((subscription) => {
+      const normalized =
+        "descriptorKey" in subscription ? subscription : createTransportSubscription(subscription);
+
+      if (normalized.subscriberId !== workerId) {
+        throw new Error(
+          "Transport worker registration subscriptions must use the worker participantId as subscriberId.",
+        );
+      }
+
+      return normalized;
+    }),
+  );
+}
+
+function normalizeWorkerRegistrations(
+  registrations:
+    readonly (TransportWorkerRegistrationInput | TransportWorkerRegistration)[] | undefined,
+): readonly TransportWorkerRegistration[] {
+  if (registrations === undefined || registrations.length === 0) {
+    return Object.freeze([]);
+  }
+
+  return Object.freeze(
+    registrations.map((registration) =>
+      "registrationKey" in registration
+        ? registration
+        : createTransportWorkerRegistration(registration),
+    ),
+  );
+}
+
+function isTransportWorkerParticipant(
+  participant: TransportParticipantIdentity,
+): participant is TransportParticipantIdentity<"worker"> {
+  return participant.participantKind === "worker";
 }
 
 function createRoutingKey(

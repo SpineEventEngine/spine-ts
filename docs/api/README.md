@@ -240,14 +240,24 @@ Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
 `TransportSubscriptionInput`, `TransportSubscription`, `TransportSubscriptionMode`,
 `PublishTransportOperation`, `RequestTransportOperation`,
 `PublishTransportHandler`, `RequestTransportHandler`, `AsyncCloseable`,
-`TransportSubscriptionHandle`, `SignalTransport`,
-`createTransportTopic()`, and `createTransportSubscription()`. This surface is
-contract-only: it defines immutable topic/subscription value objects,
-deterministic adapter-agnostic routing keys, publish/request operation shapes,
-handler callback signatures, and graceful async close behavior. It does not
-expose ZeroMQ socket types, endpoint strings, multipart frames, broker
-processes, worker registration, delivery retries, or runtime handler
-invocation.
+`TransportSubscriptionHandle`, `SignalTransport`, `TransportParticipantKind`,
+`TransportWorkerRole`, `TransportLifecycleState`, `TransportReadinessState`,
+`TransportParticipantIdentityInput`, `TransportParticipantIdentity`,
+`BrokerTransportParticipantInput`, `TransportWorkerParticipantInput`,
+`TransportWorkerRegistrationInput`, `TransportWorkerRegistration`,
+`TransportLifecycleSnapshotInput`, `TransportLifecycleSnapshot`,
+`TransportLifecycleParticipant`, `createTransportTopic()`,
+`createTransportSubscription()`, `createBrokerTransportParticipant()`,
+`createTransportWorkerParticipant()`, `createTransportParticipantIdentity()`,
+`createTransportWorkerRegistration()`, and
+`createTransportLifecycleSnapshot()`. This surface is contract-only: it defines
+immutable topic/subscription value objects, deterministic adapter-agnostic
+routing keys, stable broker/worker lifecycle identities, subscription-backed
+worker registrations, readiness/lifecycle snapshots, handler callback
+signatures, and graceful async close behavior. It does not expose ZeroMQ
+socket types, endpoint strings, multipart frames, broker processes, child
+process supervision, delivery retries, durable storage, runtime handler
+invocation, or server runtime wiring.
 The transport package pins `zeromq@6.5.0` for later local IPC adapter work, but
 that native dependency remains outside the public TypeDoc entry point.
 Adapter-private wiring validates local IPC configuration and native module
