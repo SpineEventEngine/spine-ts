@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Complete; Integration Pending
+Status: All Subtasks Integrated; Parent Verification Passed; Final Parent Review Pending
 Task log: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e.md`
 Review log: `build-protocol/reviews/T-0009e-entity-base-classes.md`
@@ -25,7 +25,8 @@ found stale chronology wording that contradicted the public-doc Java-builder
 deferral updates, and Round 3 found missing durable verification-pass evidence
 for the Round 2 fix. Fixes were applied and verified. Round 4 returned clean
 across all five required reviewer lanes, and final verification passed. The
-subtask is ready for parent integration.
+subtask was merged into the parent branch as `f499ca8`, and parent integration
+verification passed. Final parent review is pending.
 
 ## JVM Research Used
 
@@ -129,6 +130,11 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
   97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
   TypeDoc/API checks with 72 expected server exports, proto lint/generate, and
   generated-output clean.
+- T-0009e.4 parent integration verification passed on `2026-06-30 04:18 WEST`:
+  `CI=true corepack pnpm verify` passed with 15 test files / 158 tests, coverage
+  97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
+  TypeDoc/API checks with 72 expected server exports, proto lint/generate, and
+  generated-output clean.
 
 ## Review
 
@@ -160,3 +166,5 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
   applied and verified. Round 4 returned clean across all five required lanes,
   all Round 4 reviewer sub-agents were closed, and final subtask verification
   passed.
+- T-0009e.4 was merged into the parent branch as `f499ca8`, and parent
+  integration verification passed. Final parent review is pending.

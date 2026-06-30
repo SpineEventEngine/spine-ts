@@ -1,6 +1,6 @@
 # T-0009e: Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Complete; Integration Pending
+Status: All Subtasks Integrated; Parent Verification Passed; Final Parent Review Pending
 Start: `2026-06-29 21:58 WEST`
 Baseline commit: `47eae4e`
 Task log path: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
@@ -12,7 +12,7 @@ Requirements splitter:
 Authoring sub-agent: T-0009e.1, T-0009e.2, T-0009e.3, and T-0009e.4 completed in subtask branches
 Reviewer sub-agents: T-0009e.1 Round 8 clean and closed; T-0009e.2 Round 11
 clean and closed; T-0009e.3 Round 3 clean and closed; T-0009e.4 Round 4
-clean and closed, with final verification passed
+clean and closed; final parent review pending
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:01 WEST`
 
@@ -222,7 +222,7 @@ statements 97.25%, branches 91.41%, functions 99.16%, lines 97.19%;
 TypeDoc/API/proto gates passed with 72 expected server exports and generated
 proto output clean.
 
-Current parent subtask: `T-0009e.4 Public API Closure And Verification`.
+Completed parent subtask: `T-0009e.4 Public API Closure And Verification`.
 
 `T-0009e.4` started on `2026-06-30 02:52 WEST` in isolated branch
 `task/T-0009e4-public-api-closure-and-verification` from parent commit
@@ -240,6 +240,16 @@ contradicted the public-doc Java-builder deferral updates, and Round 3 found
 missing durable verification-pass evidence for the Round 2 fix. Fixes were
 applied and verified. Round 4 returned clean across all five required reviewer
 lanes, and final verification passed.
+
+`T-0009e.4 Public API Closure And Verification` was merged into this parent
+branch on `2026-06-30 04:18 WEST` from
+`task/T-0009e4-public-api-closure-and-verification`.
+
+Parent integration verification passed on `2026-06-30 04:18 WEST`:
+`CI=true corepack pnpm verify` reported 15 test files / 158 tests; coverage
+statements 97.25%, branches 91.41%, functions 99.16%, lines 97.19%;
+TypeDoc/API checks passed with 72 expected server exports; proto lint/generate
+and generated-output checks passed.
 
 ## Initial Scope Constraints
 
@@ -323,6 +333,11 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
   97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
   TypeDoc/API checks with 72 expected server exports, proto lint/generate, and
   generated-output clean.
+- T-0009e.4 parent integration verification passed on `2026-06-30 04:18 WEST`:
+  `CI=true corepack pnpm verify` passed with 15 test files / 158 tests, coverage
+  97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
+  TypeDoc/API checks with 72 expected server exports, proto lint/generate, and
+  generated-output clean.
 
 ## Review Rounds
 
@@ -364,3 +379,6 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
   after prior review-fix rounds, and all Round 4 reviewer sub-agents were
   closed. Final subtask verification passed, so the subtask is ready for parent
   integration.
+- `T-0009e.4 Public API Closure And Verification` is merged into the parent
+  branch as `f499ca8`, and parent integration verification passed.
+- Final parent review is pending before marking T-0009e complete.

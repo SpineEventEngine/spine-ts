@@ -162,3 +162,19 @@ Final verification passed on `2026-06-30 04:13 WEST`: `CI=true corepack pnpm
 verify` passed with 15 test files / 158 tests, coverage 97.25% statements /
 91.41% branches / 99.16% functions / 97.19% lines, TypeDoc/API checks with 72
 expected server exports, proto lint/generate, and generated output clean.
+
+## Parent Integration: T-0009e.4
+
+Parent integration merge completed on `2026-06-30 04:18 WEST` with
+`git merge --no-ff task/T-0009e4-public-api-closure-and-verification -m
+"Integrate T-0009e.4 public API closure"`.
+
+Result: merge applied cleanly as `f499ca8`, and parent integration verification
+passed on `2026-06-30 04:18 WEST`.
+
+- `CI=true corepack pnpm verify` passed with 15 test files / 158 tests, coverage
+  97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
+  TypeDoc/API checks with 72 expected server exports, proto lint/generate, and
+  generated output clean.
+
+Final parent review is pending before marking T-0009e complete.
