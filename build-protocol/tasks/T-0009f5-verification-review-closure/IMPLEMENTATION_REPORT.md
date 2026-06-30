@@ -24,6 +24,7 @@ status wording in already-integrated child/parent logs.
 - `build-protocol/tasks/T-0009f5-verification-review-closure/TASK.md`
 - `build-protocol/tasks/T-0009f5-verification-review-closure/IMPLEMENTATION_REPORT.md`
 - `build-protocol/work-logs/T-0009f5.md`
+- `build-protocol/work-logs/T-0009f.md`
 - `build-protocol/reviews/T-0009f5-verification-review-closure.md`
 - `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 - `build-protocol/tasks/T-0009f2-repository-identity-seam/IMPLEMENTATION_REPORT.md`
@@ -59,6 +60,20 @@ corepack pnpm verify` passed with 17 test files / 212 tests, coverage 96.39%
   statements / 90.8% branches / 99.09% functions / 96.32% lines, TypeDoc/API
   checks with 100 proto / 28 core / 97 server / 26 storage expected exports,
   proto lint/generate checksum verification, and generated proto output clean.
+- Post-format review-fix focused verification passed on `2026-06-30 14:32
+WEST`: `corepack
+pnpm test packages/server/src/index.test.ts packages/server/src/bounded-context.test.ts`
+  passed with 2 test files / 45 tests.
+- Post-format review-fix API docs guard passed on `2026-06-30 14:32 WEST`:
+  `node
+scripts/check-api-docs.mjs` passed with 100 proto / 28 core / 97 server / 26
+  storage expected exports and the existing invalid local `origin` TypeDoc
+  warning with 0 errors.
+- Post-format review-fix full verification passed on `2026-06-30 14:33 WEST`:
+  `CI=true
+corepack pnpm verify` passed with 17 test files / 212 tests, coverage 96.39%
+  statements / 90.8% branches / 99.09% functions / 96.32% lines, formatting
+  check clean, clean TypeDoc/API, proto, and generated-output gates.
 
 ## Review
 
@@ -66,3 +81,17 @@ corepack pnpm verify` passed with 17 test files / 212 tests, coverage 96.39%
   spawning sub-agents. Code style/maintainability, documentation,
   TypeScript/API docs, security, and performance/reliability lanes have no
   remaining findings from the allowed docs/API/log evidence.
+- Review-fix prompt received on `2026-06-30 14:28 WEST` for commit `8192522`.
+  Reviewer outcomes recorded:
+  - code style/maintainability CLEAN:
+    `019f18b3-5965-73f2-91dc-a8a6f6f48210`;
+  - documentation FINDING: `019f18b3-8a7e-73f3-b0bc-fe41bd100873`;
+  - TypeScript/API docs FINDINGS: `019f18b3-b2aa-7252-9f3f-7e4c4ac3f4d9`;
+  - security CLEAN: `019f18b3-d9c4-7513-b49e-2c96049cb294`;
+  - performance/reliability FINDING:
+    `019f18b4-034e-7213-b7e3-510de53c2f40`.
+- Fix actions: updated the parent T-0009f work log stale recovery state with
+  branch-level T-0009f.5 closure evidence, added the omitted
+  `build-protocol/work-logs/T-0009f.md` changed-file evidence, and recorded the
+  reviewer findings/fix action in the T-0009f.5 task/report/work/review logs.
+  Fresh post-format review-fix verification passed on `2026-06-30 14:33 WEST`.

@@ -135,6 +135,33 @@ Installed-skill lock manifest source:
 - security;
 - performance/reliability.
 
+## Review-Fix Round 1
+
+Review-fix prompt received on `2026-06-30 14:28 WEST` against implementation
+commit `8192522`. Reviewer outcomes:
+
+- code style/maintainability CLEAN:
+  `019f18b3-5965-73f2-91dc-a8a6f6f48210`;
+- documentation FINDING: `019f18b3-8a7e-73f3-b0bc-fe41bd100873`;
+- TypeScript/API docs FINDINGS: `019f18b3-b2aa-7252-9f3f-7e4c4ac3f4d9`;
+- security CLEAN: `019f18b3-d9c4-7513-b49e-2c96049cb294`;
+- performance/reliability FINDING:
+  `019f18b4-034e-7213-b7e3-510de53c2f40`.
+
+Findings to fix:
+
+- Parent work log `build-protocol/work-logs/T-0009f.md` still reported
+  T-0009f.5 as pending and only named the `2026-06-30 14:02 WEST` parent
+  verification state.
+- `build-protocol/tasks/T-0009f5-verification-review-closure/IMPLEMENTATION_REPORT.md`
+  omitted `build-protocol/work-logs/T-0009f.md` from its changed-file evidence.
+- T-0009f.5 task/report/work/review logs needed to record the review findings,
+  reviewer IDs, fix action, and review-fix verification.
+
+Fix action: update durable docs/log evidence only, keep parent merge wording
+separate from branch-level T-0009f.5 closure evidence, and rerun the required
+focused/API/full verification before committing.
+
 ## Verification Plan
 
 - `corepack pnpm test packages/server/src/index.test.ts packages/server/src/bounded-context.test.ts`
@@ -160,6 +187,22 @@ corepack pnpm verify` passed with 17 test files / 212 tests, coverage 96.39%
   statements / 90.8% branches / 99.09% functions / 96.32% lines, TypeDoc/API
   checks with 100 proto / 28 core / 97 server / 26 storage expected exports,
   proto lint/generate checksum verification, and generated proto output clean.
+- Post-format review-fix focused verification passed on `2026-06-30 14:32
+WEST`: `corepack
+pnpm test packages/server/src/index.test.ts packages/server/src/bounded-context.test.ts`
+  passed with 2 test files / 45 tests.
+- Post-format review-fix API docs guard passed on `2026-06-30 14:32 WEST`:
+  `node
+scripts/check-api-docs.mjs` passed with 100 proto / 28 core / 97 server / 26
+  storage expected exports. TypeDoc emitted the existing invalid local `origin`
+  source-link warning with 0 errors.
+- Post-format review-fix full verification passed on `2026-06-30 14:33 WEST`:
+  `CI=true
+corepack pnpm verify` passed with 17 test files / 212 tests, coverage 96.39%
+  statements / 90.8% branches / 99.09% functions / 96.32% lines, formatting
+  check clean, TypeDoc/API checks with 100 proto / 28 core / 97 server / 26
+  storage expected exports, proto lint/generate checksum verification, and
+  generated proto output clean.
 
 ## Human Questions And Answers
 
