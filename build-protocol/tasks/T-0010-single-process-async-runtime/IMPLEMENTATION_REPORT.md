@@ -56,3 +56,12 @@ splitter narrows one of them into an explicit first slice.
   lines, TypeDoc/API checks with 100 proto / 28 core / 97 server / 26 storage
   expected exports, proto lint/generate checksum verification, and generated
   proto output clean.
+
+## Subtask Progress
+
+- `T-0010.1 Runtime Lifecycle And Async Queue Kernel` branch/worktree created
+  on `2026-06-30 15:08 WEST` from parent commit `70692a9`; setup logs were
+  created before implementation handoff. Setup baseline verification passed on
+  `2026-06-30 15:11 WEST` with 17 test files / 212 tests, coverage 96.39%
+  statements / 90.8% branches / 99.09% functions / 96.32% lines, TypeDoc/API,
+  proto, and generated-output gates clean.

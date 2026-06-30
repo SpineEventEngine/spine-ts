@@ -42,6 +42,9 @@ Current slice exposes:
 - `@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply` standard method
   decorators that require explicit Protobuf-ES schemas and materialize into the
   same handler metadata contract.
+- `SingleProcessServerRuntime` for the first explicit server-owned lifecycle
+  and async queue kernel with `start()`, `close()`, deterministic states, and
+  post-intake work execution in a later microtask.
 
 ```ts
 import {
@@ -109,6 +112,51 @@ handlers for the same message type. The registry is caller-owned and
 metadata-only: constructing or registering it does not instantiate entities,
 invoke methods, unpack payloads, mutate global process state, write storage, or
 start buses/transports.
+
+## Single-Process Runtime Kernel
+
+Use `SingleProcessServerRuntime` when a server runtime part needs an explicit
+local lifecycle and an asynchronous intake boundary before command/event buses,
+delivery, storage, or service hosting exist:
+
+```ts
+import { SingleProcessServerRuntime } from "@spine-ts/server";
+
+const runtime = new SingleProcessServerRuntime();
+
+await runtime.start();
+
+const accepted = runtime.enqueue(async () => {
+  // Later runtime slices will enqueue server-owned signal work here.
+});
+
+await accepted;
+await runtime.close();
+```
+
+The lifecycle states are deterministic: `created -> running` on `start()`,
+`created -> closed` when closed before start, and
+`running -> closing -> closed` when close drains already accepted work. Calling
+`start()` while already running is a no-op. Calling `close()` more than once is
+idempotent and returns the same close outcome. New work is accepted only while
+the runtime is `running`; attempts to enqueue work while `created`, `closing`,
+or `closed` throw `ServerRuntimeStateError`.
+
+`enqueue()` is an intake boundary. It returns a promise for the accepted work
+item, but the work itself runs in a later microtask and queued work runs in
+FIFO order. A failed item rejects only its own returned promise and does not
+stop later accepted items. `close()` prevents new intake and waits for already
+accepted work to settle before the runtime becomes `closed`.
+
+Enqueued callbacks are trusted server-owned work only. The queue has no
+timeout, cancellation, fairness, queue bound, or hostile-callback protection,
+so non-settling or reentrant work can keep `close()` pending.
+
+This kernel is deliberately server-runtime-specific and single-process only. It
+is not a global singleton, process supervisor, generic job framework, command
+bus, event bus, import bus, repository dispatcher, event store, durable inbox,
+read-side stand, tenant index, integration broker, gRPC server, ZeroMQ
+transport, worker-process runtime, or storage-backed delivery mechanism.
 
 ## Bounded Context Shell
 
