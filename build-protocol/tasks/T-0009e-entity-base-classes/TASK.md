@@ -1,6 +1,6 @@
 # T-0009e: Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Complete; Round 3 Clean
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Pending
 Start: `2026-06-29 21:58 WEST`
 Baseline commit: `47eae4e`
 Task log path: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
@@ -189,15 +189,39 @@ statements 97.23%, branches 91.41%, functions 99.15%, lines 97.17%;
 TypeDoc/API/proto gates passed with 68 expected server exports and generated
 proto output clean.
 
-Current parent subtask: `T-0009e.3 Family Capability Marker Classes`.
+Completed parent subtask: `T-0009e.3 Family Capability Marker Classes`.
 
 `T-0009e.3` started on `2026-06-30 01:57 WEST` in isolated branch
 `task/T-0009e3-family-capability-marker-classes` from parent commit `26aa510`.
 It is scoped to thin `Aggregate`, `Projection`, and `ProcessManager` family
-capability marker classes over `TransactionalEntity`. Implementation and Round
-2 fixes are applied in the subtask branch, with follow-up review still pending.
-The family classes install locked own family markers and avoid speculative
-repository, dispatch, query, process, bus, transport, or storage APIs.
+capability marker classes over `TransactionalEntity`. Round 3 review returned
+clean across all required lanes. The family classes install locked own family
+markers and avoid speculative repository, dispatch, query, process, bus,
+transport, or storage APIs.
+
+`T-0009e.3 Family Capability Marker Classes` was merged into this parent branch
+on `2026-06-30 02:46 WEST` from
+`task/T-0009e3-family-capability-marker-classes`.
+
+Integrated result:
+
+- abstract `Aggregate`, `Projection`, and `ProcessManager` family marker classes
+  over `TransactionalEntity` in `packages/server/src/entity.ts`;
+- locked own `entityFamily` markers typed by the `EntityFamily` union;
+- focused family-marker, reflection-hardening, root export, and inherited
+  transaction behavior tests;
+- public package/API/user/architecture documentation updates;
+- durable T-0009e.3 task/report/work/review logs; and
+- Round 3 clean review across code style/maintainability, documentation,
+  TypeScript/API docs, security, and performance/reliability.
+
+Parent integration verification passed on `2026-06-30 02:46 WEST`:
+`CI=true corepack pnpm verify` reported 15 test files / 158 tests, coverage
+statements 97.25%, branches 91.41%, functions 99.16%, lines 97.19%;
+TypeDoc/API/proto gates passed with 72 expected server exports and generated
+proto output clean.
+
+Next parent subtask: `T-0009e.4 Public API Closure And Verification`.
 
 ## Initial Scope Constraints
 

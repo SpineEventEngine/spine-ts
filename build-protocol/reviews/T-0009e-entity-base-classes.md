@@ -120,3 +120,17 @@ Final subtask verification passed on `2026-06-30 02:40 WEST` with 15 test files
 / 158 tests, coverage 97.25% statements / 91.41% branches / 99.16% functions /
 97.19% lines, TypeDoc/API checks with 72 expected server exports, proto
 lint/generate, and generated-output clean.
+
+## Parent Integration: T-0009e.3
+
+Parent integration merge completed on `2026-06-30 02:46 WEST` with
+`git merge --no-ff task/T-0009e3-family-capability-marker-classes -m
+"Integrate T-0009e.3 family markers"`.
+
+Result: merge applied cleanly as `9ba861b`, and parent integration verification
+passed on `2026-06-30 02:46 WEST`.
+
+- `CI=true corepack pnpm verify` passed with 15 test files / 158 tests, coverage
+  97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
+  TypeDoc/API/proto gates passed with 72 expected server exports, and generated
+  proto output clean.

@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Complete; Round 3 Clean
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Pending
 Task log: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e.md`
 Review log: `build-protocol/reviews/T-0009e-entity-base-classes.md`
@@ -10,11 +10,10 @@ Worktree:
 
 ## Summary
 
-`T-0009e.1 Common Entity State Shell` and `T-0009e.2 TransactionalEntity Scoped
-Draft Helpers` are integrated into the parent entity-base branch. `T-0009e.3
-Family Capability Marker Classes` is complete in its isolated subtask branch,
-with Round 3 clean across all required reviewer lanes. The parent task remains
-bounded to OOP entity shells for
+`T-0009e.1 Common Entity State Shell`, `T-0009e.2 TransactionalEntity Scoped
+Draft Helpers`, and `T-0009e.3 Family Capability Marker Classes` are integrated
+into the parent entity-base branch. The parent task remains bounded to OOP
+entity shells for
 `@spine-ts/server` while preserving the D-0044 boundary against repositories,
 dispatch, storage, buses, and unsupported family-specific runtime behavior.
 
@@ -26,8 +25,9 @@ remaining smaller than repositories and dispatch.
 
 ## Files Changed
 
-Integrated from `task/T-0009e1-common-entity-state-shell` and
-`task/T-0009e2-transactional-entity-draft-helpers`:
+Integrated from `task/T-0009e1-common-entity-state-shell`,
+`task/T-0009e2-transactional-entity-draft-helpers`, and
+`task/T-0009e3-family-capability-marker-classes`:
 
 - `packages/server/src/entity.ts`
 - `packages/server/src/entity.test.ts`
@@ -46,6 +46,10 @@ Integrated from `task/T-0009e1-common-entity-state-shell` and
 - `build-protocol/tasks/T-0009e2-transactional-entity-draft-helpers/IMPLEMENTATION_REPORT.md`
 - `build-protocol/work-logs/T-0009e2.md`
 - `build-protocol/reviews/T-0009e2-transactional-entity-draft-helpers.md`
+- `build-protocol/tasks/T-0009e3-family-capability-marker-classes/TASK.md`
+- `build-protocol/tasks/T-0009e3-family-capability-marker-classes/IMPLEMENTATION_REPORT.md`
+- `build-protocol/work-logs/T-0009e3.md`
+- `build-protocol/reviews/T-0009e3-family-capability-marker-classes.md`
 - parent T-0009e integration logs
 
 ## Verification
@@ -80,6 +84,11 @@ Integrated from `task/T-0009e1-common-entity-state-shell` and
   97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
   TypeDoc/API/proto gates passed with 72 expected server exports, and generated
   proto output clean.
+- Parent integration verification passed on `2026-06-30 02:46 WEST`:
+  `CI=true corepack pnpm verify` passed on the merged parent tree with 15 test
+  files / 158 tests, coverage 97.25% statements / 91.41% branches / 99.16%
+  functions / 97.19% lines, TypeDoc/API/proto gates passed with 72 expected
+  server exports, and generated proto output clean.
 
 ## Review
 
@@ -103,3 +112,4 @@ Integrated from `task/T-0009e1-common-entity-state-shell` and
   required reviewer lanes: code style/maintainability, documentation,
   TypeScript/API docs, security, and performance/reliability.
 - All T-0009e.3 Round 3 reviewer sub-agents were closed by the orchestrator.
+- Parent branch integration verification passed for the T-0009e.3 merge commit.
