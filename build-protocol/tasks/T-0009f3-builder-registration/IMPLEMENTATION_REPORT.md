@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.3 Builder Repository Registration And Conflict Checks
 
-Status: Implemented And Verified - External Review Pending
+Status: Review Fix Implemented And Verified
 Task log: `build-protocol/tasks/T-0009f3-builder-registration/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f3.md`
 Review log: `build-protocol/reviews/T-0009f3-builder-registration.md`
@@ -31,9 +31,9 @@ Impact:
 
 - `BoundedContextBuilder.java` shaped the public `add(repository)` /
   `remove(repository)` API and the builder-owned registration list.
-- `BoundedContext.java` and `VisibilityGuard.java` showed that duplicate state
-  ownership fails during runtime registration in the JVM. This TypeScript slice
-  moves the check earlier into metadata registration for deterministic feedback.
+- `BoundedContext.java` showed that duplicate state ownership fails during
+  runtime registration in the JVM. This TypeScript slice moves the check
+  earlier into metadata registration for deterministic feedback.
 - `Repository.java` shaped the identity fields copied into snapshots:
   constructor identity, entity family, state schema/type name, metadata, and ID
   field.
@@ -52,6 +52,13 @@ Impact:
 - A single state type cannot be claimed by multiple entity constructors.
 - `BoundedContextRepositoryRegistrationError` reports stable conflict codes and
   structured existing/incoming ownership details.
+- Malformed or unreadable repository snapshot metadata is wrapped in
+  `BoundedContextRepositoryRegistrationError` with
+  `INVALID_REPOSITORY_SNAPSHOT` rather than leaking raw subclass/accessor
+  exceptions.
+- Conflict diagnostics read entity constructor names through a safe fallback,
+  so hostile or non-string `name` accessors report `(anonymous)` instead of
+  leaking raw errors.
 - Public docs and `scripts/check-api-docs.mjs` were updated for the new API
   surface.
 - The implementation remains metadata-only: it does not create/find/store
@@ -89,8 +96,38 @@ Impact:
   `tsc -b`, tooling typecheck, ESLint, Prettier check, 17 Vitest files / 189
   tests, coverage, TypeDoc/API guard, proto lint, proto generate, and generated
   clean check all completed successfully.
+- Review-fix RED:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts`
+  failed with three expected raw-error leaks: unreadable repository snapshots,
+  malformed repository snapshot metadata, and hostile entity constructor
+  `name` accessors.
+- Review-fix GREEN:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts`
+  passed 20 tests after adding snapshot validation/wrapping, malformed
+  copyable snapshot coverage, and safe conflict names.
+- Review-fix required focused verification:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts packages/server/src/repository.test.ts packages/server/src/index.test.ts`
+  passed 3 test files and 45 tests.
+- Review-fix `corepack pnpm typecheck:tooling` passed.
+- Review-fix `node scripts/check-api-docs.mjs` passed. TypeDoc emitted one
+  source-link warning because the local `origin` remote is not valid; the API
+  JSON guard passed.
+- Review-fix full verification:
+  `CI=true corepack pnpm verify` passed. Evidence: node version check,
+  `tsc -b`, tooling typecheck, ESLint, Prettier check, 17 Vitest files / 196
+  tests, coverage over thresholds, TypeDoc/API guard, proto lint, proto
+  generate, and generated-clean completed successfully.
 
 ## Review
 
-- Pending external review lanes from the orchestrator. This implementation
-  sub-agent was instructed not to spawn sub-agents.
+- First external review round reported two low-severity security findings and
+  two documentation findings.
+- Fixed security finding 1 by wrapping unreadable/malformed repository snapshot
+  reads in deterministic bounded-context registration errors.
+- Fixed security finding 2 by sanitizing entity constructor names used in
+  conflict diagnostics.
+- Fixed documentation finding 3 by removing the unsupported
+  `VisibilityGuard.java` citation rather than fabricating unlogged evidence.
+- Fixed documentation finding 4 by updating the work log to record reviewed
+  implementation commit `108d5fa`.
+- Required focused and full verification passed for this review-fix commit.

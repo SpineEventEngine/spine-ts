@@ -1,6 +1,6 @@
 # T-0009f.3: Builder Repository Registration And Conflict Checks
 
-Status: Implemented And Verified - External Review Pending
+Status: Review Fix Implemented And Verified
 Start: `2026-06-30 11:34 WEST`
 Parent task: `T-0009f Repository Seams And Bounded-Context Registration Skeleton`
 Parent branch: `task/T-0009f-repository-seams`
@@ -81,6 +81,22 @@ Expected boundary from current research:
 - [x] Public docs and TypeDoc/API guard describe the repository-registration
       surface and deferred behavior.
 - [ ] Required reviewer lanes report no remaining comments before integration.
+
+## Review Round 1 Fixes
+
+- [x] Security Low: unreadable or malformed virtual `Repository.snapshot`
+      values are covered by RED/GREEN tests and now fail as deterministic
+      `BoundedContextRepositoryRegistrationError` values with
+      `INVALID_REPOSITORY_SNAPSHOT`.
+- [x] Security Low: conflict diagnostics no longer read
+      `snapshot.entityType.name` directly; hostile or non-string constructor
+      names fall back to `(anonymous)`.
+- [x] Documentation P2: the unsupported `VisibilityGuard.java` citation was
+      removed from the implementation report because the durable task/work logs
+      did not record exact inspected path evidence.
+- [x] Documentation P3: the work log now records reviewed implementation commit
+      `108d5fa` instead of saying the commit is still in progress.
+- [x] Required focused and full verification pass for the review-fix commit.
 
 ## Implementation Evidence
 

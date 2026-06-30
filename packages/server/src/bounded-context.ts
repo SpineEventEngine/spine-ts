@@ -38,10 +38,13 @@ export interface BoundedContextSnapshot {
 
 /** Machine-readable bounded-context repository registration failure codes. */
 export type BoundedContextRepositoryRegistrationErrorCode =
-  "ENTITY_TYPE_CONFLICT" | "STATE_TYPE_CONFLICT";
+  "ENTITY_TYPE_CONFLICT" | "STATE_TYPE_CONFLICT" | "INVALID_REPOSITORY_SNAPSHOT";
 
-/** Stable repository ownership details included in registration errors. */
-export interface BoundedContextRepositoryRegistrationErrorDetails {
+/** Builder operation that rejected repository registration metadata. */
+type BoundedContextRepositoryRegistrationOperation = "add" | "remove";
+
+/** Stable repository ownership conflict details included in registration errors. */
+interface BoundedContextRepositoryRegistrationConflictErrorDetails {
   /** Name of the bounded context receiving the repository. */
   readonly contextName: string;
   /** Already registered repository ownership facts. */
@@ -49,6 +52,19 @@ export interface BoundedContextRepositoryRegistrationErrorDetails {
   /** Incoming repository ownership facts. */
   readonly incoming: RepositoryRegistrationConflictDetails;
 }
+
+/** Stable unreadable or malformed repository snapshot details included in registration errors. */
+interface BoundedContextRepositorySnapshotErrorDetails {
+  /** Name of the bounded context receiving the repository. */
+  readonly contextName: string;
+  /** Builder operation that attempted to read the repository snapshot. */
+  readonly operation: BoundedContextRepositoryRegistrationOperation;
+}
+
+/** Stable details included in repository registration errors. */
+export type BoundedContextRepositoryRegistrationErrorDetails =
+  | BoundedContextRepositoryRegistrationConflictErrorDetails
+  | BoundedContextRepositorySnapshotErrorDetails;
 
 /** Stable repository identity fields used in registration diagnostics. */
 export interface RepositoryRegistrationConflictDetails {
@@ -76,11 +92,7 @@ export class BoundedContextRepositoryRegistrationError extends Error {
     super(message);
     this.name = "BoundedContextRepositoryRegistrationError";
     this.code = code;
-    this.details = Object.freeze({
-      contextName: details.contextName,
-      existing: freezeConflictDetails(details.existing),
-      incoming: freezeConflictDetails(details.incoming),
-    });
+    this.details = freezeRepositoryRegistrationErrorDetails(details);
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -220,7 +232,7 @@ export class BoundedContextBuilder {
   add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
     repository: Repository<EntityType>,
   ): this {
-    const incoming = readRepositorySnapshot(repository, "add");
+    const incoming = readRepositorySnapshot(repository, "add", this.#specSnapshot.name.value);
     registerRepositorySnapshot(this.#repositorySnapshots, incoming, this.#specSnapshot.name.value);
     return this;
   }
@@ -229,7 +241,7 @@ export class BoundedContextBuilder {
   remove<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
     repository: Repository<EntityType>,
   ): this {
-    const incoming = readRepositorySnapshot(repository, "remove");
+    const incoming = readRepositorySnapshot(repository, "remove", this.#specSnapshot.name.value);
     const matchIndex = this.#repositorySnapshots.findIndex((existing) =>
       isSameRepositoryIdentity(existing, incoming),
     );
@@ -567,7 +579,8 @@ function readRepositorySnapshot<
   EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
 >(
   repository: Repository<EntityType>,
-  operation: "add" | "remove",
+  operation: BoundedContextRepositoryRegistrationOperation,
+  contextName: string,
 ): RepositoryIdentitySnapshot<EntityType> {
   if (!(repository instanceof Repository)) {
     throw new TypeError(
@@ -575,7 +588,13 @@ function readRepositorySnapshot<
     );
   }
 
-  return cloneRepositorySnapshot(repository.snapshot);
+  try {
+    const snapshot = cloneRepositorySnapshot(repository.snapshot);
+    validateRepositorySnapshot(snapshot);
+    return snapshot;
+  } catch {
+    throwInvalidRepositorySnapshot(operation, contextName);
+  }
 }
 
 function registerRepositorySnapshot(
@@ -640,9 +659,26 @@ function repositoryConflictDetails(
   snapshot: RepositoryIdentitySnapshot,
 ): RepositoryRegistrationConflictDetails {
   return freezeConflictDetails({
-    entityTypeName: snapshot.entityType.name,
+    entityTypeName: safeEntityTypeName(snapshot.entityType),
     entityFamily: snapshot.entityFamily,
     stateFullTypeName: snapshot.stateFullTypeName,
+  });
+}
+
+function freezeRepositoryRegistrationErrorDetails(
+  details: BoundedContextRepositoryRegistrationErrorDetails,
+): BoundedContextRepositoryRegistrationErrorDetails {
+  if ("operation" in details) {
+    return Object.freeze({
+      contextName: details.contextName,
+      operation: details.operation,
+    });
+  }
+
+  return Object.freeze({
+    contextName: details.contextName,
+    existing: freezeConflictDetails(details.existing),
+    incoming: freezeConflictDetails(details.incoming),
   });
 }
 
@@ -654,6 +690,96 @@ function freezeConflictDetails(
     entityFamily: details.entityFamily,
     stateFullTypeName: details.stateFullTypeName,
   });
+}
+
+function throwInvalidRepositorySnapshot(
+  operation: BoundedContextRepositoryRegistrationOperation,
+  contextName: string,
+): never {
+  throw new BoundedContextRepositoryRegistrationError(
+    "INVALID_REPOSITORY_SNAPSHOT",
+    `BoundedContextBuilder.${operation}(repository) requires a repository snapshot with supported repository identity metadata.`,
+    {
+      contextName,
+      operation,
+    },
+  );
+}
+
+function validateRepositorySnapshot(snapshot: RepositoryIdentitySnapshot): void {
+  if (typeof snapshot.entityType !== "function") {
+    throw new TypeError("Repository snapshot entityType must be a constructor.");
+  }
+  if (!isEntityFamily(snapshot.entityFamily)) {
+    throw new TypeError("Repository snapshot entityFamily must be supported.");
+  }
+  if (!isRecord(snapshot.stateSchema)) {
+    throw new TypeError("Repository snapshot stateSchema must be an object.");
+  }
+  const stateFullTypeName = snapshot.stateFullTypeName as unknown;
+  if (typeof stateFullTypeName !== "string" || stateFullTypeName.length === 0) {
+    throw new TypeError("Repository snapshot stateFullTypeName must be a non-empty string.");
+  }
+  if (!isRecord(snapshot.metadata)) {
+    throw new TypeError("Repository snapshot metadata must be an object.");
+  }
+  if (snapshot.metadata.schema !== snapshot.stateSchema) {
+    throw new TypeError("Repository snapshot metadata.schema must match stateSchema.");
+  }
+  if (snapshot.metadata.fullTypeName !== snapshot.stateFullTypeName) {
+    throw new TypeError("Repository snapshot metadata.fullTypeName must match stateFullTypeName.");
+  }
+  if (snapshot.metadata.kind !== snapshot.entityFamily) {
+    throw new TypeError("Repository snapshot metadata.kind must match entityFamily.");
+  }
+  validateRepositoryFieldMetadata(snapshot.idField, "Repository snapshot idField");
+  validateRepositoryFieldMetadata(
+    snapshot.metadata.idField,
+    "Repository snapshot metadata.idField",
+  );
+  validateRepositoryFieldMetadata(
+    snapshot.metadata.firstFieldRoutingHint.field,
+    "Repository snapshot metadata.firstFieldRoutingHint.field",
+  );
+  validateRepositoryFieldMetadataList(
+    snapshot.metadata.columns,
+    "Repository snapshot metadata.columns",
+  );
+  validateRepositoryFieldMetadataList(
+    snapshot.metadata.setOnceFields,
+    "Repository snapshot metadata.setOnceFields",
+  );
+}
+
+function isEntityFamily(value: unknown): value is RepositoryIdentitySnapshot["entityFamily"] {
+  return value === "aggregate" || value === "projection" || value === "process-manager";
+}
+
+function validateRepositoryFieldMetadata(field: unknown, owner: string): void {
+  if (
+    !isRecord(field) ||
+    typeof field.name !== "string" ||
+    typeof field.localName !== "string" ||
+    typeof field.jsonName !== "string" ||
+    typeof field.number !== "number"
+  ) {
+    throw new TypeError(`${owner} must be supported field metadata.`);
+  }
+}
+
+function validateRepositoryFieldMetadataList(fields: readonly unknown[], owner: string): void {
+  fields.forEach((field, index) => {
+    validateRepositoryFieldMetadata(field, `${owner}[${String(index)}]`);
+  });
+}
+
+function safeEntityTypeName(entityType: RepositoryIdentitySnapshot["entityType"]): string {
+  try {
+    const name = (entityType as { readonly name?: unknown }).name;
+    return typeof name === "string" && name.length > 0 ? name : "(anonymous)";
+  } catch {
+    return "(anonymous)";
+  }
 }
 
 function copyRepositorySnapshots(

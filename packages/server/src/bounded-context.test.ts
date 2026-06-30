@@ -6,7 +6,14 @@ import { describe, expect, it } from "vitest";
 import { file_spine_options } from "@spine-ts/proto";
 import { serverEntityMetadataTestFixtures } from "../test-fixtures/entity-metadata-fixtures.js";
 
-import { Aggregate, ProcessManager, Projection, Repository, type EntityFamily } from "./index.js";
+import {
+  Aggregate,
+  ProcessManager,
+  Projection,
+  Repository,
+  type EntityFamily,
+  type RepositoryIdentitySnapshot,
+} from "./index.js";
 import {
   BoundedContext,
   BoundedContextBuilder,
@@ -88,6 +95,23 @@ const ContextSpecConstructor = ContextSpec as unknown as UntypedConstructor<Cont
 const BoundedContextBuilderConstructor =
   BoundedContextBuilder as unknown as UntypedConstructor<BoundedContextBuilder>;
 const BoundedContextConstructor = BoundedContext as unknown as UntypedConstructor<BoundedContext>;
+
+function repositoryWithTaskAggregateSnapshot(
+  transformSnapshot: (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) => unknown,
+): Repository<typeof TaskAggregate> {
+  return new (class extends Repository<typeof TaskAggregate> {
+    constructor() {
+      super({
+        entityType: TaskAggregate,
+        schema: AggregateStateSchema,
+      });
+    }
+
+    override get snapshot(): RepositoryIdentitySnapshot<typeof TaskAggregate> {
+      return transformSnapshot(super.snapshot) as RepositoryIdentitySnapshot<typeof TaskAggregate>;
+    }
+  })();
+}
 
 describe("BoundedContext builder shell", () => {
   it("rejects empty or blank context names", () => {
@@ -502,6 +526,207 @@ describe("BoundedContext builder shell", () => {
           entityTypeName: "TaskSummaryProjection",
           entityFamily: "projection",
           stateFullTypeName: ProjectionStateSchema.typeName,
+        },
+      });
+    }
+  });
+
+  it("wraps unreadable repository snapshots in a deterministic registration error", () => {
+    class UnreadableSnapshotRepository extends Repository<typeof TaskAggregate> {
+      constructor() {
+        super({
+          entityType: TaskAggregate,
+          schema: AggregateStateSchema,
+        });
+      }
+
+      override get snapshot(): RepositoryIdentitySnapshot<typeof TaskAggregate> {
+        throw new Error("raw snapshot leak");
+      }
+    }
+
+    const builder = BoundedContext.singleTenant("Tasks");
+
+    try {
+      builder.add(new UnreadableSnapshotRepository());
+      throw new Error("Expected unreadable repository snapshots to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(BoundedContextRepositoryRegistrationError);
+      const registrationError = error as BoundedContextRepositoryRegistrationError;
+      expect(registrationError.code).toBe("INVALID_REPOSITORY_SNAPSHOT");
+      expect(registrationError.message).toContain("BoundedContextBuilder.add");
+      expect(registrationError.message).not.toContain("raw snapshot leak");
+      expect(registrationError.details).toEqual({
+        contextName: "Tasks",
+        operation: "add",
+      });
+    }
+  });
+
+  it("wraps malformed repository snapshot metadata in a deterministic registration error", () => {
+    class MalformedSnapshotRepository extends Repository<typeof TaskProjection> {
+      constructor() {
+        super({
+          entityType: TaskProjection,
+          schema: ProjectionStateSchema,
+        });
+      }
+
+      override get snapshot(): RepositoryIdentitySnapshot<typeof TaskProjection> {
+        const snapshot = super.snapshot;
+        const metadata = Object.create(snapshot.metadata) as typeof snapshot.metadata;
+
+        Object.defineProperty(metadata, "columns", {
+          get() {
+            throw new Error("raw metadata leak");
+          },
+        });
+
+        return Object.freeze({
+          ...snapshot,
+          metadata,
+        });
+      }
+    }
+
+    const builder = BoundedContext.singleTenant("Tasks");
+
+    try {
+      builder.remove(new MalformedSnapshotRepository());
+      throw new Error("Expected malformed repository snapshots to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(BoundedContextRepositoryRegistrationError);
+      const registrationError = error as BoundedContextRepositoryRegistrationError;
+      expect(registrationError.code).toBe("INVALID_REPOSITORY_SNAPSHOT");
+      expect(registrationError.message).toContain("BoundedContextBuilder.remove");
+      expect(registrationError.message).not.toContain("raw metadata leak");
+      expect(registrationError.details).toEqual({
+        contextName: "Tasks",
+        operation: "remove",
+      });
+    }
+  });
+
+  it.each([
+    [
+      "unsupported entity family",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          entityFamily: "unsupported" as never,
+        }),
+    ],
+    [
+      "empty state type name",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          stateFullTypeName: "" as never,
+        }),
+    ],
+    [
+      "mismatched metadata type name",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          metadata: Object.freeze({
+            ...snapshot.metadata,
+            fullTypeName: "spine.invalid.State",
+          }),
+        }),
+    ],
+    [
+      "malformed ID field",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          idField: Object.freeze({
+            ...snapshot.idField,
+            name: 7 as never,
+          }),
+        }),
+    ],
+  ] satisfies readonly [
+    string,
+    (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) => unknown,
+  ][])(
+    "wraps copyable repository snapshots with %s in a deterministic registration error",
+    (_caseName, transformSnapshot) => {
+      const repository = repositoryWithTaskAggregateSnapshot(transformSnapshot);
+      const builder = BoundedContext.singleTenant("Tasks");
+
+      try {
+        builder.add(repository);
+        throw new Error("Expected malformed repository snapshots to fail.");
+      } catch (error) {
+        expect(error).toBeInstanceOf(BoundedContextRepositoryRegistrationError);
+        const registrationError = error as BoundedContextRepositoryRegistrationError;
+        expect(registrationError.code).toBe("INVALID_REPOSITORY_SNAPSHOT");
+        expect(registrationError.details).toEqual({
+          contextName: "Tasks",
+          operation: "add",
+        });
+      }
+    },
+  );
+
+  it("sanitizes entity constructor names in repository conflict diagnostics", () => {
+    class NamelessTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {}
+    class NumericNameTaskProjection extends Projection<
+      string,
+      typeof ProjectionStateSchema,
+      number
+    > {}
+
+    Object.defineProperty(NamelessTaskProjection, "name", {
+      get() {
+        throw new Error("raw name leak");
+      },
+    });
+    Object.defineProperty(NumericNameTaskProjection, "name", {
+      value: 42,
+    });
+
+    const projectionRepository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const conflictingRepository = new Repository({
+      entityType: NamelessTaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const builder = BoundedContext.singleTenant("Tasks").add(projectionRepository);
+
+    try {
+      builder.add(conflictingRepository);
+      throw new Error("Expected conflicting state type ownership to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(BoundedContextRepositoryRegistrationError);
+      const registrationError = error as BoundedContextRepositoryRegistrationError;
+      expect(registrationError.code).toBe("STATE_TYPE_CONFLICT");
+      expect(registrationError.message).not.toContain("raw name leak");
+      expect(registrationError.details).toMatchObject({
+        incoming: {
+          entityTypeName: "(anonymous)",
+        },
+      });
+    }
+
+    const numericNameConflictingRepository = new Repository({
+      entityType: NumericNameTaskProjection,
+      schema: ProjectionStateSchema,
+    });
+
+    try {
+      builder.add(numericNameConflictingRepository);
+      throw new Error("Expected conflicting state type ownership to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(BoundedContextRepositoryRegistrationError);
+      const registrationError = error as BoundedContextRepositoryRegistrationError;
+      expect(registrationError.code).toBe("STATE_TYPE_CONFLICT");
+      expect(registrationError.details).toMatchObject({
+        incoming: {
+          entityTypeName: "(anonymous)",
         },
       });
     }
