@@ -16,7 +16,7 @@ security `019f19ce-44f2-7980-a126-178a3350a124` (closed, CLEAN);
 performance/reliability `019f19ce-4580-7dd3-9b87-c1476529a214` (closed,
 CLEAN)
 Review timestamp: `2026-06-30`, after implementation commit `d94bb39`
-Status: No remaining comments; ready for parent integration
+Status: No remaining comments; integrated into parent T-0010
 Final documentation re-review: `019f19df-8137-79c2-9d95-c05deb7db5ae`
 (closed, CLEAN)
 
@@ -91,6 +91,10 @@ Final documentation re-review: `019f19df-8137-79c2-9d95-c05deb7db5ae`
 - Post-review-closure `CI=true corepack pnpm verify` passed on `2026-06-30
 19:55 WEST` with 21 test files / 257 tests and coverage above the 90%
   protocol target.
+- Parent integration `CI=true corepack pnpm verify` passed on `2026-06-30
+19:58 WEST` after merge commit `64c8e4c` and before parent log record commit
+  `8dfbafb`, with 21 test files / 257 tests and coverage above the 90%
+  protocol target.
 - First review-fix verification from the worker report:
   `corepack pnpm prettier --write ...` passed,
   `corepack pnpm prettier --check ...` passed, `git diff --check` passed, and
@@ -124,5 +128,7 @@ Chronology log-fix outcome: durable log chronology correction recorded for the
 chronology log-fix commit `2441543`.
 
 Final documentation re-review outcome: CLEAN. No remaining comments for
-T-0010.6. Reviewed branch head `a2beb68` passed full verification and is ready
-for parent integration; this log update records that evidence.
+T-0010.6. Reviewed branch head `a2beb68` passed full verification; the branch
+was merged into parent T-0010 as `64c8e4c Integrate T-0010.6 runtime closure
+docs`, and parent verification passed on `2026-06-30 19:58 WEST` before parent
+log record commit `8dfbafb`.

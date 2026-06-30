@@ -164,6 +164,28 @@ describe("command registration readiness", () => {
     );
   });
 
+  it("rejects duplicate command assignments exposed by a custom registry lookup", () => {
+    const first = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+      builder.assign(CommandSchema, "assignCreate"),
+    ]);
+    const second = defineEntityHandlers(TaskAggregate, AggregateStateSchema, (builder) => [
+      builder.assign(CommandSchema, "assignCreate"),
+    ]);
+    const firstAssignment = createRegisteredCommandAssignment(first);
+    const secondAssignment = createRegisteredCommandAssignment(second);
+    const lookup = {
+      ...createRegistryLookupForAssignments([firstAssignment, secondAssignment]),
+      findCommandAssignment: () => firstAssignment,
+    } satisfies HandlerMetadataRegistryLookup;
+
+    expect(() => CommandRegistrationReadiness.fromRegistry(lookup)).toThrow(
+      HandlerMetadataRegistryError,
+    );
+    expect(() => CommandRegistrationReadiness.fromRegistry(lookup)).toThrow(
+      /Duplicate command assignment for "spine\.core\.Command"/,
+    );
+  });
+
   it("returns frozen copy-safe command lists and assignee values", () => {
     const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
@@ -392,6 +414,23 @@ function createRegistryLookupForAssignments(
     findCommandAssignment: (commandFullTypeName) =>
       assignments.find(({ handler }) => handler.messageFullTypeName === commandFullTypeName),
     findEventApplication: () => undefined,
+  };
+}
+
+function createRegisteredCommandAssignment(
+  entityHandlers: EntityHandlersMetadata,
+): RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> {
+  const handler = entityHandlers.commandAssignments[0];
+
+  if (handler === undefined) {
+    throw new Error("Expected command assignment metadata in test fixture.");
+  }
+
+  return {
+    entityHandlers,
+    entityType: entityHandlers.entityType,
+    entity: entityHandlers.entity,
+    handler,
   };
 }
 

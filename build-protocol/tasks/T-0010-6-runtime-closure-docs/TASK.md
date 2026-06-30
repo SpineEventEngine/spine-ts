@@ -1,6 +1,6 @@
 # T-0010.6: Runtime Closure And User-Facing Docs
 
-Status: Complete; Ready for Parent Integration
+Status: Complete; Integrated Into Parent T-0010
 Start: `2026-06-30 19:10 WEST`
 End: `2026-06-30 19:28 WEST`
 Baseline commit: `94a28bf`
@@ -30,6 +30,9 @@ Chronology log-fix commit: `2441543` (`Fix T-0010.6 chronology logs`)
 Final documentation re-reviewer: `019f19df-8137-79c2-9d95-c05deb7db5ae`
 (closed, CLEAN)
 Final reviewed branch HEAD before verification-log commit: `a2beb68`
+Parent merge commit: `64c8e4c` (`Integrate T-0010.6 runtime closure docs`)
+Parent verification recorded by: `8dfbafb`
+Parent verification: passed on `2026-06-30 19:58 WEST`
 
 ## Objective
 
@@ -198,6 +201,11 @@ Out of scope:
   `019f19df-8137-79c2-9d95-c05deb7db5ae` reported CLEAN, with no findings.
 - `2026-06-30 19:55 WEST`: Post-review-closure full verification passed after
   review closure commit `a2beb68`.
+- `2026-06-30 19:58 WEST`: Parent integration merged T-0010.6 into
+  `task/T-0010-single-process-async-runtime` as `64c8e4c Integrate T-0010.6
+runtime closure docs`; parent verification passed with 21 test files / 257
+  tests and clean TypeDoc/API, proto, and generated-output checks. The parent
+  integration record was committed as `8dfbafb`.
 
 ## Decisions
 
@@ -266,6 +274,12 @@ Out of scope:
   passed; post-commit `git status --short` was clean after commit `2441543`.
 - Post-review-closure verification: `CI=true corepack pnpm verify` - passed on
   `2026-06-30 19:55 WEST` with 21 test files / 257 tests, coverage 96.45%
+  statements / 90.55% branches / 99.24% functions / 96.39% lines, TypeDoc/API
+  counts 100 proto / 28 core / 124 server / 26 storage, copied proto checksum
+  verification, and generated output clean.
+- Parent integration verification: `CI=true corepack pnpm verify` - passed on
+  `2026-06-30 19:58 WEST` after merge commit `64c8e4c` and before parent log
+  record commit `8dfbafb`, with 21 test files / 257 tests, coverage 96.45%
   statements / 90.55% branches / 99.24% functions / 96.39% lines, TypeDoc/API
   counts 100 proto / 28 core / 124 server / 26 storage, copied proto checksum
   verification, and generated output clean.
@@ -348,5 +362,6 @@ Out of scope:
 
 ## Integration Result
 
-Pending parent merge. Reviewed branch head `a2beb68` passed full verification
-and is ready for parent integration; this log update records that evidence.
+Integrated into parent T-0010 as merge commit `64c8e4c Integrate T-0010.6
+runtime closure docs`. Parent verification passed on `2026-06-30 19:58 WEST`
+and was recorded by parent log commit `8dfbafb`.

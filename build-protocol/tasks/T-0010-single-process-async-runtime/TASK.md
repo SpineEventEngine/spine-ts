@@ -1,6 +1,6 @@
 # T-0010: Single-Process Async Runtime
 
-Status: `T-0010.6` Integrated; Final Whole-Branch Review Pending
+Status: Final Whole-Branch Review Fix Verified
 Start: `2026-06-30 14:57 WEST`
 Baseline commit: `169af02`
 Task log path: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
@@ -226,6 +226,27 @@ deferred to a later transport-adapter task.
   functions / 96.39% lines, TypeDoc/API checks with 100 proto / 28 core / 124
   server / 26 storage expected exports, proto lint/generate checksum
   verification, and generated proto output clean.
+- Parent integration verification after merge commit `64c8e4c` passed on
+  `2026-06-30 19:58 WEST`: `CI=true corepack pnpm verify` passed with 21 test
+  files / 257 tests, coverage 96.45% statements / 90.55% branches / 99.24%
+  functions / 96.39% lines, TypeDoc/API checks with 100 proto / 28 core / 124
+  server / 26 storage expected exports, proto lint/generate checksum
+  verification, and generated proto output clean. Parent log commit `8dfbafb`
+  records this post-merge verification evidence.
+- Final-review focused verification passed on `2026-06-30 20:13 WEST`:
+  `corepack pnpm vitest run packages/server/src/command-registration-readiness.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 21 tests.
+- Final-review full verification first reached `format:check` on
+  `2026-06-30 20:13 WEST` and failed because Prettier needed to rewrite
+  `build-protocol/work-logs/T-0010-6.md` and `build-protocol/work-logs/T-0010.md`.
+  `corepack pnpm prettier --write build-protocol/work-logs/T-0010-6.md build-protocol/work-logs/T-0010.md`
+  passed.
+- Final-review full verification passed on `2026-06-30 20:14 WEST`:
+  `CI=true corepack pnpm verify` passed with 21 test files / 258 tests,
+  coverage 96.45% statements / 90.55% branches / 99.24% functions / 96.39%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
+  expected exports, proto lint/generate checksum verification, and generated
+  proto output clean.
 
 ## Human Questions And Answers
 
@@ -305,3 +326,10 @@ deferred to a later transport-adapter task.
   and coverage above the 90% target.
 - T-0010 subtask roadmap is complete. Next gate: final whole-branch review
   before integration beyond the T-0010 task branch.
+- Final whole-branch review fix activity started on `2026-06-30 20:09 WEST`.
+  Scope: canonicalize `CommandRegistrationReadiness.fromRegistry()` through
+  `HandlerMetadataRegistry`, add duplicate-bypass regression coverage, update
+  stale T-0010.6 child integration logs, and update parent T-0010 logs/report
+  with the final-review fix activity.
+- Final-review fix verification passed on `2026-06-30 20:14 WEST` after
+  formatting two edited work-log Markdown tables.

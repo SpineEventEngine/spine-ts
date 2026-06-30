@@ -1,6 +1,6 @@
 # Implementation Report: T-0010.6 Runtime Closure And User-Facing Docs
 
-Status: Complete, pending commit handoff
+Status: Complete; Integrated Into Parent T-0010
 Task log: `build-protocol/tasks/T-0010-6-runtime-closure-docs/TASK.md`
 Work log: `build-protocol/work-logs/T-0010-6.md`
 Review log: `build-protocol/reviews/T-0010-6-runtime-closure-docs.md`
@@ -29,6 +29,11 @@ Documentation now describes the current runtime closure as metadata plus
 lifecycle plus readiness only. No production runtime code, public exports,
 dependencies, lockfiles, API checker expectations, or to-do application files
 were changed.
+
+Parent integration merged the reviewed T-0010.6 branch into
+`task/T-0010-single-process-async-runtime` as `64c8e4c Integrate T-0010.6
+runtime closure docs`. Parent verification passed on `2026-06-30 19:58 WEST`
+and was recorded by parent log commit `8dfbafb`.
 
 ## JVM Research Used
 
@@ -97,10 +102,17 @@ verify` passed with 21 test files / 256 tests, coverage 96.45% statements /
   90.55% branches / 99.24% functions / 96.39% lines, TypeDoc/API export counts
   100 proto / 28 core / 124 server / 26 storage, proto checksum verification,
   and generated proto output clean.
+- Parent integration `CI=true corepack pnpm verify` passed on `2026-06-30
+19:58 WEST` after merge commit `64c8e4c` and before parent log record commit
+  `8dfbafb`, with 21 test files / 257 tests, coverage 96.45% statements /
+  90.55% branches / 99.24% functions / 96.39% lines, TypeDoc/API export counts
+  100 proto / 28 core / 124 server / 26 storage, proto checksum verification,
+  and generated proto output clean.
 
 ## Review Result
 
 All required review lanes are clean after the documentation review-fix loop.
 The implementation remains deliberately docs/smoke-test only. Full verification
 passed on `2026-06-30 19:28 WEST` and again after review closure on
-`2026-06-30 19:55 WEST`.
+`2026-06-30 19:55 WEST`. Parent integration verification passed after merge
+commit `64c8e4c` on `2026-06-30 19:58 WEST`, recorded by `8dfbafb`.

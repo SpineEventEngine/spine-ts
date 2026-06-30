@@ -1,6 +1,6 @@
 # Implementation Report: T-0010 Single-Process Async Runtime
 
-Status: `T-0010.6` Integrated; Final Whole-Branch Review Pending
+Status: Final Whole-Branch Review Fix Verified
 Task log: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
 Work log: `build-protocol/work-logs/T-0010.md`
 Review log: `build-protocol/reviews/T-0010-single-process-async-runtime.md`
@@ -113,26 +113,73 @@ docs`; parent verification passed on `2026-06-30 19:58 WEST` with 21 test files
 96.39% lines, TypeDoc/API counts 100 / 28 / 124 / 26, proto checksum
 verification, and generated output clean.
 
-## Files Changed
+Final whole-branch review fix activity started on `2026-06-30 20:09 WEST`.
+The fix keeps the server code metadata-only by canonicalizing command
+registration readiness through `HandlerMetadataRegistry`, matching event
+readiness and preserving duplicate command assignment validation for arbitrary
+registry lookup implementations. It also updates stale T-0010.6 child logs and
+parent T-0010 logs with the recorded parent merge/verification evidence.
+
+## Files Changed (Whole Branch Since 169af02)
+
+Build protocol and review logs:
 
 - `build-protocol/DECISION_LOG.md`
-- `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
-- `build-protocol/tasks/T-0010-single-process-async-runtime/IMPLEMENTATION_REPORT.md`
-- `build-protocol/work-logs/T-0010.md`
+- `build-protocol/reviews/T-0010-1-runtime-lifecycle-queue.md`
+- `build-protocol/reviews/T-0010-2-bounded-context-runtime-handle.md`
+- `build-protocol/reviews/T-0010-3-write-side-signal-intake-result.md`
+- `build-protocol/reviews/T-0010-4-command-registration-readiness.md`
+- `build-protocol/reviews/T-0010-5-event-registration-readiness.md`
+- `build-protocol/reviews/T-0010-6-runtime-closure-docs.md`
 - `build-protocol/reviews/T-0010-single-process-async-runtime.md`
+- `build-protocol/work-logs/T-0010-1.md`
+- `build-protocol/work-logs/T-0010-2.md`
+- `build-protocol/work-logs/T-0010-3.md`
+- `build-protocol/work-logs/T-0010-4.md`
+- `build-protocol/work-logs/T-0010-5.md`
+- `build-protocol/work-logs/T-0010-6.md`
+- `build-protocol/work-logs/T-0010.md`
+
+Task reports:
+
 - `build-protocol/tasks/T-0010-1-runtime-lifecycle-queue/TASK.md`
 - `build-protocol/tasks/T-0010-1-runtime-lifecycle-queue/IMPLEMENTATION_REPORT.md`
-- `build-protocol/work-logs/T-0010-1.md`
-- `build-protocol/reviews/T-0010-1-runtime-lifecycle-queue.md`
+- `build-protocol/tasks/T-0010-2-bounded-context-runtime-handle/TASK.md`
+- `build-protocol/tasks/T-0010-2-bounded-context-runtime-handle/IMPLEMENTATION_REPORT.md`
+- `build-protocol/tasks/T-0010-3-write-side-signal-intake-result/TASK.md`
+- `build-protocol/tasks/T-0010-3-write-side-signal-intake-result/IMPLEMENTATION_REPORT.md`
+- `build-protocol/tasks/T-0010-4-command-registration-readiness/TASK.md`
+- `build-protocol/tasks/T-0010-4-command-registration-readiness/IMPLEMENTATION_REPORT.md`
+- `build-protocol/tasks/T-0010-5-event-registration-readiness/TASK.md`
+- `build-protocol/tasks/T-0010-5-event-registration-readiness/IMPLEMENTATION_REPORT.md`
+- `build-protocol/tasks/T-0010-6-runtime-closure-docs/TASK.md`
+- `build-protocol/tasks/T-0010-6-runtime-closure-docs/IMPLEMENTATION_REPORT.md`
+- `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
+- `build-protocol/tasks/T-0010-single-process-async-runtime/IMPLEMENTATION_REPORT.md`
+
+User-facing documentation and API checks:
+
 - `docs/api/README.md`
 - `docs/USER_GUIDE.md`
 - `docs/architecture/README.md`
 - `packages/server/README.md`
+- `scripts/check-api-docs.mjs`
+
+Server runtime, readiness, and package-root code/tests:
+
+- `packages/server/src/bounded-context.ts`
+- `packages/server/src/bounded-context.test.ts`
+- `packages/server/src/command-registration-readiness.ts`
+- `packages/server/src/command-registration-readiness.test.ts`
+- `packages/server/src/event-registration-readiness.ts`
+- `packages/server/src/event-registration-readiness.test.ts`
 - `packages/server/src/index.test.ts`
 - `packages/server/src/index.ts`
+- `packages/server/src/registration-readiness-metadata.ts`
 - `packages/server/src/runtime.test.ts`
 - `packages/server/src/runtime.ts`
-- `scripts/check-api-docs.mjs`
+- `packages/server/src/signal-intake.ts`
+- `packages/server/src/signal-intake.test.ts`
 
 ## Verification
 
@@ -172,6 +219,27 @@ verification, and generated output clean.
   functions / 96.39% lines, TypeDoc/API checks with 100 proto / 28 core / 124
   server / 26 storage expected exports, proto lint/generate checksum
   verification, and generated proto output clean.
+- Parent integration verification after merge commit `64c8e4c` passed on
+  `2026-06-30 19:58 WEST`: `CI=true corepack pnpm verify` passed with 21 test
+  files / 257 tests, coverage 96.45% statements / 90.55% branches / 99.24%
+  functions / 96.39% lines, TypeDoc/API checks with 100 proto / 28 core / 124
+  server / 26 storage expected exports, proto lint/generate checksum
+  verification, and generated proto output clean. Parent log commit `8dfbafb`
+  records this post-merge verification evidence.
+- Final-review focused verification passed on `2026-06-30 20:13 WEST`:
+  `corepack pnpm vitest run packages/server/src/command-registration-readiness.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 21 tests.
+- Final-review full verification first reached `format:check` on
+  `2026-06-30 20:13 WEST` and failed because Prettier needed to rewrite
+  `build-protocol/work-logs/T-0010-6.md` and `build-protocol/work-logs/T-0010.md`.
+  `corepack pnpm prettier --write build-protocol/work-logs/T-0010-6.md build-protocol/work-logs/T-0010.md`
+  passed.
+- Final-review full verification passed on `2026-06-30 20:14 WEST`:
+  `CI=true corepack pnpm verify` passed with 21 test files / 258 tests,
+  coverage 96.45% statements / 90.55% branches / 99.24% functions / 96.39%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
+  expected exports, proto lint/generate checksum verification, and generated
+  proto output clean.
 
 ## Subtask Progress
 
@@ -232,4 +300,6 @@ registration readiness` and verified cleanly.
 registration readiness` and verified cleanly.
 - `T-0010.6 Runtime Closure And User-Facing Docs` is integrated into the parent
   branch at merge commit `64c8e4c` and verified.
-- Final whole-branch review for T-0010 is pending.
+- Final whole-branch review fix canonicalized command readiness duplicate
+  validation, updated stale child/parent logs, and passed focused/full
+  verification on `2026-06-30 20:14 WEST`.

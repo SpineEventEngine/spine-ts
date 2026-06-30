@@ -61,11 +61,12 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
     Object.freeze(this);
   }
 
-  /** Build readiness from an already validated handler metadata registry lookup. */
+  /** Build readiness from a handler metadata registry lookup. */
   static fromRegistry(registry: HandlerMetadataRegistryLookup): CommandRegistrationReadiness {
+    const validatedRegistry = new HandlerMetadataRegistry(registry.listEntityHandlers());
     const commandFullTypeNames = [
       ...new Set(
-        registry
+        validatedRegistry
           .findHandlersByKind("command-assignment")
           .map((entry) => entry.handler.messageFullTypeName),
       ),
@@ -73,7 +74,7 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
     const assigneesByCommandFullTypeName = new Map<string, CommandRegistrationAssigneeMetadata>();
 
     for (const commandFullTypeName of commandFullTypeNames) {
-      const assignment = registry.findCommandAssignment(commandFullTypeName);
+      const assignment = validatedRegistry.findCommandAssignment(commandFullTypeName);
 
       if (assignment !== undefined) {
         assigneesByCommandFullTypeName.set(

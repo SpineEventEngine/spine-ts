@@ -1,6 +1,6 @@
 # Review Log: T-0010 Single-Process Async Runtime
 
-Status: `T-0010.6` Integrated; Final Whole-Branch Review Pending
+Status: Final Whole-Branch Review Fix Verified
 
 ## Required Review Lanes
 
@@ -89,3 +89,39 @@ and generated output clean.
 
 The T-0010 subtask roadmap is complete. Next review gate: final whole-branch
 review before integration beyond the T-0010 task branch.
+
+## Final Whole-Branch Review Fix Round
+
+Started on `2026-06-30 20:09 WEST` against whole-branch review base
+`169af02`. The final-review findings require:
+
+- `CommandRegistrationReadiness.fromRegistry()` must not allow arbitrary
+  `HandlerMetadataRegistryLookup` implementations to bypass duplicate command
+  assignment validation by returning inconsistent lookup results.
+- T-0010.6 child logs and parent T-0010 logs must record the completed
+  `64c8e4c` parent merge and `2026-06-30 19:58 WEST` parent verification
+  evidence, including parent log commit `8dfbafb`.
+- The parent implementation report must make its whole-branch file coverage
+  explicit and include final post-`64c8e4c` / `8dfbafb` verification evidence.
+
+Fix approach: canonicalize command readiness through `HandlerMetadataRegistry`
+using `registry.listEntityHandlers()`, matching the existing event-readiness
+pattern, and add a regression test with a custom lookup that exposes duplicate
+entity-handler command assignments while returning only one command assignment.
+This remains metadata-only and does not add server facade, routing, buses,
+storage, validation, handler invocation, transport, or `Ack` behavior.
+
+Fix verification:
+
+- `corepack pnpm vitest run packages/server/src/command-registration-readiness.test.ts packages/server/src/index.test.ts`
+  passed on `2026-06-30 20:13 WEST` with 2 test files / 21 tests.
+- First `CI=true corepack pnpm verify` reached `format:check` on
+  `2026-06-30 20:13 WEST` and failed only because Prettier needed to rewrite
+  `build-protocol/work-logs/T-0010-6.md` and `build-protocol/work-logs/T-0010.md`.
+- `corepack pnpm prettier --write build-protocol/work-logs/T-0010-6.md build-protocol/work-logs/T-0010.md`
+  passed on `2026-06-30 20:14 WEST`.
+- `CI=true corepack pnpm verify` passed on `2026-06-30 20:14 WEST` with 21
+  test files / 258 tests, coverage 96.45% statements / 90.55% branches /
+  99.24% functions / 96.39% lines, TypeDoc/API counts 100 proto / 28 core /
+  124 server / 26 storage, copied proto checksum verification, and generated
+  output clean.
