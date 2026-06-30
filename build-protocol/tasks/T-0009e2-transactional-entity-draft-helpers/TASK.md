@@ -1,6 +1,6 @@
 # T-0009e.2: TransactionalEntity Scoped Draft Helpers
 
-Status: Implementation Complete; Review Pending
+Status: Implementation Complete; Round 4 Docs Follow-Up Verified
 Start: `2026-06-30 00:28 WEST`
 Baseline commit: `bd8d02e`
 Task log path:
@@ -13,7 +13,8 @@ Requirements splitter:
 `019f1531-96a3-7870-bb40-b24fc9a456c8` (Goodall the 3rd, closed)
 Authoring sub-agent:
 `019f15ba-f2f2-7f21-a244-bd61564e0eb6` (Aquinas the 3rd)
-Reviewer sub-agents: Round 1 closed; Round 2 closed with docs-only follow-up
+Reviewer sub-agents: Round 1 closed; Round 2 closed; Round 3 closed; Round 4
+closed with docs-only follow-up verified
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-30 00:31 WEST`
 
@@ -166,6 +167,18 @@ Skipped relevant-looking skills:
   clean and maintainability/documentation/reliability requested stale live-state
   routing cleanup. All Round 3 reviewers were closed.
 - Round 3 docs-only cleanup verification passed on `2026-06-30 01:07 WEST`:
+  full `CI=true corepack pnpm verify` reported 15 test files / 152 tests,
+  coverage statements 97.23%, branches 91.41%, functions 99.15%, lines 97.17%;
+  TypeDoc/API/proto gates passed with 68 expected server exports and generated
+  proto output clean.
+- Round 4 reviewed the Round 3 docs-only cleanup: TypeScript/API docs and
+  security returned clean; maintainability, documentation, and
+  performance/reliability requested stale durable-review-history and
+  completed-risk-routing cleanup. All Round 4 reviewers were closed.
+- Round 4 docs-only follow-up updated the live reviewer status, completed
+  rejected-result risk routing, chronological review-log ordering, and durable
+  Round 4 review result.
+- Round 4 docs-only cleanup verification passed on `2026-06-30 01:16 WEST`:
   full `CI=true corepack pnpm verify` reported 15 test files / 152 tests,
   coverage statements 97.23%, branches 91.41%, functions 99.15%, lines 97.17%;
   TypeDoc/API/proto gates passed with 68 expected server exports and generated

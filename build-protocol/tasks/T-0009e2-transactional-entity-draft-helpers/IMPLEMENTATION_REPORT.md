@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.2 TransactionalEntity Scoped Draft Helpers
 
-Status: Implementation Complete; Review Pending
+Status: Implementation Complete; Round 4 Docs Follow-Up Verified
 Task log:
 `build-protocol/tasks/T-0009e2-transactional-entity-draft-helpers/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e2.md`
@@ -73,6 +73,10 @@ repositories, handlers, phase propagation, storage, and lifecycle events.
   `2026-06-30 00:44 WEST`: 15 test files / 151 tests; coverage statements
   97.22%, branches 91.37%, functions 99.14%, lines 97.16%; TypeDoc/API/proto
   gates passed with 68 expected server exports and generated proto output clean.
+- Round 4 docs-only cleanup verification `CI=true corepack pnpm verify` passed
+  on `2026-06-30 01:16 WEST`: 15 test files / 152 tests; coverage statements
+  97.23%, branches 91.41%, functions 99.15%, lines 97.17%; TypeDoc/API/proto
+  gates passed with 68 expected server exports and generated proto output clean.
 
 ## Review
 
@@ -109,6 +113,22 @@ repositories, handlers, phase propagation, storage, and lifecycle events.
   accepted findings are stale live-state/risk-routing text after Round 2 had
   completed.
 - Round 3 docs-only cleanup verification passed on `2026-06-30 01:07 WEST`:
+  full `CI=true corepack pnpm verify` passed with 15 test files / 152 tests,
+  coverage 97.23% statements / 91.41% branches / 99.15% functions / 97.17%
+  lines, TypeDoc/API/proto gates passed with 68 expected server exports, and
+  generated proto output clean.
+- Round 4 reviewed the Round 3 docs-only cleanup; result: documentation cleanup
+  requested. Maintainability
+  `019f15dc-24cf-78a1-ac58-d4e5881b6c14`, documentation
+  `019f15dc-2559-7c01-b77c-2927c0f0b10b`, and performance/reliability
+  `019f15dc-26d2-7f70-980d-b80982201e4b` returned P3 findings and were closed.
+  TypeScript/API `019f15dc-25c8-7532-98e8-9d5183d81e03` and security
+  `019f15dc-2662-7933-93ca-0d5915a64995` returned clean and were closed.
+- Round 4 docs-only follow-up updates stale live reviewer status, marks the
+  rejected-result risk as completed with no current follow-up, restores
+  chronological review-log ordering, and records the Round 4 result in durable
+  logs.
+- Round 4 docs-only cleanup verification passed on `2026-06-30 01:16 WEST`:
   full `CI=true corepack pnpm verify` passed with 15 test files / 152 tests,
   coverage 97.23% statements / 91.41% branches / 99.15% functions / 97.17%
   lines, TypeDoc/API/proto gates passed with 68 expected server exports, and
