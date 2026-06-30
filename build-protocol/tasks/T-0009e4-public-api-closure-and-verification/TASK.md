@@ -1,6 +1,6 @@
 # T-0009e.4: Public API Closure And Verification
 
-Status: Round 4 Review Clean; Final Verification Pending
+Status: Complete; Integration Pending
 Parent task: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Task log path:
 `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`
@@ -123,7 +123,7 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests.
   lint/generate, and generated-output clean.
 
 Round 4 re-review returned clean across all five required lanes. Final
-verification is still pending before integration.
+verification passed on `2026-06-30 04:13 WEST`.
 
 ## Round 2 Review Fix
 
@@ -147,7 +147,7 @@ Round 2 fix verification passed:
   clean.
 
 Round 4 re-review returned clean across all five required lanes. Final
-verification is still pending before integration.
+verification passed on `2026-06-30 04:13 WEST`.
 
 ## Round 4 Clean Review
 
@@ -161,5 +161,12 @@ lanes returned clean, and all Round 4 reviewer sub-agents were closed:
 - security: `019f167d-149a-7720-8406-131ca8d9f61b`;
 - performance/reliability: `019f167d-151e-78f3-a0d7-2e5f88791cee`.
 
-Final verification is next. Do not integrate this subtask until that fresh
-verification evidence is recorded.
+Final verification passed on `2026-06-30 04:13 WEST`:
+
+- `CI=true corepack pnpm verify` passed with 15 test files / 158 tests.
+- Coverage remained above target: 97.25% statements, 91.41% branches, 99.16%
+  functions, and 97.19% lines.
+- TypeDoc/API checks passed with 72 expected `@spine-ts/server` exports.
+- Proto lint/generate and generated-output checks passed.
+
+This subtask is ready for parent integration.

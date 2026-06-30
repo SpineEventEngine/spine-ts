@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.4 Public API Closure And Verification
 
-Status: Round 4 Review Clean; Final Verification Pending
+Status: Complete; Integration Pending
 Task log:
 `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e4.md`
@@ -24,8 +24,8 @@ changes were needed. Orchestrator-spawned Round 1 review later found stale
 review-status wording in durable logs only; Round 2 found stale chronology that
 contradicted the public-doc Java-builder deferral updates. Review-fix updates
 were applied and Round 2 fix verification passed. Round 4 re-review returned
-clean across all five required lanes; final verification is pending before
-integration.
+clean across all five required lanes. Final verification passed, and the
+subtask is ready for parent integration.
 
 ## Files Changed
 
@@ -81,6 +81,11 @@ packages/server/src/entity.test.ts packages/server/src/index.test.ts` passed on
   expected proto exports, 28 core exports, 72 server exports, and 26 storage
   exports, and `CI=true corepack pnpm verify` exited 0 with 15 test files / 158
   tests plus coverage/API/proto/generated gates clean.
+- Final verification `CI=true corepack pnpm verify` passed on
+  `2026-06-30 04:13 WEST`: 15 test files / 158 tests, coverage 97.25%
+  statements / 91.41% branches / 99.16% functions / 97.19% lines, TypeDoc/API
+  checks with 72 expected server exports, proto lint/generate, and
+  generated-output clean.
 
 ## Review
 
@@ -92,4 +97,5 @@ the public docs set was unchanged, contradicting the Java-builder deferral
 wording that was added to public docs. Review-fix updates corrected that
 chronology and Round 2 fix verification passed. Round 4 re-review returned
 clean across all five required lanes, and all Round 4 reviewer sub-agents were
-closed by the orchestrator. Final verification is pending before integration.
+closed by the orchestrator. Final verification passed, and the subtask is ready
+for parent integration.

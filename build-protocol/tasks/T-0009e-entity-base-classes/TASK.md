@@ -1,6 +1,6 @@
 # T-0009e: Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Round 4 Review Clean; Final Verification Pending
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Complete; Integration Pending
 Start: `2026-06-29 21:58 WEST`
 Baseline commit: `47eae4e`
 Task log path: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
@@ -12,7 +12,7 @@ Requirements splitter:
 Authoring sub-agent: T-0009e.1, T-0009e.2, T-0009e.3, and T-0009e.4 completed in subtask branches
 Reviewer sub-agents: T-0009e.1 Round 8 clean and closed; T-0009e.2 Round 11
 clean and closed; T-0009e.3 Round 3 clean and closed; T-0009e.4 Round 4
-clean and closed, with final verification pending
+clean and closed, with final verification passed
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:01 WEST`
 
@@ -239,7 +239,7 @@ stale review-status wording, Round 2 found stale chronology wording that
 contradicted the public-doc Java-builder deferral updates, and Round 3 found
 missing durable verification-pass evidence for the Round 2 fix. Fixes were
 applied and verified. Round 4 returned clean across all five required reviewer
-lanes, with final verification pending.
+lanes, and final verification passed.
 
 ## Initial Scope Constraints
 
@@ -318,6 +318,11 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
   exited 0 with 100 proto / 28 core / 72 server / 26 storage expected exports,
   and `CI=true corepack pnpm verify` exited 0 with 15 test files / 158 tests and
   coverage/API/proto/generated gates clean.
+- T-0009e.4 final subtask verification passed on `2026-06-30 04:13 WEST`:
+  `CI=true corepack pnpm verify` passed with 15 test files / 158 tests, coverage
+  97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
+  TypeDoc/API checks with 72 expected server exports, proto lint/generate, and
+  generated-output clean.
 
 ## Review Rounds
 
@@ -357,4 +362,5 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
 - T-0009e.4 closure verification passed in the isolated subtask branch.
   Orchestrator Round 4 review returned clean across all five required lanes
   after prior review-fix rounds, and all Round 4 reviewer sub-agents were
-  closed. Final verification is pending before integration.
+  closed. Final subtask verification passed, so the subtask is ready for parent
+  integration.

@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Round 4 Review Clean; Final Verification Pending
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Complete; Integration Pending
 Task log: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e.md`
 Review log: `build-protocol/reviews/T-0009e-entity-base-classes.md`
@@ -24,8 +24,8 @@ Orchestrator-spawned Round 1 review found stale review-status wording, Round 2
 found stale chronology wording that contradicted the public-doc Java-builder
 deferral updates, and Round 3 found missing durable verification-pass evidence
 for the Round 2 fix. Fixes were applied and verified. Round 4 returned clean
-across all five required reviewer lanes, with final verification pending before
-integration.
+across all five required reviewer lanes, and final verification passed. The
+subtask is ready for parent integration.
 
 ## JVM Research Used
 
@@ -124,6 +124,11 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
   exited 0 with 100 proto / 28 core / 72 server / 26 storage expected exports,
   and `CI=true corepack pnpm verify` exited 0 with 15 test files / 158 tests and
   coverage/API/proto/generated gates clean.
+- T-0009e.4 final subtask verification passed on `2026-06-30 04:13 WEST`:
+  `CI=true corepack pnpm verify` passed with 15 test files / 158 tests, coverage
+  97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
+  TypeDoc/API checks with 72 expected server exports, proto lint/generate, and
+  generated-output clean.
 
 ## Review
 
@@ -153,4 +158,5 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
   found stale chronology wording about public-doc changes, and Round 3 found
   missing durable verification-pass evidence for the Round 2 fix. Fixes were
   applied and verified. Round 4 returned clean across all five required lanes,
-  and all Round 4 reviewer sub-agents were closed.
+  all Round 4 reviewer sub-agents were closed, and final subtask verification
+  passed.
