@@ -1,6 +1,6 @@
 # T-0009f.4: Immutable Built Context Snapshot And Public Closure
 
-Status: Implementation Complete; Verification Passed; Reviews Pending
+Status: Review Fix Round 1 Complete; Verification Passed
 Start: `2026-06-30 13:30 WEST`
 Baseline commit: `855da4a`
 Task log path:
@@ -203,6 +203,21 @@ scripts/check-api-docs.mjs` passed with 100 proto / 28 core / 97 server / 26
 - Reviewer lanes remain pending for the orchestrator/reviewer phase. This
   implementation sub-agent did not spawn reviewers because the task prompt
   explicitly says not to spawn sub-agents.
+- `2026-06-30 13:47 WEST`: Review-fix sub-agent accepted round-1 findings for
+  documentation and TypeScript/API docs. Documentation fix adds durable review
+  evidence for the `b828c41..fc5b349` review basis, JVM guardrails,
+  implementation verification, documentation/API impact, lane outcomes, and
+  the two P2 findings under repair. API fix changes `BoundedContext.snapshot`
+  to return `BuiltBoundedContextSnapshot` while keeping that alias equal in
+  shape to `BoundedContextSnapshot`; an API type assertion now guards the
+  getter return type.
+- `2026-06-30 13:49 WEST`: Review-fix verification passed. Focused server tests
+  passed with 2 files / 45 tests. `node scripts/check-api-docs.mjs` passed with
+  100 proto / 28 core / 97 server / 26 storage expected exports. `CI=true
+corepack pnpm verify` passed with 17 files / 212 tests, coverage 96.39%
+  statements / 90.8% branches / 99.09% functions / 96.32% lines, TypeDoc/API
+  checks, proto lint/generate checksum verification, and generated proto output
+  clean.
 
 ## Human Questions And Answers
 

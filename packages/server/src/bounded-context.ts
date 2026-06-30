@@ -331,8 +331,8 @@ export class BoundedContext {
     return cloneRepositorySnapshots(this.#snapshot.repositories);
   }
 
-  /** Copy-safe immutable snapshot of this context shell. */
-  get snapshot(): BoundedContextSnapshot {
+  /** Copy-safe immutable built-context snapshot of this context shell. */
+  get snapshot(): BuiltBoundedContextSnapshot {
     return cloneContextSnapshot(this.#snapshot);
   }
 }

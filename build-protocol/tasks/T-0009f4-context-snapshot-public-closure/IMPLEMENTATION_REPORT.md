@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.4 Immutable Built Context Snapshot And Public Closure
 
-Status: Implementation Complete; Verification Passed; Reviews Pending
+Status: Review Fix Round 1 Complete; Verification Passed
 Task log:
 `build-protocol/tasks/T-0009f4-context-snapshot-public-closure/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f4.md`
@@ -78,6 +78,16 @@ pnpm verify` passed with 17 test files / 212 tests, coverage 96.39%
 
 ## Review
 
-- Implementation complete. Required reviewer lanes are still pending for the
-  orchestrator/reviewer phase because this implementation prompt explicitly
-  forbids spawning sub-agents.
+- Round 1 found two P2 issues now under repair:
+  documentation evidence was missing from the review log, and
+  `BoundedContext.snapshot` still returned `BoundedContextSnapshot` instead of
+  the public built-context alias documented for that getter.
+- Review-fix changes add durable round-1 review evidence and change the public
+  getter type to `BuiltBoundedContextSnapshot` with a focused API type guard.
+- Review-fix verification passed on `2026-06-30 13:49 WEST`: focused server
+  tests passed with 2 files / 45 tests; `node scripts/check-api-docs.mjs`
+  passed with 100 proto / 28 core / 97 server / 26 storage expected exports;
+  `CI=true corepack pnpm verify` passed with 17 files / 212 tests, coverage
+  96.39% statements / 90.8% branches / 99.09% functions / 96.32% lines,
+  TypeDoc/API checks, proto lint/generate checksum verification, and generated
+  proto output clean.

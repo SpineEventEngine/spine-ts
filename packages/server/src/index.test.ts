@@ -192,6 +192,9 @@ describe("@spine-ts/server", () => {
     expectTypeOf<BoundedContextName>().toEqualTypeOf<{ readonly value: string }>();
     expectTypeOf<TenantMode>().toEqualTypeOf<"single-tenant" | "multitenant">();
     expectTypeOf<BuiltBoundedContextSnapshot>().toEqualTypeOf<BoundedContextSnapshot>();
+    expectTypeOf(
+      BoundedContext.singleTenant("Exports").build().snapshot,
+    ).toEqualTypeOf<BuiltBoundedContextSnapshot>();
     expectTypeOf<BoundedContextRepositoryRegistrationOperation>().toEqualTypeOf<"add" | "remove">();
     expectTypeOf<BoundedContextRepositoryRegistrationErrorDetails>().toEqualTypeOf<
       | BoundedContextRepositoryRegistrationConflictErrorDetails
