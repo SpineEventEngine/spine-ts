@@ -147,3 +147,8 @@ context runtime handle` and verified cleanly.
 signal intake result` and verified cleanly.
 - `T-0010.4 Command Registration Readiness` is the next selected non-blocked
   subtask.
+- `T-0010.4` branch/worktree was created on `2026-06-30 17:24 WEST` from
+  parent commit `e5e7b1d`; setup logs were created before implementation
+  handoff. Setup baseline verification passed on `2026-06-30 17:27 WEST` with
+  19 test files / 234 tests and clean TypeDoc/API, proto, and generated-output
+  gates.

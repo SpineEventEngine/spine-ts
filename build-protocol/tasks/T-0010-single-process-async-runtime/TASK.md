@@ -232,3 +232,8 @@ deferred to a later transport-adapter task.
   `575e1d3 Integrate T-0010.3 write-side signal intake result`.
 - Next selected subtask:
   `T-0010.4 Command Registration Readiness`.
+- `T-0010.4 Command Registration Readiness` branch/worktree created on
+  `2026-06-30 17:24 WEST` from parent commit `e5e7b1d`. Setup logs are
+  created; setup baseline verification passed on `2026-06-30 17:27 WEST` with
+  19 test files / 234 tests and clean TypeDoc/API, proto, and generated-output
+  gates.
