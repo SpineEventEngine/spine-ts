@@ -1,6 +1,6 @@
 # T-0010.6: Runtime Closure And User-Facing Docs
 
-Status: Second review-fix complete, pending commit
+Status: Final log-cleanup recorded for commit
 Start: `2026-06-30 19:10 WEST`
 End: `2026-06-30 19:28 WEST`
 Baseline commit: `94a28bf`
@@ -24,7 +24,9 @@ fill-in)
 First review-fix commit: `bf92cd8`
 Second review-fix worker: T-0010.6 second review-fix sub-agent (this worker; id
 pending orchestrator fill-in)
-Second review-fix commit: pending
+Second review-fix commit: `a82655d` (`Record T-0010.6 review-fix verification`)
+Final log-cleanup worker: T-0010.6 final log-cleanup sub-agent (this worker; id
+pending orchestrator fill-in)
 
 ## Objective
 
@@ -173,11 +175,18 @@ Out of scope:
   implementation commit `d94bb39`. This review-fix updates the task and review
   logs with the closed author/reviewer state and marks the branch ready for
   documentation re-review, not final integration.
-- `2026-06-30 19:40 WEST`: Second documentation review-fix addressed the minor
-  finding that the review log requested Markdown formatting/checks and
-  `git diff --check` but did not record actual outcomes. This second
-  review-fix updates only durable T-0010.6 logs and records the first
-  review-fix commit `bf92cd8`; the second review-fix commit is pending.
+- After first review-fix commit `bf92cd8`: Second documentation review-fix
+  addressed the minor finding that the review log requested Markdown
+  formatting/checks and `git diff --check` but did not record actual outcomes.
+  This second review-fix updated only durable T-0010.6 logs and records the
+  first review-fix commit `bf92cd8`; it was committed as `a82655d`. The earlier
+  `2026-06-30 19:40 WEST` timestamp for this entry was a durable-log error
+  because the activity occurred after the first review-fix entry.
+- `2026-06-30 19:45 WEST`: Final log-cleanup sub-agent updated durable
+  T-0010.6 logs only to record second review-fix commit `a82655d`, clarify the
+  corrected second review-fix chronology, and prepare the final log correction
+  commit. Worker id is pending orchestrator fill-in; this cleanup is recorded
+  in the final log-correction commit.
 
 ## Decisions
 

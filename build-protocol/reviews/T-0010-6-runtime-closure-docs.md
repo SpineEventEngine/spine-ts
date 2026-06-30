@@ -16,7 +16,7 @@ security `019f19ce-44f2-7980-a126-178a3350a124` (closed, CLEAN);
 performance/reliability `019f19ce-4580-7dd3-9b87-c1476529a214` (closed,
 CLEAN)
 Review timestamp: `2026-06-30`, after implementation commit `d94bb39`
-Status: Second review-fix complete, pending commit
+Status: Final log-cleanup recorded for commit
 
 ## Scope Reviewed
 
@@ -70,7 +70,12 @@ Status: Second review-fix complete, pending commit
   orchestrator-assigned id.
 - Second review-fix updated only durable T-0010.6 logs to replace the prior
   requested-verification wording with actual verification evidence and to make
-  the second review-fix state resumable.
+  the second review-fix state resumable. It was committed as `a82655d`.
+- Final log-cleanup updated only durable T-0010.6 logs to record second
+  review-fix commit `a82655d`, clarify the second review-fix chronology, and
+  record this cleanup activity. The final log-cleanup worker id is pending
+  orchestrator fill-in because this worker cannot know its orchestrator-assigned
+  id.
 
 ## Review-Fix Verification Evidence
 
@@ -98,4 +103,8 @@ First review-fix outcome: committed as `bf92cd8`, with documentation re-review
 finding that verification evidence was requested but not recorded.
 
 Second review-fix outcome: durable log correction complete and ready to commit.
+Committed as `a82655d`.
+
+Final log-cleanup outcome: durable log correction recorded for the final
+log-correction commit.
 Not final integrated.
