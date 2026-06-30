@@ -1,6 +1,6 @@
 # Implementation Report: T-0011.4 Broker And Worker Lifecycle Seam
 
-Status: Round 1 Fixes Verified; Re-review Pending
+Status: Round 2 Fixes Verified; Re-review Pending
 Task log: `build-protocol/tasks/T-0011-4-broker-worker-lifecycle-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0011-4.md`
 Review log: `build-protocol/reviews/T-0011-4-broker-worker-lifecycle-seam.md`
@@ -60,7 +60,7 @@ sandbox rejects those binds with `EPERM`.
 
 ## Open Items
 
-- Required re-review lanes still need to confirm the round 1 fix before parent
+- Required re-review lanes still need to confirm the round 2 fix before parent
   integration.
 
 ## Result
@@ -80,3 +80,8 @@ sandbox rejects those binds with `EPERM`.
   lifecycle seam and its explicit deferrals.
 - Round 1 fix verification completed successfully. Full `verify` again needed a
   native IPC rerun because existing ZeroMQ smoke tests bind `ipc://` endpoints.
+- Round 2 re-review tightened canonical participant inputs and rejected
+  dotted host/IP-shaped logical IDs, while keeping simple logical IDs such as
+  `projection-a`, `projection_worker`, and `worker01` valid.
+- Round 2 fix verification completed successfully with the focused transport
+  tests, `typecheck`, `docs:check`, and `git diff --check`.

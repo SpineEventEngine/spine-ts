@@ -8,12 +8,14 @@ import {
   type RequestTransportOperation,
   type SignalTransport,
   type TransportLifecycleParticipant,
+  type TransportLifecycleSnapshotInput,
   type TransportLifecycleState,
   type TransportParticipantIdentity,
   type TransportParticipantIdentityInput,
   type TransportReadinessState,
   type TransportSignalKind,
   type TransportWorkerRegistration,
+  type TransportWorkerRegistrationInput,
   createTransportParticipantIdentity,
   createTransportSubscription,
   createTransportLifecycleSnapshot,
@@ -212,7 +214,6 @@ describe("@spine-ts/transport", () => {
       worker: {
         participantKind: "worker",
         participantId: "projection-a",
-        participantKey: "worker#tampered",
         workerRole: "projection-worker",
       },
       subscriptions: [
@@ -361,13 +362,35 @@ describe("@spine-ts/transport", () => {
     ).toThrow(/subscriberId/);
   });
 
-  it("rejects endpoint-shaped, path-shaped, host-shaped, and pid-only logical ids", () => {
+  it("keeps simple logical ids valid", () => {
+    expect(() =>
+      createTransportSubscription({
+        subscriberId: "projection_worker",
+        topic: {
+          signalKind: "query",
+          messageTypeUrl: "type.spine.io/example.TaskById",
+        },
+      }),
+    ).not.toThrow();
+    expect(() =>
+      createTransportParticipantIdentity({
+        participantKind: "worker",
+        participantId: "worker01",
+        workerRole: "projection-worker",
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejects endpoint-shaped, path-shaped, host-shaped, pid-only, and dotted logical ids", () => {
     const invalidIds = [
       "ipc://broker",
       "tcp://127.0.0.1:5555",
       "/tmp/worker",
       "worker@host",
       "12345",
+      "broker.local",
+      "worker-01.prod",
+      "127.0.0.1",
     ];
 
     for (const invalidId of invalidIds) {
@@ -650,6 +673,15 @@ describe("@spine-ts/transport", () => {
       readonly signalKinds: readonly TransportSignalKind[];
       readonly registrationKey: string;
     }>();
+    expectTypeOf<TransportWorkerRegistrationInput["worker"]>().toEqualTypeOf<
+      TransportParticipantIdentityInput<"worker">
+    >();
+    expectTypeOf<TransportLifecycleSnapshotInput<"broker">["participant"]>().toEqualTypeOf<
+      TransportParticipantIdentityInput<"broker">
+    >();
+    expectTypeOf<TransportLifecycleSnapshotInput<"worker">["participant"]>().toEqualTypeOf<
+      TransportParticipantIdentityInput<"worker">
+    >();
     expectTypeOf<TransportLifecycleParticipant>().toExtend<AsyncCloseable>();
     expectTypeOf<TransportLifecycleParticipant["state"]>().toEqualTypeOf<TransportLifecycleState>();
     expectTypeOf<

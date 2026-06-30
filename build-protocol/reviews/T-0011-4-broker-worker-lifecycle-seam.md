@@ -1,6 +1,6 @@
 # Review Log: T-0011.4 Broker And Worker Lifecycle Seam
 
-Status: Round 1 Fixes Verified; Re-review Pending
+Status: Round 2 Fixes Verified; Re-review Pending
 
 ## Required Review Lanes
 
@@ -30,8 +30,10 @@ coverage, TypeDoc/API counts, proto checks, and generated-clean result.
 
 Round 1 review found maintainability, security, documentation, TypeScript/API
 docs, and reliability issues in the transport lifecycle seam. The follow-up fix
-has landed and verification reran successfully; re-review remains pending
-before parent integration.
+landed and verification reran successfully, but round 2 re-review found two
+remaining items: canonical-only participant inputs and dotted logical IDs. The
+round 2 fix has landed and verification reran successfully; re-review remains
+pending before parent integration.
 
 ## Reviewer Rounds
 
@@ -69,3 +71,24 @@ Round 1 fix verification reran on `2026-06-30 23:21 WEST`:
 - native-IPC `CI=true corepack pnpm verify` passed with 23 files / 275 tests,
   coverage 96.60% statements / 91.20% branches / 99.30% functions / 96.55%
   lines, TypeDoc/API checks, proto lint/generate, and generated-clean checks.
+
+Round 2 re-review then found two remaining issues on `2026-06-30 23:30 WEST`:
+
+- maintainability: `TransportWorkerRegistrationInput.worker` and
+  `TransportLifecycleSnapshotInput.participant` still accepted prebuilt
+  participant identity shapes alongside canonical inputs; and
+- security: `normalizeLogicalTransportId()` still allowed dotted
+  hostname/IP-shaped logical IDs such as `broker.local`,
+  `worker-01.prod`, and `127.0.0.1`.
+
+Round 2 fixes landed in the transport package and the review evidence now
+shows the canonical-only builder inputs, the tighter logical-ID format, and
+the corresponding positive/negative tests. Verification reran on
+`2026-06-30 23:30 WEST`:
+
+- `corepack pnpm test packages/transport/src/index.test.ts packages/transport/src/zeromq-adapter-config.test.ts`
+  passed with 2 files / 17 tests;
+- `corepack pnpm typecheck` passed;
+- `corepack pnpm docs:check` passed with the existing invalid-`origin`
+  warning only and 31 expected `@spine-ts/transport` exports in TypeDoc JSON;
+- `git diff --check` passed.

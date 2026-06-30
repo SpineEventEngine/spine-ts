@@ -29,6 +29,9 @@ not open sockets, start child processes, supervise processes, choose socket
 topology, probe readiness over IPC, invoke handlers, classify retries or
 delivery failures, add durable inbox/outbox storage, or wire
 `@spine-ts/server`.
+Builder inputs stay canonical: worker registrations and lifecycle snapshots take
+`TransportParticipantIdentityInput` values and rehydrate frozen identities from
+those semantic fields instead of accepting prebuilt participant objects.
 
 ZeroMQ is reserved for local IPC on one host. The native binding install script
 is explicitly approved in the workspace pnpm configuration, and development or

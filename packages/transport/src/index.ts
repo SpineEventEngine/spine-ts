@@ -231,9 +231,8 @@ export interface TransportWorkerRegistration {
 
 /** Input for one worker registration. */
 export interface TransportWorkerRegistrationInput {
-  /** Stable worker identity or canonical worker identity input. */
-  readonly worker:
-    TransportParticipantIdentityInput<"worker"> | TransportParticipantIdentity<"worker">;
+  /** Stable worker identity in canonical input form. */
+  readonly worker: TransportParticipantIdentityInput<"worker">;
   /** Logical subscriptions covered by the worker. */
   readonly subscriptions: readonly (TransportSubscriptionInput | TransportSubscription)[];
 }
@@ -256,9 +255,8 @@ export interface TransportLifecycleSnapshot<
 export interface TransportLifecycleSnapshotInput<
   Kind extends TransportParticipantKind = TransportParticipantKind,
 > {
-  /** Stable logical participant identity or canonical identity input. */
-  readonly participant:
-    TransportParticipantIdentityInput<Kind> | TransportParticipantIdentity<Kind>;
+  /** Stable logical participant identity in canonical input form. */
+  readonly participant: TransportParticipantIdentityInput<Kind>;
   /** Current deterministic lifecycle state. */
   readonly state: TransportLifecycleState;
   /** Current readiness state. */
@@ -364,7 +362,7 @@ export function createTransportParticipantIdentity(
 export function createTransportWorkerRegistration(
   input: TransportWorkerRegistrationInput,
 ): TransportWorkerRegistration {
-  const worker = normalizeWorkerParticipant(input.worker, "worker");
+  const worker = normalizeWorkerParticipant(input.worker);
   const subscriptions = normalizeWorkerSubscriptions(input.subscriptions, worker.participantId);
   const signalKinds = Object.freeze(
     [...new Set(subscriptions.map((subscription) => subscription.topic.signalKind))].sort(
@@ -432,9 +430,9 @@ function normalizeRequiredText(value: string, name: string): string {
 function normalizeLogicalTransportId(value: string, name: string): string {
   const normalized = normalizeRequiredText(value, name);
 
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(normalized) || /^\d+$/u.test(normalized)) {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/u.test(normalized) || /^\d+$/u.test(normalized)) {
     throw new Error(
-      `Transport ${name} must use logical-name format (letters/digits followed by letters/digits/dots/underscores/hyphens, not endpoints, paths, hostnames, or PIDs).`,
+      `Transport ${name} must use logical-name format (letters/digits followed by letters/digits/underscores/hyphens, not endpoints, paths, hostnames, or PIDs).`,
     );
   }
 
@@ -539,32 +537,18 @@ function normalizeSemanticTags(
 }
 
 function normalizeTransportLifecycleParticipant(
-  value: TransportParticipantIdentityInput | TransportParticipantIdentity,
+  value: TransportParticipantIdentityInput,
 ): TransportParticipantIdentity {
-  if (value.participantKind === "worker") {
-    const workerInput: TransportParticipantIdentityInput<"worker"> = {
-      participantKind: "worker",
-      participantId: value.participantId,
-      workerRole: normalizeTransportWorkerRole(value.workerRole),
-    };
-
-    return createTransportParticipantIdentity(workerInput);
-  }
-
-  return createTransportParticipantIdentity({
-    participantKind: "broker",
-    participantId: value.participantId,
-  });
+  return createTransportParticipantIdentity(value);
 }
 
 function normalizeWorkerParticipant(
-  value: TransportParticipantIdentityInput<"worker"> | TransportParticipantIdentity<"worker">,
-  name: string,
+  value: TransportParticipantIdentityInput<"worker">,
 ): TransportParticipantIdentity<"worker"> {
-  const participant = normalizeTransportLifecycleParticipant(value);
+  const participant = createTransportParticipantIdentity(value);
 
-  if (!isTransportWorkerParticipant(participant)) {
-    throw new Error(`Transport ${name} must be a worker participant.`);
+  if (participant.participantKind !== "worker") {
+    throw new Error("Transport worker must be a worker participant.");
   }
 
   return participant;
@@ -610,17 +594,15 @@ function normalizeWorkerRegistrations(
   return Object.freeze(
     registrations.map((registration) =>
       createTransportWorkerRegistration({
-        worker: registration.worker,
+        worker: {
+          participantKind: registration.worker.participantKind,
+          participantId: registration.worker.participantId,
+          workerRole: registration.worker.workerRole!,
+        },
         subscriptions: registration.subscriptions,
       }),
     ),
   );
-}
-
-function isTransportWorkerParticipant(
-  participant: TransportParticipantIdentity,
-): participant is TransportParticipantIdentity<"worker"> {
-  return participant.participantKind === "worker";
 }
 
 function createRoutingKey(

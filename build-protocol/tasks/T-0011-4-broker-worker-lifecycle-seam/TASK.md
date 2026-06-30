@@ -150,3 +150,11 @@ Skipped relevant-looking skills:
   lines, TypeDoc/API checks passed with the existing invalid-`origin` warning
   only, copied-proto checksum verification passed, proto lint/generate passed,
   and generated proto output remained clean.
+- `corepack pnpm test packages/transport/src/index.test.ts packages/transport/src/zeromq-adapter-config.test.ts`
+  passed on `2026-06-30 23:30 WEST` with 2 files and 17 tests passing after the
+  round 2 participant-input and logical-ID tightening.
+- `corepack pnpm typecheck` passed on `2026-06-30 23:30 WEST`.
+- `corepack pnpm docs:check` passed on `2026-06-30 23:30 WEST` with the
+  existing invalid-`origin` warning only and 31 expected `@spine-ts/transport`
+  exports in TypeDoc JSON.
+- `git diff --check` passed on `2026-06-30 23:30 WEST`.
