@@ -255,7 +255,9 @@ typing, and package-private smoke tests prove same-host publish/subscribe and
 request/reply IPC over temporary endpoints. Socket creation, endpoint strings,
 multipart frames, and native binding types remain absent from the public API;
 production endpoint layout, frame protocols, broker/worker lifecycle, delivery
-retries, and server runtime wiring remain deferred.
+retries, and server runtime wiring remain deferred. Managed sandboxes may
+reject ZeroMQ `ipc://` binds with `EPERM`, so live local IPC smoke tests can
+require native IPC filesystem/socket permissions outside the sandbox.
 
 The generated Protobuf-ES implementation files themselves remain excluded from
 TypeDoc output and are not broadly re-exported from the package root.

@@ -432,6 +432,8 @@ tests do not define production endpoint layout, frame protocols, broker/worker
 lifecycle, delivery retries, or server runtime wiring. The workspace explicitly
 approves the `zeromq` install script in pnpm configuration, so dependency
 restoration must run in an environment that permits native package
-build/install scripts. Per D-0007, this adapter path is for same-host IPC only;
-scaling beyond one host remains the job of a different transport behind the
-same public contract.
+build/install scripts. Managed sandboxes may reject ZeroMQ `ipc://` binds with
+`EPERM`, so live local IPC smoke tests can require native IPC filesystem/socket
+permissions outside the sandbox. Per D-0007, this adapter path is for same-host
+IPC only; scaling beyond one host remains the job of a different transport
+behind the same public contract.

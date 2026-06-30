@@ -32,7 +32,15 @@ external review lanes must complete before parent integration.
 
 ## Reviewer Rounds
 
-None yet.
+### Round 1
+
+| Lane                         | Outcome | Notes                                                                                                                                                                                               |
+| ---------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Code style / maintainability | Clean   | Smoke helpers stay test-private and deterministic. One minor non-blocking note remains about failure attribution around awaiting `replyTask` after `requester.receive()`.                           |
+| Documentation                | Clean   | Package, architecture, and API docs now note that managed sandboxes can reject ZeroMQ `ipc://` binds with `EPERM`, so live local IPC smoke tests may need native IPC filesystem/socket permissions. |
+| TypeScript / API docs        | Clean   | Public `@spine-ts/transport` exports remain unchanged; ZeroMQ stays adapter-private.                                                                                                                |
+| Security                     | Clean   | No TCP ports, external services, or public ZeroMQ types were introduced.                                                                                                                            |
+| Performance / reliability    | Clean   | Bounded timeouts, `linger: 0`, and temporary IPC cleanup remain in place.                                                                                                                           |
 
 ## Implementation Self-Check
 
@@ -51,3 +59,7 @@ None yet.
 - Performance/reliability: PUB/SUB slow-joiner risk is handled by bounded
   repeated sends until the subscriber receives or its receive timeout fails the
   test; sockets use `linger: 0` to avoid shutdown hangs.
+- Documentation follow-up: the package, architecture, and API docs now record
+  the managed-sandbox `ipc://` / `EPERM` constraint, and the task/work logs now
+  capture the reviewer round 1 state plus the completed implementation
+  sub-agent ID.

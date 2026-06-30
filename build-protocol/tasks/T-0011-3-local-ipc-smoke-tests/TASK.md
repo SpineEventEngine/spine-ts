@@ -8,8 +8,8 @@ Task log path: `build-protocol/tasks/T-0011-3-local-ipc-smoke-tests/TASK.md`
 Branch: `task/T-0011-3-local-ipc-smoke-tests`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-3-local-ipc-smoke-tests`
-Authoring sub-agent: pending
-Reviewer sub-agents: pending
+Authoring sub-agent: 019f1a60-020b-72e2-b9a4-661b1b25b57d
+Reviewer sub-agents: round 1 complete; maintainability note logged and docs follow-up recorded
 
 ## Objective
 

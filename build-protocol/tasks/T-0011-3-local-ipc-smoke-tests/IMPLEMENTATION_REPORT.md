@@ -25,15 +25,16 @@ The public `@spine-ts/transport` root remains adapter-agnostic and does not
 export ZeroMQ sockets, endpoints, multipart frames, or native binding types.
 No `@spine-ts/server` files were changed.
 
-## Expected Files
+## Actual Changed Files
 
-Likely changed files:
-
-- adapter-private test/helper files under `packages/transport/src`;
-- `packages/transport/README.md`;
-- `docs/architecture/README.md` and/or `docs/api/README.md` if local IPC smoke
-  scope needs clarification;
-- this task/report/work/review log set.
+- `packages/transport/src/zeromq-local-ipc-smoke.test.ts`
+- `packages/transport/README.md`
+- `docs/architecture/README.md`
+- `docs/api/README.md`
+- `build-protocol/tasks/T-0011-3-local-ipc-smoke-tests/TASK.md`
+- `build-protocol/tasks/T-0011-3-local-ipc-smoke-tests/IMPLEMENTATION_REPORT.md`
+- `build-protocol/work-logs/T-0011-3.md`
+- `build-protocol/reviews/T-0011-3-local-ipc-smoke-tests.md`
 
 ## Guardrails
 
@@ -61,7 +62,8 @@ existing invalid-`origin` warning only.
 
 Focused smoke verification passed on `2026-06-30 22:17 WEST`:
 `corepack pnpm vitest run packages/transport/src/zeromq-local-ipc-smoke.test.ts`
-passed with 1 test file / 2 tests.
+passed with 1 test file / 2 tests. The command ran with native IPC access
+because the managed sandbox rejects ZeroMQ `ipc://` binds with `EPERM`.
 
 Required implementation verification passed on `2026-06-30 22:18-22:21 WEST`:
 
@@ -75,6 +77,17 @@ Required implementation verification passed on `2026-06-30 22:18-22:21 WEST`:
   lint/generate, generated proto output clean, and generated files clean.
   TypeDoc emitted the existing invalid-`origin` warning only.
 - `git diff --check` passed.
+
+## Review Notes
+
+- Round 1 review outcomes were clean for TypeScript/API docs, security, and
+  performance/reliability.
+- Maintainability was also clean, with one minor non-blocking note about
+  failure attribution around awaiting `replyTask` after `requester.receive()`.
+- Documentation review asked for the local IPC sandbox permission note, which
+  is now recorded in the package, architecture, and API docs.
+- The task log now records the completed implementation sub-agent ID and the
+  round 1 reviewer state.
 
 ## Open Items
 

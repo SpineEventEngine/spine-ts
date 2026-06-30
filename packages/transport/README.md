@@ -26,4 +26,6 @@ adapter-private helpers only normalize local IPC configuration and module
 typing. The smoke tests open sockets only under temporary IPC directories and
 clean them up within the test process; they do not define production endpoint
 layout, frame formats, broker/worker lifecycle, retries, delivery semantics, or
-server runtime wiring.
+server runtime wiring. Managed sandboxes may reject ZeroMQ `ipc://` binds with
+`EPERM`, so live local IPC smoke runs can require native IPC filesystem/socket
+permissions outside the sandbox.
