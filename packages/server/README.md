@@ -190,10 +190,11 @@ responsibility for later asynchronous work; they do not mean the signal was
 stored, dispatched, delivered, handled, acknowledged, or successfully applied.
 
 Failure results carry a stable `SignalIntakeFailureCode` and frozen scalar
-diagnostics. Diagnostic values are copied, limited to strings, numbers,
-booleans, or `null`, and payload-shaped keys such as `payload`, `message`,
-`signal`, and `envelope` are omitted. This keeps immediate intake evidence
-useful for later mapping without exposing full signal data.
+diagnostics. Diagnostic values are copied only from allowlisted own enumerable
+data properties, limited to strings, numbers, booleans, or `null`; unknown keys,
+accessor properties, and payload-shaped metadata are discarded. This keeps
+immediate intake evidence useful for later mapping without exposing full signal
+data.
 
 This seam deliberately does not call `SingleProcessServerRuntime.enqueue()`,
 create Spine `Ack` messages, validate tenants or messages, filter signals,

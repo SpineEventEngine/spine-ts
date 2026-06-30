@@ -93,6 +93,73 @@ describe("signal intake results", () => {
     expect(result.failure.diagnostics).not.toHaveProperty("nested");
   });
 
+  it("drops unknown scalar diagnostics and payload-shaped scalar keys", () => {
+    const result = failSignalIntake("event", "MALFORMED_ENVELOPE", {
+      boundedContext: "Tasks",
+      messageType: "example.tasks.TaskCreated",
+      reason: "missing envelope id",
+      payloadJson: '{"secret":"task-title"}',
+      rawMessage: "private-message",
+      body: "private-body",
+      details: "private-details",
+      arbitrary: "private-arbitrary",
+      payload: "private-payload",
+      message: "private-message",
+      signal: "private-signal",
+      envelope: "private-envelope",
+    });
+
+    expect(result.failure.diagnostics).toEqual({
+      boundedContext: "Tasks",
+      messageType: "example.tasks.TaskCreated",
+      reason: "missing envelope id",
+    });
+    expect(result.failure.diagnostics).not.toHaveProperty("payloadJson");
+    expect(result.failure.diagnostics).not.toHaveProperty("rawMessage");
+    expect(result.failure.diagnostics).not.toHaveProperty("body");
+    expect(result.failure.diagnostics).not.toHaveProperty("details");
+    expect(result.failure.diagnostics).not.toHaveProperty("arbitrary");
+  });
+
+  it("skips accessor diagnostics without executing getters", () => {
+    let getterExecuted = false;
+    const diagnostics: Record<string, unknown> = {};
+    Object.defineProperty(diagnostics, "boundedContext", {
+      enumerable: true,
+      value: "Tasks",
+    });
+    Object.defineProperty(diagnostics, "reason", {
+      enumerable: true,
+      get() {
+        getterExecuted = true;
+        throw new Error("getter must not run");
+      },
+    });
+
+    const result = failSignalIntake("command", "RUNTIME_NOT_ACCEPTING", diagnostics);
+
+    expect(getterExecuted).toBe(false);
+    expect(result.failure.diagnostics).toEqual({
+      boundedContext: "Tasks",
+    });
+  });
+
+  it("ignores hostile diagnostic objects that fail own-property inspection", () => {
+    const diagnostics = new Proxy<Record<string, unknown>>(
+      {},
+      {
+        ownKeys() {
+          throw new Error("diagnostic keys unavailable");
+        },
+      },
+    );
+
+    expect(() => failSignalIntake("command", "UNSUPPORTED_SIGNAL_KIND", diagnostics)).not.toThrow();
+    expect(
+      failSignalIntake("command", "UNSUPPORTED_SIGNAL_KIND", diagnostics).failure.diagnostics,
+    ).toEqual({});
+  });
+
   it("allows failure diagnostics to be omitted without sharing mutable defaults", () => {
     const first = failSignalIntake("command", "UNSUPPORTED_SIGNAL_KIND");
     const second = failSignalIntake("command", "UNSUPPORTED_SIGNAL_KIND");
@@ -134,7 +201,7 @@ describe("signal intake results", () => {
       boundedContext: "Tasks",
       retryable: false,
       attempt: 1,
-      detail: null,
+      reason: null,
     };
 
     expect(
@@ -143,7 +210,7 @@ describe("signal intake results", () => {
       boundedContext: "Tasks",
       retryable: false,
       attempt: 1,
-      detail: null,
+      reason: null,
     });
   });
 });

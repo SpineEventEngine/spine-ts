@@ -45,9 +45,14 @@ export interface SignalIntakeFailure<Kind extends SignalKind = SignalKind> {
 export type SignalIntakeResult<Kind extends SignalKind = SignalKind> =
   SignalIntakeAccepted<Kind> | SignalIntakeFailure<Kind>;
 
-type SignalIntakeDiagnosticInput = Readonly<Record<string, unknown>>;
-
-const payloadDiagnosticKeys = new Set(["payload", "message", "signal", "envelope"]);
+const allowedDiagnosticKeys = new Set([
+  "attempt",
+  "boundedContext",
+  "messageType",
+  "reason",
+  "retryable",
+  "runtimeState",
+]);
 
 /** Create an immutable accepted-for-async-work signal intake result. */
 export function acceptSignalIntake<Kind extends SignalKind>(
@@ -64,7 +69,7 @@ export function acceptSignalIntake<Kind extends SignalKind>(
 export function failSignalIntake<Kind extends SignalKind>(
   signalKind: Kind,
   code: SignalIntakeFailureCode,
-  diagnostics: SignalIntakeDiagnosticInput = {},
+  diagnostics: Readonly<Record<string, unknown>> = {},
 ): SignalIntakeFailure<Kind> {
   return Object.freeze({
     status: "failed",
@@ -77,20 +82,37 @@ export function failSignalIntake<Kind extends SignalKind>(
 }
 
 function sanitizeDiagnostics(
-  diagnostics: SignalIntakeDiagnosticInput,
+  diagnostics: Readonly<Record<string, unknown>>,
 ): SignalIntakeFailureDiagnostics {
   const sanitized: Record<string, string | number | boolean | null> = {};
+  const descriptors = getOwnDiagnosticDescriptors(diagnostics);
 
-  for (const [key, value] of Object.entries(diagnostics)) {
-    if (payloadDiagnosticKeys.has(key)) {
+  if (descriptors === undefined) {
+    return Object.freeze(sanitized);
+  }
+
+  for (const key of allowedDiagnosticKeys) {
+    const descriptor = descriptors[key];
+    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
       continue;
     }
+    const value: unknown = descriptor.value;
     if (isDiagnosticScalar(value)) {
       sanitized[key] = value;
     }
   }
 
   return Object.freeze(sanitized);
+}
+
+function getOwnDiagnosticDescriptors(
+  diagnostics: Readonly<Record<string, unknown>>,
+): PropertyDescriptorMap | undefined {
+  try {
+    return Object.getOwnPropertyDescriptors(diagnostics);
+  } catch {
+    return undefined;
+  }
 }
 
 function isDiagnosticScalar(value: unknown): value is string | number | boolean | null {

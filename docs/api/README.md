@@ -8,7 +8,8 @@ registry and validation facade APIs, the first `@spine-ts/server`
 descriptor-derived entity metadata, metadata-only `Repository` identity,
 set-once transition validation, explicit handler metadata APIs, and the first
 server runtime lifecycle/async queue kernel with a bounded-context runtime
-handle, and the first `@spine-ts/storage` contracts.
+handle, write-side signal intake result exports, and the first
+`@spine-ts/storage` contracts.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
@@ -180,11 +181,12 @@ failures. Accepted results do not enqueue work, store, dispatch, deliver,
 handle, or acknowledge a signal. Failure results carry stable failure codes
 (`"RUNTIME_NOT_ACCEPTING"`, `"MALFORMED_ENVELOPE"`, and
 `"UNSUPPORTED_SIGNAL_KIND"`) plus frozen scalar diagnostic metadata. Diagnostics
-copy only strings, numbers, booleans, and `null`, and omit payload-shaped keys
-such as `payload`, `message`, `signal`, and `envelope`, so the seam can be used
-without leaking full signal data. The surface is not Spine `Ack`, a command bus,
-event bus, import bus, filter chain, storage write, dispatcher, delivery
-mechanism, tenant/message validator, service, transport, or handler invocation.
+copy only allowlisted own enumerable data properties with string, number,
+boolean, or `null` values; unknown keys, accessor properties, and payload-shaped
+metadata are discarded so the seam can be used without leaking full signal
+data. The surface is not Spine `Ack`, a command bus, event bus, import bus,
+filter chain, storage write, dispatcher, delivery mechanism, tenant/message
+validator, service, transport, or handler invocation.
 
 Storage exports include `StorageAdapter`, `StorageRecord`,
 `WriteSideRecordStore`, `ReadSideRecordStore`, aggregate event history
