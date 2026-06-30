@@ -3,6 +3,7 @@ import {
   type CommandAssignmentHandlerMetadata,
   type EntityClass,
   type EntityHandlersMetadata,
+  type HandlerMetadata,
   type HandlerMetadataRegistryLookup,
   type RegisteredHandlerMetadata,
 } from "./handler-metadata.js";
@@ -112,32 +113,116 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
 }
 
 function compareFullTypeNames(left: string, right: string): number {
-  return left.localeCompare(right);
+  if (left < right) {
+    return -1;
+  }
+
+  if (left > right) {
+    return 1;
+  }
+
+  return 0;
 }
 
 function createAssigneeMetadata(
   commandFullTypeName: string,
   registeredHandler: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>,
 ): CommandRegistrationAssigneeMetadata {
+  const clonedHandlers = new Map<HandlerMetadata, HandlerMetadata>();
+  const handler = cloneHandlerMetadata(registeredHandler.handler, clonedHandlers);
+  const entity = cloneEntityMetadata(registeredHandler.entity);
+  const entityHandlers = cloneEntityHandlers(
+    registeredHandler.entityHandlers,
+    clonedHandlers,
+    entity,
+  );
+  const registeredHandlerCopy: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> =
+    Object.freeze({
+      entityHandlers,
+      entityType: registeredHandler.entityType,
+      entity,
+      handler,
+    });
+
   return Object.freeze({
     commandFullTypeName,
-    entityHandlers: registeredHandler.entityHandlers,
+    entityHandlers,
     entityType: registeredHandler.entityType,
-    entity: registeredHandler.entity,
-    handler: registeredHandler.handler,
-    registeredHandler,
+    entity,
+    handler,
+    registeredHandler: registeredHandlerCopy,
   });
 }
 
 function copyAssigneeMetadata(
   assignee: CommandRegistrationAssigneeMetadata,
 ): CommandRegistrationAssigneeMetadata {
+  return createAssigneeMetadata(assignee.commandFullTypeName, assignee.registeredHandler);
+}
+
+function cloneEntityHandlers(
+  entityHandlers: EntityHandlersMetadata,
+  clonedHandlers: Map<HandlerMetadata, HandlerMetadata>,
+  entity: EntityMetadata,
+): EntityHandlersMetadata {
   return Object.freeze({
-    commandFullTypeName: assignee.commandFullTypeName,
-    entityHandlers: assignee.entityHandlers,
-    entityType: assignee.entityType,
-    entity: assignee.entity,
-    handler: assignee.handler,
-    registeredHandler: assignee.registeredHandler,
+    entityType: entityHandlers.entityType,
+    entity,
+    handlers: Object.freeze(
+      entityHandlers.handlers.map((handler) => cloneHandlerMetadata(handler, clonedHandlers)),
+    ),
+    commandAssignments: Object.freeze(
+      entityHandlers.commandAssignments.map((handler) =>
+        cloneHandlerMetadata(handler, clonedHandlers),
+      ),
+    ),
+    commandReactions: Object.freeze(
+      entityHandlers.commandReactions.map((handler) =>
+        cloneHandlerMetadata(handler, clonedHandlers),
+      ),
+    ),
+    eventSubscriptions: Object.freeze(
+      entityHandlers.eventSubscriptions.map((handler) =>
+        cloneHandlerMetadata(handler, clonedHandlers),
+      ),
+    ),
+    eventReactions: Object.freeze(
+      entityHandlers.eventReactions.map((handler) => cloneHandlerMetadata(handler, clonedHandlers)),
+    ),
+    eventApplications: Object.freeze(
+      entityHandlers.eventApplications.map((handler) =>
+        cloneHandlerMetadata(handler, clonedHandlers),
+      ),
+    ),
+  });
+}
+
+function cloneHandlerMetadata<Handler extends HandlerMetadata>(
+  handler: Handler,
+  clonedHandlers: Map<HandlerMetadata, HandlerMetadata>,
+): Handler {
+  const existing = clonedHandlers.get(handler);
+
+  if (existing !== undefined) {
+    return existing as Handler;
+  }
+
+  const clone = Object.freeze({ ...handler }) as unknown as Handler;
+
+  clonedHandlers.set(handler, clone);
+  return clone;
+}
+
+function cloneEntityMetadata(entity: EntityMetadata): EntityMetadata {
+  return Object.freeze({
+    ...entity,
+    idField: Object.freeze({ ...entity.idField }),
+    firstFieldRoutingHint: Object.freeze({
+      ...entity.firstFieldRoutingHint,
+      field: Object.freeze({ ...entity.firstFieldRoutingHint.field }),
+    }),
+    columns: Object.freeze(entity.columns.map((field) => Object.freeze({ ...field }))),
+    setOnceFields: Object.freeze(entity.setOnceFields.map((field) => Object.freeze({ ...field }))),
+    semanticTags: Object.freeze([...entity.semanticTags]),
   });
 }

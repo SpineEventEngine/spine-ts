@@ -11,8 +11,14 @@ import {
   defineEntityHandlers,
   HandlerMetadataRegistry,
   HandlerMetadataRegistryError,
+  type CommandAssignmentHandlerMetadata,
   type CommandRegistrationAssigneeMetadata,
   type CommandRegistrationReadinessLookup,
+  type EntityHandlersMetadata,
+  type HandlerKind,
+  type HandlerMetadata,
+  type HandlerMetadataRegistryLookup,
+  type RegisteredHandlerMetadata,
 } from "./index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -97,6 +103,24 @@ describe("command registration readiness", () => {
     ]);
   });
 
+  it("orders command message names by locale-independent code units", () => {
+    const registry = createRegistryLookupForCommandNames([
+      "example.Command_Alpha",
+      "example.Command0Alpha",
+      "example.CommandAlpha",
+      "example.Commandalpha",
+    ]);
+
+    const readiness = CommandRegistrationReadiness.fromRegistry(registry);
+
+    expect(readiness.registeredCommandMessageFullTypeNames()).toEqual([
+      "example.Command0Alpha",
+      "example.CommandAlpha",
+      "example.Command_Alpha",
+      "example.Commandalpha",
+    ]);
+  });
+
   it("finds the unique command assignee metadata for a command type", () => {
     const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
@@ -120,7 +144,8 @@ describe("command registration readiness", () => {
         messageFullTypeName: "spine.core.Command",
       },
     });
-    expect(assignee?.registeredHandler.handler).toBe(handlers.commandAssignments[0]);
+    expect(assignee?.registeredHandler.handler).toEqual(handlers.commandAssignments[0]);
+    expect(assignee?.registeredHandler.handler).not.toBe(handlers.commandAssignments[0]);
   });
 
   it("keeps duplicate command assignment failure owned by HandlerMetadataRegistry", () => {
@@ -170,6 +195,68 @@ describe("command registration readiness", () => {
     );
   });
 
+  it("keeps returned nested assignee metadata from mutating later lookups", () => {
+    const mutableHandler: CommandAssignmentHandlerMetadata = {
+      kind: "command-assignment",
+      schema: CommandSchema,
+      descriptor: CommandSchema,
+      messageFullTypeName: CommandSchema.typeName,
+      methodName: "assignCreate",
+    };
+    const mutableEntityHandlers: EntityHandlersMetadata = {
+      entityType: TaskProjection,
+      entity: createProjectionEntityMetadata(),
+      handlers: [mutableHandler],
+      commandAssignments: [mutableHandler],
+      commandReactions: [],
+      eventSubscriptions: [],
+      eventReactions: [],
+      eventApplications: [],
+    };
+    const mutableRegisteredHandler: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> = {
+      entityHandlers: mutableEntityHandlers,
+      entityType: TaskProjection,
+      entity: mutableEntityHandlers.entity,
+      handler: mutableHandler,
+    };
+    const readiness = CommandRegistrationReadiness.fromRegistry(
+      createRegistryLookupForAssignments([mutableRegisteredHandler]),
+    );
+
+    const assignee = readiness.findCommandAssignee(CommandSchema.typeName);
+    const nestedCommandAssignment = assignee?.entityHandlers.commandAssignments[0];
+
+    if (nestedCommandAssignment === undefined) {
+      throw new Error("Expected command assignee metadata to include a nested command assignment.");
+    }
+
+    expect(Object.isFrozen(assignee?.handler)).toBe(true);
+    expect(Object.isFrozen(assignee?.entityHandlers)).toBe(true);
+    expect(Object.isFrozen(assignee?.entityHandlers.commandAssignments)).toBe(true);
+    expect(Object.isFrozen(assignee?.registeredHandler)).toBe(true);
+    expect(Object.isFrozen(assignee?.registeredHandler.handler)).toBe(true);
+    expect(() => {
+      (assignee?.handler as { methodName: string }).methodName = "mutatedHandler";
+    }).toThrow(TypeError);
+    expect(() => {
+      (nestedCommandAssignment as { methodName: string }).methodName = "mutatedNestedHandler";
+    }).toThrow(TypeError);
+    expect(() => {
+      (assignee?.registeredHandler.handler as { methodName: string }).methodName =
+        "mutatedRegisteredHandler";
+    }).toThrow(TypeError);
+
+    expect(readiness.findCommandAssignee(CommandSchema.typeName)).toMatchObject({
+      handler: { methodName: "assignCreate" },
+      entityHandlers: {
+        commandAssignments: [{ methodName: "assignCreate" }],
+      },
+      registeredHandler: {
+        handler: { methodName: "assignCreate" },
+      },
+    });
+  });
+
   it("does not expose bus, service, dispatch, posting, routing, or acknowledgement members", () => {
     const readiness = CommandRegistrationReadiness.fromRegistry(new HandlerMetadataRegistry());
 
@@ -184,3 +271,62 @@ describe("command registration readiness", () => {
     expect(readiness).not.toHaveProperty("handle");
   });
 });
+
+function createRegistryLookupForCommandNames(
+  commandFullTypeNames: readonly string[],
+): HandlerMetadataRegistryLookup {
+  const assignments = commandFullTypeNames.map((commandFullTypeName) => {
+    const handler: CommandAssignmentHandlerMetadata = {
+      kind: "command-assignment",
+      schema: { ...CommandSchema, typeName: commandFullTypeName },
+      descriptor: { ...CommandSchema, typeName: commandFullTypeName },
+      messageFullTypeName: commandFullTypeName,
+      methodName: "assignCreate",
+    };
+    const entityHandlers: EntityHandlersMetadata = {
+      entityType: TaskProjection,
+      entity: createProjectionEntityMetadata(),
+      handlers: [handler],
+      commandAssignments: [handler],
+      commandReactions: [],
+      eventSubscriptions: [],
+      eventReactions: [],
+      eventApplications: [],
+    };
+
+    return {
+      entityHandlers,
+      entityType: TaskProjection,
+      entity: entityHandlers.entity,
+      handler,
+    } satisfies RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>;
+  });
+
+  return createRegistryLookupForAssignments(assignments);
+}
+
+function createRegistryLookupForAssignments(
+  assignments: readonly RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata>[],
+): HandlerMetadataRegistryLookup {
+  return {
+    listEntityHandlers: () => assignments.map(({ entityHandlers }) => entityHandlers),
+    listHandlers: () => assignments,
+    findEntityHandlersByState: (entityStateFullTypeName) =>
+      assignments
+        .map(({ entityHandlers }) => entityHandlers)
+        .filter(({ entity }) => entity.fullTypeName === entityStateFullTypeName),
+    findHandlersByKind: <Kind extends HandlerKind>(kind: Kind) =>
+      (kind === "command-assignment" ? assignments : []) as readonly RegisteredHandlerMetadata<
+        Extract<HandlerMetadata, { readonly kind: Kind }>
+      >[],
+    findHandlersByMessageFullTypeName: (messageFullTypeName) =>
+      assignments.filter(({ handler }) => handler.messageFullTypeName === messageFullTypeName),
+    findCommandAssignment: (commandFullTypeName) =>
+      assignments.find(({ handler }) => handler.messageFullTypeName === commandFullTypeName),
+    findEventApplication: () => undefined,
+  };
+}
+
+function createProjectionEntityMetadata(): EntityHandlersMetadata["entity"] {
+  return defineEntityHandlers(TaskProjection, ProjectionStateSchema, () => []).entity;
+}

@@ -1,6 +1,6 @@
 # T-0010.4: Command Registration Readiness
 
-Status: Implementation Verified
+Status: Review Fix Verified
 Parent task: `T-0010 Single-Process Async Runtime`
 Start: `2026-06-30 17:24 WEST`
 Baseline commit: `e5e7b1d`
@@ -116,6 +116,33 @@ packages/server/src/command-registration-readiness.test.ts` passed 1 file /
   branches / 99.18% functions / 96.20% lines, TypeDoc/API checks with 100
   proto / 28 core / 119 server / 26 storage expected exports, proto
   lint/generate checksum verification, and generated proto output clean.
+- Review-fix RED on `2026-06-30 17:48 WEST`: `corepack pnpm test
+packages/server/src/command-registration-readiness.test.ts` failed as
+  expected with 3 focused regressions: default-locale sorting differed from
+  code-unit command name order, returned nested handler metadata preserved the
+  original handler object identity, and nested assignee metadata was not frozen.
+- Review-fix GREEN on `2026-06-30 17:51 WEST`: `corepack pnpm test
+packages/server/src/command-registration-readiness.test.ts` passed 1 file /
+  8 tests after replacing `localeCompare()` with code-unit comparison and
+  cloning/freezing returned nested handler, entity-handler, and registered
+  handler metadata.
+- Review-fix typecheck on `2026-06-30 17:51 WEST`: `corepack pnpm typecheck`
+  passed.
+- Review-fix full verification on `2026-06-30 17:54 WEST`: `CI=true corepack
+pnpm verify` passed with 20 test files / 242 tests, coverage 95.94%
+  statements / 90.38% branches / 98.15% functions / 95.87% lines, TypeDoc/API
+  checks with 100 proto / 28 core / 119 server / 26 storage expected exports,
+  proto lint/generate checksum verification, and generated proto output clean.
+
+## Review Fixes
+
+- Addressed Important/reliability and Minor/maintainability sorting feedback:
+  command message full type names now use locale-independent code-unit
+  comparison, with punctuation/case/underscore/digit regression coverage.
+- Addressed Important/reliability copy-safety feedback: readiness lookups now
+  return fresh frozen copies of nested handler, entity-handler, registered
+  handler, and shallow entity metadata so caller mutation of returned assignee
+  metadata cannot affect later lookups.
 
 ## Human Questions And Answers
 

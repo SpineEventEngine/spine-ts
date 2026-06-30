@@ -1,6 +1,6 @@
 # Review Log: T-0010.4 Command Registration Readiness
 
-Status: Implementation Verified
+Status: Review Fix Verified
 
 ## Required Review Lanes
 
@@ -53,5 +53,47 @@ WEST`.
 - Full: `CI=true corepack pnpm verify` passed on `2026-06-30 17:38 WEST` with
   20 test files / 240 tests and coverage 96.26% statements / 90.44% branches /
   99.18% functions / 96.20% lines.
+
+Concerns: none.
+
+## Review-Fix Round
+
+Review-fix sub-agent evaluated the two incoming findings against
+`packages/server/src/command-registration-readiness.ts` and found both valid:
+
+- Important/reliability and Minor/maintainability: command-name sorting used
+  default `localeCompare()`, so deterministic order depended on host/default
+  locale and ICU behavior.
+- Important/reliability: returned assignee values copied only the outer object;
+  nested `handler`, `entityHandlers`, and `registeredHandler` references could
+  be aliased from public lookup metadata and manually supplied registry
+  metadata.
+
+Resolution:
+
+- Replaced `localeCompare()` with explicit locale-independent code-unit
+  comparison and added regression coverage for digit, uppercase, underscore,
+  and lowercase ordering.
+- Added fresh frozen copies for returned nested handler metadata,
+  entity-handler metadata, registered handler metadata, and shallow entity
+  metadata so mutating one returned assignee cannot affect later lookups.
+- Kept scope to metadata/readiness only; no command bus, command service,
+  dispatch, posting, routing, validation, storage, handler invocation,
+  transport, repository runtime registration, or `Ack` was added.
+- Duplicate assignment enforcement remains delegated to
+  `HandlerMetadataRegistry`; no second duplicate policy was introduced.
+
+Review-fix verification:
+
+- RED: `corepack pnpm test packages/server/src/command-registration-readiness.test.ts`
+  failed on `2026-06-30 17:48 WEST` with 3 focused regressions for
+  locale-dependent sorting, nested registered handler identity, and mutable
+  nested handler metadata.
+- GREEN: `corepack pnpm test packages/server/src/command-registration-readiness.test.ts`
+  passed on `2026-06-30 17:51 WEST` with 1 file / 8 tests.
+- Typecheck: `corepack pnpm typecheck` passed on `2026-06-30 17:51 WEST`.
+- Full: `CI=true corepack pnpm verify` passed on `2026-06-30 17:54 WEST` with
+  20 test files / 242 tests and coverage 95.94% statements / 90.38% branches /
+  98.15% functions / 95.87% lines.
 
 Concerns: none.
