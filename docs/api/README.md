@@ -6,8 +6,10 @@ Current status: the generated reference contains the curated `@spine-ts/proto`
 root API for copied Spine contracts, the `@spine-ts/core` metadata/type
 registry and validation facade APIs, the first `@spine-ts/server`
 descriptor-derived entity metadata, metadata-only `Repository` identity,
-set-once transition validation, and explicit handler metadata APIs, and the
-first `@spine-ts/storage` contracts.
+set-once transition validation, explicit handler metadata APIs, and the first
+server runtime lifecycle/async queue kernel with a bounded-context runtime
+handle, write-side signal intake result exports, and the first
+`@spine-ts/storage` contracts.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
@@ -25,6 +27,7 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 Server exports include `BoundedContext`, `BoundedContextBuilder`,
 `ContextSpec`, `BoundedContextName`, `TenantMode`, `BoundedContextSnapshot`,
 `BuiltBoundedContextSnapshot`, immutable snapshot contracts,
+`BoundedContextRuntime`, `BoundedContextRuntimeOptions`,
 `BoundedContextNameError`, and
 `BoundedContextRepositoryRegistrationError` for the first bounded-context
 assembly shell.
@@ -43,6 +46,16 @@ repository ownership metadata for later runtime parts without creating default
 repositories from entity classes, registering repositories at runtime, invoking
 handlers, creating system contexts, opening storage, constructing buses/stands,
 writing tenant indexes, exposing gRPC services, or integrating transports.
+`BoundedContextRuntime` is the runtime-facing handle for one already built
+context. It owns a private `SingleProcessServerRuntime` by default or accepts an
+injected `ServerRuntimeLifecycle`; injected lifecycle sharing remains caller
+owned. The handle delegates `state`, `start()`, and `close()`, and exposes
+fresh immutable copies for the context name, spec, repository identity
+snapshots, and `contextSnapshot`. It does not expose `enqueue()` for injected or
+default runtimes and is not a JVM `Server` equivalent, command/event/import bus,
+repository dispatcher, stand, event store, tenant index, integration broker,
+system context, gRPC/ZeroMQ transport, service host, delivery inbox, or handler
+invocation mechanism.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,
@@ -134,6 +147,85 @@ exports include `HandlerMetadataRegistry`,
 `HandlerMetadataRegistryError` for caller-owned lookup-only registration and
 duplicate-policy validation. These APIs are metadata-only and do not execute
 handlers, access storage, dispatch buses, or start transport.
+Command registration readiness exports include
+`CommandRegistrationReadiness`, `CommandRegistrationReadinessLookup`, and
+`CommandRegistrationAssigneeMetadata`. The readiness view is built from an
+existing `HandlerMetadataRegistryLookup` or from `EntityHandlersMetadata`
+values by first constructing a `HandlerMetadataRegistry`, so duplicate command
+assignment enforcement remains the registry's policy. It reports deterministic
+registered command message full type names and frozen copy-safe metadata for
+the unique command assignee. It is not a command bus, command service,
+dispatcher, router, command posting API, validator, repository runtime
+registration hook, storage writer, transport adapter, handler invoker, or
+Spine `Ack` producer.
+Event registration readiness exports include `EventRegistrationReadiness`,
+`EventRegistrationReadinessLookup`,
+`EventRegistrationSubscriberMetadata`, `EventRegistrationReactorMetadata`, and
+`EventRegistrationApplicationMetadata`. The readiness view is built from an
+existing `HandlerMetadataRegistryLookup` or from `EntityHandlersMetadata`
+values by first constructing a `HandlerMetadataRegistry`, so duplicate event
+application enforcement remains the registry's per-entity-state/per-event
+policy. It reports deterministic registered event message full type names and
+frozen copy-safe metadata for event subscribers, event reactors, and event
+applications grouped by event type. Subscriber and reactor lookups preserve
+Spine fan-out semantics and do not reject multiple receivers for the same event
+type. Domestic/external event classification and integration-broker
+wanted-event publication are deferred because the current TypeScript handler
+metadata has no external-event marker. It is not an event bus, integration
+broker, import bus, event store, delivery mechanism, stand, subscription
+service, command-result subscription, dispatcher, router, event posting API,
+validator, repository runtime registration hook, storage writer, transport
+adapter, handler invoker, or Spine `Ack` producer.
+Server runtime exports include `SingleProcessServerRuntime`,
+`ServerRuntimeLifecycle`, `ServerRuntimeState`, `ServerRuntimeWork`,
+`ServerRuntimeStateOperation`, `ServerRuntimeStateErrorCode`, and
+`ServerRuntimeStateError` for the first single-process lifecycle and async queue
+kernel, plus `BoundedContextRuntime` for context-scoped lifecycle delegation
+over a built bounded-context snapshot. The lifecycle state machine is
+deterministic: `created -> running` on
+`start()`, `created -> closed` when closed before start, and
+`running -> closing -> closed` when close drains already accepted work.
+`ServerRuntimeStateError.code` is stable taxonomy
+`"INVALID_RUNTIME_STATE"`; the rejected lifecycle state is exposed separately as
+`state`. `close()` is idempotent, prevents new intake, and waits for previously
+accepted work to settle. `enqueue()` accepts work only while the runtime is
+running, returns that item's completion promise, and runs accepted work in a
+later microtask in FIFO order. Enqueued callbacks are trusted server-owned work
+only. The queue has no timeout, cancellation, fairness, queue bound, or
+hostile-callback protection, so non-settling or reentrant work can keep
+`close()` pending. `BoundedContextRuntime` does not expose queue intake; it only
+delegates lifecycle and exposes copied context metadata. This surface is a
+server-runtime kernel only; it is not a
+process-wide singleton, process supervisor, generic job framework,
+command/event/import bus, durable storage or inbox, read-side stand, repository
+dispatcher, integration broker, gRPC server, ZeroMQ transport, or worker-process
+runtime.
+The public runtime closure smoke path composes these exports with
+`BoundedContext`, `Repository`, `HandlerMetadataRegistry`,
+`CommandRegistrationReadiness`, and `EventRegistrationReadiness` to prove the
+metadata and lifecycle interfaces fit together without adding new public API.
+That composition produces context-scoped metadata, command/event readiness
+views, and deterministic lifecycle state only. It deliberately does not expose a
+`Server` export, service routing, command/event/import bus behavior,
+repository runtime registration, storage lifecycle, read-side execution,
+transport lifecycle, validation, delivery, integration-broker behavior, handler
+invocation, or Spine `Ack` mapping.
+Write-side signal intake exports include `SignalKind`, `SignalIntakeResult`,
+`SignalIntakeAccepted`, `SignalIntakeAcceptedFor`, `SignalIntakeFailure`,
+`SignalIntakeFailureCode`, `SignalIntakeFailureDetails`,
+`SignalIntakeFailureDiagnostics`, `acceptSignalIntake()`, and
+`failSignalIntake()`. These immutable result values distinguish command/event
+signals accepted for later asynchronous runtime work from immediate intake
+failures. Accepted results do not enqueue work, store, dispatch, deliver,
+handle, or acknowledge a signal. Failure results carry stable failure codes
+(`"RUNTIME_NOT_ACCEPTING"`, `"MALFORMED_ENVELOPE"`, and
+`"UNSUPPORTED_SIGNAL_KIND"`) plus frozen scalar diagnostic metadata. Diagnostics
+copy only allowlisted own enumerable data properties with string, number,
+boolean, or `null` values; unknown keys, accessor properties, and payload-shaped
+metadata are discarded so the seam can be used without leaking full signal
+data. The surface is not Spine `Ack`, a command bus, event bus, import bus,
+filter chain, storage write, dispatcher, delivery mechanism, tenant/message
+validator, service, transport, or handler invocation.
 
 Storage exports include `StorageAdapter`, `StorageRecord`,
 `WriteSideRecordStore`, `ReadSideRecordStore`, aggregate event history

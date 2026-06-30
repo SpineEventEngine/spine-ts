@@ -10,6 +10,8 @@ export {
   type BoundedContextRepositoryRegistrationErrorDetails,
   type BoundedContextRepositoryRegistrationOperation,
   type BoundedContextRepositorySnapshotErrorDetails,
+  BoundedContextRuntime,
+  type BoundedContextRuntimeOptions,
   type BoundedContextSnapshot,
   ContextSpec,
   type ContextSpecSnapshot,
@@ -71,6 +73,43 @@ export {
   type EntityStateTransitionValidationResult,
   validateEntityStateTransition,
 } from "./entity-transition-validation.js";
+
+export {
+  type ServerRuntimeLifecycle,
+  type ServerRuntimeState,
+  ServerRuntimeStateError,
+  type ServerRuntimeStateErrorCode,
+  type ServerRuntimeStateOperation,
+  type ServerRuntimeWork,
+  SingleProcessServerRuntime,
+} from "./runtime.js";
+
+export {
+  acceptSignalIntake,
+  failSignalIntake,
+  type SignalIntakeAccepted,
+  type SignalIntakeAcceptedFor,
+  type SignalIntakeFailure,
+  type SignalIntakeFailureCode,
+  type SignalIntakeFailureDetails,
+  type SignalIntakeFailureDiagnostics,
+  type SignalIntakeResult,
+  type SignalKind,
+} from "./signal-intake.js";
+
+export {
+  CommandRegistrationReadiness,
+  type CommandRegistrationAssigneeMetadata,
+  type CommandRegistrationReadinessLookup,
+} from "./command-registration-readiness.js";
+
+export {
+  EventRegistrationReadiness,
+  type EventRegistrationApplicationMetadata,
+  type EventRegistrationReadinessLookup,
+  type EventRegistrationReactorMetadata,
+  type EventRegistrationSubscriberMetadata,
+} from "./event-registration-readiness.js";
 
 export {
   type ConcreteRepositoryEntityType,

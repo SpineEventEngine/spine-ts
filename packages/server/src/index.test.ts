@@ -12,6 +12,16 @@ import {
 import * as serverRoot from "./index.js";
 import {
   BoundedContext,
+  BoundedContextRuntime,
+  type BoundedContextRuntimeOptions,
+  CommandRegistrationReadiness,
+  type CommandRegistrationAssigneeMetadata,
+  type CommandRegistrationReadinessLookup,
+  EventRegistrationReadiness,
+  type EventRegistrationApplicationMetadata,
+  type EventRegistrationReadinessLookup,
+  type EventRegistrationReactorMetadata,
+  type EventRegistrationSubscriberMetadata,
   describeEntityMetadata,
   DescriptorMetadataError,
   isEntitySchema,
@@ -23,8 +33,22 @@ import {
   type BoundedContextRepositoryRegistrationOperation,
   type BoundedContextRepositorySnapshotErrorDetails,
   type TenantMode,
+  Aggregate,
   type EntityVersionMetadata,
   type PlainEntityVersionMetadata,
+  Repository,
+  HandlerMetadataRegistry,
+  defineEntityHandlers,
+  type ServerRuntimeLifecycle,
+  type ServerRuntimeStateErrorCode,
+  ServerRuntimeStateError,
+  acceptSignalIntake,
+  failSignalIntake,
+  type SignalIntakeAcceptedFor,
+  type SignalIntakeFailureCode,
+  type SignalIntakeResult,
+  type SignalKind,
+  SingleProcessServerRuntime,
 } from "./index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -97,6 +121,16 @@ const AggregateStateSchema = messageDesc(
 ) as GenMessage<AggregateState>;
 const GenericStateSchema = messageDesc(fileEntityMetadataFixture, 2) as GenMessage<GenericState>;
 
+class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
+  assignCommand(command: Message<"spine.core.Command">): void {
+    void command;
+  }
+
+  onAggregateChanged(event: AggregateState): void {
+    void event;
+  }
+}
+
 const fileEntityEmptyFixture = createFixtureFileDescriptor(
   serverEntityMetadataTestFixtures.empty.descriptorSetBase64,
 );
@@ -150,12 +184,15 @@ describe("@spine-ts/server", () => {
         "BoundedContextBuilder",
         "BoundedContextNameError",
         "BoundedContextRepositoryRegistrationError",
+        "BoundedContextRuntime",
+        "CommandRegistrationReadiness",
         "EntityTransactionDraftStateError",
         "EntityTransaction",
         "EntityTransactionStateError",
         "ContextSpec",
         "DescriptorMetadataError",
         "Command",
+        "EventRegistrationReadiness",
         "HandlerMetadataError",
         "HandlerMetadataRegistry",
         "HandlerMetadataRegistryError",
@@ -164,13 +201,17 @@ describe("@spine-ts/server", () => {
         "Projection",
         "Repository",
         "RepositoryIdentityError",
+        "ServerRuntimeStateError",
+        "SingleProcessServerRuntime",
         "TransactionalEntity",
         "TransactionalEntityScopeError",
         "React",
         "Subscribe",
+        "acceptSignalIntake",
         "defineEntityHandlers",
         "describeEntityMetadata",
         "createEntityTransaction",
+        "failSignalIntake",
         "isEntitySchema",
         "materializeDecoratedEntityHandlers",
         "validateEntityStateTransition",
@@ -201,6 +242,139 @@ describe("@spine-ts/server", () => {
       | BoundedContextRepositorySnapshotErrorDetails
     >();
     expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
+    expect(
+      new BoundedContextRuntime(BoundedContext.singleTenant("Exports").build()),
+    ).toBeInstanceOf(BoundedContextRuntime);
+    expectTypeOf<BoundedContextRuntime>().toExtend<ServerRuntimeLifecycle>();
+    expectTypeOf<BoundedContextRuntimeOptions>().toEqualTypeOf<{
+      readonly runtime?: ServerRuntimeLifecycle;
+    }>();
+    expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);
+    expectTypeOf<SignalKind>().toEqualTypeOf<"command" | "event">();
+    expectTypeOf<SignalIntakeAcceptedFor>().toEqualTypeOf<"async-work">();
+    expectTypeOf<SignalIntakeFailureCode>().toEqualTypeOf<
+      "RUNTIME_NOT_ACCEPTING" | "MALFORMED_ENVELOPE" | "UNSUPPORTED_SIGNAL_KIND"
+    >();
+    expectTypeOf(acceptSignalIntake("command")).toExtend<SignalIntakeResult>();
+    expectTypeOf(failSignalIntake("event", "MALFORMED_ENVELOPE")).toExtend<SignalIntakeResult>();
+    expect(acceptSignalIntake("command").acceptedFor).toBe("async-work");
+    expect(failSignalIntake("event", "MALFORMED_ENVELOPE").failure.code).toBe("MALFORMED_ENVELOPE");
+    expectTypeOf<CommandRegistrationReadiness>().toExtend<CommandRegistrationReadinessLookup>();
+    expectTypeOf<CommandRegistrationAssigneeMetadata>().toExtend<{
+      readonly commandFullTypeName: string;
+    }>();
+    expectTypeOf<EventRegistrationReadiness>().toExtend<EventRegistrationReadinessLookup>();
+    expectTypeOf<EventRegistrationSubscriberMetadata>().toExtend<{
+      readonly eventFullTypeName: string;
+    }>();
+    expectTypeOf<EventRegistrationReactorMetadata>().toExtend<{
+      readonly eventFullTypeName: string;
+    }>();
+    expectTypeOf<EventRegistrationApplicationMetadata>().toExtend<{
+      readonly eventFullTypeName: string;
+      readonly entityStateFullTypeName: string;
+    }>();
+    expect(
+      CommandRegistrationReadiness.fromRegistry({
+        listEntityHandlers: () => [],
+        listHandlers: () => [],
+        findEntityHandlersByState: () => [],
+        findHandlersByKind: () => [],
+        findHandlersByMessageFullTypeName: () => [],
+        findCommandAssignment: () => undefined,
+        findEventApplication: () => undefined,
+      }).registeredCommandMessageFullTypeNames(),
+    ).toEqual([]);
+    expect(
+      EventRegistrationReadiness.fromRegistry({
+        listEntityHandlers: () => [],
+        listHandlers: () => [],
+        findEntityHandlersByState: () => [],
+        findHandlersByKind: () => [],
+        findHandlersByMessageFullTypeName: () => [],
+        findCommandAssignment: () => undefined,
+        findEventApplication: () => undefined,
+      }).registeredEventMessageFullTypeNames(),
+    ).toEqual([]);
+    expect(() => new SingleProcessServerRuntime().enqueue(() => undefined)).toThrow(
+      ServerRuntimeStateError,
+    );
+    expectTypeOf<SingleProcessServerRuntime>().toExtend<ServerRuntimeLifecycle>();
+    expectTypeOf<ServerRuntimeStateErrorCode>().toEqualTypeOf<"INVALID_RUNTIME_STATE">();
+  });
+
+  it("assembles a bounded-context runtime smoke slice from public APIs", async () => {
+    const repository = new Repository({
+      entityType: PublicRuntimeSmokeAggregate,
+      schema: AggregateStateSchema,
+    });
+    const context = BoundedContext.singleTenant("PublicRuntimeSmoke").add(repository).build();
+    const lifecycle = new SingleProcessServerRuntime();
+    const runtime = new BoundedContextRuntime(context, { runtime: lifecycle });
+    const handlers = defineEntityHandlers(
+      PublicRuntimeSmokeAggregate,
+      AggregateStateSchema,
+      (builder) => [
+        builder.assign(CommandSchema, "assignCommand"),
+        builder.apply(AggregateStateSchema, "onAggregateChanged", { allowImport: true }),
+      ],
+    );
+    const registry = new HandlerMetadataRegistry([handlers]);
+    const commandReadiness = CommandRegistrationReadiness.fromRegistry(registry);
+    const eventReadiness = EventRegistrationReadiness.fromRegistry(registry);
+
+    expect(runtime.name.value).toBe("PublicRuntimeSmoke");
+    expect(
+      runtime.contextSnapshot.repositories.map((snapshot) => snapshot.stateFullTypeName),
+    ).toEqual([AggregateStateSchema.typeName]);
+    expect(commandReadiness.registeredCommandMessageFullTypeNames()).toEqual([
+      CommandSchema.typeName,
+    ]);
+    expect(eventReadiness.registeredEventMessageFullTypeNames()).toEqual([
+      AggregateStateSchema.typeName,
+    ]);
+
+    await runtime.start();
+
+    expect(runtime.state).toBe("running");
+
+    await lifecycle.enqueue(() => undefined);
+    await runtime.close();
+
+    expect(runtime.state).toBe("closed");
+
+    for (const member of [
+      "Server",
+      "CommandBus",
+      "EventBus",
+      "ImportBus",
+      "GrpcServer",
+      "ZeroMqTransport",
+    ]) {
+      expect(Object.hasOwn(serverRoot, member)).toBe(false);
+    }
+
+    for (const member of [
+      "enqueue",
+      "commandBus",
+      "eventBus",
+      "importBus",
+      "storage",
+      "stand",
+      "tenantIndex",
+      "integrationBroker",
+      "commandService",
+      "queryService",
+      "subscriptionService",
+      "transport",
+      "registerRepository",
+      "invoke",
+      "dispatch",
+      "ack",
+    ]) {
+      expect(member in runtime).toBe(false);
+      expect(Object.hasOwn(runtime, member)).toBe(false);
+    }
   });
 
   it("extracts entity kind, default visibility, routing hints, columns, set-once fields, and tags", () => {

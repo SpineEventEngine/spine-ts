@@ -1241,3 +1241,219 @@ Consequences:
   identity snapshots.
 - Runtime behavior remains explicitly deferred to storage, routing, delivery,
   and built-context tasks.
+
+## D-0048: T-0010 Starts With A Minimal Single-Process Async Runtime Seam
+
+Status: Accepted
+
+Date: 2026-06-30
+
+Context: T-0010 follows the repository and bounded-context registration seam.
+The technical specification requires asynchronous signal processing and a future
+multi-process Node runtime over a transport abstraction, initially backed by
+ZeroMQ local IPC. The current codebase does not yet have gRPC services,
+transport adapters, durable delivery, read-side stand execution, full command or
+event dispatch, or server supervision. Spine JVM `BoundedContext`, `Bus`,
+`CommandBus`, and `EventBus` show a much larger runtime graph: contexts own
+command/event/import buses, stand, tenant index, integration broker, system
+client, and visibility guard; buses convert signals to envelopes, filter,
+store/record accepted signals, acknowledge posting, and then dispatch. The
+human also asked for server work to stay close to `core-jvm/server` and avoid
+over-inventing.
+
+Decision: T-0010 starts with the smallest useful single-process asynchronous
+runtime seam and lifecycle boundary that later tasks can extend. The first
+split must not implement gRPC services, ZeroMQ transport, durable delivery
+monitors, inbox storage, query/subscription stand execution, integration
+broker, system context, process supervision, or full repository dispatch unless
+the requirements splitter isolates a narrow, reviewed subtask for one of those
+pieces. Preserve the JVM distinction between command acknowledgement and later
+dispatch/rejection outcomes, and between event acceptance/storage and later
+delivery, even when the first TS implementation only models queueing and
+lifecycle contracts.
+
+Consequences:
+
+- Requirements splitting for T-0010 must produce small subtasks and explicitly
+  route deferred runtime pieces to later tasks.
+- Reviewers must flag speculative lifecycle phases, transport details, global
+  singleton environments, read-side query execution, or dispatch/storage
+  behavior that is not justified by the selected subtask.
+- The public API should prefer explicit, testable async lifecycle objects over
+  hidden import-time registration or process-wide mutable state.
+
+## D-0049: T-0010.2 Adds Only A Bounded Context Runtime Handle
+
+Status: Accepted
+
+Date: 2026-06-30
+
+Context: `T-0010.2 Bounded Context Runtime Handle` follows the
+single-process runtime lifecycle/queue kernel. The corresponding Spine JVM
+`core-jvm/server` code is intentionally much larger: `BoundedContextBuilder`
+creates system and domain contexts, initializes tenant index, command bus, and
+stand, and registers repositories, command dispatchers, event dispatchers, and
+delivery dispatchers. `BoundedContext` owns command/event/import buses,
+integration broker, stand, tenant index, visibility guard, internal access, and
+close hooks. `Server.Builder` wires built contexts into command/query/
+subscription gRPC services. The human explicitly warned that server-module work
+should have a close look at Spine JVM `core-jvm/server` and avoid
+over-inventing.
+
+Decision: T-0010.2 adds only a lightweight runtime-facing handle for an already
+built TS `BoundedContext` snapshot and the existing `ServerRuntimeLifecycle`
+boundary. It must not recreate JVM's full server graph, service hosting, buses,
+stand, tenant index, system context, delivery registration, repository runtime
+registration, storage, transport, or handler invocation. The existing
+metadata-only `BoundedContext` build contract remains intact.
+
+Consequences:
+
+- Later command/event intake tasks can reference a context-scoped runtime
+  boundary without depending on service, bus, or storage abstractions.
+- Reviewers must reject extra runtime members that imply buses, dispatch,
+  read-side query execution, storage, transport, or repository runtime
+  registration in this subtask.
+- Public docs must state that the handle is not a JVM `Server` equivalent and
+  is not a running context graph.
+
+## D-0050: T-0010.3 Models Intake Outcomes Without Ack Or Buses
+
+Status: Accepted
+
+Date: 2026-06-30
+
+Context: `T-0010.3 Write-Side Signal Intake Result` follows the runtime queue
+and bounded-context runtime handle. Spine JVM `Bus.post()` converts signals to
+envelopes, filters them, stores accepted signals, acknowledges accepted signals
+with `Ack`, and then dispatches. Filter failures are immediate post-time
+outcomes represented as `Ack` statuses; normal posting results do not use
+`StreamObserver.onError()`. `CommandBus` adds command ack monitoring and
+`EventBus` stores events before dispatch. These behaviors are larger than the
+current TS runtime.
+
+Decision: T-0010.3 introduces only typed result values that distinguish
+accepted-for-async-work from immediate intake failure. It must not implement
+`Ack`, command/event/import buses, filters, storage, store-before-dispatch,
+dispatch, delivery, services, tenant validation, transport, or handler
+invocation. Failure diagnostics should use stable reason codes and sanitized
+metadata, not full signal payloads.
+
+Consequences:
+
+- Later command/event intake tasks can map these result values to Spine `Ack`
+  semantics after the required proto contracts and service layer are in scope.
+- Reviewers must flag attempts to enqueue work, dispatch handlers, store events,
+  perform validation, or expose transport/service concepts in this subtask.
+- The public documentation must explain that accepted means accepted for later
+  asynchronous runtime work, not dispatched, stored, or successfully handled.
+
+## D-0051: T-0010.4 Reuses Handler Metadata For Command Readiness
+
+Status: Accepted
+
+Date: 2026-06-30
+
+Context: `T-0010.4 Command Registration Readiness` follows the signal intake
+result seam. Spine JVM `CommandDispatcherRegistry` is a unicast registry: each
+registered `CommandDispatcher` exposes handled command classes, and
+registration rejects any command class that already has a dispatcher.
+`AbstractAssignee` derives its command classes from assignee model metadata,
+`DuplicateHandlerCheck` rejects duplicate command-handling methods across model
+classes, and `CommandService.Builder` later builds service routing from each
+context's registered command classes. The current TS code already has
+`HandlerMetadataRegistry`, which registers `EntityHandlersMetadata` values,
+rejects duplicate command assignments for one command message type, and exposes
+lookup for the unique command assignment. The human explicitly warned to inspect
+Spine JVM `core-jvm/server` closely and avoid over-inventing server-module
+work.
+
+Decision: T-0010.4 adds only a metadata/readiness surface that reports
+registered command message types and their unique assignee metadata from the
+existing handler metadata registry. It must reuse
+`HandlerMetadataRegistry` duplicate-assignment enforcement rather than creating
+a parallel command bus registry or new duplicate policy. It must not implement
+command posting, command service `Ack` mapping, routing, dispatch, handler
+invocation, validation, storage, delivery, transport, or repository runtime
+registration.
+
+Consequences:
+
+- Later command service/runtime tasks can ask a bounded context's handler
+  metadata which command types are ready before implementing posting or bus
+  behavior.
+- Reviewers must flag command bus/service/dispatch behavior or any second
+  duplicate-assignment policy in this subtask.
+- Public docs must describe the surface as registration readiness, not runtime
+  command handling.
+
+## D-0052: T-0010.5 Models Event Readiness As Multicast Metadata
+
+Status: Accepted
+
+Date: 2026-06-30
+
+Context: `T-0010.5 Event Registration Readiness` follows command registration
+readiness. Spine JVM `EventDispatcherRegistry` permits multiple event
+dispatchers per event class and filters dispatchers by domestic versus external
+event classes. `EventDispatcher`, `EventDispatcherDelegate`,
+`EventSubscriber`, and `EventReactor` separate event dispatch capability from
+handler invocation and expose domestic/external event interests. The current TS
+code already has `HandlerMetadataRegistry`, which preserves many
+event-subscription and event-reaction handlers and only rejects duplicate event
+applications for the same entity state and event type. The human explicitly
+warned to inspect Spine JVM `core-jvm/server` closely and avoid over-inventing
+server-module work.
+
+Decision: T-0010.5 adds only a metadata/readiness surface that reports
+registered event message types and fan-out handler metadata for event
+subscriptions and event reactions, plus event-application metadata grouped by
+event type. It must reuse `HandlerMetadataRegistry` for event-application
+uniqueness and must not reject duplicate subscribers or reactors. Because the
+current TS handler metadata does not yet model external event interests,
+domestic/external filtering and integration-broker wanted-event publication are
+documented as deferred rather than guessed.
+
+Consequences:
+
+- Later event-bus, integration-broker, and import-runtime tasks can consume the
+  readiness index without depending on handler invocation or transport.
+- Reviewers must flag event bus, integration broker, import bus, storage,
+  dispatch, service, transport, handler invocation, validation, or `Ack`
+  behavior in this subtask.
+- Public docs must describe the surface as event registration readiness and
+  explicitly state that domestic/external classification is not available until
+  a later metadata task introduces it.
+
+## D-0053: T-0010.6 Closes Runtime Slice With Docs And Smoke Test Only
+
+Status: Accepted
+
+Date: 2026-06-30
+
+Context: `T-0010.6 Runtime Closure And User-Facing Docs` follows the runtime
+lifecycle, bounded-context runtime handle, signal intake result, and
+registration-readiness subtasks. The Spine JVM `Server` class is a gRPC service
+container and lifecycle supervisor, while `BoundedContext` owns command,
+event, import, read-side, integration, tenant, system, repository, and close
+collaborators that the TypeScript slice has intentionally deferred. The human
+explicitly warned to inspect the Spine JVM `core-jvm/server` module closely and
+avoid over-inventing server-module work.
+
+Decision: T-0010.6 closes the first runtime slice with documentation and a tiny
+bounded-context runtime assembly smoke test over existing public APIs. It must
+not add a TypeScript `Server` facade, gRPC/service routing, command/event/import
+bus behavior, storage lifecycle, read-side stand/query/subscription execution,
+transport lifecycle, repository runtime registration, handler invocation,
+validation, delivery, integration broker behavior, or `Ack` mapping.
+
+Consequences:
+
+- Public docs may show how to compose the existing
+  `SingleProcessServerRuntime`, `BoundedContextRuntime`, signal intake result,
+  and registration-readiness metadata, but must describe the composition as a
+  first local runtime seam rather than a complete server.
+- Reviewers must flag new server/service/transport/storage/bus behavior in this
+  subtask as over-scoped unless a later task explicitly authorizes it.
+- To-do example docs remain non-runnable for runtime behavior until the example
+  implementation tasks introduce domain command/event/projection execution.

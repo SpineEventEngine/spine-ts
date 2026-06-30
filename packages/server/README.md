@@ -39,15 +39,37 @@ Current slice exposes:
   entity method names; and
 - `HandlerMetadataRegistry` for caller-owned metadata registration, deterministic
   lookup views, and duplicate command/applier validation.
+- `CommandRegistrationReadiness.fromRegistry()` /
+  `CommandRegistrationReadiness.fromEntityHandlers()` for deterministic,
+  metadata-only command type readiness over unique command assignments already
+  validated by `HandlerMetadataRegistry`.
+- `EventRegistrationReadiness.fromRegistry()` /
+  `EventRegistrationReadiness.fromEntityHandlers()` for deterministic,
+  metadata-only event type readiness over subscriber fan-out, reactor fan-out,
+  and event applications already validated by `HandlerMetadataRegistry`.
 - `@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply` standard method
   decorators that require explicit Protobuf-ES schemas and materialize into the
   same handler metadata contract.
+- `SingleProcessServerRuntime` for the first explicit server-owned lifecycle
+  and async queue kernel with `start()`, `close()`, deterministic states, and
+  post-intake work execution in a later microtask.
+- `BoundedContextRuntime` for a context-scoped runtime handle that binds one
+  built `BoundedContext` snapshot to a lifecycle without exposing queue intake,
+  buses, storage, services, dispatch, or repository runtime registration.
+- `acceptSignalIntake()` / `failSignalIntake()` and `SignalIntakeResult` for
+  typed write-side command/event intake outcomes that distinguish
+  accepted-for-async-work from immediate intake failure without implementing
+  `Ack`, buses, filters, storage, dispatch, services, or transport.
 
 ```ts
 import {
   Apply,
   Assign,
+  CommandRegistrationReadiness,
+  EventRegistrationReadiness,
   HandlerMetadataRegistry,
+  React,
+  Subscribe,
   defineEntityHandlers,
   materializeDecoratedEntityHandlers,
 } from "@spine-ts/server";
@@ -58,6 +80,12 @@ class TaskAggregate {
   @Assign(CreateTaskSchema)
   create(command: unknown): void {}
 
+  @Subscribe(TaskCreatedSchema)
+  noteCreated(event: unknown): void {}
+
+  @React(TaskCreatedSchema)
+  reactToCreated(event: unknown): void {}
+
   @Apply(TaskCreatedSchema, { allowImport: true })
   onCreated(event: unknown): void {}
 }
@@ -67,8 +95,10 @@ const decoratedTaskHandlers = materializeDecoratedEntityHandlers(TaskAggregate, 
 const explicitTaskHandlers = defineEntityHandlers(
   TaskAggregate,
   TaskStateSchema,
-  ({ assign, apply }) => [
+  ({ assign, subscribe, react, apply }) => [
     assign(CreateTaskSchema, "create"),
+    subscribe(TaskCreatedSchema, "noteCreated"),
+    react(TaskCreatedSchema, "reactToCreated"),
     apply(TaskCreatedSchema, "onCreated", { allowImport: true }),
   ],
 );
@@ -80,6 +110,18 @@ const registry = new HandlerMetadataRegistry([decoratedTaskHandlers]);
 registry.findCommandAssignment(CreateTaskSchema.typeName)?.handler.methodName; // "create"
 registry.findEventApplication(TaskStateSchema.typeName, TaskCreatedSchema.typeName)?.handler
   .methodName; // "onCreated"
+
+const readiness = CommandRegistrationReadiness.fromRegistry(registry);
+readiness.registeredCommandMessageFullTypeNames(); // [CreateTaskSchema.typeName]
+readiness.findCommandAssignee(CreateTaskSchema.typeName)?.handler.methodName; // "create"
+
+const eventReadiness = EventRegistrationReadiness.fromRegistry(registry);
+eventReadiness.registeredEventMessageFullTypeNames(); // [TaskCreatedSchema.typeName]
+eventReadiness.findEventSubscribers(TaskCreatedSchema.typeName)[0]?.handler.methodName;
+// "noteCreated"
+eventReadiness.findEventReactors(TaskCreatedSchema.typeName)[0]?.handler.methodName;
+// "reactToCreated"
+eventReadiness.findEventApplications(TaskCreatedSchema.typeName)[0]?.handler.allowImport; // true
 
 explicitTaskHandlers.handlers.map((handler) => handler.methodName); // same contract
 ```
@@ -109,6 +151,197 @@ handlers for the same message type. The registry is caller-owned and
 metadata-only: constructing or registering it does not instantiate entities,
 invoke methods, unpack payloads, mutate global process state, write storage, or
 start buses/transports.
+
+`CommandRegistrationReadiness` is a read-only command-registration view over
+the same handler metadata. It reports registered command message full type
+names in deterministic order and returns frozen copy-safe assignee metadata for
+the unique command assignment of a message type. Building from entity handler
+metadata first constructs a `HandlerMetadataRegistry`, so duplicate command
+assignment failures remain owned by the registry. This surface is not a command
+bus, command service, dispatcher, router, validator, repository runtime
+registration hook, storage writer, transport adapter, handler invoker, or
+Spine `Ack` producer.
+
+`EventRegistrationReadiness` is the matching read-only event-registration view
+over the same handler metadata. It reports registered event message full type
+names in deterministic code-unit order and returns frozen copy-safe metadata
+for event subscribers, event reactors, and event appliers grouped by event
+type. Subscriber and reactor lookups preserve Spine event fan-out, so multiple
+entities may receive the same event type. Event application uniqueness remains
+the registry policy: one entity state may apply a given event type once, while
+multiple entity states may apply the same event type. Domestic/external event
+classification and integration-broker wanted-event publication are deferred
+because the current TypeScript handler metadata has no external-event marker.
+This surface is not an event bus, integration broker, import bus, event store,
+delivery mechanism, stand, subscription service, command-result subscription,
+dispatcher, router, validator, repository runtime registration hook, storage
+writer, transport adapter, handler invoker, or Spine `Ack` producer.
+
+## Single-Process Runtime Kernel
+
+Use `SingleProcessServerRuntime` when a server runtime part needs an explicit
+local lifecycle and an asynchronous intake boundary before command/event buses,
+delivery, storage, or service hosting exist:
+
+```ts
+import { SingleProcessServerRuntime } from "@spine-ts/server";
+
+const runtime = new SingleProcessServerRuntime();
+
+await runtime.start();
+
+const accepted = runtime.enqueue(async () => {
+  // Later runtime slices will enqueue server-owned signal work here.
+});
+
+await accepted;
+await runtime.close();
+```
+
+The lifecycle states are deterministic: `created -> running` on `start()`,
+`created -> closed` when closed before start, and
+`running -> closing -> closed` when close drains already accepted work. Calling
+`start()` while already running is a no-op. Calling `close()` more than once is
+idempotent and returns the same close outcome. New work is accepted only while
+the runtime is `running`; attempts to enqueue work while `created`, `closing`,
+or `closed` throw `ServerRuntimeStateError`.
+
+`enqueue()` is an intake boundary. It returns a promise for the accepted work
+item, but the work itself runs in a later microtask and queued work runs in
+FIFO order. A failed item rejects only its own returned promise and does not
+stop later accepted items. `close()` prevents new intake and waits for already
+accepted work to settle before the runtime becomes `closed`.
+
+Enqueued callbacks are trusted server-owned work only. The queue has no
+timeout, cancellation, fairness, queue bound, or hostile-callback protection,
+so non-settling or reentrant work can keep `close()` pending.
+
+This kernel is deliberately server-runtime-specific and single-process only. It
+is not a global singleton, process supervisor, generic job framework, command
+bus, event bus, import bus, repository dispatcher, event store, durable inbox,
+read-side stand, tenant index, integration broker, gRPC server, ZeroMQ
+transport, worker-process runtime, or storage-backed delivery mechanism.
+
+## Write-Side Signal Intake Results
+
+Use `SignalIntakeResult` when later command/event intake code needs to report
+whether a signal was accepted for future asynchronous runtime work or failed
+immediately at the intake edge:
+
+```ts
+import { acceptSignalIntake, failSignalIntake } from "@spine-ts/server";
+
+const accepted = acceptSignalIntake("command");
+accepted.status; // "accepted"
+accepted.acceptedFor; // "async-work"
+
+const failed = failSignalIntake("event", "RUNTIME_NOT_ACCEPTING", {
+  boundedContext: "Tasks",
+  runtimeState: "closed",
+});
+failed.failure.code; // "RUNTIME_NOT_ACCEPTING"
+```
+
+Accepted results are immutable values only. They mean the runtime accepted
+responsibility for later asynchronous work; they do not mean the signal was
+stored, dispatched, delivered, handled, acknowledged, or successfully applied.
+
+Failure results carry a stable `SignalIntakeFailureCode` and frozen scalar
+diagnostics. Diagnostic values are copied only from allowlisted own enumerable
+data properties, limited to strings, numbers, booleans, or `null`; unknown keys,
+accessor properties, and payload-shaped metadata are discarded. This keeps
+immediate intake evidence useful for later mapping without exposing full signal
+data.
+
+This seam deliberately does not call `SingleProcessServerRuntime.enqueue()`,
+create Spine `Ack` messages, validate tenants or messages, filter signals,
+store events, dispatch handlers, run services, or expose transport behavior.
+
+## Bounded Context Runtime Handle
+
+Use `BoundedContextRuntime` when later runtime code needs a context-scoped
+lifecycle handle for an already built `BoundedContext`:
+
+```ts
+import { BoundedContext, BoundedContextRuntime } from "@spine-ts/server";
+
+const tasks = BoundedContext.singleTenant("Tasks").build();
+const runtime = new BoundedContextRuntime(tasks);
+
+runtime.name.value; // "Tasks"
+runtime.contextSnapshot.repositories; // copied built-context metadata
+
+await runtime.start();
+await runtime.close();
+```
+
+The current runtime slice can be assembled with repository identity and
+registration-readiness metadata, but the result is still lifecycle plus
+metadata only:
+
+```ts
+import {
+  Aggregate,
+  BoundedContext,
+  BoundedContextRuntime,
+  CommandRegistrationReadiness,
+  EventRegistrationReadiness,
+  HandlerMetadataRegistry,
+  Repository,
+  SingleProcessServerRuntime,
+  defineEntityHandlers,
+} from "@spine-ts/server";
+import { CreateTaskSchema } from "./generated/task_commands_pb.js";
+import { TaskCreatedSchema, TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {
+  create(command: unknown): void {}
+  onCreated(event: unknown): void {}
+}
+
+const taskRepository = new Repository({
+  entityType: TaskAggregate,
+  schema: TaskStateSchema,
+});
+const tasks = BoundedContext.singleTenant("Tasks").add(taskRepository).build();
+const lifecycle = new SingleProcessServerRuntime();
+const runtime = new BoundedContextRuntime(tasks, { runtime: lifecycle });
+const handlers = defineEntityHandlers(TaskAggregate, TaskStateSchema, (builder) => [
+  builder.assign(CreateTaskSchema, "create"),
+  builder.apply(TaskCreatedSchema, "onCreated", { allowImport: true }),
+]);
+const registry = new HandlerMetadataRegistry([handlers]);
+
+CommandRegistrationReadiness.fromRegistry(registry).registeredCommandMessageFullTypeNames();
+EventRegistrationReadiness.fromRegistry(registry).registeredEventMessageFullTypeNames();
+
+await runtime.start();
+await runtime.close();
+```
+
+This assembly proves the current public seams fit together; it does not turn
+registered command/event metadata into routing, dispatch, validation, storage,
+delivery, handler invocation, service hosting, or `Ack` behavior.
+
+By default the handle creates and owns a private `SingleProcessServerRuntime`.
+You may inject a `ServerRuntimeLifecycle` when a caller owns the lifecycle
+object:
+
+```ts
+const runtime = new BoundedContextRuntime(tasks, { runtime: sharedLifecycle });
+```
+
+Injected lifecycle ownership stays with the caller. The handle delegates
+`state`, `start()`, and `close()` deterministically to that lifecycle and
+returns fresh immutable copies for `name`, `spec`, `repositories`, and
+`contextSnapshot`.
+
+The handle deliberately does not expose `enqueue()` unless a later typed
+context queue boundary is designed. It is not a JVM `Server` equivalent, a
+running bounded-context graph, command/event/import bus, repository dispatcher,
+stand, event store, tenant index, integration broker, command/query/subscription
+service, gRPC server, ZeroMQ transport, system context, delivery inbox, or
+handler invocation mechanism.
 
 ## Bounded Context Shell
 
