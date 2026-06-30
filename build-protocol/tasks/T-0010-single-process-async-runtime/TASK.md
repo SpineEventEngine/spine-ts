@@ -175,3 +175,11 @@ deferred to a later transport-adapter task.
 ## Human Questions And Answers
 
 - None.
+
+## Subtask Progress
+
+- `T-0010.1 Runtime Lifecycle And Async Queue Kernel` subtask branch/worktree
+  created on `2026-06-30 15:08 WEST` from parent commit `70692a9`. Setup logs
+  are created; setup baseline verification passed on `2026-06-30 15:11 WEST`
+  with 17 test files / 212 tests and clean TypeDoc/API, proto, and
+  generated-output gates. Implementation handoff is pending.

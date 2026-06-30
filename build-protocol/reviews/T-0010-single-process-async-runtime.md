@@ -27,6 +27,10 @@ Requirements splitter `019f18d6-f12d-7640-9c9e-be8943200c99` completed on
 `2026-06-30 15:01 WEST`, found no blockers, selected `T-0010.1 Runtime
 Lifecycle And Async Queue Kernel`, and was closed by the orchestrator.
 
+`T-0010.1` setup started on `2026-06-30 15:08 WEST` from parent commit
+`70692a9`; setup baseline verification passed on `2026-06-30 15:11 WEST`.
+Subtask implementation and reviewer rounds are pending.
+
 ## Reviewer Rounds
 
 - Pending.
