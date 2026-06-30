@@ -1,6 +1,6 @@
 # Review Log: T-0011 Transport Foundation
 
-Status: T-0011.1 Integrated
+Status: T-0011.2 Integrated
 
 ## Required Review Lanes
 
@@ -29,8 +29,11 @@ Requirements splitter completed on `2026-06-30 20:40 WEST` with no blocking
 questions. `T-0011.1 Transport Contracts, Topics, And Envelope Routing Keys`
 completed all five required review lanes and was integrated into the parent
 branch by merge commit `6c86ad1`. Parent verification passed after merge on
-`2026-06-30 21:28 WEST`. Next review gate:
-`T-0011.2 ZeroMQ Adapter Package Wiring And Dependency Pin`.
+`2026-06-30 21:28 WEST`. `T-0011.2 ZeroMQ Adapter Package Wiring And
+Dependency Pin` completed all five required review lanes and was integrated
+into the parent branch by merge commit `e9d14c3`. Parent dependency refresh and
+verification passed after merge on `2026-06-30 22:05 WEST`. Next review gate:
+`T-0011.3 Local IPC Smoke Tests`.
 
 ## Reviewer Rounds
 
@@ -43,3 +46,13 @@ branch by merge commit `6c86ad1`. Parent verification passed after merge on
   expected exports, copied Spine proto checksum verification, proto
   lint/generate, and generated-clean checks. TypeDoc emitted the existing
   invalid-`origin` warning only.
+- T-0011.2 required-lane reviews completed in
+  `build-protocol/reviews/T-0011-2-zmq-adapter-package-wiring.md`.
+- Parent integration verification passed after merge commit `e9d14c3`: after
+  running `corepack pnpm install --frozen-lockfile` to refresh the merged
+  `allowBuilds` dependency state, `CI=true corepack pnpm verify` passed with 22
+  test files / 266 tests, coverage 96.34% statements / 90.48% branches /
+  99.27% functions / 96.28% lines, TypeDoc/API checks with 100 proto / 28 core
+  / 124 server / 26 storage expected exports, copied Spine proto checksum
+  verification, proto lint/generate, and generated-clean checks. TypeDoc
+  emitted the existing invalid-`origin` warning only.

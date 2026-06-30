@@ -1,6 +1,6 @@
 # Implementation Report: T-0011 Transport Foundation
 
-Status: T-0011.1 Integrated
+Status: T-0011.2 Integrated
 Task log: `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
 Work log: `build-protocol/work-logs/T-0011.md`
 Review log: `build-protocol/reviews/T-0011-transport-foundation.md`
@@ -28,6 +28,13 @@ routing descriptors, publish/request operation contracts, handler callback
 types, transport handles, and async close behavior. It intentionally does not
 install ZeroMQ or implement socket, broker, worker, retry, server dispatch, or
 read-side behavior.
+
+`T-0011.2` was integrated into this parent branch by merge commit `e9d14c3` on
+`2026-06-30 22:01 WEST`. The integrated slice pins exact `zeromq@6.5.0` for
+`@spine-ts/transport`, records explicit pnpm native build approval, adds an
+adapter-private local IPC configuration helper and tests, and documents the
+native/local IPC constraints without exporting ZeroMQ through the public
+transport API.
 
 ## Scope Guardrails
 
@@ -59,6 +66,17 @@ read-side behavior.
   verification, proto lint/generate, generated proto output clean, and
   generated files clean. TypeDoc emitted the existing invalid-`origin` warning
   only.
+- Parent verification after integrating T-0011.2 passed on
+  `2026-06-30 22:05 WEST`: the first `CI=true corepack pnpm verify` attempt
+  stopped at pnpm's dependency-state guard after the merged `allowBuilds`
+  change; `corepack pnpm install --frozen-lockfile` passed, added the merged
+  `zeromq` dependency packages, and ran the `zeromq@6.5.0` install script; the
+  subsequent `CI=true corepack pnpm verify` passed with 22 test files / 266
+  tests, coverage 96.34% statements / 90.48% branches / 99.27% functions /
+  96.28% lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26
+  storage expected exports, copied Spine proto checksum verification, proto
+  lint/generate, generated proto output clean, and generated files clean.
+  TypeDoc emitted the existing invalid-`origin` warning only.
 
 ## Splitter Research And Recommendation
 
@@ -89,9 +107,12 @@ performs native smoke tests.
 - T-0011.1 integration also changed `packages/transport`, package/API docs,
   architecture docs, and transport API export checks. See
   `build-protocol/tasks/T-0011-1-transport-contracts/IMPLEMENTATION_REPORT.md`.
+- T-0011.2 integration changed `packages/transport` dependency/configuration
+  files, lockfile/workspace build policy, package/API docs, architecture docs,
+  and T-0011.2 durable logs. See
+  `build-protocol/tasks/T-0011-2-zmq-adapter-package-wiring/IMPLEMENTATION_REPORT.md`.
 
 ## Open Items
 
-- `T-0011.2 ZeroMQ Adapter Package Wiring And Dependency Pin` is next.
-- Native dependency installation remains deferred to the dedicated adapter
-  subtask.
+- `T-0011.3 Local IPC Smoke Tests` is next.
+- Live ZeroMQ socket and IPC behavior remains deferred to T-0011.3.
