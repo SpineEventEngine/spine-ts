@@ -1,6 +1,6 @@
 # T-0010: Single-Process Async Runtime
 
-Status: `T-0010.6` Active
+Status: `T-0010.6` Integrated; Final Whole-Branch Review Pending
 Start: `2026-06-30 14:57 WEST`
 Baseline commit: `169af02`
 Task log path: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
@@ -17,7 +17,11 @@ Authoring sub-agents:
   `019f196c-c5d2-7212-b559-f1b9d8939ec2` (review fix, closed).
 - `T-0010.5`: `019f198d-7dc2-7641-9abb-4c49d776e370` (closed);
   `019f199d-9b3a-76f0-887b-5ea128774140` (review fix, closed).
-- `T-0010.6`: Pending.
+- `T-0010.6`: `019f19c2-19e5-7762-9d62-edc7c336018f` (closed);
+  review-fix/log-fix workers `019f19d0-f773-7392-b68b-b1c448e8d5df`,
+  `019f19d4-d4d0-71b3-9130-012db5290987`,
+  `019f19d8-b547-7fc0-803c-d009a7f14ecb`, and
+  `019f19dc-8495-7152-a968-aebb531530e6` (all closed).
 
 Reviewer sub-agents:
 
@@ -29,7 +33,9 @@ Reviewer sub-agents:
   `019f1979-a556-7583-93a0-7f59499e1dda`, and
   `019f1979-d135-7342-a3d5-38c286f5da1c`.
 - `T-0010.5`: all required review lanes completed and closed.
-- `T-0010.6`: Pending.
+- `T-0010.6`: all required review lanes completed and closed, including final
+  documentation re-review `019f19df-8137-79c2-9d95-c05deb7db5ae` (closed,
+  CLEAN).
 
 ## Objective
 
@@ -281,7 +287,7 @@ deferred to a later transport-adapter task.
   `task/T-0010-5-event-registration-readiness`; all participating sub-agents
   were closed. The subtask was merged into the parent branch as
   `480d14c Integrate T-0010.5 event registration readiness`.
-- Active subtask:
+- Integrated subtask:
   `T-0010.6 Runtime Closure And User-Facing Docs`.
 - `T-0010.6 Runtime Closure And User-Facing Docs` branch/worktree created on
   `2026-06-30 19:10 WEST` from parent T-0010 commit `94a28bf`.
@@ -292,3 +298,10 @@ deferred to a later transport-adapter task.
   passed after one lint-only test edit. Final full verification passed on
   `2026-06-30 19:28 WEST` with 21 test files / 257 tests and clean TypeDoc/API,
   proto, and generated-output checks.
+- `T-0010.6` review closure completed after documentation log-fix rounds. All
+  participating sub-agents were closed. The subtask was merged into the parent
+  branch as `64c8e4c Integrate T-0010.6 runtime closure docs`; parent
+  verification passed on `2026-06-30 19:58 WEST` with 21 test files / 257 tests
+  and coverage above the 90% target.
+- T-0010 subtask roadmap is complete. Next gate: final whole-branch review
+  before integration beyond the T-0010 task branch.

@@ -1,6 +1,6 @@
 # Implementation Report: T-0010 Single-Process Async Runtime
 
-Status: `T-0010.6` Active
+Status: `T-0010.6` Integrated; Final Whole-Branch Review Pending
 Task log: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
 Work log: `build-protocol/work-logs/T-0010.md`
 Review log: `build-protocol/reviews/T-0010-single-process-async-runtime.md`
@@ -104,6 +104,14 @@ passed after one lint-only test style fix. Final full verification passed on
 statements / 90.55% branches / 99.24% functions / 96.39% lines, TypeDoc/API
 export counts 100 / 28 / 124 / 26, proto checksum verification, and generated
 proto output clean.
+
+`T-0010.6` completed the required review loop after documentation log-fix
+rounds, with final documentation re-review clean. The child branch was merged
+into the parent task branch as `64c8e4c Integrate T-0010.6 runtime closure
+docs`; parent verification passed on `2026-06-30 19:58 WEST` with 21 test files
+/ 257 tests, coverage 96.45% statements / 90.55% branches / 99.24% functions /
+96.39% lines, TypeDoc/API counts 100 / 28 / 124 / 26, proto checksum
+verification, and generated output clean.
 
 ## Files Changed
 
@@ -222,5 +230,6 @@ registration readiness` and verified cleanly.
   closure completed on `2026-06-30 19:03 WEST`; the child branch was merged
   into the parent task branch as `480d14c Integrate T-0010.5 event
 registration readiness` and verified cleanly.
-- `T-0010.6 Runtime Closure And User-Facing Docs` is active in branch
-  `task/T-0010-6-runtime-closure-docs`.
+- `T-0010.6 Runtime Closure And User-Facing Docs` is integrated into the parent
+  branch at merge commit `64c8e4c` and verified.
+- Final whole-branch review for T-0010 is pending.

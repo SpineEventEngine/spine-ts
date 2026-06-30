@@ -1,6 +1,6 @@
 # Review Log: T-0010 Single-Process Async Runtime
 
-Status: `T-0010.6` Active
+Status: `T-0010.6` Integrated; Final Whole-Branch Review Pending
 
 ## Required Review Lanes
 
@@ -79,19 +79,13 @@ verification, and generated proto output clean.
   sub-agents were closed. The subtask was merged into the parent task branch as
   `480d14c` and parent verification passed on `2026-06-30 19:04 WEST`.
 
-`T-0010.6 Runtime Closure And User-Facing Docs` is the active non-blocked
-subtask. D-0053 requires this closure task to stay limited to user-facing/API
-documentation and a tiny bounded-context runtime assembly smoke test over
-existing public APIs. Its implementation prompts must carry the server-module
-guardrail from `BUILD_PROTOCOL.md`. Reviewers must flag any TypeScript
-`Server` facade, service routing, command/event/import bus behavior, storage
-lifecycle, read-side stand/query/subscription execution, transport lifecycle,
-repository runtime registration, handler invocation, validation, delivery,
-integration broker behavior, or `Ack` mapping as over-scoped for this subtask.
+`T-0010.6 Runtime Closure And User-Facing Docs` completed the required review
+loop after documentation durable-log fixes. All participating sub-agents were
+closed. It was merged into the parent task branch as `64c8e4c`, and parent
+verification passed on `2026-06-30 19:58 WEST` with 21 test files / 257 tests,
+coverage 96.45% statements / 90.55% branches / 99.24% functions / 96.39%
+lines, TypeDoc/API counts 100 / 28 / 124 / 26, proto checksum verification,
+and generated output clean.
 
-Implementation sub-agent changes landed on `2026-06-30 19:24 WEST` and remain
-inside that scope: one public-entry-point smoke test, user/API/architecture
-documentation, and durable log updates. No reviewer sub-agents were spawned by
-the implementation sub-agent per handoff instruction. Final full verification
-passed on `2026-06-30 19:28 WEST`; any parent-orchestrated review closure is
-pending.
+The T-0010 subtask roadmap is complete. Next review gate: final whole-branch
+review before integration beyond the T-0010 task branch.
