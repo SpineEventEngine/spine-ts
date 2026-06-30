@@ -1,6 +1,6 @@
 # Review Log: T-0010 Single-Process Async Runtime
 
-Status: `T-0010.5` Setup Baseline Verified
+Status: `T-0010.5` Integrated; Next Subtask Selected
 
 ## Required Review Lanes
 
@@ -70,11 +70,17 @@ verification, and generated proto output clean.
 
 ## Current Review Gate
 
-`T-0010.5 Event Registration Readiness` is the next selected non-blocked
-subtask. Setup logs and D-0052 were created on `2026-06-30 18:13 WEST`; setup
-baseline verification passed on `2026-06-30 18:16 WEST`. Its implementation
-prompts must carry the server-module guardrail from `BUILD_PROTOCOL.md`:
-inspect task-relevant Spine JVM `core-jvm/server` event/subscriber code before
-creating or changing `@spine-ts/server` event readiness APIs, and avoid adding
-bus, dispatch, delivery, storage, transport, or service behavior unless the
-task scope and inspected JVM source justify it.
+- `T-0010.5 Event Registration Readiness`: setup logs created on
+  `2026-06-30 18:13 WEST`; setup baseline verification passed on
+  `2026-06-30 18:16 WEST`; initial review found maintainability,
+  documentation, security, and performance/reliability findings; review fixes
+  completed in `c4f87b5`; documentation audit-log fix completed in `dc55fa3`;
+  final review closure completed clean in `8df84d5`; all participating
+  sub-agents were closed. The subtask was merged into the parent task branch as
+  `480d14c` and parent verification passed on `2026-06-30 19:04 WEST`.
+
+`T-0010.6 Runtime Closure And User-Facing Docs` is the next selected
+non-blocked subtask. Its implementation prompts must carry the server-module
+guardrail from `BUILD_PROTOCOL.md`, close the T-0010 runtime slice without
+adding bus, dispatch, transport, storage, read-side execution, service, or
+handler invocation behavior, and update user-facing/API docs accurately.

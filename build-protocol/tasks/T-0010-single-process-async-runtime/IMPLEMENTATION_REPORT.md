@@ -1,6 +1,6 @@
 # Implementation Report: T-0010 Single-Process Async Runtime
 
-Status: `T-0010.5` Setup Baseline Verified
+Status: `T-0010.5` Integrated; Next Subtask Selected
 Task log: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
 Work log: `build-protocol/work-logs/T-0010.md`
 Review log: `build-protocol/reviews/T-0010-single-process-async-runtime.md`
@@ -76,11 +76,16 @@ or changing `@spine-ts/server` runtime/API code, and directs implementers to
 prefer the smallest TS contract justified by the inspected JVM source and the
 current task.
 
-`T-0010.5 Event Registration Readiness` started on
-`2026-06-30 18:12 WEST` from parent commit `20aaad1`. Setup logs and D-0052
-are created. Setup baseline verification passed on `2026-06-30 18:16 WEST`
-with 20 test files / 242 tests and clean TypeDoc/API, proto, and
-generated-output gates. Implementation handoff is pending.
+`T-0010.5 Event Registration Readiness` was merged into the parent branch as
+`480d14c Integrate T-0010.5 event registration readiness` after shared
+readiness helper, schema/descriptor copy-safety, custom lookup validation, and
+field identity review fixes plus clean final re-review. It introduced
+metadata-derived event registration readiness without adding event bus,
+integration broker, import bus, storage, dispatch, service, transport, handler
+invocation, validation, or `Ack` behavior. All participating implementer,
+fixer, and reviewer sub-agents were closed.
+
+Next selected subtask: `T-0010.6 Runtime Closure And User-Facing Docs`.
 
 ## Files Changed
 
@@ -131,6 +136,12 @@ generated-output gates. Implementation handoff is pending.
   `2026-06-30 18:08 WEST`: `CI=true corepack pnpm verify` passed with 20 test
   files / 242 tests, coverage 95.94% statements / 90.38% branches / 98.15%
   functions / 95.87% lines, TypeDoc/API checks with 100 proto / 28 core / 119
+  server / 26 storage expected exports, proto lint/generate checksum
+  verification, and generated proto output clean.
+- Parent integration verification after merge commit `480d14c` passed on
+  `2026-06-30 19:04 WEST`: `CI=true corepack pnpm verify` passed with 21 test
+  files / 256 tests, coverage 96.45% statements / 90.55% branches / 99.24%
+  functions / 96.39% lines, TypeDoc/API checks with 100 proto / 28 core / 124
   server / 26 storage expected exports, proto lint/generate checksum
   verification, and generated proto output clean.
 
@@ -187,3 +198,9 @@ registration readiness` and verified cleanly.
   handoff. Setup baseline verification passed on `2026-06-30 18:16 WEST` with
   20 test files / 242 tests and clean TypeDoc/API, proto, and generated-output
   gates.
+- `T-0010.5` implementation, review fixes, clean final re-review, and review
+  closure completed on `2026-06-30 19:03 WEST`; the child branch was merged
+  into the parent task branch as `480d14c Integrate T-0010.5 event
+registration readiness` and verified cleanly.
+- `T-0010.6 Runtime Closure And User-Facing Docs` is the next selected
+  non-blocked subtask.

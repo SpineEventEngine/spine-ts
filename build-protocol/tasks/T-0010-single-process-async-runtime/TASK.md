@@ -1,6 +1,6 @@
 # T-0010: Single-Process Async Runtime
 
-Status: `T-0010.5` Setup Baseline Verified
+Status: `T-0010.5` Integrated; Next Subtask Selected
 Start: `2026-06-30 14:57 WEST`
 Baseline commit: `169af02`
 Task log path: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
@@ -15,7 +15,8 @@ Authoring sub-agents:
   `019f18f1-ad4c-7fb2-b079-994735ee337c` (review fix, closed).
 - `T-0010.4`: `019f195f-908c-7943-8dc9-5f7f1d94ebe2` (closed);
   `019f196c-c5d2-7212-b559-f1b9d8939ec2` (review fix, closed).
-- `T-0010.5`: pending.
+- `T-0010.5`: `019f198d-7dc2-7641-9abb-4c49d776e370` (closed);
+  `019f199d-9b3a-76f0-887b-5ea128774140` (review fix, closed).
 
 Reviewer sub-agents:
 
@@ -210,6 +211,12 @@ deferred to a later transport-adapter task.
   functions / 95.87% lines, TypeDoc/API checks with 100 proto / 28 core / 119
   server / 26 storage expected exports, proto lint/generate checksum
   verification, and generated proto output clean.
+- Parent integration verification after merge commit `480d14c` passed on
+  `2026-06-30 19:04 WEST`: `CI=true corepack pnpm verify` passed with 21 test
+  files / 256 tests, coverage 96.45% statements / 90.55% branches / 99.24%
+  functions / 96.39% lines, TypeDoc/API checks with 100 proto / 28 core / 124
+  server / 26 storage expected exports, proto lint/generate checksum
+  verification, and generated proto output clean.
 
 ## Human Questions And Answers
 
@@ -266,4 +273,10 @@ deferred to a later transport-adapter task.
   `2026-06-30 18:12 WEST` from parent commit `20aaad1`. Setup logs and D-0052
   are created; setup baseline verification passed on `2026-06-30 18:16 WEST`
   with 20 test files / 242 tests and clean TypeDoc/API, proto, and
-  generated-output gates. Implementation handoff is pending.
+  generated-output gates. Implementation, review fixes, clean final re-review,
+  documentation second re-review, and review closure completed on branch
+  `task/T-0010-5-event-registration-readiness`; all participating sub-agents
+  were closed. The subtask was merged into the parent branch as
+  `480d14c Integrate T-0010.5 event registration readiness`.
+- Next selected subtask:
+  `T-0010.6 Runtime Closure And User-Facing Docs`.
