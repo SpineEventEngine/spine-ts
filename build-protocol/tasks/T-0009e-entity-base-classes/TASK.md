@@ -1,6 +1,6 @@
 # T-0009e: Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Pending
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Started
 Start: `2026-06-29 21:58 WEST`
 Baseline commit: `47eae4e`
 Task log path: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
@@ -221,7 +221,12 @@ statements 97.25%, branches 91.41%, functions 99.16%, lines 97.19%;
 TypeDoc/API/proto gates passed with 72 expected server exports and generated
 proto output clean.
 
-Next parent subtask: `T-0009e.4 Public API Closure And Verification`.
+Current parent subtask: `T-0009e.4 Public API Closure And Verification`.
+
+`T-0009e.4` started on `2026-06-30 02:52 WEST` in isolated branch
+`task/T-0009e4-public-api-closure-and-verification` from parent commit
+`94dd6d1`. It is scoped to public API/docs/log closure and verification for the
+completed entity base-class task, with no new runtime behavior.
 
 ## Initial Scope Constraints
 

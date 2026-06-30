@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Pending
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Started
 Task log: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e.md`
 Review log: `build-protocol/reviews/T-0009e-entity-base-classes.md`
@@ -16,6 +16,8 @@ into the parent entity-base branch. The parent task remains bounded to OOP
 entity shells for
 `@spine-ts/server` while preserving the D-0044 boundary against repositories,
 dispatch, storage, buses, and unsupported family-specific runtime behavior.
+`T-0009e.4 Public API Closure And Verification` has started in an isolated
+subtask branch to close the parent API/docs/log surface.
 
 ## JVM Research Used
 
