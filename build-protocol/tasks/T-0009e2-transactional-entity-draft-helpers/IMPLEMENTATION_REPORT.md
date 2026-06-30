@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.2 TransactionalEntity Scoped Draft Helpers
 
-Status: Implementation Complete; Round 6 Docs Follow-Up Verified
+Status: Implementation Complete; Round 9 Docs Follow-Up In Progress
 Task log:
 `build-protocol/tasks/T-0009e2-transactional-entity-draft-helpers/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e2.md`
@@ -146,3 +146,11 @@ repositories, handlers, phase propagation, storage, and lifecycle events.
   statements / 91.41% branches / 99.15% functions / 97.17% lines,
   TypeDoc/API/proto gates passed with 68 expected server exports, and generated
   proto output clean.
+- Round 7 reviewed committed range `623f0d7..b9456dc`; documentation and
+  maintainability requested timestamp/current-state cleanup, while
+  TypeScript/API, security, and performance/reliability returned clean. Round 7
+  docs-only cleanup was verified on `2026-06-30 01:31 WEST`.
+- Round 8 reviewed committed range `b9456dc..f3a067d`; maintainability and
+  documentation requested chronology/fix-evidence cleanup, while
+  TypeScript/API, security, and performance/reliability returned clean. The
+  accepted docs-only cleanup is implemented and awaiting verification.
