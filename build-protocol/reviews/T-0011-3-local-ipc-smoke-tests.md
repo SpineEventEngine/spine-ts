@@ -1,6 +1,6 @@
 # Review Log: T-0011.3 Local IPC Smoke Tests
 
-Status: Implementation Handoff Ready
+Status: Implementation Complete; External Review Pending
 
 ## Required Review Lanes
 
@@ -26,9 +26,28 @@ invalid-`origin` warning only.
 
 ## Current Review Gate
 
-Setup dependency install and baseline verification passed. Implementation and
-the required review lanes must complete before parent integration.
+Setup dependency install and baseline verification passed. Implementation
+passed focused and full verification on `2026-06-30 22:21 WEST`. The required
+external review lanes must complete before parent integration.
 
 ## Reviewer Rounds
 
 None yet.
+
+## Implementation Self-Check
+
+`2026-06-30 22:21 WEST` implementation sub-agent notes before external review:
+
+- Code style/maintainability: smoke helpers are test-private, use short
+  temporary IPC paths, bounded timeouts, explicit frame guards, and `finally`
+  cleanup for sockets and directories.
+- Documentation: package, architecture, and API docs describe local IPC smoke
+  scope and continue to defer broker/worker lifecycle, delivery/retry behavior,
+  production endpoint/frame protocols, and server runtime wiring.
+- TypeScript/API docs: public `@spine-ts/transport` root exports are unchanged;
+  ZeroMQ types are imported only from adapter-private package files/tests.
+- Security: tests use local same-host IPC resources under temporary directories
+  and do not open TCP ports or external services.
+- Performance/reliability: PUB/SUB slow-joiner risk is handled by bounded
+  repeated sends until the subscriber receives or its receive timeout fails the
+  test; sockets use `linger: 0` to avoid shutdown hangs.

@@ -1,6 +1,6 @@
 # Implementation Report: T-0011.3 Local IPC Smoke Tests
 
-Status: Implementation Handoff Ready
+Status: Implemented
 Task log: `build-protocol/tasks/T-0011-3-local-ipc-smoke-tests/TASK.md`
 Work log: `build-protocol/work-logs/T-0011-3.md`
 Review log: `build-protocol/reviews/T-0011-3-local-ipc-smoke-tests.md`
@@ -13,6 +13,17 @@ Worktree:
 T-0011.3 starts from parent T-0011 commit `08d7e82`, after T-0011.2 pinned
 `zeromq@6.5.0` and added adapter-private local IPC configuration helpers. This
 subtask owns focused local IPC smoke tests over the pinned ZeroMQ dependency.
+
+Implementation added one adapter-private Vitest smoke test file that imports
+`zeromq@6.5.0` directly and covers:
+
+- a same-host publish/subscribe IPC flow with `Publisher` and `Subscriber`;
+- a same-host request/reply IPC flow with `Request` and `Reply`; and
+- temporary IPC directory cleanup plus socket closure in `finally` paths.
+
+The public `@spine-ts/transport` root remains adapter-agnostic and does not
+export ZeroMQ sockets, endpoints, multipart frames, or native binding types.
+No `@spine-ts/server` files were changed.
 
 ## Expected Files
 
@@ -48,6 +59,23 @@ exports, copied Spine proto checksum verification, proto lint/generate,
 generated proto output clean, and generated files clean. TypeDoc emitted the
 existing invalid-`origin` warning only.
 
+Focused smoke verification passed on `2026-06-30 22:17 WEST`:
+`corepack pnpm vitest run packages/transport/src/zeromq-local-ipc-smoke.test.ts`
+passed with 1 test file / 2 tests.
+
+Required implementation verification passed on `2026-06-30 22:18-22:21 WEST`:
+
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
+  warning only.
+- `CI=true corepack pnpm verify` passed with 23 test files / 268 tests,
+  coverage 96.34% statements / 90.48% branches / 99.27% functions / 96.28%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
+  expected exports, copied Spine proto checksum verification, proto
+  lint/generate, generated proto output clean, and generated files clean.
+  TypeDoc emitted the existing invalid-`origin` warning only.
+- `git diff --check` passed.
+
 ## Open Items
 
-- Dispatch the implementation sub-agent.
+- External review lanes remain for the orchestrator/reviewer agents.

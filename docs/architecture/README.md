@@ -425,9 +425,13 @@ transport and runtime tasks.
 
 The transport package now pins the maintained official `zeromq@6.5.0` line for
 the later local IPC adapter. That native dependency is adapter-private: current
-helper code only validates a local IPC configuration shape and keeps native
-module typing out of the public entry point. The workspace explicitly approves
-the `zeromq` install script in pnpm configuration, so dependency restoration
-must run in an environment that permits native package build/install scripts.
-Per D-0007, this adapter path is for same-host IPC only; scaling beyond one
-host remains the job of a different transport behind the same public contract.
+helper code validates a local IPC configuration shape and keeps native module
+typing out of the public entry point, while package-private smoke tests prove
+same-host publish/subscribe and request/reply IPC over temporary endpoints. The
+tests do not define production endpoint layout, frame protocols, broker/worker
+lifecycle, delivery retries, or server runtime wiring. The workspace explicitly
+approves the `zeromq` install script in pnpm configuration, so dependency
+restoration must run in an environment that permits native package
+build/install scripts. Per D-0007, this adapter path is for same-host IPC only;
+scaling beyond one host remains the job of a different transport behind the
+same public contract.

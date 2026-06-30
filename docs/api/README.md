@@ -249,10 +249,13 @@ expose ZeroMQ socket types, endpoint strings, multipart frames, broker
 processes, worker registration, delivery retries, or runtime handler
 invocation.
 The transport package pins `zeromq@6.5.0` for later local IPC adapter work, but
-that native dependency remains outside the public TypeDoc entry point. Current
-adapter-private wiring validates local IPC configuration and native module
-typing only; socket creation, IPC binding/connection, frame protocols, and live
-smoke tests remain deferred.
+that native dependency remains outside the public TypeDoc entry point.
+Adapter-private wiring validates local IPC configuration and native module
+typing, and package-private smoke tests prove same-host publish/subscribe and
+request/reply IPC over temporary endpoints. Socket creation, endpoint strings,
+multipart frames, and native binding types remain absent from the public API;
+production endpoint layout, frame protocols, broker/worker lifecycle, delivery
+retries, and server runtime wiring remain deferred.
 
 The generated Protobuf-ES implementation files themselves remain excluded from
 TypeDoc output and are not broadly re-exported from the package root.

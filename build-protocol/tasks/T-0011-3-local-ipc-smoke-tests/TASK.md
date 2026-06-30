@@ -1,6 +1,6 @@
 # T-0011.3: Local IPC Smoke Tests
 
-Status: Implementation Handoff Ready
+Status: Implemented
 Parent task: `T-0011 Transport Foundation`
 Start: `2026-06-30 22:07 WEST`
 Baseline commit: `08d7e82`
@@ -98,3 +98,36 @@ Skipped relevant-looking skills:
   expected exports, copied Spine proto checksum verification, proto
   lint/generate, generated proto output clean, and generated files clean.
   TypeDoc emitted the existing invalid-`origin` warning only.
+
+- Implementation focused verification passed on `2026-06-30 22:17 WEST`:
+  `corepack pnpm vitest run packages/transport/src/zeromq-local-ipc-smoke.test.ts`
+  passed with 1 test file / 2 tests, covering same-host ZeroMQ
+  publish/subscribe and request/reply IPC over temporary endpoints.
+
+- Implementation type/API verification passed on `2026-06-30 22:18 WEST`:
+  `corepack pnpm typecheck` passed, and `corepack pnpm docs:check` passed with
+  the existing invalid-`origin` TypeDoc warning only.
+
+- Implementation full verification passed on `2026-06-30 22:21 WEST`:
+  `CI=true corepack pnpm verify` passed with 23 test files / 268 tests,
+  coverage 96.34% statements / 90.48% branches / 99.27% functions / 96.28%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
+  expected exports, copied Spine proto checksum verification, proto
+  lint/generate, generated proto output clean, and generated files clean.
+  TypeDoc emitted the existing invalid-`origin` warning only.
+
+- Implementation whitespace verification passed on `2026-06-30 22:21 WEST`:
+  `git diff --check` passed.
+
+## Implementation Notes
+
+- Added adapter-private `zeromq@6.5.0` smoke tests under
+  `packages/transport/src` for one publish/subscribe flow and one request/reply
+  flow. The tests open ZeroMQ sockets only inside test bodies, use `linger: 0`,
+  set bounded send/receive timeouts, and close sockets plus remove temporary
+  IPC directories in `finally` paths.
+- Temporary IPC endpoints use short `mkdtemp(tmpdir(), "sz-")` directories and
+  short socket file names to avoid Unix-domain socket path-length limits.
+- The smoke tests import `zeromq` directly from package-private test code and do
+  not change the public `@spine-ts/transport` root exports.
+- No `@spine-ts/server` files were touched.
