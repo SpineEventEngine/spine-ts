@@ -1347,3 +1347,42 @@ Consequences:
   perform validation, or expose transport/service concepts in this subtask.
 - The public documentation must explain that accepted means accepted for later
   asynchronous runtime work, not dispatched, stored, or successfully handled.
+
+## D-0051: T-0010.4 Reuses Handler Metadata For Command Readiness
+
+Status: Accepted
+
+Date: 2026-06-30
+
+Context: `T-0010.4 Command Registration Readiness` follows the signal intake
+result seam. Spine JVM `CommandDispatcherRegistry` is a unicast registry: each
+registered `CommandDispatcher` exposes handled command classes, and
+registration rejects any command class that already has a dispatcher.
+`AbstractAssignee` derives its command classes from assignee model metadata,
+`DuplicateHandlerCheck` rejects duplicate command-handling methods across model
+classes, and `CommandService.Builder` later builds service routing from each
+context's registered command classes. The current TS code already has
+`HandlerMetadataRegistry`, which registers `EntityHandlersMetadata` values,
+rejects duplicate command assignments for one command message type, and exposes
+lookup for the unique command assignment. The human explicitly warned to inspect
+Spine JVM `core-jvm/server` closely and avoid over-inventing server-module
+work.
+
+Decision: T-0010.4 adds only a metadata/readiness surface that reports
+registered command message types and their unique assignee metadata from the
+existing handler metadata registry. It must reuse
+`HandlerMetadataRegistry` duplicate-assignment enforcement rather than creating
+a parallel command bus registry or new duplicate policy. It must not implement
+command posting, command service `Ack` mapping, routing, dispatch, handler
+invocation, validation, storage, delivery, transport, or repository runtime
+registration.
+
+Consequences:
+
+- Later command service/runtime tasks can ask a bounded context's handler
+  metadata which command types are ready before implementing posting or bus
+  behavior.
+- Reviewers must flag command bus/service/dispatch behavior or any second
+  duplicate-assignment policy in this subtask.
+- Public docs must describe the surface as registration readiness, not runtime
+  command handling.

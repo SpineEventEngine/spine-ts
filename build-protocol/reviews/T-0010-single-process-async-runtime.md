@@ -60,3 +60,6 @@ verification, and generated proto output clean.
   `2026-06-30 17:09 WEST`; all review lanes are clean. The subtask was merged
   into the parent task branch as `575e1d3` and parent verification passed on
   `2026-06-30 17:20 WEST`.
+- `T-0010.4 Command Registration Readiness`: setup logs created on
+  `2026-06-30 17:24 WEST`; setup baseline verification passed on
+  `2026-06-30 17:27 WEST`; implementation review rounds are pending.
