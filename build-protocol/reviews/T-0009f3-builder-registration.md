@@ -1,6 +1,6 @@
 # Review Log: T-0009f.3 Builder Repository Registration And Conflict Checks
 
-Status: Round 3 Review Fix Implemented And Verified
+Status: Round 4 Review Fix Implemented And Verified
 
 ## Required Review Lanes
 
@@ -132,4 +132,40 @@ lanes before integration:
   `node scripts/check-api-docs.mjs` passed with one TypeDoc source-link warning
   for invalid local `origin`; `CI=true corepack pnpm verify` passed 17 test
   files / 203 tests plus coverage, docs, proto lint/generate, and
+  generated-clean.
+
+## Round 4 Review State
+
+- Fourth external review round reported two findings:
+  - Security Low: `cloneRepositorySemanticTags()` /
+    `validateRepositorySemanticTags()` accepted empty or blank semantic tags
+    from hostile snapshots even though descriptor-derived tags are trimmed and
+    empty tags are rejected in `entity-metadata.ts`.
+  - Reliability P2: `validateRepositorySnapshot()` did not verify
+    `snapshot.stateSchema.typeName === snapshot.stateFullTypeName`, allowing a
+    hostile repository subclass to forge `stateFullTypeName` and
+    `metadata.fullTypeName` while retaining the real schema object.
+- Already clean review lanes from the fourth round: code style,
+  documentation, and TypeScript/API docs.
+
+## Round 4 Fix State
+
+- Added RED/GREEN coverage for empty, blank, and trim-needed
+  `metadata.semanticTags`.
+- Added RED/GREEN coverage for forged `stateFullTypeName` /
+  `metadata.fullTypeName` values that do not match `stateSchema.typeName`.
+- Repository snapshot cloning and validation now reject empty, blank, or
+  trim-needed semantic tags.
+- Repository snapshot validation now verifies `stateSchema.typeName` directly
+  against `stateFullTypeName` before accepting the snapshot.
+- Preserved the metadata-only builder boundary: no storage, routing, stand,
+  bus, handler, default runtime repository, or context runtime behavior was
+  added.
+- Required focused and full verification passed before committing the round-4
+  fix:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts packages/server/src/repository.test.ts packages/server/src/index.test.ts`
+  passed 56 tests; `corepack pnpm typecheck:tooling` passed;
+  `node scripts/check-api-docs.mjs` passed with one TypeDoc source-link warning
+  for invalid local `origin`; `CI=true corepack pnpm verify` passed 17 test
+  files / 207 tests plus coverage, docs, proto lint/generate, and
   generated-clean.

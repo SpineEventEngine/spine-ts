@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.3 Builder Repository Registration And Conflict Checks
 
-Status: Round 3 Review Fix Implemented And Verified
+Status: Round 4 Review Fix Implemented And Verified
 Task log: `build-protocol/tasks/T-0009f3-builder-registration/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f3.md`
 Review log: `build-protocol/reviews/T-0009f3-builder-registration.md`
@@ -74,6 +74,13 @@ Impact:
 - Repository snapshot cloning and validation require `metadata.semanticTags` to
   be a real array whose entries are strings, rejecting non-array iterables,
   sparse arrays, and non-string entries as malformed repository snapshots.
+- Repository snapshot cloning and validation require `metadata.semanticTags`
+  entries to be non-empty canonical strings that do not need trimming, matching
+  the descriptor-derived semantic-tag boundary for hostile snapshot input.
+- Repository snapshot validation directly verifies
+  `stateSchema.typeName === stateFullTypeName`, so hostile snapshots cannot
+  forge `stateFullTypeName` and `metadata.fullTypeName` while retaining a
+  different schema object.
 - `BoundedContextBuilder.build()` no longer pre-clones repository snapshots
   before constructing `BoundedContext`; constructor validation performs the
   defensive copy once, and context snapshot freezing preserves already
@@ -189,6 +196,28 @@ Impact:
   `tsc -b`, tooling typecheck, ESLint, Prettier check, 17 Vitest files / 203
   tests, coverage over thresholds, TypeDoc/API guard, proto lint, proto
   generate, and generated-clean completed successfully.
+- Round-4 metadata RED:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts`
+  failed with four expected failures because forged `stateFullTypeName` /
+  `metadata.fullTypeName` values, empty semantic tags, blank semantic tags, and
+  trim-needed semantic tags were accepted instead of producing deterministic
+  `INVALID_REPOSITORY_SNAPSHOT` errors.
+- Round-4 bounded-context GREEN:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts`
+  passed 31 tests after canonical semantic-tag validation and the direct
+  `stateSchema.typeName` check were added.
+- Round-4 focused verification:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts packages/server/src/repository.test.ts packages/server/src/index.test.ts`
+  passed 3 test files and 56 tests.
+- Round-4 `corepack pnpm typecheck:tooling` passed.
+- Round-4 `node scripts/check-api-docs.mjs` passed. TypeDoc emitted one
+  source-link warning because the local `origin` remote is not valid; the API
+  JSON guard passed with 96 expected `@spine-ts/server` exports.
+- Round-4 full verification:
+  `CI=true corepack pnpm verify` passed. Evidence: node version check,
+  `tsc -b`, tooling typecheck, ESLint, Prettier check, 17 Vitest files / 207
+  tests, coverage over thresholds, TypeDoc/API guard, proto lint, proto
+  generate, and generated-clean completed successfully.
 
 ## Review
 
@@ -224,3 +253,11 @@ Impact:
   `metadata.semanticTags` as a dense string array instead of spreading any
   iterable.
 - Required focused and full verification passed for the round-3 fix.
+- Fourth external review round reported one low-severity security finding and
+  one reliability finding.
+- Fixed round-4 security finding by rejecting empty, blank, and trim-needed
+  semantic tags in repository snapshot clone/validation paths.
+- Fixed round-4 reliability finding by requiring `stateSchema.typeName` to
+  match the snapshot's `stateFullTypeName` before accepting repository
+  snapshots.
+- Required focused and full verification passed for the round-4 fix.

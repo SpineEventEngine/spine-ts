@@ -636,6 +636,18 @@ describe("BoundedContext builder shell", () => {
         }),
     ],
     [
+      "mismatched state schema type name",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          metadata: Object.freeze({
+            ...snapshot.metadata,
+            fullTypeName: "spine.invalid.State",
+          }),
+          stateFullTypeName: "spine.invalid.State" as never,
+        }),
+    ],
+    [
       "malformed ID field",
       (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
         Object.freeze({
@@ -736,6 +748,39 @@ describe("BoundedContext builder shell", () => {
           metadata: Object.freeze({
             ...snapshot.metadata,
             semanticTags: [7] as never,
+          }),
+        }),
+    ],
+    [
+      "empty metadata semantic tag",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          metadata: Object.freeze({
+            ...snapshot.metadata,
+            semanticTags: [""] as never,
+          }),
+        }),
+    ],
+    [
+      "blank metadata semantic tag",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          metadata: Object.freeze({
+            ...snapshot.metadata,
+            semanticTags: [" \t\n"] as never,
+          }),
+        }),
+    ],
+    [
+      "trim-needed metadata semantic tag",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          metadata: Object.freeze({
+            ...snapshot.metadata,
+            semanticTags: [" example.tags.AggregateTag "] as never,
           }),
         }),
     ],

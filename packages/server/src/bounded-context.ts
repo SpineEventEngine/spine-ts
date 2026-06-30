@@ -507,6 +507,7 @@ function cloneRepositorySemanticTags(tags: unknown, owner: string): readonly str
     if (typeof tag !== "string") {
       throw new TypeError(`${owner}[${String(index)}] must be a string.`);
     }
+    validateCanonicalRepositorySemanticTag(tag, `${owner}[${String(index)}]`);
 
     clonedTags.push(tag);
   }
@@ -781,12 +782,16 @@ function validateRepositorySnapshot(snapshot: RepositoryIdentitySnapshot): void 
   if (!isEntityFamily(snapshot.entityFamily)) {
     throw new TypeError("Repository snapshot entityFamily must be supported.");
   }
-  if (!isRecord(snapshot.stateSchema)) {
+  const stateSchema = snapshot.stateSchema as unknown;
+  if (!isRecord(stateSchema)) {
     throw new TypeError("Repository snapshot stateSchema must be an object.");
   }
   const stateFullTypeName = snapshot.stateFullTypeName as unknown;
   if (typeof stateFullTypeName !== "string" || stateFullTypeName.length === 0) {
     throw new TypeError("Repository snapshot stateFullTypeName must be a non-empty string.");
+  }
+  if (stateSchema.typeName !== stateFullTypeName) {
+    throw new TypeError("Repository snapshot stateSchema.typeName must match stateFullTypeName.");
   }
   if (!isRecord(snapshot.metadata)) {
     throw new TypeError("Repository snapshot metadata must be an object.");
@@ -858,14 +863,29 @@ function validateRepositorySemanticTags(tags: unknown, owner: string): void {
     throw new TypeError(`${owner} must be an array.`);
   }
 
-  for (let index = 0; index < tags.length; index += 1) {
-    if (!Object.hasOwn(tags, index)) {
+  const tagValues = tags as readonly unknown[];
+
+  for (let index = 0; index < tagValues.length; index += 1) {
+    if (!Object.hasOwn(tagValues, index)) {
       throw new TypeError(`${owner}[${String(index)}] must be present.`);
     }
 
-    if (typeof tags[index] !== "string") {
+    const tag = tagValues[index];
+    if (typeof tag !== "string") {
       throw new TypeError(`${owner}[${String(index)}] must be a string.`);
     }
+    validateCanonicalRepositorySemanticTag(tag, `${owner}[${String(index)}]`);
+  }
+}
+
+function validateCanonicalRepositorySemanticTag(tag: string, owner: string): void {
+  const canonicalTag = tag.trim();
+
+  if (canonicalTag.length === 0) {
+    throw new TypeError(`${owner} must be a non-empty string.`);
+  }
+  if (tag !== canonicalTag) {
+    throw new TypeError(`${owner} must not require trimming.`);
   }
 }
 

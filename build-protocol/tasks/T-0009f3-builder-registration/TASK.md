@@ -1,6 +1,6 @@
 # T-0009f.3: Builder Repository Registration And Conflict Checks
 
-Status: Round 3 Review Fix Implemented And Verified
+Status: Round 4 Review Fix Implemented And Verified
 Start: `2026-06-30 11:34 WEST`
 Parent task: `T-0009f Repository Seams And Bounded-Context Registration Skeleton`
 Parent branch: `task/T-0009f-repository-seams`
@@ -134,6 +134,22 @@ Expected boundary from current research:
 - [x] Security Low: repository snapshot cloning and validation now require
       `metadata.semanticTags` to be an array of strings.
 - [x] Required focused and full verification pass for the round-3 fix commit.
+
+## Review Round 4 Fixes
+
+- [x] Security Low: added RED/GREEN coverage for empty, blank, and
+      trim-needed `metadata.semanticTags` values returned by hostile
+      repository snapshots.
+- [x] Security Low: repository snapshot cloning and validation now require
+      semantic tags to be non-empty canonical strings that do not need
+      trimming, matching descriptor-derived semantic-tag boundaries.
+- [x] Reliability P2: added RED/GREEN coverage for forged repository snapshots
+      whose `stateFullTypeName` and `metadata.fullTypeName` agree with each
+      other but not with `stateSchema.typeName`.
+- [x] Reliability P2: repository snapshot validation now directly verifies
+      `stateSchema.typeName === stateFullTypeName` before accepting the
+      snapshot.
+- [x] Required focused and full verification pass for the round-4 fix commit.
 
 ## Implementation Evidence
 
