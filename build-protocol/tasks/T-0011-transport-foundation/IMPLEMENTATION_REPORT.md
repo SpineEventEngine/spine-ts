@@ -1,6 +1,6 @@
 # Implementation Report: T-0011 Transport Foundation
 
-Status: Setup Baseline Verified; Requirements Split Pending
+Status: Requirements Split Complete
 Task log: `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
 Work log: `build-protocol/work-logs/T-0011.md`
 Review log: `build-protocol/reviews/T-0011-transport-foundation.md`
@@ -14,6 +14,12 @@ T-0011 starts from verified `main` commit `194ce9e`, after T-0010 was merged
 and verified. The task owns the first transport foundation for local
 multi-process Node.js execution. The splitter must decide the smallest safe
 subtask before implementation starts.
+
+Requirements splitter completed on `2026-06-30 20:40 WEST` with no blocking
+questions. The recommended first slice is `T-0011.1 Transport Contracts,
+Topics, And Envelope Routing Keys`, followed by later subtasks for ZeroMQ
+adapter installation, IPC smoke tests, broker/worker lifecycle, delivery/retry
+boundaries, server/runtime wiring, and docs closure.
 
 ## Scope Guardrails
 
@@ -38,6 +44,26 @@ subtask before implementation starts.
   expected exports, copied Spine proto checksum verification, generated proto
   output clean, and generated files clean.
 
+## Splitter Research And Recommendation
+
+- `npm view zeromq version dist-tags repository homepage description engines os
+cpu` succeeded in this environment and identified the maintained official
+  package line as `zeromq@6.5.0` from `zeromq/zeromq.js`.
+- `npm view zmq version description repository homepage engines` returned the
+  legacy `zmq@2.15.3` binding line with an older Node engine range and older
+  repository lineage.
+- `npm view zeromq-old version description repository homepage engines` and
+  `npm view @aminya/node-zmq version description repository homepage engines`
+  returned npm `E404` responses.
+- GitHub project docs reviewed:
+  [zeromq/zeromq.js](https://github.com/zeromq/zeromq.js) and
+  [JustinTulloss/zeromq.node](https://github.com/JustinTulloss/zeromq.node).
+
+Recommendation: keep the first subtask dependency-free and contract-first;
+defer installation to the adapter subtask and plan to pin the official
+`zeromq` package there unless new evidence appears when the adapter branch
+performs native smoke tests.
+
 ## Files Changed
 
 - `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
@@ -47,7 +73,7 @@ subtask before implementation starts.
 
 ## Open Items
 
-- Requirements splitter pending.
+- Requirements split completed; first implementation handoff is pending.
 - Baseline verification passed.
-- Dependency/tooling decision pending; ZeroMQ package selection must be
-  researched and recorded before installation.
+- Native dependency installation remains deferred to the dedicated adapter
+  subtask.

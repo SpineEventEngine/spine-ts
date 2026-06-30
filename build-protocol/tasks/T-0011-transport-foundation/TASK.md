@@ -1,13 +1,14 @@
 # T-0011: Transport Foundation
 
-Status: Setup Baseline Verified; Requirements Split Pending
+Status: Requirements Split Complete
 Start: `2026-06-30 20:32 WEST`
 Baseline commit: `194ce9e`
 Task log path: `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
 Branch: `task/T-0011-transport-foundation`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-transport-foundation`
-Requirements splitter: pending
+Requirements splitter:
+`2026-06-30 20:40 WEST` splitter session (closed by orchestrator after handoff)
 Authoring sub-agents: pending
 Reviewer sub-agents: pending
 
@@ -115,6 +116,89 @@ The orchestrator inspected:
 - T-0010 task/report logs and deferred transport notes.
 
 No blocking human question is known at setup time.
+
+## Splitter Result
+
+Requirements splitter completed on `2026-06-30 20:40 WEST`. Blocking
+questions: none.
+
+Dependency research evidence:
+
+- Local repo/tooling constraints: root [package.json](/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-transport-foundation/package.json)
+  requires Node `>=24.0.0` and pnpm `11.9.0`.
+- Official npm metadata via `npm view zeromq version dist-tags repository
+homepage description engines os cpu` returned `version = '6.5.0'`,
+  `latest = '6.5.0'`, repo `git+https://github.com/zeromq/zeromq.js.git`,
+  homepage `http://zeromq.github.io/zeromq.js/`, description
+  "Next-generation ZeroMQ bindings for Node.js", and
+  `engines = { node: '>= 12' }`.
+- Comparison metadata via `npm view zmq version description repository
+homepage engines` returned `version = '2.15.3'`, older repo
+  `git+ssh://git@github.com/JustinTulloss/zeromq.node.git`, and
+  `engines = { node: '>=0.8' }`.
+- `npm view zeromq-old version description repository homepage engines` and
+  `npm view @aminya/node-zmq version description repository homepage engines`
+  both returned `npm error code E404`.
+- Official GitHub docs reviewed:
+  [zeromq/zeromq.js](https://github.com/zeromq/zeromq.js) and
+  [JustinTulloss/zeromq.node](https://github.com/JustinTulloss/zeromq.node).
+
+Research conclusion:
+
+- No blocker prevents proceeding with transport planning.
+- The best current dependency target is the official `zeromq` package line,
+  pinned in a later adapter subtask rather than installed in the first slice.
+- T-0011 should begin with a contract-first slice so public APIs settle before
+  native adapter concerns are introduced.
+
+Roadmap:
+
+1. `T-0011.1 Transport Contracts, Topics, And Envelope Routing Keys`: define
+   the smallest `@spine-ts/transport` public abstractions for transport-owned
+   topics, subscriptions, publish/request contracts, handler signatures, and
+   close semantics over existing signal-envelope concepts. No ZeroMQ install,
+   sockets, buses, workers, or retries.
+2. `T-0011.2 ZeroMQ Adapter Package Wiring And Dependency Pin`: install and
+   pin `zeromq@6`, add adapter-private configuration/types, and document native
+   runtime constraints without exposing ZeroMQ in public APIs.
+3. `T-0011.3 Local IPC Smoke Tests`: add focused publish/subscribe and
+   request/reply smoke tests over local IPC endpoints for the adapter, with
+   clean test lifecycle and explicit single-host scope.
+4. `T-0011.4 Broker And Worker Lifecycle Seam`: define broker/worker startup,
+   registration, readiness, and graceful close boundaries needed for local
+   multi-process transport, still without server supervision or delivery
+   retries.
+5. `T-0011.5 Delivery And Retry Boundary Contracts`: add transport-adjacent
+   delivery status/result contracts and failure classification boundaries
+   without implementing durable inbox/outbox storage or full retry engines.
+6. `T-0011.6 Server Runtime Wiring Integration`: connect the server/runtime
+   side to transport abstractions for command/event/query/subscription/system
+   routing seams while still deferring full handler dispatch and broad facade
+   behavior.
+7. `T-0011.7 Documentation And Closure`: update package docs, architecture
+   notes, compatibility notes, and parent-task verification closure after the
+   transport slices land.
+
+First selected non-blocked subtask:
+`T-0011.1 Transport Contracts, Topics, And Envelope Routing Keys`.
+
+Acceptance criteria for `T-0011.1`:
+
+- `@spine-ts/transport` exports a small public contract surface for transport
+  topics, subscription descriptors, publish/request operations, handler
+  callbacks, and async close behavior.
+- Topic abstractions are framed in type URLs, signal kinds, and transport-owned
+  routing descriptors rather than ZeroMQ socket names or multipart frames.
+- The slice composes with existing core/server signal-envelope work and does
+  not invent command/event/query service implementations or repository
+  dispatch.
+- Tests and docs show that the transport package is still adapter-agnostic and
+  single-host ZeroMQ remains a later implementation detail.
+
+Out of scope for `T-0011.1`: native dependency installation, socket creation,
+IPC addresses, broker processes, worker registration, retries, durable
+delivery, server supervisors, gRPC service wiring, handler invocation, or read
+side execution.
 
 ## Verification
 

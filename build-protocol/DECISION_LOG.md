@@ -1457,3 +1457,52 @@ Consequences:
   subtask as over-scoped unless a later task explicitly authorizes it.
 - To-do example docs remain non-runnable for runtime behavior until the example
   implementation tasks introduce domain command/event/projection execution.
+
+## D-0054: T-0011 Starts With Adapter-Agnostic Transport Contracts And Defers Native ZeroMQ Installation
+
+Status: Accepted
+
+Date: 2026-06-30
+
+Context: T-0011 introduces the first transport foundation after the
+single-process runtime and registration-readiness slices. The spec requires
+local multi-process execution over an abstract bus transport initially backed
+by ZeroMQ local IPC, but D-0007 limits ZeroMQ to one-host IPC and D-0024
+already deferred ZeroMQ installation until the transport-adapter task. The
+current workspace uses Node `>=24.0.0`. Requirements-splitting research
+checked official npm metadata and project docs before any dependency choice:
+`npm view zeromq ...` returned maintained package metadata for
+`zeromq@6.5.0` from `zeromq/zeromq.js`; `npm view zmq ...` returned legacy
+`zmq@2.15.3` metadata tied to an older repository lineage; `npm view
+zeromq-old ...` and `npm view @aminya/node-zmq ...` returned `E404`.
+
+Decision: Split T-0011 so the first subtask defines only adapter-agnostic
+transport contracts, topics, routing descriptors, and close semantics over the
+existing signal-envelope model. Do not install any native ZeroMQ dependency in
+that first slice. Reserve dependency installation, adapter-private ZeroMQ
+configuration, and IPC smoke tests for a later dedicated adapter subtask. When
+that subtask begins, prefer the maintained official `zeromq@6` package line
+unless newer task-time research contradicts it.
+
+Alternatives considered:
+
+- Install ZeroMQ in the first subtask. Rejected because the first slice should
+  stay small, reviewable, and free of native runtime concerns while the public
+  transport surface is still being shaped.
+- Target the older `zmq` package line. Rejected because the metadata and
+  repository lineage indicate a legacy binding line rather than the maintained
+  current package.
+- Delay all transport work until the adapter exists. Rejected because the
+  runtime architecture and package boundary need a public contract seam before
+  adapter or broker lifecycle work can proceed safely.
+
+Consequences:
+
+- `T-0011.1` can stay focused on transport-owned API boundaries and topic
+  abstractions without leaking socket details into public code.
+- The adapter-installation subtask must own native dependency pinning,
+  bootstrap notes, and smoke tests instead of inheriting an implicit package
+  choice.
+- Reviewers should reject any early transport slice that creates sockets,
+  installs native dependencies, or grows into broker/process/delivery behavior
+  before the roadmap reaches those explicit subtasks.

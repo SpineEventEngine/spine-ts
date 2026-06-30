@@ -1,6 +1,6 @@
 # Review Log: T-0011 Transport Foundation
 
-Status: Setup Baseline Verified; Requirements Split Pending
+Status: Requirements Split Complete
 
 ## Required Review Lanes
 
@@ -25,7 +25,9 @@ clean. No implementation review has started.
 
 ## Current Review Gate
 
-Requirements splitter pending. Baseline verification passed.
+Requirements splitter completed on `2026-06-30 20:40 WEST` with no blocking
+questions. Next review gate: first implementation subtask
+`T-0011.1 Transport Contracts, Topics, And Envelope Routing Keys`.
 
 ## Reviewer Rounds
 
