@@ -2,8 +2,8 @@
 
 Current status: early framework guide for the descriptor registry,
 single-message validation facade, core envelope construction helpers, the first
-server entity and handler metadata layers, and the first storage contracts with
-an in-memory adapter.
+server entity, handler, repository identity, and bounded-context metadata
+layers, and the first storage contracts with an in-memory adapter.
 
 This guide covers the runnable behavior available now: Spine proto descriptors
 are exposed through curated packages, `@spine-ts/core` can derive and look up

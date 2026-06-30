@@ -216,6 +216,21 @@ describe("repository identity", () => {
     }
   });
 
+  it("rejects nullish options with structured errors", () => {
+    for (const options of [null, undefined]) {
+      try {
+        new Repository(options as unknown as RepositoryOptions<typeof RuntimeCheckedAggregate>);
+        throw new Error("Expected malformed repository options to fail.");
+      } catch (error) {
+        expect(error).toBeInstanceOf(RepositoryIdentityError);
+        expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
+        expect((error as RepositoryIdentityError).details).toEqual({
+          entityTypeName: "(anonymous)",
+        });
+      }
+    }
+  });
+
   it("uses the validated entity type and schema values captured at construction entry", () => {
     let entityTypeReadCount = 0;
     let schemaReadCount = 0;
@@ -261,7 +276,7 @@ describe("repository identity", () => {
   });
 
   it("allows repository subclasses to initialize their own fields after super", () => {
-    class NamedProjectionRepository extends Repository {
+    class NamedProjectionRepository extends Repository<typeof TaskProjection> {
       readonly label: string;
 
       constructor() {
@@ -325,6 +340,19 @@ describe("repository identity", () => {
         schema: ProjectionStateSchema,
       };
       expectTypeOf(mismatchedAnnotatedOptions).not.toBeAny();
+      // @ts-expect-error subclasses must bind the repository entity constructor type explicitly.
+      abstract class UnboundRepositorySubclass extends Repository {}
+      void UnboundRepositorySubclass;
+      class MismatchedRepositorySubclass extends Repository<typeof TaskProjection> {
+        constructor() {
+          super({
+            entityType: TaskProjection,
+            // @ts-expect-error subclass repository identity must preserve its bound entity schema.
+            schema: AggregateStateSchema,
+          });
+        }
+      }
+      void MismatchedRepositorySubclass;
     };
 
     expectTypeOf(assertRepositoryOptionTypes).not.toBeAny();

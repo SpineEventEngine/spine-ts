@@ -1,6 +1,6 @@
 # Review Log: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-3 findings fixed - Pending Re-review
+Status: Round-4 findings fixed - Pending Re-review
 
 ## Required Review Lanes
 
@@ -81,8 +81,30 @@ Status: Round-3 findings fixed - Pending Re-review
   - Verified: focused RED reproduced all three holes; focused Vitest,
     `corepack pnpm typecheck:tooling`, `node scripts/check-api-docs.mjs`, and
     `CI=true corepack pnpm verify` passed after the fixes.
+- Fourth-round reviewer findings received by the review-fix sub-agent:
+  - Documentation Low: `docs/USER_GUIDE.md` top Current status paragraph omitted
+    the metadata-only repository identity seam.
+  - Performance/reliability Medium: `Repository` dereferenced
+    `options.entityType`/`options.schema` before validating that `options` was a
+    non-null object, so nullish JS/cast callers received `TypeError`.
+  - TypeScript/API P2: `Repository` still defaulted its generic to broad
+    `RepositoryEntityType`, allowing subclasses written as `extends Repository`
+    to avoid binding their constructor/schema pair.
+- Round-4 fix status:
+  - Fixed: user-guide Current status now mentions the repository identity
+    metadata layer.
+  - Fixed: `Repository` validates the options container before property access
+    and returns deterministic `RepositoryIdentityError` details for nullish
+    options.
+  - Fixed: removed the default `Repository` generic; subclass tests now use
+    `extends Repository<typeof TaskProjection>` and negative type tests cover
+    unbound and schema-mismatched subclasses.
+  - Verified: focused RED reproduced the nullish-options `TypeError` and unused
+    subclass `@ts-expect-error`; focused Vitest passed with 18 tests, tooling
+    typecheck passed, `node scripts/check-api-docs.mjs` passed, and full verify
+    passed.
 
 ## Current Review State
 
-- First-, second-, and third-round comments are fixed. Orchestrator reviewer lanes
+- First-, second-, third-, and fourth-round comments are fixed. Orchestrator reviewer lanes
   should re-run before integration.

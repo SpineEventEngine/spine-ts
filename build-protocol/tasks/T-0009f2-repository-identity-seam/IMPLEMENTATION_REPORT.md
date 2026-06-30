@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-3 Review Fixes Complete - Pending Re-review
+Status: Round-4 Review Fixes Complete - Pending Re-review
 Task log: `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f2.md`
 Review log: `build-protocol/reviews/T-0009f2-repository-identity-seam.md`
@@ -65,6 +65,11 @@ Implementation research inspected and used:
   `schema` once at constructor entry before validation/storage, and added an
   abstract construct signature to `RepositoryEntityType` so non-function object
   literals no longer type-check.
+- Fourth-round review fixes added an early non-null options-object guard before
+  reading `options.entityType`/`options.schema`, removed the broad default
+  generic from `Repository`, required subclasses to bind their entity
+  constructor type explicitly, and refreshed user-guide status wording for the
+  repository identity seam.
 - Public root exports, TypeDoc export guard, package README, API docs, user
   guide, and architecture notes now describe the metadata-only boundary.
 
@@ -110,9 +115,21 @@ Implementation research inspected and used:
 - Round-3 full verification: `CI=true corepack pnpm verify` passed with 17
   test files, 176 tests, coverage, docs check, proto lint/generate, and
   generated-clean.
+- Round-4 RED: focused Vitest failed because `new Repository(null as any)`
+  threw `TypeError` instead of `RepositoryIdentityError`; tooling typecheck
+  failed with an unused `@ts-expect-error` because `extends Repository` still
+  type-checked without a bound entity constructor.
+- Round-4 GREEN: focused Vitest passed with 2 files and 18 tests;
+  `corepack pnpm typecheck:tooling` passed after guarding options before
+  dereference and removing the default `Repository` generic.
+- Round-4 API docs guard: `node scripts/check-api-docs.mjs` passed and
+  reported 87 expected `@spine-ts/server` exports.
+- Round-4 full verification: `CI=true corepack pnpm verify` passed with 17
+  test files, 177 tests, coverage, docs check, proto lint/generate, and
+  generated-clean.
 
 ## Review
 
-- First-, second-, and third-round reviewer findings were applied by review-fix
+- First-, second-, third-, and fourth-round reviewer findings were applied by review-fix
   sub-agents.
   Re-review by the orchestrator lanes remains pending.

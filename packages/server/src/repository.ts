@@ -116,13 +116,23 @@ export class RepositoryIdentityError extends Error {
  * store records, open storage, register with a context, route messages, invoke
  * handlers, manage caches, emit lifecycle events, or start buses/transports.
  */
-export class Repository<EntityType extends RepositoryEntityType = RepositoryEntityType> {
+export class Repository<EntityType extends RepositoryEntityType> {
   readonly #entityType: EntityType;
   readonly #entityFamily: EntityFamily;
   readonly #metadata: EntityMetadata<RepositoryEntitySchema<EntityType>>;
 
   /** Create repository identity metadata for exactly one entity family/state schema pair. */
   constructor(options: RepositoryOptions<EntityType>) {
+    if (!isRepositoryOptionsObject(options)) {
+      throw new RepositoryIdentityError(
+        "UNSUPPORTED_ENTITY_TYPE",
+        `Repository options must be a non-null object with an entity type class constructor extending Aggregate, Projection, or ProcessManager.`,
+        {
+          entityTypeName: "(anonymous)",
+        },
+      );
+    }
+
     const entityType = options.entityType;
     const schema = options.schema;
 
@@ -212,6 +222,10 @@ export class Repository<EntityType extends RepositoryEntityType = RepositoryEnti
       idField: cloneFieldMetadata(metadata.idField),
     });
   }
+}
+
+function isRepositoryOptionsObject(options: unknown): options is object {
+  return typeof options === "object" && options !== null;
 }
 
 function resolveEntityFamily(entityType: RuntimeRepositoryEntityType): EntityFamily | undefined {
