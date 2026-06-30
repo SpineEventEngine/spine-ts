@@ -1,6 +1,6 @@
 # T-0010: Single-Process Async Runtime
 
-Status: `T-0010.5` Integrated; Next Subtask Selected
+Status: `T-0010.6` Active
 Start: `2026-06-30 14:57 WEST`
 Baseline commit: `169af02`
 Task log path: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
@@ -17,6 +17,7 @@ Authoring sub-agents:
   `019f196c-c5d2-7212-b559-f1b9d8939ec2` (review fix, closed).
 - `T-0010.5`: `019f198d-7dc2-7641-9abb-4c49d776e370` (closed);
   `019f199d-9b3a-76f0-887b-5ea128774140` (review fix, closed).
+- `T-0010.6`: Pending.
 
 Reviewer sub-agents:
 
@@ -27,6 +28,8 @@ Reviewer sub-agents:
   `019f1979-6fc3-7022-ba8f-fd272e8f5468`,
   `019f1979-a556-7583-93a0-7f59499e1dda`, and
   `019f1979-d135-7342-a3d5-38c286f5da1c`.
+- `T-0010.5`: all required review lanes completed and closed.
+- `T-0010.6`: Pending.
 
 ## Objective
 
@@ -278,5 +281,14 @@ deferred to a later transport-adapter task.
   `task/T-0010-5-event-registration-readiness`; all participating sub-agents
   were closed. The subtask was merged into the parent branch as
   `480d14c Integrate T-0010.5 event registration readiness`.
-- Next selected subtask:
+- Active subtask:
   `T-0010.6 Runtime Closure And User-Facing Docs`.
+- `T-0010.6 Runtime Closure And User-Facing Docs` branch/worktree created on
+  `2026-06-30 19:10 WEST` from parent T-0010 commit `94a28bf`.
+- `T-0010.6` implementation sub-agent added the public runtime assembly smoke
+  test and documentation updates on `2026-06-30 19:24 WEST`. The subtask still
+  has no production runtime code or public export changes, no lockfile changes,
+  and no to-do example edits. Focused test/typecheck/lint/format/docs checks
+  passed after one lint-only test edit. Final full verification passed on
+  `2026-06-30 19:28 WEST` with 21 test files / 257 tests and clean TypeDoc/API,
+  proto, and generated-output checks.

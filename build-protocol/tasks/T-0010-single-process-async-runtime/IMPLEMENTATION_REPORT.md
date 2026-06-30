@@ -1,6 +1,6 @@
 # Implementation Report: T-0010 Single-Process Async Runtime
 
-Status: `T-0010.5` Integrated; Next Subtask Selected
+Status: `T-0010.6` Active
 Task log: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
 Work log: `build-protocol/work-logs/T-0010.md`
 Review log: `build-protocol/reviews/T-0010-single-process-async-runtime.md`
@@ -85,7 +85,25 @@ integration broker, import bus, storage, dispatch, service, transport, handler
 invocation, validation, or `Ack` behavior. All participating implementer,
 fixer, and reviewer sub-agents were closed.
 
-Next selected subtask: `T-0010.6 Runtime Closure And User-Facing Docs`.
+Next selected subtask `T-0010.6 Runtime Closure And User-Facing Docs` is now
+active in isolated branch `task/T-0010-6-runtime-closure-docs` from baseline
+`94a28bf`. D-0053 records that the closure subtask must update docs and add a
+small public-surface smoke test only. It must not add a TypeScript `Server`
+facade, service routing, command/event/import buses, transport, storage,
+read-side execution, repository runtime registration, validation, handler
+invocation, delivery, integration broker behavior, or `Ack` mapping.
+
+`T-0010.6` implementation added the bounded-context runtime assembly smoke test
+and user/API/architecture documentation updates on `2026-06-30 19:24 WEST`.
+The smoke uses existing public server APIs only and keeps the runtime closure
+as metadata plus lifecycle plus readiness. No production code, public exports,
+dependencies, lockfiles, API checker expectations, or to-do example files were
+changed. Focused tests, typecheck, lint, format check, and docs/API checks
+passed after one lint-only test style fix. Final full verification passed on
+`2026-06-30 19:28 WEST` with 21 test files / 257 tests, coverage 96.45%
+statements / 90.55% branches / 99.24% functions / 96.39% lines, TypeDoc/API
+export counts 100 / 28 / 124 / 26, proto checksum verification, and generated
+proto output clean.
 
 ## Files Changed
 
@@ -99,6 +117,8 @@ Next selected subtask: `T-0010.6 Runtime Closure And User-Facing Docs`.
 - `build-protocol/work-logs/T-0010-1.md`
 - `build-protocol/reviews/T-0010-1-runtime-lifecycle-queue.md`
 - `docs/api/README.md`
+- `docs/USER_GUIDE.md`
+- `docs/architecture/README.md`
 - `packages/server/README.md`
 - `packages/server/src/index.test.ts`
 - `packages/server/src/index.ts`
@@ -202,5 +222,5 @@ registration readiness` and verified cleanly.
   closure completed on `2026-06-30 19:03 WEST`; the child branch was merged
   into the parent task branch as `480d14c Integrate T-0010.5 event
 registration readiness` and verified cleanly.
-- `T-0010.6 Runtime Closure And User-Facing Docs` is the next selected
-  non-blocked subtask.
+- `T-0010.6 Runtime Closure And User-Facing Docs` is active in branch
+  `task/T-0010-6-runtime-closure-docs`.

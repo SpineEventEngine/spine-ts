@@ -1,6 +1,6 @@
 # Review Log: T-0010 Single-Process Async Runtime
 
-Status: `T-0010.5` Integrated; Next Subtask Selected
+Status: `T-0010.6` Active
 
 ## Required Review Lanes
 
@@ -79,8 +79,19 @@ verification, and generated proto output clean.
   sub-agents were closed. The subtask was merged into the parent task branch as
   `480d14c` and parent verification passed on `2026-06-30 19:04 WEST`.
 
-`T-0010.6 Runtime Closure And User-Facing Docs` is the next selected
-non-blocked subtask. Its implementation prompts must carry the server-module
-guardrail from `BUILD_PROTOCOL.md`, close the T-0010 runtime slice without
-adding bus, dispatch, transport, storage, read-side execution, service, or
-handler invocation behavior, and update user-facing/API docs accurately.
+`T-0010.6 Runtime Closure And User-Facing Docs` is the active non-blocked
+subtask. D-0053 requires this closure task to stay limited to user-facing/API
+documentation and a tiny bounded-context runtime assembly smoke test over
+existing public APIs. Its implementation prompts must carry the server-module
+guardrail from `BUILD_PROTOCOL.md`. Reviewers must flag any TypeScript
+`Server` facade, service routing, command/event/import bus behavior, storage
+lifecycle, read-side stand/query/subscription execution, transport lifecycle,
+repository runtime registration, handler invocation, validation, delivery,
+integration broker behavior, or `Ack` mapping as over-scoped for this subtask.
+
+Implementation sub-agent changes landed on `2026-06-30 19:24 WEST` and remain
+inside that scope: one public-entry-point smoke test, user/API/architecture
+documentation, and durable log updates. No reviewer sub-agents were spawned by
+the implementation sub-agent per handoff instruction. Final full verification
+passed on `2026-06-30 19:28 WEST`; any parent-orchestrated review closure is
+pending.

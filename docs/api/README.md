@@ -200,6 +200,16 @@ process-wide singleton, process supervisor, generic job framework,
 command/event/import bus, durable storage or inbox, read-side stand, repository
 dispatcher, integration broker, gRPC server, ZeroMQ transport, or worker-process
 runtime.
+The public runtime closure smoke path composes these exports with
+`BoundedContext`, `Repository`, `HandlerMetadataRegistry`,
+`CommandRegistrationReadiness`, and `EventRegistrationReadiness` to prove the
+metadata and lifecycle interfaces fit together without adding new public API.
+That composition produces context-scoped metadata, command/event readiness
+views, and deterministic lifecycle state only. It deliberately does not expose a
+`Server` export, service routing, command/event/import bus behavior,
+repository runtime registration, storage lifecycle, read-side execution,
+transport lifecycle, validation, delivery, integration-broker behavior, handler
+invocation, or Spine `Ack` mapping.
 Write-side signal intake exports include `SignalKind`, `SignalIntakeResult`,
 `SignalIntakeAccepted`, `SignalIntakeAcceptedFor`, `SignalIntakeFailure`,
 `SignalIntakeFailureCode`, `SignalIntakeFailureDetails`,
