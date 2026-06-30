@@ -196,3 +196,39 @@ WEST`: the focused entity test first failed because `withStoredState` was
   through the public cloned state snapshot boundary.
 - Final parent re-review remains pending after the superseding fix; no clean
   final parent re-review is claimed here.
+- The protocol-guidance documentation/log update completed its required review
+  loop on `2026-06-30 05:07 WEST`: documentation, TypeScript/API docs, security,
+  and performance/reliability were initially clean; maintainability requested
+  canonical skill-check evidence; fix worker
+  `019f16b1-3530-71d0-8efe-01320fe4dff0` added it; focused maintainability
+  re-review `019f16b3-df05-7911-82bd-1f8166478645` returned clean; and all
+  participating sub-agents were closed.
+
+## Protocol Guidance Update
+
+On `2026-06-30 04:55 WEST`, human guidance was incorporated before any further
+server-module implementation: when creating code related to the `server` module,
+take a close look at the corresponding Spine JVM `core-jvm/server` code; avoid
+over-inventing and do not over-engineer.
+
+Actions:
+
+- Strengthened the existing `BUILD_PROTOCOL.md` server-module JVM source
+  guardrail as a pre-implementation requirement for `@spine-ts/server` code.
+- Added D-0045 to `build-protocol/DECISION_LOG.md`.
+- Updated active T-0009e durable logs to record the guidance and this
+  documentation-only protocol update.
+- Recorded bounded canonical skill applicability evidence in the parent task
+  log: session inventory source, task-provided skill names/paths as N/A,
+  `build-protocol/skills/EXPECTED_SKILLS.md`, installed-skill enumeration via
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`,
+  lock-manifest evidence from `/Users/armiol/.agents/.skill-lock.json`, selected
+  skills, and relevant-looking skipped skills with reasons.
+- Read applicable skills before editing: `planning-with-files`,
+  `architecture-decision-records`, and `doc-coauthoring`. `planning-with-files`
+  mapped to the existing project durable logs, `architecture-decision-records`
+  governed the new decision entry, and `doc-coauthoring` was used freeform
+  because the requested wording and target files were concrete.
+
+No runtime source changed. The protocol-guidance review loop is clean and all
+participating sub-agents were closed. Final parent re-review remains pending.

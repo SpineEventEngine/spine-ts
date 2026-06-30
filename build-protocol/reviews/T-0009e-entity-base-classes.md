@@ -241,3 +241,33 @@ packages/server/src/index.test.ts` passed with 2 files / 40 tests.
 
 Final parent re-review remains pending; this section does not mark the parent
 review clean.
+
+## Protocol Guidance Update
+
+After the final-parent-re-review fix verification, human guidance on
+`2026-06-30 04:55 WEST` required the durable build protocol to make the
+server-module JVM source guardrail explicit before any more server-module
+implementation. The documentation/log update strengthened `BUILD_PROTOCOL.md`,
+added D-0045, and updated active T-0009e logs. It did not change runtime source,
+does not supersede prior review findings, and does not mark final parent
+re-review clean.
+
+Protocol-guidance review completed on `2026-06-30 05:07 WEST`.
+
+Initial review:
+
+| Role                       | Reviewer ID                            | Result                                           | Closure |
+| -------------------------- | -------------------------------------- | ------------------------------------------------ | ------- |
+| Code style/maintainability | `019f16af-2d1f-7dc3-8d52-8acd09d7a7d3` | Comment: missing canonical skill-check evidence. | Closed  |
+| Documentation              | `019f16af-4e73-7e30-9353-f247d5d9c290` | Clean                                            | Closed  |
+| TypeScript/API docs        | `019f16af-72e6-7af2-96ef-d02308aac914` | Clean                                            | Closed  |
+| Security                   | `019f16af-963d-77f0-83a6-31d7a8ea9e66` | Clean                                            | Closed  |
+| Performance/reliability    | `019f16af-bbac-7730-b7a6-01bab20d49bc` | Clean                                            | Closed  |
+
+Fix worker `019f16b1-3530-71d0-8efe-01320fe4dff0` added bounded canonical
+skill applicability evidence to the active T-0009e task/report/work logs and
+verified the docs/log-only fix with Prettier, `corepack pnpm docs:check`, and
+`git diff --check`. Focused maintainability re-review
+`019f16b3-df05-7911-82bd-1f8166478645` returned clean, and that reviewer was
+closed. The protocol-guidance update now has no open review comments. Final
+parent re-review for T-0009e remains a separate pending task-state item.

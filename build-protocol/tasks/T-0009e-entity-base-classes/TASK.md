@@ -275,6 +275,82 @@ Out of scope until later tasks:
 
 - D-0044: `T-0009e` entity bases start as scoped OOP state shells and must not
   broaden into repository/runtime behavior.
+- D-0045: future `@spine-ts/server` code must closely inspect task-relevant
+  Spine JVM `core-jvm/server` source before creating or changing server
+  runtime/API code, avoid over-inventing, and defer unsupported behavior.
+
+## Protocol Guidance Update: 2026-06-30
+
+Human guidance received before any more server-module implementation: when
+creating code related to the `server` module, take a close look at the
+corresponding code in Spine's `core-jvm` `server` module; avoid over-inventing
+and do not over-engineer.
+
+Disposition:
+
+- Strengthened the existing `BUILD_PROTOCOL.md` server-module JVM source
+  guardrail instead of adding a duplicate paragraph.
+- Added D-0045 to `build-protocol/DECISION_LOG.md`.
+- Recorded the guidance in active T-0009e durable logs.
+- No runtime source changed.
+
+Canonical skill applicability evidence for this documentation/log update:
+
+- Session inventory source: the Codex session skill inventory exposed to the
+  worker before edits. Task-relevant available entries included
+  `planning-with-files`
+  (`/Users/armiol/.agents/skills/planning-with-files/SKILL.md`),
+  `architecture-decision-records`
+  (`/Users/armiol/.agents/skills/architecture-decision-records/SKILL.md`), and
+  `doc-coauthoring`
+  (`/Users/armiol/.agents/skills/doc-coauthoring/SKILL.md`).
+- Task-provided skill names/paths: none. The human instruction supplied concrete
+  protocol guidance and target logs, but did not name a skill or skill path.
+- Repo expected-skill manifest checked:
+  `build-protocol/skills/EXPECTED_SKILLS.md`. It lists
+  `planning-with-files` and `architecture-decision-records`; `doc-coauthoring`
+  is not expected by that manifest but was present in the session inventory and
+  installed-skill enumeration.
+- Installed-skill enumeration source:
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`.
+  The command checked the readable installed-skill entrypoint directory and
+  found the selected skills plus relevant-looking skipped skills.
+- Installed-skill lock source: `/Users/armiol/.agents/.skill-lock.json`.
+  Relevant entries recorded sources as `othmanadi/planning-with-files` for
+  `planning-with-files`, `wshobson/agents` for
+  `architecture-decision-records`, and `anthropics/skills` for
+  `doc-coauthoring`.
+- Selected skills: `planning-with-files` was applicable in spirit because this
+  update modified durable working memory, but the project build protocol already
+  owns the durable log shape so no separate `task_plan.md`, `progress.md`, or
+  `findings.md` files were created. `architecture-decision-records` was
+  applicable and fully read before D-0045 was added as a lightweight decision
+  entry. `doc-coauthoring` was lightly applicable and fully read; it was used
+  freeform because the human supplied concrete wording and target files, so no
+  interactive coauthoring stages were needed.
+- Skipped relevant-looking skills:
+  `subagent-driven-development`
+  (`/Users/armiol/.agents/skills/subagent-driven-development/SKILL.md`) because
+  the update was docs/log-only and no new sub-agent orchestration was needed;
+  `using-git-worktrees`
+  (`/Users/armiol/.agents/skills/using-git-worktrees/SKILL.md`) because the
+  worker was already in the assigned worktree;
+  `requesting-code-review`
+  (`/Users/armiol/.agents/skills/requesting-code-review/SKILL.md`) because this
+  update recorded protocol guidance and did not itself start a new review round;
+  `verification-before-completion`
+  (`/Users/armiol/.agents/skills/verification-before-completion/SKILL.md`) was
+  not selected for authoring guidance beyond the standard project verification
+  commands already recorded for this docs/log-only change; `codebase-design`
+  (`/Users/armiol/.agents/skills/codebase-design/SKILL.md`) was not selected
+  because no runtime/API design was changed; `typescript-advanced-types`
+  (`/Users/armiol/.agents/skills/typescript-advanced-types/SKILL.md`) was not
+  selected because no TypeScript source changed; `nodejs-backend-patterns`
+  (`/Users/armiol/.agents/skills/nodejs-backend-patterns/SKILL.md`) was not
+  selected because no backend runtime behavior was designed; and
+  `event-store-design`, `cqrs-implementation`, and `saga-orchestration` were
+  skipped for the same reasons recorded in the setup applicability table: no
+  event store, read-side runtime, or process workflow execution was in scope.
 
 ## Human Questions And Answers
 
@@ -287,6 +363,7 @@ Out of scope until later tasks:
 - `build-protocol/tasks/T-0009e-entity-base-classes/IMPLEMENTATION_REPORT.md`
 - `build-protocol/work-logs/T-0009e.md`
 - `build-protocol/reviews/T-0009e-entity-base-classes.md`
+- `build-protocol/BUILD_PROTOCOL.md`
 - `build-protocol/DECISION_LOG.md`
 - `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`
 - `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/IMPLEMENTATION_REPORT.md`
@@ -360,6 +437,22 @@ packages/server/src/entity.test.ts` passed with 1 test file / 31 tests.
   `rg -n "withStoredState" packages docs build-protocol` had no docs or
   implementation-source matches, only the regression assertion and historical
   review/log mentions.
+- Documentation/log protocol update on `2026-06-30 04:55 WEST`: no runtime
+  source changed. `corepack pnpm prettier --write
+build-protocol/BUILD_PROTOCOL.md build-protocol/DECISION_LOG.md
+build-protocol/work-logs/T-0009e.md
+build-protocol/tasks/T-0009e-entity-base-classes/TASK.md
+build-protocol/tasks/T-0009e-entity-base-classes/IMPLEMENTATION_REPORT.md
+build-protocol/reviews/T-0009e-entity-base-classes.md` completed, with only
+  `build-protocol/work-logs/T-0009e.md` rewritten by Prettier.
+  `corepack pnpm prettier --check build-protocol/BUILD_PROTOCOL.md
+build-protocol/DECISION_LOG.md build-protocol/work-logs/T-0009e.md
+build-protocol/tasks/T-0009e-entity-base-classes/TASK.md
+build-protocol/tasks/T-0009e-entity-base-classes/IMPLEMENTATION_REPORT.md
+build-protocol/reviews/T-0009e-entity-base-classes.md` passed.
+  `corepack pnpm docs:check` passed with 100 proto / 28 core / 72 server / 26
+  storage expected exports and the known TypeDoc invalid-origin source-link
+  warning.
 
 ## Review Rounds
 
@@ -375,6 +468,13 @@ packages/server/src/entity.test.ts` passed with 1 test file / 31 tests.
   durable verification-pass evidence for the Round 2 fix. Fixes were applied
   and verified. Round 4 returned clean across all five required lanes, and all
   Round 4 reviewer sub-agents were closed.
+- The protocol-guidance documentation/log update completed the required
+  five-lane review loop. Documentation, TypeScript/API docs, security, and
+  performance/reliability were clean in the initial round. Maintainability found
+  missing canonical skill-check evidence; fix worker
+  `019f16b1-3530-71d0-8efe-01320fe4dff0` added the bounded evidence, focused
+  maintainability re-review `019f16b3-df05-7911-82bd-1f8166478645` returned
+  clean, and all participating sub-agents were closed.
 
 ## Current State
 
@@ -406,5 +506,11 @@ packages/server/src/entity.test.ts` passed with 1 test file / 31 tests.
   `withStoredState()` optimization exposed subclass-facing API and a live stored
   state reference. The fix removes that API and uses the public cloned `state`
   snapshot boundary for transaction start.
+- Human guidance has been incorporated at the protocol level before further
+  server-module implementation: future `@spine-ts/server` code must closely
+  inspect task-relevant Spine JVM `core-jvm/server` source before code changes,
+  avoid over-inventing, and defer unsupported behavior.
+- The protocol-guidance update review loop is clean and all participating
+  implementation/review sub-agents have been closed.
 - Final parent re-review remains pending before marking T-0009e complete.
 - Final-parent-re-review fix verification passed on `2026-06-30 04:43 WEST`.

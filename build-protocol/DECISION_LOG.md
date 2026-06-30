@@ -4,6 +4,38 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+## D-0045: Server-module implementation requires close JVM source guardrail
+
+Status: Accepted
+
+Date: 2026-06-30
+
+Context: Human guidance before further `server` module implementation clarified
+that TypeScript server work must take a close look at the corresponding Spine
+JVM `core-jvm/server` code, avoid over-inventing, and avoid over-engineering.
+The build protocol already contained a JVM source inspection note, but the
+guidance needs to be explicit as a protocol-level guardrail before any more
+server-module code is created or changed.
+
+Decision: Strengthen `BUILD_PROTOCOL.md#skills-and-tooling` so any code related
+to `@spine-ts/server` must inspect task-relevant Spine JVM `core-jvm/server`
+source before creating or changing server runtime/API code. Implementers must
+record the inspected JVM notes/source files and their implementation impact in
+the task log before or in the same atomic step as code changes. Server-module
+work must prefer the smallest TypeScript contract that remains familiar to
+Spine JVM behavior, and must defer broader abstractions, lifecycle phases,
+dispatch/storage behavior, or convenience APIs unless both inspected JVM source
+and current task scope justify them.
+
+Consequences:
+
+- Future server-module tasks have an auditable pre-implementation source
+  inspection gate, not a vague compatibility preference.
+- Reviewers should flag server code that introduces abstractions or runtime
+  behavior without recorded task-relevant `core-jvm/server` source evidence.
+- Documentation and task logs should describe unsupported or deferred behavior
+  instead of expanding the server module speculatively.
+
 ## D-0044: T-0009e entity bases start as scoped OOP state shells
 
 Status: Accepted
