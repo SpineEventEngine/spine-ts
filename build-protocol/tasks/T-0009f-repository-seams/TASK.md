@@ -1,6 +1,6 @@
 # T-0009f: Repository Seams And Bounded-Context Registration Skeleton
 
-Status: Second Subtask Integrated; Parent Verification Passed
+Status: Third Subtask Integrated; Parent Verification Passed
 Start: `2026-06-30 05:21 WEST`
 Baseline commit: `ec70945`
 Task log path: `build-protocol/tasks/T-0009f-repository-seams/TASK.md`
@@ -9,9 +9,9 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009f-repository-seams`
 Requirements splitter:
 `019f16c7-9335-72e3-ab82-7c4ce7fc8e9c` (Singer the 4th, closed)
-Authoring sub-agents: T-0009f.1 and T-0009f.2 implemented by Codex
+Authoring sub-agents: T-0009f.1, T-0009f.2, and T-0009f.3 implemented by Codex
 implementation sub-agents
-Reviewer sub-agents: completed T-0009f.1 and T-0009f.2 durable review/fix
+Reviewer sub-agents: completed T-0009f.1, T-0009f.2, and T-0009f.3 durable review/fix
 rounds recorded in review logs; future subtasks pending
 
 ## Objective
@@ -170,6 +170,9 @@ Staged subtasks:
 - D-0047: T-0009f.2 repository identity remains metadata-only and defers
   create/find/store, routing, inboxes, cache, stand, context lifecycle, handler
   invocation, and bus registration.
+- D-0048: T-0009f.3 builder repository registration stays metadata-only and
+  rejects conflicting repository/state ownership without adding bus, stand,
+  storage, or dispatcher behavior.
 
 ## Files Changed
 
@@ -247,6 +250,16 @@ pnpm verify` passed with 15 test files / 160 tests, coverage 97.25%
   96.81% lines, TypeDoc/API checks with 100 proto / 28 core / 89 server / 26
   storage expected exports, proto lint/generate checksum verification, and
   generated proto output clean.
+- `T-0009f.3 Builder Repository Registration And Conflict Checks` merged into
+  parent branch `task/T-0009f-repository-seams` on `2026-06-30 13:27 WEST` with
+  merge commit `32a664e` after seven reviewer rounds ended with code
+  style/maintainability, documentation, TypeScript/API docs, security, and
+  performance/reliability lanes reporting no remaining findings. Parent
+  `CI=true corepack pnpm verify` passed with 17 test files / 212 tests,
+  coverage 96.39% statements / 90.8% branches / 99.09% functions / 96.32%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 96 server / 26 storage
+  expected exports, proto lint/generate checksum verification, and generated
+  proto output clean.
 
 ## Human Questions And Answers
 
