@@ -88,3 +88,10 @@ guardrail from `BUILD_PROTOCOL.md`. Reviewers must flag any TypeScript
 lifecycle, read-side stand/query/subscription execution, transport lifecycle,
 repository runtime registration, handler invocation, validation, delivery,
 integration broker behavior, or `Ack` mapping as over-scoped for this subtask.
+
+Implementation sub-agent changes landed on `2026-06-30 19:24 WEST` and remain
+inside that scope: one public-entry-point smoke test, user/API/architecture
+documentation, and durable log updates. No reviewer sub-agents were spawned by
+the implementation sub-agent per handoff instruction. Final full verification
+passed on `2026-06-30 19:28 WEST`; any parent-orchestrated review closure is
+pending.

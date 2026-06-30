@@ -1,6 +1,6 @@
 # Implementation Report: T-0010.6 Runtime Closure And User-Facing Docs
 
-Status: In progress
+Status: Complete, pending commit handoff
 Task log: `build-protocol/tasks/T-0010-6-runtime-closure-docs/TASK.md`
 Work log: `build-protocol/work-logs/T-0010-6.md`
 Review log: `build-protocol/reviews/T-0010-6-runtime-closure-docs.md`
@@ -14,6 +14,21 @@ T-0010.6 starts from parent T-0010 commit `94a28bf` after T-0010.5 was
 integrated and verified. Its job is to close the single-process async runtime
 slice with docs and a tiny public-surface smoke test, not to implement a
 TypeScript equivalent of Spine JVM `Server`.
+
+Implementation added the smoke test to the existing `@spine-ts/server` public
+entry-point test file. The smoke composes `Repository`, `BoundedContext`,
+`BoundedContextRuntime`, `SingleProcessServerRuntime`,
+`HandlerMetadataRegistry`, `CommandRegistrationReadiness`, and
+`EventRegistrationReadiness` from the package root. It verifies copied context
+repository metadata, command/event readiness metadata, lifecycle start/close,
+and the absence of package/root and context-runtime members that would imply a
+server facade, buses, services, transport, storage, dispatch, handler
+invocation, or `Ack` behavior.
+
+Documentation now describes the current runtime closure as metadata plus
+lifecycle plus readiness only. No production runtime code, public exports,
+dependencies, lockfiles, API checker expectations, or to-do application files
+were changed.
 
 ## JVM Research Used
 
@@ -34,13 +49,24 @@ read-side stand execution, or handler invocation.
 
 ## Files Changed
 
-- Setup log/decision files only so far:
-  `build-protocol/DECISION_LOG.md`,
+- `packages/server/src/index.test.ts`: public-entry-point bounded-context
+  runtime assembly smoke test.
+- `packages/server/README.md`: existing-API runtime assembly example and
+  non-server compatibility notes.
+- `docs/USER_GUIDE.md`: current runtime slice summary and runtime assembly
+  closure section.
+- `docs/api/README.md`: API-surface note for runtime closure composition with
+  no public API additions.
+- `docs/architecture/README.md`: architecture note for the runtime closure as
+  an assembly seam, not a server graph.
+- Durable task/parent logs:
   `build-protocol/tasks/T-0010-6-runtime-closure-docs/TASK.md`,
   `build-protocol/tasks/T-0010-6-runtime-closure-docs/IMPLEMENTATION_REPORT.md`,
   `build-protocol/work-logs/T-0010-6.md`,
-  `build-protocol/reviews/T-0010-6-runtime-closure-docs.md`, and parent T-0010
-  task/report/work/review logs.
+  `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`,
+  `build-protocol/tasks/T-0010-single-process-async-runtime/IMPLEMENTATION_REPORT.md`,
+  `build-protocol/work-logs/T-0010.md`, and
+  `build-protocol/reviews/T-0010-single-process-async-runtime.md`.
 
 ## Verification
 
@@ -49,7 +75,26 @@ verify` passed with 21 test files / 256 tests, coverage 96.45% statements /
   90.55% branches / 99.24% functions / 96.39% lines, TypeDoc/API checks with
   100 proto / 28 core / 124 server / 26 storage expected exports, proto
   lint/generate checksum verification, and generated proto output clean.
+- Focused smoke test:
+  `corepack pnpm vitest run packages/server/src/index.test.ts -t "assembles a bounded-context runtime smoke slice from public APIs"` -
+  passed with 1 matching test.
+- Focused package-root tests:
+  `corepack pnpm vitest run packages/server/src/index.test.ts` - passed with 10
+  tests.
+- `corepack pnpm typecheck` - passed.
+- `corepack pnpm lint` - first run failed on unbound destructured builder
+  methods in the smoke test; fixed by calling through `builder`, then rerun
+  passed.
+- `corepack pnpm format:check` - passed.
+- `corepack pnpm docs:check` - passed with TypeDoc/API export counts 100 proto
+  / 28 core / 124 server / 26 storage.
+- `CI=true corepack pnpm verify` - passed with 21 test files / 257 tests,
+  coverage 96.45% statements / 90.55% branches / 99.24% functions / 96.39%
+  lines, TypeDoc/API export counts 100 proto / 28 core / 124 server / 26
+  storage, proto checksum verification, and generated proto output clean.
 
 ## Review Result
 
-Pending.
+Not run in this sub-agent turn; no reviewer sub-agents were spawned per
+handoff instruction. The implementation remains deliberately docs/smoke-test
+only. Full verification passed on `2026-06-30 19:28 WEST`.

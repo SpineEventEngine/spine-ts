@@ -1,8 +1,8 @@
 # T-0010.6: Runtime Closure And User-Facing Docs
 
-Status: In progress
+Status: Complete, pending commit handoff
 Start: `2026-06-30 19:10 WEST`
-End: Pending
+End: `2026-06-30 19:28 WEST`
 Baseline commit: `94a28bf`
 Task log path: `build-protocol/tasks/T-0010-6-runtime-closure-docs/TASK.md`
 Branch: `task/T-0010-6-runtime-closure-docs`
@@ -148,6 +148,13 @@ Out of scope:
   succeeded with approved network escalation. The first full verify attempt
   stopped at Prettier on the newly created Markdown logs; after formatting
   those logs, full verify passed.
+- `2026-06-30 19:24 WEST`: Implementation added the public entry-point runtime
+  assembly smoke test over existing APIs, updated user-facing/API/architecture
+  docs, and left `examples/todo/USER_GUIDE.md` unchanged because it contains no
+  stale runtime claim.
+- `2026-06-30 19:28 WEST`: Full `CI=true corepack pnpm verify` passed after
+  implementation and log updates, with 21 test files / 257 tests and clean
+  TypeDoc/API, proto, and generated-output checks.
 
 ## Decisions
 
@@ -169,6 +176,11 @@ Out of scope:
 - `build-protocol/tasks/T-0010-single-process-async-runtime/IMPLEMENTATION_REPORT.md`
 - `build-protocol/work-logs/T-0010-6.md`
 - `build-protocol/work-logs/T-0010.md`
+- `docs/USER_GUIDE.md`
+- `docs/api/README.md`
+- `docs/architecture/README.md`
+- `packages/server/README.md`
+- `packages/server/src/index.test.ts`
 
 ## Tests Run
 
@@ -181,23 +193,38 @@ Out of scope:
   newly created Markdown logs.
 - `corepack pnpm prettier --write ...` - passed for setup Markdown logs.
 - `CI=true corepack pnpm verify` - passed on `2026-06-30 19:16 WEST`.
+- `corepack pnpm vitest run packages/server/src/index.test.ts -t "assembles a bounded-context runtime smoke slice from public APIs"` -
+  passed with 1 matching test and 9 skipped tests.
+- `corepack pnpm vitest run packages/server/src/index.test.ts` - passed with
+  10 tests.
+- `corepack pnpm typecheck` - passed.
+- `corepack pnpm lint` - first run failed on unbound destructured handler
+  builder methods in the new smoke test; after changing to `builder.assign()`
+  and `builder.apply()`, rerun passed.
+- `corepack pnpm format:check` - passed.
+- `corepack pnpm docs:check` - passed with the expected TypeDoc/API export
+  counts: 100 proto / 28 core / 124 server / 26 storage.
+- `CI=true corepack pnpm verify` - passed with 21 test files / 257 tests,
+  coverage 96.45% statements / 90.55% branches / 99.24% functions / 96.39%
+  lines, TypeDoc/API counts 100 proto / 28 core / 124 server / 26 storage,
+  proto checksum verification, and generated proto output clean.
 
 ## Coverage Result
 
-- Setup baseline coverage: 96.45% statements, 90.55% branches, 99.24%
-  functions, 96.39% lines.
+- Final coverage: 96.45% statements, 90.55% branches, 99.24% functions,
+  96.39% lines.
 
 ## Documentation And Public API Impact
 
-| Area                             | Impact                                                                                                             |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Package README impact            | Yes. Clarify runtime closure/smoke-test scope if needed.                                                           |
-| TypeDoc/API docs impact          | Yes if docs mention the closure; API export changes are expected to be N/A unless implementation proves otherwise. |
-| Public API additions/removals    | Expected N/A. This task should use existing surfaces.                                                              |
-| Framework `USER_GUIDE.md` impact | Yes. Document T-0010 runtime assembly usage and deferred behavior.                                                 |
-| Example `USER_GUIDE.md` impact   | Expected N/A unless a stale claim is found; the to-do example remains placeholder/runtime-deferred.                |
-| API examples                     | Yes. Add or update a minimal existing-API runtime assembly example.                                                |
-| Compatibility notes              | Yes. State this is not a Spine JVM `Server` equivalent.                                                            |
+| Area                             | Impact                                                                                  |
+| -------------------------------- | --------------------------------------------------------------------------------------- |
+| Package README impact            | Updated with an existing-API runtime assembly example and deferred-behavior guardrails. |
+| TypeDoc/API docs impact          | API README updated; generated TypeDoc/export check unchanged and passing.               |
+| Public API additions/removals    | N/A. No new exports or API-doc checker changes.                                         |
+| Framework `USER_GUIDE.md` impact | Updated with current runtime assembly usage and deferred behavior.                      |
+| Example `USER_GUIDE.md` impact   | N/A. Checked; no stale false runtime claim found.                                       |
+| API examples                     | Added a minimal existing-API runtime assembly example.                                  |
+| Compatibility notes              | Updated to state this is not a Spine JVM `Server` equivalent.                           |
 
 ## Security Impact
 
@@ -217,6 +244,13 @@ Out of scope:
   `CI=true corepack pnpm verify` ran node check, typecheck, lint, formatting,
   Vitest, coverage, TypeDoc/API docs, proto lint/generate, and generated-output
   cleanliness. Result: 21 test files / 256 tests, coverage 96.45% statements /
+  90.55% branches / 99.24% functions / 96.39% lines, TypeDoc/API docs with 100
+  proto / 28 core / 124 server / 26 storage expected exports, copied proto
+  checksum verification, and generated proto output clean.
+- Final full verification passed on `2026-06-30 19:28 WEST`:
+  `CI=true corepack pnpm verify` ran node check, typecheck, lint, formatting,
+  Vitest, coverage, TypeDoc/API docs, proto lint/generate, and generated-output
+  cleanliness. Result: 21 test files / 257 tests, coverage 96.45% statements /
   90.55% branches / 99.24% functions / 96.39% lines, TypeDoc/API docs with 100
   proto / 28 core / 124 server / 26 storage expected exports, copied proto
   checksum verification, and generated proto output clean.

@@ -275,6 +275,54 @@ await runtime.start();
 await runtime.close();
 ```
 
+The current runtime slice can be assembled with repository identity and
+registration-readiness metadata, but the result is still lifecycle plus
+metadata only:
+
+```ts
+import {
+  Aggregate,
+  BoundedContext,
+  BoundedContextRuntime,
+  CommandRegistrationReadiness,
+  EventRegistrationReadiness,
+  HandlerMetadataRegistry,
+  Repository,
+  SingleProcessServerRuntime,
+  defineEntityHandlers,
+} from "@spine-ts/server";
+import { CreateTaskSchema } from "./generated/task_commands_pb.js";
+import { TaskCreatedSchema, TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {
+  create(command: unknown): void {}
+  onCreated(event: unknown): void {}
+}
+
+const taskRepository = new Repository({
+  entityType: TaskAggregate,
+  schema: TaskStateSchema,
+});
+const tasks = BoundedContext.singleTenant("Tasks").add(taskRepository).build();
+const lifecycle = new SingleProcessServerRuntime();
+const runtime = new BoundedContextRuntime(tasks, { runtime: lifecycle });
+const handlers = defineEntityHandlers(TaskAggregate, TaskStateSchema, (builder) => [
+  builder.assign(CreateTaskSchema, "create"),
+  builder.apply(TaskCreatedSchema, "onCreated", { allowImport: true }),
+]);
+const registry = new HandlerMetadataRegistry([handlers]);
+
+CommandRegistrationReadiness.fromRegistry(registry).registeredCommandMessageFullTypeNames();
+EventRegistrationReadiness.fromRegistry(registry).registeredEventMessageFullTypeNames();
+
+await runtime.start();
+await runtime.close();
+```
+
+This assembly proves the current public seams fit together; it does not turn
+registered command/event metadata into routing, dispatch, validation, storage,
+delivery, handler invocation, service hosting, or `Ack` behavior.
+
 By default the handle creates and owns a private `SingleProcessServerRuntime`.
 You may inject a `ServerRuntimeLifecycle` when a caller owns the lifecycle
 object:

@@ -33,8 +33,12 @@ import {
   type BoundedContextRepositoryRegistrationOperation,
   type BoundedContextRepositorySnapshotErrorDetails,
   type TenantMode,
+  Aggregate,
   type EntityVersionMetadata,
   type PlainEntityVersionMetadata,
+  Repository,
+  HandlerMetadataRegistry,
+  defineEntityHandlers,
   type ServerRuntimeLifecycle,
   type ServerRuntimeStateErrorCode,
   ServerRuntimeStateError,
@@ -116,6 +120,16 @@ const AggregateStateSchema = messageDesc(
   1,
 ) as GenMessage<AggregateState>;
 const GenericStateSchema = messageDesc(fileEntityMetadataFixture, 2) as GenMessage<GenericState>;
+
+class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
+  assignCommand(command: Message<"spine.core.Command">): void {
+    void command;
+  }
+
+  onAggregateChanged(event: AggregateState): void {
+    void event;
+  }
+}
 
 const fileEntityEmptyFixture = createFixtureFileDescriptor(
   serverEntityMetadataTestFixtures.empty.descriptorSetBase64,
@@ -287,6 +301,80 @@ describe("@spine-ts/server", () => {
     );
     expectTypeOf<SingleProcessServerRuntime>().toExtend<ServerRuntimeLifecycle>();
     expectTypeOf<ServerRuntimeStateErrorCode>().toEqualTypeOf<"INVALID_RUNTIME_STATE">();
+  });
+
+  it("assembles a bounded-context runtime smoke slice from public APIs", async () => {
+    const repository = new Repository({
+      entityType: PublicRuntimeSmokeAggregate,
+      schema: AggregateStateSchema,
+    });
+    const context = BoundedContext.singleTenant("PublicRuntimeSmoke").add(repository).build();
+    const lifecycle = new SingleProcessServerRuntime();
+    const runtime = new BoundedContextRuntime(context, { runtime: lifecycle });
+    const handlers = defineEntityHandlers(
+      PublicRuntimeSmokeAggregate,
+      AggregateStateSchema,
+      (builder) => [
+        builder.assign(CommandSchema, "assignCommand"),
+        builder.apply(AggregateStateSchema, "onAggregateChanged", { allowImport: true }),
+      ],
+    );
+    const registry = new HandlerMetadataRegistry([handlers]);
+    const commandReadiness = CommandRegistrationReadiness.fromRegistry(registry);
+    const eventReadiness = EventRegistrationReadiness.fromRegistry(registry);
+
+    expect(runtime.name.value).toBe("PublicRuntimeSmoke");
+    expect(
+      runtime.contextSnapshot.repositories.map((snapshot) => snapshot.stateFullTypeName),
+    ).toEqual([AggregateStateSchema.typeName]);
+    expect(commandReadiness.registeredCommandMessageFullTypeNames()).toEqual([
+      CommandSchema.typeName,
+    ]);
+    expect(eventReadiness.registeredEventMessageFullTypeNames()).toEqual([
+      AggregateStateSchema.typeName,
+    ]);
+
+    await runtime.start();
+
+    expect(runtime.state).toBe("running");
+
+    await lifecycle.enqueue(() => undefined);
+    await runtime.close();
+
+    expect(runtime.state).toBe("closed");
+
+    for (const member of [
+      "Server",
+      "CommandBus",
+      "EventBus",
+      "ImportBus",
+      "GrpcServer",
+      "ZeroMqTransport",
+    ]) {
+      expect(Object.hasOwn(serverRoot, member)).toBe(false);
+    }
+
+    for (const member of [
+      "enqueue",
+      "commandBus",
+      "eventBus",
+      "importBus",
+      "storage",
+      "stand",
+      "tenantIndex",
+      "integrationBroker",
+      "commandService",
+      "queryService",
+      "subscriptionService",
+      "transport",
+      "registerRepository",
+      "invoke",
+      "dispatch",
+      "ack",
+    ]) {
+      expect(member in runtime).toBe(false);
+      expect(Object.hasOwn(runtime, member)).toBe(false);
+    }
   });
 
   it("extracts entity kind, default visibility, routing hints, columns, set-once fields, and tags", () => {

@@ -336,6 +336,33 @@ The following runtime pieces are still deferred to later explicit tasks:
 - system-context pairing and server/gRPC services; and
 - ZeroMQ and other transport integration.
 
+## Server Runtime Closure
+
+T-0010 closes the first single-process runtime slice as an assembly seam rather
+than a server graph. The verified public composition is:
+
+- build a metadata-only `BoundedContext` through the existing builder and
+  explicit `Repository` identity registration;
+- bind that built context to `BoundedContextRuntime`, using either its private
+  `SingleProcessServerRuntime` or a caller-owned `ServerRuntimeLifecycle`;
+- derive command and event registration-readiness metadata from existing
+  `HandlerMetadataRegistry` entries; and
+- start/close the context runtime through deterministic lifecycle state.
+
+This is intentionally enough for later runtime tasks to share vocabulary and
+tests around "context metadata plus lifecycle plus readiness." It is not an
+equivalent of Spine JVM `Server` or a running JVM-style `BoundedContext`.
+`BoundedContextRuntime` does not expose queue intake, and the readiness views do
+not dispatch or invoke handlers. The package root does not export service,
+transport, bus, storage, delivery, stand, integration-broker, repository
+runtime-registration, validation, or `Ack` abstractions as part of this closure.
+
+The architectural consequence is that later work must add those collaborators
+as explicit tasks at their own seams. Command and event intake can consume the
+existing readiness views, but must still design validation, `Ack` mapping,
+filtering, storage-before-dispatch, dispatch outcomes, delivery, and transport
+integration separately.
+
 ## Storage Boundary
 
 `@spine-ts/storage` now owns the first framework storage seam. The package

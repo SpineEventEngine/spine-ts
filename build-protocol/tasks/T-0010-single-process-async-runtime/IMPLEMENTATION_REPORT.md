@@ -93,6 +93,18 @@ facade, service routing, command/event/import buses, transport, storage,
 read-side execution, repository runtime registration, validation, handler
 invocation, delivery, integration broker behavior, or `Ack` mapping.
 
+`T-0010.6` implementation added the bounded-context runtime assembly smoke test
+and user/API/architecture documentation updates on `2026-06-30 19:24 WEST`.
+The smoke uses existing public server APIs only and keeps the runtime closure
+as metadata plus lifecycle plus readiness. No production code, public exports,
+dependencies, lockfiles, API checker expectations, or to-do example files were
+changed. Focused tests, typecheck, lint, format check, and docs/API checks
+passed after one lint-only test style fix. Final full verification passed on
+`2026-06-30 19:28 WEST` with 21 test files / 257 tests, coverage 96.45%
+statements / 90.55% branches / 99.24% functions / 96.39% lines, TypeDoc/API
+export counts 100 / 28 / 124 / 26, proto checksum verification, and generated
+proto output clean.
+
 ## Files Changed
 
 - `build-protocol/DECISION_LOG.md`
@@ -105,6 +117,8 @@ invocation, delivery, integration broker behavior, or `Ack` mapping.
 - `build-protocol/work-logs/T-0010-1.md`
 - `build-protocol/reviews/T-0010-1-runtime-lifecycle-queue.md`
 - `docs/api/README.md`
+- `docs/USER_GUIDE.md`
+- `docs/architecture/README.md`
 - `packages/server/README.md`
 - `packages/server/src/index.test.ts`
 - `packages/server/src/index.ts`

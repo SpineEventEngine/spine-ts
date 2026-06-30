@@ -87,6 +87,15 @@ slices.
   `builder.spec` and `context.spec`, tenant mode metadata, explicit repository
   identity registration, deterministic repository ownership conflict checks,
   frozen metadata-only built contexts, and copy-safe context snapshots.
+- A first single-process server runtime lifecycle/queue kernel,
+  context-scoped `BoundedContextRuntime` handle, typed write-side signal intake
+  result values, and command/event registration-readiness metadata derived from
+  handler metadata.
+- A smoke-tested public assembly path that combines a built bounded context,
+  repository identity metadata, handler metadata registry, command/event
+  readiness views, and a lifecycle-only context runtime without exposing a
+  server facade, buses, services, transport, storage, dispatch, or handler
+  invocation.
 - Storage contracts in `@spine-ts/storage` for write-side entity records,
   aggregate event histories/snapshots, read-side projection records, delivery
   records, tenant indexes, and safe diagnostics.
@@ -407,6 +416,65 @@ repositories from entity classes, register repositories into a live context,
 open storage, register type suppliers with a stand, route messages, invoke
 handlers, write inboxes, emit lifecycle events, construct buses, or start
 transport.
+
+## Runtime Assembly Closure
+
+Use the current runtime slice when framework-owned setup code needs to assemble
+bounded-context metadata and a local lifecycle handle before buses, services,
+and storage exist:
+
+```ts
+import {
+  Aggregate,
+  BoundedContext,
+  BoundedContextRuntime,
+  CommandRegistrationReadiness,
+  EventRegistrationReadiness,
+  HandlerMetadataRegistry,
+  Repository,
+  SingleProcessServerRuntime,
+  defineEntityHandlers,
+} from "@spine-ts/server";
+import { CreateTaskSchema } from "./generated/task_commands_pb.js";
+import { TaskCreatedSchema, TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {
+  create(command: unknown): void {}
+  onCreated(event: unknown): void {}
+}
+
+const repository = new Repository({
+  entityType: TaskAggregate,
+  schema: TaskStateSchema,
+});
+const tasks = BoundedContext.singleTenant("Tasks").add(repository).build();
+const lifecycle = new SingleProcessServerRuntime();
+const runtime = new BoundedContextRuntime(tasks, { runtime: lifecycle });
+const handlers = defineEntityHandlers(TaskAggregate, TaskStateSchema, (builder) => [
+  builder.assign(CreateTaskSchema, "create"),
+  builder.apply(TaskCreatedSchema, "onCreated", { allowImport: true }),
+]);
+const registry = new HandlerMetadataRegistry([handlers]);
+
+const commandReadiness = CommandRegistrationReadiness.fromRegistry(registry);
+const eventReadiness = EventRegistrationReadiness.fromRegistry(registry);
+
+commandReadiness.registeredCommandMessageFullTypeNames();
+eventReadiness.registeredEventMessageFullTypeNames();
+
+await runtime.start();
+await runtime.close();
+```
+
+This assembly records what a later runtime can consume: context identity,
+repository ownership metadata, handler metadata, command assignment readiness,
+event subscriber/reactor/applier readiness, and deterministic lifecycle state.
+It does not expose `enqueue()` through the context runtime handle and does not
+create a TypeScript `Server`, command/event/import bus, service router, storage
+lifecycle, delivery engine, integration broker, read-side stand, transport, or
+handler invocation path. Accepted signal intake values still mean only
+accepted for later asynchronous work; they are not `Ack` messages and do not
+claim validation, storage, dispatch, delivery, or successful handling.
 
 ## Envelope Packing
 
