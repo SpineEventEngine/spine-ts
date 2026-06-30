@@ -4,6 +4,41 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+## D-0046: T-0009f starts repository and bounded-context seams without dispatch execution
+
+Status: Accepted
+
+Date: 2026-06-30
+
+Context: After T-0009e introduced OOP entity base classes, the next roadmap item
+is `T-0009f Repository Seams And Bounded-Context Registration Skeleton`.
+Spine JVM `BoundedContextBuilder` accepts repositories and entity classes,
+builds contexts lazily, and registers repositories/dispatchers with buses,
+stands, storage, integration brokers, and delivery. Spine JVM repositories route
+signals to inbox endpoints instead of directly executing handlers in the common
+dispatch path. The TypeScript framework does not yet have buses, inbox delivery,
+read-side stands, gRPC services, tenant index storage, or production storage
+factories.
+
+Decision: Start T-0009f with registration seams only: repository identity and
+entity-family ownership metadata, bounded-context name/tenant-mode builders,
+add/remove registration APIs, duplicate/conflict checks, immutable built context
+snapshots, and capability markers that later buses/stands/storage can consume.
+Do not execute handlers, route commands/events, write inbox records, open
+storage, build system contexts, start buses, expose gRPC services, or infer
+tenant state in this slice. Keep the API familiar to Spine JVM users but
+TypeScript-small until the missing runtime pieces exist.
+
+Consequences:
+
+- Reviewers must reject dispatch, storage, inbox, stand, gRPC, ZeroMQ, or system
+  context behavior added under T-0009f unless the splitter creates a later
+  explicit subtask for that behavior.
+- Builder APIs may expose names that mirror JVM concepts, but documentation must
+  state which runtime behaviors remain deferred.
+- Future bus/storage/read-side tasks can consume these registration snapshots as
+  contracts without inheriting speculative runtime execution.
+
 ## D-0045: Server-module implementation requires close JVM source guardrail
 
 Status: Accepted
