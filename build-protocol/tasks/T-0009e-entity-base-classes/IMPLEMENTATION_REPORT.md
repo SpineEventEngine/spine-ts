@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Pending
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Started
 Task log: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e.md`
 Review log: `build-protocol/reviews/T-0009e-entity-base-classes.md`
@@ -11,10 +11,11 @@ Worktree:
 ## Summary
 
 `T-0009e.1 Common Entity State Shell` and `T-0009e.2 TransactionalEntity Scoped
-Draft Helpers` are integrated into the parent entity-base branch. They introduce
-the abstract `Entity` state shell and protected transaction-backed draft helper
-layer for `@spine-ts/server` while preserving the D-0044 boundary against
-repositories, dispatch, storage, buses, and family-specific runtime behavior.
+Draft Helpers` are integrated into the parent entity-base branch. `T-0009e.3
+Family Capability Marker Classes` has started in its isolated subtask branch.
+The parent task remains bounded to OOP entity shells for `@spine-ts/server`
+while preserving the D-0044 boundary against repositories, dispatch, storage,
+buses, and unsupported family-specific runtime behavior.
 
 ## JVM Research Used
 
@@ -85,3 +86,4 @@ Integrated from `task/T-0009e1-common-entity-state-shell` and
   TypeScript/API docs, security, and performance/reliability.
 - All T-0009e.2 Round 11 reviewer sub-agents were closed by the orchestrator.
 - Parent branch integration verification passed for both subtask merge commits.
+- T-0009e.3 implementation and review are pending.

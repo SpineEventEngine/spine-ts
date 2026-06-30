@@ -1,6 +1,6 @@
 # T-0009e: Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Pending
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Started
 Start: `2026-06-29 21:58 WEST`
 Baseline commit: `47eae4e`
 Task log path: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
@@ -189,7 +189,15 @@ statements 97.23%, branches 91.41%, functions 99.15%, lines 97.17%;
 TypeDoc/API/proto gates passed with 68 expected server exports and generated
 proto output clean.
 
-Next parent subtask: `T-0009e.3 Family Capability Marker Classes`.
+Current parent subtask: `T-0009e.3 Family Capability Marker Classes`.
+
+`T-0009e.3` started on `2026-06-30 01:57 WEST` in isolated branch
+`task/T-0009e3-family-capability-marker-classes` from parent commit `26aa510`.
+It is scoped to thin `Aggregate`, `Projection`, and `ProcessManager` family
+capability marker classes over `TransactionalEntity`. Before adding behavior,
+the authoring sub-agent and reviewers must inspect the corresponding Spine JVM
+`core-jvm/server` classes and avoid speculative repository, dispatch, query,
+process, bus, transport, or storage APIs.
 
 ## Initial Scope Constraints
 

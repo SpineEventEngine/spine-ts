@@ -88,3 +88,10 @@ passed on `2026-06-30 01:51 WEST`.
   97.23% statements / 91.41% branches / 99.15% functions / 97.17% lines,
   TypeDoc/API/proto gates passed with 68 expected server exports, and generated
   proto output clean.
+
+## T-0009e.3 Subtask Review Summary
+
+`T-0009e.3 Family Capability Marker Classes` started on
+`2026-06-30 01:57 WEST` in isolated branch
+`task/T-0009e3-family-capability-marker-classes` from baseline `26aa510`.
+Review is pending implementation.
