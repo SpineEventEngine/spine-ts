@@ -1,6 +1,6 @@
 # T-0009e.2: TransactionalEntity Scoped Draft Helpers
 
-Status: Implementation Complete; Round 5 Clean Review Recorded
+Status: Implementation Complete; Round 6 Docs Follow-Up Verified
 Start: `2026-06-30 00:28 WEST`
 Baseline commit: `bd8d02e`
 Task log path:
@@ -14,7 +14,8 @@ Requirements splitter:
 Authoring sub-agent:
 `019f15ba-f2f2-7f21-a244-bd61564e0eb6` (Aquinas the 3rd)
 Reviewer sub-agents: Round 1 closed; Round 2 closed; Round 3 closed; Round 4
-closed; Round 5 clean and closed
+closed; Round 5 clean and closed; Round 6 closed with docs-only follow-up
+verified
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-30 00:31 WEST`
 
