@@ -1,6 +1,6 @@
 # Review Log: T-0010 Single-Process Async Runtime
 
-Status: `T-0010.1` Integrated; Next Subtask Selected
+Status: `T-0010.2` Integrated; Next Subtask Selected
 
 ## Required Review Lanes
 
@@ -49,4 +49,8 @@ verification, and generated proto output clean.
   TypeScript/API, and security was clean.
 - `T-0010.2 Bounded Context Runtime Handle`: setup logs created on
   `2026-06-30 15:52 WEST`; setup baseline verification passed on
-  `2026-06-30 15:56 WEST`; implementation review rounds are pending.
+  `2026-06-30 15:56 WEST`; one security finding was fixed in `f8fe7fd`, clean
+  security re-review completed on `2026-06-30 16:23 WEST`, and all review lanes
+  are clean. The subtask was merged into the parent task branch as `d8ce736`
+  and parent verification passed on `2026-06-30 16:28 WEST`.
+- `T-0010.3 Write-Side Signal Intake Result`: pending.

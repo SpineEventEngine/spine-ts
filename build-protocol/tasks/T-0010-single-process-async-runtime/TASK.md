@@ -1,6 +1,6 @@
 # T-0010: Single-Process Async Runtime
 
-Status: `T-0010.1` Integrated; Next Subtask Selected
+Status: `T-0010.2` Integrated; Next Subtask Selected
 Start: `2026-06-30 14:57 WEST`
 Baseline commit: `169af02`
 Task log path: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
@@ -183,6 +183,12 @@ deferred to a later transport-adapter task.
   functions / 96.26% lines, TypeDoc/API checks with 100 proto / 28 core / 104
   server / 26 storage expected exports, proto lint/generate checksum
   verification, and generated proto output clean.
+- Parent integration verification after merge commit `d8ce736` passed on
+  `2026-06-30 16:28 WEST`: `CI=true corepack pnpm verify` passed with 18 test
+  files / 224 tests, coverage 96.22% statements / 90.3% branches / 99.15%
+  functions / 96.15% lines, TypeDoc/API checks with 100 proto / 28 core / 106
+  server / 26 storage expected exports, proto lint/generate checksum
+  verification, and generated proto output clean.
 
 ## Human Questions And Answers
 
@@ -204,4 +210,9 @@ deferred to a later transport-adapter task.
   `2026-06-30 15:52 WEST` from parent commit `d570bba`. Setup logs are
   created; setup baseline verification passed on `2026-06-30 15:56 WEST` with
   18 test files / 219 tests and clean TypeDoc/API, proto, and generated-output
-  gates. Implementation handoff is pending.
+  gates. Implementation, review fix, and clean re-review completed on branch
+  `task/T-0010-2-bounded-context-runtime-handle`; all participating sub-agents
+  were closed. The subtask was merged into the parent branch as
+  `d8ce736 Integrate T-0010.2 bounded context runtime handle`.
+- Next selected subtask:
+  `T-0010.3 Write-Side Signal Intake Result`.
