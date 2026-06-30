@@ -451,6 +451,35 @@ describe("repository identity", () => {
     }
   });
 
+  it("rejects hostile entity inheritance chains with structured errors", () => {
+    class HostileAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
+    class StaticParent {
+      marker(): string {
+        return "static-parent";
+      }
+    }
+    const throwingStaticParent = new Proxy(StaticParent, {
+      getPrototypeOf() {
+        throw new Error("static prototype chain should not escape family validation");
+      },
+    });
+    Object.setPrototypeOf(HostileAggregate, throwingStaticParent);
+
+    try {
+      new Repository({
+        entityType: HostileAggregate,
+        schema: AggregateStateSchema,
+      });
+      throw new Error("Expected hostile entity inheritance chain to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(RepositoryIdentityError);
+      expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
+      expect((error as RepositoryIdentityError).details).toEqual({
+        entityTypeName: "HostileAggregate",
+      });
+    }
+  });
+
   it("uses the validated entity type and schema values captured at construction entry", () => {
     let entityTypeReadCount = 0;
     let schemaReadCount = 0;
@@ -538,6 +567,7 @@ describe("repository identity", () => {
       new Repository({
         // @ts-expect-error plain classes are not valid repository entity constructors.
         entityType: PlainEntityClass,
+        // @ts-expect-error invalid entity constructors do not carry a repository state schema.
         schema: ProjectionStateSchema,
       });
       new Repository({
@@ -546,6 +576,7 @@ describe("repository identity", () => {
           name: "ObjectLiteralAggregate",
           prototype: TaskAggregate.prototype,
         },
+        // @ts-expect-error invalid entity constructors do not carry a repository state schema.
         schema: AggregateStateSchema,
       });
       // @ts-expect-error bare RepositoryOptions annotations must not erase the constructor-carried schema.
@@ -563,6 +594,7 @@ describe("repository identity", () => {
       // @ts-expect-error broad repository options must not erase constructor/schema pairing.
       const broadAnnotatedOptions: RepositoryOptions<RepositoryEntityType> = {
         entityType: TaskAggregate,
+        // @ts-expect-error broad repository entity types do not carry one concrete state schema.
         schema: ProjectionStateSchema,
       };
       void broadAnnotatedOptions;
@@ -603,6 +635,17 @@ describe("repository identity", () => {
           schema: AggregateStateSchema,
         };
       void manuallySpelledFamilyBroadOptions;
+      type PublicStringBrandFamilyBroadAggregateEntityType =
+        ManuallySpelledFamilyBroadAggregateEntityType & {
+          readonly __spineTsEntityConstructorBrand: true;
+        };
+      // @ts-expect-error callers must not satisfy repository options by spelling the old public string brand.
+      const publicStringBrandFamilyBroadOptions: RepositoryOptions<PublicStringBrandFamilyBroadAggregateEntityType> =
+        {
+          entityType: undefined as unknown as PublicStringBrandFamilyBroadAggregateEntityType,
+          schema: AggregateStateSchema,
+        };
+      void publicStringBrandFamilyBroadOptions;
       type SchemaUnionAggregateEntityType = RepositoryEntityType<
         Aggregate<unknown, typeof AggregateStateSchema | typeof ProjectionStateSchema, number>
       >;
@@ -616,6 +659,7 @@ describe("repository identity", () => {
       const unionAnnotatedOptions: RepositoryOptions<typeof TaskAggregate | typeof TaskProjection> =
         {
           entityType: TaskAggregate,
+          // @ts-expect-error union repository entity types do not carry one concrete state schema.
           schema: ProjectionStateSchema,
         };
       void unionAnnotatedOptions;
@@ -640,6 +684,11 @@ describe("repository identity", () => {
         ManuallySpelledFamilyBroadAggregateEntityType
       > {}
       void ManuallySpelledFamilyBroadRepositorySubclass;
+      abstract class PublicStringBrandFamilyBroadRepositorySubclass extends Repository<
+        // @ts-expect-error subclasses must not bind manually spelled constructor shapes by spelling the old public string brand.
+        PublicStringBrandFamilyBroadAggregateEntityType
+      > {}
+      void PublicStringBrandFamilyBroadRepositorySubclass;
       abstract class SchemaUnionRepositorySubclass extends Repository<
         // @ts-expect-error subclasses must not bind schema-union repository entity constructor types.
         SchemaUnionAggregateEntityType

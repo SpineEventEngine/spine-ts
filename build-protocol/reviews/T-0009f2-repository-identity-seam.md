@@ -1,6 +1,6 @@
 # Review Log: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-9 findings fixed - Pending Re-review
+Status: Round-10 findings fixed - Pending Re-review
 
 ## Required Review Lanes
 
@@ -250,8 +250,39 @@ Status: Round-9 findings fixed - Pending Re-review
     tests, `corepack pnpm typecheck:tooling` passed, and
     `node scripts/check-api-docs.mjs` passed after the fixes. Full
     `CI=true corepack pnpm verify` passed with 17 test files and 181 tests.
+- Tenth-round reviewer findings received by the review-fix sub-agent:
+  - Code style/TypeScript/API P2: `RepositoryEntityType` relied on the public
+    string brand `__spineTsEntityConstructorBrand`, so callers could spell the
+    brand structurally and bypass the manually broad constructor alias guard.
+  - TypeScript/API P3: public TypeDoc signatures exposed private repository
+    helper names and the old internal brand as part of the main contract.
+  - Performance/reliability Medium: `hasEntityFamilyInheritance()` let
+    exceptions from caller-controlled constructor/prototype chains escape as
+    raw errors.
+  - Documentation Low: `packages/server/README.md` needed a short note tying
+    this identity seam to Spine `core-jvm` `Repository` identity concepts while
+    keeping runtime behavior deferred.
+- Round-10 fix status:
+  - Fixed: replaced the public string-keyed entity-constructor brand with a
+    TypeScript-only protected constructor-side marker inherited by built-in
+    entity constructors. The marker is not a public `RepositoryEntityType`
+    string property and emits no runtime brand property.
+  - Fixed: public signatures now use `ConcreteRepositoryEntityType` and
+    `RepositoryStateSchema`; the API docs guard rejects the old private helper
+    names and old string brand from TypeDoc JSON.
+  - Fixed: family inheritance checks catch prototype-chain/proxy exceptions
+    and return unsupported-family structured `RepositoryIdentityError`
+    diagnostics.
+  - Fixed: package README now states that the seam follows Spine `core-jvm`
+    `Repository` identity concepts closely while deferring runtime behavior.
+  - Verified: focused RED reproduced the hostile prototype-chain raw error and
+    unused public-string-brand type assertions; focused Vitest passed with 23
+    tests, `corepack pnpm typecheck:tooling` passed, and
+    `node scripts/check-api-docs.mjs` passed after the fixes. Full
+    `CI=true corepack pnpm verify` passed with 17 test files and 182 tests.
 
 ## Current Review State
 
-- First-, second-, third-, fourth-, fifth-, sixth-, seventh-, eighth-, and ninth-round comments are fixed. Orchestrator reviewer lanes
-  should re-run before integration.
+- First-, second-, third-, fourth-, fifth-, sixth-, seventh-, eighth-, ninth-,
+  and tenth-round comments are fixed. Orchestrator reviewer lanes should
+  re-run before integration.

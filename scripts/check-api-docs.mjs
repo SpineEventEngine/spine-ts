@@ -193,6 +193,7 @@ const expectedServerExports = [
   "PlainEntityVersionMetadata",
   "ProcessManager",
   "Projection",
+  "ConcreteRepositoryEntityType",
   "Repository",
   "RepositoryEntityType",
   "RepositoryIdentityError",
@@ -200,6 +201,7 @@ const expectedServerExports = [
   "RepositoryIdentityErrorDetails",
   "RepositoryIdentitySnapshot",
   "RepositoryOptions",
+  "RepositoryStateSchema",
   "TransactionalEntity",
   "TransactionalEntityScopeError",
   "TransactionalEntityScopeErrorReason",
@@ -396,6 +398,14 @@ const missingExports = expectedProtoExports.filter((name) => !documentedNames.ha
 const missingCoreExports = expectedCoreExports.filter((name) => !documentedNames.has(name));
 const missingServerExports = expectedServerExports.filter((name) => !documentedNames.has(name));
 const missingStorageExports = expectedStorageExports.filter((name) => !documentedNames.has(name));
+const forbiddenTypeDocNames = [
+  "SingleConcreteRepositoryEntityType",
+  "RepositorySchemaForInstance",
+  "RepositoryConcreteEntityTypeConstraint",
+  "RepositorySchemaFromEntityInstance",
+  "__spineTsEntityConstructorBrand",
+  "EntityConstructorBrand",
+];
 
 if (missingExports.length > 0) {
   console.error(
@@ -430,6 +440,18 @@ if (forbiddenMatches.length > 0) {
     `TypeDoc JSON exposes removed or non-public @spine-ts/server API surface: ${[
       ...new Set(forbiddenMatches),
     ].join(", ")}`,
+  );
+  process.exit(1);
+}
+
+const apiDocsText = JSON.stringify(apiDocs);
+const forbiddenTypeDocNameMatches = forbiddenTypeDocNames.filter((name) =>
+  apiDocsText.includes(name),
+);
+
+if (forbiddenTypeDocNameMatches.length > 0) {
+  console.error(
+    `TypeDoc JSON exposes internal @spine-ts/server repository type machinery: ${forbiddenTypeDocNameMatches.join(", ")}`,
   );
   process.exit(1);
 }

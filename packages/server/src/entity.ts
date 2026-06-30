@@ -158,6 +158,20 @@ export interface EntityOptions<
 /** Public entity family marker exposed by Spine server entity base classes. */
 export type EntityFamily = "aggregate" | "projection" | "process-manager";
 
+/** @hidden */
+// eslint-disable-next-line @typescript-eslint/no-extraneous-class
+abstract class BuiltInEntityConstructorBase {
+  /** @hidden */
+  protected static readonly __spineTsBuiltInEntityConstructor: true;
+
+  protected constructor(...args: never[]) {
+    void args;
+  }
+}
+
+/** @hidden */
+export type BuiltInEntityConstructor = typeof BuiltInEntityConstructorBase;
+
 /**
  * Common in-memory OOP shell for one server-side entity state.
  *
@@ -171,10 +185,7 @@ export abstract class Entity<
   Id,
   Schema extends DescriptorMessageSchema,
   Version = EntityVersionMetadata,
-> {
-  /** @internal Brand inherited by concrete entity constructors for repository type constraints. */
-  static readonly __spineTsEntityConstructorBrand = true as const;
-
+> extends BuiltInEntityConstructorBase {
   readonly #id: Id;
   readonly #schema: Schema;
   readonly #metadata: EntityMetadata<Schema>;
@@ -185,6 +196,7 @@ export abstract class Entity<
 
   /** Create an entity shell from caller-provided state and metadata inputs. */
   constructor(options: EntityOptions<Id, Schema, Version>) {
+    super();
     this.#id = options.id;
     this.#schema = options.schema;
     this.#metadata = describeEntityMetadata(options.schema);

@@ -65,6 +65,7 @@ event history, snapshots, subscriptions, command posting, query clients,
 process workflow execution, handler invocation, storage, buses, or lifecycle
 events.
 `Repository`, `RepositoryOptions`, `RepositoryEntityType`,
+`ConcreteRepositoryEntityType`, `RepositoryStateSchema`,
 `RepositoryIdentitySnapshot`, `RepositoryIdentityError`,
 `RepositoryIdentityErrorCode`, and `RepositoryIdentityErrorDetails` form the
 metadata-only repository identity seam. A repository identity records one

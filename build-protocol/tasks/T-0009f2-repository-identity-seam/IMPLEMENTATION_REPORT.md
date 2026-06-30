@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-9 Review Fixes Complete - Pending Re-review
+Status: Round-10 Review Fixes Complete - Pending Re-review
 Task log: `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f2.md`
 Review log: `build-protocol/reviews/T-0009f2-repository-identity-seam.md`
@@ -99,6 +99,18 @@ Implementation research inspected and used:
   supported family prototype chain are trusted rather than rejected. A
   type-only inherited entity-constructor brand rejects manually spelled
   family-broad constructor aliases with real constructor parameters.
+- Tenth-round review fixes replace the public string-keyed entity-constructor
+  brand with a TypeScript-only protected constructor-side marker inherited from
+  the entity base class. `RepositoryEntityType` now uses the built-in entity
+  constructor marker rather than a caller-spellable string property, and
+  public repository signatures use `ConcreteRepositoryEntityType` and
+  `RepositoryStateSchema` instead of leading with private helper names.
+- Tenth-round runtime hardening wraps entity family prototype-chain checks so
+  hostile caller-controlled constructor/prototype chains return structured
+  `RepositoryIdentityError` diagnostics instead of raw proxy/prototype errors.
+- Tenth-round docs note that the repository identity seam follows Spine
+  `core-jvm` `Repository` identity concepts closely while deferring runtime
+  behavior.
 - Public root exports, TypeDoc export guard, package README, API docs, user
   guide, and architecture notes now describe the metadata-only boundary.
 
@@ -227,9 +239,23 @@ Implementation research inspected and used:
 - Round-9 full verification: `CI=true corepack pnpm verify` passed with 17
   test files, 181 tests, coverage, docs check, proto lint/generate, and
   generated-clean.
+- Round-10 RED: focused Vitest failed because a hostile static prototype chain
+  escaped as a raw error; `corepack pnpm typecheck:tooling` failed with unused
+  `@ts-expect-error` directives proving callers could still spell the old
+  public string brand in a manually shaped constructor alias.
+- Round-10 GREEN: focused Vitest passed with 2 files and 23 tests;
+  `corepack pnpm typecheck:tooling` passed after replacing the string brand
+  with the protected built-in entity constructor marker and wrapping family
+  inheritance checks.
+- Round-10 API docs guard: `node scripts/check-api-docs.mjs` passed and now
+  also rejects the old internal repository helper names and old public string
+  brand from TypeDoc JSON.
+- Round-10 full verification: `CI=true corepack pnpm verify` passed with 17
+  test files, 182 tests, coverage, docs check, proto lint/generate, and
+  generated-clean.
 
 ## Review
 
-- First-, second-, third-, fourth-, fifth-, sixth-, seventh-, eighth-, and ninth-round reviewer findings were applied by review-fix
-  sub-agents.
+- First-, second-, third-, fourth-, fifth-, sixth-, seventh-, eighth-, ninth-,
+  and tenth-round reviewer findings were applied by review-fix sub-agents.
   Re-review by the orchestrator lanes remains pending.

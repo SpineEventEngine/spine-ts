@@ -1,4 +1,10 @@
-import { Aggregate, ProcessManager, Projection, type EntityFamily } from "./entity.js";
+import {
+  Aggregate,
+  type BuiltInEntityConstructor,
+  ProcessManager,
+  Projection,
+  type EntityFamily,
+} from "./entity.js";
 import {
   describeEntityMetadata,
   type DescriptorFieldMetadata,
@@ -13,22 +19,21 @@ type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = Descripto
   | Projection<unknown, Schema, unknown>
   | ProcessManager<unknown, Schema, unknown>;
 
-type RepositoryEntitySchema<EntityType extends RepositoryEntityType> = RepositorySchemaForInstance<
-  EntityType["prototype"]
->;
-
-type RepositorySchemaForInstance<Instance> =
-  Instance extends Aggregate<infer Id, infer Schema, infer Version>
-    ? RepositorySchemaFromEntityParts<Id, Schema, Version>
-    : Instance extends Projection<infer Id, infer Schema, infer Version>
-      ? RepositorySchemaFromEntityParts<Id, Schema, Version>
-      : Instance extends ProcessManager<infer Id, infer Schema, infer Version>
-        ? RepositorySchemaFromEntityParts<Id, Schema, Version>
+/** Generated Protobuf-ES state schema carried by a repository entity constructor. */
+export type RepositoryStateSchema<EntityType extends RepositoryEntityType> =
+  EntityType["prototype"] extends Aggregate<infer Id, infer Schema, infer Version>
+    ? [Id, Version] extends [unknown, unknown]
+      ? Schema
+      : never
+    : EntityType["prototype"] extends Projection<infer Id, infer Schema, infer Version>
+      ? [Id, Version] extends [unknown, unknown]
+        ? Schema
+        : never
+      : EntityType["prototype"] extends ProcessManager<infer Id, infer Schema, infer Version>
+        ? [Id, Version] extends [unknown, unknown]
+          ? Schema
+          : never
         : never;
-
-type RepositorySchemaFromEntityParts<Id, Schema, Version> = [Id, Version] extends [unknown, unknown]
-  ? Schema
-  : never;
 
 type IsUnion<Type, Union = Type> = Type extends unknown
   ? [Union] extends [Type]
@@ -36,25 +41,24 @@ type IsUnion<Type, Union = Type> = Type extends unknown
     : true
   : false;
 
-interface RepositoryConcreteEntityTypeError {
-  readonly __repositoryEntityTypeMustBeASingleConcreteConstructor: never;
-}
-
-interface RepositoryConcreteStateSchemaError {
-  readonly __repositoryEntityTypeMustCarryConcreteStateSchema: never;
-}
-
-type SingleConcreteRepositoryEntityType<EntityType extends RepositoryEntityType> =
+/**
+ * Single concrete entity constructor accepted by repository identity metadata.
+ *
+ * Concrete aggregate, projection, and process-manager classes satisfy this type naturally. Broad
+ * constructor aliases, constructor unions, broad state schemas, and state-schema unions are
+ * rejected so repository identities cannot erase which state schema the entity owns.
+ */
+export type ConcreteRepositoryEntityType<EntityType extends RepositoryEntityType> =
   IsUnion<EntityType> extends true
-    ? RepositoryConcreteEntityTypeError
+    ? { readonly __repositoryEntityTypeMustBeASingleConcreteConstructor: never }
     : RepositoryEntityType extends EntityType
-      ? RepositoryConcreteEntityTypeError
+      ? { readonly __repositoryEntityTypeMustBeASingleConcreteConstructor: never }
       : HasErasedRepositoryConstructorParameters<EntityType> extends true
-        ? RepositoryConcreteEntityTypeError
-        : IsUnion<RepositoryEntitySchema<EntityType>> extends true
-          ? RepositoryConcreteStateSchemaError
-          : DescriptorMessageSchema extends RepositoryEntitySchema<EntityType>
-            ? RepositoryConcreteStateSchemaError
+        ? { readonly __repositoryEntityTypeMustBeASingleConcreteConstructor: never }
+        : IsUnion<RepositoryStateSchema<EntityType>> extends true
+          ? { readonly __repositoryEntityTypeMustCarryConcreteStateSchema: never }
+          : DescriptorMessageSchema extends RepositoryStateSchema<EntityType>
+            ? { readonly __repositoryEntityTypeMustCarryConcreteStateSchema: never }
             : unknown;
 
 type HasErasedRepositoryConstructorParameters<EntityType extends RepositoryEntityType> =
@@ -72,14 +76,13 @@ interface RuntimeRepositoryEntityType {
 /** Entity constructor value accepted by repository identity metadata. */
 export type RepositoryEntityType<
   Instance extends RepositoryEntityInstance = RepositoryEntityInstance,
-> = (abstract new (...args: never[]) => Instance) & {
-  /** @internal Constructor brand inherited from the built-in entity base class. */
-  readonly __spineTsEntityConstructorBrand: true;
-  /** Prototype inspected for built-in entity family marker inheritance. */
-  readonly prototype: Instance;
-  /** Constructor name used in structured diagnostics. */
-  readonly name: string;
-};
+> = (abstract new (...args: never[]) => Instance) &
+  BuiltInEntityConstructor & {
+    /** Prototype inspected for built-in entity family marker inheritance. */
+    readonly prototype: Instance;
+    /** Constructor name used in structured diagnostics. */
+    readonly name: string;
+  };
 
 /**
  * Options for constructing metadata-only repository identity.
@@ -89,12 +92,12 @@ export type RepositoryEntityType<
  * constructor-union, broad-schema, and schema-union bindings are rejected at compile time.
  */
 export interface RepositoryOptions<
-  EntityType extends RepositoryEntityType & SingleConcreteRepositoryEntityType<EntityType>,
+  EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
 > {
   /** Entity constructor owned by this repository identity. */
   readonly entityType: EntityType;
   /** Generated Protobuf-ES schema for the entity state owned by this repository identity. */
-  readonly schema: RepositoryEntitySchema<EntityType>;
+  readonly schema: RepositoryStateSchema<EntityType>;
 }
 
 /**
@@ -112,11 +115,11 @@ export interface RepositoryIdentitySnapshot<
   /** Entity family inferred from the constructor's built-in family marker base class. */
   readonly entityFamily: EntityFamily;
   /** Generated Protobuf-ES schema for the owned entity state. */
-  readonly stateSchema: RepositoryEntitySchema<EntityType>;
+  readonly stateSchema: RepositoryStateSchema<EntityType>;
   /** Descriptor-derived metadata for the owned entity state. */
-  readonly metadata: EntityMetadata<RepositoryEntitySchema<EntityType>>;
+  readonly metadata: EntityMetadata<RepositoryStateSchema<EntityType>>;
   /** Fully qualified Protobuf type name of the owned entity state. */
-  readonly stateFullTypeName: RepositoryEntitySchema<EntityType>["typeName"];
+  readonly stateFullTypeName: RepositoryStateSchema<EntityType>["typeName"];
   /** Canonical entity ID field copied from descriptor-derived metadata. */
   readonly idField: DescriptorFieldMetadata;
 }
@@ -170,11 +173,11 @@ export class RepositoryIdentityError extends Error {
  * schema-union bindings intentionally fail the public type constraint.
  */
 export class Repository<
-  EntityType extends RepositoryEntityType & SingleConcreteRepositoryEntityType<EntityType>,
+  EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
 > {
   readonly #entityType: EntityType;
   readonly #entityFamily: EntityFamily;
-  readonly #metadata: EntityMetadata<RepositoryEntitySchema<EntityType>>;
+  readonly #metadata: EntityMetadata<RepositoryStateSchema<EntityType>>;
 
   /** Create repository identity metadata for exactly one entity family/state schema pair. */
   constructor(options: RepositoryOptions<EntityType>) {
@@ -216,7 +219,7 @@ export class Repository<
       options,
       entityType,
       entityFamily,
-    ) as RepositoryEntitySchema<EntityType>;
+    ) as RepositoryStateSchema<EntityType>;
 
     const metadata = describeRepositoryEntityMetadata(entityType, entityFamily, schema);
 
@@ -249,17 +252,17 @@ export class Repository<
   }
 
   /** Generated Protobuf-ES schema for this repository's owned entity state. */
-  get stateSchema(): RepositoryEntitySchema<EntityType> {
+  get stateSchema(): RepositoryStateSchema<EntityType> {
     return this.#metadata.schema;
   }
 
   /** Descriptor-derived metadata for this repository's owned entity state. */
-  get metadata(): EntityMetadata<RepositoryEntitySchema<EntityType>> {
+  get metadata(): EntityMetadata<RepositoryStateSchema<EntityType>> {
     return this.#metadata;
   }
 
   /** Fully qualified Protobuf type name of the owned entity state. */
-  get stateFullTypeName(): RepositoryEntitySchema<EntityType>["typeName"] {
+  get stateFullTypeName(): RepositoryStateSchema<EntityType>["typeName"] {
     return this.#metadata.fullTypeName;
   }
 
@@ -352,10 +355,14 @@ function hasEntityFamilyInheritance(
   familyConstructor: object,
   familyPrototype: object,
 ): boolean {
-  return (
-    Object.prototype.isPrototypeOf.call(familyConstructor, entityType) &&
-    Object.prototype.isPrototypeOf.call(familyPrototype, entityType.prototype)
-  );
+  try {
+    return (
+      Object.prototype.isPrototypeOf.call(familyConstructor, entityType) &&
+      Object.prototype.isPrototypeOf.call(familyPrototype, entityType.prototype)
+    );
+  } catch {
+    return false;
+  }
 }
 
 function entityTypeName(entityType: unknown): string {
