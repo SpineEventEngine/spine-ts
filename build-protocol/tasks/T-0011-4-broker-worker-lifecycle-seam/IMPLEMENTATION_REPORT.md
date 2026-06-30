@@ -1,6 +1,6 @@
 # Implementation Report: T-0011.4 Broker And Worker Lifecycle Seam
 
-Status: Round 2 Fixes Verified; Re-review Pending
+Status: Round 3 Clean; Final Verification Pending
 Task log: `build-protocol/tasks/T-0011-4-broker-worker-lifecycle-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0011-4.md`
 Review log: `build-protocol/reviews/T-0011-4-broker-worker-lifecycle-seam.md`
@@ -85,3 +85,7 @@ sandbox rejects those binds with `EPERM`.
   `projection-a`, `projection_worker`, and `worker01` valid.
 - Round 2 fix verification completed successfully with the focused transport
   tests, `typecheck`, `docs:check`, and `git diff --check`.
+- Round 3 maintainability and security re-review reported clean.
+- Final verification found and fixed two lint/type issues in the round 2 fix:
+  an always-false worker-kind check and a non-null assertion. Focused lint,
+  transport tests, typecheck, and whitespace checks passed after the follow-up.

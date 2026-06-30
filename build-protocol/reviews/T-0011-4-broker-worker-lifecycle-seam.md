@@ -1,6 +1,6 @@
 # Review Log: T-0011.4 Broker And Worker Lifecycle Seam
 
-Status: Round 2 Fixes Verified; Re-review Pending
+Status: Round 3 Clean; Final Verification Pending
 
 ## Required Review Lanes
 
@@ -32,8 +32,9 @@ Round 1 review found maintainability, security, documentation, TypeScript/API
 docs, and reliability issues in the transport lifecycle seam. The follow-up fix
 landed and verification reran successfully, but round 2 re-review found two
 remaining items: canonical-only participant inputs and dotted logical IDs. The
-round 2 fix has landed and verification reran successfully; re-review remains
-pending before parent integration.
+round 2 fix has landed and verification reran successfully. Round 3
+maintainability and security re-review reported clean. Final branch-tip
+verification remains before parent integration.
 
 ## Reviewer Rounds
 
@@ -92,3 +93,25 @@ the corresponding positive/negative tests. Verification reran on
 - `corepack pnpm docs:check` passed with the existing invalid-`origin`
   warning only and 31 expected `@spine-ts/transport` exports in TypeDoc JSON;
 - `git diff --check` passed.
+
+Round 3 re-review completed on `2026-06-30 23:36 WEST`:
+
+- Maintainability reviewer `019f1aaa-97aa-71f2-b7be-da2d204e2294` reported
+  `STATUS: CLEAN`: builder inputs now consume canonical
+  `TransportParticipantIdentityInput` shapes only, and public shape-branching
+  is gone.
+- Security reviewer `019f1aaa-bb0f-75d3-9fc6-b3a89e51c17b` reported
+  `STATUS: CLEAN`: dotted host/IP-shaped values are rejected for both
+  `subscriberId` and `participantId`, with no new boundary widening.
+
+Final verification first found lint/type issues in the round 2 fix on
+`2026-06-30 23:36 WEST`:
+
+- `corepack pnpm lint` failed on an always-false worker-kind check and a
+  non-null assertion in `packages/transport/src/index.ts`.
+- The smallest follow-up restored runtime worker validation through an internal
+  type guard and removed the non-null assertion while preserving canonical
+  public builder inputs.
+- `corepack pnpm lint`,
+  `corepack pnpm test packages/transport/src/index.test.ts packages/transport/src/zeromq-adapter-config.test.ts`,
+  `corepack pnpm typecheck`, and `git diff --check` then passed.

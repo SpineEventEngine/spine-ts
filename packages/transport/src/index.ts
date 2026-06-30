@@ -543,15 +543,21 @@ function normalizeTransportLifecycleParticipant(
 }
 
 function normalizeWorkerParticipant(
-  value: TransportParticipantIdentityInput<"worker">,
+  value: TransportParticipantIdentityInput,
 ): TransportParticipantIdentity<"worker"> {
   const participant = createTransportParticipantIdentity(value);
 
-  if (participant.participantKind !== "worker") {
+  if (!isTransportWorkerParticipant(participant)) {
     throw new Error("Transport worker must be a worker participant.");
   }
 
   return participant;
+}
+
+function isTransportWorkerParticipant(
+  participant: TransportParticipantIdentity,
+): participant is TransportParticipantIdentity<"worker"> {
+  return participant.participantKind === "worker";
 }
 
 function normalizeWorkerSubscriptions(
@@ -597,7 +603,9 @@ function normalizeWorkerRegistrations(
         worker: {
           participantKind: registration.worker.participantKind,
           participantId: registration.worker.participantId,
-          workerRole: registration.worker.workerRole!,
+          ...(registration.worker.workerRole === undefined
+            ? {}
+            : { workerRole: registration.worker.workerRole }),
         },
         subscriptions: registration.subscriptions,
       }),

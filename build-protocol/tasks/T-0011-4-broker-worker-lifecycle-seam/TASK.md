@@ -1,6 +1,6 @@
 # T-0011.4: Broker And Worker Lifecycle Seam
 
-Status: Complete
+Status: Round 3 Clean; Final Verification Pending
 Parent task: `T-0011 Transport Foundation`
 Start: `2026-06-30 22:52 WEST`
 Baseline commit: `4ed7db6`
@@ -8,8 +8,21 @@ Task log path: `build-protocol/tasks/T-0011-4-broker-worker-lifecycle-seam/TASK.
 Branch: `task/T-0011-4-broker-worker-lifecycle-seam`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-4-broker-worker-lifecycle-seam`
-Authoring sub-agent: pending
-Reviewer sub-agents: pending
+Authoring sub-agent: `019f1a89-60ac-78f2-90cc-2b0bc7e6c316`; round 1 fixer
+`019f1a97-4040-7502-8c33-516b18a137ef`; round 2 fixer
+`019f1aa4-1cc6-7542-b385-46b0c4a235a4`
+Reviewer sub-agents: maintainability `019f1a94-75f4-7143-8bbc-1eb563411539`
+and re-review `019f1aa2-3178-7412-8f71-4995cc59cde6`, final re-review
+`019f1aaa-97aa-71f2-b7be-da2d204e2294`; documentation
+`019f1a94-9fed-7b22-8b62-aff40e8c9fb1` and re-review
+`019f1aa2-5f7d-72e0-bb06-534177b48228`; TypeScript/API docs
+`019f1a94-c76f-7443-8237-80d78fdb4694` and re-review
+`019f1aa2-8409-7a81-bae7-28df7ad3e1d9`; security
+`019f1a94-f248-7411-bdae-704a9a3c02e9`, re-review
+`019f1aa2-a4b1-7a52-b10a-d8465a472dbe`, and final re-review
+`019f1aaa-bb0f-75d3-9fc6-b3a89e51c17b`; performance/reliability
+`019f1a95-1a9d-7b70-9833-3380ac9840be` and re-review
+`019f1aa2-d218-7842-a25a-5952ebd45c0d`
 
 ## Objective
 
@@ -158,3 +171,13 @@ Skipped relevant-looking skills:
   existing invalid-`origin` warning only and 31 expected `@spine-ts/transport`
   exports in TypeDoc JSON.
 - `git diff --check` passed on `2026-06-30 23:30 WEST`.
+- Round 3 targeted re-review passed on `2026-06-30 23:36 WEST`:
+  maintainability reviewer `019f1aaa-97aa-71f2-b7be-da2d204e2294` and security
+  reviewer `019f1aaa-bb0f-75d3-9fc6-b3a89e51c17b` both reported
+  `STATUS: CLEAN`.
+- Final lint/type follow-up verification passed on `2026-06-30 23:38 WEST`:
+  `corepack pnpm lint`,
+  `corepack pnpm test packages/transport/src/index.test.ts packages/transport/src/zeromq-adapter-config.test.ts`,
+  `corepack pnpm typecheck`, and `git diff --check` passed after restoring
+  runtime worker validation through an internal type guard and removing a
+  non-null assertion.
