@@ -49,11 +49,20 @@ type SingleConcreteRepositoryEntityType<EntityType extends RepositoryEntityType>
     ? RepositoryConcreteEntityTypeError
     : RepositoryEntityType extends EntityType
       ? RepositoryConcreteEntityTypeError
-      : IsUnion<RepositoryEntitySchema<EntityType>> extends true
-        ? RepositoryConcreteStateSchemaError
-        : DescriptorMessageSchema extends RepositoryEntitySchema<EntityType>
+      : HasErasedRepositoryConstructorParameters<EntityType> extends true
+        ? RepositoryConcreteEntityTypeError
+        : IsUnion<RepositoryEntitySchema<EntityType>> extends true
           ? RepositoryConcreteStateSchemaError
-          : unknown;
+          : DescriptorMessageSchema extends RepositoryEntitySchema<EntityType>
+            ? RepositoryConcreteStateSchemaError
+            : unknown;
+
+type HasErasedRepositoryConstructorParameters<EntityType extends RepositoryEntityType> =
+  EntityType extends abstract new (...args: infer Args) => RepositoryEntityInstance
+    ? [Args] extends [never[]]
+      ? true
+      : false
+    : true;
 
 interface RuntimeRepositoryEntityType {
   readonly prototype: object;
@@ -86,9 +95,14 @@ export interface RepositoryOptions<
   readonly schema: RepositoryEntitySchema<EntityType>;
 }
 
-/** Immutable copy-safe repository identity snapshot. */
+/**
+ * Immutable copy-safe repository identity snapshot.
+ *
+ * @typeParam EntityType - The concrete entity constructor owned by the repository. The snapshot's
+ * state schema and metadata are derived from this constructor so callers cannot spell an impossible
+ * entity/schema snapshot pair.
+ */
 export interface RepositoryIdentitySnapshot<
-  Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
   EntityType extends RepositoryEntityType = RepositoryEntityType,
 > {
   /** Entity constructor owned by the repository. */
@@ -96,11 +110,11 @@ export interface RepositoryIdentitySnapshot<
   /** Entity family inferred from the constructor's built-in family marker base class. */
   readonly entityFamily: EntityFamily;
   /** Generated Protobuf-ES schema for the owned entity state. */
-  readonly stateSchema: Schema;
+  readonly stateSchema: RepositoryEntitySchema<EntityType>;
   /** Descriptor-derived metadata for the owned entity state. */
-  readonly metadata: EntityMetadata<Schema>;
+  readonly metadata: EntityMetadata<RepositoryEntitySchema<EntityType>>;
   /** Fully qualified Protobuf type name of the owned entity state. */
-  readonly stateFullTypeName: Schema["typeName"];
+  readonly stateFullTypeName: RepositoryEntitySchema<EntityType>["typeName"];
   /** Canonical entity ID field copied from descriptor-derived metadata. */
   readonly idField: DescriptorFieldMetadata;
 }
@@ -172,14 +186,10 @@ export class Repository<
       );
     }
 
-    const entityType = options.entityType;
-    const schema = options.schema;
+    const entityType = readRepositoryEntityTypeOption(options);
+    const classSource = classConstructorSource(entityType);
 
-    if (
-      typeof entityType !== "function" ||
-      !isClassConstructor(entityType) ||
-      !declaresSubclass(entityType)
-    ) {
+    if (typeof entityType !== "function" || classSource === undefined) {
       throw new RepositoryIdentityError(
         "UNSUPPORTED_ENTITY_TYPE",
         `Repository entity type "${entityTypeName(entityType)}" must be a class constructor extending Aggregate, Projection, or ProcessManager.`,
@@ -191,7 +201,7 @@ export class Repository<
 
     const entityFamily = resolveEntityFamily(entityType);
 
-    if (entityFamily === undefined) {
+    if (entityFamily === undefined || !declaresSupportedEntitySubclass(classSource, entityFamily)) {
       throw new RepositoryIdentityError(
         "UNSUPPORTED_ENTITY_TYPE",
         `Repository entity type "${entityTypeName(entityType)}" must extend Aggregate, Projection, or ProcessManager.`,
@@ -200,6 +210,12 @@ export class Repository<
         },
       );
     }
+
+    const schema = readRepositorySchemaOption(
+      options,
+      entityType,
+      entityFamily,
+    ) as RepositoryEntitySchema<EntityType>;
 
     const metadata = describeRepositoryEntityMetadata(entityType, entityFamily, schema);
 
@@ -216,7 +232,7 @@ export class Repository<
       );
     }
 
-    this.#entityType = entityType;
+    this.#entityType = entityType as EntityType;
     this.#entityFamily = entityFamily;
     this.#metadata = metadata;
   }
@@ -252,7 +268,7 @@ export class Repository<
   }
 
   /** Copy-safe immutable identity snapshot for later builder duplicate/conflict checks. */
-  get snapshot(): RepositoryIdentitySnapshot<RepositoryEntitySchema<EntityType>, EntityType> {
+  get snapshot(): RepositoryIdentitySnapshot<EntityType> {
     const metadata = cloneEntityMetadata(this.#metadata);
 
     return Object.freeze({
@@ -270,12 +286,74 @@ function isRepositoryOptionsObject(options: unknown): options is object {
   return typeof options === "object" && options !== null;
 }
 
-function isClassConstructor(entityType: object): boolean {
-  return Function.prototype.toString.call(entityType).startsWith("class ");
+function readRepositoryEntityTypeOption(options: object): unknown {
+  try {
+    return (options as { readonly entityType: unknown }).entityType;
+  } catch {
+    throw new RepositoryIdentityError(
+      "UNSUPPORTED_ENTITY_TYPE",
+      `Repository options entityType must be readable and resolve to a class constructor extending Aggregate, Projection, or ProcessManager.`,
+      {
+        entityTypeName: "(anonymous)",
+      },
+    );
+  }
 }
 
-function declaresSubclass(entityType: object): boolean {
-  return /\bextends\b/u.test(Function.prototype.toString.call(entityType));
+function readRepositorySchemaOption(
+  options: object,
+  entityType: RuntimeRepositoryEntityType,
+  entityFamily: EntityFamily,
+): unknown {
+  try {
+    return (options as { readonly schema: unknown }).schema;
+  } catch {
+    throw new RepositoryIdentityError(
+      "ENTITY_SCHEMA_KIND_MISMATCH",
+      `Repository entity type "${entityTypeName(entityType)}" is a ${entityFamily}, but the supplied state schema could not be read.`,
+      {
+        entityTypeName: entityTypeName(entityType),
+        entityFamily,
+      },
+    );
+  }
+}
+
+function classConstructorSource(entityType: unknown): string | undefined {
+  if (typeof entityType !== "function") {
+    return undefined;
+  }
+
+  try {
+    const source = Function.prototype.toString.call(entityType);
+    return source.startsWith("class ") ? source : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function declaresSupportedEntitySubclass(classSource: string, entityFamily: EntityFamily): boolean {
+  const headerEnd = classSource.indexOf("{");
+  const header = stripJavaScriptComments(
+    headerEnd === -1 ? classSource : classSource.slice(0, headerEnd),
+  );
+  const declaredBase = /\bextends\s+([A-Za-z_$][\w$]*)\b/u.exec(header)?.[1];
+  return declaredBase === entityFamilyBaseClassName(entityFamily);
+}
+
+function stripJavaScriptComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//gu, " ").replace(/\/\/[^\n\r]*/gu, " ");
+}
+
+function entityFamilyBaseClassName(entityFamily: EntityFamily): string {
+  switch (entityFamily) {
+    case "aggregate":
+      return "Aggregate";
+    case "projection":
+      return "Projection";
+    case "process-manager":
+      return "ProcessManager";
+  }
 }
 
 function resolveEntityFamily(entityType: RuntimeRepositoryEntityType): EntityFamily | undefined {

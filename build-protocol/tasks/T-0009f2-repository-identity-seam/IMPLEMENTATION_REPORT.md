@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-7 Review Fixes Complete - Pending Re-review
+Status: Round-8 Review Fixes Complete - Pending Re-review
 Task log: `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f2.md`
 Review log: `build-protocol/reviews/T-0009f2-repository-identity-seam.md`
@@ -85,6 +85,13 @@ Implementation research inspected and used:
   for accessor/proxy-backed `name` and `typeName` values, reject schema-union
   repository bindings, and add public-facing TypeDoc type-parameter notes for
   the single concrete constructor/state schema rule.
+- Eighth-round review fixes guard `options.entityType` and `options.schema`
+  property capture so throwing accessors or revoked proxies produce structured
+  `RepositoryIdentityError` diagnostics, strengthen the declared-subclass check
+  to require the class header to name the resolved built-in family base class,
+  reject family-broad constructor aliases even when they carry a concrete state
+  schema, and bind `RepositoryIdentitySnapshot` to the constructor-carried
+  state schema.
 - Public root exports, TypeDoc export guard, package README, API docs, user
   guide, and architecture notes now describe the metadata-only boundary.
 
@@ -185,9 +192,24 @@ Implementation research inspected and used:
 - Round-7 full verification: `CI=true corepack pnpm verify` passed with 17
   test files, 178 tests, coverage, docs check, proto lint/generate, and
   generated-clean.
+- Round-8 RED: focused Vitest failed because a reparented unrelated subclass
+  could still be accepted and throwing options accessors escaped raw errors;
+  `corepack pnpm typecheck:tooling` failed on the old independent
+  snapshot generic and unused `@ts-expect-error` directives for concrete-schema
+  family-broad repository bindings.
+- Round-8 GREEN: focused Vitest passed with 2 files and 20 tests;
+  `corepack pnpm typecheck:tooling` passed after guarded option reads, the
+  stronger declared-family-class-header check, the constructor-parameter
+  erasure type guard, and the single-generic `RepositoryIdentitySnapshot`
+  binding.
+- Round-8 API docs guard: `node scripts/check-api-docs.mjs` passed and
+  reported 87 expected `@spine-ts/server` exports.
+- Round-8 full verification: `CI=true corepack pnpm verify` passed with 17
+  test files, 179 tests, coverage, docs check, proto lint/generate, and
+  generated-clean.
 
 ## Review
 
-- First-, second-, third-, fourth-, fifth-, sixth-, and seventh-round reviewer findings were applied by review-fix
+- First-, second-, third-, fourth-, fifth-, sixth-, seventh-, and eighth-round reviewer findings were applied by review-fix
   sub-agents.
   Re-review by the orchestrator lanes remains pending.

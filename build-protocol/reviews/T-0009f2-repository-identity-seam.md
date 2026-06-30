@@ -1,6 +1,6 @@
 # Review Log: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-7 findings fixed - Pending Re-review
+Status: Round-8 findings fixed - Pending Re-review
 
 ## Required Review Lanes
 
@@ -189,8 +189,40 @@ Status: Round-7 findings fixed - Pending Re-review
     with 19 tests and `corepack pnpm typecheck:tooling` passed after the fixes.
     API docs guard passed, and full `CI=true corepack pnpm verify` passed with
     17 test files and 178 tests.
+- Eighth-round reviewer findings received by the review-fix sub-agent:
+  - Performance/security: `Repository` still read `options.entityType` and
+    `options.schema` directly, so throwing accessors or revoked proxy options
+    could escape raw errors before `RepositoryIdentityError`.
+  - Code/security: `declaresSubclass()` only checked source text for `extends`,
+    allowing unrelated subclasses or comments/static strings to pass after
+    prototype reparenting.
+  - TypeScript/API P2: `SingleConcreteRepositoryEntityType` still permitted
+    family-broad constructor aliases with concrete schemas for
+    `RepositoryOptions` and `Repository` subclass bindings.
+  - TypeScript/API P2: `RepositoryIdentitySnapshot` exposed independent
+    `Schema` and `EntityType` generics, allowing impossible snapshot types.
+- Round-8 fix status:
+  - Fixed: repository construction now reads `entityType` and `schema` through
+    guarded single-read helpers, wrapping throwing getters and revoked proxy
+    options in deterministic `RepositoryIdentityError` diagnostics.
+  - Fixed: the runtime declared-subclass check now inspects only the class
+    header and requires its direct `extends` identifier to match the resolved
+    built-in family base class, covering reparented `class ... extends Other`
+    forgeries while preserving the same-realm metadata boundary.
+  - Fixed: exported repository generic constraints now reject constructor
+    aliases with erased `never[]` constructor parameters, including
+    family-broad aliases that carry a concrete state schema.
+  - Fixed: `RepositoryIdentitySnapshot` now takes the entity constructor as its
+    only generic and derives `stateSchema`, `metadata`, and
+    `stateFullTypeName` from that constructor-carried schema.
+  - Verified: focused RED reproduced the raw options accessor error, unrelated
+    subclass forgery, old independent snapshot generic, and unused
+    concrete-schema family-broad type assertions; focused Vitest passed with 20
+    tests and `corepack pnpm typecheck:tooling` passed after the fixes. API
+    docs guard passed, and full `CI=true corepack pnpm verify` passed with 17
+    test files and 179 tests.
 
 ## Current Review State
 
-- First-, second-, third-, fourth-, fifth-, sixth-, and seventh-round comments are fixed. Orchestrator reviewer lanes
+- First-, second-, third-, fourth-, fifth-, sixth-, seventh-, and eighth-round comments are fixed. Orchestrator reviewer lanes
   should re-run before integration.
