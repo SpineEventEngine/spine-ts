@@ -73,6 +73,15 @@ export {
 } from "./entity-transition-validation.js";
 
 export {
+  type ServerRuntimeLifecycle,
+  type ServerRuntimeState,
+  ServerRuntimeStateError,
+  type ServerRuntimeStateOperation,
+  type ServerRuntimeWork,
+  SingleProcessServerRuntime,
+} from "./runtime.js";
+
+export {
   type ConcreteRepositoryEntityType,
   Repository,
   type RepositoryEntityType,

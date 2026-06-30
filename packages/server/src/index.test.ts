@@ -25,6 +25,9 @@ import {
   type TenantMode,
   type EntityVersionMetadata,
   type PlainEntityVersionMetadata,
+  type ServerRuntimeLifecycle,
+  ServerRuntimeStateError,
+  SingleProcessServerRuntime,
 } from "./index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -164,6 +167,8 @@ describe("@spine-ts/server", () => {
         "Projection",
         "Repository",
         "RepositoryIdentityError",
+        "ServerRuntimeStateError",
+        "SingleProcessServerRuntime",
         "TransactionalEntity",
         "TransactionalEntityScopeError",
         "React",
@@ -201,6 +206,11 @@ describe("@spine-ts/server", () => {
       | BoundedContextRepositorySnapshotErrorDetails
     >();
     expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
+    expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);
+    expect(() => new SingleProcessServerRuntime().enqueue(() => undefined)).toThrow(
+      ServerRuntimeStateError,
+    );
+    expectTypeOf<SingleProcessServerRuntime>().toExtend<ServerRuntimeLifecycle>();
   });
 
   it("extracts entity kind, default visibility, routing hints, columns, set-once fields, and tags", () => {

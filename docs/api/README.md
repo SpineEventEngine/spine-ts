@@ -134,6 +134,20 @@ exports include `HandlerMetadataRegistry`,
 `HandlerMetadataRegistryError` for caller-owned lookup-only registration and
 duplicate-policy validation. These APIs are metadata-only and do not execute
 handlers, access storage, dispatch buses, or start transport.
+Server runtime exports include `SingleProcessServerRuntime`,
+`ServerRuntimeLifecycle`, `ServerRuntimeState`, `ServerRuntimeWork`,
+`ServerRuntimeStateOperation`, and `ServerRuntimeStateError` for the first
+single-process lifecycle and async queue kernel. The lifecycle state machine is
+deterministic: `created -> running` on `start()`, `created -> closed` when
+closed before start, and `running -> closing -> closed` when close drains
+already accepted work. `close()` is idempotent, prevents new intake, and waits
+for previously accepted work to settle. `enqueue()` accepts work only while the
+runtime is running, returns that item's completion promise, and runs accepted
+work in a later microtask in FIFO order. This surface is a server-runtime
+kernel only; it is not a process-wide singleton, process supervisor, generic job
+framework, command/event/import bus, durable storage or inbox, read-side stand,
+repository dispatcher, integration broker, gRPC server, ZeroMQ transport, or
+worker-process runtime.
 
 Storage exports include `StorageAdapter`, `StorageRecord`,
 `WriteSideRecordStore`, `ReadSideRecordStore`, aggregate event history

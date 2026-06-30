@@ -1,6 +1,6 @@
 # T-0010.1: Runtime Lifecycle And Async Queue Kernel
 
-Status: Setup Complete; Implementation Pending
+Status: Implementation Complete; Author Verification Passed
 Start: `2026-06-30 15:08 WEST`
 Baseline commit: `70692a9`
 Parent task: `T-0010 Single-Process Async Runtime`
@@ -8,7 +8,7 @@ Task log path: `build-protocol/tasks/T-0010-1-runtime-lifecycle-queue/TASK.md`
 Branch: `task/T-0010-1-runtime-lifecycle-queue`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0010-1-runtime-lifecycle-queue`
-Authoring sub-agent: pending.
+Authoring sub-agent: Codex implementation sub-agent.
 Reviewer sub-agents: pending implementation.
 
 ## Objective
@@ -101,6 +101,31 @@ Likely touched:
   lines, TypeDoc/API checks with 100 proto / 28 core / 97 server / 26 storage
   expected exports, proto lint/generate checksum verification, and generated
   proto output clean.
+- Author verification passed on `2026-06-30 15:25 WEST`:
+  `CI=true corepack pnpm verify` passed with 18 test files / 219 tests,
+  coverage 96.33% statements / 90.87% branches / 99.12% functions / 96.26%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 103 server / 26 storage
+  expected exports, proto lint/generate checksum verification, and generated
+  proto output clean.
+
+## Implementation Result
+
+- Added `SingleProcessServerRuntime` with explicit `start()` / `close()`
+  lifecycle, deterministic `created | running | closing | closed` states, and
+  idempotent close.
+- Added `enqueue()` as a server-runtime-specific intake boundary that accepts
+  work only while running, schedules accepted work after intake returns, runs
+  work FIFO in the same process, returns per-item completion, and lets later
+  accepted work continue after one item fails.
+- Closing prevents new intake and waits for already accepted work to settle
+  before the runtime reaches `closed`.
+- Updated package root exports, API guard, TypeDoc-facing docs, and package
+  README.
+- Deferred boundaries remain unchanged: no global singleton, import-time
+  registration, process supervision, gRPC, ZeroMQ, durable storage, read-side
+  stand, repository dispatch, command/event/import buses, `Ack`, event store,
+  tenant index, system context, integration broker, worker processes, or full
+  repository dispatch.
 
 ## Human Questions And Answers
 
