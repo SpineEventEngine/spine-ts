@@ -5,6 +5,11 @@ metadata, and standard decorator metadata adapters.
 
 Current slice exposes:
 
+- `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)` for
+  creating metadata-only builder shells with immutable context names,
+  `ContextSpec` values exposed through `builder.spec` and `context.spec`, tenant
+  mode metadata, and copy-safe built context snapshots;
+  and
 - `Entity<Id, Schema, Version>` for a common abstract OOP state shell with
   identity, descriptor-derived metadata, cloned Protobuf-ES state snapshots,
   caller-owned plain version metadata, lifecycle flags, and
@@ -100,6 +105,29 @@ handlers for the same message type. The registry is caller-owned and
 metadata-only: constructing or registering it does not instantiate entities,
 invoke methods, unpack payloads, mutate global process state, write storage, or
 start buses/transports.
+
+## Bounded Context Shell
+
+Create a bounded-context shell through the JVM-familiar entry points:
+
+```ts
+import { BoundedContext } from "@spine-ts/server";
+
+const tasks = BoundedContext.singleTenant("Tasks").build();
+const customers = BoundedContext.multitenant("Customers").build();
+
+tasks.name.value; // "Tasks"
+tasks.tenantMode; // "single-tenant"
+customers.isMultitenant; // true
+```
+
+Names must be non-empty and non-blank. `ContextSpec` is a framework-owned
+immutable value exposed from the builder and built context, `build()` returns a
+frozen metadata-only `BoundedContext`, and `.snapshot` returns a copy-safe
+immutable snapshot.
+This slice deliberately does not register repositories, invoke handlers, open
+storage, construct system contexts, start command/event/query/subscription
+buses, write tenant indexes, expose gRPC services, or integrate transports.
 
 ## Entity State Shell
 

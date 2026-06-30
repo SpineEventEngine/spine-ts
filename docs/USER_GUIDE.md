@@ -15,9 +15,9 @@ entity metadata from `(entity)`, `(column)`, `(set_once)`, `(is)`, and
 defines explicit or decorator-collected handler metadata without invoking
 handlers or mutating global runtime state. It also exposes built-in
 `(set_once)` entity state transition validation, a buffered entity transaction
-boundary, thin aggregate/projection/process-manager family base classes, and a
+boundary, thin aggregate/projection/process-manager family base classes, a
 caller-owned handler metadata registry for duplicate validation and lookup-only
-views.
+views, and a first metadata-only bounded-context builder shell.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
 deterministic in-memory adapter for tests/development. Entity runtime,
 transport, durable production storage, and the to-do application remain later
@@ -76,6 +76,11 @@ slices.
   entity handler metadata, rejects duplicate command assignments and duplicate
   event appliers for the same entity/event pair, and exposes frozen
   deterministic lookup views.
+- A metadata-only bounded-context builder shell in `@spine-ts/server` with
+  `BoundedContext.singleTenant(name)`, `BoundedContext.multitenant(name)`,
+  immutable context names, framework-owned `ContextSpec` values from
+  `builder.spec` and `context.spec`, tenant mode metadata, frozen metadata-only
+  built contexts, and copy-safe context snapshots.
 - Storage contracts in `@spine-ts/storage` for write-side entity records,
   aggregate event histories/snapshots, read-side projection records, delivery
   records, tenant indexes, and safe diagnostics.
@@ -93,8 +98,10 @@ slices.
   registries. The server metadata APIs preserve entity tags and explicit
   handler declarations now, but no runtime registry consumes them yet.
 - gRPC service implementations.
-- Entity, bus, transport, durable production storage, and to-do domain runtime
-  behavior.
+- Repository registration, handler invocation, entity runtime dispatch, system
+  context construction, bus/stand execution, tenant index persistence, gRPC
+  service implementations, transport integration, durable production storage,
+  and to-do domain runtime behavior.
 
 ## Type Registry
 
