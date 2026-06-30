@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.3 Family Capability Marker Classes
 
-Status: Implemented; Round 2 Fixes Applied; Follow-up Review Pending
+Status: Complete; Round 3 Clean
 Task log:
 `build-protocol/tasks/T-0009e3-family-capability-marker-classes/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e3.md`
@@ -167,6 +167,12 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests.
   99.16%, lines 97.19%, TypeDoc/API export checks with 72 expected server
   exports, proto lint/generate, and generated-output clean checks. TypeDoc
   reported the existing invalid `origin` remote warning only.
+- Final subtask verification passed on `2026-06-30 02:40 WEST` after the clean
+  Round 3 review started: `CI=true corepack pnpm verify` passed typecheck, lint,
+  format check, 15 test files / 158 tests, coverage statements 97.25%, branches
+  91.41%, functions 99.16%, lines 97.19%, TypeDoc/API export checks with 72
+  expected server exports, proto lint/generate, and generated-output clean
+  checks. TypeDoc reported the existing invalid `origin` remote warning only.
 
 ## Review
 
@@ -182,9 +188,18 @@ This report was updated as part of the Round 1 fix pass. A follow-up review
 round is still required before this subtask can be called clean.
 
 Round 2 review then found that inherited getter markers remained forgeable via
-reflective own-property definition and prototype mutation. The Round 2 fix is
-applied and awaiting follow-up review; this report does not claim a clean final
-review.
+reflective own-property definition and prototype mutation. The Round 2 fix was
+applied and verified.
+
+Round 3 review returned clean across all required lanes:
+
+| Role                       | Reviewer ID                            | Result | Closure |
+| -------------------------- | -------------------------------------- | ------ | ------- |
+| Code style/maintainability | `019f162f-6b28-7c70-851c-46fe7df1bf35` | Clean  | Closed  |
+| Documentation              | `019f162f-97e9-72c3-841a-015771638a00` | Clean  | Closed  |
+| TypeScript/API docs        | `019f162f-b985-7ca2-ba43-f208d2ce2975` | Clean  | Closed  |
+| Security                   | `019f162f-e309-7232-a6df-78bf8ffff6d0` | Clean  | Closed  |
+| Performance/reliability    | `019f1630-1526-73a3-a8d1-d2ceac94ae6f` | Clean  | Closed  |
 
 ## Concerns
 

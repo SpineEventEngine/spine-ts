@@ -1,6 +1,6 @@
 # T-0009e: Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Implemented; Round 2 Fixes Applied; Follow-up Review Pending
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Complete; Round 3 Clean
 Start: `2026-06-29 21:58 WEST`
 Baseline commit: `47eae4e`
 Task log path: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
@@ -9,9 +9,9 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009e-entity-base-classes`
 Requirements splitter:
 `019f1531-96a3-7870-bb40-b24fc9a456c8` (Goodall the 3rd, closed)
-Authoring sub-agent: T-0009e.1 and T-0009e.2 completed in subtask branches
+Authoring sub-agent: T-0009e.1, T-0009e.2, and T-0009e.3 completed in subtask branches
 Reviewer sub-agents: T-0009e.1 Round 8 clean and closed; T-0009e.2 Round 11
-clean and closed
+clean and closed; T-0009e.3 Round 3 clean and closed
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:01 WEST`
 
