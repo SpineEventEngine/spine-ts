@@ -1,6 +1,6 @@
 # Review Log: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: First-round findings fixed - Pending Re-review
+Status: Round-2 findings fixed - Pending Re-review
 
 ## Required Review Lanes
 
@@ -34,8 +34,33 @@ Status: First-round findings fixed - Pending Re-review
   - Fixed: added negative type tests for mismatched schema pairs and plain
     classes, plus a subclass initialization regression test.
   - Fixed: updated `packages/server/README.md` and `docs/api/README.md`.
+- Second-round reviewer findings received by the review-fix sub-agent:
+  - Documentation Low: `docs/architecture/README.md` still described storage
+    metadata as supporting a future repository seam "without introducing
+    repository classes in this slice," which was stale after adding the
+    metadata-only `Repository` identity class.
+  - TypeScript/API P2: bare annotated `RepositoryOptions` still defaulted to a
+    broad `RepositoryEntityType`, allowing annotated options to pair an
+    aggregate entity constructor with a projection schema.
+  - Security Low: runtime accepted a forged non-function object with
+    `{ name, prototype }` shaped like an aggregate/projection/process-manager
+    constructor.
+- Round-2 fix status:
+  - Fixed: architecture docs now distinguish deferred repository
+    runtime/storage behavior from the present metadata-only `Repository`
+    identity class.
+  - Fixed: removed the default generic from exported `RepositoryOptions`, so
+    bare annotations cannot erase the entity constructor's schema constraint;
+    explicit `RepositoryOptions<typeof Entity>` annotations reject mismatched
+    schemas.
+  - Fixed: added a runtime function/class-constructor guard before schema
+    introspection and covered forged non-function prototype-chain objects with a
+    regression test.
+  - Verified: focused RED reproduced the runtime and type holes; focused
+    Vitest, `corepack pnpm typecheck:tooling`, `node scripts/check-api-docs.mjs`,
+    and `CI=true corepack pnpm verify` passed after the fixes.
 
 ## Current Review State
 
-- First-round comments are fixed. Orchestrator reviewer lanes should re-run
+- First- and second-round comments are fixed. Orchestrator reviewer lanes should re-run
   before integration.

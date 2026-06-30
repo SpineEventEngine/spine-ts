@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Review Fixes Complete - Pending Re-review
+Status: Round-2 Review Fixes Complete - Pending Re-review
 Task log: `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f2.md`
 Review log: `build-protocol/reviews/T-0009f2-repository-identity-seam.md`
@@ -55,6 +55,11 @@ Implementation research inspected and used:
   `RepositoryOptions` so TypeScript callers must pair entity constructors with
   the constructor-carried state schema, and kept runtime structured errors for
   JavaScript/cast inputs.
+- Second-round review fixes made bare `RepositoryOptions` annotations invalid
+  so callers cannot erase the constructor-carried schema constraint, added an
+  early runtime function/class-constructor guard for forged entity-type objects,
+  and refreshed stale architecture wording around the now-present
+  metadata-only `Repository` identity class.
 - Public root exports, TypeDoc export guard, package README, API docs, user
   guide, and architecture notes now describe the metadata-only boundary.
 
@@ -77,8 +82,19 @@ Implementation research inspected and used:
 - Review-fix full verification: `CI=true corepack pnpm verify` passed with 17
   test files, 174 tests, coverage, docs check, proto lint/generate, and
   generated-clean.
+- Round-2 RED: focused Vitest failed because a forged non-function
+  `{ name, prototype }` object was accepted as an aggregate repository entity
+  type; `corepack pnpm typecheck:tooling` failed with an unused
+  `@ts-expect-error` for annotated bare `RepositoryOptions` schema erasure.
+- Round-2 GREEN: focused Vitest passed with 2 files and 15 tests;
+  `corepack pnpm typecheck:tooling` passed after removing the default
+  `RepositoryOptions` generic and adding the runtime constructor guard.
+- Round-2 full verification: `CI=true corepack pnpm verify` passed with 17
+  test files, 174 tests, coverage, docs check, proto lint/generate, and
+  generated-clean.
 
 ## Review
 
-- First-round reviewer findings were applied by the review-fix sub-agent.
+- First- and second-round reviewer findings were applied by review-fix
+  sub-agents.
   Re-review by the orchestrator lanes remains pending.

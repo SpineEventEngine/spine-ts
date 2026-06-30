@@ -17,6 +17,7 @@ import {
   type EntityFamily,
   type EntityMetadata,
   type RepositoryIdentitySnapshot,
+  type RepositoryOptions,
 } from "./index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -175,6 +176,26 @@ describe("repository identity", () => {
         stateKind: "projection",
       });
     }
+
+    const forgedAggregatePrototype = {};
+    Object.setPrototypeOf(forgedAggregatePrototype, Aggregate.prototype);
+
+    try {
+      new Repository({
+        entityType: {
+          name: "FakeAggregate",
+          prototype: forgedAggregatePrototype,
+        } as unknown as typeof RuntimeCheckedAggregate,
+        schema: AggregateStateSchema,
+      });
+      throw new Error("Expected forged non-function entity type to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(RepositoryIdentityError);
+      expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
+      expect((error as RepositoryIdentityError).details).toEqual({
+        entityTypeName: "FakeAggregate",
+      });
+    }
   });
 
   it("returns frozen fresh snapshots for later builder duplicate and conflict checks", () => {
@@ -242,6 +263,18 @@ describe("repository identity", () => {
         entityType: PlainEntityClass,
         schema: ProjectionStateSchema,
       });
+      // @ts-expect-error bare RepositoryOptions annotations must not erase the constructor-carried schema.
+      const erasedAnnotatedOptions: RepositoryOptions = {
+        entityType: TaskAggregate,
+        schema: ProjectionStateSchema,
+      };
+      void erasedAnnotatedOptions;
+      const mismatchedAnnotatedOptions: RepositoryOptions<typeof TaskAggregate> = {
+        entityType: TaskAggregate,
+        // @ts-expect-error annotated repository options must preserve the entity constructor's state schema.
+        schema: ProjectionStateSchema,
+      };
+      expectTypeOf(mismatchedAnnotatedOptions).not.toBeAny();
     };
 
     expectTypeOf(assertRepositoryOptionTypes).not.toBeAny();

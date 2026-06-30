@@ -46,7 +46,7 @@ export interface RepositoryEntityType<
 }
 
 /** Options for constructing metadata-only repository identity. */
-export interface RepositoryOptions<EntityType extends RepositoryEntityType = RepositoryEntityType> {
+export interface RepositoryOptions<EntityType extends RepositoryEntityType> {
   /** Entity constructor owned by this repository identity. */
   readonly entityType: EntityType;
   /** Generated Protobuf-ES schema for the entity state owned by this repository identity. */
@@ -123,6 +123,16 @@ export class Repository<EntityType extends RepositoryEntityType = RepositoryEnti
 
   /** Create repository identity metadata for exactly one entity family/state schema pair. */
   constructor(options: RepositoryOptions<EntityType>) {
+    if (typeof options.entityType !== "function") {
+      throw new RepositoryIdentityError(
+        "UNSUPPORTED_ENTITY_TYPE",
+        `Repository entity type "${entityTypeName(options.entityType)}" must be a class constructor extending Aggregate, Projection, or ProcessManager.`,
+        {
+          entityTypeName: entityTypeName(options.entityType),
+        },
+      );
+    }
+
     const metadata = describeEntityMetadata(options.schema);
     const entityFamily = resolveEntityFamily(options.entityType);
 
@@ -217,7 +227,7 @@ function resolveEntityFamily(entityType: RuntimeRepositoryEntityType): EntityFam
   return undefined;
 }
 
-function entityTypeName(entityType: RuntimeRepositoryEntityType): string {
+function entityTypeName(entityType: Pick<RuntimeRepositoryEntityType, "name">): string {
   return entityType.name.length > 0 ? entityType.name : "(anonymous)";
 }
 

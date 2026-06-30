@@ -341,7 +341,10 @@ interface rather than to each read call, so package-level storage defaults to
 histories append ordered stream records with expected stream versions and
 adapter-local global positions. Empty appends validate the expected stream
 version but do not retain an empty stream. These metadata fields provide the
-future repository seam without introducing repository classes in this slice.
+future repository runtime/storage seam. The server package now has a
+metadata-only `Repository` identity class for entity/schema ownership, but
+create/find/store behavior, storage opening, and repository runtime classes
+remain deferred.
 
 `InMemoryStorageAdapter` is a test/development adapter. Each instance is
 isolated, keeps deterministic counters, snapshots values on write/read with
