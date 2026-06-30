@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-12 Review Fixes Complete - Pending Re-review
+Status: Round-13 Review Fixes Complete - Pending Re-review
 Task log: `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f2.md`
 Review log: `build-protocol/reviews/T-0009f2-repository-identity-seam.md`
@@ -127,6 +127,16 @@ Implementation research inspected and used:
 - Twelfth-round tests now assert that the current declaration-only
   `spineTsEntityConstructor` marker is absent from aggregate, projection, and
   process-manager runtime constructor shapes.
+- Thirteenth-round review fixes remove the separate
+  `EntityStaticMarkerBaseClass` inheritance layer entirely. The declaration-only
+  protected static nominal marker now lives on `Entity`, and
+  `RepositoryEntityType` uses the public `Entity` static side for nominal
+  provenance, so generated TypeDoc no longer publishes marker helper names in
+  repository signatures or the `Entity` hierarchy.
+- Thirteenth-round API guard fixes reject the current
+  `EntityStaticMarkerBase`/`EntityStaticMarkerBaseClass` leaks and generic
+  marker-shaped names so future marker renames cannot pass by avoiding the old
+  exact-name list.
 - Public root exports, TypeDoc export guard, package README, API docs, user
   guide, and architecture notes now describe the metadata-only boundary.
 
@@ -296,10 +306,23 @@ EntityConstructor`.
 - Round-12 full verification: `CI=true corepack pnpm verify` passed with 17
   test files, 184 tests, coverage, docs check, proto lint/generate, and
   generated-clean.
+- Round-13 RED: `node scripts/check-api-docs.mjs` failed after adding
+  `EntityStaticMarkerBase`, `EntityStaticMarkerBaseClass`, and generic
+  marker-name patterns to the forbidden TypeDoc guard, proving the current
+  generated JSON still exposed the active nominal marker base.
+- Round-13 GREEN: focused Vitest passed with 2 files and 25 tests;
+  `corepack pnpm typecheck:tooling` passed after moving the nominal marker onto
+  `Entity` and reshaping `RepositoryEntityType` around the public `Entity`
+  static side.
+- Round-13 API docs guard: `node scripts/check-api-docs.mjs` passed and now
+  rejects current and future marker-shaped TypeDoc leaks.
+- Round-13 full verification: `CI=true corepack pnpm verify` passed with 17
+  test files, 184 tests, coverage, docs check, proto lint/generate, and
+  generated-clean.
 
 ## Review
 
 - First-, second-, third-, fourth-, fifth-, sixth-, seventh-, eighth-, ninth-,
-  tenth-, eleventh-, and twelfth-round reviewer findings were applied by review-fix
-  sub-agents.
+  tenth-, eleventh-, twelfth-, and thirteenth-round reviewer findings were
+  applied by review-fix sub-agents.
   Re-review by the orchestrator lanes remains pending.

@@ -1,10 +1,4 @@
-import {
-  Aggregate,
-  type EntityStaticMarkerBase,
-  ProcessManager,
-  Projection,
-  type EntityFamily,
-} from "./entity.js";
+import { Aggregate, type Entity, ProcessManager, Projection, type EntityFamily } from "./entity.js";
 import {
   describeEntityMetadata,
   type DescriptorFieldMetadata,
@@ -70,7 +64,9 @@ interface RuntimeRepositoryEntityType {
 export type RepositoryEntityType<
   Instance extends RepositoryEntityInstance = RepositoryEntityInstance,
 > = (abstract new (...args: never[]) => Instance) &
-  EntityStaticMarkerBase & {
+  // `any` erases the Entity constructor parameters while preserving its protected static origin.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  typeof Entity<any, DescriptorMessageSchema, any> & {
     /** Prototype inspected for built-in entity family marker inheritance. */
     readonly prototype: Instance;
     /** Constructor name used in structured diagnostics. */

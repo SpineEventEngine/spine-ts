@@ -402,6 +402,8 @@ const forbiddenTypeDocNames = [
   "BuiltInEntityConstructor",
   "BuiltInEntityConstructorBase",
   "EntityConstructor",
+  "EntityStaticMarkerBase",
+  "EntityStaticMarkerBaseClass",
   "HasErasedRepositoryConstructorParameters",
   "RepositoryEntityTypeCarriesConcreteConstructorParameters",
   "RepositoryEntityTypeConstraint",
@@ -416,6 +418,11 @@ const forbiddenTypeDocNames = [
   "__spineTsBuiltInEntityConstructor",
   "__spineTsEntityConstructorBrand",
   "EntityConstructorBrand",
+];
+const forbiddenTypeDocNamePatterns = [
+  /\bEntity\w*Marker\w*\b/u,
+  /\b\w*EntityConstructor\w*Brand\w*\b/u,
+  /\bspineTs\w*\b/u,
 ];
 
 if (missingExports.length > 0) {
@@ -459,10 +466,16 @@ const apiDocsText = JSON.stringify(apiDocs);
 const forbiddenTypeDocNameMatches = forbiddenTypeDocNames.filter((name) =>
   apiDocsText.includes(name),
 );
+const forbiddenTypeDocPatternMatches = forbiddenTypeDocNamePatterns
+  .filter((pattern) => pattern.test(apiDocsText))
+  .map((pattern) => pattern.toString());
 
-if (forbiddenTypeDocNameMatches.length > 0) {
+if (forbiddenTypeDocNameMatches.length > 0 || forbiddenTypeDocPatternMatches.length > 0) {
   console.error(
-    `TypeDoc JSON exposes internal @spine-ts/server repository type machinery: ${forbiddenTypeDocNameMatches.join(", ")}`,
+    `TypeDoc JSON exposes internal @spine-ts/server repository type machinery: ${[
+      ...forbiddenTypeDocNameMatches,
+      ...forbiddenTypeDocPatternMatches,
+    ].join(", ")}`,
   );
   process.exit(1);
 }

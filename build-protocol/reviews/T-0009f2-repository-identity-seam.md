@@ -1,6 +1,6 @@
 # Review Log: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-12 findings fixed - Pending Re-review
+Status: Round-13 findings fixed - Pending Re-review
 
 ## Required Review Lanes
 
@@ -330,9 +330,42 @@ Aggregate`, `Projection`, and `ProcessManager` is false.
     `corepack pnpm typecheck:tooling` passed; `node scripts/check-api-docs.mjs`
     passed; full `CI=true corepack pnpm verify` passed with 17 test files and
     184 tests.
+- Thirteenth-round reviewer findings received by the review-fix sub-agent:
+  - Code style / TypeScript/API P2: generated TypeDoc still leaked the
+    current nominal marker machinery. `RepositoryEntityType` intersected with
+    `EntityStaticMarkerBase`, repository constructor docs expanded that as
+    `typeof EntityStaticMarkerBaseClass`, and `Entity` hierarchy docs showed
+    the marker base class.
+  - API docs guard false-negative: `scripts/check-api-docs.mjs` rejected older
+    leaked names but not `EntityStaticMarkerBase` or
+    `EntityStaticMarkerBaseClass`, so the guard passed while the current marker
+    names remained visible.
+- Round-13 fix status:
+  - Fixed: removed the separate entity static marker base class from the
+    public `Entity` inheritance chain. The declaration-only protected static
+    nominal marker now lives on `Entity` itself, so generated hierarchy docs no
+    longer need to mention a marker base.
+  - Fixed: reshaped `RepositoryEntityType` to intersect with the public
+    `typeof Entity<any, DescriptorMessageSchema, any>` static side instead of
+    a marker-named helper, preserving the protected static nominal guard and
+    the old public string-brand bypass protection without publishing
+    implementation marker names.
+  - Fixed: expanded the TypeDoc guard to reject the current
+    `EntityStaticMarkerBase`/`EntityStaticMarkerBaseClass` names and generic
+    marker-shaped leaks (`Entity*Marker*`, `*EntityConstructor*Brand*`, and
+    `spineTs*`).
+  - Verified RED: after adding the guard checks but before reshaping the types,
+    `node scripts/check-api-docs.mjs` failed on `EntityStaticMarkerBase`,
+    `EntityStaticMarkerBaseClass`, and the generic marker-name pattern.
+  - Verified focused checks: focused Vitest passed with 2 files and 25 tests;
+    `corepack pnpm typecheck:tooling` passed; `node scripts/check-api-docs.mjs`
+    passed after the marker reshaping.
+  - Verified full check: `CI=true corepack pnpm verify` passed with 17 test
+    files and 184 tests, coverage, docs check, proto lint/generate, and
+    generated-clean.
 
 ## Current Review State
 
 - First-, second-, third-, fourth-, fifth-, sixth-, seventh-, eighth-, ninth-,
-  tenth-, eleventh-, and twelfth-round comments are fixed. Orchestrator reviewer lanes
-  should re-run before integration.
+  tenth-, eleventh-, twelfth-, and thirteenth-round comments are fixed.
+  Orchestrator reviewer lanes should re-run before integration.
