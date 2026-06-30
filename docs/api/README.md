@@ -7,8 +7,8 @@ root API for copied Spine contracts, the `@spine-ts/core` metadata/type
 registry and validation facade APIs, the first `@spine-ts/server`
 descriptor-derived entity metadata, metadata-only `Repository` identity,
 set-once transition validation, explicit handler metadata APIs, and the first
-server runtime lifecycle/async queue kernel, and the first `@spine-ts/storage`
-contracts.
+server runtime lifecycle/async queue kernel with a bounded-context runtime
+handle, and the first `@spine-ts/storage` contracts.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
@@ -26,6 +26,7 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 Server exports include `BoundedContext`, `BoundedContextBuilder`,
 `ContextSpec`, `BoundedContextName`, `TenantMode`, `BoundedContextSnapshot`,
 `BuiltBoundedContextSnapshot`, immutable snapshot contracts,
+`BoundedContextRuntime`, `BoundedContextRuntimeOptions`,
 `BoundedContextNameError`, and
 `BoundedContextRepositoryRegistrationError` for the first bounded-context
 assembly shell.
@@ -44,6 +45,16 @@ repository ownership metadata for later runtime parts without creating default
 repositories from entity classes, registering repositories at runtime, invoking
 handlers, creating system contexts, opening storage, constructing buses/stands,
 writing tenant indexes, exposing gRPC services, or integrating transports.
+`BoundedContextRuntime` is the runtime-facing handle for one already built
+context. It owns a private `SingleProcessServerRuntime` by default or accepts an
+injected `ServerRuntimeLifecycle`; injected lifecycle sharing remains caller
+owned. The handle delegates `state`, `start()`, and `close()`, and exposes
+fresh immutable copies for the context name, spec, repository identity
+snapshots, and `contextSnapshot`. It does not expose `enqueue()` for injected or
+default runtimes and is not a JVM `Server` equivalent, command/event/import bus,
+repository dispatcher, stand, event store, tenant index, integration broker,
+system context, gRPC/ZeroMQ transport, service host, delivery inbox, or handler
+invocation mechanism.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,
@@ -139,7 +150,9 @@ Server runtime exports include `SingleProcessServerRuntime`,
 `ServerRuntimeLifecycle`, `ServerRuntimeState`, `ServerRuntimeWork`,
 `ServerRuntimeStateOperation`, `ServerRuntimeStateErrorCode`, and
 `ServerRuntimeStateError` for the first single-process lifecycle and async queue
-kernel. The lifecycle state machine is deterministic: `created -> running` on
+kernel, plus `BoundedContextRuntime` for context-scoped lifecycle delegation
+over a built bounded-context snapshot. The lifecycle state machine is
+deterministic: `created -> running` on
 `start()`, `created -> closed` when closed before start, and
 `running -> closing -> closed` when close drains already accepted work.
 `ServerRuntimeStateError.code` is stable taxonomy
@@ -150,7 +163,9 @@ running, returns that item's completion promise, and runs accepted work in a
 later microtask in FIFO order. Enqueued callbacks are trusted server-owned work
 only. The queue has no timeout, cancellation, fairness, queue bound, or
 hostile-callback protection, so non-settling or reentrant work can keep
-`close()` pending. This surface is a server-runtime kernel only; it is not a
+`close()` pending. `BoundedContextRuntime` does not expose queue intake; it only
+delegates lifecycle and exposes copied context metadata. This surface is a
+server-runtime kernel only; it is not a
 process-wide singleton, process supervisor, generic job framework,
 command/event/import bus, durable storage or inbox, read-side stand, repository
 dispatcher, integration broker, gRPC server, ZeroMQ transport, or worker-process

@@ -12,6 +12,8 @@ import {
 import * as serverRoot from "./index.js";
 import {
   BoundedContext,
+  BoundedContextRuntime,
+  type BoundedContextRuntimeOptions,
   describeEntityMetadata,
   DescriptorMetadataError,
   isEntitySchema,
@@ -154,6 +156,7 @@ describe("@spine-ts/server", () => {
         "BoundedContextBuilder",
         "BoundedContextNameError",
         "BoundedContextRepositoryRegistrationError",
+        "BoundedContextRuntime",
         "EntityTransactionDraftStateError",
         "EntityTransaction",
         "EntityTransactionStateError",
@@ -207,6 +210,13 @@ describe("@spine-ts/server", () => {
       | BoundedContextRepositorySnapshotErrorDetails
     >();
     expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
+    expect(
+      new BoundedContextRuntime(BoundedContext.singleTenant("Exports").build()),
+    ).toBeInstanceOf(BoundedContextRuntime);
+    expectTypeOf<BoundedContextRuntime>().toExtend<ServerRuntimeLifecycle>();
+    expectTypeOf<BoundedContextRuntimeOptions>().toEqualTypeOf<{
+      readonly runtime?: ServerRuntimeLifecycle;
+    }>();
     expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);
     expect(() => new SingleProcessServerRuntime().enqueue(() => undefined)).toThrow(
       ServerRuntimeStateError,

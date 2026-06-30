@@ -10,6 +10,8 @@ export {
   type BoundedContextRepositoryRegistrationErrorDetails,
   type BoundedContextRepositoryRegistrationOperation,
   type BoundedContextRepositorySnapshotErrorDetails,
+  BoundedContextRuntime,
+  type BoundedContextRuntimeOptions,
   type BoundedContextSnapshot,
   ContextSpec,
   type ContextSpecSnapshot,

@@ -45,6 +45,9 @@ Current slice exposes:
 - `SingleProcessServerRuntime` for the first explicit server-owned lifecycle
   and async queue kernel with `start()`, `close()`, deterministic states, and
   post-intake work execution in a later microtask.
+- `BoundedContextRuntime` for a context-scoped runtime handle that binds one
+  built `BoundedContext` snapshot to a lifecycle without exposing queue intake,
+  buses, storage, services, dispatch, or repository runtime registration.
 
 ```ts
 import {
@@ -157,6 +160,44 @@ is not a global singleton, process supervisor, generic job framework, command
 bus, event bus, import bus, repository dispatcher, event store, durable inbox,
 read-side stand, tenant index, integration broker, gRPC server, ZeroMQ
 transport, worker-process runtime, or storage-backed delivery mechanism.
+
+## Bounded Context Runtime Handle
+
+Use `BoundedContextRuntime` when later runtime code needs a context-scoped
+lifecycle handle for an already built `BoundedContext`:
+
+```ts
+import { BoundedContext, BoundedContextRuntime } from "@spine-ts/server";
+
+const tasks = BoundedContext.singleTenant("Tasks").build();
+const runtime = new BoundedContextRuntime(tasks);
+
+runtime.name.value; // "Tasks"
+runtime.contextSnapshot.repositories; // copied built-context metadata
+
+await runtime.start();
+await runtime.close();
+```
+
+By default the handle creates and owns a private `SingleProcessServerRuntime`.
+You may inject a `ServerRuntimeLifecycle` when a caller owns the lifecycle
+object:
+
+```ts
+const runtime = new BoundedContextRuntime(tasks, { runtime: sharedLifecycle });
+```
+
+Injected lifecycle ownership stays with the caller. The handle delegates
+`state`, `start()`, and `close()` deterministically to that lifecycle and
+returns fresh immutable copies for `name`, `spec`, `repositories`, and
+`contextSnapshot`.
+
+The handle deliberately does not expose `enqueue()` unless a later typed
+context queue boundary is designed. It is not a JVM `Server` equivalent, a
+running bounded-context graph, command/event/import bus, repository dispatcher,
+stand, event store, tenant index, integration broker, command/query/subscription
+service, gRPC server, ZeroMQ transport, system context, delivery inbox, or
+handler invocation mechanism.
 
 ## Bounded Context Shell
 

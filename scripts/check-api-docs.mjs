@@ -179,6 +179,8 @@ const expectedServerExports = [
   "BoundedContextRepositoryRegistrationErrorDetails",
   "BoundedContextRepositoryRegistrationOperation",
   "BoundedContextRepositorySnapshotErrorDetails",
+  "BoundedContextRuntime",
+  "BoundedContextRuntimeOptions",
   "BoundedContextSnapshot",
   "Command",
   "CommandAssignmentHandlerMetadata",

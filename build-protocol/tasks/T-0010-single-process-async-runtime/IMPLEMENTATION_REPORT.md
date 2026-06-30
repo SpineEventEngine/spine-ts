@@ -96,3 +96,9 @@ Next selected subtask: `T-0010.2 Bounded Context Runtime Handle`.
   branch on `2026-06-30 15:50 WEST` and verified cleanly.
 - `T-0010.2 Bounded Context Runtime Handle` is the next selected non-blocked
   subtask.
+- `T-0010.2` branch/worktree was created on `2026-06-30 15:52 WEST` from
+  parent commit `d570bba`; setup logs were created before implementation
+  handoff. Setup baseline verification passed on `2026-06-30 15:56 WEST` with
+  18 test files / 219 tests, coverage 96.33% statements / 90.87% branches /
+  99.12% functions / 96.26% lines, TypeDoc/API, proto, and generated-output
+  gates clean.
