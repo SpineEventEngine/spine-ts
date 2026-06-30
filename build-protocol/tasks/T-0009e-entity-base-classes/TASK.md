@@ -274,6 +274,10 @@ Out of scope until later tasks:
   `2026-06-30 01:51 WEST`: 15 test files / 152 tests; coverage statements
   97.23%, branches 91.41%, functions 99.15%, lines 97.17%; TypeDoc/API/proto
   gates passed with 68 expected server exports and generated proto output clean.
+- T-0009e.3 parent integration `CI=true corepack pnpm verify` passed on
+  `2026-06-30 02:46 WEST`: 15 test files / 158 tests; coverage statements
+  97.25%, branches 91.41%, functions 99.16%, lines 97.19%; TypeDoc/API/proto
+  gates passed with 72 expected server exports and generated proto output clean.
 
 ## Review Rounds
 
@@ -281,9 +285,8 @@ Out of scope until later tasks:
   five required reviewer lanes and all reviewers were closed.
 - T-0009e.2 completed eleven review rounds; Round 11 returned clean across all
   five required reviewer lanes and all reviewers were closed.
-- T-0009e.3 completed implementation plus Round 1 and Round 2 fix passes.
-  Follow-up review is still pending, so this parent task does not claim a clean
-  T-0009e.3 review.
+- T-0009e.3 completed three review rounds; Round 3 returned clean across all
+  five required reviewer lanes and all reviewers were closed.
 
 ## Current State
 
@@ -299,7 +302,11 @@ Out of scope until later tasks:
   `2026-06-30 01:51 WEST`: 15 test files / 152 tests; coverage 97.23%
   statements, 91.41% branches, 99.15% functions, 97.17% lines; TypeDoc/API/proto
   gates passed with 68 expected server exports.
-- `T-0009e.3 Family Capability Marker Classes` is implemented in its isolated
-  branch with Round 2 fixes applied.
-- Next step: run follow-up review for T-0009e.3; this parent task does not
-  claim the subtask is clean until reviewers return clean.
+- `T-0009e.3 Family Capability Marker Classes` is merged into the parent branch
+  with parent integration logs updated.
+- T-0009e.3 parent integration verification passed on
+  `2026-06-30 02:46 WEST`: 15 test files / 158 tests; coverage 97.25%
+  statements, 91.41% branches, 99.16% functions, 97.19% lines; TypeDoc/API/proto
+  gates passed with 72 expected server exports.
+- Next step: create isolated `T-0009e.4 Public API Closure And Verification`
+  branch/worktree.
