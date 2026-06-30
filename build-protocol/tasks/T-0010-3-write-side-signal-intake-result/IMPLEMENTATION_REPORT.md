@@ -1,6 +1,6 @@
 # Implementation Report: T-0010.3 Write-Side Signal Intake Result
 
-Status: Review Fix Complete
+Status: Second Security Review Fix Complete
 Task log:
 `build-protocol/tasks/T-0010-3-write-side-signal-intake-result/TASK.md`
 Work log: `build-protocol/work-logs/T-0010-3.md`
@@ -68,6 +68,10 @@ store-before-dispatch are explicitly larger than this subtask.
   properties, skipped accessors without executing getters, and caught
   own-property descriptor inspection failures so hostile diagnostics collapse to
   empty sanitized metadata instead of making `failSignalIntake()` throw.
+- Second security finding: added proxy detection before descriptor inspection
+  using the same `node:util` `types.isProxy` pattern used in
+  `packages/server/src/entity.ts`, so proxy diagnostics are ignored before
+  `ownKeys` or `getOwnPropertyDescriptor` traps can execute.
 
 ## Verification
 
@@ -108,3 +112,19 @@ pnpm verify` passed with 19 test files / 233 tests, coverage 96.28% statements
   / 90.35% branches / 99.16% functions / 96.21% lines, TypeDoc/API checks with
   100 proto / 28 core / 116 server / 26 storage expected exports, proto
   lint/generate checksum verification, and generated proto output clean.
+- Second security-fix RED check on `2026-06-30 17:03 WEST`: `corepack pnpm
+exec vitest run packages/server/src/signal-intake.test.ts` failed with 1 test
+  file / 1 failed test / 9 passed tests; the new regression received
+  `{ boundedContext: "Tasks" }` from proxy diagnostics instead of `{}`.
+- Second security-fix focused check on `2026-06-30 17:04 WEST`: `corepack pnpm
+exec vitest run packages/server/src/signal-intake.test.ts` passed with 1 test
+  file / 10 tests after proxy diagnostics were ignored before descriptor
+  inspection.
+- Second security-fix full verification on `2026-06-30 17:06 WEST`: the first
+  `CI=true corepack pnpm verify` stopped at `format:check` for
+  `build-protocol/work-logs/T-0010-3.md`; after formatting that file, the fresh
+  `CI=true corepack pnpm verify` run passed with 19 test files / 234 tests,
+  coverage 96.21% statements / 90.38% branches / 99.16% functions / 96.14%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 116 server / 26 storage
+  expected exports, proto lint/generate checksum verification, and generated
+  proto output clean.

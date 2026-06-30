@@ -45,6 +45,16 @@ export interface SignalIntakeFailure<Kind extends SignalKind = SignalKind> {
 export type SignalIntakeResult<Kind extends SignalKind = SignalKind> =
   SignalIntakeAccepted<Kind> | SignalIntakeFailure<Kind>;
 
+declare const process: {
+  readonly getBuiltinModule: (specifier: "node:util") => {
+    readonly types: {
+      readonly isProxy: (value: object) => boolean;
+    };
+  };
+};
+
+const isProxy = process.getBuiltinModule("node:util").types.isProxy;
+
 const allowedDiagnosticKeys = new Set([
   "attempt",
   "boundedContext",
@@ -108,6 +118,10 @@ function sanitizeDiagnostics(
 function getOwnDiagnosticDescriptors(
   diagnostics: Readonly<Record<string, unknown>>,
 ): PropertyDescriptorMap | undefined {
+  if (isProxy(diagnostics)) {
+    return undefined;
+  }
+
   try {
     return Object.getOwnPropertyDescriptors(diagnostics);
   } catch {

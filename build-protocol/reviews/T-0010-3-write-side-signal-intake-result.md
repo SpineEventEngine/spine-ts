@@ -1,6 +1,6 @@
 # Review Log: T-0010.3 Write-Side Signal Intake Result
 
-Status: Review Fix Complete
+Status: Second Security Review Fix Complete
 
 ## Required Review Lanes
 
@@ -48,6 +48,25 @@ packages/server/src/index.test.ts` passed with 2 test files / 18 tests on
   99.16% function coverage, 96.21% line coverage, TypeDoc/API checks with 100
   proto / 28 core / 116 server / 26 storage expected exports, and generated
   proto output clean on `2026-06-30 16:57 WEST`.
+- Security re-review found one remaining issue: catching descriptor inspection
+  failures still allowed proxy `ownKeys` and `getOwnPropertyDescriptor` traps to
+  execute before the catch path returned empty diagnostics.
+- Second security-fix resolved the finding by checking `node:util`
+  `types.isProxy` before calling `Object.getOwnPropertyDescriptors()`, matching
+  the repo-local pattern in `packages/server/src/entity.ts`.
+- Second security-fix verification: RED `corepack pnpm exec vitest run
+packages/server/src/signal-intake.test.ts` failed with 1 test file / 1 failed
+  test / 9 passed tests on `2026-06-30 17:03 WEST`; focused GREEN `corepack
+pnpm exec vitest run packages/server/src/signal-intake.test.ts` passed with 1
+  test file / 10 tests on `2026-06-30 17:04 WEST`.
+- Second security-fix full verification: the first `CI=true corepack pnpm
+verify` stopped at `format:check` for `build-protocol/work-logs/T-0010-3.md`;
+  after formatting that file, a fresh `CI=true corepack pnpm verify` passed
+  with 19 test files / 234 tests, 96.21% statement coverage, 90.38% branch
+  coverage, 99.16% function coverage, 96.14% line coverage, TypeDoc/API checks
+  with 100 proto / 28 core / 116 server / 26 storage expected exports, proto
+  lint/generate checksum verification, and generated proto output clean on
+  `2026-06-30 17:06 WEST`.
 
 ## Implementation Self-Check
 
@@ -61,6 +80,7 @@ packages/server/src/index.test.ts` passed with 2 test files / 18 tests on
   new public types and factories.
 - Security: failure diagnostics keep only allowlisted scalar copied metadata,
   drop unknown and payload-shaped keys, skip accessors without invoking
-  getters, and tolerate descriptor inspection failures.
+  getters, ignore proxies before invoking inspection traps, and tolerate
+  descriptor inspection failures for other hostile objects.
 - Performance/reliability: factories allocate/freeze small values only and do
   not enqueue work, dispatch, store, validate, or invoke handlers.

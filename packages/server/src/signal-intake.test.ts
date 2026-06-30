@@ -160,6 +160,34 @@ describe("signal intake results", () => {
     ).toEqual({});
   });
 
+  it("ignores proxy diagnostics without invoking proxy inspection traps", () => {
+    let ownKeysCalls = 0;
+    let descriptorCalls = 0;
+    const diagnostics = new Proxy<Record<string, unknown>>(
+      {},
+      {
+        ownKeys() {
+          ownKeysCalls += 1;
+          return ["boundedContext"];
+        },
+        getOwnPropertyDescriptor() {
+          descriptorCalls += 1;
+          return {
+            configurable: true,
+            enumerable: true,
+            value: "Tasks",
+          };
+        },
+      },
+    );
+
+    const result = failSignalIntake("command", "UNSUPPORTED_SIGNAL_KIND", diagnostics);
+
+    expect(result.failure.diagnostics).toEqual({});
+    expect(ownKeysCalls).toBe(0);
+    expect(descriptorCalls).toBe(0);
+  });
+
   it("allows failure diagnostics to be omitted without sharing mutable defaults", () => {
     const first = failSignalIntake("command", "UNSUPPORTED_SIGNAL_KIND");
     const second = failSignalIntake("command", "UNSUPPORTED_SIGNAL_KIND");
