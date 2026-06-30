@@ -203,3 +203,41 @@ with 100 proto / 28 core / 72 server / 26 storage expected exports; full
 97.26% statements / 91.41% branches / 99.17% functions / 97.2% lines,
 TypeDoc/API/proto/generated gates clean; and the required stale-terminal-wording
 scan exited 1 with no matches. Final parent re-review remains pending.
+
+## Final Parent Re-Review Fixes
+
+Final parent re-review found that the prior transaction clone optimization
+introduced `Entity.withStoredState()` as a protected member. Because `Entity` is
+exported, that made the method subclass-facing API and TypeDoc-visible, and the
+callback received the live internal `#state` reference.
+
+The superseding fix removes `withStoredState()` entirely and changes
+`TransactionalEntity.startTransaction()` back to the public `this.state` snapshot
+boundary. This accepts the extra clone rather than exposing live framework-owned
+state outside a true private/internal boundary. Regression coverage now asserts
+that `withStoredState` is absent from `Entity.prototype`, while preserving
+transaction snapshot and commit/rollback semantics.
+
+Focused red/green evidence:
+
+- Before the source fix, `corepack pnpm vitest run packages/server/src/entity.test.ts`
+  failed because `"withStoredState" in Entity.prototype` was `true` and
+  transaction start did not read the public state snapshot getter.
+- After the source fix, the same focused entity suite passed with 1 test file /
+  31 tests.
+
+Final-parent-re-review fix verification passed on `2026-06-30 04:43 WEST`:
+
+- `node scripts/check-api-docs.mjs` passed with 100 proto / 28 core / 72 server
+  / 26 storage expected exports and no TypeDoc errors.
+- `corepack pnpm vitest run packages/server/src/entity.test.ts
+packages/server/src/index.test.ts` passed with 2 files / 40 tests.
+- `CI=true corepack pnpm verify` passed with 15 files / 160 tests, coverage
+  97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines, and
+  TypeDoc/API/proto/generated gates clean.
+- `rg -n "withStoredState" packages docs build-protocol` had no docs or
+  implementation-source matches; remaining matches are the regression assertion
+  and historical review/log mentions.
+
+Final parent re-review remains pending; this section does not mark the parent
+review clean.

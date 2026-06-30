@@ -345,6 +345,21 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
   coverage 97.26% statements / 91.41% branches / 99.17% functions / 97.2%
   lines, TypeDoc/API/proto/generated gates clean; and the required
   stale-terminal-wording scan exited 1 with no matches.
+- Final-parent-re-review fix focused red/green evidence on `2026-06-30 04:39
+WEST`: the focused entity test first failed because `withStoredState` was
+  present on `Entity.prototype` and transaction start avoided the public state
+  snapshot getter; after removing the protected API and routing
+  `startTransaction()` through `this.state`, `corepack pnpm vitest run
+packages/server/src/entity.test.ts` passed with 1 test file / 31 tests.
+- Final-parent-re-review fix verification passed on `2026-06-30 04:43 WEST`:
+  `node scripts/check-api-docs.mjs` passed with 100 proto / 28 core / 72 server
+  / 26 storage expected exports and no TypeDoc errors; focused entity/root tests
+  passed with 2 files / 40 tests; full `CI=true corepack pnpm verify` passed
+  with 15 files / 160 tests, coverage 97.25% statements / 91.41% branches /
+  99.16% functions / 97.19% lines, TypeDoc/API/proto/generated gates clean; and
+  `rg -n "withStoredState" packages docs build-protocol` had no docs or
+  implementation-source matches, only the regression assertion and historical
+  review/log mentions.
 
 ## Review Rounds
 
@@ -387,6 +402,9 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
   closed. Final subtask verification passed before parent integration.
 - `T-0009e.4 Public API Closure And Verification` is merged into the parent
   branch as `f499ca8`, and parent integration verification passed.
-- Final parent review findings have been addressed in this branch, and final
-  parent re-review remains pending before marking T-0009e complete.
-- Final-parent-review fix verification passed on `2026-06-30 04:30 WEST`.
+- A superseding final parent re-review found the prior protected
+  `withStoredState()` optimization exposed subclass-facing API and a live stored
+  state reference. The fix removes that API and uses the public cloned `state`
+  snapshot boundary for transaction start.
+- Final parent re-review remains pending before marking T-0009e complete.
+- Final-parent-re-review fix verification passed on `2026-06-30 04:43 WEST`.

@@ -171,5 +171,12 @@ Final verification passed on `2026-06-30 04:13 WEST`:
 
 This subtask was merged into the parent branch as `f499ca8` on
 `2026-06-30 04:18 WEST`, and parent integration verification passed.
-Final-parent-review fix verification passed on `2026-06-30 04:30 WEST`, and
-final parent re-review remains pending.
+Final-parent-review fix verification passed on `2026-06-30 04:30 WEST`.
+A later final parent re-review found the protected `withStoredState()` runtime
+optimization exposed subclass-facing API and a live stored-state reference. The
+parent branch fix removes that API, routes transaction start through the public
+cloned state snapshot boundary, and keeps final parent re-review pending.
+Final-parent-re-review fix verification passed on `2026-06-30 04:43 WEST`:
+API docs check, focused entity/root tests, full verify, and the required
+`withStoredState` scan all passed with no generated-doc or implementation-source
+matches for the removed API.

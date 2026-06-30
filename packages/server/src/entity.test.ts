@@ -274,6 +274,10 @@ describe("entities", () => {
     expect(entity.state).not.toBe(returnedState);
   });
 
+  it("does not expose a stored-state reader on the exported entity base prototype", () => {
+    expect("withStoredState" in Entity.prototype).toBe(false);
+  });
+
   it("keeps constructor-provided version metadata isolated from caller mutations", () => {
     const initialVersion = { revision: 1, source: "server" as const, labels: ["initial"] };
     const entity = new TestEntity({
@@ -717,7 +721,7 @@ describe("entities", () => {
     }).toThrow(/already has an active transaction/);
   });
 
-  it("starts transactions without reading the public state snapshot getter", () => {
+  it("starts transactions from the public state snapshot boundary", () => {
     const entity = new GetterCountingTransactionalEntity({
       id: "task-1",
       schema: ProjectionStateSchema,
@@ -727,7 +731,7 @@ describe("entities", () => {
 
     entity.start();
 
-    expect(entity.stateReads).toBe(0);
+    expect(entity.stateReads).toBe(1);
     expect(entity.draft()).toEqual(createProjectionState());
   });
 

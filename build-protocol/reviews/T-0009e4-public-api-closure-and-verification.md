@@ -160,3 +160,14 @@ The subtask was merged into the parent branch as `f499ca8` on
 parent re-review remains pending after the final-parent-review finding fixes.
 Final-parent-review fix verification passed on `2026-06-30 04:30 WEST`, and the
 required stale-terminal-wording scan exited 1 with no matches.
+
+Later final parent re-review found that the parent runtime fix had introduced a
+protected `withStoredState()` member on exported `Entity`, making it
+subclass-facing API and TypeDoc-visible while passing a live stored-state
+reference to subclass code. The superseding parent fix removes that API and
+routes transaction start through the public cloned state snapshot boundary.
+Final-parent-re-review fix verification passed on `2026-06-30 04:43 WEST` with
+API docs check, focused entity/root tests, full verify, and the required
+`withStoredState` scan all passing; the scan has no generated-doc or
+implementation-source matches for the removed API. Final parent re-review
+remains pending.

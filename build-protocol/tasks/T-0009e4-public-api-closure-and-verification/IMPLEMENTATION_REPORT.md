@@ -27,7 +27,9 @@ were applied and Round 2 fix verification passed. Round 4 re-review returned
 clean across all five required lanes. Final verification passed, and the
 subtask was merged into the parent branch as `f499ca8`, and parent integration
 verification passed. Final parent review remains pending after the follow-up
-final-parent-review fixes.
+final-parent-review fixes. A later final parent re-review found protected
+`withStoredState()` API exposure in the parent runtime source; the superseding
+parent fix removes that API and keeps final parent re-review pending.
 
 ## Files Changed
 
@@ -109,4 +111,11 @@ clean across all five required lanes, and all Round 4 reviewer sub-agents were
 closed by the orchestrator. Final verification passed, the subtask was merged
 into the parent branch as `f499ca8`, and parent integration verification passed.
 Final parent review remains pending after the follow-up final-parent-review
-fixes.
+fixes. A later final parent re-review rejected the protected `withStoredState()`
+optimization as subclass-facing API that exposed a live stored-state reference;
+the parent branch fix removes that API and accepts the public cloned state
+snapshot boundary for transaction start. No clean final parent re-review is
+claimed here. Final-parent-re-review fix verification passed on
+`2026-06-30 04:43 WEST`: API docs check, focused entity/root tests, full verify,
+and the required `withStoredState` scan all passed with no generated-doc or
+implementation-source matches for the removed API.
