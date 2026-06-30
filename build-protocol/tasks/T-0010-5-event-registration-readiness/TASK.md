@@ -8,6 +8,7 @@ Branch: `task/T-0010-5-event-registration-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0010-5-event-registration-readiness`
 Authoring sub-agent: `019f198d-7dc2-7641-9abb-4c49d776e370`.
+Review-fix sub-agent: `019f199d-9b3a-76f0-887b-5ea128774140`.
 Reviewer sub-agents:
 
 - Maintainability reviewer `019f1999-9c26-7c80-868d-1c54f56daa6e`:

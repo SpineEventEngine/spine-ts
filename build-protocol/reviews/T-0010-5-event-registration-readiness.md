@@ -53,7 +53,8 @@ Reviewer prompts must check:
   authoring sub-agent ID. Minor finding. This review log status was stale.
   Disposition: fixed by recording authoring sub-agent
   `019f198d-7dc2-7641-9abb-4c49d776e370`, reviewer IDs, findings, and
-  review-fix status in task/report/work/review logs.
+  review-fix sub-agent `019f199d-9b3a-76f0-887b-5ea128774140` plus review-fix
+  status in task/report/work/review logs.
 - TypeScript/API reviewer `019f199a-0079-7cf3-ab60-78f8c7286dac`: clean.
   Disposition: no code change required.
 - Security reviewer `019f199a-38dc-7a90-bc98-5a3a08efd62e`: Important
@@ -75,6 +76,9 @@ Reviewer prompts must check:
   records.
 
 ### Review-Fix Verification
+
+Review-fix sub-agent:
+`019f199d-9b3a-76f0-887b-5ea128774140`.
 
 - RED on `2026-06-30 18:42 WEST`: `corepack pnpm test
 packages/server/src/command-registration-readiness.test.ts

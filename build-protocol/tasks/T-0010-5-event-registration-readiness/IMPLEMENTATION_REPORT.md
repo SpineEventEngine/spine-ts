@@ -29,7 +29,8 @@ helper used by both command and event readiness. Event readiness now
 canonicalizes custom registry lookups through `HandlerMetadataRegistry` before
 building event indexes, and readiness metadata snapshots freeze cloned
 handler schema/descriptor objects while preserving entity field identity within
-each returned metadata value.
+each returned metadata value. Review-fix sub-agent
+`019f199d-9b3a-76f0-887b-5ea128774140` authored the fix commit.
 
 ## JVM Research Used
 
@@ -75,7 +76,8 @@ source modules and is not exported from the package index.
 - Documentation reviewer `019f1999-cfd4-7ed3-a88a-f23f3a75c943`: Important
   missing authoring sub-agent ID; Minor stale review log. Fixed by recording
   authoring sub-agent `019f198d-7dc2-7641-9abb-4c49d776e370`, reviewer IDs,
-  finding dispositions, and current review-fix status in durable logs.
+  review-fix sub-agent `019f199d-9b3a-76f0-887b-5ea128774140`, finding
+  dispositions, and current review-fix status in durable logs.
 - TypeScript/API reviewer `019f199a-0079-7cf3-ab60-78f8c7286dac`: clean. No
   code change required.
 - Security reviewer `019f199a-38dc-7a90-bc98-5a3a08efd62e`: Important
