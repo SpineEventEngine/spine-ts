@@ -145,6 +145,16 @@ describe("@spine-ts/transport", () => {
         },
       }),
     ).toThrow(/mode/);
+    expect(() =>
+      createTransportSubscription({
+        subscriberId: "projection-worker",
+        mode: "round-robin" as never,
+        topic: {
+          signalKind: "event",
+          messageTypeUrl: "malformed-type-url",
+        },
+      }),
+    ).toThrow(/mode/);
   });
 
   it("exposes adapter-agnostic operation, handler, and close type contracts", () => {

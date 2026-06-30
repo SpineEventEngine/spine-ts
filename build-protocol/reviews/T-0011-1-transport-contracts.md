@@ -67,3 +67,16 @@ Verification passed on `2026-06-30 21:11 WEST`:
   lines, plus TypeDoc/API export checks, proto lint/generate,
   copied-proto checksum verification, and generated-clean checks.
 - `git diff --check`: passed.
+
+Round 2 re-review results:
+
+- Maintainability reviewer `019f1a2b-b1f2-7a61-92b1-9259f53081ea`: CLEAN.
+- Documentation reviewer `019f1a2b-dc9a-7df3-9319-f56fdcc6c291`: CLEAN.
+- TypeScript/API reviewer `019f1a2c-13c7-7691-8c4d-12ce532bf90d`: CLEAN.
+- Performance/reliability reviewer `019f1a2c-7004-76c3-9fe9-0d1bbac1a5c0`:
+  CLEAN.
+- Security reviewer `019f1a2c-3d16-7b00-99bc-865f1ae4b62e`: COMMENTS.
+  `createTransportSubscription()` validates `mode`, but only after topic
+  normalization materializes a routing descriptor. Fix: normalize the
+  subscription mode before creating the copy-safe topic and add regression
+  coverage proving an invalid mode is rejected before a malformed topic.

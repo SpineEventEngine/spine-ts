@@ -179,8 +179,8 @@ export function createTransportSubscription<Kind extends TransportSignalKind>(
   input: TransportSubscriptionInput<Kind>,
 ): TransportSubscription<Kind> {
   const subscriberId = normalizeRequiredText(input.subscriberId, "subscriberId");
-  const topic = createTransportTopic(input.topic);
   const mode = normalizeTransportSubscriptionMode(input.mode ?? "fan-out");
+  const topic = createTransportTopic(input.topic);
 
   return Object.freeze({
     subscriberId,
