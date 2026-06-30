@@ -3,8 +3,9 @@ import {
   type ConcreteRepositoryEntityType,
   type RepositoryEntityType,
   type RepositoryIdentitySnapshot,
+  resolveRepositoryEntityFamily,
 } from "./repository.js";
-import { Aggregate, ProcessManager, Projection } from "./entity.js";
+import { describeEntityMetadata } from "./entity-metadata.js";
 
 /** Tenant isolation mode declared by a bounded context specification. */
 export type TenantMode = "single-tenant" | "multitenant";
@@ -114,10 +115,6 @@ export class BoundedContextNameError extends Error {
 
 interface FrameworkConstructionToken {
   readonly frameworkConstructionToken: true;
-}
-
-interface RuntimeEntityConstructor {
-  readonly prototype: object;
 }
 
 const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
@@ -455,9 +452,11 @@ function cloneRepositorySnapshot<EntityType extends RepositoryEntityType>(
       snapshot.metadata.setOnceFields,
       "Repository snapshot metadata.setOnceFields",
     ),
-    semanticTags: cloneRepositorySemanticTags(
-      snapshot.metadata.semanticTags,
-      "Repository snapshot metadata.semanticTags",
+    semanticTags: Object.freeze(
+      readCanonicalRepositorySemanticTags(
+        snapshot.metadata.semanticTags,
+        "Repository snapshot metadata.semanticTags",
+      ),
     ),
   });
 
@@ -493,33 +492,6 @@ function cloneRepositoryFieldMetadataList(
   }
 
   return Object.freeze(clonedFields);
-}
-
-function cloneRepositorySemanticTags(tags: unknown, owner: string): readonly string[] {
-  if (!Array.isArray(tags)) {
-    throw new TypeError(`${owner} must be an array.`);
-  }
-
-  const tagValues = tags as readonly unknown[];
-  const clonedTags: string[] = [];
-
-  for (let index = 0; index < tagValues.length; index += 1) {
-    if (!Object.hasOwn(tagValues, index)) {
-      throw new TypeError(`${owner}[${String(index)}] must be present.`);
-    }
-
-    const tag = tagValues[index];
-    if (typeof tag !== "string") {
-      throw new TypeError(`${owner}[${String(index)}] must be a string.`);
-    }
-    validateCanonicalRepositorySemanticTag(tag, `${owner}[${String(index)}]`);
-
-    clonedTags.push(tag);
-  }
-
-  validateCanonicalRepositorySemanticTagList(clonedTags, owner);
-
-  return Object.freeze(clonedTags);
 }
 
 function cloneRepositoryFieldMetadata(
@@ -783,7 +755,7 @@ function throwInvalidRepositorySnapshot(
 }
 
 function validateRepositorySnapshot(snapshot: RepositoryIdentitySnapshot): void {
-  const entityFamily = resolveRepositorySnapshotEntityFamily(snapshot.entityType);
+  const entityFamily = resolveRepositoryEntityFamily(snapshot.entityType);
   if (entityFamily === undefined) {
     throw new TypeError(
       "Repository snapshot entityType must be a supported entity class constructor.",
@@ -805,6 +777,10 @@ function validateRepositorySnapshot(snapshot: RepositoryIdentitySnapshot): void 
   }
   if (stateSchema.typeName !== stateFullTypeName) {
     throw new TypeError("Repository snapshot stateSchema.typeName must match stateFullTypeName.");
+  }
+  const trustedMetadata = describeEntityMetadata(snapshot.stateSchema);
+  if (trustedMetadata.kind !== snapshot.entityFamily) {
+    throw new TypeError("Repository snapshot stateSchema entity kind must match entityFamily.");
   }
   if (!isRecord(snapshot.metadata)) {
     throw new TypeError("Repository snapshot metadata must be an object.");
@@ -835,7 +811,7 @@ function validateRepositorySnapshot(snapshot: RepositoryIdentitySnapshot): void 
     snapshot.metadata.setOnceFields,
     "Repository snapshot metadata.setOnceFields",
   );
-  validateRepositorySemanticTags(
+  readCanonicalRepositorySemanticTags(
     snapshot.metadata.semanticTags,
     "Repository snapshot metadata.semanticTags",
   );
@@ -871,12 +847,13 @@ function validateRepositoryFieldMetadataList(fields: unknown, owner: string): vo
   }
 }
 
-function validateRepositorySemanticTags(tags: unknown, owner: string): void {
+function readCanonicalRepositorySemanticTags(tags: unknown, owner: string): string[] {
   if (!Array.isArray(tags)) {
     throw new TypeError(`${owner} must be an array.`);
   }
 
   const tagValues = tags as readonly unknown[];
+  const canonicalTags: string[] = [];
 
   for (let index = 0; index < tagValues.length; index += 1) {
     if (!Object.hasOwn(tagValues, index)) {
@@ -887,13 +864,14 @@ function validateRepositorySemanticTags(tags: unknown, owner: string): void {
     if (typeof tag !== "string") {
       throw new TypeError(`${owner}[${String(index)}] must be a string.`);
     }
-    validateCanonicalRepositorySemanticTag(tag, `${owner}[${String(index)}]`);
+    canonicalTags.push(canonicalRepositorySemanticTag(tag, `${owner}[${String(index)}]`));
   }
 
-  validateCanonicalRepositorySemanticTagList(tagValues as readonly string[], owner);
+  validateCanonicalRepositorySemanticTagList(canonicalTags, owner);
+  return canonicalTags;
 }
 
-function validateCanonicalRepositorySemanticTag(tag: string, owner: string): void {
+function canonicalRepositorySemanticTag(tag: string, owner: string): string {
   const canonicalTag = tag.trim();
 
   if (canonicalTag.length === 0) {
@@ -902,6 +880,7 @@ function validateCanonicalRepositorySemanticTag(tag: string, owner: string): voi
   if (tag !== canonicalTag) {
     throw new TypeError(`${owner} must not require trimming.`);
   }
+  return canonicalTag;
 }
 
 function validateCanonicalRepositorySemanticTagList(tags: readonly string[], owner: string): void {
@@ -918,50 +897,6 @@ function validateCanonicalRepositorySemanticTagList(tags: readonly string[], own
     if (previousTag > tag) {
       throw new TypeError(`${owner} must be sorted.`);
     }
-  }
-}
-
-function resolveRepositorySnapshotEntityFamily(
-  entityType: unknown,
-): RepositoryIdentitySnapshot["entityFamily"] | undefined {
-  if (typeof entityType !== "function" || !isClassConstructor(entityType)) {
-    return undefined;
-  }
-  const entityConstructor = entityType as RuntimeEntityConstructor;
-
-  if (hasEntityFamilyInheritance(entityConstructor, Aggregate, Aggregate.prototype)) {
-    return "aggregate";
-  }
-  if (hasEntityFamilyInheritance(entityConstructor, Projection, Projection.prototype)) {
-    return "projection";
-  }
-  if (hasEntityFamilyInheritance(entityConstructor, ProcessManager, ProcessManager.prototype)) {
-    return "process-manager";
-  }
-
-  return undefined;
-}
-
-function isClassConstructor(value: object): boolean {
-  try {
-    return Function.prototype.toString.call(value).startsWith("class ");
-  } catch {
-    return false;
-  }
-}
-
-function hasEntityFamilyInheritance(
-  entityType: RuntimeEntityConstructor,
-  familyConstructor: object,
-  familyPrototype: object,
-): boolean {
-  try {
-    return (
-      Object.prototype.isPrototypeOf.call(familyConstructor, entityType) &&
-      Object.prototype.isPrototypeOf.call(familyPrototype, entityType.prototype)
-    );
-  } catch {
-    return false;
   }
 }
 

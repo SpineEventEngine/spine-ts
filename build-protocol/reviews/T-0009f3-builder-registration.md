@@ -1,6 +1,6 @@
 # Review Log: T-0009f.3 Builder Repository Registration And Conflict Checks
 
-Status: Round 4 Review Fix Implemented And Verified
+Status: Round 6 Review Fix Implemented And Verified
 
 ## Required Review Lanes
 
@@ -211,4 +211,47 @@ lanes before integration:
   `node scripts/check-api-docs.mjs` passed with one TypeDoc source-link warning
   for invalid local `origin`; `CI=true corepack pnpm verify` passed 17 test
   files / 211 tests plus coverage, docs, proto lint/generate, and
+  generated-clean.
+
+## Round 6 Review State
+
+- Sixth external review round reported four findings:
+  - Code style P3: `resolveRepositorySnapshotEntityFamily()` duplicated the
+    class/family detection already present in `repository.ts`.
+  - Code style P3: semantic-tag canonicality was implemented separately in
+    clone and validation paths.
+  - Documentation P3: top-level durable status still named stale round-4 or
+    round-5 fix state.
+  - Reliability P2: `validateRepositorySnapshot()` trusted
+    `snapshot.metadata.kind` instead of descriptor-derived metadata from
+    `stateSchema`, allowing a self-consistent forged snapshot to lie about the
+    schema kind.
+- Already clean review lanes from the sixth round: TypeScript/API docs and
+  security.
+
+## Round 6 Fix State
+
+- Added RED/GREEN coverage for a hostile repository snapshot that swaps in a
+  projection `stateSchema` while forging aggregate metadata fields that are
+  otherwise self-consistent.
+- Exported a narrow `@internal` `resolveRepositoryEntityFamily()` helper from
+  `repository.ts` and reused it from bounded-context snapshot validation
+  without adding it to the root package export surface.
+- Replaced separate semantic-tag clone/validate loops with one
+  `readCanonicalRepositorySemanticTags()` helper that validates and returns a
+  dense canonical string array.
+- Repository snapshot validation now derives trusted metadata from
+  `stateSchema` with `describeEntityMetadata()` and requires the trusted schema
+  kind to match `snapshot.entityFamily`.
+- Preserved the metadata-only builder boundary: no storage, routing, stand,
+  bus, handler, default runtime repository, or context runtime behavior was
+  added.
+- Required focused and full verification passed before committing the round-6
+  fix:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts packages/server/src/repository.test.ts packages/server/src/index.test.ts`
+  passed 61 tests; `corepack pnpm typecheck:tooling` passed;
+  `node scripts/check-api-docs.mjs` passed with one TypeDoc source-link warning
+  for invalid local `origin`; the first full `CI=true corepack pnpm verify`
+  attempt failed at Prettier for this work log, then the rerun passed 17 test
+  files / 212 tests plus coverage, docs, proto lint/generate, and
   generated-clean.

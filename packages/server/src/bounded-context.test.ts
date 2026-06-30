@@ -648,6 +648,21 @@ describe("BoundedContext builder shell", () => {
         }),
     ],
     [
+      "forged metadata kind for descriptor state kind",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          stateSchema: ProjectionStateSchema as never,
+          stateFullTypeName: ProjectionStateSchema.typeName,
+          metadata: Object.freeze({
+            ...snapshot.metadata,
+            schema: ProjectionStateSchema as never,
+            fullTypeName: ProjectionStateSchema.typeName,
+            kind: "aggregate",
+          }),
+        }),
+    ],
+    [
       "malformed ID field",
       (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
         Object.freeze({

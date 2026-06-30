@@ -193,7 +193,7 @@ export class Repository<
       );
     }
 
-    const entityFamily = resolveEntityFamily(entityType);
+    const entityFamily = resolveRepositoryEntityFamily(entityType);
 
     if (entityFamily === undefined) {
       throw new RepositoryIdentityError(
@@ -326,14 +326,21 @@ function isClassConstructor(entityType: unknown): boolean {
   }
 }
 
-function resolveEntityFamily(entityType: RuntimeRepositoryEntityType): EntityFamily | undefined {
-  if (hasEntityFamilyInheritance(entityType, Aggregate, Aggregate.prototype)) {
+/** @internal Shared runtime family check for repository-owned entity constructors. */
+export function resolveRepositoryEntityFamily(entityType: unknown): EntityFamily | undefined {
+  if (typeof entityType !== "function" || !isClassConstructor(entityType)) {
+    return undefined;
+  }
+
+  const runtimeEntityType = entityType as RuntimeRepositoryEntityType;
+
+  if (hasEntityFamilyInheritance(runtimeEntityType, Aggregate, Aggregate.prototype)) {
     return "aggregate";
   }
-  if (hasEntityFamilyInheritance(entityType, Projection, Projection.prototype)) {
+  if (hasEntityFamilyInheritance(runtimeEntityType, Projection, Projection.prototype)) {
     return "projection";
   }
-  if (hasEntityFamilyInheritance(entityType, ProcessManager, ProcessManager.prototype)) {
+  if (hasEntityFamilyInheritance(runtimeEntityType, ProcessManager, ProcessManager.prototype)) {
     return "process-manager";
   }
 

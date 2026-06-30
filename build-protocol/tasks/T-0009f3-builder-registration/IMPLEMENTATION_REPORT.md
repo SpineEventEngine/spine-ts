@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.3 Builder Repository Registration And Conflict Checks
 
-Status: Round 5 Review Fix Implemented And Verified
+Status: Round 6 Review Fix Implemented And Verified
 Task log: `build-protocol/tasks/T-0009f3-builder-registration/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f3.md`
 Review log: `build-protocol/reviews/T-0009f3-builder-registration.md`
@@ -88,6 +88,15 @@ Impact:
   Aggregate/Projection/ProcessManager class and that the inferred family
   matches `snapshot.entityFamily`, so hostile snapshots cannot substitute an
   arbitrary function or cross-family constructor.
+- Repository snapshot validation reuses the repository module's shared
+  internal entity-family resolver, avoiding duplicate constructor/family
+  inheritance checks in bounded-context registration.
+- Repository snapshot cloning and validation share one semantic-tag helper that
+  validates and returns a dense canonical string array before freezing clones.
+- Repository snapshot validation derives trusted metadata from `stateSchema`
+  with `describeEntityMetadata()` and verifies the descriptor-derived schema
+  kind matches `snapshot.entityFamily`, so hostile snapshots cannot forge
+  self-consistent `metadata.kind` values around a different descriptor kind.
 - `BoundedContextBuilder.build()` no longer pre-clones repository snapshots
   before constructing `BoundedContext`; constructor validation performs the
   defensive copy once, and context snapshot freezing preserves already
@@ -248,6 +257,33 @@ Impact:
   `tsc -b`, tooling typecheck, ESLint, Prettier check, 17 Vitest files / 211
   tests, coverage over thresholds, TypeDoc/API guard, proto lint, proto
   generate, and generated-clean completed successfully.
+- Round-6 descriptor-kind RED:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts`
+  failed with one expected failure because a hostile snapshot with aggregate
+  `entityType`/`entityFamily`, projection `stateSchema`, and forged aggregate
+  `metadata.kind` was accepted instead of producing deterministic
+  `INVALID_REPOSITORY_SNAPSHOT`.
+- Round-6 bounded-context GREEN:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts`
+  passed 36 tests after descriptor-derived schema-kind validation and the
+  helper deduplication changes were added.
+- Round-6 required focused verification:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts packages/server/src/repository.test.ts packages/server/src/index.test.ts`
+  passed 3 test files and 61 tests.
+- Round-6 `corepack pnpm typecheck:tooling`:
+  passed.
+- Round-6 `node scripts/check-api-docs.mjs`:
+  passed. TypeDoc emitted one source-link warning because the local `origin`
+  remote is not valid; the API JSON guard passed.
+- Round-6 first full verification attempt:
+  `CI=true corepack pnpm verify` failed at `pnpm format:check` because
+  `build-protocol/work-logs/T-0009f3.md` needed Prettier formatting after the
+  round-6 entries were added.
+- Round-6 full verification rerun:
+  `CI=true corepack pnpm verify` passed. Evidence: node version check,
+  `tsc -b`, tooling typecheck, ESLint, Prettier check, 17 Vitest files / 212
+  tests, coverage over thresholds, TypeDoc/API guard, proto lint, proto
+  generate, and generated-clean completed successfully.
 
 ## Review
 
@@ -303,3 +339,14 @@ Impact:
   supported Aggregate/Projection/ProcessManager class and requiring its
   inferred family to match `snapshot.entityFamily`.
 - Required focused and full verification passed for the round-5 fix.
+- Sixth external review round reported two code-style findings, one
+  documentation finding, and one reliability finding.
+- Fixed round-6 code-style finding 1 by reusing a shared internal repository
+  entity-family resolver from bounded-context snapshot validation.
+- Fixed round-6 code-style finding 2 by routing semantic-tag cloning and
+  validation through one canonical dense-array helper.
+- Fixed round-6 documentation finding by updating durable top-level status and
+  round-6 fix notes.
+- Fixed round-6 reliability finding by validating descriptor-derived metadata
+  from `stateSchema` before accepting the snapshot kind.
+- Required focused and full verification passed for the round-6 fix.

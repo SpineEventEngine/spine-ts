@@ -1,6 +1,6 @@
 # T-0009f.3: Builder Repository Registration And Conflict Checks
 
-Status: Round 4 Review Fix Implemented And Verified
+Status: Round 6 Review Fix Implemented And Verified
 Start: `2026-06-30 11:34 WEST`
 Parent task: `T-0009f Repository Seams And Bounded-Context Registration Skeleton`
 Parent branch: `task/T-0009f-repository-seams`
@@ -169,6 +169,23 @@ Expected boundary from current research:
       and that the inferred family matches the snapshot family before
       accepting metadata.
 - [x] Required focused and full verification pass for the round-5 fix commit.
+
+## Review Round 6 Fixes
+
+- [x] Code style P3: repository snapshot validation now reuses the repository
+      module's shared internal entity-family resolver instead of duplicating
+      class/family inheritance checks in `bounded-context.ts`.
+- [x] Code style P3: semantic-tag cloning and validation now share one helper
+      that validates and returns a dense canonical tag array.
+- [x] Documentation P3: durable task/review/report/work-log status was updated
+      from stale round-4/round-5 wording to the round-6 fix state.
+- [x] Reliability P2: added RED/GREEN coverage for a hostile repository
+      snapshot whose exposed metadata is self-consistent but whose
+      `stateSchema` descriptor kind disagrees with `entityFamily`.
+- [x] Reliability P2: repository snapshot validation now derives trusted
+      metadata from `stateSchema` with `describeEntityMetadata()` before
+      accepting the snapshot kind.
+- [x] Required focused and full verification pass for the round-6 fix commit.
 
 ## Implementation Evidence
 
