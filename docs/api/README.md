@@ -73,9 +73,13 @@ the matching descriptor-backed state schema, descriptor metadata, state full
 type name, and ID-field metadata. Snapshots are frozen fresh-copy values for
 later bounded-context duplicate/conflict checks. The seam rejects unsupported
 constructors and entity-family/state-kind mismatches with structured
-`RepositoryIdentityError` details. It does not create/find/store entities, open
-storage, register contexts, route or dispatch messages, write inboxes, invoke
-handlers, manage caches, run catch-up, expose stands, or start buses/transports.
+`RepositoryIdentityError` details. Family inference trusts same-realm class
+constructor and instance prototype metadata, so alias imports, member
+expressions, intermediate domain base classes, and explicitly reparented ES
+classes with matching same-realm prototype chains are treated as metadata. It
+does not create/find/store entities, open storage, register contexts, route or
+dispatch messages, write inboxes, invoke handlers, manage caches, run catch-up,
+expose stands, or start buses/transports.
 Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field

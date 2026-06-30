@@ -1,6 +1,6 @@
 # Review Log: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-8 findings fixed - Pending Re-review
+Status: Round-9 findings fixed - Pending Re-review
 
 ## Required Review Lanes
 
@@ -221,8 +221,37 @@ Status: Round-8 findings fixed - Pending Re-review
     tests and `corepack pnpm typecheck:tooling` passed after the fixes. API
     docs guard passed, and full `CI=true corepack pnpm verify` passed with 17
     test files and 179 tests.
+- Ninth-round reviewer findings received by the review-fix sub-agent:
+  - Code/performance/TypeScript: `declaresSupportedEntitySubclass()` parsed
+    source text and rejected valid subclasses using alias imports,
+    namespace/member base expressions, or intermediate domain base classes.
+  - TypeScript/API P2: manually spelled family-broad constructor aliases with
+    real constructor parameters could still satisfy `RepositoryOptions` and
+    `Repository` subclass bindings.
+  - Documentation/API: if valid same-realm prototype-reparented ES classes
+    remain trusted, docs and tests must describe that explicit metadata
+    boundary and must not claim those classes are rejected.
+- Round-9 fix status:
+  - Fixed: removed source-name subclass parsing from repository family
+    acceptance. Runtime validation now requires an ES class constructor plus
+    same-realm constructor and instance prototype chains reaching `Aggregate`,
+    `Projection`, or `ProcessManager`.
+  - Fixed: added regression coverage for aliased aggregate bases,
+    namespace/member base expressions, and intermediate domain aggregate base
+    classes.
+  - Fixed: documented and tested the explicit same-realm metadata boundary:
+    prototype-reparented ES classes with matching same-realm family prototype
+    chains are trusted rather than rejected.
+  - Fixed: added a type-only inherited entity-constructor brand to reject
+    manually spelled family-broad constructor aliases with real constructor
+    parameters for both `RepositoryOptions` and `Repository` subclasses.
+  - Verified: focused RED reproduced the source-name parser rejection and
+    unused manual-constructor type assertions; focused Vitest passed with 22
+    tests, `corepack pnpm typecheck:tooling` passed, and
+    `node scripts/check-api-docs.mjs` passed after the fixes. Full
+    `CI=true corepack pnpm verify` passed with 17 test files and 181 tests.
 
 ## Current Review State
 
-- First-, second-, third-, fourth-, fifth-, sixth-, seventh-, and eighth-round comments are fixed. Orchestrator reviewer lanes
+- First-, second-, third-, fourth-, fifth-, sixth-, seventh-, eighth-, and ninth-round comments are fixed. Orchestrator reviewer lanes
   should re-run before integration.

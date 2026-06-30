@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-8 Review Fixes Complete - Pending Re-review
+Status: Round-9 Review Fixes Complete - Pending Re-review
 Task log: `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f2.md`
 Review log: `build-protocol/reviews/T-0009f2-repository-identity-seam.md`
@@ -29,9 +29,9 @@ Implementation research inspected and used:
   scope.
 - `DefaultRepository.java`: family-based default repository selection is a
   convenience seam, not an invitation to build runtime repositories now. The TS
-  implementation uses a metadata-only runtime guard over declared ES class
-  subclass shape plus constructor/prototype inheritance to infer family
-  identity, without instantiating repositories or entities.
+  implementation uses a metadata-only runtime guard over same-realm ES class
+  constructors plus constructor/prototype inheritance to infer family identity,
+  without instantiating repositories or entities.
 - `AggregateRepository.java`, `ProjectionRepository.java`, and
   `ProcessManagerRepository.java`: routing, inbox, cache, dispatch, catch-up,
   import, command bus, event bus, and query behavior are concrete repository
@@ -46,8 +46,8 @@ Implementation research inspected and used:
   `RepositoryOptions`, `RepositoryEntityType`, `RepositoryIdentitySnapshot`,
   `RepositoryIdentityError`, and structured error detail/code exports.
 - `Repository` derives descriptor metadata through `describeEntityMetadata()`,
-  infers the entity family from `Aggregate`, `Projection`, or `ProcessManager`
-  declared class subclassing plus constructor/prototype inheritance, and
+  infers the entity family from same-realm class constructor and instance
+  prototype chains reaching `Aggregate`, `Projection`, or `ProcessManager`, and
   rejects unsupported constructors or schema-kind mismatches.
 - `snapshot` returns frozen fresh-copy metadata suitable for later
   bounded-context duplicate/conflict checks.
@@ -92,6 +92,13 @@ Implementation research inspected and used:
   reject family-broad constructor aliases even when they carry a concrete state
   schema, and bind `RepositoryIdentitySnapshot` to the constructor-carried
   state schema.
+- Ninth-round review fixes remove source-name parsing from entity family
+  acceptance so aliased bases, namespace/member base expressions, and
+  intermediate domain base classes are valid. The runtime now documents and
+  tests the explicit same-realm metadata boundary: ES classes reparented onto a
+  supported family prototype chain are trusted rather than rejected. A
+  type-only inherited entity-constructor brand rejects manually spelled
+  family-broad constructor aliases with real constructor parameters.
 - Public root exports, TypeDoc export guard, package README, API docs, user
   guide, and architecture notes now describe the metadata-only boundary.
 
@@ -207,9 +214,22 @@ Implementation research inspected and used:
 - Round-8 full verification: `CI=true corepack pnpm verify` passed with 17
   test files, 179 tests, coverage, docs check, proto lint/generate, and
   generated-clean.
+- Round-9 RED: focused Vitest failed because aliased aggregate bases and
+  same-realm reparented ES classes were rejected by source-name parsing;
+  `corepack pnpm typecheck:tooling` failed with unused `@ts-expect-error`
+  directives for manually spelled family-broad constructor aliases with real
+  constructor parameters.
+- Round-9 GREEN: focused Vitest passed with 2 files and 22 tests;
+  `corepack pnpm typecheck:tooling` passed after removing the source-name
+  subclass parser and adding the inherited entity-constructor type brand.
+- Round-9 API docs guard: `node scripts/check-api-docs.mjs` passed and
+  reported 87 expected `@spine-ts/server` exports.
+- Round-9 full verification: `CI=true corepack pnpm verify` passed with 17
+  test files, 181 tests, coverage, docs check, proto lint/generate, and
+  generated-clean.
 
 ## Review
 
-- First-, second-, third-, fourth-, fifth-, sixth-, seventh-, and eighth-round reviewer findings were applied by review-fix
+- First-, second-, third-, fourth-, fifth-, sixth-, seventh-, eighth-, and ninth-round reviewer findings were applied by review-fix
   sub-agents.
   Re-review by the orchestrator lanes remains pending.

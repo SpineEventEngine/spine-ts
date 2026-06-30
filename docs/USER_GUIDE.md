@@ -351,11 +351,15 @@ repository.metadata.fullTypeName; // TaskStateSchema.typeName
 repository.snapshot.idField.name; // "id"
 ```
 
-`Repository` infers the family from the constructor's built-in family marker
-base class and checks it against the state schema's `(entity).kind`.
-Mismatches, such as an aggregate constructor paired with a projection state
-schema, throw `RepositoryIdentityError` with stable codes and structured
-details. `snapshot` returns a frozen fresh copy suitable for later
+`Repository` infers the family from the constructor and instance prototype
+chains reaching the built-in family marker base class and checks it against the
+state schema's `(entity).kind`. Alias imports, namespace/member base-class
+expressions, and intermediate domain base classes are accepted. This is a
+same-realm metadata boundary: code that explicitly reparents an ES class onto an
+entity family is trusted as entity metadata, not rejected as an adversarial
+sandbox escape. Mismatches, such as an aggregate constructor paired with a
+projection state schema, throw `RepositoryIdentityError` with stable codes and
+structured details. `snapshot` returns a frozen fresh copy suitable for later
 bounded-context duplicate and conflict checks.
 
 This is explicitly metadata-only. It does not create, find, or store entities;

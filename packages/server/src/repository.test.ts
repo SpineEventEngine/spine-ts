@@ -14,6 +14,7 @@ import {
   Repository,
   RepositoryIdentityError,
   type DescriptorMessageSchema,
+  type EntityOptions,
   type EntityFamily,
   type EntityMetadata,
   type RepositoryEntityType,
@@ -84,6 +85,11 @@ class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, numbe
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {}
 class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {}
 class RuntimeCheckedAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
+const DomainEntityBase = {
+  Aggregate,
+};
+const AggregateAlias = Aggregate;
+abstract class DomainAggregateBase extends Aggregate<string, typeof AggregateStateSchema, number> {}
 class OtherRepositoryEntityBase {
   otherBase(): string {
     return "other";
@@ -123,6 +129,26 @@ describe("repository identity", () => {
     expectTypeOf(aggregate.snapshot).toEqualTypeOf<
       RepositoryIdentitySnapshot<typeof TaskAggregate>
     >();
+  });
+
+  it("accepts valid same-realm subclass chains through aliases, members, and domain bases", () => {
+    class AliasedAggregate extends AggregateAlias<string, typeof AggregateStateSchema, number> {}
+    class MemberAggregate extends DomainEntityBase.Aggregate<
+      string,
+      typeof AggregateStateSchema,
+      number
+    > {}
+    class DomainAggregate extends DomainAggregateBase {}
+
+    for (const entityType of [AliasedAggregate, MemberAggregate, DomainAggregate]) {
+      const repository = new Repository({
+        entityType,
+        schema: AggregateStateSchema,
+      });
+
+      expect(repository.entityFamily).toBe("aggregate");
+      expect(repository.stateSchema).toBe(AggregateStateSchema);
+    }
   });
 
   it("rejects an entity family whose constructor and state schema kind disagree", () => {
@@ -241,7 +267,9 @@ describe("repository identity", () => {
         entityTypeName: "ForgedAggregateConstructor",
       });
     }
+  });
 
+  it("trusts same-realm ES classes that are explicitly reparented onto an entity family", () => {
     class ForgedAggregateClass {
       forged(): boolean {
         return true;
@@ -250,36 +278,19 @@ describe("repository identity", () => {
     Object.setPrototypeOf(ForgedAggregateClass, Aggregate);
     Object.setPrototypeOf(ForgedAggregateClass.prototype, Aggregate.prototype);
 
-    try {
-      new Repository({
-        entityType: ForgedAggregateClass as unknown as typeof RuntimeCheckedAggregate,
-        schema: AggregateStateSchema,
-      });
-      throw new Error("Expected forged ES class entity type to fail.");
-    } catch (error) {
-      expect(error).toBeInstanceOf(RepositoryIdentityError);
-      expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
-      expect((error as RepositoryIdentityError).details).toEqual({
-        entityTypeName: "ForgedAggregateClass",
-      });
-    }
-
     class ForgedAggregateSubclass extends OtherRepositoryEntityBase {}
     Object.setPrototypeOf(ForgedAggregateSubclass, Aggregate);
     Object.setPrototypeOf(ForgedAggregateSubclass.prototype, Aggregate.prototype);
 
-    try {
-      new Repository({
-        entityType: ForgedAggregateSubclass as unknown as typeof RuntimeCheckedAggregate,
+    for (const entityType of [ForgedAggregateClass, ForgedAggregateSubclass]) {
+      const repository = new Repository({
+        entityType: entityType as unknown as typeof RuntimeCheckedAggregate,
         schema: AggregateStateSchema,
       });
-      throw new Error("Expected reparented unrelated subclass entity type to fail.");
-    } catch (error) {
-      expect(error).toBeInstanceOf(RepositoryIdentityError);
-      expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
-      expect((error as RepositoryIdentityError).details).toEqual({
-        entityTypeName: "ForgedAggregateSubclass",
-      });
+
+      expect(repository.entityType).toBe(entityType);
+      expect(repository.entityFamily).toBe("aggregate");
+      expect(repository.stateSchema).toBe(AggregateStateSchema);
     }
   });
 
@@ -574,6 +585,24 @@ describe("repository identity", () => {
           schema: AggregateStateSchema,
         };
       void concreteSchemaFamilyBroadAnnotatedOptions;
+      type ManuallySpelledFamilyBroadAggregateInstance = Aggregate<
+        string,
+        typeof AggregateStateSchema,
+        number
+      >;
+      type ManuallySpelledFamilyBroadAggregateEntityType = (abstract new (
+        options: EntityOptions<string, typeof AggregateStateSchema, number>,
+      ) => ManuallySpelledFamilyBroadAggregateInstance) & {
+        readonly name: string;
+        readonly prototype: ManuallySpelledFamilyBroadAggregateInstance;
+      };
+      // @ts-expect-error manually spelled family-broad constructor shapes must not satisfy repository options.
+      const manuallySpelledFamilyBroadOptions: RepositoryOptions<ManuallySpelledFamilyBroadAggregateEntityType> =
+        {
+          entityType: TaskAggregate,
+          schema: AggregateStateSchema,
+        };
+      void manuallySpelledFamilyBroadOptions;
       type SchemaUnionAggregateEntityType = RepositoryEntityType<
         Aggregate<unknown, typeof AggregateStateSchema | typeof ProjectionStateSchema, number>
       >;
@@ -606,6 +635,11 @@ describe("repository identity", () => {
         ConcreteSchemaFamilyBroadAggregateEntityType
       > {}
       void ConcreteSchemaFamilyBroadRepositorySubclass;
+      abstract class ManuallySpelledFamilyBroadRepositorySubclass extends Repository<
+        // @ts-expect-error subclasses must not bind manually spelled family-broad constructor shapes.
+        ManuallySpelledFamilyBroadAggregateEntityType
+      > {}
+      void ManuallySpelledFamilyBroadRepositorySubclass;
       abstract class SchemaUnionRepositorySubclass extends Repository<
         // @ts-expect-error subclasses must not bind schema-union repository entity constructor types.
         SchemaUnionAggregateEntityType

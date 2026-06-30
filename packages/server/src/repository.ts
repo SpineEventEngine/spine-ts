@@ -73,6 +73,8 @@ interface RuntimeRepositoryEntityType {
 export type RepositoryEntityType<
   Instance extends RepositoryEntityInstance = RepositoryEntityInstance,
 > = (abstract new (...args: never[]) => Instance) & {
+  /** @internal Constructor brand inherited from the built-in entity base class. */
+  readonly __spineTsEntityConstructorBrand: true;
   /** Prototype inspected for built-in entity family marker inheritance. */
   readonly prototype: Instance;
   /** Constructor name used in structured diagnostics. */
@@ -187,9 +189,8 @@ export class Repository<
     }
 
     const entityType = readRepositoryEntityTypeOption(options);
-    const classSource = classConstructorSource(entityType);
 
-    if (typeof entityType !== "function" || classSource === undefined) {
+    if (typeof entityType !== "function" || !isClassConstructor(entityType)) {
       throw new RepositoryIdentityError(
         "UNSUPPORTED_ENTITY_TYPE",
         `Repository entity type "${entityTypeName(entityType)}" must be a class constructor extending Aggregate, Projection, or ProcessManager.`,
@@ -201,7 +202,7 @@ export class Repository<
 
     const entityFamily = resolveEntityFamily(entityType);
 
-    if (entityFamily === undefined || !declaresSupportedEntitySubclass(classSource, entityFamily)) {
+    if (entityFamily === undefined) {
       throw new RepositoryIdentityError(
         "UNSUPPORTED_ENTITY_TYPE",
         `Repository entity type "${entityTypeName(entityType)}" must extend Aggregate, Projection, or ProcessManager.`,
@@ -319,40 +320,16 @@ function readRepositorySchemaOption(
   }
 }
 
-function classConstructorSource(entityType: unknown): string | undefined {
+function isClassConstructor(entityType: unknown): boolean {
   if (typeof entityType !== "function") {
-    return undefined;
+    return false;
   }
 
   try {
     const source = Function.prototype.toString.call(entityType);
-    return source.startsWith("class ") ? source : undefined;
+    return source.startsWith("class ");
   } catch {
-    return undefined;
-  }
-}
-
-function declaresSupportedEntitySubclass(classSource: string, entityFamily: EntityFamily): boolean {
-  const headerEnd = classSource.indexOf("{");
-  const header = stripJavaScriptComments(
-    headerEnd === -1 ? classSource : classSource.slice(0, headerEnd),
-  );
-  const declaredBase = /\bextends\s+([A-Za-z_$][\w$]*)\b/u.exec(header)?.[1];
-  return declaredBase === entityFamilyBaseClassName(entityFamily);
-}
-
-function stripJavaScriptComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//gu, " ").replace(/\/\/[^\n\r]*/gu, " ");
-}
-
-function entityFamilyBaseClassName(entityFamily: EntityFamily): string {
-  switch (entityFamily) {
-    case "aggregate":
-      return "Aggregate";
-    case "projection":
-      return "Projection";
-    case "process-manager":
-      return "ProcessManager";
+    return false;
   }
 }
 

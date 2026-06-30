@@ -227,11 +227,14 @@ repository.snapshot.stateFullTypeName; // immutable fresh-copy snapshot
 ```
 
 The constructor derives descriptor metadata with `describeEntityMetadata()` and
-infers the entity family from the constructor's `Aggregate`, `Projection`, or
-`ProcessManager` base class. It rejects constructors outside those families and
-rejects mismatched family/schema pairs, such as an aggregate class with a
-projection state schema, with structured `RepositoryIdentityError` codes and
-details. This API is metadata-only: it does not create, find, or store
+infers the entity family from same-realm constructor and instance prototype
+chains reaching `Aggregate`, `Projection`, or `ProcessManager`. Alias imports,
+namespace/member base-class expressions, and intermediate domain base classes
+are accepted. Explicitly reparented same-realm ES classes are trusted as
+metadata; this is not a sandbox boundary. The API rejects constructors outside
+those families and rejects mismatched family/schema pairs, such as an aggregate
+class with a projection state schema, with structured `RepositoryIdentityError`
+codes and details. This API is metadata-only: it does not create, find, or store
 entities; open storage; register with a bounded context; route messages; invoke
 handlers; write inboxes; manage caches; emit lifecycle events; start buses; or
 touch transport.

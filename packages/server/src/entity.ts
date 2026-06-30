@@ -172,6 +172,9 @@ export abstract class Entity<
   Schema extends DescriptorMessageSchema,
   Version = EntityVersionMetadata,
 > {
+  /** @internal Brand inherited by concrete entity constructors for repository type constraints. */
+  static readonly __spineTsEntityConstructorBrand = true as const;
+
   readonly #id: Id;
   readonly #schema: Schema;
   readonly #metadata: EntityMetadata<Schema>;
