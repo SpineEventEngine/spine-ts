@@ -1,6 +1,6 @@
 # T-0009e.4: Public API Closure And Verification
 
-Status: Complete
+Status: Implemented; Orchestrator Review Pending
 Parent task: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Task log path:
 `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`

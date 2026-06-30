@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.4 Public API Closure And Verification
 
-Status: Complete
+Status: Implemented; Orchestrator Review Pending
 Task log:
 `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e4.md`
@@ -18,9 +18,9 @@ README, API guide, user guide, and architecture notes coherent at the parent
 surface integrated by T-0009e.1, T-0009e.2, and T-0009e.3. Round 1 review
 requested explicit public-doc mentions that Java builders remain deferred, so
 this subtask updates that wording plus durable task/report/work/review logs.
-Later review found parent closure evidence gaps, which are also corrected. Round
-3 returned clean across all required reviewer lanes. No runtime source, root
-export, or API-check changes were needed.
+Local implementation audit passes found parent closure evidence gaps, which are
+also corrected. No runtime source, root export, or API-check changes were
+needed. Required orchestrator-spawned review is pending.
 
 ## Files Changed
 
@@ -58,6 +58,5 @@ packages/server/src/index.test.ts` passed on `2026-06-30 03:11 WEST`: 2 test
 
 ## Review
 
-Review findings were accepted and fixed. Round 3 returned clean across all five
-required reviewer lanes, and final review evidence is recorded in the review
-log.
+The implementation sub-agent recorded local audit/fix passes. Required
+orchestrator-spawned review is pending in the review log.
