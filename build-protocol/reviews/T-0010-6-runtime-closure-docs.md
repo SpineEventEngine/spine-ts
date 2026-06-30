@@ -88,6 +88,9 @@ Final documentation re-review: `019f19df-8137-79c2-9d95-c05deb7db5ae`
 ## Review-Fix Verification Evidence
 
 - Final full `CI=true corepack pnpm verify` passed on `2026-06-30 19:28 WEST`.
+- Post-review-closure `CI=true corepack pnpm verify` passed on `2026-06-30
+19:55 WEST` with 21 test files / 257 tests and coverage above the 90%
+  protocol target.
 - First review-fix verification from the worker report:
   `corepack pnpm prettier --write ...` passed,
   `corepack pnpm prettier --check ...` passed, `git diff --check` passed, and
@@ -121,4 +124,5 @@ Chronology log-fix outcome: durable log chronology correction recorded for the
 chronology log-fix commit `2441543`.
 
 Final documentation re-review outcome: CLEAN. No remaining comments for
-T-0010.6. Branch HEAD `2441543` is ready for parent integration.
+T-0010.6. Reviewed branch head `a2beb68` passed full verification and is ready
+for parent integration; this log update records that evidence.

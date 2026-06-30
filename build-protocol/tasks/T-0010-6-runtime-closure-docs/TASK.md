@@ -29,7 +29,7 @@ Chronology log-fix worker: `019f19dc-8495-7152-a968-aebb531530e6` (closed)
 Chronology log-fix commit: `2441543` (`Fix T-0010.6 chronology logs`)
 Final documentation re-reviewer: `019f19df-8137-79c2-9d95-c05deb7db5ae`
 (closed, CLEAN)
-Final branch HEAD: `2441543`
+Final reviewed branch HEAD before verification-log commit: `a2beb68`
 
 ## Objective
 
@@ -196,6 +196,8 @@ Out of scope:
   already-committed outcome wording. It was committed as `2441543`.
 - After chronology log-fix commit `2441543`: Final documentation re-reviewer
   `019f19df-8137-79c2-9d95-c05deb7db5ae` reported CLEAN, with no findings.
+- `2026-06-30 19:55 WEST`: Post-review-closure full verification passed after
+  review closure commit `a2beb68`.
 
 ## Decisions
 
@@ -262,6 +264,11 @@ Out of scope:
 - Chronology log-fix worker report: `corepack pnpm prettier --write ...`
   passed; `corepack pnpm prettier --check ...` passed; `git diff --check`
   passed; post-commit `git status --short` was clean after commit `2441543`.
+- Post-review-closure verification: `CI=true corepack pnpm verify` - passed on
+  `2026-06-30 19:55 WEST` with 21 test files / 257 tests, coverage 96.45%
+  statements / 90.55% branches / 99.24% functions / 96.39% lines, TypeDoc/API
+  counts 100 proto / 28 core / 124 server / 26 storage, copied proto checksum
+  verification, and generated output clean.
 
 ## Coverage Result
 
@@ -308,6 +315,11 @@ Out of scope:
   90.55% branches / 99.24% functions / 96.39% lines, TypeDoc/API docs with 100
   proto / 28 core / 124 server / 26 storage expected exports, copied proto
   checksum verification, and generated proto output clean.
+- Post-review-closure full verification passed on `2026-06-30 19:55 WEST`:
+  `CI=true corepack pnpm verify` passed with 21 test files / 257 tests,
+  coverage 96.45% statements / 90.55% branches / 99.24% functions / 96.39%
+  lines, TypeDoc/API counts 100 proto / 28 core / 124 server / 26 storage,
+  copied proto checksum verification, and generated output clean.
 
 ## Open Risks And Follow-Up Routing
 
@@ -336,4 +348,5 @@ Out of scope:
 
 ## Integration Result
 
-Pending parent merge. Branch HEAD `2441543` is ready for parent integration.
+Pending parent merge. Reviewed branch head `a2beb68` passed full verification
+and is ready for parent integration; this log update records that evidence.
