@@ -102,5 +102,16 @@ Round 2 findings to fix:
 Review-fix updates now record the correct chronology: the initial/local audit
 found runtime source, root export, and API-check surfaces coherent, then
 identified and applied required explicit Java-builder deferral wording in public
-docs. Re-review remains pending; do not treat this protocol review loop as clean
-or closed yet.
+docs.
+
+Round 2 fix verification passed:
+
+- Required stale-wording scan exited 1 with no matches.
+- `node scripts/check-api-docs.mjs` exited 0 with 100 expected proto exports,
+  28 core exports, 72 server exports, and 26 storage exports.
+- `CI=true corepack pnpm verify` exited 0 with 15 test files / 158 tests,
+  coverage, TypeDoc/API checks, proto lint/generate, and generated-output gates
+  clean.
+
+Re-review remains pending; do not treat this protocol review loop as clean or
+closed yet.

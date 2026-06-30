@@ -237,7 +237,7 @@ closure logs record final verification evidence. No runtime source, root export,
 or API-check changes were needed. Orchestrator-spawned Round 1 review found
 stale review-status wording, and Round 2 found stale chronology wording that
 contradicted the public-doc Java-builder deferral updates; fixes were applied,
-with re-review pending.
+with Round 2 fix verification passed and re-review pending.
 
 ## Initial Scope Constraints
 
@@ -311,6 +311,11 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
   tests, coverage statements 97.25%, branches 91.41%, functions 99.16%, lines
   97.19%; TypeDoc/API/proto gates passed with 72 expected server exports and
   generated proto output clean.
+- T-0009e.4 Round 2 stale chronology fix verification passed: required
+  stale-wording scan exited 1 with no matches, `node scripts/check-api-docs.mjs`
+  exited 0 with 100 proto / 28 core / 72 server / 26 storage expected exports,
+  and `CI=true corepack pnpm verify` exited 0 with 15 test files / 158 tests and
+  coverage/API/proto/generated gates clean.
 
 ## Review Rounds
 
@@ -322,8 +327,8 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
   five required reviewer lanes and all reviewers were closed.
 - T-0009e.4 implementation completed its local closure audit and verification.
   Orchestrator Round 1 review found stale review-status wording, and Round 2
-  found stale chronology wording about public-doc changes; fixes were applied,
-  with re-review pending.
+  found stale chronology wording about public-doc changes; fixes were applied
+  and Round 2 fix verification passed, with re-review pending.
 
 ## Current State
 
@@ -347,5 +352,5 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
   gates passed with 72 expected server exports.
 - T-0009e.4 closure verification passed in the isolated subtask branch.
   Orchestrator Round 1 review found stale review-status wording, and Round 2
-  found stale chronology wording about public-doc changes; fixes were applied,
-  with re-review pending.
+  found stale chronology wording about public-doc changes; fixes were applied
+  and Round 2 fix verification passed, with re-review pending.

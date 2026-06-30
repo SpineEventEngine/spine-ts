@@ -22,7 +22,8 @@ surface coherent without runtime source, root export, or API-check changes, and
 added explicit public-doc wording that Java builders remain deferred.
 Orchestrator-spawned Round 1 review found stale review-status wording, and Round
 2 found stale chronology wording that contradicted the public-doc Java-builder
-deferral updates. Fixes were applied, with re-review pending.
+deferral updates. Fixes were applied and Round 2 fix verification passed, with
+re-review pending.
 
 ## JVM Research Used
 
@@ -116,6 +117,11 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
   tests, coverage 97.25% statements / 91.41% branches / 99.16% functions /
   97.19% lines, TypeDoc/API/proto gates passed with 72 expected server exports,
   and generated proto output clean.
+- T-0009e.4 Round 2 stale chronology fix verification passed: required
+  stale-wording scan exited 1 with no matches, `node scripts/check-api-docs.mjs`
+  exited 0 with 100 proto / 28 core / 72 server / 26 storage expected exports,
+  and `CI=true corepack pnpm verify` exited 0 with 15 test files / 158 tests and
+  coverage/API/proto/generated gates clean.
 
 ## Review
 
@@ -143,4 +149,4 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
 - T-0009e.4 completed its local closure audit and verification in the subtask
   branch. Orchestrator Round 1 review found stale review-status wording, and
   Round 2 found stale chronology wording about public-doc changes; fixes were
-  applied, with re-review pending.
+  applied and Round 2 fix verification passed, with re-review pending.

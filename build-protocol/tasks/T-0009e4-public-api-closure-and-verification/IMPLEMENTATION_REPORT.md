@@ -23,7 +23,7 @@ gaps, which are also corrected. No runtime source, root export, or API-check
 changes were needed. Orchestrator-spawned Round 1 review later found stale
 review-status wording in durable logs only; Round 2 found stale chronology that
 contradicted the public-doc Java-builder deferral updates. Review-fix updates
-were applied, and re-review is pending.
+were applied, Round 2 fix verification passed, and re-review is pending.
 
 ## Files Changed
 
@@ -74,6 +74,11 @@ packages/server/src/entity.test.ts packages/server/src/index.test.ts` passed on
   files / 158 tests, coverage 97.25% statements / 91.41% branches / 99.16%
   functions / 97.19% lines, TypeDoc/API checks with 72 expected server exports,
   proto lint/generate, and generated-output clean.
+- Round 2 review-fix verification passed: the required stale-wording scan
+  exited 1 with no matches, `node scripts/check-api-docs.mjs` exited 0 with 100
+  expected proto exports, 28 core exports, 72 server exports, and 26 storage
+  exports, and `CI=true corepack pnpm verify` exited 0 with 15 test files / 158
+  tests plus coverage/API/proto/generated gates clean.
 
 ## Review
 
@@ -83,4 +88,5 @@ with no runtime, API, public-doc content, security, or reliability issues
 beyond that wording. Round 2 re-review found stale chronology wording that said
 the public docs set was unchanged, contradicting the Java-builder deferral
 wording that was added to public docs. Review-fix updates corrected that
-chronology; re-review is pending in the review log.
+chronology and Round 2 fix verification passed; re-review is pending in the
+review log.
