@@ -114,3 +114,9 @@ Next selected subtask: `T-0010.2 Bounded Context Runtime Handle`.
 context runtime handle` and verified cleanly.
 - `T-0010.3 Write-Side Signal Intake Result` is the next selected non-blocked
   subtask.
+- `T-0010.3` branch/worktree was created on `2026-06-30 16:31 WEST` from
+  parent commit `4d58ba8`; setup logs were created before implementation
+  handoff. Setup baseline verification passed on `2026-06-30 16:35 WEST` with
+  18 test files / 224 tests, coverage 96.22% statements / 90.3% branches /
+  99.15% functions / 96.15% lines, TypeDoc/API, proto, and generated-output
+  gates clean.
