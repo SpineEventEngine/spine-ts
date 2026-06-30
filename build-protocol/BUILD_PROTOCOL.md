@@ -148,17 +148,23 @@ Before implementing a typical task, the orchestrator must also:
 
 No sub-agent should invent infrastructure before checking available tools/libraries unless the task is explicitly novel.
 
-For work in `@spine-ts/server`, the orchestrator or implementer must also take
-a close look at the corresponding `server` module code in Spine's `core-jvm`
-repository before inventing server/runtime behavior. Start with `rg` over the
-local `spine-jvm-docs/` research notes to identify the relevant `core-jvm`
-source paths, then inspect the corresponding local source files when available
-or record why only the summarized notes could be used. Read only task-relevant
-sections/files, and record the inspected notes/source files plus the
-implementation impact in the task log. Prefer the smallest TypeScript contract
-that remains familiar to Spine JVM server/runtime behavior; document
+For any code related to `@spine-ts/server`, the orchestrator or implementer
+must treat corresponding Spine JVM `core-jvm/server` source inspection as a
+pre-implementation guardrail, not an optional reference. Before creating or
+changing server-module runtime/API code, take a close, task-relevant look at the
+corresponding `server` module code in Spine's `core-jvm` repository. Start with
+`rg` over the local `spine-jvm-docs/` research notes to identify the relevant
+`core-jvm` source paths, then inspect the corresponding local source files when
+available or record why only the summarized notes could be used. Read only
+task-relevant sections/files, and record the inspected notes/source files plus
+the implementation impact in the task log before or in the same atomic step as
+the code change. Prefer the smallest TypeScript contract that remains familiar
+to Spine JVM server/runtime behavior; do not invent broader server
+abstractions, lifecycle phases, dispatch/storage behavior, or convenience APIs
+unless the inspected JVM source and current task scope justify them. Document
 unsupported or adversarial input boundaries instead of broadening the server
-module with speculative infrastructure.
+module with speculative infrastructure. When in doubt, defer behavior to a
+later explicit task rather than over-engineering the current slice.
 
 ## Logging Protocol
 

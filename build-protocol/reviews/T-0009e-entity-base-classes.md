@@ -1,0 +1,291 @@
+# Review Log: T-0009e Concrete OOP Entity Base Classes With Capability Segregation
+
+Task log: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
+Work log: `build-protocol/work-logs/T-0009e.md`
+Branch: `task/T-0009e-entity-base-classes`
+Worktree:
+`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009e-entity-base-classes`
+Baseline commit: `47eae4e`
+
+## Review Requirements
+
+Every review round must include separate sub-agents for:
+
+- code style/maintainability;
+- documentation;
+- TypeScript/API docs;
+- security;
+- performance/reliability.
+
+Reviewers must inspect the committed range for this task or subtask, report
+findings with file/line references when possible, and explicitly state whether
+their role is clean. The orchestrator must close every reviewer after result
+capture.
+
+## T-0009e.1 Subtask Review Summary
+
+`T-0009e.1 Common Entity State Shell` completed its required review loop on
+`2026-06-30 00:20 WEST`.
+
+Final reviewed commit: `5c62059`.
+
+| Role                       | Reviewer ID                            | Result | Closure |
+| -------------------------- | -------------------------------------- | ------ | ------- |
+| Code style/maintainability | `019f15ad-b34e-7800-ba1f-35c3abca1ab6` | Clean  | Closed  |
+| Documentation              | `019f15ad-d363-7af2-a3a9-3932d69d499b` | Clean  | Closed  |
+| TypeScript/API docs        | `019f15ad-ed8c-7550-80a5-3a77c8870d8a` | Clean  | Closed  |
+| Security                   | `019f15ae-0fe0-7242-bd4b-0609d4110c09` | Clean  | Closed  |
+| Performance/reliability    | `019f15ae-29fb-7da3-8df1-9b39a9936ff5` | Clean  | Closed  |
+
+Final verification for the subtask passed on `2026-06-30 00:22 WEST` with 15
+test files / 145 tests, coverage 97.31% statements / 91.28% branches / 100%
+functions / 97.25% lines, TypeDoc/API/proto gates passed with 64 expected server
+exports, and generated proto output clean.
+
+## Parent Integration
+
+Parent integration merge started on `2026-06-30 00:24 WEST` with
+`git merge --no-ff --no-commit task/T-0009e1-common-entity-state-shell`.
+
+Result: merge applied cleanly, and parent integration verification passed on
+`2026-06-30 00:26 WEST`.
+
+- `CI=true corepack pnpm verify` passed with 15 test files / 145 tests, coverage
+  97.31% statements / 91.28% branches / 100% functions / 97.25% lines,
+  TypeDoc/API/proto gates passed with 64 expected server exports, and generated
+  proto output clean.
+
+## T-0009e.2 Subtask Review Summary
+
+`T-0009e.2 TransactionalEntity Scoped Draft Helpers` completed its required
+review loop on `2026-06-30 01:48 WEST`.
+
+Final reviewed commit: `9e1a9cf`, with clean confirmation recorded at
+`76dd584`.
+
+| Role                       | Reviewer ID                            | Result | Closure |
+| -------------------------- | -------------------------------------- | ------ | ------- |
+| Code style/maintainability | `019f15fd-c2f4-7ae2-82a1-0e68037288e8` | Clean  | Closed  |
+| Documentation              | `019f15fd-c368-7112-ab67-05e5a76f8282` | Clean  | Closed  |
+| TypeScript/API docs        | `019f15fd-c3e6-7701-811a-7a0f23feae7f` | Clean  | Closed  |
+| Security                   | `019f15fd-c45f-72b1-a531-8e30a8bae617` | Clean  | Closed  |
+| Performance/reliability    | `019f15fd-c4e3-7d61-8078-a138ef2418c5` | Clean  | Closed  |
+
+Final verification for the subtask passed on `2026-06-30 01:50 WEST` with 15
+test files / 152 tests, coverage 97.23% statements / 91.41% branches / 99.15%
+functions / 97.17% lines, TypeDoc/API/proto gates passed with 68 expected server
+exports, and generated proto output clean.
+
+## Parent Integration: T-0009e.2
+
+Parent integration merge completed on `2026-06-30 01:50 WEST` with
+`git merge --no-ff task/T-0009e2-transactional-entity-draft-helpers`.
+
+Result: merge applied cleanly as `7dae0e0`, and parent integration verification
+passed on `2026-06-30 01:51 WEST`.
+
+- `CI=true corepack pnpm verify` passed with 15 test files / 152 tests, coverage
+  97.23% statements / 91.41% branches / 99.15% functions / 97.17% lines,
+  TypeDoc/API/proto gates passed with 68 expected server exports, and generated
+  proto output clean.
+
+## T-0009e.3 Subtask Review Summary
+
+`T-0009e.3 Family Capability Marker Classes` started on
+`2026-06-30 01:57 WEST` in isolated branch
+`task/T-0009e3-family-capability-marker-classes` from baseline `26aa510`.
+Implementation completed at `3e0571e`, and Round 1 review produced findings in
+code style/maintainability, security, performance/reliability, and
+documentation. Round 1 fixes replaced runtime-mutable `readonly entityFamily`
+fields with getter-only family markers and updated durable log status drift.
+Those Round 1 fixes were applied and verified by the review-fix worker.
+
+Round 2 review then found inherited getter markers still forgeable through
+reflective own-property definition and prototype descriptor mutation, plus stale
+task status headers. Round 2 fixes install locked own family markers and update
+durable status text.
+
+Round 3 reviewed the full subtask range through `462e9a6` and returned clean
+across all five required lanes.
+
+| Role                       | Reviewer ID                            | Result | Closure |
+| -------------------------- | -------------------------------------- | ------ | ------- |
+| Code style/maintainability | `019f162f-6b28-7c70-851c-46fe7df1bf35` | Clean  | Closed  |
+| Documentation              | `019f162f-97e9-72c3-841a-015771638a00` | Clean  | Closed  |
+| TypeScript/API docs        | `019f162f-b985-7ca2-ba43-f208d2ce2975` | Clean  | Closed  |
+| Security                   | `019f162f-e309-7232-a6df-78bf8ffff6d0` | Clean  | Closed  |
+| Performance/reliability    | `019f1630-1526-73a3-a8d1-d2ceac94ae6f` | Clean  | Closed  |
+
+Final subtask verification passed on `2026-06-30 02:40 WEST` with 15 test files
+/ 158 tests, coverage 97.25% statements / 91.41% branches / 99.16% functions /
+97.19% lines, TypeDoc/API checks with 72 expected server exports, proto
+lint/generate, and generated-output clean.
+
+## Parent Integration: T-0009e.3
+
+Parent integration merge completed on `2026-06-30 02:46 WEST` with
+`git merge --no-ff task/T-0009e3-family-capability-marker-classes -m
+"Integrate T-0009e.3 family markers"`.
+
+Result: merge applied cleanly as `9ba861b`, and parent integration verification
+passed on `2026-06-30 02:46 WEST`.
+
+- `CI=true corepack pnpm verify` passed with 15 test files / 158 tests, coverage
+  97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
+  TypeDoc/API/proto gates passed with 72 expected server exports, and generated
+  proto output clean.
+
+## T-0009e.4 Subtask Review Summary
+
+`T-0009e.4 Public API Closure And Verification` started on
+`2026-06-30 02:52 WEST` in isolated branch
+`task/T-0009e4-public-api-closure-and-verification` from baseline `94dd6d1`.
+
+Round 1 review found stale durable-log wording that falsely implied protocol
+review completion. Round 2 review found stale chronology wording that
+contradicted the public-doc Java-builder deferral updates. Round 3 review found
+missing durable verification-pass evidence for the Round 2 fix. Each finding
+was fixed and verified before re-review.
+
+Round 4 reviewed the full subtask range through `7b602e4` and returned clean
+across all five required lanes.
+
+| Role                       | Reviewer ID                            | Result | Closure |
+| -------------------------- | -------------------------------------- | ------ | ------- |
+| Code style/maintainability | `019f167d-130e-7d73-a92d-62a098edf5f1` | Clean  | Closed  |
+| Documentation              | `019f167d-13a0-7ea3-b8b2-2cbf7c8a40df` | Clean  | Closed  |
+| TypeScript/API docs        | `019f167d-140e-79b2-8624-d15971f21c13` | Clean  | Closed  |
+| Security                   | `019f167d-149a-7720-8406-131ca8d9f61b` | Clean  | Closed  |
+| Performance/reliability    | `019f167d-151e-78f3-a0d7-2e5f88791cee` | Clean  | Closed  |
+
+Final verification passed on `2026-06-30 04:13 WEST`: `CI=true corepack pnpm
+verify` passed with 15 test files / 158 tests, coverage 97.25% statements /
+91.41% branches / 99.16% functions / 97.19% lines, TypeDoc/API checks with 72
+expected server exports, proto lint/generate, and generated output clean.
+
+## Parent Integration: T-0009e.4
+
+Parent integration merge completed on `2026-06-30 04:18 WEST` with
+`git merge --no-ff task/T-0009e4-public-api-closure-and-verification -m
+"Integrate T-0009e.4 public API closure"`.
+
+Result: merge applied cleanly as `f499ca8`, and parent integration verification
+passed on `2026-06-30 04:18 WEST`.
+
+- `CI=true corepack pnpm verify` passed with 15 test files / 158 tests, coverage
+  97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines,
+  TypeDoc/API checks with 72 expected server exports, proto lint/generate, and
+  generated output clean.
+
+Final parent review is pending before marking T-0009e complete.
+
+## Final Parent Review Fixes
+
+Final parent review found two follow-up issues after parent integration:
+
+- T-0009e.4 terminal durable logs still described the subtask as awaiting parent
+  integration even though the parent branch merged it as `f499ca8` and parent
+  integration verification passed.
+- `TransactionalEntity.startTransaction()` routed the previous-state input
+  through the public `state` getter, causing an avoidable full-state clone before
+  `EntityTransaction` cloned previous and draft snapshots.
+
+The fix worker updated the relevant parent/subtask logs to record the `f499ca8`
+merge and passing parent integration verification, and changed
+`startTransaction()` to read the framework-owned stored state at the transaction
+clone boundary without exposing public mutable state. Final parent re-review
+remains pending; this section does not claim a clean final parent review.
+
+Final-parent-review fix verification passed on `2026-06-30 04:30 WEST`:
+focused entity/root tests passed with 2 files / 39 tests; API docs check passed
+with 100 proto / 28 core / 72 server / 26 storage expected exports; full
+`CI=true corepack pnpm verify` passed with 15 test files / 159 tests, coverage
+97.26% statements / 91.41% branches / 99.17% functions / 97.2% lines,
+TypeDoc/API/proto/generated gates clean; and the required stale-terminal-wording
+scan exited 1 with no matches. Final parent re-review remains pending.
+
+## Final Parent Re-Review Fixes
+
+Final parent re-review found that the prior transaction clone optimization
+introduced `Entity.withStoredState()` as a protected member. Because `Entity` is
+exported, that made the method subclass-facing API and TypeDoc-visible, and the
+callback received the live internal `#state` reference.
+
+The superseding fix removes `withStoredState()` entirely and changes
+`TransactionalEntity.startTransaction()` back to the public `this.state` snapshot
+boundary. This accepts the extra clone rather than exposing live framework-owned
+state outside a true private/internal boundary. Regression coverage now asserts
+that `withStoredState` is absent from `Entity.prototype`, while preserving
+transaction snapshot and commit/rollback semantics.
+
+Focused red/green evidence:
+
+- Before the source fix, `corepack pnpm vitest run packages/server/src/entity.test.ts`
+  failed because `"withStoredState" in Entity.prototype` was `true` and
+  transaction start did not read the public state snapshot getter.
+- After the source fix, the same focused entity suite passed with 1 test file /
+  31 tests.
+
+Final-parent-re-review fix verification passed on `2026-06-30 04:43 WEST`:
+
+- `node scripts/check-api-docs.mjs` passed with 100 proto / 28 core / 72 server
+  / 26 storage expected exports and no TypeDoc errors.
+- `corepack pnpm vitest run packages/server/src/entity.test.ts
+packages/server/src/index.test.ts` passed with 2 files / 40 tests.
+- `CI=true corepack pnpm verify` passed with 15 files / 160 tests, coverage
+  97.25% statements / 91.41% branches / 99.16% functions / 97.19% lines, and
+  TypeDoc/API/proto/generated gates clean.
+- `rg -n "withStoredState" packages docs build-protocol` had no docs or
+  implementation-source matches; remaining matches are the regression assertion
+  and historical review/log mentions.
+
+Final parent re-review remains pending; this section does not mark the parent
+review clean.
+
+## Final Parent Re-Review Clean
+
+Final parent re-review completed on `2026-06-30 04:47 WEST` after the
+superseding fix removed `Entity.withStoredState()` and kept transaction start on
+the public cloned state snapshot boundary.
+
+| Role                       | Reviewer ID                            | Result | Closure |
+| -------------------------- | -------------------------------------- | ------ | ------- |
+| Code style/maintainability | `019f16a4-71bc-7bd3-b4a9-f8d44e88be9c` | Clean  | Closed  |
+| Documentation              | `019f16a4-725a-74d1-b385-99c44267d2b7` | Clean  | Closed  |
+| TypeScript/API docs        | `019f16a4-72c9-73a0-a208-72dbcf3ea586` | Clean  | Closed  |
+| Security                   | `019f16a4-7354-7011-83c5-1a148bc85a95` | Clean  | Closed  |
+| Performance/reliability    | `019f16a4-73d2-7ac0-a3e8-c941563d41f9` | Clean  | Closed  |
+
+All final parent review and re-review comments are closed. Final task
+verification passed on `2026-06-30 05:12 WEST`, and repeat verification after
+recording that evidence passed on `2026-06-30 05:14 WEST`.
+
+## Protocol Guidance Update
+
+After the final-parent-re-review fix verification, human guidance on
+`2026-06-30 04:55 WEST` required the durable build protocol to make the
+server-module JVM source guardrail explicit before any more server-module
+implementation. The documentation/log update strengthened `BUILD_PROTOCOL.md`,
+added D-0045, and updated active T-0009e logs. It did not change runtime source,
+does not supersede prior review findings, and does not mark final parent
+re-review clean.
+
+Protocol-guidance review completed on `2026-06-30 05:07 WEST`.
+
+Initial review:
+
+| Role                       | Reviewer ID                            | Result                                           | Closure |
+| -------------------------- | -------------------------------------- | ------------------------------------------------ | ------- |
+| Code style/maintainability | `019f16af-2d1f-7dc3-8d52-8acd09d7a7d3` | Comment: missing canonical skill-check evidence. | Closed  |
+| Documentation              | `019f16af-4e73-7e30-9353-f247d5d9c290` | Clean                                            | Closed  |
+| TypeScript/API docs        | `019f16af-72e6-7af2-96ef-d02308aac914` | Clean                                            | Closed  |
+| Security                   | `019f16af-963d-77f0-83a6-31d7a8ea9e66` | Clean                                            | Closed  |
+| Performance/reliability    | `019f16af-bbac-7730-b7a6-01bab20d49bc` | Clean                                            | Closed  |
+
+Fix worker `019f16b1-3530-71d0-8efe-01320fe4dff0` added bounded canonical
+skill applicability evidence to the active T-0009e task/report/work logs and
+verified the docs/log-only fix with Prettier, `corepack pnpm docs:check`, and
+`git diff --check`. Focused maintainability re-review
+`019f16b3-df05-7911-82bd-1f8166478645` returned clean, and that reviewer was
+closed. The protocol-guidance update now has no open review comments. Final
+parent re-review for T-0009e remains a separate pending task-state item.

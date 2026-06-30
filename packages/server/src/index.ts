@@ -1,4 +1,20 @@
 export {
+  Aggregate,
+  Entity,
+  type EntityFamily,
+  type EntityLifecycleFlags,
+  type EntityOptions,
+  type EntityVersionMetadata,
+  type PlainEntityVersionMetadata,
+  ProcessManager,
+  Projection,
+  TransactionalEntity,
+  TransactionalEntityScopeError,
+  type TransactionalEntityScopeErrorReason,
+  type TransactionalEntityScopeOperation,
+} from "./entity.js";
+
+export {
   type DeclaredEntityVisibility,
   type DescriptorFieldMetadata,
   DescriptorMetadataError,

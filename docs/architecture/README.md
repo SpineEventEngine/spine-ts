@@ -118,8 +118,10 @@ responsibilities remain with later runtime slices.
 following D-0034, the first explicit handler metadata layer, following D-0035,
 the caller-owned handler registry, following D-0036, the first standard
 decorator adapter, following D-0037, and built-in set-once transition
-validation, following D-0038. The package consumes curated option exports from
-`@spine-ts/proto` and delegates transition result shaping to `@spine-ts/core`.
+validation, following D-0038. It also owns the first thin entity-family marker
+classes over the transactional entity shell. The package consumes curated
+option exports from `@spine-ts/proto` and delegates transition result shaping
+to `@spine-ts/core`.
 
 Current server metadata is pure and deterministic:
 
@@ -196,6 +198,48 @@ unsupported and fail closed even on creation transitions. The low-level
 set-once rule remains private; callers receive the core
 `TransitionValidationResult` shape with repo-local `spine.validation.*`
 messages, field paths, and no raw previous/next values.
+
+`Entity` is the first common OOP entity state shell. It binds a caller-supplied
+ID to one descriptor-backed Protobuf-ES state schema, derives and caches
+`EntityMetadata`, snapshots state on construction and read access, snapshots
+caller-owned plain version metadata without computing increments, and exposes
+lifecycle flags plus `isActive`, `isArchived`, `isDeleted`, and sticky
+`lifecycleFlagsChanged` accessors. Protected replacement hooks give future
+framework-owned subclasses a narrow place to apply accepted state/version or
+lifecycle evidence, but the public shell has no state setters or Java builders
+and does not own transactions, repositories, handler invocation, storage,
+lifecycle events, routing, queries, buses, transports, or process-global runtime
+state.
+
+`TransactionalEntity` is the protected OOP draft layer over `EntityTransaction`.
+It adds one active transaction slot per entity instance, scoped helpers for
+reading and updating draft state, draft version metadata, and draft lifecycle
+flags, and commit/rollback helpers that close over the existing transaction
+kernel. Accepted commits apply only the accepted state, explicit version
+metadata, and lifecycle flags back through the `Entity` replacement hooks.
+Rejected commits apply nothing and intentionally keep the transaction active so
+subclass code can correct the draft or roll it back explicitly, matching the
+current `EntityTransaction.commit()` behavior. The `changed` signal records
+accepted state changes or committed lifecycle flag changes without making
+repository storage decisions. Scope errors are deterministic
+`TransactionalEntityScopeError` instances for missing or duplicate active
+transactions. The layer still avoids handler invocation, repositories, storage,
+lifecycle events, Java builders, automatic version increments, transaction
+listeners, recent history, async-local/global transaction state, and
+entity-family-specific aggregate/projection/process-manager behavior.
+
+`Aggregate`, `Projection`, and `ProcessManager` are now public abstract entity
+family markers. Each extends `TransactionalEntity<Id, Schema, Version>` and
+adds only a stable readonly `entityFamily` property typed by the exported
+`EntityFamily` union. This follows the JVM family shape only as far as the
+current TypeScript runtime can support safely: JVM `Projection` directly
+extends `TransactionalEntity`, while JVM aggregate and process-manager behavior
+is mostly supplied by assignee, dispatch, event-history, repository, querying,
+and bounded-context collaborators that this slice has not implemented. The
+TypeScript family classes therefore do not expose public transaction mutators,
+repository hooks, dispatch APIs, command posting, query clients, aggregate event
+history, snapshots, process workflow execution, idempotency guards, lifecycle
+events, handler invocation, or async-local/global transaction state.
 
 `EntityTransaction` is the first server-owned draft/result commit boundary over
 one entity state. It buffers a draft state, explicit previous/draft version

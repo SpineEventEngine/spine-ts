@@ -5,6 +5,16 @@ metadata, and standard decorator metadata adapters.
 
 Current slice exposes:
 
+- `Entity<Id, Schema, Version>` for a common abstract OOP state shell with
+  identity, descriptor-derived metadata, cloned Protobuf-ES state snapshots,
+  caller-owned plain version metadata, lifecycle flags, and
+  active/archive/delete accessors; and
+- `TransactionalEntity<Id, Schema, Version>` for protected, scoped draft helpers
+  over `EntityTransaction`, with one active in-memory transaction per entity;
+  and
+- `Aggregate`, `Projection`, and `ProcessManager` abstract family marker classes
+  over `TransactionalEntity`, each exposing a stable `entityFamily` identity;
+  and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
 - first-field routing hints from descriptor order;
@@ -90,6 +100,79 @@ handlers for the same message type. The registry is caller-owned and
 metadata-only: constructing or registering it does not instantiate entities,
 invoke methods, unpack payloads, mutate global process state, write storage, or
 start buses/transports.
+
+## Entity State Shell
+
+Extend `Entity` when framework-owned code needs a common base for local entity
+state and metadata without introducing repository/runtime behavior:
+
+```ts
+import { Entity } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskEntity extends Entity<string, typeof TaskStateSchema, number> {}
+
+const task = new TaskEntity({
+  id: "task-1",
+  schema: TaskStateSchema,
+  state: taskState,
+  version: 7,
+});
+
+task.id; // "task-1"
+task.metadata.fullTypeName; // TaskStateSchema.typeName
+task.state; // cloned state snapshot
+task.isActive; // true unless archived or deleted
+```
+
+The constructor derives metadata with `describeEntityMetadata(schema)`, snapshots
+the supplied Protobuf-ES state, defaults lifecycle flags to active/not deleted,
+and snapshots plain version metadata values. Version metadata accepts primitives,
+`null`, arrays, and plain objects; functions, typed arrays, buffers, dates,
+maps, sets, class instances, and proxies are rejected. The exported
+`PlainEntityVersionMetadata<T>` type helper preserves ordinary plain metadata
+interfaces at entity input boundaries while rejecting known non-plain types such
+as `Date`. State and version access return cloned snapshots so caller mutation
+does not mutate stored entity state. Protected replacement hooks exist only for
+later framework-owned subclasses; there are no public state setters, Java
+builders, automatic version increments, transactions, handler invocation,
+repository writes, storage calls, lifecycle events, routing, queries, buses,
+transports, or global runtime state.
+
+`TransactionalEntity` is the small protected draft layer for future
+framework-owned entity families. Subclasses can start one active transaction,
+read/update the draft state snapshot, replace explicit draft version metadata,
+adjust draft lifecycle flags, and then commit or roll back. Accepted commits
+apply state, version metadata, and lifecycle flags back into the entity through
+the base protected replacement hooks. Rejected commits do not apply anything and
+keep the transaction active so subclass code can correct the draft or roll it
+back explicitly. `changed` reports accepted state changes or committed
+lifecycle flag changes only; it is not a repository storage decision. Missing
+or duplicate transaction scopes throw `TransactionalEntityScopeError`
+deterministically. Public state, version, and lifecycle accessors remain cloned
+snapshots, and the class still does not invoke handlers, write storage, emit
+events, increment versions, route messages, or provide async-local/global
+transaction state.
+
+`Aggregate`, `Projection`, and `ProcessManager` are the first public entity
+family base classes. They are thin abstract subclasses of `TransactionalEntity`
+with the same `<Id, Schema, Version>` generic pattern and a stable
+readonly `entityFamily` property returning `"aggregate"`, `"projection"`, or
+`"process-manager"`. Use them when application or framework-owned code needs
+the right OOP family type before repositories and dispatch runtime exist:
+
+```ts
+import { Aggregate } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
+```
+
+The family marker classes inherit identity, metadata, cloned snapshots,
+lifecycle accessors, `changed`, and protected transaction helpers from
+`TransactionalEntity`. They do not add public transaction mutators, command
+posting, event history, snapshots, subscriptions, query clients, process
+workflow execution, handler invocation, storage, buses, or lifecycle events.
 
 ## Entity State Transition Validation
 

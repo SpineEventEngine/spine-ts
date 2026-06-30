@@ -11,11 +11,13 @@ type metadata, framework users can validate one Protobuf message at a time, and
 callers can pack already-built domain messages into generated Spine
 `Command`/`Event` envelopes. `@spine-ts/server` now derives descriptor-backed
 entity metadata from `(entity)`, `(column)`, `(set_once)`, `(is)`, and
-`(every_is)` options and defines explicit or decorator-collected handler
-metadata without invoking handlers or mutating global runtime state. It also
-exposes built-in `(set_once)` entity state transition validation, a buffered
-entity transaction boundary, and a caller-owned handler metadata registry for
-duplicate validation and lookup-only views.
+`(every_is)` options, exposes a first common abstract entity state shell, and
+defines explicit or decorator-collected handler metadata without invoking
+handlers or mutating global runtime state. It also exposes built-in
+`(set_once)` entity state transition validation, a buffered entity transaction
+boundary, thin aggregate/projection/process-manager family base classes, and a
+caller-owned handler metadata registry for duplicate validation and lookup-only
+views.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
 deterministic in-memory adapter for tests/development. Entity runtime,
 transport, durable production storage, and the to-do application remain later
@@ -48,6 +50,15 @@ slices.
   kind and visibility, expose first-field routing hints, surface `(column)`
   fields for projections/process managers, surface `(set_once)` fields for all
   entity kinds, and preserve semantic tags from `(is)` and `(every_is)`.
+- A common abstract server `Entity` shell that exposes identity,
+  descriptor-derived metadata, cloned Protobuf-ES state snapshots, caller-owned
+  plain version metadata, lifecycle flags, active/archive/delete accessors, and
+  sticky lifecycle-change tracking.
+- A protected `TransactionalEntity` base that wraps the transaction kernel with
+  one active scoped draft per entity and applies only accepted commits back to
+  the entity shell.
+- Thin abstract `Aggregate`, `Projection`, and `ProcessManager` family marker
+  classes over `TransactionalEntity`, each with stable `entityFamily` identity.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.
@@ -243,6 +254,69 @@ system, repository unit of work, handler dispatch phase, lifecycle-event
 emitter, or async-local/global transaction context. The snapshots returned from
 commit and rollback are evidence for later runtime layers, not persisted state.
 
+## Transactional Entity Draft Helpers
+
+Extend `TransactionalEntity` when framework-owned subclasses need protected
+draft helpers over the transaction kernel:
+
+```ts
+import { TransactionalEntity } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskEntity extends TransactionalEntity<string, typeof TaskStateSchema, number> {
+  rename(name: string): void {
+    this.startTransaction();
+    this.updateDraftState((state) => ({ ...state, name }));
+    this.updateDraftVersionMetadata(this.version + 1);
+
+    const result = this.commitTransaction();
+    if (result.status === "rejected") {
+      this.rollbackTransaction();
+    }
+  }
+}
+```
+
+Only subclass code can use the draft scope. `startTransaction()` opens one
+active transaction from the entity's current state, version metadata, and
+lifecycle snapshots. Draft helpers return snapshots, so mutating returned state
+or version data does not mutate the buffered draft. Accepted commits close the
+scope and replace the entity state, explicit version metadata, and lifecycle
+flags. Rejected commits keep the scope active for correction or explicit
+rollback and apply nothing to the entity. `rollbackTransaction()` closes the
+scope without applying state, version, or lifecycle changes.
+
+`changed` becomes true when an accepted commit changes entity state or committed
+lifecycle flags. It does not include version-only commits and does not decide
+whether a repository should store the entity. Missing or duplicate scopes throw
+`TransactionalEntityScopeError`. The base still does not invoke handlers, write
+storage, expose Java builders, emit lifecycle events, increment versions
+automatically, dispatch messages, or create async-local/global transaction
+state.
+
+## Entity Family Marker Classes
+
+Extend `Aggregate`, `Projection`, or `ProcessManager` when code needs the
+server-side OOP family type now, before runtime repositories and dispatch are
+available:
+
+```ts
+import { Aggregate, Projection, ProcessManager } from "@spine-ts/server";
+import { TaskProjectionSchema, TaskStateSchema, TaskWorkflowSchema } from "./generated/tasks_pb.js";
+
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
+class TaskProjection extends Projection<string, typeof TaskProjectionSchema, number> {}
+class TaskWorkflow extends ProcessManager<string, typeof TaskWorkflowSchema, number> {}
+
+new TaskAggregate({ id, schema: TaskStateSchema, state, version: 1 }).entityFamily; // "aggregate"
+```
+
+These classes inherit `TransactionalEntity` behavior and expose only stable
+family identity through `entityFamily`. They do not add public transaction
+mutators, Java builders, event history, snapshots, subscriptions, command
+posting, query clients, process workflow execution, handler invocation, storage,
+buses, or lifecycle events.
+
 ## Envelope Packing
 
 Use `packAny()` when a domain message must be packed into
@@ -324,6 +398,45 @@ entity metadata from a non-entity schema or when the descriptor uses
 unsupported combinations such as repeated/map `(column)` fields on projections
 or process managers. Aggregate and generic entity `(column)` declarations are
 ignored in this slice, matching the Spine option contract.
+
+## Entity Shells
+
+Extend `Entity` when framework-owned code needs a local OOP holder for entity
+identity, state, plain version metadata, lifecycle flags, and descriptor
+metadata:
+
+```ts
+import { Entity } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskEntity extends Entity<string, typeof TaskStateSchema, number> {}
+
+const task = new TaskEntity({
+  id: "task-1",
+  schema: TaskStateSchema,
+  state: taskState,
+  version: 7,
+});
+
+task.metadata.kind;
+task.state; // cloned Protobuf-ES state snapshot
+task.isActive; // true unless archived or deleted
+```
+
+`Entity` snapshots supplied and returned state with Protobuf-ES binary cloning,
+so caller mutation does not mutate stored shell state. Version metadata is
+caller-owned plain snapshot data: primitives, `null`, arrays, and plain objects
+are cloned, while functions, typed arrays, buffers, dates, maps, sets, class
+instances, and other non-plain objects are rejected. The shell does not
+increment versions, compute timestamps, or derive producer/event metadata.
+Lifecycle flags default to active/not deleted, and `lifecycleFlagsChanged`
+becomes true only when future subclass/runtime code changes lifecycle flags
+through protected hooks.
+
+The shell is deliberately not a transaction or runtime. It does not expose
+public state setters, invoke handlers, write repositories or storage, emit
+lifecycle events, route IDs, query read models, start buses/transports, or use
+global runtime state.
 
 ## Handler Metadata
 
