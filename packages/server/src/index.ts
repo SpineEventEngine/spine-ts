@@ -76,6 +76,7 @@ export {
   type ServerRuntimeLifecycle,
   type ServerRuntimeState,
   ServerRuntimeStateError,
+  type ServerRuntimeStateErrorCode,
   type ServerRuntimeStateOperation,
   type ServerRuntimeWork,
   SingleProcessServerRuntime,

@@ -5,6 +5,7 @@ import {
   SingleProcessServerRuntime,
   type ServerRuntimeLifecycle,
   type ServerRuntimeState,
+  type ServerRuntimeStateErrorCode,
   type ServerRuntimeWork,
 } from "./runtime.js";
 
@@ -16,6 +17,7 @@ describe("SingleProcessServerRuntime", () => {
     expectTypeOf<ServerRuntimeState>().toEqualTypeOf<
       "created" | "running" | "closing" | "closed"
     >();
+    expectTypeOf<ServerRuntimeStateErrorCode>().toEqualTypeOf<"INVALID_RUNTIME_STATE">();
     expectTypeOf<ServerRuntimeWork>().toEqualTypeOf<() => void | Promise<void>>();
     expect(runtime.state).toBe("created");
 
@@ -37,8 +39,9 @@ describe("SingleProcessServerRuntime", () => {
     await runtime.close();
     expect(runtime.state).toBe("closed");
     await expect(runtime.start()).rejects.toMatchObject({
-      code: "closed",
+      code: "INVALID_RUNTIME_STATE",
       operation: "start",
+      state: "closed",
     });
   });
 
@@ -58,6 +61,11 @@ describe("SingleProcessServerRuntime", () => {
     expect(() => runtime.enqueue(() => undefined)).toThrow(
       "Cannot enqueue runtime work while server runtime is created.",
     );
+    expect(captureStateError(() => runtime.enqueue(() => undefined))).toMatchObject({
+      code: "INVALID_RUNTIME_STATE",
+      operation: "enqueue",
+      state: "created",
+    });
   });
 
   it("runs accepted work asynchronously after intake returns", async () => {
@@ -137,6 +145,11 @@ describe("SingleProcessServerRuntime", () => {
 
     expect(runtime.state).toBe("closing");
     expect(() => runtime.enqueue(() => undefined)).toThrow(ServerRuntimeStateError);
+    expect(captureStateError(() => runtime.enqueue(() => undefined))).toMatchObject({
+      code: "INVALID_RUNTIME_STATE",
+      operation: "enqueue",
+      state: "closing",
+    });
     expect(() => runtime.enqueue(() => undefined)).toThrow(
       "Cannot enqueue runtime work while server runtime is closing.",
     );
@@ -172,3 +185,15 @@ describe("SingleProcessServerRuntime", () => {
     expect(observed).toEqual(["later"]);
   });
 });
+
+function captureStateError(operation: () => unknown): ServerRuntimeStateError {
+  try {
+    operation();
+  } catch (error) {
+    if (error instanceof ServerRuntimeStateError) {
+      return error;
+    }
+  }
+
+  throw new Error("Expected ServerRuntimeStateError.");
+}

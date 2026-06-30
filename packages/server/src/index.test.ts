@@ -26,6 +26,7 @@ import {
   type EntityVersionMetadata,
   type PlainEntityVersionMetadata,
   type ServerRuntimeLifecycle,
+  type ServerRuntimeStateErrorCode,
   ServerRuntimeStateError,
   SingleProcessServerRuntime,
 } from "./index.js";
@@ -211,6 +212,7 @@ describe("@spine-ts/server", () => {
       ServerRuntimeStateError,
     );
     expectTypeOf<SingleProcessServerRuntime>().toExtend<ServerRuntimeLifecycle>();
+    expectTypeOf<ServerRuntimeStateErrorCode>().toEqualTypeOf<"INVALID_RUNTIME_STATE">();
   });
 
   it("extracts entity kind, default visibility, routing hints, columns, set-once fields, and tags", () => {

@@ -1,6 +1,6 @@
 # T-0010.1: Runtime Lifecycle And Async Queue Kernel
 
-Status: Implementation Complete; Author Verification Passed
+Status: Review Fix Complete; Verification Passed
 Start: `2026-06-30 15:08 WEST`
 Baseline commit: `70692a9`
 Parent task: `T-0010 Single-Process Async Runtime`
@@ -9,7 +9,8 @@ Branch: `task/T-0010-1-runtime-lifecycle-queue`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0010-1-runtime-lifecycle-queue`
 Authoring sub-agent: Codex implementation sub-agent.
-Reviewer sub-agents: pending implementation.
+Reviewer sub-agents: Round 1 findings addressed by review-fix sub-agent; no
+additional sub-agents spawned.
 
 ## Objective
 
@@ -107,6 +108,15 @@ Likely touched:
   lines, TypeDoc/API checks with 100 proto / 28 core / 103 server / 26 storage
   expected exports, proto lint/generate checksum verification, and generated
   proto output clean.
+- Review-fix verification passed on `2026-06-30 15:35 WEST`:
+  `corepack pnpm vitest run packages/server/src/runtime.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 16 tests; `node scripts/check-api-docs.mjs`
+  passed with 100 proto / 28 core / 104 server / 26 storage expected exports;
+  `CI=true corepack pnpm verify` passed with 18 test files / 219 tests,
+  coverage 96.33% statements / 90.87% branches / 99.12% functions / 96.26%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 104 server / 26 storage
+  expected exports, proto lint/generate checksum verification, and generated
+  proto output clean.
 
 ## Implementation Result
 
@@ -126,6 +136,18 @@ Likely touched:
   stand, repository dispatch, command/event/import buses, `Ack`, event store,
   tenant index, system context, integration broker, worker processes, or full
   repository dispatch.
+
+## Review-Fix Result
+
+- Reviewed implementation commit: `450b8c0`.
+- Review-fix commit: the commit containing this log entry.
+- `ServerRuntimeStateError.code` now uses stable taxonomy
+  `"INVALID_RUNTIME_STATE"`; rejected lifecycle state is exposed as `state`.
+- Runtime TypeDoc, package README, and API docs document that enqueued callbacks
+  are trusted server-owned work only, with no timeout, cancellation, fairness,
+  queue bound, or hostile-callback protection.
+- Durable task, report, work, and review logs were updated to remove stale
+  reviewer/current-state claims and record round 1 fix status.
 
 ## Human Questions And Answers
 

@@ -6,8 +6,9 @@ Current status: the generated reference contains the curated `@spine-ts/proto`
 root API for copied Spine contracts, the `@spine-ts/core` metadata/type
 registry and validation facade APIs, the first `@spine-ts/server`
 descriptor-derived entity metadata, metadata-only `Repository` identity,
-set-once transition validation, and explicit handler metadata APIs, and the
-first `@spine-ts/storage` contracts.
+set-once transition validation, explicit handler metadata APIs, and the first
+server runtime lifecycle/async queue kernel, and the first `@spine-ts/storage`
+contracts.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
@@ -136,18 +137,24 @@ duplicate-policy validation. These APIs are metadata-only and do not execute
 handlers, access storage, dispatch buses, or start transport.
 Server runtime exports include `SingleProcessServerRuntime`,
 `ServerRuntimeLifecycle`, `ServerRuntimeState`, `ServerRuntimeWork`,
-`ServerRuntimeStateOperation`, and `ServerRuntimeStateError` for the first
-single-process lifecycle and async queue kernel. The lifecycle state machine is
-deterministic: `created -> running` on `start()`, `created -> closed` when
-closed before start, and `running -> closing -> closed` when close drains
-already accepted work. `close()` is idempotent, prevents new intake, and waits
-for previously accepted work to settle. `enqueue()` accepts work only while the
-runtime is running, returns that item's completion promise, and runs accepted
-work in a later microtask in FIFO order. This surface is a server-runtime
-kernel only; it is not a process-wide singleton, process supervisor, generic job
-framework, command/event/import bus, durable storage or inbox, read-side stand,
-repository dispatcher, integration broker, gRPC server, ZeroMQ transport, or
-worker-process runtime.
+`ServerRuntimeStateOperation`, `ServerRuntimeStateErrorCode`, and
+`ServerRuntimeStateError` for the first single-process lifecycle and async queue
+kernel. The lifecycle state machine is deterministic: `created -> running` on
+`start()`, `created -> closed` when closed before start, and
+`running -> closing -> closed` when close drains already accepted work.
+`ServerRuntimeStateError.code` is stable taxonomy
+`"INVALID_RUNTIME_STATE"`; the rejected lifecycle state is exposed separately as
+`state`. `close()` is idempotent, prevents new intake, and waits for previously
+accepted work to settle. `enqueue()` accepts work only while the runtime is
+running, returns that item's completion promise, and runs accepted work in a
+later microtask in FIFO order. Enqueued callbacks are trusted server-owned work
+only. The queue has no timeout, cancellation, fairness, queue bound, or
+hostile-callback protection, so non-settling or reentrant work can keep
+`close()` pending. This surface is a server-runtime kernel only; it is not a
+process-wide singleton, process supervisor, generic job framework,
+command/event/import bus, durable storage or inbox, read-side stand, repository
+dispatcher, integration broker, gRPC server, ZeroMQ transport, or worker-process
+runtime.
 
 Storage exports include `StorageAdapter`, `StorageRecord`,
 `WriteSideRecordStore`, `ReadSideRecordStore`, aggregate event history

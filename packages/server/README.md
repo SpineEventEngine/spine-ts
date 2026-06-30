@@ -148,6 +148,10 @@ FIFO order. A failed item rejects only its own returned promise and does not
 stop later accepted items. `close()` prevents new intake and waits for already
 accepted work to settle before the runtime becomes `closed`.
 
+Enqueued callbacks are trusted server-owned work only. The queue has no
+timeout, cancellation, fairness, queue bound, or hostile-callback protection,
+so non-settling or reentrant work can keep `close()` pending.
+
 This kernel is deliberately server-runtime-specific and single-process only. It
 is not a global singleton, process supervisor, generic job framework, command
 bus, event bus, import bus, repository dispatcher, event store, durable inbox,

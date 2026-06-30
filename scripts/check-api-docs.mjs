@@ -213,6 +213,7 @@ const expectedServerExports = [
   "ServerRuntimeLifecycle",
   "ServerRuntimeState",
   "ServerRuntimeStateError",
+  "ServerRuntimeStateErrorCode",
   "ServerRuntimeStateOperation",
   "ServerRuntimeWork",
   "SingleProcessServerRuntime",
