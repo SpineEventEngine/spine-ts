@@ -1386,3 +1386,41 @@ Consequences:
   duplicate-assignment policy in this subtask.
 - Public docs must describe the surface as registration readiness, not runtime
   command handling.
+
+## D-0052: T-0010.5 Models Event Readiness As Multicast Metadata
+
+Status: Accepted
+
+Date: 2026-06-30
+
+Context: `T-0010.5 Event Registration Readiness` follows command registration
+readiness. Spine JVM `EventDispatcherRegistry` permits multiple event
+dispatchers per event class and filters dispatchers by domestic versus external
+event classes. `EventDispatcher`, `EventDispatcherDelegate`,
+`EventSubscriber`, and `EventReactor` separate event dispatch capability from
+handler invocation and expose domestic/external event interests. The current TS
+code already has `HandlerMetadataRegistry`, which preserves many
+event-subscription and event-reaction handlers and only rejects duplicate event
+applications for the same entity state and event type. The human explicitly
+warned to inspect Spine JVM `core-jvm/server` closely and avoid over-inventing
+server-module work.
+
+Decision: T-0010.5 adds only a metadata/readiness surface that reports
+registered event message types and fan-out handler metadata for event
+subscriptions and event reactions, plus event-application metadata grouped by
+event type. It must reuse `HandlerMetadataRegistry` for event-application
+uniqueness and must not reject duplicate subscribers or reactors. Because the
+current TS handler metadata does not yet model external event interests,
+domestic/external filtering and integration-broker wanted-event publication are
+documented as deferred rather than guessed.
+
+Consequences:
+
+- Later event-bus, integration-broker, and import-runtime tasks can consume the
+  readiness index without depending on handler invocation or transport.
+- Reviewers must flag event bus, integration broker, import bus, storage,
+  dispatch, service, transport, handler invocation, validation, or `Ack`
+  behavior in this subtask.
+- Public docs must describe the surface as event registration readiness and
+  explicitly state that domestic/external classification is not available until
+  a later metadata task introduces it.
