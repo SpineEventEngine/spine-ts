@@ -24,16 +24,24 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 
 Server exports include `BoundedContext`, `BoundedContextBuilder`,
 `ContextSpec`, `BoundedContextName`, `TenantMode`, immutable snapshot contracts,
-and `BoundedContextNameError` for the first bounded-context assembly shell.
+`BoundedContextNameError`, and
+`BoundedContextRepositoryRegistrationError` for the first bounded-context
+assembly shell.
 The public entry points mirror Spine JVM's
 `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
 `ContextSpec` remains a framework-owned immutable value surfaced through
 `builder.spec` and `context.spec`; `build()` currently returns a frozen
-metadata-only `BoundedContext`; and `.snapshot` returns a copy-safe immutable
-snapshot. The shell validates non-empty/non-blank names and records tenant mode
-for later runtime parts without registering repositories, invoking handlers,
-creating system contexts, opening storage, constructing buses/stands, writing
-tenant indexes, exposing gRPC services, or integrating transports.
+metadata-only `BoundedContext`; `.snapshot` returns a copy-safe immutable
+snapshot; and `builder.add(repository)` / `builder.remove(repository)` record
+explicit metadata-only `Repository` identities for later runtime slices. The
+builder keeps repeated registration of the same repository identity idempotent
+and rejects conflicting ownership when one entity constructor receives multiple
+state schema identities or one state type is claimed by multiple constructors.
+The shell validates non-empty/non-blank names and records tenant mode plus
+repository ownership metadata for later runtime parts without creating default
+repositories from entity classes, registering repositories at runtime, invoking
+handlers, creating system contexts, opening storage, constructing buses/stands,
+writing tenant indexes, exposing gRPC services, or integrating transports.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,
