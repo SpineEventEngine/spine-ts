@@ -30,6 +30,12 @@ import {
   type ServerRuntimeLifecycle,
   type ServerRuntimeStateErrorCode,
   ServerRuntimeStateError,
+  acceptSignalIntake,
+  failSignalIntake,
+  type SignalIntakeAcceptedFor,
+  type SignalIntakeFailureCode,
+  type SignalIntakeResult,
+  type SignalKind,
   SingleProcessServerRuntime,
 } from "./index.js";
 
@@ -177,9 +183,11 @@ describe("@spine-ts/server", () => {
         "TransactionalEntityScopeError",
         "React",
         "Subscribe",
+        "acceptSignalIntake",
         "defineEntityHandlers",
         "describeEntityMetadata",
         "createEntityTransaction",
+        "failSignalIntake",
         "isEntitySchema",
         "materializeDecoratedEntityHandlers",
         "validateEntityStateTransition",
@@ -218,6 +226,15 @@ describe("@spine-ts/server", () => {
       readonly runtime?: ServerRuntimeLifecycle;
     }>();
     expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);
+    expectTypeOf<SignalKind>().toEqualTypeOf<"command" | "event">();
+    expectTypeOf<SignalIntakeAcceptedFor>().toEqualTypeOf<"async-work">();
+    expectTypeOf<SignalIntakeFailureCode>().toEqualTypeOf<
+      "RUNTIME_NOT_ACCEPTING" | "MALFORMED_ENVELOPE" | "UNSUPPORTED_SIGNAL_KIND"
+    >();
+    expectTypeOf(acceptSignalIntake("command")).toExtend<SignalIntakeResult>();
+    expectTypeOf(failSignalIntake("event", "MALFORMED_ENVELOPE")).toExtend<SignalIntakeResult>();
+    expect(acceptSignalIntake("command").acceptedFor).toBe("async-work");
+    expect(failSignalIntake("event", "MALFORMED_ENVELOPE").failure.code).toBe("MALFORMED_ENVELOPE");
     expect(() => new SingleProcessServerRuntime().enqueue(() => undefined)).toThrow(
       ServerRuntimeStateError,
     );

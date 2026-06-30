@@ -1316,3 +1316,34 @@ Consequences:
   registration in this subtask.
 - Public docs must state that the handle is not a JVM `Server` equivalent and
   is not a running context graph.
+
+## D-0050: T-0010.3 Models Intake Outcomes Without Ack Or Buses
+
+Status: Accepted
+
+Date: 2026-06-30
+
+Context: `T-0010.3 Write-Side Signal Intake Result` follows the runtime queue
+and bounded-context runtime handle. Spine JVM `Bus.post()` converts signals to
+envelopes, filters them, stores accepted signals, acknowledges accepted signals
+with `Ack`, and then dispatches. Filter failures are immediate post-time
+outcomes represented as `Ack` statuses; normal posting results do not use
+`StreamObserver.onError()`. `CommandBus` adds command ack monitoring and
+`EventBus` stores events before dispatch. These behaviors are larger than the
+current TS runtime.
+
+Decision: T-0010.3 introduces only typed result values that distinguish
+accepted-for-async-work from immediate intake failure. It must not implement
+`Ack`, command/event/import buses, filters, storage, store-before-dispatch,
+dispatch, delivery, services, tenant validation, transport, or handler
+invocation. Failure diagnostics should use stable reason codes and sanitized
+metadata, not full signal payloads.
+
+Consequences:
+
+- Later command/event intake tasks can map these result values to Spine `Ack`
+  semantics after the required proto contracts and service layer are in scope.
+- Reviewers must flag attempts to enqueue work, dispatch handlers, store events,
+  perform validation, or expose transport/service concepts in this subtask.
+- The public documentation must explain that accepted means accepted for later
+  asynchronous runtime work, not dispatched, stored, or successfully handled.

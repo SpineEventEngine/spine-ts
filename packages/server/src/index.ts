@@ -85,6 +85,19 @@ export {
 } from "./runtime.js";
 
 export {
+  acceptSignalIntake,
+  failSignalIntake,
+  type SignalIntakeAccepted,
+  type SignalIntakeAcceptedFor,
+  type SignalIntakeFailure,
+  type SignalIntakeFailureCode,
+  type SignalIntakeFailureDetails,
+  type SignalIntakeFailureDiagnostics,
+  type SignalIntakeResult,
+  type SignalKind,
+} from "./signal-intake.js";
+
+export {
   type ConcreteRepositoryEntityType,
   Repository,
   type RepositoryEntityType,

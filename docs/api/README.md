@@ -8,7 +8,8 @@ registry and validation facade APIs, the first `@spine-ts/server`
 descriptor-derived entity metadata, metadata-only `Repository` identity,
 set-once transition validation, explicit handler metadata APIs, and the first
 server runtime lifecycle/async queue kernel with a bounded-context runtime
-handle, and the first `@spine-ts/storage` contracts.
+handle, write-side signal intake result exports, and the first
+`@spine-ts/storage` contracts.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
@@ -170,6 +171,22 @@ process-wide singleton, process supervisor, generic job framework,
 command/event/import bus, durable storage or inbox, read-side stand, repository
 dispatcher, integration broker, gRPC server, ZeroMQ transport, or worker-process
 runtime.
+Write-side signal intake exports include `SignalKind`, `SignalIntakeResult`,
+`SignalIntakeAccepted`, `SignalIntakeAcceptedFor`, `SignalIntakeFailure`,
+`SignalIntakeFailureCode`, `SignalIntakeFailureDetails`,
+`SignalIntakeFailureDiagnostics`, `acceptSignalIntake()`, and
+`failSignalIntake()`. These immutable result values distinguish command/event
+signals accepted for later asynchronous runtime work from immediate intake
+failures. Accepted results do not enqueue work, store, dispatch, deliver,
+handle, or acknowledge a signal. Failure results carry stable failure codes
+(`"RUNTIME_NOT_ACCEPTING"`, `"MALFORMED_ENVELOPE"`, and
+`"UNSUPPORTED_SIGNAL_KIND"`) plus frozen scalar diagnostic metadata. Diagnostics
+copy only allowlisted own enumerable data properties with string, number,
+boolean, or `null` values; unknown keys, accessor properties, and payload-shaped
+metadata are discarded so the seam can be used without leaking full signal
+data. The surface is not Spine `Ack`, a command bus, event bus, import bus,
+filter chain, storage write, dispatcher, delivery mechanism, tenant/message
+validator, service, transport, or handler invocation.
 
 Storage exports include `StorageAdapter`, `StorageRecord`,
 `WriteSideRecordStore`, `ReadSideRecordStore`, aggregate event history
