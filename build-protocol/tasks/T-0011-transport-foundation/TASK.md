@@ -1,6 +1,6 @@
 # T-0011: Transport Foundation
 
-Status: T-0011.3 Integrated
+Status: T-0011.4 Integrated
 Start: `2026-06-30 20:32 WEST`
 Baseline commit: `194ce9e`
 Task log path: `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
@@ -9,8 +9,8 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-transport-foundation`
 Requirements splitter:
 `2026-06-30 20:40 WEST` splitter session (closed by orchestrator after handoff)
-Authoring sub-agents: T-0011.1, T-0011.2, and T-0011.3 complete; later subtasks pending
-Reviewer sub-agents: T-0011.1, T-0011.2, and T-0011.3 complete; later subtasks pending
+Authoring sub-agents: T-0011.1, T-0011.2, T-0011.3, and T-0011.4 complete; later subtasks pending
+Reviewer sub-agents: T-0011.1, T-0011.2, T-0011.3, and T-0011.4 complete; later subtasks pending
 
 ## Objective
 
@@ -242,6 +242,17 @@ side execution.
   with native IPC access because the merged ZeroMQ smoke test binds
   `ipc://` endpoints and the managed sandbox rejects those binds with `EPERM`.
 
+- T-0011.4 parent integration verification passed on `2026-06-30 23:46 WEST`
+  after merge commit `78e3b0a`:
+  `CI=true corepack pnpm verify` passed with 23 test files / 276 tests,
+  coverage 96.60% statements / 91.06% branches / 99.30% functions / 96.54%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
+  / 31 transport expected exports, copied Spine proto checksum verification,
+  proto lint/generate, generated proto output clean, and generated files clean.
+  TypeDoc emitted the existing invalid-`origin` warning only. The command ran
+  with native IPC access because the merged ZeroMQ smoke test binds
+  `ipc://` endpoints and the managed sandbox rejects those binds with `EPERM`.
+
 ## Integrated Subtasks
 
 - `T-0011.1 Transport Contracts, Topics, And Envelope Routing Keys`: integrated
@@ -256,7 +267,11 @@ side execution.
   `2026-06-30 22:48 WEST`. Required five-lane review clean after documentation
   follow-up; final subtask verification passed; parent native IPC verification
   passed after merge.
+- `T-0011.4 Broker And Worker Lifecycle Seam`: integrated by merge commit
+  `78e3b0a` on `2026-06-30 23:46 WEST`. Required five-lane review clean after
+  maintainability, security, and final lint follow-ups; final subtask
+  verification passed; parent native IPC verification passed after merge.
 
 ## Next Subtask
 
-- `T-0011.4 Broker And Worker Lifecycle Seam`.
+- `T-0011.5 Delivery And Retry Boundary Contracts`.

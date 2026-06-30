@@ -1,6 +1,6 @@
 # Review Log: T-0011 Transport Foundation
 
-Status: T-0011.3 Integrated
+Status: T-0011.4 Integrated
 
 ## Required Review Lanes
 
@@ -36,7 +36,11 @@ verification passed after merge on `2026-06-30 22:05 WEST`. `T-0011.3 Local
 IPC Smoke Tests` completed all five required review lanes after documentation
 follow-up and was integrated into the parent branch by merge commit `6f5c53c`.
 Parent native IPC verification passed after merge on `2026-06-30 22:48 WEST`.
-Next review gate: `T-0011.4 Broker And Worker Lifecycle Seam`.
+`T-0011.4 Broker And Worker Lifecycle Seam` completed all five required review
+lanes after maintainability, security, and final lint follow-ups and was
+integrated into the parent branch by merge commit `78e3b0a`. Parent native IPC
+verification passed after merge on `2026-06-30 23:46 WEST`. Next review gate:
+`T-0011.5 Delivery And Retry Boundary Contracts`.
 
 ## Reviewer Rounds
 
@@ -67,6 +71,17 @@ Next review gate: `T-0011.4 Broker And Worker Lifecycle Seam`.
   lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
   expected exports, copied Spine proto checksum verification, proto
   lint/generate, and generated-clean checks. TypeDoc emitted the existing
+  invalid-`origin` warning only. The command ran with native IPC access because
+  the merged ZeroMQ smoke test binds `ipc://` endpoints and the managed sandbox
+  rejects those binds with `EPERM`.
+- T-0011.4 required-lane reviews completed in
+  `build-protocol/reviews/T-0011-4-broker-worker-lifecycle-seam.md`.
+- Parent integration verification passed after merge commit `78e3b0a`:
+  `CI=true corepack pnpm verify` passed with 23 test files / 276 tests,
+  coverage 96.60% statements / 91.06% branches / 99.30% functions / 96.54%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
+  / 31 transport expected exports, copied Spine proto checksum verification,
+  proto lint/generate, and generated-clean checks. TypeDoc emitted the existing
   invalid-`origin` warning only. The command ran with native IPC access because
   the merged ZeroMQ smoke test binds `ipc://` endpoints and the managed sandbox
   rejects those binds with `EPERM`.
