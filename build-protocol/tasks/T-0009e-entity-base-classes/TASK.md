@@ -1,6 +1,6 @@
 # T-0009e: Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Pending
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Pending
 Start: `2026-06-29 21:58 WEST`
 Baseline commit: `47eae4e`
 Task log path: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
@@ -9,8 +9,9 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009e-entity-base-classes`
 Requirements splitter:
 `019f1531-96a3-7870-bb40-b24fc9a456c8` (Goodall the 3rd, closed)
-Authoring sub-agent: T-0009e.1 completed in subtask branch
-Reviewer sub-agents: T-0009e.1 Round 8 complete; all reviewers clean and closed
+Authoring sub-agent: T-0009e.1 and T-0009e.2 completed in subtask branches
+Reviewer sub-agents: T-0009e.1 Round 8 clean and closed; T-0009e.2 Round 11
+clean and closed
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:01 WEST`
 
@@ -167,7 +168,28 @@ Integrated result:
 - Round 8 clean review across code style/maintainability, documentation,
   TypeScript/API docs, security, and performance/reliability.
 
-Next parent subtask: `T-0009e.2 TransactionalEntity Scoped Draft Helpers`.
+`T-0009e.2 TransactionalEntity Scoped Draft Helpers` was merged into this parent
+branch on `2026-06-30 01:50 WEST` from
+`task/T-0009e2-transactional-entity-draft-helpers`.
+
+Integrated result:
+
+- protected `TransactionalEntity` draft/commit/rollback helpers in
+  `packages/server/src/entity.ts`;
+- commit-result snapshot isolation for accepted and rejected version evidence;
+- focused transaction/root tests and API export checks;
+- public docs and architecture/API/user guide updates;
+- durable task/report/work/review logs for all T-0009e.2 review rounds; and
+- Round 11 clean review across code style/maintainability, documentation,
+  TypeScript/API docs, security, and performance/reliability.
+
+Parent integration verification passed on `2026-06-30 01:51 WEST`:
+`CI=true corepack pnpm verify` reported 15 test files / 152 tests, coverage
+statements 97.23%, branches 91.41%, functions 99.15%, lines 97.17%;
+TypeDoc/API/proto gates passed with 68 expected server exports and generated
+proto output clean.
+
+Next parent subtask: `T-0009e.3 Family Capability Marker Classes`.
 
 ## Initial Scope Constraints
 
@@ -216,10 +238,17 @@ Out of scope until later tasks:
   97.61%, branches 90.51%, functions 100%, lines 97.56%; TypeDoc/API reported
   100 proto, 28 core, 59 server, and 26 storage expected exports; proto
   lint/generate/check passed with generated output clean.
+- T-0009e.2 parent integration `CI=true corepack pnpm verify` passed on
+  `2026-06-30 01:51 WEST`: 15 test files / 152 tests; coverage statements
+  97.23%, branches 91.41%, functions 99.15%, lines 97.17%; TypeDoc/API/proto
+  gates passed with 68 expected server exports and generated proto output clean.
 
 ## Review Rounds
 
-- Pending splitter and implementation.
+- T-0009e.1 completed eight review rounds; Round 8 returned clean across all
+  five required reviewer lanes and all reviewers were closed.
+- T-0009e.2 completed eleven review rounds; Round 11 returned clean across all
+  five required reviewer lanes and all reviewers were closed.
 
 ## Current State
 
@@ -227,4 +256,13 @@ Out of scope until later tasks:
 - Durable setup logs are committed at `3ff607b`.
 - Baseline verification passed on `2026-06-29 22:01 WEST`.
 - Requirements splitter completed with no blockers and was closed.
-- Next step: create the isolated `T-0009e.1` branch/worktree.
+- `T-0009e.1 Common Entity State Shell` is merged into the parent branch with
+  parent integration logs updated.
+- `T-0009e.2 TransactionalEntity Scoped Draft Helpers` is merged into the parent
+  branch with parent integration logs updated.
+- T-0009e.2 parent integration verification passed on
+  `2026-06-30 01:51 WEST`: 15 test files / 152 tests; coverage 97.23%
+  statements, 91.41% branches, 99.15% functions, 97.17% lines; TypeDoc/API/proto
+  gates passed with 68 expected server exports.
+- Next step: create the isolated
+  `T-0009e.3 Family Capability Marker Classes` branch/worktree.

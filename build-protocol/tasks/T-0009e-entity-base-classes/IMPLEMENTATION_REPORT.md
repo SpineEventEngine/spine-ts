@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Pending
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Pending
 Task log: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e.md`
 Review log: `build-protocol/reviews/T-0009e-entity-base-classes.md`
@@ -10,10 +10,11 @@ Worktree:
 
 ## Summary
 
-`T-0009e.1 Common Entity State Shell` is integrated into the parent entity-base
-branch. It introduces the first abstract `Entity` state shell for
-`@spine-ts/server` while preserving the D-0044 boundary against repositories,
-dispatch, storage, buses, and family-specific runtime behavior.
+`T-0009e.1 Common Entity State Shell` and `T-0009e.2 TransactionalEntity Scoped
+Draft Helpers` are integrated into the parent entity-base branch. They introduce
+the abstract `Entity` state shell and protected transaction-backed draft helper
+layer for `@spine-ts/server` while preserving the D-0044 boundary against
+repositories, dispatch, storage, buses, and family-specific runtime behavior.
 
 ## JVM Research Used
 
@@ -23,7 +24,8 @@ remaining smaller than repositories and dispatch.
 
 ## Files Changed
 
-Integrated from `task/T-0009e1-common-entity-state-shell`:
+Integrated from `task/T-0009e1-common-entity-state-shell` and
+`task/T-0009e2-transactional-entity-draft-helpers`:
 
 - `packages/server/src/entity.ts`
 - `packages/server/src/entity.test.ts`
@@ -38,6 +40,10 @@ Integrated from `task/T-0009e1-common-entity-state-shell`:
 - `build-protocol/tasks/T-0009e1-common-entity-state-shell/IMPLEMENTATION_REPORT.md`
 - `build-protocol/work-logs/T-0009e1.md`
 - `build-protocol/reviews/T-0009e1-common-entity-state-shell.md`
+- `build-protocol/tasks/T-0009e2-transactional-entity-draft-helpers/TASK.md`
+- `build-protocol/tasks/T-0009e2-transactional-entity-draft-helpers/IMPLEMENTATION_REPORT.md`
+- `build-protocol/work-logs/T-0009e2.md`
+- `build-protocol/reviews/T-0009e2-transactional-entity-draft-helpers.md`
 - parent T-0009e integration logs
 
 ## Verification
@@ -57,6 +63,16 @@ Integrated from `task/T-0009e1-common-entity-state-shell`:
   files / 145 tests, coverage 97.31% statements / 91.28% branches / 100%
   functions / 97.25% lines, TypeDoc/API/proto gates passed with 64 expected
   server exports, and generated proto output clean.
+- T-0009e.2 final subtask verification passed on `2026-06-30 01:50 WEST`:
+  `CI=true corepack pnpm verify` passed with 15 test files / 152 tests, coverage
+  97.23% statements / 91.41% branches / 99.15% functions / 97.17% lines,
+  TypeDoc/API/proto gates passed with 68 expected server exports, and generated
+  proto output clean.
+- Parent integration verification passed on `2026-06-30 01:51 WEST`:
+  `CI=true corepack pnpm verify` passed on the merged parent tree with 15 test
+  files / 152 tests, coverage 97.23% statements / 91.41% branches / 99.15%
+  functions / 97.17% lines, TypeDoc/API/proto gates passed with 68 expected
+  server exports, and generated proto output clean.
 
 ## Review
 
@@ -64,4 +80,8 @@ Integrated from `task/T-0009e1-common-entity-state-shell`:
   required reviewer lanes: code style/maintainability, documentation,
   TypeScript/API docs, security, and performance/reliability.
 - All T-0009e.1 Round 8 reviewer sub-agents were closed by the orchestrator.
-- Parent branch integration verification passed for this merge commit.
+- T-0009e.2 completed eleven review rounds. Round 11 returned clean across all
+  required reviewer lanes: code style/maintainability, documentation,
+  TypeScript/API docs, security, and performance/reliability.
+- All T-0009e.2 Round 11 reviewer sub-agents were closed by the orchestrator.
+- Parent branch integration verification passed for both subtask merge commits.
