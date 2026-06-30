@@ -684,6 +684,61 @@ describe("BoundedContext builder shell", () => {
           }),
         }),
     ],
+    [
+      "sparse metadata columns",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          metadata: Object.freeze({
+            ...snapshot.metadata,
+            columns: Array(1) as never,
+          }),
+        }),
+    ],
+    [
+      "sparse metadata set-once fields",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          metadata: Object.freeze({
+            ...snapshot.metadata,
+            setOnceFields: Array(1) as never,
+          }),
+        }),
+    ],
+    [
+      "non-array metadata semantic tags",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          metadata: Object.freeze({
+            ...snapshot.metadata,
+            semanticTags: new Set(["snapshot"]) as never,
+          }),
+        }),
+    ],
+    [
+      "sparse metadata semantic tags",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          metadata: Object.freeze({
+            ...snapshot.metadata,
+            semanticTags: Array(1) as never,
+          }),
+        }),
+    ],
+    [
+      "non-string metadata semantic tag",
+      (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) =>
+        Object.freeze({
+          ...snapshot,
+          metadata: Object.freeze({
+            ...snapshot.metadata,
+            semanticTags: [7] as never,
+          }),
+        }),
+    ],
   ] satisfies readonly [
     string,
     (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) => unknown,

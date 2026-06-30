@@ -1,6 +1,6 @@
 # T-0009f.3: Builder Repository Registration And Conflict Checks
 
-Status: Round 2 Review Fix Implemented And Verified
+Status: Round 3 Review Fix Implemented And Verified
 Start: `2026-06-30 11:34 WEST`
 Parent task: `T-0009f Repository Seams And Bounded-Context Registration Skeleton`
 Parent branch: `task/T-0009f-repository-seams`
@@ -120,6 +120,20 @@ Expected boundary from current research:
       and by freezing already-validated context snapshot children instead of
       cloning them again.
 - [x] Required focused and full verification pass for the round-2 fix commit.
+
+## Review Round 3 Fixes
+
+- [x] Reliability P2: added RED/GREEN coverage for sparse
+      `metadata.columns`, `metadata.setOnceFields`, and `metadata.semanticTags`
+      arrays returned by hostile repository snapshots.
+- [x] Reliability P2: metadata field-list clone and validation now use
+      index-based loops that reject missing own indices before cloning or
+      validating each field.
+- [x] Security Low: added RED/GREEN coverage for non-array and non-string
+      `metadata.semanticTags` values returned by hostile repository snapshots.
+- [x] Security Low: repository snapshot cloning and validation now require
+      `metadata.semanticTags` to be an array of strings.
+- [x] Required focused and full verification pass for the round-3 fix commit.
 
 ## Implementation Evidence
 

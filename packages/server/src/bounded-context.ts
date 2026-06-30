@@ -450,7 +450,10 @@ function cloneRepositorySnapshot<EntityType extends RepositoryEntityType>(
       snapshot.metadata.setOnceFields,
       "Repository snapshot metadata.setOnceFields",
     ),
-    semanticTags: Object.freeze([...snapshot.metadata.semanticTags]),
+    semanticTags: cloneRepositorySemanticTags(
+      snapshot.metadata.semanticTags,
+      "Repository snapshot metadata.semanticTags",
+    ),
   });
 
   return Object.freeze({
@@ -471,11 +474,44 @@ function cloneRepositoryFieldMetadataList(
     throw new TypeError(`${owner} must be an array.`);
   }
 
-  return Object.freeze(
-    mapArray(fields, (field) =>
-      cloneRepositoryFieldMetadata(field as RepositoryIdentitySnapshot["idField"]),
-    ),
-  );
+  const fieldValues = fields as readonly unknown[];
+  const clonedFields: RepositoryIdentitySnapshot["idField"][] = [];
+
+  for (let index = 0; index < fieldValues.length; index += 1) {
+    if (!Object.hasOwn(fieldValues, index)) {
+      throw new TypeError(`${owner}[${String(index)}] must be present.`);
+    }
+
+    clonedFields.push(
+      cloneRepositoryFieldMetadata(fieldValues[index] as RepositoryIdentitySnapshot["idField"]),
+    );
+  }
+
+  return Object.freeze(clonedFields);
+}
+
+function cloneRepositorySemanticTags(tags: unknown, owner: string): readonly string[] {
+  if (!Array.isArray(tags)) {
+    throw new TypeError(`${owner} must be an array.`);
+  }
+
+  const tagValues = tags as readonly unknown[];
+  const clonedTags: string[] = [];
+
+  for (let index = 0; index < tagValues.length; index += 1) {
+    if (!Object.hasOwn(tagValues, index)) {
+      throw new TypeError(`${owner}[${String(index)}] must be present.`);
+    }
+
+    const tag = tagValues[index];
+    if (typeof tag !== "string") {
+      throw new TypeError(`${owner}[${String(index)}] must be a string.`);
+    }
+
+    clonedTags.push(tag);
+  }
+
+  return Object.freeze(clonedTags);
 }
 
 function cloneRepositoryFieldMetadata(
@@ -781,6 +817,10 @@ function validateRepositorySnapshot(snapshot: RepositoryIdentitySnapshot): void 
     snapshot.metadata.setOnceFields,
     "Repository snapshot metadata.setOnceFields",
   );
+  validateRepositorySemanticTags(
+    snapshot.metadata.semanticTags,
+    "Repository snapshot metadata.semanticTags",
+  );
 }
 
 function isEntityFamily(value: unknown): value is RepositoryIdentitySnapshot["entityFamily"] {
@@ -804,9 +844,29 @@ function validateRepositoryFieldMetadataList(fields: unknown, owner: string): vo
     throw new TypeError(`${owner} must be an array.`);
   }
 
-  Array.prototype.forEach.call(fields, (field: unknown, index: number) => {
-    validateRepositoryFieldMetadata(field, `${owner}[${String(index)}]`);
-  });
+  for (let index = 0; index < fields.length; index += 1) {
+    if (!Object.hasOwn(fields, index)) {
+      throw new TypeError(`${owner}[${String(index)}] must be present.`);
+    }
+
+    validateRepositoryFieldMetadata(fields[index], `${owner}[${String(index)}]`);
+  }
+}
+
+function validateRepositorySemanticTags(tags: unknown, owner: string): void {
+  if (!Array.isArray(tags)) {
+    throw new TypeError(`${owner} must be an array.`);
+  }
+
+  for (let index = 0; index < tags.length; index += 1) {
+    if (!Object.hasOwn(tags, index)) {
+      throw new TypeError(`${owner}[${String(index)}] must be present.`);
+    }
+
+    if (typeof tags[index] !== "string") {
+      throw new TypeError(`${owner}[${String(index)}] must be a string.`);
+    }
+  }
 }
 
 function safeEntityTypeName(entityType: RepositoryIdentitySnapshot["entityType"]): string {

@@ -1,6 +1,6 @@
 # Review Log: T-0009f.3 Builder Repository Registration And Conflict Checks
 
-Status: Round 2 Review Fix Implemented And Verified
+Status: Round 3 Review Fix Implemented And Verified
 
 ## Required Review Lanes
 
@@ -98,4 +98,38 @@ lanes before integration:
   `node scripts/check-api-docs.mjs` passed with one TypeDoc source-link warning
   for invalid local `origin`; `CI=true corepack pnpm verify` passed 17 test
   files / 198 tests plus coverage, docs, proto lint/generate, and
+  generated-clean.
+
+## Round 3 Review State
+
+- Third external review round reported two findings:
+  - Reliability P2: sparse `metadata.columns` and
+    `metadata.setOnceFields` arrays could still bypass malformed snapshot
+    rejection because `Array.prototype.map.call()` and
+    `Array.prototype.forEach.call()` skip holes.
+  - Security Low: `metadata.semanticTags` was cloned with spread and not
+    validated in `validateRepositorySnapshot()`, allowing non-array iterables
+    or arrays containing non-strings to be accepted.
+- Already clean review lanes from the third round: code style, documentation,
+  and TypeScript/API docs.
+
+## Round 3 Fix State
+
+- Added RED/GREEN coverage for sparse `metadata.columns`, sparse
+  `metadata.setOnceFields`, sparse `metadata.semanticTags`, non-array
+  `metadata.semanticTags`, and non-string `metadata.semanticTags`.
+- Replaced metadata field-list clone/validation with index-based loops that
+  reject missing own indices before cloning or validating each field.
+- Added `metadata.semanticTags` clone and validation helpers that require a
+  dense string array.
+- Preserved the metadata-only builder boundary: no storage, routing, stand,
+  bus, handler, default runtime repository, or context runtime behavior was
+  added.
+- Required focused and full verification passed before committing the round-3
+  fix:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts packages/server/src/repository.test.ts packages/server/src/index.test.ts`
+  passed 52 tests; `corepack pnpm typecheck:tooling` passed;
+  `node scripts/check-api-docs.mjs` passed with one TypeDoc source-link warning
+  for invalid local `origin`; `CI=true corepack pnpm verify` passed 17 test
+  files / 203 tests plus coverage, docs, proto lint/generate, and
   generated-clean.

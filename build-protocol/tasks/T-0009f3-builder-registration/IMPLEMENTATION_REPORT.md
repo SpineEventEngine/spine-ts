@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.3 Builder Repository Registration And Conflict Checks
 
-Status: Round 2 Review Fix Implemented And Verified
+Status: Round 3 Review Fix Implemented And Verified
 Task log: `build-protocol/tasks/T-0009f3-builder-registration/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f3.md`
 Review log: `build-protocol/reviews/T-0009f3-builder-registration.md`
@@ -65,9 +65,15 @@ Impact:
   operation type are public exports, so the emitted `.d.ts` and TypeDoc API
   surface no longer reference private branch names.
 - Repository snapshot cloning validates `metadata.columns` and
-  `metadata.setOnceFields` with `Array.isArray()` before mapping them and uses
-  `Array.prototype.map.call` for array clones to avoid trusting
-  caller-controlled `map()` methods.
+  `metadata.setOnceFields` with `Array.isArray()` and index-based loops to
+  avoid trusting caller-controlled array helpers.
+- Repository snapshot metadata field-list cloning and validation reject sparse
+  arrays with missing own indices before cloning or validating each field, so
+  hostile snapshots cannot hide absent column or set-once field metadata in
+  array holes.
+- Repository snapshot cloning and validation require `metadata.semanticTags` to
+  be a real array whose entries are strings, rejecting non-array iterables,
+  sparse arrays, and non-string entries as malformed repository snapshots.
 - `BoundedContextBuilder.build()` no longer pre-clones repository snapshots
   before constructing `BoundedContext`; constructor validation performs the
   defensive copy once, and context snapshot freezing preserves already
@@ -160,6 +166,29 @@ Impact:
   `tsc -b`, tooling typecheck, ESLint, Prettier check, 17 Vitest files / 198
   tests, coverage over thresholds, TypeDoc/API guard, proto lint, proto
   generate, and generated-clean completed successfully.
+- Round-3 metadata RED:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts`
+  failed with four expected failures because sparse `metadata.columns`,
+  sparse `metadata.setOnceFields`, non-array `metadata.semanticTags`, and
+  non-string `metadata.semanticTags` values were accepted instead of producing
+  deterministic `INVALID_REPOSITORY_SNAPSHOT` errors.
+- Round-3 bounded-context GREEN:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts`
+  passed 26 tests after index-based metadata-list loops and semantic-tag
+  validation were added.
+- Round-3 focused verification:
+  `corepack pnpm exec vitest run --passWithNoTests packages/server/src/bounded-context.test.ts packages/server/src/repository.test.ts packages/server/src/index.test.ts`
+  passed 3 test files and 52 tests after the sparse semantic-tag regression
+  case was added.
+- Round-3 `corepack pnpm typecheck:tooling` passed.
+- Round-3 `node scripts/check-api-docs.mjs` passed. TypeDoc emitted one
+  source-link warning because the local `origin` remote is not valid; the API
+  JSON guard passed with 96 expected `@spine-ts/server` exports.
+- Round-3 full verification:
+  `CI=true corepack pnpm verify` passed. Evidence: node version check,
+  `tsc -b`, tooling typecheck, ESLint, Prettier check, 17 Vitest files / 203
+  tests, coverage over thresholds, TypeDoc/API guard, proto lint, proto
+  generate, and generated-clean completed successfully.
 
 ## Review
 
@@ -186,3 +215,12 @@ Impact:
   snapshot clone and avoiding a second context-snapshot deep clone after
   validation.
 - Required focused and full verification passed for the round-2 fix.
+- Third external review round reported one reliability finding and one
+  low-severity security finding.
+- Fixed round-3 reliability finding by adding sparse metadata-list RED/GREEN
+  coverage and replacing field-list `map()`/`forEach()` cloning/validation
+  with index-based loops that reject missing own indices.
+- Fixed round-3 security finding by validating and cloning
+  `metadata.semanticTags` as a dense string array instead of spreading any
+  iterable.
+- Required focused and full verification passed for the round-3 fix.
