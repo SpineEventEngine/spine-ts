@@ -1,6 +1,6 @@
 # Review Log: T-0011.3 Local IPC Smoke Tests
 
-Status: Implementation Complete; External Review Pending
+Status: Complete; All Review Lanes Clean
 
 ## Required Review Lanes
 
@@ -27,8 +27,9 @@ invalid-`origin` warning only.
 ## Current Review Gate
 
 Setup dependency install and baseline verification passed. Implementation
-passed focused and full verification on `2026-06-30 22:21 WEST`. The required
-external review lanes must complete before parent integration.
+passed focused and full verification on `2026-06-30 22:21 WEST`. Documentation
+follow-up passed re-review on `2026-06-30 22:42 WEST`. Final task verification
+passed on `2026-06-30 22:43 WEST`.
 
 ## Reviewer Rounds
 
@@ -41,6 +42,16 @@ external review lanes must complete before parent integration.
 | TypeScript / API docs        | Clean   | Public `@spine-ts/transport` exports remain unchanged; ZeroMQ stays adapter-private.                                                                                                                |
 | Security                     | Clean   | No TCP ports, external services, or public ZeroMQ types were introduced.                                                                                                                            |
 | Performance / reliability    | Clean   | Bounded timeouts, `linger: 0`, and temporary IPC cleanup remain in place.                                                                                                                           |
+
+### Documentation Re-review
+
+Reviewer `019f1a74-86b3-7551-81ab-936c237d2dad` checked the documentation
+follow-up and requested explicit reviewer sub-agent IDs in durable logs.
+
+Reviewer `019f1a7b-357f-7753-b416-e2ee71abb3b1` checked the reviewer-ID
+provenance fix and reported `STATUS: CLEAN`: the task file, work log, and
+review log now explicitly name all five round 1 reviewer sub-agent IDs, and no
+new documentation/log inconsistency was introduced.
 
 ## Implementation Self-Check
 
