@@ -1,6 +1,7 @@
 export {
   BoundedContext,
   BoundedContextBuilder,
+  type BuiltBoundedContextSnapshot,
   type BoundedContextName,
   BoundedContextNameError,
   BoundedContextRepositoryRegistrationError,

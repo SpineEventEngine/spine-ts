@@ -170,6 +170,7 @@ const expectedServerExports = [
   "BaseHandlerMetadata",
   "BoundedContext",
   "BoundedContextBuilder",
+  "BuiltBoundedContextSnapshot",
   "BoundedContextName",
   "BoundedContextNameError",
   "BoundedContextRepositoryRegistrationError",

@@ -44,6 +44,11 @@ and merged into the parent branch on `2026-06-30 13:27 WEST` as merge commit
 coverage 96.39% statements / 90.8% branches / 99.09% functions / 96.32% lines,
 clean TypeDoc/API counts 100 / 28 / 96 / 26, proto lint/generate checksum
 verification, and generated-output gates clean.
+T-0009f.4 setup created the isolated
+`task/T-0009f4-context-snapshot-public-closure` branch/worktree from parent
+commit `855da4a` on `2026-06-30 13:30 WEST`, recorded the task/review/work logs,
+and confirmed the implementation scope as immutable built-context metadata
+snapshots plus public documentation/API closure only.
 
 ## JVM Research Used
 
@@ -158,3 +163,5 @@ construction.
   lines, TypeDoc/API checks with 100 proto / 28 core / 96 server / 26 storage
   expected exports, proto lint/generate checksum verification, and generated
   proto output clean.
+- T-0009f.4 setup started on `2026-06-30 13:30 WEST` from parent commit
+  `855da4a`; implementation and required reviewer lanes are pending.

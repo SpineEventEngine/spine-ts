@@ -128,8 +128,8 @@ customers.isMultitenant; // true
 Names must be non-empty and non-blank. `ContextSpec` is a framework-owned
 immutable value exposed from the builder and built context, `build()` returns a
 frozen metadata-only `BoundedContext`, and `.snapshot` returns a copy-safe
-immutable snapshot. Builders accept explicit metadata-only `Repository`
-identity objects:
+immutable `BuiltBoundedContextSnapshot` / `BoundedContextSnapshot`. Builders
+accept explicit metadata-only `Repository` identity objects:
 
 ```ts
 import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
@@ -151,7 +151,8 @@ Adding the same repository identity repeatedly is idempotent. The builder
 rejects conflicting ownership when one entity constructor is paired with a
 different state schema identity, or when one state type is claimed by multiple
 entity constructors. Returned repository arrays and built context snapshots are
-fresh frozen copies.
+fresh frozen copies. `BuiltBoundedContextSnapshot` is a public name for this
+closed registration contract; it is not a runtime context handle.
 
 This slice deliberately does not create default repositories from entity
 classes, perform runtime repository registration, invoke handlers, open storage,

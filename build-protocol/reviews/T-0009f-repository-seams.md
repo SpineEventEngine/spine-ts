@@ -47,6 +47,9 @@ Spec And Builder Shell` was the first selected subtask.
   performance/reliability lanes reported no remaining findings.
 - T-0009f.3 merged into the parent branch at merge commit `32a664e` on
   `2026-06-30 13:27 WEST`, and parent verification passed.
+- `T-0009f.4 Immutable Built Context Snapshot And Public Closure` setup started
+  on `2026-06-30 13:30 WEST`; implementation and all required review lanes are
+  pending.
 - Current parent review state: all required review lanes are clean for the
-  first three subtasks. Later T-0009f subtasks remain pending implementation and
-  their own review rounds.
+  first three subtasks. T-0009f.4 and later T-0009f subtasks remain pending
+  implementation and their own review rounds.

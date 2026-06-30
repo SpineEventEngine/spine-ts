@@ -192,6 +192,18 @@ describe("BoundedContext builder shell", () => {
   it("exposes the metadata-only builder and built-context surface", () => {
     const builder = BoundedContext.singleTenant("Tasks");
     const context = builder.build();
+    const forbiddenRuntimeMembers = [
+      "close",
+      "register",
+      "registerCommandDispatcher",
+      "registerEventDispatcher",
+      "commandBus",
+      "eventBus",
+      "stand",
+      "storage",
+      "tenantIndex",
+      "systemContext",
+    ];
 
     expect(Object.getOwnPropertyNames(BoundedContextBuilder.prototype).sort()).toEqual([
       "add",
@@ -233,6 +245,11 @@ describe("BoundedContext builder shell", () => {
       "tenantMode",
     ]);
     expect(context.spec.snapshot).toEqual(builder.spec.snapshot);
+
+    for (const member of forbiddenRuntimeMembers) {
+      expect(member in context).toBe(false);
+      expect(Object.hasOwn(context, member)).toBe(false);
+    }
   });
 
   it("rejects direct JS construction outside the public builder path", () => {

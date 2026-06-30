@@ -11,8 +11,9 @@ Requirements splitter:
 `019f16c7-9335-72e3-ab82-7c4ce7fc8e9c` (Singer the 4th, closed)
 Authoring sub-agents: T-0009f.1, T-0009f.2, and T-0009f.3 implemented by Codex
 implementation sub-agents
-Reviewer sub-agents: completed T-0009f.1, T-0009f.2, and T-0009f.3 durable review/fix
-rounds recorded in review logs; future subtasks pending
+Reviewer sub-agents: completed T-0009f.1, T-0009f.2, and T-0009f.3 durable
+review/fix rounds recorded in review logs; T-0009f.4 setup complete and
+implementation pending
 
 ## Objective
 
@@ -260,6 +261,11 @@ pnpm verify` passed with 15 test files / 160 tests, coverage 97.25%
   lines, TypeDoc/API checks with 100 proto / 28 core / 96 server / 26 storage
   expected exports, proto lint/generate checksum verification, and generated
   proto output clean.
+- `T-0009f.4 Immutable Built Context Snapshot And Public Closure` subtask
+  branch/worktree created on `2026-06-30 13:30 WEST` from parent integration
+  commit `855da4a`; setup inspected task-relevant JVM `BoundedContext`,
+  `BoundedContextBuilder`, and `Repository` source and scoped the task to
+  immutable metadata snapshots and public closure docs/API only.
 
 ## Human Questions And Answers
 
