@@ -1,6 +1,6 @@
 # T-0010: Single-Process Async Runtime
 
-Status: Requirements Split Complete; First Subtask Selected
+Status: `T-0010.1` Integrated; Next Subtask Selected
 Start: `2026-06-30 14:57 WEST`
 Baseline commit: `169af02`
 Task log path: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
@@ -9,8 +9,14 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0010-single-process-async-runtime`
 Requirements splitter:
 `019f18d6-f12d-7640-9c9e-be8943200c99` (Plato the 6th, closed)
-Authoring sub-agents: pending splitter output.
-Reviewer sub-agents: pending implementation subtask selection.
+Authoring sub-agents:
+
+- `T-0010.1`: `019f18e2-6b71-72d2-ad2a-fb3cf0b5859f` (closed);
+  `019f18f1-ad4c-7fb2-b079-994735ee337c` (review fix, closed).
+
+Reviewer sub-agents:
+
+- `T-0010.1`: all required review lanes completed and closed.
 
 ## Objective
 
@@ -171,6 +177,12 @@ deferred to a later transport-adapter task.
   lines, TypeDoc/API checks with 100 proto / 28 core / 97 server / 26 storage
   expected exports, proto lint/generate checksum verification, and generated
   proto output clean.
+- Parent integration verification after merge commit `556c23a` passed on
+  `2026-06-30 15:50 WEST`: `CI=true corepack pnpm verify` passed with 18 test
+  files / 219 tests, coverage 96.33% statements / 90.87% branches / 99.12%
+  functions / 96.26% lines, TypeDoc/API checks with 100 proto / 28 core / 104
+  server / 26 storage expected exports, proto lint/generate checksum
+  verification, and generated proto output clean.
 
 ## Human Questions And Answers
 
@@ -182,4 +194,9 @@ deferred to a later transport-adapter task.
   created on `2026-06-30 15:08 WEST` from parent commit `70692a9`. Setup logs
   are created; setup baseline verification passed on `2026-06-30 15:11 WEST`
   with 17 test files / 212 tests and clean TypeDoc/API, proto, and
-  generated-output gates. Implementation handoff is pending.
+  generated-output gates. Implementation, review fixes, and clean re-review
+  completed on branch `task/T-0010-1-runtime-lifecycle-queue`; all participating
+  sub-agents were closed. The subtask was merged into the parent branch as
+  `556c23a Integrate T-0010.1 runtime lifecycle queue`.
+- Next selected subtask:
+  `T-0010.2 Bounded Context Runtime Handle`.

@@ -1,6 +1,6 @@
 # Review Log: T-0010 Single-Process Async Runtime
 
-Status: Requirements Split Complete; First Subtask Selected
+Status: `T-0010.1` Integrated; Next Subtask Selected
 
 ## Required Review Lanes
 
@@ -29,8 +29,22 @@ Lifecycle And Async Queue Kernel`, and was closed by the orchestrator.
 
 `T-0010.1` setup started on `2026-06-30 15:08 WEST` from parent commit
 `70692a9`; setup baseline verification passed on `2026-06-30 15:11 WEST`.
-Subtask implementation and reviewer rounds are pending.
+Implementation, review fixes, and re-review completed on
+`2026-06-30 15:45 WEST`; all participating sub-agents were closed. The subtask
+was merged into the parent branch as `556c23a Integrate T-0010.1 runtime
+lifecycle queue`.
+
+Parent integration verification after merge commit `556c23a` passed on
+`2026-06-30 15:50 WEST`: `CI=true corepack pnpm verify` passed with 18 test
+files / 219 tests, coverage 96.33% statements / 90.87% branches / 99.12%
+functions / 96.26% lines, TypeDoc/API checks with 100 proto / 28 core / 104
+server / 26 storage expected exports, proto lint/generate checksum
+verification, and generated proto output clean.
 
 ## Reviewer Rounds
 
-- Pending.
+- `T-0010.1 Runtime Lifecycle And Async Queue Kernel`: first review round found
+  documentation, TypeScript/API, and security notes; maintainability and
+  performance/reliability were clean. Review-fix re-review for documentation,
+  TypeScript/API, and security was clean.
+- `T-0010.2 Bounded Context Runtime Handle`: pending.

@@ -1,6 +1,6 @@
 # Implementation Report: T-0010 Single-Process Async Runtime
 
-Status: Requirements Split Complete; First Subtask Selected
+Status: `T-0010.1` Integrated; Next Subtask Selected
 Task log: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
 Work log: `build-protocol/work-logs/T-0010.md`
 Review log: `build-protocol/reviews/T-0010-single-process-async-runtime.md`
@@ -40,6 +40,15 @@ storage-before-dispatch, delivery monitors, system events, integration broker,
 stand/query behavior, and transport supervision are future tasks unless the
 splitter narrows one of them into an explicit first slice.
 
+`T-0010.1 Runtime Lifecycle And Async Queue Kernel` was merged into the parent
+branch as `556c23a Integrate T-0010.1 runtime lifecycle queue` after a clean
+review-fix round. It introduced a minimal single-process server runtime
+lifecycle/queue kernel, tests, README/API documentation, and updated API export
+checks. All participating implementer, fixer, and reviewer sub-agents were
+closed.
+
+Next selected subtask: `T-0010.2 Bounded Context Runtime Handle`.
+
 ## Files Changed
 
 - `build-protocol/DECISION_LOG.md`
@@ -47,6 +56,17 @@ splitter narrows one of them into an explicit first slice.
 - `build-protocol/tasks/T-0010-single-process-async-runtime/IMPLEMENTATION_REPORT.md`
 - `build-protocol/work-logs/T-0010.md`
 - `build-protocol/reviews/T-0010-single-process-async-runtime.md`
+- `build-protocol/tasks/T-0010-1-runtime-lifecycle-queue/TASK.md`
+- `build-protocol/tasks/T-0010-1-runtime-lifecycle-queue/IMPLEMENTATION_REPORT.md`
+- `build-protocol/work-logs/T-0010-1.md`
+- `build-protocol/reviews/T-0010-1-runtime-lifecycle-queue.md`
+- `docs/api/README.md`
+- `packages/server/README.md`
+- `packages/server/src/index.test.ts`
+- `packages/server/src/index.ts`
+- `packages/server/src/runtime.test.ts`
+- `packages/server/src/runtime.ts`
+- `scripts/check-api-docs.mjs`
 
 ## Verification
 
@@ -56,6 +76,12 @@ splitter narrows one of them into an explicit first slice.
   lines, TypeDoc/API checks with 100 proto / 28 core / 97 server / 26 storage
   expected exports, proto lint/generate checksum verification, and generated
   proto output clean.
+- Parent integration verification after merge commit `556c23a` passed on
+  `2026-06-30 15:50 WEST`: `CI=true corepack pnpm verify` passed with 18 test
+  files / 219 tests, coverage 96.33% statements / 90.87% branches / 99.12%
+  functions / 96.26% lines, TypeDoc/API checks with 100 proto / 28 core / 104
+  server / 26 storage expected exports, proto lint/generate checksum
+  verification, and generated proto output clean.
 
 ## Subtask Progress
 
@@ -65,3 +91,8 @@ splitter narrows one of them into an explicit first slice.
   `2026-06-30 15:11 WEST` with 17 test files / 212 tests, coverage 96.39%
   statements / 90.8% branches / 99.09% functions / 96.32% lines, TypeDoc/API,
   proto, and generated-output gates clean.
+- `T-0010.1` implementation and review closure completed on
+  `2026-06-30 15:45 WEST`; the child branch was merged into the parent task
+  branch on `2026-06-30 15:50 WEST` and verified cleanly.
+- `T-0010.2 Bounded Context Runtime Handle` is the next selected non-blocked
+  subtask.
