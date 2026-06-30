@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f Repository Seams And Bounded-Context Registration Skeleton
 
-Status: Setup; Baseline Verification Passed; Requirements Splitter Pending
+Status: Requirements Split Complete; First Subtask Selected
 Task log: `build-protocol/tasks/T-0009f-repository-seams/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f.md`
 Review log: `build-protocol/reviews/T-0009f-repository-seams.md`
@@ -11,9 +11,10 @@ Worktree:
 ## Summary
 
 T-0009f setup created durable logs and D-0046 after T-0009e main integration.
-Implementation has not started. The first splitter pass must keep this work to
-repository and bounded-context registration seams unless it records a more
-specific decision and JVM source evidence.
+Requirements splitter `019f16c7-9335-72e3-ab82-7c4ce7fc8e9c` completed on
+`2026-06-30 05:29 WEST`, produced a five-subtask roadmap, found no blockers, and
+selected `T-0009f.1 Context Spec And Builder Shell` as the first non-blocked
+implementable subtask. Implementation has not started.
 
 ## JVM Research Used
 
@@ -40,6 +41,20 @@ pnpm verify` passed with 15 test files / 160 tests, coverage 97.25%
   `2026-06-30 05:25 WEST` with the same test count, coverage, API, proto, and
   generated-output gates clean.
 
+## Splitter Result
+
+Roadmap:
+
+1. `T-0009f.1 Context Spec And Builder Shell`.
+2. `T-0009f.2 Repository Identity And Entity Ownership Seam`.
+3. `T-0009f.3 Builder Repository Registration And Conflict Checks`.
+4. `T-0009f.4 Immutable Built Context Snapshot And Public Closure`.
+5. `T-0009f.5 Verification And Review Closure`.
+
+No blockers were found. The main risk is scope creep into dispatch, inbox,
+delivery, storage, stand/query execution, gRPC, ZeroMQ, or system context
+construction.
+
 ## Review
 
-- Pending requirements split and implementation subtasks.
+- Requirements split complete; implementation subtasks pending.

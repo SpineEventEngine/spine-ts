@@ -1,13 +1,14 @@
 # T-0009f: Repository Seams And Bounded-Context Registration Skeleton
 
-Status: Setup; Baseline Verification Passed; Requirements Splitter Pending
+Status: Requirements Split Complete; First Subtask Selected
 Start: `2026-06-30 05:21 WEST`
 Baseline commit: `ec70945`
 Task log path: `build-protocol/tasks/T-0009f-repository-seams/TASK.md`
 Branch: `task/T-0009f-repository-seams`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009f-repository-seams`
-Requirements splitter: pending
+Requirements splitter:
+`019f16c7-9335-72e3-ab82-7c4ce7fc8e9c` (Singer the 4th, closed)
 Authoring sub-agent: pending
 Reviewer sub-agents: pending
 
@@ -118,6 +119,32 @@ The splitter may revise these boundaries after inspecting the code, but it must
 keep runtime execution out of the first subtasks unless it records a separate
 decision and the required JVM source evidence.
 
+## Splitter Roadmap
+
+Requirements splitter `019f16c7-9335-72e3-ab82-7c4ce7fc8e9c` completed on
+`2026-06-30 05:29 WEST` and was closed. It found no blockers and selected
+`T-0009f.1 Context Spec And Builder Shell` as the first non-blocked implementable
+subtask.
+
+Staged subtasks:
+
+1. `T-0009f.1 Context Spec And Builder Shell`: immutable context
+   name/tenant-mode values, `BoundedContext.singleTenant(name)`,
+   `BoundedContext.multitenant(name)`, builder shell, name validation, and build
+   snapshot shape. No system context, tenant index, buses, stand, storage, or
+   service routing.
+2. `T-0009f.2 Repository Identity And Entity Ownership Seam`: metadata-only
+   repository base/options over entity constructors and schemas. No create/find,
+   storage adapters, routing execution, inbox writes, or handler invocation.
+3. `T-0009f.3 Builder Repository Registration And Conflict Checks`: builder
+   `add(...)`/`remove(...)`, default repository metadata where possible, and
+   duplicate/conflict checks. No bus registration or dispatcher execution.
+4. `T-0009f.4 Immutable Built Context Snapshot And Public Closure`: final built
+   context snapshot, docs, exports, and deferred capability markers. No close,
+   delivery dispatchers, system context, or storage lifecycle.
+5. `T-0009f.5 Verification And Review Closure`: focused tests, docs/API checks,
+   full verification, logs, and review closure. No new runtime behavior.
+
 ## Out Of Scope
 
 - Handler invocation.
@@ -157,6 +184,9 @@ pnpm verify` passed with 15 test files / 160 tests, coverage 97.25%
   Repeat verification after recording this evidence passed on
   `2026-06-30 05:25 WEST` with the same test count, coverage, API, proto, and
   generated-output gates clean.
+- Requirements splitter completed on `2026-06-30 05:29 WEST`; no verification
+  run was needed because it was read-only. Follow-up verification is pending
+  after recording this split.
 
 ## Human Questions And Answers
 

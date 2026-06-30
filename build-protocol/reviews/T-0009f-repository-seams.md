@@ -1,6 +1,6 @@
 # Review Log: T-0009f Repository Seams And Bounded-Context Registration Skeleton
 
-Status: Setup; Requirements Splitter Pending
+Status: Requirements Split Complete; First Subtask Selected
 
 ## Required Review Lanes
 
@@ -15,4 +15,6 @@ lanes before integration:
 
 ## Setup Review State
 
-No implementation review has run yet. Requirements splitting is pending.
+No implementation review has run yet. Requirements splitting completed on
+`2026-06-30 05:29 WEST`; `T-0009f.1 Context Spec And Builder Shell` is the first
+selected subtask.
