@@ -74,6 +74,12 @@ scripts/check-api-docs.mjs` passed with 100 proto / 28 core / 97 server / 26
 corepack pnpm verify` passed with 17 test files / 212 tests, coverage 96.39%
   statements / 90.8% branches / 99.09% functions / 96.32% lines, formatting
   check clean, clean TypeDoc/API, proto, and generated-output gates.
+- Final log-polish verification passed on `2026-06-30 14:40 WEST`: `CI=true
+corepack pnpm verify` passed with 17 test files / 212 tests, coverage 96.39%
+  statements / 90.8% branches / 99.09% functions / 96.32% lines, formatting
+  check clean, TypeDoc/API checks with 100 proto / 28 core / 97 server / 26
+  storage expected exports, proto lint/generate checksum verification, and
+  generated proto output clean.
 
 ## Review
 
@@ -95,3 +101,6 @@ corepack pnpm verify` passed with 17 test files / 212 tests, coverage 96.39%
   `build-protocol/work-logs/T-0009f.md` changed-file evidence, and recorded the
   reviewer findings/fix action in the T-0009f.5 task/report/work/review logs.
   Fresh post-format review-fix verification passed on `2026-06-30 14:33 WEST`.
+- Final log-polish verification passed on `2026-06-30 14:40 WEST` after
+  updating the parent work-log pointer to the latest branch-level closure
+  verification and normalizing the review-fix round label.
