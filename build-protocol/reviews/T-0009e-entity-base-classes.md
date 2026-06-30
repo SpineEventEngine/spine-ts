@@ -242,6 +242,24 @@ packages/server/src/index.test.ts` passed with 2 files / 40 tests.
 Final parent re-review remains pending; this section does not mark the parent
 review clean.
 
+## Final Parent Re-Review Clean
+
+Final parent re-review completed on `2026-06-30 04:47 WEST` after the
+superseding fix removed `Entity.withStoredState()` and kept transaction start on
+the public cloned state snapshot boundary.
+
+| Role                       | Reviewer ID                            | Result | Closure |
+| -------------------------- | -------------------------------------- | ------ | ------- |
+| Code style/maintainability | `019f16a4-71bc-7bd3-b4a9-f8d44e88be9c` | Clean  | Closed  |
+| Documentation              | `019f16a4-725a-74d1-b385-99c44267d2b7` | Clean  | Closed  |
+| TypeScript/API docs        | `019f16a4-72c9-73a0-a208-72dbcf3ea586` | Clean  | Closed  |
+| Security                   | `019f16a4-7354-7011-83c5-1a148bc85a95` | Clean  | Closed  |
+| Performance/reliability    | `019f16a4-73d2-7ac0-a3e8-c941563d41f9` | Clean  | Closed  |
+
+All final parent review and re-review comments are closed. Final task
+verification passed on `2026-06-30 05:12 WEST`, and repeat verification after
+recording that evidence passed on `2026-06-30 05:14 WEST`.
+
 ## Protocol Guidance Update
 
 After the final-parent-re-review fix verification, human guidance on

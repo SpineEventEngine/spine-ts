@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: All Subtasks Integrated; Parent Verification Passed; Final Parent Review Pending
+Status: Complete; Ready For Main Integration
 Task log: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e.md`
 Review log: `build-protocol/reviews/T-0009e-entity-base-classes.md`
@@ -26,10 +26,12 @@ deferral updates, and Round 3 found missing durable verification-pass evidence
 for the Round 2 fix. Fixes were applied and verified. Round 4 returned clean
 across all five required reviewer lanes, and final verification passed. The
 subtask was merged into the parent branch as `f499ca8`, and parent integration
-verification passed. Final parent review is pending. A later final parent
+verification passed. Final parent review found stale durable terminal-state
+wording and an avoidable transaction snapshot clone. A later final parent
 re-review found that the transaction clone optimization exposed protected
-`withStoredState()` API; the superseding fix removes that API and keeps final
-parent re-review pending.
+`withStoredState()` API; the superseding fix removes that API and final parent
+re-review returned clean across all five lanes. Final task verification passed
+on `2026-06-30 05:12 WEST`.
 
 ## JVM Research Used
 
@@ -194,8 +196,17 @@ WEST`: the focused entity test first failed because `withStoredState` was
   prior internal stored-state clone boundary was exposed as protected API. The
   superseding fix removes `withStoredState()` and routes transaction start
   through the public cloned state snapshot boundary.
-- Final parent re-review remains pending after the superseding fix; no clean
-  final parent re-review is claimed here.
+- Final parent re-review returned clean across all five required lanes after
+  the superseding fix, and all participating sub-agents were closed. Final
+  verification passed on `2026-06-30 05:12 WEST`.
+- Final task verification passed on `2026-06-30 05:12 WEST`: `CI=true corepack
+pnpm verify` passed with 15 test files / 160 tests, coverage 97.25%
+  statements / 91.41% branches / 99.16% functions / 97.19% lines, TypeDoc/API
+  checks with 100 proto / 28 core / 72 server / 26 storage expected exports,
+  proto lint/generate checksum verification, and generated proto output clean.
+  Repeat verification after recording this evidence passed on
+  `2026-06-30 05:14 WEST` with the same test count, coverage, API, proto, and
+  generated-output gates clean.
 - The protocol-guidance documentation/log update completed its required review
   loop on `2026-06-30 05:07 WEST`: documentation, TypeScript/API docs, security,
   and performance/reliability were initially clean; maintainability requested
@@ -231,4 +242,6 @@ Actions:
   because the requested wording and target files were concrete.
 
 No runtime source changed. The protocol-guidance review loop is clean and all
-participating sub-agents were closed. Final parent re-review remains pending.
+participating sub-agents were closed. Final task verification passed on
+`2026-06-30 05:12 WEST`, and repeat verification after recording that evidence
+passed on `2026-06-30 05:14 WEST`.

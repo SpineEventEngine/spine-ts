@@ -1,6 +1,6 @@
 # T-0009e: Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: All Subtasks Integrated; Parent Verification Passed; Final Parent Review Pending
+Status: Complete; Ready For Main Integration
 Start: `2026-06-29 21:58 WEST`
 Baseline commit: `47eae4e`
 Task log path: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
@@ -12,7 +12,7 @@ Requirements splitter:
 Authoring sub-agent: T-0009e.1, T-0009e.2, T-0009e.3, and T-0009e.4 completed in subtask branches
 Reviewer sub-agents: T-0009e.1 Round 8 clean and closed; T-0009e.2 Round 11
 clean and closed; T-0009e.3 Round 3 clean and closed; T-0009e.4 Round 4
-clean and closed; final parent review pending
+clean and closed; final parent review clean and closed
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:01 WEST`
 
@@ -453,6 +453,14 @@ build-protocol/reviews/T-0009e-entity-base-classes.md` passed.
   `corepack pnpm docs:check` passed with 100 proto / 28 core / 72 server / 26
   storage expected exports and the known TypeDoc invalid-origin source-link
   warning.
+- Final task verification passed on `2026-06-30 05:12 WEST`: `CI=true corepack
+pnpm verify` passed with 15 test files / 160 tests, coverage 97.25%
+  statements / 91.41% branches / 99.16% functions / 97.19% lines, TypeDoc/API
+  checks with 100 proto / 28 core / 72 server / 26 storage expected exports,
+  proto lint/generate checksum verification, and generated proto output clean.
+  Repeat verification after recording this evidence passed on
+  `2026-06-30 05:14 WEST` with the same test count, coverage, API, proto, and
+  generated-output gates clean.
 
 ## Review Rounds
 
@@ -468,6 +476,14 @@ build-protocol/reviews/T-0009e-entity-base-classes.md` passed.
   durable verification-pass evidence for the Round 2 fix. Fixes were applied
   and verified. Round 4 returned clean across all five required lanes, and all
   Round 4 reviewer sub-agents were closed.
+- Final parent review completed its fix and re-review loop. The first final
+  review found stale durable terminal-state wording and an avoidable transaction
+  snapshot clone. The first fix introduced protected `withStoredState()`; final
+  parent re-review correctly rejected that exposed stored-state API. The
+  superseding fix removed the protected API, kept transaction start on the
+  public cloned state snapshot boundary, and a final re-review returned clean
+  across all five lanes. All final parent review/re-review sub-agents were
+  closed.
 - The protocol-guidance documentation/log update completed the required
   five-lane review loop. Documentation, TypeScript/API docs, security, and
   performance/reliability were clean in the initial round. Maintainability found
@@ -506,11 +522,14 @@ build-protocol/reviews/T-0009e-entity-base-classes.md` passed.
   `withStoredState()` optimization exposed subclass-facing API and a live stored
   state reference. The fix removes that API and uses the public cloned `state`
   snapshot boundary for transaction start.
+- Final parent re-review returned clean across all five required lanes after
+  the superseding fix, and all participating sub-agents were closed.
 - Human guidance has been incorporated at the protocol level before further
   server-module implementation: future `@spine-ts/server` code must closely
   inspect task-relevant Spine JVM `core-jvm/server` source before code changes,
   avoid over-inventing, and defer unsupported behavior.
 - The protocol-guidance update review loop is clean and all participating
   implementation/review sub-agents have been closed.
-- Final parent re-review remains pending before marking T-0009e complete.
 - Final-parent-re-review fix verification passed on `2026-06-30 04:43 WEST`.
+- Final verification passed on `2026-06-30 05:12 WEST`, and repeat verification
+  after recording that evidence passed on `2026-06-30 05:14 WEST`.
