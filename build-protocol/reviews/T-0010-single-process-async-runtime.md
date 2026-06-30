@@ -1,6 +1,6 @@
 # Review Log: T-0010 Single-Process Async Runtime
 
-Status: `T-0010.4` Integrated; Next Subtask Selected
+Status: `T-0010.5` Setup Baseline Verified
 
 ## Required Review Lanes
 
@@ -71,9 +71,10 @@ verification, and generated proto output clean.
 ## Current Review Gate
 
 `T-0010.5 Event Registration Readiness` is the next selected non-blocked
-subtask. Its setup and implementation prompts must carry the server-module
-guardrail from `BUILD_PROTOCOL.md`: inspect task-relevant Spine JVM
-`core-jvm/server` event/subscriber code before creating or changing
-`@spine-ts/server` event readiness APIs, and avoid adding bus, dispatch,
-delivery, storage, transport, or service behavior unless the task scope and
-inspected JVM source justify it.
+subtask. Setup logs and D-0052 were created on `2026-06-30 18:13 WEST`; setup
+baseline verification passed on `2026-06-30 18:16 WEST`. Its implementation
+prompts must carry the server-module guardrail from `BUILD_PROTOCOL.md`:
+inspect task-relevant Spine JVM `core-jvm/server` event/subscriber code before
+creating or changing `@spine-ts/server` event readiness APIs, and avoid adding
+bus, dispatch, delivery, storage, transport, or service behavior unless the
+task scope and inspected JVM source justify it.

@@ -43,6 +43,10 @@ Current slice exposes:
   `CommandRegistrationReadiness.fromEntityHandlers()` for deterministic,
   metadata-only command type readiness over unique command assignments already
   validated by `HandlerMetadataRegistry`.
+- `EventRegistrationReadiness.fromRegistry()` /
+  `EventRegistrationReadiness.fromEntityHandlers()` for deterministic,
+  metadata-only event type readiness over subscriber fan-out, reactor fan-out,
+  and event applications already validated by `HandlerMetadataRegistry`.
 - `@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply` standard method
   decorators that require explicit Protobuf-ES schemas and materialize into the
   same handler metadata contract.
@@ -62,7 +66,10 @@ import {
   Apply,
   Assign,
   CommandRegistrationReadiness,
+  EventRegistrationReadiness,
   HandlerMetadataRegistry,
+  React,
+  Subscribe,
   defineEntityHandlers,
   materializeDecoratedEntityHandlers,
 } from "@spine-ts/server";
@@ -73,6 +80,12 @@ class TaskAggregate {
   @Assign(CreateTaskSchema)
   create(command: unknown): void {}
 
+  @Subscribe(TaskCreatedSchema)
+  noteCreated(event: unknown): void {}
+
+  @React(TaskCreatedSchema)
+  reactToCreated(event: unknown): void {}
+
   @Apply(TaskCreatedSchema, { allowImport: true })
   onCreated(event: unknown): void {}
 }
@@ -82,8 +95,10 @@ const decoratedTaskHandlers = materializeDecoratedEntityHandlers(TaskAggregate, 
 const explicitTaskHandlers = defineEntityHandlers(
   TaskAggregate,
   TaskStateSchema,
-  ({ assign, apply }) => [
+  ({ assign, subscribe, react, apply }) => [
     assign(CreateTaskSchema, "create"),
+    subscribe(TaskCreatedSchema, "noteCreated"),
+    react(TaskCreatedSchema, "reactToCreated"),
     apply(TaskCreatedSchema, "onCreated", { allowImport: true }),
   ],
 );
@@ -99,6 +114,14 @@ registry.findEventApplication(TaskStateSchema.typeName, TaskCreatedSchema.typeNa
 const readiness = CommandRegistrationReadiness.fromRegistry(registry);
 readiness.registeredCommandMessageFullTypeNames(); // [CreateTaskSchema.typeName]
 readiness.findCommandAssignee(CreateTaskSchema.typeName)?.handler.methodName; // "create"
+
+const eventReadiness = EventRegistrationReadiness.fromRegistry(registry);
+eventReadiness.registeredEventMessageFullTypeNames(); // [TaskCreatedSchema.typeName]
+eventReadiness.findEventSubscribers(TaskCreatedSchema.typeName)[0]?.handler.methodName;
+// "noteCreated"
+eventReadiness.findEventReactors(TaskCreatedSchema.typeName)[0]?.handler.methodName;
+// "reactToCreated"
+eventReadiness.findEventApplications(TaskCreatedSchema.typeName)[0]?.handler.allowImport; // true
 
 explicitTaskHandlers.handlers.map((handler) => handler.methodName); // same contract
 ```
@@ -138,6 +161,21 @@ assignment failures remain owned by the registry. This surface is not a command
 bus, command service, dispatcher, router, validator, repository runtime
 registration hook, storage writer, transport adapter, handler invoker, or
 Spine `Ack` producer.
+
+`EventRegistrationReadiness` is the matching read-only event-registration view
+over the same handler metadata. It reports registered event message full type
+names in deterministic code-unit order and returns frozen copy-safe metadata
+for event subscribers, event reactors, and event appliers grouped by event
+type. Subscriber and reactor lookups preserve Spine event fan-out, so multiple
+entities may receive the same event type. Event application uniqueness remains
+the registry policy: one entity state may apply a given event type once, while
+multiple entity states may apply the same event type. Domestic/external event
+classification and integration-broker wanted-event publication are deferred
+because the current TypeScript handler metadata has no external-event marker.
+This surface is not an event bus, integration broker, import bus, event store,
+delivery mechanism, stand, subscription service, command-result subscription,
+dispatcher, router, validator, repository runtime registration hook, storage
+writer, transport adapter, handler invoker, or Spine `Ack` producer.
 
 ## Single-Process Runtime Kernel
 

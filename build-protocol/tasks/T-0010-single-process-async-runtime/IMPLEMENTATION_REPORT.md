@@ -1,6 +1,6 @@
 # Implementation Report: T-0010 Single-Process Async Runtime
 
-Status: `T-0010.4` Integrated; Next Subtask Selected
+Status: `T-0010.5` Setup Baseline Verified
 Task log: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
 Work log: `build-protocol/work-logs/T-0010.md`
 Review log: `build-protocol/reviews/T-0010-single-process-async-runtime.md`
@@ -76,7 +76,11 @@ or changing `@spine-ts/server` runtime/API code, and directs implementers to
 prefer the smallest TS contract justified by the inspected JVM source and the
 current task.
 
-Next selected subtask: `T-0010.5 Event Registration Readiness`.
+`T-0010.5 Event Registration Readiness` started on
+`2026-06-30 18:12 WEST` from parent commit `20aaad1`. Setup logs and D-0052
+are created. Setup baseline verification passed on `2026-06-30 18:16 WEST`
+with 20 test files / 242 tests and clean TypeDoc/API, proto, and
+generated-output gates. Implementation handoff is pending.
 
 ## Files Changed
 
@@ -178,3 +182,8 @@ signal intake result` and verified cleanly.
 registration readiness` and verified cleanly.
 - `T-0010.5 Event Registration Readiness` is the next selected non-blocked
   subtask.
+- `T-0010.5` branch/worktree was created on `2026-06-30 18:12 WEST` from
+  parent commit `20aaad1`; setup logs were created before implementation
+  handoff. Setup baseline verification passed on `2026-06-30 18:16 WEST` with
+  20 test files / 242 tests and clean TypeDoc/API, proto, and generated-output
+  gates.

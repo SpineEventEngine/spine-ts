@@ -17,6 +17,11 @@ import {
   CommandRegistrationReadiness,
   type CommandRegistrationAssigneeMetadata,
   type CommandRegistrationReadinessLookup,
+  EventRegistrationReadiness,
+  type EventRegistrationApplicationMetadata,
+  type EventRegistrationReadinessLookup,
+  type EventRegistrationReactorMetadata,
+  type EventRegistrationSubscriberMetadata,
   describeEntityMetadata,
   DescriptorMetadataError,
   isEntitySchema,
@@ -173,6 +178,7 @@ describe("@spine-ts/server", () => {
         "ContextSpec",
         "DescriptorMetadataError",
         "Command",
+        "EventRegistrationReadiness",
         "HandlerMetadataError",
         "HandlerMetadataRegistry",
         "HandlerMetadataRegistryError",
@@ -243,6 +249,17 @@ describe("@spine-ts/server", () => {
     expectTypeOf<CommandRegistrationAssigneeMetadata>().toExtend<{
       readonly commandFullTypeName: string;
     }>();
+    expectTypeOf<EventRegistrationReadiness>().toExtend<EventRegistrationReadinessLookup>();
+    expectTypeOf<EventRegistrationSubscriberMetadata>().toExtend<{
+      readonly eventFullTypeName: string;
+    }>();
+    expectTypeOf<EventRegistrationReactorMetadata>().toExtend<{
+      readonly eventFullTypeName: string;
+    }>();
+    expectTypeOf<EventRegistrationApplicationMetadata>().toExtend<{
+      readonly eventFullTypeName: string;
+      readonly entityStateFullTypeName: string;
+    }>();
     expect(
       CommandRegistrationReadiness.fromRegistry({
         listEntityHandlers: () => [],
@@ -253,6 +270,17 @@ describe("@spine-ts/server", () => {
         findCommandAssignment: () => undefined,
         findEventApplication: () => undefined,
       }).registeredCommandMessageFullTypeNames(),
+    ).toEqual([]);
+    expect(
+      EventRegistrationReadiness.fromRegistry({
+        listEntityHandlers: () => [],
+        listHandlers: () => [],
+        findEntityHandlersByState: () => [],
+        findHandlersByKind: () => [],
+        findHandlersByMessageFullTypeName: () => [],
+        findCommandAssignment: () => undefined,
+        findEventApplication: () => undefined,
+      }).registeredEventMessageFullTypeNames(),
     ).toEqual([]);
     expect(() => new SingleProcessServerRuntime().enqueue(() => undefined)).toThrow(
       ServerRuntimeStateError,

@@ -1,6 +1,6 @@
 # T-0010: Single-Process Async Runtime
 
-Status: `T-0010.4` Integrated; Next Subtask Selected
+Status: `T-0010.5` Setup Baseline Verified
 Start: `2026-06-30 14:57 WEST`
 Baseline commit: `169af02`
 Task log path: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
@@ -15,6 +15,7 @@ Authoring sub-agents:
   `019f18f1-ad4c-7fb2-b079-994735ee337c` (review fix, closed).
 - `T-0010.4`: `019f195f-908c-7943-8dc9-5f7f1d94ebe2` (closed);
   `019f196c-c5d2-7212-b559-f1b9d8939ec2` (review fix, closed).
+- `T-0010.5`: pending.
 
 Reviewer sub-agents:
 
@@ -261,3 +262,8 @@ deferred to a later transport-adapter task.
   abstractions.
 - Next selected subtask:
   `T-0010.5 Event Registration Readiness`.
+- `T-0010.5 Event Registration Readiness` branch/worktree created on
+  `2026-06-30 18:12 WEST` from parent commit `20aaad1`. Setup logs and D-0052
+  are created; setup baseline verification passed on `2026-06-30 18:16 WEST`
+  with 20 test files / 242 tests and clean TypeDoc/API, proto, and
+  generated-output gates. Implementation handoff is pending.
