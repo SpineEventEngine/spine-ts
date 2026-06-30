@@ -1,6 +1,6 @@
 # T-0010: Single-Process Async Runtime
 
-Status: `T-0010.3` Integrated; Next Subtask Selected
+Status: `T-0010.4` Integrated; Next Subtask Selected
 Start: `2026-06-30 14:57 WEST`
 Baseline commit: `169af02`
 Task log path: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
@@ -13,10 +13,18 @@ Authoring sub-agents:
 
 - `T-0010.1`: `019f18e2-6b71-72d2-ad2a-fb3cf0b5859f` (closed);
   `019f18f1-ad4c-7fb2-b079-994735ee337c` (review fix, closed).
+- `T-0010.4`: `019f195f-908c-7943-8dc9-5f7f1d94ebe2` (closed);
+  `019f196c-c5d2-7212-b559-f1b9d8939ec2` (review fix, closed).
 
 Reviewer sub-agents:
 
 - `T-0010.1`: all required review lanes completed and closed.
+- `T-0010.4`: all required review lanes completed and closed, including final
+  re-review lanes `019f1979-0da3-7bf1-9119-ee0e8bb0ad4c`,
+  `019f1979-47a0-7703-b882-1f56c2adff15`,
+  `019f1979-6fc3-7022-ba8f-fd272e8f5468`,
+  `019f1979-a556-7583-93a0-7f59499e1dda`, and
+  `019f1979-d135-7342-a3d5-38c286f5da1c`.
 
 ## Objective
 
@@ -195,6 +203,12 @@ deferred to a later transport-adapter task.
   functions / 96.14% lines, TypeDoc/API checks with 100 proto / 28 core / 116
   server / 26 storage expected exports, proto lint/generate checksum
   verification, and generated proto output clean.
+- Parent integration verification after merge commit `032257b` passed on
+  `2026-06-30 18:08 WEST`: `CI=true corepack pnpm verify` passed with 20 test
+  files / 242 tests, coverage 95.94% statements / 90.38% branches / 98.15%
+  functions / 95.87% lines, TypeDoc/API checks with 100 proto / 28 core / 119
+  server / 26 storage expected exports, proto lint/generate checksum
+  verification, and generated proto output clean.
 
 ## Human Questions And Answers
 
@@ -236,4 +250,14 @@ deferred to a later transport-adapter task.
   `2026-06-30 17:24 WEST` from parent commit `e5e7b1d`. Setup logs are
   created; setup baseline verification passed on `2026-06-30 17:27 WEST` with
   19 test files / 234 tests and clean TypeDoc/API, proto, and generated-output
-  gates.
+  gates. Implementation, review fix, clean final re-review, and review closure
+  completed on branch `task/T-0010-4-command-registration-readiness`; all
+  participating sub-agents were closed. The subtask was merged into the parent
+  branch as `032257b Integrate T-0010.4 command registration readiness`.
+- User server-module guardrail: `BUILD_PROTOCOL.md` now explicitly requires
+  task-relevant inspection of Spine JVM `core-jvm/server` source before
+  creating or changing `@spine-ts/server` runtime/API code, with a bias toward
+  the smallest familiar TS contract and against speculative server
+  abstractions.
+- Next selected subtask:
+  `T-0010.5 Event Registration Readiness`.

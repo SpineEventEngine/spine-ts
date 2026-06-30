@@ -1,6 +1,6 @@
 # Review Log: T-0010 Single-Process Async Runtime
 
-Status: `T-0010.3` Integrated; Next Subtask Selected
+Status: `T-0010.4` Integrated; Next Subtask Selected
 
 ## Required Review Lanes
 
@@ -62,4 +62,18 @@ verification, and generated proto output clean.
   `2026-06-30 17:20 WEST`.
 - `T-0010.4 Command Registration Readiness`: setup logs created on
   `2026-06-30 17:24 WEST`; setup baseline verification passed on
-  `2026-06-30 17:27 WEST`; implementation review rounds are pending.
+  `2026-06-30 17:27 WEST`; initial review found sorting determinism and nested
+  copy-safety findings, both fixed; final re-review completed clean across all
+  five lanes on `2026-06-30 18:02 WEST`; all participating sub-agents were
+  closed. The subtask was merged into the parent task branch as `032257b` and
+  parent verification passed on `2026-06-30 18:08 WEST`.
+
+## Current Review Gate
+
+`T-0010.5 Event Registration Readiness` is the next selected non-blocked
+subtask. Its setup and implementation prompts must carry the server-module
+guardrail from `BUILD_PROTOCOL.md`: inspect task-relevant Spine JVM
+`core-jvm/server` event/subscriber code before creating or changing
+`@spine-ts/server` event readiness APIs, and avoid adding bus, dispatch,
+delivery, storage, transport, or service behavior unless the task scope and
+inspected JVM source justify it.

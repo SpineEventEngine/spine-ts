@@ -1,6 +1,6 @@
 # Implementation Report: T-0010 Single-Process Async Runtime
 
-Status: `T-0010.3` Integrated; Next Subtask Selected
+Status: `T-0010.4` Integrated; Next Subtask Selected
 Task log: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
 Work log: `build-protocol/work-logs/T-0010.md`
 Review log: `build-protocol/reviews/T-0010-single-process-async-runtime.md`
@@ -62,7 +62,21 @@ README/API documentation without adding buses, `Ack`, storage, dispatch,
 services, validation, or transport behavior. All participating implementer,
 fixer, and reviewer sub-agents were closed.
 
-Next selected subtask: `T-0010.4 Command Registration Readiness`.
+`T-0010.4 Command Registration Readiness` was merged into the parent branch as
+`032257b Integrate T-0010.4 command registration readiness` after sorting and
+nested copy-safety review fixes plus clean final re-review. It introduced
+metadata-derived command registration readiness over existing handler metadata
+without adding bus, service, dispatch, storage, validation, transport, or `Ack`
+behavior. All participating implementer, fixer, and reviewer sub-agents were
+closed.
+
+User server-module guardrail: `BUILD_PROTOCOL.md` now explicitly requires
+task-relevant inspection of Spine JVM `core-jvm/server` source before creating
+or changing `@spine-ts/server` runtime/API code, and directs implementers to
+prefer the smallest TS contract justified by the inspected JVM source and the
+current task.
+
+Next selected subtask: `T-0010.5 Event Registration Readiness`.
 
 ## Files Changed
 
@@ -109,6 +123,12 @@ Next selected subtask: `T-0010.4 Command Registration Readiness`.
   functions / 96.14% lines, TypeDoc/API checks with 100 proto / 28 core / 116
   server / 26 storage expected exports, proto lint/generate checksum
   verification, and generated proto output clean.
+- Parent integration verification after merge commit `032257b` passed on
+  `2026-06-30 18:08 WEST`: `CI=true corepack pnpm verify` passed with 20 test
+  files / 242 tests, coverage 95.94% statements / 90.38% branches / 98.15%
+  functions / 95.87% lines, TypeDoc/API checks with 100 proto / 28 core / 119
+  server / 26 storage expected exports, proto lint/generate checksum
+  verification, and generated proto output clean.
 
 ## Subtask Progress
 
@@ -152,3 +172,9 @@ signal intake result` and verified cleanly.
   handoff. Setup baseline verification passed on `2026-06-30 17:27 WEST` with
   19 test files / 234 tests and clean TypeDoc/API, proto, and generated-output
   gates.
+- `T-0010.4` implementation, review fix, clean final re-review, and review
+  closure completed on `2026-06-30 18:03 WEST`; the child branch was merged
+  into the parent task branch as `032257b Integrate T-0010.4 command
+registration readiness` and verified cleanly.
+- `T-0010.5 Event Registration Readiness` is the next selected non-blocked
+  subtask.
