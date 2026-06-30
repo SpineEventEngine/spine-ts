@@ -1,6 +1,6 @@
 # T-0009e.4: Public API Closure And Verification
 
-Status: Implemented; Round 1 Review Fix Verified; Re-review Pending
+Status: Implemented; Round 2 Review Fix Applied; Re-review Pending
 Parent task: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Task log path:
 `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`
@@ -123,3 +123,15 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests.
   lint/generate, and generated-output clean.
 
 Re-review is pending; the protocol review loop is not clean or closed yet.
+
+## Round 2 Review Fix
+
+Orchestrator-spawned Round 2 review found stale chronology wording in durable
+logs. Some entries still claimed the public docs set was unchanged even though
+later entries correctly recorded explicit Java-builder deferral wording in public
+docs.
+
+Review-fix updates corrected the chronology to state that the initial/local audit
+found runtime source, root export, and API-check surfaces coherent, then
+identified and applied required explicit Java-builder deferral wording in public
+docs. Re-review is pending; the protocol review loop is not clean or closed yet.

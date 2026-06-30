@@ -25,9 +25,11 @@ role is clean. The orchestrator must close every reviewer after result capture.
 ## Implementation Audit Notes
 
 The implementation sub-agent audited the T-0009e.4 scope on
-`2026-06-30 03:03 WEST`. The audit found no required runtime source, root
-export, TypeDoc export-check, package README, API guide, user guide, or
-architecture-note changes beyond durable closure status/evidence updates.
+`2026-06-30 03:03 WEST`. The initial/local audit found the runtime source, root
+export, and TypeDoc export-check surfaces coherent, then identified required
+explicit Java-builder deferral wording in the package README, API guide, user
+guide, and architecture notes. No runtime source, root export, or API-check
+changes were needed.
 
 The implementation sub-agent also made local audit/fix passes before returning
 control to the orchestrator:
@@ -80,3 +82,25 @@ packages/server/src/index.test.ts`: 2 test files / 38 tests passed.
 Local implementation audit/fix passes remain distinct from
 orchestrator-spawned protocol review rounds. Re-review is pending; do not treat
 this protocol review loop as clean or closed yet.
+
+### Round 2: Orchestrator-Spawned Re-Review
+
+Round 2 reviewer results were captured on `2026-06-30` after the Round 1
+review-fix commit. The finding was stale durable-log chronology: some entries
+still claimed the public docs set was unchanged even though later entries
+correctly recorded explicit Java-builder deferral wording in public docs.
+
+Round 2 findings to fix:
+
+- Parent work log `build-protocol/work-logs/T-0009e.md` still said no public
+  documentation changes were needed.
+- Subtask work log `build-protocol/work-logs/T-0009e4.md` still said no public
+  documentation changes were needed.
+- This review log still said the package README, API guide, user guide, and
+  architecture-note entries needed only durable status/evidence updates.
+
+Review-fix updates now record the correct chronology: the initial/local audit
+found runtime source, root export, and API-check surfaces coherent, then
+identified and applied required explicit Java-builder deferral wording in public
+docs. Re-review remains pending; do not treat this protocol review loop as clean
+or closed yet.

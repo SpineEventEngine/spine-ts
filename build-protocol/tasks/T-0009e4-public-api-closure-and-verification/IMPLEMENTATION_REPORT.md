@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.4 Public API Closure And Verification
 
-Status: Implemented; Round 1 Review Fix Verified; Re-review Pending
+Status: Implemented; Round 2 Review Fix Applied; Re-review Pending
 Task log:
 `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e4.md`
@@ -21,8 +21,9 @@ deferred, so this subtask updates that wording plus durable task/report/work/
 review logs. Local implementation audit passes found parent closure evidence
 gaps, which are also corrected. No runtime source, root export, or API-check
 changes were needed. Orchestrator-spawned Round 1 review later found stale
-review-status wording in durable logs only; review-fix updates and verification
-passed, and re-review is pending.
+review-status wording in durable logs only; Round 2 found stale chronology that
+contradicted the public-doc Java-builder deferral updates. Review-fix updates
+were applied, and re-review is pending.
 
 ## Files Changed
 
@@ -79,5 +80,7 @@ packages/server/src/entity.test.ts packages/server/src/index.test.ts` passed on
 The implementation sub-agent recorded local audit/fix passes.
 Orchestrator-spawned Round 1 review found stale review-status wording only,
 with no runtime, API, public-doc content, security, or reliability issues
-beyond that wording. Review-fix verification passed, and re-review is pending
-in the review log.
+beyond that wording. Round 2 re-review found stale chronology wording that said
+the public docs set was unchanged, contradicting the Java-builder deferral
+wording that was added to public docs. Review-fix updates corrected that
+chronology; re-review is pending in the review log.

@@ -1,6 +1,6 @@
 # T-0009e: Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Round 1 Review Fix Verified; Re-review Pending
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Integrated; T-0009e.4 Round 2 Review Fix Applied; Re-review Pending
 Start: `2026-06-29 21:58 WEST`
 Baseline commit: `47eae4e`
 Task log path: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
@@ -11,8 +11,8 @@ Requirements splitter:
 `019f1531-96a3-7870-bb40-b24fc9a456c8` (Goodall the 3rd, closed)
 Authoring sub-agent: T-0009e.1, T-0009e.2, T-0009e.3, and T-0009e.4 completed in subtask branches
 Reviewer sub-agents: T-0009e.1 Round 8 clean and closed; T-0009e.2 Round 11
-clean and closed; T-0009e.3 Round 3 clean and closed; T-0009e.4 Round 1
-fix verified and re-review pending
+clean and closed; T-0009e.3 Round 3 clean and closed; T-0009e.4 Round 2
+fix applied and re-review pending
 Baseline verification evidence: `CI=true corepack pnpm verify` passed on
 `2026-06-29 22:01 WEST`
 
@@ -235,8 +235,9 @@ entity/root tests coherent at the final T-0009e surface. Local audit cleanup
 added explicit public-doc mentions that Java builders remain deferred and parent
 closure logs record final verification evidence. No runtime source, root export,
 or API-check changes were needed. Orchestrator-spawned Round 1 review found
-stale review-status wording only; fixes were applied and verified, with
-re-review pending.
+stale review-status wording, and Round 2 found stale chronology wording that
+contradicted the public-doc Java-builder deferral updates; fixes were applied,
+with re-review pending.
 
 ## Initial Scope Constraints
 
@@ -320,8 +321,9 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
 - T-0009e.3 completed three review rounds; Round 3 returned clean across all
   five required reviewer lanes and all reviewers were closed.
 - T-0009e.4 implementation completed its local closure audit and verification.
-  Orchestrator Round 1 review found stale review-status wording only; fixes were
-  applied and verified, with re-review pending.
+  Orchestrator Round 1 review found stale review-status wording, and Round 2
+  found stale chronology wording about public-doc changes; fixes were applied,
+  with re-review pending.
 
 ## Current State
 
@@ -344,5 +346,6 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests, and
   statements, 91.41% branches, 99.16% functions, 97.19% lines; TypeDoc/API/proto
   gates passed with 72 expected server exports.
 - T-0009e.4 closure verification passed in the isolated subtask branch.
-  Orchestrator Round 1 review found stale review-status wording only; fixes were
-  applied and verified, with re-review pending.
+  Orchestrator Round 1 review found stale review-status wording, and Round 2
+  found stale chronology wording about public-doc changes; fixes were applied,
+  with re-review pending.
