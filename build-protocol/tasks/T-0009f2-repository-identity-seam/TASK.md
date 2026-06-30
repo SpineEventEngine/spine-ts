@@ -1,13 +1,13 @@
 # T-0009f.2: Repository Identity And Entity Ownership Seam
 
-Status: Setup In Progress
+Status: Implementation Complete - Pending Review
 Start: `2026-06-30 07:34 WEST`
 Parent task: `T-0009f Repository Seams And Bounded-Context Registration Skeleton`
 Parent branch: `task/T-0009f-repository-seams`
 Branch: `task/T-0009f2-repository-identity-seam`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009f2-repository-identity-seam`
-Baseline commit: `2dcb581`
+Baseline commit: `a6e72be`
 Task log path:
 `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 Implementation report path:
@@ -71,25 +71,26 @@ Observed JVM boundary for this subtask:
 
 ## Acceptance Criteria
 
-- Tests are written before production code and fail for the expected missing
-  repository surface.
-- Repository identity can be constructed for aggregate, projection, and
-  process-manager entity constructors whose state schemas match the family.
-- Mismatched entity family and state-schema kind are rejected with a structured
-  error.
-- Snapshots are immutable/fresh-copy values suitable for later builder duplicate
-  and conflict checks.
-- Public exports, TypeDoc/API docs checks, and package docs include the new API.
-- Docs explicitly state this is metadata-only and does not create/find/store,
-  route, dispatch, or open storage.
+- [x] Tests are written before production code and fail for the expected
+      missing repository surface.
+- [x] Repository identity can be constructed for aggregate, projection, and
+      process-manager entity constructors whose state schemas match the family.
+- [x] Mismatched entity family and state-schema kind are rejected with a
+      structured error.
+- [x] Snapshots are immutable/fresh-copy values suitable for later builder
+      duplicate and conflict checks.
+- [x] Public exports, TypeDoc/API docs checks, and package docs include the new
+      API.
+- [x] Docs explicitly state this is metadata-only and does not create/find/store,
+      route, dispatch, or open storage.
 - Required reviewer lanes all report no remaining comments before integration.
 
 ## Required Verification
 
-- Focused RED and GREEN Vitest commands for the new repository tests.
-- Focused index/API tests when exports change.
-- `node scripts/check-api-docs.mjs`
-- `CI=true corepack pnpm verify`
+- [x] Focused RED and GREEN Vitest commands for the new repository tests.
+- [x] Focused index/API tests when exports change.
+- [x] `node scripts/check-api-docs.mjs`
+- [x] `CI=true corepack pnpm verify`
 
 ## Review Lanes
 

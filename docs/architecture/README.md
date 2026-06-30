@@ -241,6 +241,20 @@ repository hooks, dispatch APIs, command posting, query clients, aggregate event
 history, snapshots, process workflow execution, idempotency guards, lifecycle
 events, handler invocation, or async-local/global transaction state.
 
+`Repository` is now the metadata-only entity ownership seam for later
+bounded-context registration. It accepts one entity constructor and one
+descriptor-backed state schema, infers the family from the constructor's
+`Aggregate`, `Projection`, or `ProcessManager` prototype chain, and verifies
+that the state schema's `(entity).kind` matches that family. The snapshot
+surface records only immutable identity facts: constructor identity, family,
+state schema, descriptor metadata, state full type name, and ID-field metadata.
+This follows the JVM `Repository` identity surface (`entityClass()`,
+`idClass()`, and `entityStateType()`) without implementing its lifecycle or
+runtime methods. The TypeScript seam deliberately omits `create`, `find`,
+`store`, storage adapters, record conversion, bounded-context registration,
+stand registration, routing, inboxes, caches, lifecycle monitors, catch-up,
+handler invocation, buses, and transport.
+
 `EntityTransaction` is the first server-owned draft/result commit boundary over
 one entity state. It buffers a draft state, explicit previous/draft version
 metadata, lifecycle flags, and visible status (`active`, `committed`, or
@@ -298,7 +312,8 @@ builder-only build path by passing ad hoc objects.
 
 The following runtime pieces are still deferred to later explicit tasks:
 
-- repository registration and entity ownership;
+- runtime repository registration and duplicate/conflict checks over the
+  repository identity seam;
 - handler invocation and command/event routing;
 - inbox, delivery, storage, and tenant-index persistence;
 - stand/query/subscription execution;

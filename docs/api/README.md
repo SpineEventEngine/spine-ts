@@ -63,6 +63,18 @@ They do not add public transaction mutators, repositories, dispatch, aggregate
 event history, snapshots, subscriptions, command posting, query clients,
 process workflow execution, handler invocation, storage, buses, or lifecycle
 events.
+`Repository`, `RepositoryOptions`, `RepositoryEntityType`,
+`RepositoryIdentitySnapshot`, `RepositoryIdentityError`,
+`RepositoryIdentityErrorCode`, and `RepositoryIdentityErrorDetails` form the
+metadata-only repository identity seam. A repository identity records one
+entity constructor, the inferred aggregate/projection/process-manager family,
+the matching descriptor-backed state schema, descriptor metadata, state full
+type name, and ID-field metadata. Snapshots are frozen fresh-copy values for
+later bounded-context duplicate/conflict checks. The seam rejects unsupported
+constructors and entity-family/state-kind mismatches with structured
+`RepositoryIdentityError` details. It does not create/find/store entities, open
+storage, register contexts, route or dispatch messages, write inboxes, invoke
+handlers, manage caches, run catch-up, expose stands, or start buses/transports.
 Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field

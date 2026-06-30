@@ -65,6 +65,16 @@ export {
 } from "./entity-transition-validation.js";
 
 export {
+  Repository,
+  type RepositoryEntityType,
+  RepositoryIdentityError,
+  type RepositoryIdentityErrorCode,
+  type RepositoryIdentityErrorDetails,
+  type RepositoryIdentitySnapshot,
+  type RepositoryOptions,
+} from "./repository.js";
+
+export {
   Apply,
   Assign,
   Command,

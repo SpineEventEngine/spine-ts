@@ -20,6 +20,9 @@ Current slice exposes:
 - `Aggregate`, `Projection`, and `ProcessManager` abstract family marker classes
   over `TransactionalEntity`, each exposing a stable `entityFamily` identity;
   and
+- `Repository({ entityType, schema })` for metadata-only repository identity
+  over one entity constructor and matching entity state schema;
+  and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
 - first-field routing hints from descriptor order;
@@ -201,6 +204,37 @@ lifecycle accessors, `changed`, and protected transaction helpers from
 `TransactionalEntity`. They do not add public transaction mutators, command
 posting, event history, snapshots, subscriptions, query clients, process
 workflow execution, handler invocation, storage, buses, or lifecycle events.
+
+## Repository Identity
+
+Use `Repository` when later bounded-context builder code needs to record that
+one entity constructor owns one descriptor-backed state schema:
+
+```ts
+import { Aggregate, Repository } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
+
+const repository = new Repository({
+  entityType: TaskAggregate,
+  schema: TaskStateSchema,
+});
+
+repository.entityFamily; // "aggregate"
+repository.stateFullTypeName; // TaskStateSchema.typeName
+repository.snapshot.stateFullTypeName; // immutable fresh-copy snapshot
+```
+
+The constructor derives descriptor metadata with `describeEntityMetadata()` and
+infers the entity family from the constructor's `Aggregate`, `Projection`, or
+`ProcessManager` base class. It rejects constructors outside those families and
+rejects mismatched family/schema pairs, such as an aggregate class with a
+projection state schema, with structured `RepositoryIdentityError` codes and
+details. This API is metadata-only: it does not create, find, or store
+entities; open storage; register with a bounded context; route messages; invoke
+handlers; write inboxes; manage caches; emit lifecycle events; start buses; or
+touch transport.
 
 ## Entity State Transition Validation
 

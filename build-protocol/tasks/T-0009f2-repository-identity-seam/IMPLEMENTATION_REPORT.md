@@ -1,28 +1,36 @@
 # Implementation Report: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Setup In Progress
+Status: Implementation Complete - Pending Review
 Task log: `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f2.md`
 Review log: `build-protocol/reviews/T-0009f2-repository-identity-seam.md`
 
 ## Summary
 
-Subtask setup began on `2026-06-30 07:34 WEST` from parent commit `2dcb581`.
-The selected scope is a metadata-only repository identity seam. It must mirror
-the JVM repository model only as far as entity ownership metadata, leaving
-storage, routing, dispatch, inboxes, caches, lifecycle, stand, and context
-registration execution to later subtasks.
+Implemented the metadata-only repository identity seam from baseline
+`a6e72be`. The TypeScript surface now records one entity constructor, the
+inferred aggregate/projection/process-manager family, one matching
+descriptor-backed entity state schema, descriptor metadata, state full type
+name, and ID-field metadata. It leaves storage, routing, dispatch, inboxes,
+caches, lifecycle, stand, context registration execution, buses, transport, and
+gRPC to later subtasks.
 
 ## JVM Research Used
 
-Initial orchestrator research inspected:
+Implementation research inspected and used:
 
 - `Repository.java`: model-class identity, `idClass()`, `entityClass()`,
   `entityStateType()`, one-context registration, and storage/open lifecycle.
+  The TypeScript seam kept only identity metadata and did not port
+  `registerWith()`, `open()`, `storage()`, routing helpers, or lifecycle hooks.
 - `RecordBasedRepository.java`: entity-record persistence is a subclass/runtime
-  concern and must stay out of this subtask.
+  concern and must stay out of this subtask. Its `create`, `find`, `store`,
+  converter, query, migration, and record-storage methods remained out of
+  scope.
 - `DefaultRepository.java`: family-based default repository selection is a
-  convenience seam, not an invitation to build runtime repositories now.
+  convenience seam, not an invitation to build runtime repositories now. The TS
+  implementation uses constructor prototype inheritance only to infer family
+  identity.
 - `AggregateRepository.java`, `ProjectionRepository.java`, and
   `ProcessManagerRepository.java`: routing, inbox, cache, dispatch, catch-up,
   import, command bus, event bus, and query behavior are concrete repository
@@ -33,12 +41,31 @@ Initial orchestrator research inspected:
 
 ## Implementation Notes
 
-- Pending implementation sub-agent.
+- Added `packages/server/src/repository.ts` with `Repository`,
+  `RepositoryOptions`, `RepositoryEntityType`, `RepositoryIdentitySnapshot`,
+  `RepositoryIdentityError`, and structured error detail/code exports.
+- `Repository` derives descriptor metadata through `describeEntityMetadata()`,
+  infers the entity family from `Aggregate`, `Projection`, or `ProcessManager`
+  prototype inheritance, and rejects unsupported constructors or schema-kind
+  mismatches.
+- `snapshot` returns frozen fresh-copy metadata suitable for later
+  bounded-context duplicate/conflict checks.
+- Public root exports, TypeDoc export guard, package README, API docs, user
+  guide, and architecture notes now describe the metadata-only boundary.
 
 ## Verification
 
-- Pending.
+- RED: `corepack pnpm exec vitest run --passWithNoTests packages/server/src/repository.test.ts packages/server/src/index.test.ts`
+  failed as expected before production code because `Repository` was not a
+  constructor and root exports lacked `Repository`/`RepositoryIdentityError`.
+- GREEN: `corepack pnpm exec vitest run --passWithNoTests packages/server/src/repository.test.ts packages/server/src/index.test.ts`
+  passed with 2 files and 13 tests.
+- API docs guard: `node scripts/check-api-docs.mjs` passed and reported 87
+  expected `@spine-ts/server` exports.
+- Full verification: `CI=true corepack pnpm verify` passed with 17 test files,
+  172 tests, coverage, docs check, proto lint/generate, and generated-clean.
 
 ## Review
 
-- Pending.
+- Pending orchestrator reviewer lanes. This implementation sub-agent was
+  instructed not to spawn sub-agents.
