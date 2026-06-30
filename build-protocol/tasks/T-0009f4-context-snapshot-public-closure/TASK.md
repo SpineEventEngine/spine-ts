@@ -1,6 +1,6 @@
 # T-0009f.4: Immutable Built Context Snapshot And Public Closure
 
-Status: Setup Complete; Baseline Verification Passed
+Status: Implementation Complete; Verification Passed; Reviews Pending
 Start: `2026-06-30 13:30 WEST`
 Baseline commit: `855da4a`
 Task log path:
@@ -9,7 +9,7 @@ Branch: `task/T-0009f4-context-snapshot-public-closure`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009f4-context-snapshot-public-closure`
 Parent task: `T-0009f Repository Seams And Bounded-Context Registration Skeleton`
-Authoring sub-agent: pending
+Authoring sub-agent: Codex implementation sub-agent
 Reviewer sub-agents: pending
 
 ## Objective
@@ -139,6 +139,70 @@ pnpm verify` passed with 17 test files / 212 tests, coverage 96.39%
   statements / 90.8% branches / 99.09% functions / 96.32% lines, TypeDoc/API
   checks with 100 proto / 28 core / 96 server / 26 storage expected exports,
   proto lint/generate checksum verification, and generated proto output clean.
+
+## Implementation Notes
+
+- `2026-06-30 13:36 WEST`: Implementation sub-agent performed the canonical
+  skill applicability check before code changes. Session inventory exposed
+  applicable skills including `test-driven-development`,
+  `typescript-advanced-types`, `verification-before-completion`,
+  `architecture-patterns`, `cqrs-implementation`, `codebase-design`,
+  `subagent-driven-development`, `using-git-worktrees`,
+  `requesting-code-review`, and `receiving-code-review`.
+- Task-provided skill names matched the task brief and setup notes. Repo
+  manifest inspected: `build-protocol/skills/EXPECTED_SKILLS.md`.
+  User-installed entrypoints enumerated with
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`.
+  Lock manifest inspected at `/Users/armiol/.agents/.skill-lock.json` with
+  selected entries confirmed by `rg`.
+- Selected and fully read before governed actions:
+  `/Users/armiol/.agents/skills/test-driven-development/SKILL.md`,
+  `/Users/armiol/.agents/skills/typescript-advanced-types/SKILL.md`,
+  `/Users/armiol/.agents/skills/verification-before-completion/SKILL.md`,
+  `/Users/armiol/.agents/skills/codebase-design/SKILL.md`,
+  `/Users/armiol/.agents/skills/architecture-patterns/SKILL.md`, and
+  `/Users/armiol/.agents/skills/cqrs-implementation/SKILL.md`.
+- Skipped relevant-looking skills:
+  `subagent-driven-development`, `using-git-worktrees`,
+  `requesting-code-review`, and `receiving-code-review` because this prompt
+  explicitly forbids spawning sub-agents and the worktree/review orchestration
+  is already prepared; `nodejs-backend-patterns`, `event-store-design`,
+  `projection-patterns`, and `saga-orchestration` remain later runtime or
+  storage work outside this metadata-only task.
+- Implementation sub-agent confirmed the setup-inspected JVM notes/source and
+  re-inspected task-relevant lines with `rg` over
+  `spine-jvm-docs/spine-server-runtime-and-bounded-context.md`,
+  `spine-jvm-docs/spine-routing-dispatch-and-delivery.md`,
+  `build-protocol/DEVELOPER_API.md`,
+  `build-protocol/RUNTIME_ARCHITECTURE.md`, and the local JVM
+  `BoundedContext.java`, `BoundedContextBuilder.java`, and `Repository.java`
+  files under
+  `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server`.
+  Impact remains: TS build output must close immutable registration metadata
+  snapshots only, while JVM runtime build/close/register/dispatch/storage
+  behavior stays deferred.
+- `2026-06-30 13:40 WEST`: Implementation closed the public built-context
+  snapshot contract by adding the `BuiltBoundedContextSnapshot` public type
+  alias, exporting/documenting it, and updating the TypeDoc/API guard. Added a
+  runtime surface test proving built contexts still expose no `close`,
+  registration, bus, stand, storage, tenant-index, or system-context members.
+  Existing builder/built-context repository snapshot tests continue to prove
+  immutable fresh-copy snapshots and builder mutation isolation after `build()`.
+- TDD evidence: added focused API/runtime tests before production changes.
+  `corepack pnpm typecheck:tooling` failed as expected with missing
+  `BuiltBoundedContextSnapshot`; after implementation,
+  `corepack pnpm test packages/server/src/index.test.ts packages/server/src/bounded-context.test.ts`
+  passed with 2 test files / 45 tests and `corepack pnpm typecheck:tooling`
+  passed.
+- Verification passed on `2026-06-30 13:39 WEST`: `node
+scripts/check-api-docs.mjs` passed with 100 proto / 28 core / 97 server / 26
+  storage expected exports; `CI=true corepack pnpm verify` passed with 17 test
+  files / 212 tests, coverage 96.39% statements / 90.8% branches / 99.09%
+  functions / 96.32% lines, TypeDoc/API checks, proto lint/generate checksum
+  verification, and generated proto output clean.
+- Reviewer lanes remain pending for the orchestrator/reviewer phase. This
+  implementation sub-agent did not spawn reviewers because the task prompt
+  explicitly says not to spawn sub-agents.
 
 ## Human Questions And Answers
 

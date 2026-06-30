@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.4 Immutable Built Context Snapshot And Public Closure
 
-Status: Setup Complete; Baseline Verification Passed
+Status: Implementation Complete; Verification Passed; Reviews Pending
 Task log:
 `build-protocol/tasks/T-0009f4-context-snapshot-public-closure/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f4.md`
@@ -14,6 +14,15 @@ Worktree:
 Setup started from parent commit `855da4a` after T-0009f.3 parent integration.
 The task is scoped to immutable built-context metadata snapshots and public
 closure documentation/API polish. Runtime behavior remains deferred.
+
+Implementation sub-agent started on `2026-06-30 13:36 WEST` and completed the
+required skill/JVM guardrail checks before code changes.
+
+Implementation completed on `2026-06-30 13:40 WEST`. The public built-context
+snapshot contract is closed with a `BuiltBoundedContextSnapshot` alias to the
+existing immutable metadata snapshot shape. No runtime lifecycle, dispatch,
+storage, stand, tenant-index, transport, system-context, or handler behavior was
+added.
 
 ## JVM Research Used
 
@@ -37,6 +46,15 @@ only produce immutable metadata snapshots and public closure notes.
 - `build-protocol/tasks/T-0009f4-context-snapshot-public-closure/IMPLEMENTATION_REPORT.md`
 - `build-protocol/work-logs/T-0009f4.md`
 - `build-protocol/reviews/T-0009f4-context-snapshot-public-closure.md`
+- `docs/USER_GUIDE.md`
+- `docs/api/README.md`
+- `docs/architecture/README.md`
+- `packages/server/README.md`
+- `packages/server/src/bounded-context.ts`
+- `packages/server/src/bounded-context.test.ts`
+- `packages/server/src/index.ts`
+- `packages/server/src/index.test.ts`
+- `scripts/check-api-docs.mjs`
 
 ## Verification
 
@@ -45,7 +63,21 @@ pnpm verify` passed with 17 test files / 212 tests, coverage 96.39%
   statements / 90.8% branches / 99.09% functions / 96.32% lines, TypeDoc/API
   checks with 100 proto / 28 core / 96 server / 26 storage expected exports,
   proto lint/generate checksum verification, and generated proto output clean.
+- Red step: `corepack pnpm typecheck:tooling` failed with missing
+  `BuiltBoundedContextSnapshot` after the focused API test was added.
+- Focused green checks:
+  `corepack pnpm test packages/server/src/index.test.ts packages/server/src/bounded-context.test.ts`
+  passed with 2 test files / 45 tests; `corepack pnpm typecheck:tooling`
+  passed.
+- API docs guard: `node scripts/check-api-docs.mjs` passed with 100 proto / 28
+  core / 97 server / 26 storage expected exports.
+- Full verification: `CI=true corepack pnpm verify` passed with 17 test files /
+  212 tests, coverage 96.39% statements / 90.8% branches / 99.09% functions /
+  96.32% lines, TypeDoc/API checks, proto lint/generate checksum verification,
+  and generated proto output clean.
 
 ## Review
 
-- Pending implementation and required reviewer lanes.
+- Implementation complete. Required reviewer lanes are still pending for the
+  orchestrator/reviewer phase because this implementation prompt explicitly
+  forbids spawning sub-agents.

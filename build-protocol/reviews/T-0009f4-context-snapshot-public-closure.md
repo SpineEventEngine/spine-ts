@@ -1,6 +1,6 @@
 # Review Log: T-0009f.4 Immutable Built Context Snapshot And Public Closure
 
-Status: Setup Complete; Reviews Pending
+Status: Implementation Complete; Reviews Pending
 
 ## Required Review Lanes
 
@@ -12,4 +12,6 @@ Status: Setup Complete; Reviews Pending
 
 ## Review Rounds
 
-- Pending implementation.
+- Pending orchestrator-assigned reviewer lanes. The implementation sub-agent
+  did not spawn review sub-agents because the task prompt explicitly forbids
+  spawning sub-agents.

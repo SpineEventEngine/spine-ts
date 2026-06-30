@@ -38,6 +38,16 @@ export interface BoundedContextSnapshot {
   readonly repositories: readonly RepositoryIdentitySnapshot[];
 }
 
+/**
+ * Public alias for the immutable snapshot closed by {@link BoundedContextBuilder.build}.
+ *
+ * The alias names the built-context contract explicitly while preserving the
+ * same metadata-only shape as {@link BoundedContextSnapshot}. It does not imply
+ * a running server, registered repository runtime, storage, dispatch, delivery,
+ * stand, tenant-index, or lifecycle capability.
+ */
+export type BuiltBoundedContextSnapshot = BoundedContextSnapshot;
+
 /** Machine-readable bounded-context repository registration failure codes. */
 export type BoundedContextRepositoryRegistrationErrorCode =
   "ENTITY_TYPE_CONFLICT" | "STATE_TYPE_CONFLICT" | "INVALID_REPOSITORY_SNAPSHOT";

@@ -313,6 +313,9 @@ Current bounded-context scope is intentionally limited to immutable metadata:
   built `BoundedContext`; and
 - built contexts expose frozen metadata only: name, tenant mode, spec,
   repository identities, and a copy-safe snapshot of that shell state.
+  `BuiltBoundedContextSnapshot` is the public name for this closed built-context
+  registration contract and is intentionally equivalent to
+  `BoundedContextSnapshot`.
 
 This keeps the TypeScript API JVM-familiar without pretending that later
 runtime collaborators already exist. Application code does not subclass

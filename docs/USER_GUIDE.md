@@ -388,6 +388,7 @@ const builder = BoundedContext.singleTenant("Tasks").add(taskRepository);
 const context = builder.build();
 
 context.repositories[0]?.entityType === TaskAggregate; // true
+const builtSnapshot = context.snapshot; // BuiltBoundedContextSnapshot shape
 ```
 
 `add()` and `remove()` return the same builder for JVM-familiar chaining.
@@ -397,7 +398,9 @@ entity constructor is paired with a different state schema identity, or when one
 state type is claimed by multiple entity constructors. Builder and context
 repository arrays are frozen fresh-copy snapshots, so later `add()` or
 `remove()` calls do not mutate snapshots already returned by the API or contexts
-already built.
+already built. `BuiltBoundedContextSnapshot` names the immutable registration
+contract produced by `build()`; it is intentionally the same metadata-only shape
+as `BoundedContextSnapshot`.
 
 This registration is still metadata-only. It does not create default
 repositories from entity classes, register repositories into a live context,

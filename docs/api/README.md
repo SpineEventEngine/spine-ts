@@ -23,7 +23,8 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 `PackEventInput`.
 
 Server exports include `BoundedContext`, `BoundedContextBuilder`,
-`ContextSpec`, `BoundedContextName`, `TenantMode`, immutable snapshot contracts,
+`ContextSpec`, `BoundedContextName`, `TenantMode`, `BoundedContextSnapshot`,
+`BuiltBoundedContextSnapshot`, immutable snapshot contracts,
 `BoundedContextNameError`, and
 `BoundedContextRepositoryRegistrationError` for the first bounded-context
 assembly shell.
