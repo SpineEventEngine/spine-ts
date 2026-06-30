@@ -1,6 +1,6 @@
 # T-0009e: Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: Complete; Ready For Main Integration
+Status: Integrated To Main; Main Verification Passed
 Start: `2026-06-29 21:58 WEST`
 Baseline commit: `47eae4e`
 Task log path: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
@@ -533,3 +533,13 @@ pnpm verify` passed with 15 test files / 160 tests, coverage 97.25%
 - Final-parent-re-review fix verification passed on `2026-06-30 04:43 WEST`.
 - Final verification passed on `2026-06-30 05:12 WEST`, and repeat verification
   after recording that evidence passed on `2026-06-30 05:14 WEST`.
+- Main integration completed on `2026-06-30 05:16 WEST`: `git merge --no-ff
+task/T-0009e-entity-base-classes -m "Integrate T-0009e entity base classes"`
+  applied cleanly to `main`. Main verification passed with `CI=true corepack
+pnpm verify`: 15 test files / 160 tests, coverage 97.25% statements / 91.41%
+  branches / 99.16% functions / 97.19% lines, TypeDoc/API checks with 100 proto
+  / 28 core / 72 server / 26 storage expected exports, proto lint/generate
+  checksum verification, and generated proto output clean. Repeat main
+  verification after recording this evidence passed on `2026-06-30 05:18 WEST`
+  with the same test count, coverage, API, proto, and generated-output gates
+  clean.

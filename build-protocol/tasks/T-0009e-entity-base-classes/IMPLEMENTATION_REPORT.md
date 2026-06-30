@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: Complete; Ready For Main Integration
+Status: Integrated To Main; Main Verification Passed
 Task log: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e.md`
 Review log: `build-protocol/reviews/T-0009e-entity-base-classes.md`
@@ -31,7 +31,8 @@ wording and an avoidable transaction snapshot clone. A later final parent
 re-review found that the transaction clone optimization exposed protected
 `withStoredState()` API; the superseding fix removes that API and final parent
 re-review returned clean across all five lanes. Final task verification passed
-on `2026-06-30 05:12 WEST`.
+on `2026-06-30 05:12 WEST`. Main integration completed and verified on
+`2026-06-30 05:16 WEST`.
 
 ## JVM Research Used
 
@@ -245,3 +246,17 @@ No runtime source changed. The protocol-guidance review loop is clean and all
 participating sub-agents were closed. Final task verification passed on
 `2026-06-30 05:12 WEST`, and repeat verification after recording that evidence
 passed on `2026-06-30 05:14 WEST`.
+
+## Main Integration
+
+Main integration completed on `2026-06-30 05:16 WEST` with
+`git merge --no-ff task/T-0009e-entity-base-classes -m "Integrate T-0009e entity
+base classes"`.
+
+Main verification passed with `CI=true corepack pnpm verify`: 15 test files /
+160 tests, coverage 97.25% statements / 91.41% branches / 99.16% functions /
+97.19% lines, TypeDoc/API checks with 100 proto / 28 core / 72 server / 26
+storage expected exports, proto lint/generate checksum verification, and
+generated proto output clean. Repeat main verification after recording this
+evidence passed on `2026-06-30 05:18 WEST` with the same test count, coverage,
+API, proto, and generated-output gates clean.
