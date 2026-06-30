@@ -168,9 +168,16 @@ const expectedServerExports = [
   "Apply",
   "Assign",
   "BaseHandlerMetadata",
+  "BoundedContext",
+  "BoundedContextBuilder",
+  "BoundedContextName",
+  "BoundedContextNameError",
+  "BoundedContextSnapshot",
   "Command",
   "CommandAssignmentHandlerMetadata",
   "CommandReactionHandlerMetadata",
+  "ContextSpec",
+  "ContextSpecSnapshot",
   "DeclaredEntityVisibility",
   "DescriptorFieldMetadata",
   "DescriptorMessageSchema",
@@ -190,6 +197,7 @@ const expectedServerExports = [
   "TransactionalEntityScopeError",
   "TransactionalEntityScopeErrorReason",
   "TransactionalEntityScopeOperation",
+  "TenantMode",
   "EntityTransaction",
   "EntityTransactionAcceptedCommit",
   "EntityTransactionCommitResult",
@@ -293,6 +301,90 @@ function collectNames(value) {
 
 collectNames(apiDocs);
 
+const forbiddenPublicMembers = [
+  {
+    owner: "BoundedContext",
+    member: "constructor",
+    reason: "public constructor",
+    matches: (value) => value.flags?.isProtected !== true && value.flags?.isPrivate !== true,
+  },
+  {
+    owner: "BoundedContextBuilder",
+    member: "constructor",
+    reason: "public constructor",
+    matches: (value) => value.flags?.isProtected !== true && value.flags?.isPrivate !== true,
+  },
+  {
+    owner: "ContextSpec",
+    member: "constructor",
+    reason: "public constructor",
+    matches: (value) => value.flags?.isProtected !== true && value.flags?.isPrivate !== true,
+  },
+  {
+    owner: "BoundedContext",
+    member: "fromSpecSnapshot",
+    reason: "removed factory",
+    matches: (value) => Array.isArray(value.signatures),
+  },
+  {
+    owner: "BoundedContextBuilder",
+    member: "rename",
+    reason: "removed builder method",
+    matches: (value) => Array.isArray(value.signatures),
+  },
+  {
+    owner: "ContextSpec",
+    member: "singleTenant",
+    reason: "removed factory",
+    matches: (value) => value.flags?.isStatic === true && Array.isArray(value.signatures),
+  },
+  {
+    owner: "ContextSpec",
+    member: "multitenant",
+    reason: "removed factory",
+    matches: (value) => value.flags?.isStatic === true && Array.isArray(value.signatures),
+  },
+];
+
+function collectForbiddenMembers(value, ownerName, matches) {
+  if (Array.isArray(value)) {
+    for (const child of value) {
+      collectForbiddenMembers(child, ownerName, matches);
+    }
+    return;
+  }
+
+  if (value === null || typeof value !== "object") {
+    return;
+  }
+
+  const nextOwnerName =
+    typeof value.kind === "number" &&
+    typeof value.name === "string" &&
+    ["BoundedContext", "BoundedContextBuilder", "ContextSpec"].includes(value.name)
+      ? value.name
+      : ownerName;
+
+  if (typeof value.name === "string" && nextOwnerName !== undefined) {
+    for (const forbidden of forbiddenPublicMembers) {
+      if (
+        forbidden.owner === nextOwnerName &&
+        forbidden.member === value.name &&
+        forbidden.matches(value)
+      ) {
+        matches.push(`${forbidden.owner}.${forbidden.member} (${forbidden.reason})`);
+      }
+    }
+  }
+
+  for (const child of Object.values(value)) {
+    collectForbiddenMembers(child, nextOwnerName, matches);
+  }
+}
+
+const forbiddenMatches = [];
+collectForbiddenMembers(apiDocs, undefined, forbiddenMatches);
+
 const missingExports = expectedProtoExports.filter((name) => !documentedNames.has(name));
 const missingCoreExports = expectedCoreExports.filter((name) => !documentedNames.has(name));
 const missingServerExports = expectedServerExports.filter((name) => !documentedNames.has(name));
@@ -322,6 +414,15 @@ if (missingServerExports.length > 0) {
 if (missingStorageExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-ts/storage exports: ${missingStorageExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (forbiddenMatches.length > 0) {
+  console.error(
+    `TypeDoc JSON exposes removed or non-public @spine-ts/server API surface: ${[
+      ...new Set(forbiddenMatches),
+    ].join(", ")}`,
   );
   process.exit(1);
 }

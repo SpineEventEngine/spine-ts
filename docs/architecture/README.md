@@ -269,6 +269,42 @@ handlers, instantiate entities, deserialize `Any` payloads, assemble
 repositories, mutate storage, register buses, mutate a global registry, provide
 async-local transaction state, or start transport.
 
+## Server Bounded-Context Shell
+
+`@spine-ts/server` now exposes the first bounded-context assembly shell for
+server metadata. It follows the Spine JVM entry points closely while keeping
+the implementation boundary deliberately smaller than the eventual runtime.
+
+Current bounded-context scope is intentionally limited to immutable metadata:
+
+- `BoundedContext.singleTenant(name)` and
+  `BoundedContext.multitenant(name)` are the only public entry points for
+  starting context assembly;
+- `ContextSpec` is a framework-owned immutable value exposed through
+  `builder.spec` and `context.spec`; it carries the validated bounded-context
+  name, tenant mode, and event-storage metadata for future runtime work;
+- `BoundedContextBuilder.build()` is the only supported path for constructing a
+  built `BoundedContext`; and
+- built contexts expose frozen metadata only: name, tenant mode, spec, and a
+  copy-safe snapshot of that shell state.
+
+This keeps the TypeScript API JVM-familiar without pretending that later
+runtime collaborators already exist. Application code does not subclass
+`BoundedContext`, directly instantiate shell classes, or reach runtime parts
+such as command buses, event buses, stands, tenant indexes, storage, or
+transport from this slice. Runtime constructor guards also reject direct
+JavaScript escape hatches so callers cannot bypass name validation or the
+builder-only build path by passing ad hoc objects.
+
+The following runtime pieces are still deferred to later explicit tasks:
+
+- repository registration and entity ownership;
+- handler invocation and command/event routing;
+- inbox, delivery, storage, and tenant-index persistence;
+- stand/query/subscription execution;
+- system-context pairing and server/gRPC services; and
+- ZeroMQ and other transport integration.
+
 ## Storage Boundary
 
 `@spine-ts/storage` now owns the first framework storage seam. The package

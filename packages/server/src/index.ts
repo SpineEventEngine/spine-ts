@@ -1,4 +1,15 @@
 export {
+  BoundedContext,
+  BoundedContextBuilder,
+  type BoundedContextName,
+  BoundedContextNameError,
+  type BoundedContextSnapshot,
+  ContextSpec,
+  type ContextSpecSnapshot,
+  type TenantMode,
+} from "./bounded-context.js";
+
+export {
   Aggregate,
   Entity,
   type EntityFamily,

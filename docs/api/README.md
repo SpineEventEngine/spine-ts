@@ -21,7 +21,19 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 `packCommand()`, `packEvent()`, `PackAnyOptions`, `PackCommandInput`, and
 `PackEventInput`.
 
-Server exports include the abstract `Entity` shell, `TransactionalEntity`,
+Server exports include `BoundedContext`, `BoundedContextBuilder`,
+`ContextSpec`, `BoundedContextName`, `TenantMode`, immutable snapshot contracts,
+and `BoundedContextNameError` for the first bounded-context assembly shell.
+The public entry points mirror Spine JVM's
+`BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
+`ContextSpec` remains a framework-owned immutable value surfaced through
+`builder.spec` and `context.spec`; `build()` currently returns a frozen
+metadata-only `BoundedContext`; and `.snapshot` returns a copy-safe immutable
+snapshot. The shell validates non-empty/non-blank names and records tenant mode
+for later runtime parts without registering repositories, invoking handlers,
+creating system contexts, opening storage, constructing buses/stands, writing
+tenant indexes, exposing gRPC services, or integrating transports.
+Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,
 `TransactionalEntityScopeOperation`, `EntityOptions`, `EntityVersionMetadata`,

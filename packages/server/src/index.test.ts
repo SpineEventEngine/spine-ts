@@ -11,9 +11,12 @@ import {
 
 import * as serverRoot from "./index.js";
 import {
+  BoundedContext,
   describeEntityMetadata,
   DescriptorMetadataError,
   isEntitySchema,
+  type BoundedContextName,
+  type TenantMode,
   type EntityVersionMetadata,
   type PlainEntityVersionMetadata,
 } from "./index.js";
@@ -137,9 +140,13 @@ describe("@spine-ts/server", () => {
         "Aggregate",
         "Apply",
         "Assign",
+        "BoundedContext",
+        "BoundedContextBuilder",
+        "BoundedContextNameError",
         "EntityTransactionDraftStateError",
         "EntityTransaction",
         "EntityTransactionStateError",
+        "ContextSpec",
         "DescriptorMetadataError",
         "Command",
         "HandlerMetadataError",
@@ -173,6 +180,9 @@ describe("@spine-ts/server", () => {
       PlainEntityVersionMetadata<ExportedSizedMetadata>
     >().toEqualTypeOf<ExportedSizedMetadata>();
     expectTypeOf<PlainEntityVersionMetadata<Date>>().toBeNever();
+    expectTypeOf<BoundedContextName>().toEqualTypeOf<{ readonly value: string }>();
+    expectTypeOf<TenantMode>().toEqualTypeOf<"single-tenant" | "multitenant">();
+    expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
   });
 
   it("extracts entity kind, default visibility, routing hints, columns, set-once fields, and tags", () => {

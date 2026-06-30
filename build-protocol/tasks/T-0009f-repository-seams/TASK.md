@@ -1,6 +1,6 @@
 # T-0009f: Repository Seams And Bounded-Context Registration Skeleton
 
-Status: Requirements Split Complete; First Subtask Selected
+Status: First Subtask Implemented; T-0009f.1 Round-4 Fix Applied
 Start: `2026-06-30 05:21 WEST`
 Baseline commit: `ec70945`
 Task log path: `build-protocol/tasks/T-0009f-repository-seams/TASK.md`
@@ -9,8 +9,8 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0009f-repository-seams`
 Requirements splitter:
 `019f16c7-9335-72e3-ab82-7c4ce7fc8e9c` (Singer the 4th, closed)
-Authoring sub-agent: pending
-Reviewer sub-agents: pending
+Authoring sub-agent: T-0009f.1 implemented by Codex implementation sub-agent
+Reviewer sub-agents: completed T-0009f.1 durable review/fix rounds recorded in review logs; future subtasks pending
 
 ## Objective
 
@@ -187,6 +187,46 @@ pnpm verify` passed with 15 test files / 160 tests, coverage 97.25%
 - Requirements splitter completed on `2026-06-30 05:29 WEST`; no verification
   run was needed because it was read-only. Follow-up verification is pending
   after recording this split.
+- `T-0009f.1 Context Spec And Builder Shell` subtask branch/worktree created on
+  `2026-06-30 05:31 WEST`; baseline verification is pending.
+- `T-0009f.1 Context Spec And Builder Shell` implementation completed on
+  `2026-06-30 05:41 WEST`. Focused tests passed with 2 files / 15 tests, API
+  docs check passed with 80 expected server exports, and full
+  `CI=true corepack pnpm verify` passed with 16 test files / 166 tests,
+  coverage 97.26% statements / 91.38% branches / 98.9% functions / 97.21%
+  lines, TypeDoc/API checks, proto lint/generate checksum verification, and
+  generated proto output clean. A final post-log-format verification rerun
+  passed again on `2026-06-30 05:43 WEST`.
+- The first T-0009f.1 review-fix round removed `fromSpecSnapshot()` and updated
+  docs/log wording, but it did not actually remove `BoundedContextBuilder.rename()`.
+  A correction round started on `2026-06-30 06:07 WEST` to remove `rename()`,
+  simplify constructor validation away from token/`Reflect.construct(...)`
+  machinery, and rerun the required verification commands. Those reruns
+  finished green on `2026-06-30 06:10 WEST`.
+- A final narrowing fix completed on `2026-06-30 06:47 WEST`: the bounded
+  context shell now exposes only `BoundedContext.singleTenant(name)`,
+  `BoundedContext.multitenant(name)`, and `builder.build()` as supported
+  construction entry points; `ContextSpec`, `BoundedContextBuilder`, and
+  `BoundedContext` now emit protected constructors in `.d.ts`; the TypeDoc JSON
+  guard accepts the protected constructors and rejects removed factories; and
+  fresh focused/API/full verification reruns all passed with 16 full-suite test
+  files / 167 tests and coverage 97.08% statements / 90.78% branches / 98.91%
+  functions / 97.02% lines.
+- A post-log-format rerun passed on `2026-06-30 06:51 WEST` with the same green
+  focused/API/full verification totals, confirming the parent status after the
+  final durable-log updates.
+- A round-4 fix completed on `2026-06-30 07:05 WEST`: the bounded-context shell
+  now removes the internal subclass/`new.target` construction lattice, uses a
+  module-private construction token plus class-internal factory closures to keep
+  constructors protected in `.d.ts`, rejects leaked `.constructor` forgery for
+  blank names, non-boolean flags, invalid snapshot objects, mismatched context
+  names, and arbitrary tenant-mode mismatches, and passed fresh focused/API/full
+  verification with 2 focused test files / 17 tests plus 16 full-suite files /
+  168 tests at 96.84% statements / 90.49% branches / 98.93% functions /
+  96.78% lines.
+- A post-log-format rerun passed on `2026-06-30 07:08 WEST` with the same green
+  focused/API/full verification totals, confirming the parent status after the
+  final round-4 durable-log formatting pass.
 
 ## Human Questions And Answers
 
