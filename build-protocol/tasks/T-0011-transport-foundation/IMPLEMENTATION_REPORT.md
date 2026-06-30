@@ -1,6 +1,6 @@
 # Implementation Report: T-0011 Transport Foundation
 
-Status: Requirements Split Complete
+Status: T-0011.1 Integrated
 Task log: `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
 Work log: `build-protocol/work-logs/T-0011.md`
 Review log: `build-protocol/reviews/T-0011-transport-foundation.md`
@@ -20,6 +20,14 @@ questions. The recommended first slice is `T-0011.1 Transport Contracts,
 Topics, And Envelope Routing Keys`, followed by later subtasks for ZeroMQ
 adapter installation, IPC smoke tests, broker/worker lifecycle, delivery/retry
 boundaries, server/runtime wiring, and docs closure.
+
+`T-0011.1` was integrated into this parent branch by merge commit `6c86ad1` on
+`2026-06-30 21:28 WEST`. The integrated slice adds the adapter-agnostic
+`@spine-ts/transport` contract surface for immutable topics, subscriptions,
+routing descriptors, publish/request operation contracts, handler callback
+types, transport handles, and async close behavior. It intentionally does not
+install ZeroMQ or implement socket, broker, worker, retry, server dispatch, or
+read-side behavior.
 
 ## Scope Guardrails
 
@@ -43,6 +51,14 @@ boundaries, server/runtime wiring, and docs closure.
   lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
   expected exports, copied Spine proto checksum verification, generated proto
   output clean, and generated files clean.
+- Parent verification after integrating T-0011.1 passed on
+  `2026-06-30 21:28 WEST`: `CI=true corepack pnpm verify` passed with 21 test
+  files / 262 tests, coverage 96.35% statements / 90.43% branches / 99.26%
+  functions / 96.29% lines, TypeDoc/API checks with 100 proto / 28 core / 124
+  server / 26 storage expected exports, copied Spine proto checksum
+  verification, proto lint/generate, generated proto output clean, and
+  generated files clean. TypeDoc emitted the existing invalid-`origin` warning
+  only.
 
 ## Splitter Research And Recommendation
 
@@ -70,10 +86,12 @@ performs native smoke tests.
 - `build-protocol/tasks/T-0011-transport-foundation/IMPLEMENTATION_REPORT.md`
 - `build-protocol/work-logs/T-0011.md`
 - `build-protocol/reviews/T-0011-transport-foundation.md`
+- T-0011.1 integration also changed `packages/transport`, package/API docs,
+  architecture docs, and transport API export checks. See
+  `build-protocol/tasks/T-0011-1-transport-contracts/IMPLEMENTATION_REPORT.md`.
 
 ## Open Items
 
-- Requirements split completed; first implementation handoff is pending.
-- Baseline verification passed.
+- `T-0011.2 ZeroMQ Adapter Package Wiring And Dependency Pin` is next.
 - Native dependency installation remains deferred to the dedicated adapter
   subtask.

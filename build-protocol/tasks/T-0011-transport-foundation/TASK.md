@@ -1,6 +1,6 @@
 # T-0011: Transport Foundation
 
-Status: Requirements Split Complete
+Status: T-0011.1 Integrated
 Start: `2026-06-30 20:32 WEST`
 Baseline commit: `194ce9e`
 Task log path: `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
@@ -9,8 +9,8 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-transport-foundation`
 Requirements splitter:
 `2026-06-30 20:40 WEST` splitter session (closed by orchestrator after handoff)
-Authoring sub-agents: pending
-Reviewer sub-agents: pending
+Authoring sub-agents: T-0011.1 complete; later subtasks pending
+Reviewer sub-agents: T-0011.1 complete; later subtasks pending
 
 ## Objective
 
@@ -208,3 +208,23 @@ side execution.
   lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
   expected exports, copied Spine proto checksum verification, generated proto
   output clean, and generated files clean.
+
+- T-0011.1 parent integration verification passed on `2026-06-30 21:28 WEST`
+  after merge commit `6c86ad1`:
+  `CI=true corepack pnpm verify` passed with 21 test files / 262 tests,
+  coverage 96.35% statements / 90.43% branches / 99.26% functions / 96.29%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
+  expected exports, copied Spine proto checksum verification, proto
+  lint/generate, generated proto output clean, and generated files clean.
+  TypeDoc emitted the existing invalid-`origin` warning only.
+
+## Integrated Subtasks
+
+- `T-0011.1 Transport Contracts, Topics, And Envelope Routing Keys`: integrated
+  by merge commit `6c86ad1` on `2026-06-30 21:28 WEST`. Required five-lane
+  review clean; final subtask verification passed; parent verification passed
+  after merge.
+
+## Next Subtask
+
+- `T-0011.2 ZeroMQ Adapter Package Wiring And Dependency Pin`.
