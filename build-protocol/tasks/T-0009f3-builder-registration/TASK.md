@@ -1,6 +1,6 @@
 # T-0009f.3: Builder Repository Registration And Conflict Checks
 
-Status: Setup Complete - Pending Implementation
+Status: Implemented And Verified - External Review Pending
 Start: `2026-06-30 11:34 WEST`
 Parent task: `T-0009f Repository Seams And Bounded-Context Registration Skeleton`
 Parent branch: `task/T-0009f-repository-seams`
@@ -68,19 +68,48 @@ Expected boundary from current research:
 
 ## Acceptance Criteria
 
-- [ ] Tests are written before production code and fail for the missing builder
+- [x] Tests are written before production code and fail for the missing builder
       repository registration surface.
-- [ ] `BoundedContextBuilder` can add and remove explicit `Repository`
+- [x] `BoundedContextBuilder` can add and remove explicit `Repository`
       identities without mutating previously returned snapshots.
-- [ ] Built `BoundedContext` snapshots include immutable repository identity
+- [x] Built `BoundedContext` snapshots include immutable repository identity
       snapshots for later runtime tasks.
-- [ ] Duplicate/conflicting repository registrations are deterministic and
+- [x] Duplicate/conflicting repository registrations are deterministic and
       covered by tests.
-- [ ] Runtime behavior remains metadata-only and does not create/find/store,
+- [x] Runtime behavior remains metadata-only and does not create/find/store,
       route, dispatch, open storage, or register buses/stands.
-- [ ] Public docs and TypeDoc/API guard describe the repository-registration
+- [x] Public docs and TypeDoc/API guard describe the repository-registration
       surface and deferred behavior.
 - [ ] Required reviewer lanes report no remaining comments before integration.
+
+## Implementation Evidence
+
+- Inspected `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/BoundedContextBuilder.java`:
+  JVM keeps a mutable repository registration list, exposes a snapshot
+  `repositories()` view, supports `add(Repository)` / `remove(Repository)`, and
+  only performs runtime registration during `build()`.
+- Inspected `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/BoundedContext.java`:
+  JVM `register(repository)` performs context-aware registration, visibility
+  registration, and repository callbacks after context construction. TypeScript
+  keeps these effects deferred.
+- Inspected `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/entity/Repository.java`:
+  repository identity is available through entity class, ID class, and state
+  type metadata, while create/find/store/storage/context registration remain
+  lifecycle/runtime concerns outside this subtask.
+- Inspected `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/DefaultRepository.java`:
+  default repository construction selects runtime repository implementations by
+  entity family. TypeScript did not implement `add(entityClass)`.
+- Inspected `spine-jvm-docs/spine-server-runtime-and-bounded-context.md` and
+  `spine-jvm-docs/spine-entities-repositories-and-state.md`: confirmed the
+  builder should collect registration metadata while runtime storage opening,
+  stand/type-supplier registration, buses, system context, routing, and handler
+  execution remain later slices.
+
+Implementation impact: `BoundedContextBuilder` now records explicit
+metadata-only `Repository` identity snapshots, treats duplicate identical
+identity registration as idempotent, rejects conflicting entity constructor or
+state type ownership deterministically, and builds frozen context snapshots that
+include repository identities.
 
 ## Required Verification
 

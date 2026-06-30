@@ -3,9 +3,13 @@ export {
   BoundedContextBuilder,
   type BoundedContextName,
   BoundedContextNameError,
+  BoundedContextRepositoryRegistrationError,
+  type BoundedContextRepositoryRegistrationErrorCode,
+  type BoundedContextRepositoryRegistrationErrorDetails,
   type BoundedContextSnapshot,
   ContextSpec,
   type ContextSpecSnapshot,
+  type RepositoryRegistrationConflictDetails,
   type TenantMode,
 } from "./bounded-context.js";
 

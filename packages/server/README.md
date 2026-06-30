@@ -8,7 +8,8 @@ Current slice exposes:
 - `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)` for
   creating metadata-only builder shells with immutable context names,
   `ContextSpec` values exposed through `builder.spec` and `context.spec`, tenant
-  mode metadata, and copy-safe built context snapshots;
+  mode metadata, explicit `Repository` identity registration, deterministic
+  repository ownership conflict checks, and copy-safe built context snapshots;
   and
 - `Entity<Id, Schema, Version>` for a common abstract OOP state shell with
   identity, descriptor-derived metadata, cloned Protobuf-ES state snapshots,
@@ -127,10 +128,35 @@ customers.isMultitenant; // true
 Names must be non-empty and non-blank. `ContextSpec` is a framework-owned
 immutable value exposed from the builder and built context, `build()` returns a
 frozen metadata-only `BoundedContext`, and `.snapshot` returns a copy-safe
-immutable snapshot.
-This slice deliberately does not register repositories, invoke handlers, open
-storage, construct system contexts, start command/event/query/subscription
-buses, write tenant indexes, expose gRPC services, or integrate transports.
+immutable snapshot. Builders accept explicit metadata-only `Repository`
+identity objects:
+
+```ts
+import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
+
+const taskRepository = new Repository({
+  entityType: TaskAggregate,
+  schema: TaskStateSchema,
+});
+
+const tasks = BoundedContext.singleTenant("Tasks").add(taskRepository).build();
+
+tasks.repositories[0]?.stateFullTypeName; // TaskStateSchema.typeName
+```
+
+Adding the same repository identity repeatedly is idempotent. The builder
+rejects conflicting ownership when one entity constructor is paired with a
+different state schema identity, or when one state type is claimed by multiple
+entity constructors. Returned repository arrays and built context snapshots are
+fresh frozen copies.
+
+This slice deliberately does not create default repositories from entity
+classes, perform runtime repository registration, invoke handlers, open storage,
+construct system contexts, start command/event/query/subscription buses, write
+tenant indexes, expose gRPC services, or integrate transports.
 
 ## Entity State Shell
 

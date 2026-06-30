@@ -84,8 +84,9 @@ slices.
 - A metadata-only bounded-context builder shell in `@spine-ts/server` with
   `BoundedContext.singleTenant(name)`, `BoundedContext.multitenant(name)`,
   immutable context names, framework-owned `ContextSpec` values from
-  `builder.spec` and `context.spec`, tenant mode metadata, frozen metadata-only
-  built contexts, and copy-safe context snapshots.
+  `builder.spec` and `context.spec`, tenant mode metadata, explicit repository
+  identity registration, deterministic repository ownership conflict checks,
+  frozen metadata-only built contexts, and copy-safe context snapshots.
 - Storage contracts in `@spine-ts/storage` for write-side entity records,
   aggregate event histories/snapshots, read-side projection records, delivery
   records, tenant indexes, and safe diagnostics.
@@ -103,11 +104,11 @@ slices.
   registries. The server metadata APIs preserve entity tags and explicit
   handler declarations now, but no runtime registry consumes them yet.
 - gRPC service implementations.
-- Runtime repository registration, repository duplicate/conflict policy,
-  handler invocation, entity runtime dispatch, system context construction,
-  bus/stand execution, tenant index persistence, gRPC service implementations,
-  transport integration, durable production storage, and to-do domain runtime
-  behavior.
+- Runtime repository registration, default repository construction from entity
+  classes, handler invocation, entity runtime dispatch, system context
+  construction, bus/stand execution, tenant index persistence, gRPC service
+  implementations, transport integration, durable production storage, and to-do
+  domain runtime behavior.
 
 ## Type Registry
 
@@ -366,6 +367,43 @@ This is explicitly metadata-only. It does not create, find, or store entities;
 open storage; convert records; register with a bounded context; route or
 dispatch messages; write inboxes; invoke handlers; manage caches; run catch-up;
 emit lifecycle events; expose query stands; start buses; or use gRPC/transport.
+
+## Bounded Context Repository Registration
+
+Use `BoundedContextBuilder.add(repository)` when a bounded context should record
+which repository identity owns an entity/state type pair:
+
+```ts
+import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
+import { TaskStateSchema } from "./generated/tasks_pb.js";
+
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
+
+const taskRepository = new Repository({
+  entityType: TaskAggregate,
+  schema: TaskStateSchema,
+});
+
+const builder = BoundedContext.singleTenant("Tasks").add(taskRepository);
+const context = builder.build();
+
+context.repositories[0]?.entityType === TaskAggregate; // true
+```
+
+`add()` and `remove()` return the same builder for JVM-familiar chaining.
+Repeatedly adding the same repository identity is a no-op. The builder rejects
+conflicting ownership with `BoundedContextRepositoryRegistrationError` when one
+entity constructor is paired with a different state schema identity, or when one
+state type is claimed by multiple entity constructors. Builder and context
+repository arrays are frozen fresh-copy snapshots, so later `add()` or
+`remove()` calls do not mutate snapshots already returned by the API or contexts
+already built.
+
+This registration is still metadata-only. It does not create default
+repositories from entity classes, register repositories into a live context,
+open storage, register type suppliers with a stand, route messages, invoke
+handlers, write inboxes, emit lifecycle events, construct buses, or start
+transport.
 
 ## Envelope Packing
 

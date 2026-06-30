@@ -303,10 +303,16 @@ Current bounded-context scope is intentionally limited to immutable metadata:
 - `ContextSpec` is a framework-owned immutable value exposed through
   `builder.spec` and `context.spec`; it carries the validated bounded-context
   name, tenant mode, and event-storage metadata for future runtime work;
+- `BoundedContextBuilder.add(repository)` and `remove(repository)` record
+  explicit metadata-only `Repository` identities and expose fresh frozen
+  repository snapshots from the builder and built context;
+- repeated registration of the same repository identity is idempotent, while
+  conflicting entity-constructor/state-schema ownership and state-type
+  ownership are rejected before runtime assembly;
 - `BoundedContextBuilder.build()` is the only supported path for constructing a
   built `BoundedContext`; and
-- built contexts expose frozen metadata only: name, tenant mode, spec, and a
-  copy-safe snapshot of that shell state.
+- built contexts expose frozen metadata only: name, tenant mode, spec,
+  repository identities, and a copy-safe snapshot of that shell state.
 
 This keeps the TypeScript API JVM-familiar without pretending that later
 runtime collaborators already exist. Application code does not subclass
@@ -318,8 +324,9 @@ builder-only build path by passing ad hoc objects.
 
 The following runtime pieces are still deferred to later explicit tasks:
 
-- runtime repository registration and duplicate/conflict checks over the
-  repository identity seam;
+- runtime repository registration, default repository construction from entity
+  classes, storage opening, visibility/type-supplier registration, and
+  lifecycle callbacks over the repository identity seam;
 - handler invocation and command/event routing;
 - inbox, delivery, storage, and tenant-index persistence;
 - stand/query/subscription execution;

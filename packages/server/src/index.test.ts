@@ -143,6 +143,7 @@ describe("@spine-ts/server", () => {
         "BoundedContext",
         "BoundedContextBuilder",
         "BoundedContextNameError",
+        "BoundedContextRepositoryRegistrationError",
         "EntityTransactionDraftStateError",
         "EntityTransaction",
         "EntityTransactionStateError",

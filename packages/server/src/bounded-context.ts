@@ -1,3 +1,10 @@
+import {
+  Repository,
+  type ConcreteRepositoryEntityType,
+  type RepositoryEntityType,
+  type RepositoryIdentitySnapshot,
+} from "./repository.js";
+
 /** Tenant isolation mode declared by a bounded context specification. */
 export type TenantMode = "single-tenant" | "multitenant";
 
@@ -25,6 +32,57 @@ export interface BoundedContextSnapshot {
   readonly tenantMode: TenantMode;
   /** Context specification used to build the context. */
   readonly spec: ContextSpecSnapshot;
+  /** Repository identities registered with the builder before this context was built. */
+  readonly repositories: readonly RepositoryIdentitySnapshot[];
+}
+
+/** Machine-readable bounded-context repository registration failure codes. */
+export type BoundedContextRepositoryRegistrationErrorCode =
+  "ENTITY_TYPE_CONFLICT" | "STATE_TYPE_CONFLICT";
+
+/** Stable repository ownership details included in registration errors. */
+export interface BoundedContextRepositoryRegistrationErrorDetails {
+  /** Name of the bounded context receiving the repository. */
+  readonly contextName: string;
+  /** Already registered repository ownership facts. */
+  readonly existing: RepositoryRegistrationConflictDetails;
+  /** Incoming repository ownership facts. */
+  readonly incoming: RepositoryRegistrationConflictDetails;
+}
+
+/** Stable repository identity fields used in registration diagnostics. */
+export interface RepositoryRegistrationConflictDetails {
+  /** Name of the entity constructor owned by the repository. */
+  readonly entityTypeName: string;
+  /** Entity family owned by the repository. */
+  readonly entityFamily: RepositoryIdentitySnapshot["entityFamily"];
+  /** Fully qualified Protobuf state type owned by the repository. */
+  readonly stateFullTypeName: string;
+}
+
+/** Error thrown when a bounded context builder rejects repository ownership metadata. */
+export class BoundedContextRepositoryRegistrationError extends Error {
+  /** Stable code for callers/tests that need structured failure handling. */
+  readonly code: BoundedContextRepositoryRegistrationErrorCode;
+
+  /** Structured details describing the rejected registration. */
+  readonly details: BoundedContextRepositoryRegistrationErrorDetails;
+
+  constructor(
+    code: BoundedContextRepositoryRegistrationErrorCode,
+    message: string,
+    details: BoundedContextRepositoryRegistrationErrorDetails,
+  ) {
+    super(message);
+    this.name = "BoundedContextRepositoryRegistrationError";
+    this.code = code;
+    this.details = Object.freeze({
+      contextName: details.contextName,
+      existing: freezeConflictDetails(details.existing),
+      incoming: freezeConflictDetails(details.incoming),
+    });
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
 }
 
 /** Error thrown when a bounded context name cannot be accepted. */
@@ -108,6 +166,7 @@ export class ContextSpec {
 /** Metadata-only builder shell for a future {@link BoundedContext}. */
 export class BoundedContextBuilder {
   readonly #specSnapshot: ContextSpecSnapshot;
+  readonly #repositorySnapshots: RepositoryIdentitySnapshot[];
 
   static {
     constructBoundedContextBuilder = (
@@ -120,6 +179,7 @@ export class BoundedContextBuilder {
   protected constructor(
     specSnapshot: ContextSpecSnapshot,
     token: typeof frameworkConstructionToken,
+    repositorySnapshots: readonly RepositoryIdentitySnapshot[] = [],
   ) {
     const validatedSnapshot = validateSpecSnapshot(specSnapshot, "BoundedContextBuilder");
     requireFrameworkConstructionToken(
@@ -127,6 +187,7 @@ export class BoundedContextBuilder {
       "BoundedContextBuilder instances are framework-owned. Use BoundedContext.singleTenant(name) or BoundedContext.multitenant(name).",
     );
     this.#specSnapshot = validatedSnapshot;
+    this.#repositorySnapshots = copyRepositorySnapshots(repositorySnapshots);
     Object.freeze(this);
   }
 
@@ -150,9 +211,39 @@ export class BoundedContextBuilder {
     return this.#specSnapshot.multitenant;
   }
 
+  /** Repository identities registered with this builder as immutable fresh-copy snapshots. */
+  get repositories(): readonly RepositoryIdentitySnapshot[] {
+    return cloneRepositorySnapshots(this.#repositorySnapshots);
+  }
+
+  /** Adds an explicit metadata-only repository identity for the context to build. */
+  add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
+    repository: Repository<EntityType>,
+  ): this {
+    const incoming = readRepositorySnapshot(repository, "add");
+    registerRepositorySnapshot(this.#repositorySnapshots, incoming, this.#specSnapshot.name.value);
+    return this;
+  }
+
+  /** Removes an explicit metadata-only repository identity from the context to build. */
+  remove<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
+    repository: Repository<EntityType>,
+  ): this {
+    const incoming = readRepositorySnapshot(repository, "remove");
+    const matchIndex = this.#repositorySnapshots.findIndex((existing) =>
+      isSameRepositoryIdentity(existing, incoming),
+    );
+
+    if (matchIndex >= 0) {
+      this.#repositorySnapshots.splice(matchIndex, 1);
+    }
+
+    return this;
+  }
+
   /** Builds an immutable metadata-only bounded context snapshot. */
   build(): BoundedContext {
-    return createBoundedContext(this.#specSnapshot);
+    return createBoundedContext(this.#specSnapshot, this.#repositorySnapshots);
   }
 }
 
@@ -211,6 +302,11 @@ export class BoundedContext {
     return createContextSpec(this.#snapshot.spec);
   }
 
+  /** Repository identities registered when this metadata-only context was built. */
+  get repositories(): readonly RepositoryIdentitySnapshot[] {
+    return cloneRepositorySnapshots(this.#snapshot.repositories);
+  }
+
   /** Copy-safe immutable snapshot of this context shell. */
   get snapshot(): BoundedContextSnapshot {
     return cloneContextSnapshot(this.#snapshot);
@@ -241,7 +337,10 @@ function createBoundedContextBuilder(specSnapshot: ContextSpecSnapshot): Bounded
   return constructBoundedContextBuilder(specSnapshot, frameworkConstructionToken);
 }
 
-function createBoundedContext(specSnapshot: ContextSpecSnapshot): BoundedContext {
+function createBoundedContext(
+  specSnapshot: ContextSpecSnapshot,
+  repositorySnapshots: readonly RepositoryIdentitySnapshot[],
+): BoundedContext {
   /* c8 ignore next 3 -- static class initialization installs the factory at module load. */
   if (constructBoundedContext === undefined) {
     throw new TypeError("BoundedContext factory is unavailable.");
@@ -252,6 +351,7 @@ function createBoundedContext(specSnapshot: ContextSpecSnapshot): BoundedContext
       name: specSnapshot.name,
       tenantMode: toTenantMode(specSnapshot.multitenant),
       spec: specSnapshot,
+      repositories: cloneRepositorySnapshots(repositorySnapshots),
     },
     frameworkConstructionToken,
   );
@@ -300,6 +400,58 @@ function cloneContextSnapshot(snapshot: BoundedContextSnapshot): BoundedContextS
     name: cloneName(snapshot.name),
     tenantMode: snapshot.tenantMode,
     spec: cloneSpecSnapshot(snapshot.spec),
+    repositories: cloneRepositorySnapshots(snapshot.repositories),
+  });
+}
+
+function cloneRepositorySnapshots(
+  snapshots: readonly RepositoryIdentitySnapshot[],
+): RepositoryIdentitySnapshot[] {
+  return Object.freeze(snapshots.map(cloneRepositorySnapshot)) as RepositoryIdentitySnapshot[];
+}
+
+function cloneRepositorySnapshot<EntityType extends RepositoryEntityType>(
+  snapshot: RepositoryIdentitySnapshot<EntityType>,
+): RepositoryIdentitySnapshot<EntityType> {
+  const metadata = Object.freeze({
+    schema: snapshot.metadata.schema,
+    descriptor: snapshot.metadata.descriptor,
+    fullTypeName: snapshot.metadata.fullTypeName,
+    fileDescriptor: snapshot.metadata.fileDescriptor,
+    fileName: snapshot.metadata.fileName,
+    kind: snapshot.metadata.kind,
+    declaredVisibility: snapshot.metadata.declaredVisibility,
+    visibility: snapshot.metadata.visibility,
+    visibilitySource: snapshot.metadata.visibilitySource,
+    idField: cloneRepositoryFieldMetadata(snapshot.metadata.idField),
+    firstFieldRoutingHint: Object.freeze({
+      strategy: snapshot.metadata.firstFieldRoutingHint.strategy,
+      field: cloneRepositoryFieldMetadata(snapshot.metadata.firstFieldRoutingHint.field),
+    }),
+    columns: Object.freeze(snapshot.metadata.columns.map(cloneRepositoryFieldMetadata)),
+    setOnceFields: Object.freeze(snapshot.metadata.setOnceFields.map(cloneRepositoryFieldMetadata)),
+    semanticTags: Object.freeze([...snapshot.metadata.semanticTags]),
+  });
+
+  return Object.freeze({
+    entityType: snapshot.entityType,
+    entityFamily: snapshot.entityFamily,
+    stateSchema: snapshot.stateSchema,
+    metadata,
+    stateFullTypeName: snapshot.stateFullTypeName,
+    idField: cloneRepositoryFieldMetadata(snapshot.idField),
+  });
+}
+
+function cloneRepositoryFieldMetadata(
+  field: RepositoryIdentitySnapshot["idField"],
+): RepositoryIdentitySnapshot["idField"] {
+  return Object.freeze({
+    descriptor: field.descriptor,
+    name: field.name,
+    localName: field.localName,
+    jsonName: field.jsonName,
+    number: field.number,
   });
 }
 
@@ -357,6 +509,10 @@ function validateContextSnapshot(snapshot: unknown): BoundedContextSnapshot {
   const name = validateNameSnapshot(snapshot.name, "BoundedContext");
   const tenantMode = validateTenantMode(snapshot.tenantMode);
   const spec = validateSpecSnapshot(snapshot.spec, "BoundedContext.spec");
+  const repositories =
+    snapshot.repositories === undefined
+      ? []
+      : validateRepositorySnapshots(snapshot.repositories, "BoundedContext.repositories");
 
   if (name.value !== spec.name.value) {
     throw new TypeError("BoundedContext.name must match BoundedContext.spec.name.");
@@ -369,6 +525,24 @@ function validateContextSnapshot(snapshot: unknown): BoundedContextSnapshot {
     name,
     tenantMode,
     spec,
+    repositories,
+  });
+}
+
+function validateRepositorySnapshots(
+  snapshots: unknown,
+  owner: string,
+): readonly RepositoryIdentitySnapshot[] {
+  if (!Array.isArray(snapshots)) {
+    throw new TypeError(`${owner} must be an array.`);
+  }
+
+  return snapshots.map((snapshot, index) => {
+    if (!isRecord(snapshot)) {
+      throw new TypeError(`${owner}[${String(index)}] must be a repository identity snapshot.`);
+    }
+
+    return cloneRepositorySnapshot(snapshot as unknown as RepositoryIdentitySnapshot);
   });
 }
 
@@ -385,5 +559,105 @@ function freezeContextSnapshot(snapshot: BoundedContextSnapshot): BoundedContext
     name: cloneName(snapshot.name),
     tenantMode: snapshot.tenantMode,
     spec: cloneSpecSnapshot(snapshot.spec),
+    repositories: cloneRepositorySnapshots(snapshot.repositories),
   });
+}
+
+function readRepositorySnapshot<
+  EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
+>(
+  repository: Repository<EntityType>,
+  operation: "add" | "remove",
+): RepositoryIdentitySnapshot<EntityType> {
+  if (!(repository instanceof Repository)) {
+    throw new TypeError(
+      `BoundedContextBuilder.${operation}(repository) requires a Repository identity object.`,
+    );
+  }
+
+  return cloneRepositorySnapshot(repository.snapshot);
+}
+
+function registerRepositorySnapshot(
+  existingRepositories: RepositoryIdentitySnapshot[],
+  incoming: RepositoryIdentitySnapshot,
+  contextName: string,
+): void {
+  for (const existing of existingRepositories) {
+    if (isSameRepositoryIdentity(existing, incoming)) {
+      return;
+    }
+
+    if (existing.entityType === incoming.entityType) {
+      throwRepositoryRegistrationConflict("ENTITY_TYPE_CONFLICT", contextName, existing, incoming);
+    }
+
+    if (existing.stateFullTypeName === incoming.stateFullTypeName) {
+      throwRepositoryRegistrationConflict("STATE_TYPE_CONFLICT", contextName, existing, incoming);
+    }
+  }
+
+  existingRepositories.push(incoming);
+}
+
+function throwRepositoryRegistrationConflict(
+  code: BoundedContextRepositoryRegistrationErrorCode,
+  contextName: string,
+  existing: RepositoryIdentitySnapshot,
+  incoming: RepositoryIdentitySnapshot,
+): never {
+  const existingDetails = repositoryConflictDetails(existing);
+  const incomingDetails = repositoryConflictDetails(incoming);
+  const ownership =
+    code === "ENTITY_TYPE_CONFLICT"
+      ? `entity constructor "${incomingDetails.entityTypeName}"`
+      : `state type "${incomingDetails.stateFullTypeName}"`;
+
+  throw new BoundedContextRepositoryRegistrationError(
+    code,
+    `Bounded context "${contextName}" already has repository ownership for ${ownership}.`,
+    {
+      contextName,
+      existing: existingDetails,
+      incoming: incomingDetails,
+    },
+  );
+}
+
+function isSameRepositoryIdentity(
+  left: RepositoryIdentitySnapshot,
+  right: RepositoryIdentitySnapshot,
+): boolean {
+  return (
+    left.entityType === right.entityType &&
+    left.entityFamily === right.entityFamily &&
+    left.stateSchema === right.stateSchema &&
+    left.stateFullTypeName === right.stateFullTypeName
+  );
+}
+
+function repositoryConflictDetails(
+  snapshot: RepositoryIdentitySnapshot,
+): RepositoryRegistrationConflictDetails {
+  return freezeConflictDetails({
+    entityTypeName: snapshot.entityType.name,
+    entityFamily: snapshot.entityFamily,
+    stateFullTypeName: snapshot.stateFullTypeName,
+  });
+}
+
+function freezeConflictDetails(
+  details: RepositoryRegistrationConflictDetails,
+): RepositoryRegistrationConflictDetails {
+  return Object.freeze({
+    entityTypeName: details.entityTypeName,
+    entityFamily: details.entityFamily,
+    stateFullTypeName: details.stateFullTypeName,
+  });
+}
+
+function copyRepositorySnapshots(
+  snapshots: readonly RepositoryIdentitySnapshot[],
+): RepositoryIdentitySnapshot[] {
+  return snapshots.map(cloneRepositorySnapshot);
 }

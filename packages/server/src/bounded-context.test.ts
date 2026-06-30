@@ -1,15 +1,88 @@
+import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
+import { file_spine_options } from "@spine-ts/proto";
+import { serverEntityMetadataTestFixtures } from "../test-fixtures/entity-metadata-fixtures.js";
 
+import { Aggregate, ProcessManager, Projection, Repository, type EntityFamily } from "./index.js";
 import {
   BoundedContext,
   BoundedContextBuilder,
   BoundedContextNameError,
+  BoundedContextRepositoryRegistrationError,
   ContextSpec,
   type ContextSpecSnapshot,
   type TenantMode,
 } from "./bounded-context.js";
 
 type UntypedConstructor<T> = new (...args: unknown[]) => T;
+
+type ProjectionState = Message<"ProjectionState"> & {
+  id: string;
+  name: string;
+  priority: number;
+};
+
+type AggregateState = Message<"AggregateState"> & {
+  id: string;
+  name: string;
+  archived: boolean;
+};
+
+type ProcessManagerState = Message<"ProcessManagerState"> & {
+  id: string;
+  queue: string;
+};
+
+function createFixtureFileDescriptor(descriptorSetBase64: string) {
+  const descriptorSet = fromBinary(
+    FileDescriptorSetSchema,
+    Buffer.from(descriptorSetBase64, "base64"),
+  );
+  const descriptor = descriptorSet.file[0];
+
+  if (descriptor === undefined) {
+    throw new Error("Server bounded-context fixture descriptor set is empty.");
+  }
+
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"), [
+    file_spine_options,
+  ]);
+}
+
+const fileEntityMetadataFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
+);
+const ProjectionStateSchema = messageDesc(
+  fileEntityMetadataFixture,
+  0,
+) as GenMessage<ProjectionState>;
+const AggregateStateSchema = messageDesc(
+  fileEntityMetadataFixture,
+  1,
+) as GenMessage<AggregateState>;
+const alternateFileEntityMetadataFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
+);
+const AlternateAggregateStateSchema = messageDesc(
+  alternateFileEntityMetadataFixture,
+  1,
+) as GenMessage<AggregateState>;
+
+const fileEntityVisibilityFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
+);
+const ProcessManagerStateSchema = messageDesc(
+  fileEntityVisibilityFixture,
+  0,
+) as GenMessage<ProcessManagerState>;
+
+class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
+class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {}
+class TaskSummaryProjection extends Projection<string, typeof ProjectionStateSchema, number> {}
+class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {}
 
 const ContextSpecConstructor = ContextSpec as unknown as UntypedConstructor<ContextSpec>;
 const BoundedContextBuilderConstructor =
@@ -76,6 +149,7 @@ describe("BoundedContext builder shell", () => {
         multitenant: true,
         storesEvents: true,
       },
+      repositories: [],
     });
 
     const secondSnapshot = context.snapshot;
@@ -96,10 +170,13 @@ describe("BoundedContext builder shell", () => {
     const context = builder.build();
 
     expect(Object.getOwnPropertyNames(BoundedContextBuilder.prototype).sort()).toEqual([
+      "add",
       "build",
       "constructor",
       "isMultitenant",
       "name",
+      "remove",
+      "repositories",
       "spec",
       "tenantMode",
     ]);
@@ -107,6 +184,7 @@ describe("BoundedContext builder shell", () => {
       "constructor",
       "isMultitenant",
       "name",
+      "repositories",
       "snapshot",
       "spec",
       "tenantMode",
@@ -124,7 +202,12 @@ describe("BoundedContext builder shell", () => {
       "name",
       "storesEvents",
     ]);
-    expect(Object.keys(context.snapshot).sort()).toEqual(["name", "spec", "tenantMode"]);
+    expect(Object.keys(context.snapshot).sort()).toEqual([
+      "name",
+      "repositories",
+      "spec",
+      "tenantMode",
+    ]);
     expect(context.spec.snapshot).toEqual(builder.spec.snapshot);
   });
 
@@ -262,5 +345,165 @@ describe("BoundedContext builder shell", () => {
         },
       ]),
     ).toThrow(/must match BoundedContext\.spec\.multitenant/);
+  });
+
+  it("adds and removes explicit repository identities with chainable builder calls", () => {
+    const aggregateRepository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const projectionRepository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const builder = BoundedContext.singleTenant("Tasks");
+
+    expect(builder.add(aggregateRepository)).toBe(builder);
+    expect(builder.add(projectionRepository)).toBe(builder);
+    expect(builder.repositories.map((repository) => repository.stateFullTypeName)).toEqual([
+      AggregateStateSchema.typeName,
+      ProjectionStateSchema.typeName,
+    ]);
+
+    expect(builder.remove(aggregateRepository)).toBe(builder);
+    expect(builder.repositories.map((repository) => repository.stateFullTypeName)).toEqual([
+      ProjectionStateSchema.typeName,
+    ]);
+
+    const context = builder.build();
+    expect(context.repositories.map((repository) => repository.stateFullTypeName)).toEqual([
+      ProjectionStateSchema.typeName,
+    ]);
+    expect(context.snapshot.repositories.map((repository) => repository.entityType)).toEqual([
+      TaskProjection,
+    ]);
+  });
+
+  it("keeps builder and built-context repository snapshots immutable and copy-safe", () => {
+    const repository = new Repository({
+      entityType: TaskProcessManager,
+      schema: ProcessManagerStateSchema,
+    });
+    const builder = BoundedContext.multitenant("Tasks").add(repository);
+    const firstBuilderRepositories = builder.repositories;
+    const secondBuilderRepositories = builder.repositories;
+    const contextBeforeRemoval = builder.build();
+    const firstContextRepositories = contextBeforeRemoval.repositories;
+    const secondContextRepositories = contextBeforeRemoval.repositories;
+    const contextBeforeRemovalSnapshot = contextBeforeRemoval.snapshot;
+
+    builder.remove(repository);
+    const contextAfterRemoval = builder.build();
+
+    expect(firstBuilderRepositories).toEqual(secondBuilderRepositories);
+    expect(firstBuilderRepositories).not.toBe(secondBuilderRepositories);
+    expect(firstBuilderRepositories[0]).not.toBe(secondBuilderRepositories[0]);
+    expect(Object.isFrozen(firstBuilderRepositories)).toBe(true);
+    expect(Object.isFrozen(firstBuilderRepositories[0])).toBe(true);
+    expect(Object.isFrozen(firstBuilderRepositories[0]?.idField)).toBe(true);
+    expect(firstContextRepositories).toEqual(secondContextRepositories);
+    expect(firstContextRepositories).not.toBe(secondContextRepositories);
+    expect(firstContextRepositories[0]).not.toBe(secondContextRepositories[0]);
+    expect(contextBeforeRemovalSnapshot.repositories).toEqual(firstContextRepositories);
+    expect(contextBeforeRemovalSnapshot.repositories).not.toBe(firstContextRepositories);
+    expect(contextBeforeRemovalSnapshot.repositories[0]).not.toBe(firstContextRepositories[0]);
+    expect(contextBeforeRemoval.repositories.map((snapshot) => snapshot.entityType)).toEqual([
+      TaskProcessManager,
+    ]);
+    expect(contextAfterRemoval.repositories).toEqual([]);
+    expect(() => {
+      (firstBuilderRepositories[0] as { entityFamily: EntityFamily }).entityFamily = "aggregate";
+    }).toThrow(TypeError);
+  });
+
+  it("treats repeated registration of the same repository identity as idempotent", () => {
+    const repository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const equivalentRepository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const builder = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .add(repository)
+      .add(equivalentRepository);
+
+    expect(builder.repositories).toHaveLength(1);
+    expect(builder.build().repositories).toHaveLength(1);
+  });
+
+  it("rejects repositories that make one entity constructor own conflicting state types", () => {
+    class ConflictingTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
+    const aggregateRepository = new Repository({
+      entityType: ConflictingTaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const conflictingRepository = new Repository({
+      entityType: ConflictingTaskAggregate,
+      schema: AlternateAggregateStateSchema,
+    });
+    const builder = BoundedContext.singleTenant("Tasks").add(aggregateRepository);
+
+    expect(() => builder.add(conflictingRepository)).toThrow(
+      BoundedContextRepositoryRegistrationError,
+    );
+
+    try {
+      builder.add(conflictingRepository);
+      throw new Error("Expected conflicting entity constructor ownership to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(BoundedContextRepositoryRegistrationError);
+      const registrationError = error as BoundedContextRepositoryRegistrationError;
+      expect(registrationError.code).toBe("ENTITY_TYPE_CONFLICT");
+      expect(registrationError.details).toEqual({
+        contextName: "Tasks",
+        existing: {
+          entityTypeName: "ConflictingTaskAggregate",
+          entityFamily: "aggregate",
+          stateFullTypeName: AggregateStateSchema.typeName,
+        },
+        incoming: {
+          entityTypeName: "ConflictingTaskAggregate",
+          entityFamily: "aggregate",
+          stateFullTypeName: AlternateAggregateStateSchema.typeName,
+        },
+      });
+    }
+  });
+
+  it("rejects repositories that make one state type belong to multiple entity constructors", () => {
+    const projectionRepository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const conflictingRepository = new Repository({
+      entityType: TaskSummaryProjection,
+      schema: ProjectionStateSchema,
+    });
+    const builder = BoundedContext.singleTenant("Tasks").add(projectionRepository);
+
+    try {
+      builder.add(conflictingRepository);
+      throw new Error("Expected conflicting state type ownership to fail.");
+    } catch (error) {
+      expect(error).toBeInstanceOf(BoundedContextRepositoryRegistrationError);
+      const registrationError = error as BoundedContextRepositoryRegistrationError;
+      expect(registrationError.code).toBe("STATE_TYPE_CONFLICT");
+      expect(registrationError.details).toEqual({
+        contextName: "Tasks",
+        existing: {
+          entityTypeName: "TaskProjection",
+          entityFamily: "projection",
+          stateFullTypeName: ProjectionStateSchema.typeName,
+        },
+        incoming: {
+          entityTypeName: "TaskSummaryProjection",
+          entityFamily: "projection",
+          stateFullTypeName: ProjectionStateSchema.typeName,
+        },
+      });
+    }
   });
 });
