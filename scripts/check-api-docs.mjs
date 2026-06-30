@@ -401,6 +401,7 @@ const missingStorageExports = expectedStorageExports.filter((name) => !documente
 const forbiddenTypeDocNames = [
   "BuiltInEntityConstructor",
   "BuiltInEntityConstructorBase",
+  "EntityConstructor",
   "HasErasedRepositoryConstructorParameters",
   "RepositoryEntityTypeCarriesConcreteConstructorParameters",
   "RepositoryEntityTypeConstraint",

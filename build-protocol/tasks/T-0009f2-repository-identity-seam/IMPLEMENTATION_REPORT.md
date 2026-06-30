@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-11 Review Fixes Complete - Pending Re-review
+Status: Round-12 Review Fixes Complete - Pending Re-review
 Task log: `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f2.md`
 Review log: `build-protocol/reviews/T-0009f2-repository-identity-seam.md`
@@ -120,6 +120,13 @@ Implementation research inspected and used:
 - Eleventh-round reliability hardening captures the repository entity type
   display name once per validation failure path and reuses it for both the
   thrown message and structured details.
+- Twelfth-round review fixes remove the `EntityConstructor` identifier from the
+  repository public type signatures and generated TypeDoc output by renaming
+  the inherited nominal marker base and using the neutral
+  `EntityStaticMarkerBase` type in `RepositoryEntityType`.
+- Twelfth-round tests now assert that the current declaration-only
+  `spineTsEntityConstructor` marker is absent from aggregate, projection, and
+  process-manager runtime constructor shapes.
 - Public root exports, TypeDoc export guard, package README, API docs, user
   guide, and architecture notes now describe the metadata-only boundary.
 
@@ -277,10 +284,22 @@ Implementation research inspected and used:
 - Round-11 full verification: `CI=true corepack pnpm verify` passed with 17
   test files, 184 tests, coverage, docs check, proto lint/generate, and
   generated-clean.
+- Round-12 RED: `node scripts/check-api-docs.mjs` failed after adding
+  `EntityConstructor` to the forbidden TypeDoc-name guard, proving the current
+  generated JSON still exposed the old nominal base name.
+- Round-12 GREEN: focused Vitest passed with 2 files and 25 tests;
+  `corepack pnpm typecheck:tooling` passed after the nominal marker base was
+  renamed and repository signatures stopped referencing `typeof
+EntityConstructor`.
+- Round-12 API docs guard: `node scripts/check-api-docs.mjs` passed and now
+  rejects `EntityConstructor` from TypeDoc JSON.
+- Round-12 full verification: `CI=true corepack pnpm verify` passed with 17
+  test files, 184 tests, coverage, docs check, proto lint/generate, and
+  generated-clean.
 
 ## Review
 
 - First-, second-, third-, fourth-, fifth-, sixth-, seventh-, eighth-, ninth-,
-  tenth-, and eleventh-round reviewer findings were applied by review-fix
+  tenth-, eleventh-, and twelfth-round reviewer findings were applied by review-fix
   sub-agents.
   Re-review by the orchestrator lanes remains pending.

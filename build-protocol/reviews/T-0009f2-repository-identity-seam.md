@@ -1,6 +1,6 @@
 # Review Log: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Round-11 findings fixed - Pending Re-review
+Status: Round-12 findings fixed - Pending Re-review
 
 ## Required Review Lanes
 
@@ -307,9 +307,32 @@ Status: Round-11 findings fixed - Pending Re-review
     tests, tooling typecheck passed, and `node scripts/check-api-docs.mjs`
     passed after the fixes. Full `CI=true corepack pnpm verify` passed with 17
     test files and 184 tests.
+- Twelfth-round reviewer findings received by the review-fix sub-agent:
+  - TypeScript/API P2: `RepositoryEntityType` still exposed the hidden nominal
+    base in generated API docs because it intersected with
+    `typeof EntityConstructor`; generated TypeDoc JSON/HTML still contained
+    `EntityConstructor` in repository signatures and the `Entity` hierarchy.
+  - Code style/TypeScript P3: repository tests only checked the old runtime
+    marker name and did not assert that the current declaration-only
+    `spineTsEntityConstructor` marker stays out of aggregate/projection/process
+    manager constructor values.
+- Round-12 fix status:
+  - Fixed: renamed the inherited nominal marker base away from
+    `EntityConstructor` and changed `RepositoryEntityType` to intersect with
+    the neutral `EntityStaticMarkerBase` type, preserving the existing
+    constructor nominal guard while removing `EntityConstructor` from generated
+    TypeDoc JSON.
+  - Fixed: `scripts/check-api-docs.mjs` now rejects `EntityConstructor` from
+    TypeDoc JSON, and focused RED showed the guard caught the previous leak.
+  - Fixed: repository tests now assert `"spineTsEntityConstructor" in
+Aggregate`, `Projection`, and `ProcessManager` is false.
+  - Verified: focused Vitest passed with 2 files and 25 tests;
+    `corepack pnpm typecheck:tooling` passed; `node scripts/check-api-docs.mjs`
+    passed; full `CI=true corepack pnpm verify` passed with 17 test files and
+    184 tests.
 
 ## Current Review State
 
 - First-, second-, third-, fourth-, fifth-, sixth-, seventh-, eighth-, ninth-,
-  tenth-, and eleventh-round comments are fixed. Orchestrator reviewer lanes
+  tenth-, eleventh-, and twelfth-round comments are fixed. Orchestrator reviewer lanes
   should re-run before integration.

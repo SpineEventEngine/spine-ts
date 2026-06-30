@@ -329,6 +329,9 @@ describe("repository identity", () => {
     expect("__spineTsBuiltInEntityConstructor" in Aggregate).toBe(false);
     expect("__spineTsBuiltInEntityConstructor" in Projection).toBe(false);
     expect("__spineTsBuiltInEntityConstructor" in ProcessManager).toBe(false);
+    expect("spineTsEntityConstructor" in Aggregate).toBe(false);
+    expect("spineTsEntityConstructor" in Projection).toBe(false);
+    expect("spineTsEntityConstructor" in ProcessManager).toBe(false);
   });
 
   it("uses one captured entity type display name per rejected identity diagnostic", () => {

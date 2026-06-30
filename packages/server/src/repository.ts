@@ -1,6 +1,6 @@
 import {
   Aggregate,
-  type EntityConstructor,
+  type EntityStaticMarkerBase,
   ProcessManager,
   Projection,
   type EntityFamily,
@@ -70,7 +70,7 @@ interface RuntimeRepositoryEntityType {
 export type RepositoryEntityType<
   Instance extends RepositoryEntityInstance = RepositoryEntityInstance,
 > = (abstract new (...args: never[]) => Instance) &
-  typeof EntityConstructor & {
+  EntityStaticMarkerBase & {
     /** Prototype inspected for built-in entity family marker inheritance. */
     readonly prototype: Instance;
     /** Constructor name used in structured diagnostics. */
