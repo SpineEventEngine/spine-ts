@@ -217,20 +217,6 @@ export interface TransportParticipantIdentity<
   readonly workerRole?: Kind extends "worker" ? TransportWorkerRole : never;
 }
 
-/** Input for one broker participant identity. */
-export interface BrokerTransportParticipantInput {
-  /** Stable logical participant identity. */
-  readonly participantId: string;
-}
-
-/** Input for one worker participant identity. */
-export interface TransportWorkerParticipantInput {
-  /** Stable logical participant identity. */
-  readonly participantId: string;
-  /** Stable logical worker role. */
-  readonly workerRole: TransportWorkerRole;
-}
-
 /** Immutable worker registration owned by the transport lifecycle seam. */
 export interface TransportWorkerRegistration {
   /** Stable worker identity. */
@@ -245,11 +231,9 @@ export interface TransportWorkerRegistration {
 
 /** Input for one worker registration. */
 export interface TransportWorkerRegistrationInput {
-  /** Stable worker identity or worker identity input. */
+  /** Stable worker identity or canonical worker identity input. */
   readonly worker:
-    | TransportWorkerParticipantInput
-    | TransportParticipantIdentityInput<"worker">
-    | TransportParticipantIdentity<"worker">;
+    TransportParticipantIdentityInput<"worker"> | TransportParticipantIdentity<"worker">;
   /** Logical subscriptions covered by the worker. */
   readonly subscriptions: readonly (TransportSubscriptionInput | TransportSubscription)[];
 }
@@ -272,11 +256,9 @@ export interface TransportLifecycleSnapshot<
 export interface TransportLifecycleSnapshotInput<
   Kind extends TransportParticipantKind = TransportParticipantKind,
 > {
-  /** Stable logical participant identity or input. */
+  /** Stable logical participant identity or canonical identity input. */
   readonly participant:
-    | TransportParticipantIdentityInput<Kind>
-    | TransportParticipantIdentity<Kind>
-    | (Kind extends "worker" ? TransportWorkerParticipantInput : BrokerTransportParticipantInput);
+    TransportParticipantIdentityInput<Kind> | TransportParticipantIdentity<Kind>;
   /** Current deterministic lifecycle state. */
   readonly state: TransportLifecycleState;
   /** Current readiness state. */
@@ -325,7 +307,7 @@ export function createTransportTopic<Kind extends TransportSignalKind>(
 export function createTransportSubscription<Kind extends TransportSignalKind>(
   input: TransportSubscriptionInput<Kind>,
 ): TransportSubscription<Kind> {
-  const subscriberId = normalizeRequiredText(input.subscriberId, "subscriberId");
+  const subscriberId = normalizeLogicalTransportId(input.subscriberId, "subscriberId");
   const mode = normalizeTransportSubscriptionMode(input.mode ?? "fan-out");
   const topic = createTransportTopic(input.topic);
 
@@ -334,27 +316,6 @@ export function createTransportSubscription<Kind extends TransportSignalKind>(
     mode,
     topic,
     descriptorKey: `${topic.routing.routingKey}#${encodeRoutingSegment(mode)}#${encodeRoutingSegment(subscriberId)}`,
-  });
-}
-
-/** Create an immutable broker participant identity. */
-export function createBrokerTransportParticipant(
-  input: BrokerTransportParticipantInput,
-): TransportParticipantIdentity<"broker"> {
-  return createTransportParticipantIdentity({
-    participantKind: "broker",
-    participantId: input.participantId,
-  });
-}
-
-/** Create an immutable worker participant identity. */
-export function createTransportWorkerParticipant(
-  input: TransportWorkerParticipantInput,
-): TransportParticipantIdentity<"worker"> {
-  return createTransportParticipantIdentity({
-    participantKind: "worker",
-    participantId: input.participantId,
-    workerRole: input.workerRole,
   });
 }
 
@@ -375,7 +336,7 @@ export function createTransportParticipantIdentity(
   input: TransportParticipantIdentityInput,
 ): TransportParticipantIdentity {
   const participantKind = normalizeTransportParticipantKind(input.participantKind);
-  const participantId = normalizeRequiredText(input.participantId, "participantId");
+  const participantId = normalizeLogicalTransportId(input.participantId, "participantId");
 
   if (participantKind === "worker") {
     const workerRole = normalizeTransportWorkerRole(input.workerRole);
@@ -437,6 +398,10 @@ export function createTransportLifecycleSnapshot<Kind extends TransportParticipa
       throw new Error("Transport brokers must not include worker registrations.");
     }
   } else {
+    if (readiness === "ready" && workerRegistrations.length === 0) {
+      throw new Error("Transport ready workers must include at least one worker registration.");
+    }
+
     for (const registration of workerRegistrations) {
       if (registration.worker.participantKey !== participant.participantKey) {
         throw new Error(
@@ -459,6 +424,18 @@ function normalizeRequiredText(value: string, name: string): string {
 
   if (normalized.length === 0) {
     throw new Error(`Transport ${name} must not be empty.`);
+  }
+
+  return normalized;
+}
+
+function normalizeLogicalTransportId(value: string, name: string): string {
+  const normalized = normalizeRequiredText(value, name);
+
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(normalized) || /^\d+$/u.test(normalized)) {
+    throw new Error(
+      `Transport ${name} must use logical-name format (letters/digits followed by letters/digits/dots/underscores/hyphens, not endpoints, paths, hostnames, or PIDs).`,
+    );
   }
 
   return normalized;
@@ -562,32 +539,26 @@ function normalizeSemanticTags(
 }
 
 function normalizeTransportLifecycleParticipant(
-  value:
-    | BrokerTransportParticipantInput
-    | TransportWorkerParticipantInput
-    | TransportParticipantIdentityInput
-    | TransportParticipantIdentity,
+  value: TransportParticipantIdentityInput | TransportParticipantIdentity,
 ): TransportParticipantIdentity {
-  if ("participantKey" in value) {
-    return value;
+  if (value.participantKind === "worker") {
+    const workerInput: TransportParticipantIdentityInput<"worker"> = {
+      participantKind: "worker",
+      participantId: value.participantId,
+      workerRole: normalizeTransportWorkerRole(value.workerRole),
+    };
+
+    return createTransportParticipantIdentity(workerInput);
   }
 
-  if ("participantKind" in value) {
-    return createTransportParticipantIdentity(value);
-  }
-
-  if ("workerRole" in value) {
-    return createTransportWorkerParticipant(value);
-  }
-
-  return createBrokerTransportParticipant(value);
+  return createTransportParticipantIdentity({
+    participantKind: "broker",
+    participantId: value.participantId,
+  });
 }
 
 function normalizeWorkerParticipant(
-  value:
-    | TransportWorkerParticipantInput
-    | TransportParticipantIdentityInput<"worker">
-    | TransportParticipantIdentity<"worker">,
+  value: TransportParticipantIdentityInput<"worker"> | TransportParticipantIdentity<"worker">,
   name: string,
 ): TransportParticipantIdentity<"worker"> {
   const participant = normalizeTransportLifecycleParticipant(value);
@@ -608,18 +579,23 @@ function normalizeWorkerSubscriptions(
   }
 
   return Object.freeze(
-    subscriptions.map((subscription) => {
-      const normalized =
-        "descriptorKey" in subscription ? subscription : createTransportSubscription(subscription);
+    subscriptions
+      .map((subscription) => {
+        const normalized = createTransportSubscription({
+          subscriberId: subscription.subscriberId,
+          ...(subscription.mode === undefined ? {} : { mode: subscription.mode }),
+          topic: subscription.topic,
+        });
 
-      if (normalized.subscriberId !== workerId) {
-        throw new Error(
-          "Transport worker registration subscriptions must use the worker participantId as subscriberId.",
-        );
-      }
+        if (normalized.subscriberId !== workerId) {
+          throw new Error(
+            "Transport worker registration subscriptions must use the worker participantId as subscriberId.",
+          );
+        }
 
-      return normalized;
-    }),
+        return normalized;
+      })
+      .sort((left, right) => compareTransportStrings(left.descriptorKey, right.descriptorKey)),
   );
 }
 
@@ -633,9 +609,10 @@ function normalizeWorkerRegistrations(
 
   return Object.freeze(
     registrations.map((registration) =>
-      "registrationKey" in registration
-        ? registration
-        : createTransportWorkerRegistration(registration),
+      createTransportWorkerRegistration({
+        worker: registration.worker,
+        subscriptions: registration.subscriptions,
+      }),
     ),
   );
 }

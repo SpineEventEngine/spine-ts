@@ -18,9 +18,7 @@ import {
   createTransportSubscription,
   createTransportLifecycleSnapshot,
   createTransportWorkerRegistration,
-  createBrokerTransportParticipant,
   createTransportTopic,
-  createTransportWorkerParticipant,
 } from "./index.js";
 
 describe("@spine-ts/transport", () => {
@@ -102,10 +100,12 @@ describe("@spine-ts/transport", () => {
   });
 
   it("creates stable broker and worker participant identities", () => {
-    const broker = createBrokerTransportParticipant({
+    const broker = createTransportParticipantIdentity({
+      participantKind: "broker",
       participantId: " local-broker ",
     });
-    const worker = createTransportWorkerParticipant({
+    const worker = createTransportParticipantIdentity({
+      participantKind: "worker",
       participantId: " projections ",
       workerRole: "projection-worker",
     });
@@ -131,6 +131,7 @@ describe("@spine-ts/transport", () => {
   it("creates deterministic worker registrations from transport subscriptions", () => {
     const registration = createTransportWorkerRegistration({
       worker: {
+        participantKind: "worker",
         participantId: "projection-a",
         workerRole: "projection-worker",
       },
@@ -206,9 +207,64 @@ describe("@spine-ts/transport", () => {
     expect(Object.isFrozen(registration)).toBe(true);
   });
 
+  it("rebuilds lifecycle value objects from semantic fields and sorts worker subscriptions", () => {
+    const rebuilt = createTransportWorkerRegistration({
+      worker: {
+        participantKind: "worker",
+        participantId: "projection-a",
+        participantKey: "worker#tampered",
+        workerRole: "projection-worker",
+      },
+      subscriptions: [
+        {
+          descriptorKey: "tampered-z",
+          mode: "competing-consumer",
+          subscriberId: "projection-a",
+          topic: {
+            signalKind: "subscription",
+            messageTypeUrl: "type.spine.io/example.TaskWatch",
+            semanticTags: [],
+            routing: {
+              signalKind: "subscription",
+              messageTypeUrl: "type.spine.io/example.TaskWatch",
+              routingKey: "tampered",
+              semanticTags: [],
+            },
+          },
+        },
+        {
+          descriptorKey: "tampered-a",
+          mode: "fan-out",
+          subscriberId: "projection-a",
+          topic: {
+            signalKind: "event",
+            messageTypeUrl: "type.spine.io/example.TaskCreated",
+            semanticTags: ["projection"],
+            routing: {
+              signalKind: "event",
+              messageTypeUrl: "type.spine.io/example.TaskCreated",
+              routingKey: "tampered",
+              semanticTags: ["projection"],
+            },
+          },
+        },
+      ],
+    });
+
+    expect(rebuilt.worker.participantKey).toBe("worker#projection-worker#projection-a");
+    expect(rebuilt.subscriptions.map((subscription) => subscription.descriptorKey)).toEqual([
+      "event:type.spine.io%2Fexample.TaskCreated:projection#fan-out#projection-a",
+      "subscription:type.spine.io%2Fexample.TaskWatch#competing-consumer#projection-a",
+    ]);
+    expect(rebuilt.registrationKey).toBe(
+      "worker#projection-worker#projection-a#event:type.spine.io%2Fexample.TaskCreated:projection#fan-out#projection-a|subscription:type.spine.io%2Fexample.TaskWatch#competing-consumer#projection-a",
+    );
+  });
+
   it("creates lifecycle snapshots with validated readiness and worker registrations", () => {
     const workerRegistration = createTransportWorkerRegistration({
       worker: {
+        participantKind: "worker",
         participantId: "projection-a",
         workerRole: "projection-worker",
       },
@@ -249,6 +305,7 @@ describe("@spine-ts/transport", () => {
   it("normalizes lifecycle snapshots from broker inputs without worker registrations", () => {
     const snapshot = createTransportLifecycleSnapshot({
       participant: {
+        participantKind: "broker",
         participantId: " broker-a ",
       },
       state: "created",
@@ -304,6 +361,36 @@ describe("@spine-ts/transport", () => {
     ).toThrow(/subscriberId/);
   });
 
+  it("rejects endpoint-shaped, path-shaped, host-shaped, and pid-only logical ids", () => {
+    const invalidIds = [
+      "ipc://broker",
+      "tcp://127.0.0.1:5555",
+      "/tmp/worker",
+      "worker@host",
+      "12345",
+    ];
+
+    for (const invalidId of invalidIds) {
+      expect(() =>
+        createTransportSubscription({
+          subscriberId: invalidId,
+          topic: {
+            signalKind: "query",
+            messageTypeUrl: "type.spine.io/example.TaskById",
+          },
+        }),
+      ).toThrow(/logical-name format/);
+
+      expect(() =>
+        createTransportParticipantIdentity({
+          participantKind: "worker",
+          participantId: invalidId,
+          workerRole: "projection-worker",
+        }),
+      ).toThrow(/logical-name format/);
+    }
+  });
+
   it("rejects unknown runtime signal kinds and subscription modes", () => {
     expect(() =>
       createTransportTopic({
@@ -351,7 +438,8 @@ describe("@spine-ts/transport", () => {
     ).toThrow(/participantKind/);
 
     expect(() =>
-      createTransportWorkerParticipant({
+      createTransportParticipantIdentity({
+        participantKind: "worker",
         participantId: "worker-a",
         workerRole: "queue-pump" as never,
       }),
@@ -359,7 +447,8 @@ describe("@spine-ts/transport", () => {
 
     expect(() =>
       createTransportWorkerRegistration({
-        worker: createBrokerTransportParticipant({
+        worker: createTransportParticipantIdentity({
+          participantKind: "broker",
           participantId: "broker-a",
         }) as never,
         subscriptions: [
@@ -377,6 +466,7 @@ describe("@spine-ts/transport", () => {
     expect(() =>
       createTransportWorkerRegistration({
         worker: {
+          participantKind: "worker",
           participantId: "projection-a",
           workerRole: "projection-worker",
         },
@@ -387,6 +477,7 @@ describe("@spine-ts/transport", () => {
     expect(() =>
       createTransportWorkerRegistration({
         worker: {
+          participantKind: "worker",
           participantId: "projection-a",
           workerRole: "projection-worker",
         },
@@ -404,12 +495,16 @@ describe("@spine-ts/transport", () => {
 
     expect(() =>
       createTransportLifecycleSnapshot({
-        participant: createBrokerTransportParticipant({ participantId: "broker-a" }),
+        participant: createTransportParticipantIdentity({
+          participantKind: "broker",
+          participantId: "broker-a",
+        }),
         state: "running",
         readiness: "ready",
         workerRegistrations: [
           createTransportWorkerRegistration({
             worker: {
+              participantKind: "worker",
               participantId: "projection-a",
               workerRole: "projection-worker",
             },
@@ -453,7 +548,8 @@ describe("@spine-ts/transport", () => {
 
     expect(() =>
       createTransportLifecycleSnapshot({
-        participant: createTransportWorkerParticipant({
+        participant: createTransportParticipantIdentity({
+          participantKind: "worker",
           participantId: "projection-a",
           workerRole: "projection-worker",
         }),
@@ -464,7 +560,8 @@ describe("@spine-ts/transport", () => {
 
     expect(() =>
       createTransportLifecycleSnapshot({
-        participant: createTransportWorkerParticipant({
+        participant: createTransportParticipantIdentity({
+          participantKind: "worker",
           participantId: "projection-a",
           workerRole: "projection-worker",
         }),
@@ -475,7 +572,20 @@ describe("@spine-ts/transport", () => {
 
     expect(() =>
       createTransportLifecycleSnapshot({
-        participant: createTransportWorkerParticipant({
+        participant: createTransportParticipantIdentity({
+          participantKind: "worker",
+          participantId: "projection-a",
+          workerRole: "projection-worker",
+        }),
+        state: "running",
+        readiness: "ready",
+      }),
+    ).toThrow(/must include at least one worker registration/);
+
+    expect(() =>
+      createTransportLifecycleSnapshot({
+        participant: createTransportParticipantIdentity({
+          participantKind: "worker",
           participantId: "projection-a",
           workerRole: "projection-worker",
         }),
@@ -484,6 +594,7 @@ describe("@spine-ts/transport", () => {
         workerRegistrations: [
           createTransportWorkerRegistration({
             worker: {
+              participantKind: "worker",
               participantId: "projection-b",
               workerRole: "projection-worker",
             },

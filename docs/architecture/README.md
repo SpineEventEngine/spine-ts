@@ -414,8 +414,7 @@ objects and interfaces that later adapters can implement:
 - `createTransportSubscription()` builds immutable logical subscription
   descriptors from a topic, a logical subscriber ID, and a transport delivery
   mode; and
-- `createBrokerTransportParticipant()`,
-  `createTransportWorkerParticipant()`,
+- `createTransportParticipantIdentity()`,
   `createTransportWorkerRegistration()`, and
   `createTransportLifecycleSnapshot()` add the first adapter-agnostic
   broker/worker lifecycle seam using stable participant identities, logical
@@ -425,20 +424,20 @@ objects and interfaces that later adapters can implement:
   adapter seam for later runtime integration and graceful async close behavior.
 
 The boundary is intentionally smaller than a bus implementation. It does not
-choose ZeroMQ socket topology, endpoint naming, broker lifecycle, durable
-delivery, retries, process supervision, readiness probes over IPC, handler
-invocation, repository dispatch, storage lifecycle, or read-side execution
-policy. The lifecycle seam records helper state only; it does not start broker
-or worker processes, wire `@spine-ts/server`, or decide broker restart
-behavior. Those decisions remain in later transport and runtime tasks.
+choose ZeroMQ socket topology, endpoint naming, durable delivery, retries,
+process supervision, readiness probes over IPC, handler invocation, repository
+dispatch, storage lifecycle, or read-side execution policy. The lifecycle seam
+records helper state only; it does not start broker or worker processes, wire
+`@spine-ts/server`, or decide restart behavior. Those decisions remain in later
+transport and runtime tasks.
 
 The transport package now pins the maintained official `zeromq@6.5.0` line for
 the later local IPC adapter. That native dependency is adapter-private: current
 helper code validates a local IPC configuration shape and keeps native module
 typing out of the public entry point, while package-private smoke tests prove
 same-host publish/subscribe and request/reply IPC over temporary endpoints. The
-tests do not define production endpoint layout, frame protocols, broker/worker
-lifecycle, delivery retries, or server runtime wiring. The workspace explicitly
+tests do not define production endpoint layout, frame protocols, delivery
+retries, process supervision, or server runtime wiring. The workspace explicitly
 approves the `zeromq` install script in pnpm configuration, so dependency
 restoration must run in an environment that permits native package
 build/install scripts. Managed sandboxes may reject ZeroMQ `ipc://` binds with

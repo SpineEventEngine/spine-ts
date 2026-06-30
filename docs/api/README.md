@@ -243,12 +243,10 @@ Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
 `TransportSubscriptionHandle`, `SignalTransport`, `TransportParticipantKind`,
 `TransportWorkerRole`, `TransportLifecycleState`, `TransportReadinessState`,
 `TransportParticipantIdentityInput`, `TransportParticipantIdentity`,
-`BrokerTransportParticipantInput`, `TransportWorkerParticipantInput`,
 `TransportWorkerRegistrationInput`, `TransportWorkerRegistration`,
 `TransportLifecycleSnapshotInput`, `TransportLifecycleSnapshot`,
 `TransportLifecycleParticipant`, `createTransportTopic()`,
-`createTransportSubscription()`, `createBrokerTransportParticipant()`,
-`createTransportWorkerParticipant()`, `createTransportParticipantIdentity()`,
+`createTransportSubscription()`, `createTransportParticipantIdentity()`,
 `createTransportWorkerRegistration()`, and
 `createTransportLifecycleSnapshot()`. This surface is contract-only: it defines
 immutable topic/subscription value objects, deterministic adapter-agnostic
@@ -264,7 +262,7 @@ Adapter-private wiring validates local IPC configuration and native module
 typing, and package-private smoke tests prove same-host publish/subscribe and
 request/reply IPC over temporary endpoints. Socket creation, endpoint strings,
 multipart frames, and native binding types remain absent from the public API;
-production endpoint layout, frame protocols, broker/worker lifecycle, delivery
+production endpoint layout, frame protocols, process supervision, delivery
 retries, and server runtime wiring remain deferred. Managed sandboxes may
 reject ZeroMQ `ipc://` binds with `EPERM`, so live local IPC smoke tests can
 require native IPC filesystem/socket permissions outside the sandbox.

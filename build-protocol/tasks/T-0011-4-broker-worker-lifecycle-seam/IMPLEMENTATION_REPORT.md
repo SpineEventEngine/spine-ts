@@ -1,6 +1,6 @@
 # Implementation Report: T-0011.4 Broker And Worker Lifecycle Seam
 
-Status: Complete
+Status: Round 1 Fixes Verified; Re-review Pending
 Task log: `build-protocol/tasks/T-0011-4-broker-worker-lifecycle-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0011-4.md`
 Review log: `build-protocol/reviews/T-0011-4-broker-worker-lifecycle-seam.md`
@@ -60,8 +60,8 @@ sandbox rejects those binds with `EPERM`.
 
 ## Open Items
 
-- Required review lanes still need to be completed before parent integration if
-  the orchestrator keeps them as a separate gate.
+- Required re-review lanes still need to confirm the round 1 fix before parent
+  integration.
 
 ## Result
 
@@ -69,9 +69,14 @@ sandbox rejects those binds with `EPERM`.
   `@spine-ts/transport`: stable participant identities, logical worker roles,
   worker registrations over transport subscriptions, lifecycle/readiness
   snapshots, and runtime-facing async-close participant typing.
+- Round 1 review fixes collapsed lifecycle helpers onto canonical participant
+  identity input, removed public participant wrapper constructors, tightened
+  logical ID validation, re-normalized exported lifecycle value objects from
+  semantic fields, sorted worker subscriptions by `descriptorKey`, and
+  prevented `ready` worker snapshots without registration evidence.
 - Added deterministic tests for lifecycle helpers and validation failures
   without opening sockets or starting processes.
 - Updated package/API/architecture docs and durable task logs to describe the
   lifecycle seam and its explicit deferrals.
-- Required verification completed successfully. Full `verify` needed native IPC
-  access because existing ZeroMQ smoke tests bind `ipc://` endpoints.
+- Round 1 fix verification completed successfully. Full `verify` again needed a
+  native IPC rerun because existing ZeroMQ smoke tests bind `ipc://` endpoints.
