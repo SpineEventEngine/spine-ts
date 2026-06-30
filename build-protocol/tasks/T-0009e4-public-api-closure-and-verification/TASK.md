@@ -1,6 +1,6 @@
 # T-0009e.4: Public API Closure And Verification
 
-Status: Implemented; Round 2 Review Fix Applied; Re-review Pending
+Status: Round 4 Review Clean; Final Verification Pending
 Parent task: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Task log path:
 `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`
@@ -122,7 +122,8 @@ packages/server/src/index.test.ts` passed with 2 test files / 38 tests.
   91.41%, functions 99.16%, lines 97.19%, TypeDoc/API checks, proto
   lint/generate, and generated-output clean.
 
-Re-review is pending; the protocol review loop is not clean or closed yet.
+Round 4 re-review returned clean across all five required lanes. Final
+verification is still pending before integration.
 
 ## Round 2 Review Fix
 
@@ -145,4 +146,20 @@ Round 2 fix verification passed:
   coverage, TypeDoc/API checks, proto lint/generate, and generated-output gates
   clean.
 
-Re-review is pending; the protocol review loop is not clean or closed yet.
+Round 4 re-review returned clean across all five required lanes. Final
+verification is still pending before integration.
+
+## Round 4 Clean Review
+
+Orchestrator-spawned Round 4 review inspected the full subtask range through
+`7b602e4` after the Round 3 reliability evidence fix. All five required reviewer
+lanes returned clean, and all Round 4 reviewer sub-agents were closed:
+
+- code style/maintainability: `019f167d-130e-7d73-a92d-62a098edf5f1`;
+- documentation: `019f167d-13a0-7ea3-b8b2-2cbf7c8a40df`;
+- TypeScript/API docs: `019f167d-140e-79b2-8624-d15971f21c13`;
+- security: `019f167d-149a-7720-8406-131ca8d9f61b`;
+- performance/reliability: `019f167d-151e-78f3-a0d7-2e5f88791cee`.
+
+Final verification is next. Do not integrate this subtask until that fresh
+verification evidence is recorded.

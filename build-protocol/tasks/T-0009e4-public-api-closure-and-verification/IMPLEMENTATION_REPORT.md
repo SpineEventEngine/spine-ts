@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.4 Public API Closure And Verification
 
-Status: Implemented; Round 2 Review Fix Applied; Re-review Pending
+Status: Round 4 Review Clean; Final Verification Pending
 Task log:
 `build-protocol/tasks/T-0009e4-public-api-closure-and-verification/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e4.md`
@@ -23,7 +23,9 @@ gaps, which are also corrected. No runtime source, root export, or API-check
 changes were needed. Orchestrator-spawned Round 1 review later found stale
 review-status wording in durable logs only; Round 2 found stale chronology that
 contradicted the public-doc Java-builder deferral updates. Review-fix updates
-were applied, Round 2 fix verification passed, and re-review is pending.
+were applied and Round 2 fix verification passed. Round 4 re-review returned
+clean across all five required lanes; final verification is pending before
+integration.
 
 ## Files Changed
 
@@ -88,5 +90,6 @@ with no runtime, API, public-doc content, security, or reliability issues
 beyond that wording. Round 2 re-review found stale chronology wording that said
 the public docs set was unchanged, contradicting the Java-builder deferral
 wording that was added to public docs. Review-fix updates corrected that
-chronology and Round 2 fix verification passed; re-review is pending in the
-review log.
+chronology and Round 2 fix verification passed. Round 4 re-review returned
+clean across all five required lanes, and all Round 4 reviewer sub-agents were
+closed by the orchestrator. Final verification is pending before integration.

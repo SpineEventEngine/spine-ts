@@ -80,8 +80,8 @@ packages/server/src/index.test.ts`: 2 test files / 38 tests passed.
   generated-output checks passed.
 
 Local implementation audit/fix passes remain distinct from
-orchestrator-spawned protocol review rounds. Re-review is pending; do not treat
-this protocol review loop as clean or closed yet.
+orchestrator-spawned protocol review rounds. Later re-review rounds are recorded
+below.
 
 ### Round 2: Orchestrator-Spawned Re-Review
 
@@ -113,5 +113,42 @@ Round 2 fix verification passed:
   coverage, TypeDoc/API checks, proto lint/generate, and generated-output gates
   clean.
 
-Re-review remains pending; do not treat this protocol review loop as clean or
-closed yet.
+Round 4 re-review returned clean across all five required lanes. Final
+verification is still pending before integration.
+
+### Round 3: Orchestrator-Spawned Re-Review
+
+Round 3 reviewer results were captured on `2026-06-30` after the Round 2
+review-fix commit. Four lanes returned clean. The performance/reliability lane
+found that the Round 2 fix commands were listed but their pass results were not
+durably recorded in current-state and result text.
+
+Round 3 finding to fix:
+
+- Subtask and parent work logs listed the Round 2 verification commands without
+  recording pass/fail evidence in the result/current-state wording.
+
+Review-fix updates added the durable Round 2 verification-pass evidence:
+
+- Required stale-wording scan exited 1 with no matches.
+- `node scripts/check-api-docs.mjs` exited 0 with 100 expected proto exports,
+  28 core exports, 72 server exports, and 26 storage exports.
+- `CI=true corepack pnpm verify` exited 0 with 15 test files / 158 tests,
+  coverage, TypeDoc/API checks, proto lint/generate, and generated-output gates
+  clean.
+
+### Round 4: Orchestrator-Spawned Re-Review
+
+Round 4 reviewed the full subtask range through `7b602e4` and returned clean
+across all five required lanes.
+
+| Role                       | Reviewer ID                            | Result | Closure |
+| -------------------------- | -------------------------------------- | ------ | ------- |
+| Code style/maintainability | `019f167d-130e-7d73-a92d-62a098edf5f1` | Clean  | Closed  |
+| Documentation              | `019f167d-13a0-7ea3-b8b2-2cbf7c8a40df` | Clean  | Closed  |
+| TypeScript/API docs        | `019f167d-140e-79b2-8624-d15971f21c13` | Clean  | Closed  |
+| Security                   | `019f167d-149a-7720-8406-131ca8d9f61b` | Clean  | Closed  |
+| Performance/reliability    | `019f167d-151e-78f3-a0d7-2e5f88791cee` | Clean  | Closed  |
+
+Final verification is next. Do not integrate this subtask until that fresh
+verification evidence is recorded.
