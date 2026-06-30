@@ -1,6 +1,6 @@
 # Implementation Report: T-0010 Single-Process Async Runtime
 
-Status: Final Whole-Branch Review Fix Verified
+Status: Complete
 Task log: `build-protocol/tasks/T-0010-single-process-async-runtime/TASK.md`
 Work log: `build-protocol/work-logs/T-0010.md`
 Review log: `build-protocol/reviews/T-0010-single-process-async-runtime.md`
@@ -119,6 +119,9 @@ registration readiness through `HandlerMetadataRegistry`, matching event
 readiness and preserving duplicate command assignment validation for arbitrary
 registry lookup implementations. It also updates stale T-0010.6 child logs and
 parent T-0010 logs with the recorded parent merge/verification evidence.
+Post-fix re-review completed clean after the documentation current-state
+wording fix in `8c60054`. Final full verification passed on
+`2026-06-30 20:24 WEST`.
 
 ## Files Changed (Whole Branch Since 169af02)
 
@@ -240,6 +243,16 @@ Server runtime, readiness, and package-root code/tests:
   lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
   expected exports, proto lint/generate checksum verification, and generated
   proto output clean.
+- Final closure verification first reached `format:check` on
+  `2026-06-30 20:24 WEST` and failed because Prettier needed to rewrite
+  `build-protocol/work-logs/T-0010.md`; `corepack pnpm prettier --write build-protocol/work-logs/T-0010.md`
+  passed.
+- Final closure verification passed on `2026-06-30 20:24 WEST`:
+  `CI=true corepack pnpm verify` passed with 21 test files / 258 tests,
+  coverage 96.45% statements / 90.55% branches / 99.24% functions / 96.39%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
+  expected exports, copied Spine proto checksum verification, generated proto
+  output clean, and generated files clean.
 
 ## Subtask Progress
 
@@ -303,3 +316,5 @@ registration readiness` and verified cleanly.
 - Final whole-branch review fix canonicalized command readiness duplicate
   validation, updated stale child/parent logs, and passed focused/full
   verification on `2026-06-30 20:14 WEST`.
+- Final whole-branch re-review is clean and final closure verification passed
+  on `2026-06-30 20:24 WEST`.
