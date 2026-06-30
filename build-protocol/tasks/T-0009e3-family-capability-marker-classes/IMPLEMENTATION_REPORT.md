@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e.3 Family Capability Marker Classes
 
-Status: Implemented And Verified
+Status: Implemented; Round 1 Fixes Applied; Follow-up Review Pending
 Task log:
 `build-protocol/tasks/T-0009e3-family-capability-marker-classes/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e3.md`
@@ -24,11 +24,11 @@ classes:
   marker union.
 
 Each family class is an abstract subclass of
-`TransactionalEntity<Id, Schema, Version>` and adds only a stable
-readonly `entityFamily` property. No repository, storage, dispatch, command
-posting, query client, event history, snapshot, process workflow, handler
-invocation, idempotency, lifecycle event, automatic version increment, or global
-transaction behavior was added.
+`TransactionalEntity<Id, Schema, Version>` and adds only a stable getter-only
+`entityFamily` property. No repository, storage, dispatch, command posting,
+query client, event history, snapshot, process workflow, handler invocation,
+idempotency, lifecycle event, automatic version increment, or global transaction
+behavior was added.
 
 ## JVM Research Used
 
@@ -59,6 +59,7 @@ RED tests were added first in `packages/server/src/entity.test.ts` and
 - root exports for `Aggregate`, `Projection`, and `ProcessManager`;
 - inheritance from `TransactionalEntity`;
 - stable `entityFamily` identities and `EntityFamily` typing;
+- runtime immutability of family identity under JavaScript reassignment attempts;
 - inherited transaction/snapshot behavior through a test aggregate subclass; and
 - transaction-scope operations remaining absent from the public family class
   types.
@@ -76,6 +77,23 @@ passed:
 - `corepack pnpm vitest run packages/server/src/entity.test.ts packages/server/src/index.test.ts`
   passed: 2 test files, 36 tests.
 
+## Round 1 Fix Pass
+
+Round 1 review found that the initial `readonly entityFamily = ...` markers
+compiled to writable own properties at runtime. The family markers now use
+getter-only literal accessors, with narrow lint suppressions explaining why the
+accessor form is required instead of the repository's usual literal-field
+style.
+
+`packages/server/src/entity.test.ts` now includes an explicit runtime
+immutability test that attempts JavaScript reassignment with `Reflect.set()` and
+asserts the reported family remains unchanged for aggregate, projection, and
+process manager instances.
+
+The durable T-0009e.3 and parent T-0009e logs were also updated to reflect that
+implementation completed, Round 1 produced findings, and follow-up review is
+still pending.
+
 ## Files Changed
 
 - `packages/server/src/entity.ts`
@@ -89,6 +107,10 @@ passed:
 - `docs/architecture/README.md`
 - `build-protocol/tasks/T-0009e3-family-capability-marker-classes/IMPLEMENTATION_REPORT.md`
 - `build-protocol/work-logs/T-0009e3.md`
+- `build-protocol/reviews/T-0009e3-family-capability-marker-classes.md`
+- `build-protocol/tasks/T-0009e-entity-base-classes/IMPLEMENTATION_REPORT.md`
+- `build-protocol/work-logs/T-0009e.md`
+- `build-protocol/reviews/T-0009e-entity-base-classes.md`
 
 ## Verification
 
@@ -100,12 +122,27 @@ passed:
   API export check with 72 expected server exports, proto lint/generate, and
   generated-output clean checks all completed successfully. TypeDoc reported the
   existing invalid `origin` remote warning only.
+- Round 1 fix targeted verification passed on `2026-06-30 02:23 WEST`:
+  `corepack pnpm vitest run packages/server/src/entity.test.ts packages/server/src/index.test.ts`
+  passed with 2 test files / 37 tests.
+- Round 1 fix full verification passed on `2026-06-30 02:23 WEST`:
+  `CI=true corepack pnpm verify` passed typecheck, lint, format check, 15 test
+  files / 157 tests, coverage, TypeDoc/API export checks with 72 expected server
+  exports, proto lint/generate, and generated-output clean checks. TypeDoc
+  reported the existing invalid `origin` remote warning only.
 
 ## Review
 
-Implementation review is pending. The review log remains available at
-`build-protocol/reviews/T-0009e3-family-capability-marker-classes.md` for the
-required five-lane review round.
+Round 1 review completed across the required lanes and produced findings:
+
+- code style/maintainability, security, and performance/reliability found that
+  the original `readonly entityFamily = ...` class fields were runtime-mutable
+  own properties after TypeScript emit;
+- documentation found durable log status drift that still described
+  implementation or review as pending.
+
+This report was updated as part of the Round 1 fix pass. A follow-up review
+round is still required before this subtask can be called clean.
 
 ## Concerns
 

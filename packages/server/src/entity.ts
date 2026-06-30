@@ -480,7 +480,10 @@ export abstract class Aggregate<
   Version = EntityVersionMetadata,
 > extends TransactionalEntity<Id, Schema, Version> {
   /** Stable server entity family identity. */
-  readonly entityFamily = "aggregate" as const;
+  // eslint-disable-next-line @typescript-eslint/class-literal-property-style -- Getter-only marker remains non-writable at runtime.
+  get entityFamily(): "aggregate" {
+    return "aggregate";
+  }
 }
 
 /**
@@ -496,7 +499,10 @@ export abstract class Projection<
   Version = EntityVersionMetadata,
 > extends TransactionalEntity<Id, Schema, Version> {
   /** Stable server entity family identity. */
-  readonly entityFamily = "projection" as const;
+  // eslint-disable-next-line @typescript-eslint/class-literal-property-style -- Getter-only marker remains non-writable at runtime.
+  get entityFamily(): "projection" {
+    return "projection";
+  }
 }
 
 /**
@@ -512,7 +518,10 @@ export abstract class ProcessManager<
   Version = EntityVersionMetadata,
 > extends TransactionalEntity<Id, Schema, Version> {
   /** Stable server entity family identity. */
-  readonly entityFamily = "process-manager" as const;
+  // eslint-disable-next-line @typescript-eslint/class-literal-property-style -- Getter-only marker remains non-writable at runtime.
+  get entityFamily(): "process-manager" {
+    return "process-manager";
+  }
 }
 
 function cloneCommitResult<Schema extends DescriptorMessageSchema, Version>(

@@ -900,6 +900,34 @@ describe("entities", () => {
     expectTypeOf<TestAggregate["entityFamily"]>().toExtend<EntityFamily>();
   });
 
+  it("keeps family marker accessors stable under runtime reassignment attempts", () => {
+    const aggregate = new TestAggregate({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+    const projection = new TestProjection({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+    const processManager = new TestProcessManager({
+      id: "task-1",
+      schema: ProjectionStateSchema,
+      state: createProjectionState(),
+      version: { revision: 1, source: "server" },
+    });
+
+    expect(Reflect.set(aggregate, "entityFamily", "projection")).toBe(false);
+    expect(Reflect.set(projection, "entityFamily", "aggregate")).toBe(false);
+    expect(Reflect.set(processManager, "entityFamily", "aggregate")).toBe(false);
+    expect(aggregate.entityFamily).toBe("aggregate");
+    expect(projection.entityFamily).toBe("projection");
+    expect(processManager.entityFamily).toBe("process-manager");
+  });
+
   it("preserves transactional entity behavior through family marker classes", () => {
     const aggregate = new TestAggregate({
       id: "task-1",

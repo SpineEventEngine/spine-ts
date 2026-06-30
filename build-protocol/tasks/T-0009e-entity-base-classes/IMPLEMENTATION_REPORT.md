@@ -1,6 +1,6 @@
 # Implementation Report: T-0009e Concrete OOP Entity Base Classes With Capability Segregation
 
-Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Started
+Status: T-0009e.1 Integrated; T-0009e.2 Integrated; T-0009e.3 Round 1 Fixes Applied
 Task log: `build-protocol/tasks/T-0009e-entity-base-classes/TASK.md`
 Work log: `build-protocol/work-logs/T-0009e.md`
 Review log: `build-protocol/reviews/T-0009e-entity-base-classes.md`
@@ -12,7 +12,8 @@ Worktree:
 
 `T-0009e.1 Common Entity State Shell` and `T-0009e.2 TransactionalEntity Scoped
 Draft Helpers` are integrated into the parent entity-base branch. `T-0009e.3
-Family Capability Marker Classes` has started in its isolated subtask branch.
+Family Capability Marker Classes` is implemented in its isolated subtask branch,
+and a Round 1 fix pass has addressed review findings before follow-up review.
 The parent task remains bounded to OOP entity shells for `@spine-ts/server`
 while preserving the D-0044 boundary against repositories, dispatch, storage,
 buses, and unsupported family-specific runtime behavior.
@@ -86,4 +87,8 @@ Integrated from `task/T-0009e1-common-entity-state-shell` and
   TypeScript/API docs, security, and performance/reliability.
 - All T-0009e.2 Round 11 reviewer sub-agents were closed by the orchestrator.
 - Parent branch integration verification passed for both subtask merge commits.
-- T-0009e.3 implementation and review are pending.
+- T-0009e.3 implementation completed at `3e0571e`; Round 1 review produced
+  findings about runtime-mutable emitted `readonly entityFamily` fields and
+  durable log status drift.
+- T-0009e.3 Round 1 fixes are applied and verified. Follow-up review is still
+  required before the subtask can be called clean.
