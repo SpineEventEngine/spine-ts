@@ -1241,3 +1241,43 @@ Consequences:
   identity snapshots.
 - Runtime behavior remains explicitly deferred to storage, routing, delivery,
   and built-context tasks.
+
+## D-0048: T-0010 Starts With A Minimal Single-Process Async Runtime Seam
+
+Status: Accepted
+
+Date: 2026-06-30
+
+Context: T-0010 follows the repository and bounded-context registration seam.
+The technical specification requires asynchronous signal processing and a future
+multi-process Node runtime over a transport abstraction, initially backed by
+ZeroMQ local IPC. The current codebase does not yet have gRPC services,
+transport adapters, durable delivery, read-side stand execution, full command or
+event dispatch, or server supervision. Spine JVM `BoundedContext`, `Bus`,
+`CommandBus`, and `EventBus` show a much larger runtime graph: contexts own
+command/event/import buses, stand, tenant index, integration broker, system
+client, and visibility guard; buses convert signals to envelopes, filter,
+store/record accepted signals, acknowledge posting, and then dispatch. The
+human also asked for server work to stay close to `core-jvm/server` and avoid
+over-inventing.
+
+Decision: T-0010 starts with the smallest useful single-process asynchronous
+runtime seam and lifecycle boundary that later tasks can extend. The first
+split must not implement gRPC services, ZeroMQ transport, durable delivery
+monitors, inbox storage, query/subscription stand execution, integration
+broker, system context, process supervision, or full repository dispatch unless
+the requirements splitter isolates a narrow, reviewed subtask for one of those
+pieces. Preserve the JVM distinction between command acknowledgement and later
+dispatch/rejection outcomes, and between event acceptance/storage and later
+delivery, even when the first TS implementation only models queueing and
+lifecycle contracts.
+
+Consequences:
+
+- Requirements splitting for T-0010 must produce small subtasks and explicitly
+  route deferred runtime pieces to later tasks.
+- Reviewers must flag speculative lifecycle phases, transport details, global
+  singleton environments, read-side query execution, or dispatch/storage
+  behavior that is not justified by the selected subtask.
+- The public API should prefer explicit, testable async lifecycle objects over
+  hidden import-time registration or process-wide mutable state.
