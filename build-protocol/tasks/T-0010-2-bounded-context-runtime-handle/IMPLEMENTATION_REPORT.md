@@ -25,6 +25,12 @@ queue policy. The handle delegates `state`, `start()`, and `close()` only and
 exposes fresh immutable context metadata through `name`, `tenantMode`,
 `isMultitenant`, `spec`, `repositories`, and `contextSnapshot`.
 
+Security review found that the constructor previously read inherited
+`options.runtime` values, allowing a prototype-supplied lifecycle to replace the
+private default runtime. The review fix makes runtime injection require an own
+`runtime` property and adds a regression test proving inherited values are
+ignored.
+
 ## JVM Research Used
 
 Setup inspected Spine JVM `core-jvm/server` source for
@@ -79,3 +85,16 @@ added.
   expected exports, proto lint/generate checksum verification, and generated
   proto output clean. TypeDoc emitted the existing non-blocking invalid-origin
   source-link warning.
+- Review-fix focused verification passed on `2026-06-30 16:17 WEST`:
+  `corepack pnpm vitest run packages/server/src/bounded-context.test.ts` was
+  run before the production fix and failed with 1 failed / 40 passed because
+  the inherited lifecycle received `start` and `close`; after changing the
+  constructor to use `Object.hasOwn(options, "runtime")`, the same command
+  passed with 1 test file / 41 tests.
+- Review-fix full verification passed on `2026-06-30 16:20 WEST`:
+  `CI=true corepack pnpm verify` passed with 18 test files / 224 tests in both
+  normal and coverage runs, coverage 96.22% statements / 90.3% branches /
+  99.15% functions / 96.15% lines, TypeDoc/API checks with 100 proto / 28 core
+  / 106 server / 26 storage expected exports, proto lint/generate checksum
+  verification, and generated proto output clean. TypeDoc emitted the existing
+  non-blocking invalid-origin source-link warning.

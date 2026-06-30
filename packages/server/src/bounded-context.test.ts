@@ -21,6 +21,7 @@ import {
   BoundedContextRepositoryRegistrationError,
   BoundedContextRuntime,
   ContextSpec,
+  type BoundedContextRuntimeOptions,
   type ContextSpecSnapshot,
   type TenantMode,
 } from "./bounded-context.js";
@@ -989,6 +990,29 @@ describe("BoundedContextRuntime", () => {
 
     expect(lifecycle.calls).toEqual(["start", "close"]);
     expect(runtime.state).toBe("closed");
+  });
+
+  it("ignores inherited options.runtime and owns a default lifecycle", async () => {
+    const inheritedLifecycle = new RecordingRuntime();
+    const options = Object.create({
+      runtime: inheritedLifecycle,
+    }) as BoundedContextRuntimeOptions;
+
+    expect("runtime" in options).toBe(true);
+    expect(Object.hasOwn(options, "runtime")).toBe(false);
+
+    const runtime = new BoundedContextRuntime(
+      BoundedContext.singleTenant("Tasks").build(),
+      options,
+    );
+
+    expect(runtime.state).toBe("created");
+
+    await runtime.start();
+    await runtime.close();
+
+    expect(runtime.state).toBe("closed");
+    expect(inheritedLifecycle.calls).toEqual([]);
   });
 
   it("exposes copy-safe built context metadata snapshots", () => {

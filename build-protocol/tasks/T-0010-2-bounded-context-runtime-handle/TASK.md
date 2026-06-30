@@ -9,7 +9,7 @@ Branch: `task/T-0010-2-bounded-context-runtime-handle`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0010-2-bounded-context-runtime-handle`
 Authoring sub-agent: Codex implementation sub-agent.
-Reviewer sub-agents: pending implementation review.
+Reviewer sub-agents: security review finding fixed on `2026-06-30 16:17 WEST`.
 
 ## Objective
 
@@ -60,6 +60,9 @@ and repository runtime registration remain future subtasks.
   repository identity snapshots without leaking mutable internals.
 - The handle owns or accepts a `ServerRuntimeLifecycle`/queue boundary and
   delegates deterministic `start()` and `close()` lifecycle behavior.
+- The constructor treats only an own `options.runtime` property as an injected
+  lifecycle; inherited `runtime` properties are ignored so omitted runtime
+  options always create a private `SingleProcessServerRuntime`.
 - The handle must not execute handlers, register repositories at runtime,
   create command/event/import buses, construct a stand, open storage, expose
   gRPC/ZeroMQ, or implement dispatch.
@@ -105,6 +108,18 @@ remain deferred.
   expected exports, proto lint/generate checksum verification, and generated
   proto output clean. TypeDoc emitted the existing non-blocking invalid-origin
   source-link warning.
+- Review-fix regression verification on `2026-06-30 16:17 WEST`:
+  `corepack pnpm vitest run packages/server/src/bounded-context.test.ts` first
+  failed with 1 failed / 40 passed because an inherited lifecycle received
+  `start` and `close`; after the constructor fix, the same command passed with
+  1 test file / 41 tests.
+- Review-fix full verification passed on `2026-06-30 16:20 WEST`:
+  `CI=true corepack pnpm verify` passed with 18 test files / 224 tests in both
+  normal and coverage runs, coverage 96.22% statements / 90.3% branches /
+  99.15% functions / 96.15% lines, TypeDoc/API checks with 100 proto / 28 core
+  / 106 server / 26 storage expected exports, proto lint/generate checksum
+  verification, and generated proto output clean. TypeDoc emitted the existing
+  non-blocking invalid-origin source-link warning.
 
 ## Implementation Evidence
 
@@ -116,8 +131,8 @@ remain deferred.
 - The handle exposes `name`, `tenantMode`, `isMultitenant`, `spec`,
   `repositories`, `contextSnapshot`, `state`, `start()`, and `close()` only.
 - Tests cover default lifecycle ownership, injected lifecycle delegation,
-  context/repository snapshot copying, and absence of queue methods plus
-  out-of-scope server graph members.
+  inherited `options.runtime` rejection, context/repository snapshot copying,
+  and absence of queue methods plus out-of-scope server graph members.
 - Public exports, package README, API overview, and API export guard now include
   the handle and document that it is not a JVM `Server` equivalent and does not
   implement buses, services, storage, dispatch, stand, tenant index, system

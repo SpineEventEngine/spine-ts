@@ -1,6 +1,6 @@
 # Review Log: T-0010.2 Bounded Context Runtime Handle
 
-Status: Ready for Review
+Status: Security Finding Fixed
 
 ## Required Review Lanes
 
@@ -26,7 +26,12 @@ verification, and generated proto output clean.
 
 ## Reviewer Rounds
 
-- Pending.
+- Security review reported that `BoundedContextRuntime` treated inherited
+  `options.runtime` as an explicit injected lifecycle, so prototype pollution
+  could replace the promised private `SingleProcessServerRuntime` default.
+- Review-fix resolution on `2026-06-30 16:17 WEST`: constructor injection now
+  requires `Object.hasOwn(options, "runtime")`, and omitted or inherited
+  runtime options create a new private default runtime.
 
 ## Author Implementation Evidence
 
@@ -44,6 +49,8 @@ Implemented on `2026-06-30 16:07 WEST` by the Codex implementation sub-agent.
 - Security: the handle accepts only a built `BoundedContext`, validates injected
   lifecycle shape, exposes no queue intake, and does not add transport, storage,
   handler invocation, or hostile callback execution paths.
+- Security review fix: added a regression for inherited `options.runtime` and
+  changed runtime selection to honor only an own `runtime` property.
 - Performance/reliability: metadata getters return fresh immutable copies, and
   lifecycle behavior delegates deterministically to `ServerRuntimeLifecycle` or
   the owned default `SingleProcessServerRuntime`.
@@ -64,3 +71,17 @@ Focused verification passed:
   server / 26 storage expected exports, proto lint/generate checksum
   verification, and generated proto output clean. TypeDoc emitted the existing
   invalid-origin source-link warning.
+
+Review-fix verification:
+
+- `corepack pnpm vitest run packages/server/src/bounded-context.test.ts` failed
+  before the constructor fix with 1 failed / 40 passed; the failure showed the
+  inherited lifecycle received `["start", "close"]`.
+- `corepack pnpm vitest run packages/server/src/bounded-context.test.ts` passed
+  after the constructor fix with 1 test file / 41 tests.
+- `CI=true corepack pnpm verify` passed after the review fix with 18 test files
+  / 224 tests in both normal and coverage runs, coverage 96.22% statements /
+  90.3% branches / 99.15% functions / 96.15% lines, TypeDoc/API checks with
+  100 proto / 28 core / 106 server / 26 storage expected exports, proto
+  lint/generate checksum verification, and generated proto output clean.
+  TypeDoc emitted the existing invalid-origin source-link warning.

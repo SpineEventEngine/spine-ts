@@ -379,7 +379,9 @@ export class BoundedContextRuntime implements ServerRuntimeLifecycle {
       throw new TypeError("BoundedContextRuntime requires a built BoundedContext.");
     }
 
-    const runtime = options.runtime ?? new SingleProcessServerRuntime();
+    const runtime = Object.hasOwn(options, "runtime")
+      ? options.runtime
+      : new SingleProcessServerRuntime();
     validateRuntimeLifecycle(runtime);
 
     this.#contextSnapshot = context.snapshot;
