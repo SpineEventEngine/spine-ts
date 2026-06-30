@@ -161,7 +161,10 @@ describe("repository identity", () => {
     }
 
     try {
-      new Repository({ entityType: PlainEntityClass, schema: ProjectionStateSchema });
+      new Repository({
+        entityType: PlainEntityClass as unknown as typeof TaskProjection,
+        schema: ProjectionStateSchema,
+      });
       throw new Error("Expected plain entity class to fail.");
     } catch (error) {
       expect(error).toBeInstanceOf(RepositoryIdentityError);
@@ -192,5 +195,55 @@ describe("repository identity", () => {
     expect(() => {
       (first as { entityFamily: EntityFamily }).entityFamily = "aggregate";
     }).toThrow(TypeError);
+  });
+
+  it("allows repository subclasses to initialize their own fields after super", () => {
+    class NamedProjectionRepository extends Repository {
+      readonly label: string;
+
+      constructor() {
+        super({
+          entityType: TaskProjection,
+          schema: ProjectionStateSchema,
+        });
+        this.label = "task-projections";
+      }
+    }
+
+    expect(new NamedProjectionRepository().label).toBe("task-projections");
+  });
+
+  it("constrains entity constructor and schema pairs at compile time", () => {
+    const assertRepositoryOptionTypes = () => {
+      new Repository({
+        entityType: TaskAggregate,
+        schema: AggregateStateSchema,
+      });
+      new Repository({
+        entityType: TaskProjection,
+        schema: ProjectionStateSchema,
+      });
+      new Repository({
+        entityType: TaskProcessManager,
+        schema: ProcessManagerStateSchema,
+      });
+      new Repository({
+        entityType: TaskAggregate,
+        // @ts-expect-error aggregate repository identity must use the aggregate's state schema.
+        schema: ProjectionStateSchema,
+      });
+      new Repository({
+        entityType: TaskProjection,
+        // @ts-expect-error projection repository identity must use the projection's state schema.
+        schema: AggregateStateSchema,
+      });
+      new Repository({
+        // @ts-expect-error plain classes are not valid repository entity constructors.
+        entityType: PlainEntityClass,
+        schema: ProjectionStateSchema,
+      });
+    };
+
+    expectTypeOf(assertRepositoryOptionTypes).not.toBeAny();
   });
 });

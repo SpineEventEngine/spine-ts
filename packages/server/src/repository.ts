@@ -8,8 +8,37 @@ import {
   type FirstFieldRoutingHint,
 } from "./entity-metadata.js";
 
+type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> =
+  | Aggregate<unknown, Schema, unknown>
+  | Projection<unknown, Schema, unknown>
+  | ProcessManager<unknown, Schema, unknown>;
+
+type RepositoryEntitySchema<EntityType extends RepositoryEntityType> = RepositorySchemaForInstance<
+  EntityType["prototype"]
+>;
+
+type RepositorySchemaForInstance<Instance> =
+  Instance extends Aggregate<infer Id, infer Schema, infer Version>
+    ? RepositorySchemaFromEntityParts<Id, Schema, Version>
+    : Instance extends Projection<infer Id, infer Schema, infer Version>
+      ? RepositorySchemaFromEntityParts<Id, Schema, Version>
+      : Instance extends ProcessManager<infer Id, infer Schema, infer Version>
+        ? RepositorySchemaFromEntityParts<Id, Schema, Version>
+        : never;
+
+type RepositorySchemaFromEntityParts<Id, Schema, Version> = [Id, Version] extends [unknown, unknown]
+  ? Schema
+  : never;
+
+interface RuntimeRepositoryEntityType {
+  readonly prototype: object;
+  readonly name: string;
+}
+
 /** Entity constructor value accepted by repository identity metadata. */
-export interface RepositoryEntityType<Instance extends object = object> {
+export interface RepositoryEntityType<
+  Instance extends RepositoryEntityInstance = RepositoryEntityInstance,
+> {
   /** Prototype inspected for built-in entity family marker inheritance. */
   readonly prototype: Instance;
   /** Constructor name used in structured diagnostics. */
@@ -17,14 +46,11 @@ export interface RepositoryEntityType<Instance extends object = object> {
 }
 
 /** Options for constructing metadata-only repository identity. */
-export interface RepositoryOptions<
-  Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
-  EntityType extends RepositoryEntityType = RepositoryEntityType,
-> {
+export interface RepositoryOptions<EntityType extends RepositoryEntityType = RepositoryEntityType> {
   /** Entity constructor owned by this repository identity. */
   readonly entityType: EntityType;
   /** Generated Protobuf-ES schema for the entity state owned by this repository identity. */
-  readonly schema: Schema;
+  readonly schema: RepositoryEntitySchema<EntityType>;
 }
 
 /** Immutable copy-safe repository identity snapshot. */
@@ -90,16 +116,13 @@ export class RepositoryIdentityError extends Error {
  * store records, open storage, register with a context, route messages, invoke
  * handlers, manage caches, emit lifecycle events, or start buses/transports.
  */
-export class Repository<
-  Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
-  EntityType extends RepositoryEntityType = RepositoryEntityType,
-> {
+export class Repository<EntityType extends RepositoryEntityType = RepositoryEntityType> {
   readonly #entityType: EntityType;
   readonly #entityFamily: EntityFamily;
-  readonly #metadata: EntityMetadata<Schema>;
+  readonly #metadata: EntityMetadata<RepositoryEntitySchema<EntityType>>;
 
   /** Create repository identity metadata for exactly one entity family/state schema pair. */
-  constructor(options: RepositoryOptions<Schema, EntityType>) {
+  constructor(options: RepositoryOptions<EntityType>) {
     const metadata = describeEntityMetadata(options.schema);
     const entityFamily = resolveEntityFamily(options.entityType);
 
@@ -131,7 +154,6 @@ export class Repository<
     this.#entityType = options.entityType;
     this.#entityFamily = entityFamily;
     this.#metadata = metadata;
-    Object.freeze(this);
   }
 
   /** Entity constructor owned by this repository identity. */
@@ -145,17 +167,17 @@ export class Repository<
   }
 
   /** Generated Protobuf-ES schema for this repository's owned entity state. */
-  get stateSchema(): Schema {
+  get stateSchema(): RepositoryEntitySchema<EntityType> {
     return this.#metadata.schema;
   }
 
   /** Descriptor-derived metadata for this repository's owned entity state. */
-  get metadata(): EntityMetadata<Schema> {
+  get metadata(): EntityMetadata<RepositoryEntitySchema<EntityType>> {
     return this.#metadata;
   }
 
   /** Fully qualified Protobuf type name of the owned entity state. */
-  get stateFullTypeName(): Schema["typeName"] {
+  get stateFullTypeName(): RepositoryEntitySchema<EntityType>["typeName"] {
     return this.#metadata.fullTypeName;
   }
 
@@ -165,7 +187,7 @@ export class Repository<
   }
 
   /** Copy-safe immutable identity snapshot for later builder duplicate/conflict checks. */
-  get snapshot(): RepositoryIdentitySnapshot<Schema, EntityType> {
+  get snapshot(): RepositoryIdentitySnapshot<RepositoryEntitySchema<EntityType>, EntityType> {
     const metadata = cloneEntityMetadata(this.#metadata);
 
     return Object.freeze({
@@ -179,7 +201,7 @@ export class Repository<
   }
 }
 
-function resolveEntityFamily(entityType: RepositoryEntityType): EntityFamily | undefined {
+function resolveEntityFamily(entityType: RuntimeRepositoryEntityType): EntityFamily | undefined {
   const prototype = entityType.prototype;
 
   if (Object.prototype.isPrototypeOf.call(Aggregate.prototype, prototype)) {
@@ -195,7 +217,7 @@ function resolveEntityFamily(entityType: RepositoryEntityType): EntityFamily | u
   return undefined;
 }
 
-function entityTypeName(entityType: RepositoryEntityType): string {
+function entityTypeName(entityType: RuntimeRepositoryEntityType): string {
   return entityType.name.length > 0 ? entityType.name : "(anonymous)";
 }
 

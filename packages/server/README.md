@@ -20,7 +20,7 @@ Current slice exposes:
 - `Aggregate`, `Projection`, and `ProcessManager` abstract family marker classes
   over `TransactionalEntity`, each exposing a stable `entityFamily` identity;
   and
-- `Repository({ entityType, schema })` for metadata-only repository identity
+- `new Repository({ entityType, schema })` for metadata-only repository identity
   over one entity constructor and matching entity state schema;
   and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;

@@ -1,6 +1,6 @@
 # Implementation Report: T-0009f.2 Repository Identity And Entity Ownership Seam
 
-Status: Implementation Complete - Pending Review
+Status: Review Fixes Complete - Pending Re-review
 Task log: `build-protocol/tasks/T-0009f2-repository-identity-seam/TASK.md`
 Work log: `build-protocol/work-logs/T-0009f2.md`
 Review log: `build-protocol/reviews/T-0009f2-repository-identity-seam.md`
@@ -50,6 +50,11 @@ Implementation research inspected and used:
   mismatches.
 - `snapshot` returns frozen fresh-copy metadata suitable for later
   bounded-context duplicate/conflict checks.
+- First-round review fixes removed base-instance freezing so repository
+  subclasses can initialize fields after `super(...)`, tightened
+  `RepositoryOptions` so TypeScript callers must pair entity constructors with
+  the constructor-carried state schema, and kept runtime structured errors for
+  JavaScript/cast inputs.
 - Public root exports, TypeDoc export guard, package README, API docs, user
   guide, and architecture notes now describe the metadata-only boundary.
 
@@ -64,8 +69,16 @@ Implementation research inspected and used:
   expected `@spine-ts/server` exports.
 - Full verification: `CI=true corepack pnpm verify` passed with 17 test files,
   172 tests, coverage, docs check, proto lint/generate, and generated-clean.
+- Review-fix RED: focused Vitest failed while `Repository` froze the base
+  instance and `corepack pnpm typecheck:tooling` failed with unused
+  `@ts-expect-error` directives for mismatched repository entity/schema pairs.
+- Review-fix GREEN: focused Vitest, `corepack pnpm typecheck:build`, and
+  `corepack pnpm typecheck:tooling` passed after the fixes.
+- Review-fix full verification: `CI=true corepack pnpm verify` passed with 17
+  test files, 174 tests, coverage, docs check, proto lint/generate, and
+  generated-clean.
 
 ## Review
 
-- Pending orchestrator reviewer lanes. This implementation sub-agent was
-  instructed not to spawn sub-agents.
+- First-round reviewer findings were applied by the review-fix sub-agent.
+  Re-review by the orchestrator lanes remains pending.
