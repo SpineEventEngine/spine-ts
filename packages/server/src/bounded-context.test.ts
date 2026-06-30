@@ -19,10 +19,12 @@ import {
   BoundedContextBuilder,
   BoundedContextNameError,
   BoundedContextRepositoryRegistrationError,
+  BoundedContextRuntime,
   ContextSpec,
   type ContextSpecSnapshot,
   type TenantMode,
 } from "./bounded-context.js";
+import type { ServerRuntimeLifecycle, ServerRuntimeState } from "./runtime.js";
 
 type UntypedConstructor<T> = new (...args: unknown[]) => T;
 
@@ -95,6 +97,23 @@ const ContextSpecConstructor = ContextSpec as unknown as UntypedConstructor<Cont
 const BoundedContextBuilderConstructor =
   BoundedContextBuilder as unknown as UntypedConstructor<BoundedContextBuilder>;
 const BoundedContextConstructor = BoundedContext as unknown as UntypedConstructor<BoundedContext>;
+
+class RecordingRuntime implements ServerRuntimeLifecycle {
+  readonly calls: string[] = [];
+  state: ServerRuntimeState = "created";
+
+  start(): Promise<void> {
+    this.calls.push("start");
+    this.state = "running";
+    return Promise.resolve();
+  }
+
+  close(): Promise<void> {
+    this.calls.push("close");
+    this.state = "closed";
+    return Promise.resolve();
+  }
+}
 
 function repositoryWithTaskAggregateSnapshot(
   transformSnapshot: (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) => unknown,
@@ -937,6 +956,113 @@ describe("BoundedContext builder shell", () => {
           entityTypeName: "(anonymous)",
         },
       });
+    }
+  });
+});
+
+describe("BoundedContextRuntime", () => {
+  it("owns a default single-process runtime lifecycle for a built context", async () => {
+    const context = BoundedContext.singleTenant("Tasks").build();
+    const runtime = new BoundedContextRuntime(context);
+
+    expect(runtime.state).toBe("created");
+
+    await runtime.start();
+
+    expect(runtime.state).toBe("running");
+
+    await runtime.close();
+
+    expect(runtime.state).toBe("closed");
+  });
+
+  it("delegates lifecycle state, start, and close to an injected lifecycle", async () => {
+    const lifecycle = new RecordingRuntime();
+    const runtime = new BoundedContextRuntime(BoundedContext.multitenant("Tasks").build(), {
+      runtime: lifecycle,
+    });
+
+    expect(runtime.state).toBe("created");
+
+    await runtime.start();
+    await runtime.close();
+
+    expect(lifecycle.calls).toEqual(["start", "close"]);
+    expect(runtime.state).toBe("closed");
+  });
+
+  it("exposes copy-safe built context metadata snapshots", () => {
+    const repository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const context = BoundedContext.multitenant("Tasks").add(repository).build();
+    const runtime = new BoundedContextRuntime(context);
+    const firstSnapshot = runtime.contextSnapshot;
+    const secondSnapshot = runtime.contextSnapshot;
+    const firstRepositories = runtime.repositories;
+    const secondRepositories = runtime.repositories;
+    const firstSpec = runtime.spec;
+    const secondSpec = runtime.spec;
+
+    expect(runtime.name.value).toBe("Tasks");
+    expect(runtime.tenantMode).toBe<TenantMode>("multitenant");
+    expect(runtime.isMultitenant).toBe(true);
+    expect(firstSnapshot).toEqual(context.snapshot);
+    expect(firstSnapshot).not.toBe(secondSnapshot);
+    expect(firstSnapshot.name).not.toBe(secondSnapshot.name);
+    expect(firstSnapshot.spec).not.toBe(secondSnapshot.spec);
+    expect(firstSnapshot.repositories).not.toBe(secondSnapshot.repositories);
+    expect(firstSnapshot.repositories[0]).not.toBe(secondSnapshot.repositories[0]);
+    expect(Object.isFrozen(firstSnapshot)).toBe(true);
+    expect(Object.isFrozen(firstSnapshot.repositories[0])).toBe(true);
+    expect(firstRepositories).toEqual(secondRepositories);
+    expect(firstRepositories).not.toBe(secondRepositories);
+    expect(firstRepositories[0]).not.toBe(secondRepositories[0]);
+    expect(firstSpec.snapshot).toEqual(secondSpec.snapshot);
+    expect(firstSpec).not.toBe(secondSpec);
+    expect(() => {
+      (firstRepositories[0] as { entityFamily: EntityFamily }).entityFamily = "projection";
+    }).toThrow(TypeError);
+  });
+
+  it("keeps queue methods and out-of-scope server graph members absent", () => {
+    const runtime = new BoundedContextRuntime(BoundedContext.singleTenant("Tasks").build());
+    const forbiddenRuntimeMembers = [
+      "enqueue",
+      "register",
+      "registerRepository",
+      "registerCommandDispatcher",
+      "registerEventDispatcher",
+      "commandBus",
+      "eventBus",
+      "importBus",
+      "stand",
+      "storage",
+      "tenantIndex",
+      "systemContext",
+      "integrationBroker",
+      "commandService",
+      "queryService",
+      "subscriptionService",
+    ];
+
+    expect(Object.getOwnPropertyNames(BoundedContextRuntime.prototype).sort()).toEqual([
+      "close",
+      "constructor",
+      "contextSnapshot",
+      "isMultitenant",
+      "name",
+      "repositories",
+      "spec",
+      "start",
+      "state",
+      "tenantMode",
+    ]);
+
+    for (const member of forbiddenRuntimeMembers) {
+      expect(member in runtime).toBe(false);
+      expect(Object.hasOwn(runtime, member)).toBe(false);
     }
   });
 });

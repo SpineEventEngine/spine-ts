@@ -6,6 +6,11 @@ import {
   resolveRepositoryEntityFamily,
 } from "./repository.js";
 import { describeEntityMetadata } from "./entity-metadata.js";
+import {
+  SingleProcessServerRuntime,
+  type ServerRuntimeLifecycle,
+  type ServerRuntimeState,
+} from "./runtime.js";
 
 /** Tenant isolation mode declared by a bounded context specification. */
 export type TenantMode = "single-tenant" | "multitenant";
@@ -47,6 +52,19 @@ export interface BoundedContextSnapshot {
  * stand, tenant-index, or lifecycle capability.
  */
 export type BuiltBoundedContextSnapshot = BoundedContextSnapshot;
+
+/**
+ * Runtime lifecycle boundary used by {@link BoundedContextRuntime}.
+ *
+ * When omitted, the handle creates and owns a private
+ * {@link SingleProcessServerRuntime}. When supplied, the caller owns any
+ * sharing policy for that lifecycle object; the handle delegates `start()`,
+ * `close()`, and `state` without exposing queue intake.
+ */
+export interface BoundedContextRuntimeOptions {
+  /** Runtime lifecycle to delegate to instead of creating a default runtime. */
+  readonly runtime?: ServerRuntimeLifecycle;
+}
 
 /** Machine-readable bounded-context repository registration failure codes. */
 export type BoundedContextRepositoryRegistrationErrorCode =
@@ -337,10 +355,105 @@ export class BoundedContext {
   }
 }
 
+/**
+ * Runtime-facing handle scoped to one built {@link BoundedContext} snapshot.
+ *
+ * The handle binds copy-safe bounded-context metadata to a server runtime
+ * lifecycle. It is not a JVM `Server` equivalent and does not expose command,
+ * event, import, query, subscription, stand, storage, tenant-index, transport,
+ * repository-dispatch, or handler-invocation behavior.
+ */
+export class BoundedContextRuntime implements ServerRuntimeLifecycle {
+  readonly #contextSnapshot: BuiltBoundedContextSnapshot;
+  readonly #runtime: ServerRuntimeLifecycle;
+
+  /**
+   * Creates a runtime handle for an already built bounded context.
+   *
+   * Without `options.runtime`, the handle owns a private
+   * {@link SingleProcessServerRuntime}. With an injected runtime lifecycle, the
+   * caller owns that runtime's sharing and queue-intake policy.
+   */
+  constructor(context: BoundedContext, options: BoundedContextRuntimeOptions = {}) {
+    if (!(context instanceof BoundedContext)) {
+      throw new TypeError("BoundedContextRuntime requires a built BoundedContext.");
+    }
+
+    const runtime = options.runtime ?? new SingleProcessServerRuntime();
+    validateRuntimeLifecycle(runtime);
+
+    this.#contextSnapshot = context.snapshot;
+    this.#runtime = runtime;
+    Object.freeze(this);
+  }
+
+  /** Bounded context name as a fresh immutable value object. */
+  get name(): BoundedContextName {
+    return cloneName(this.#contextSnapshot.name);
+  }
+
+  /** Tenant mode declared by the built context. */
+  get tenantMode(): TenantMode {
+    return this.#contextSnapshot.tenantMode;
+  }
+
+  /** Whether the built context is multitenant. */
+  get isMultitenant(): boolean {
+    return this.#contextSnapshot.tenantMode === "multitenant";
+  }
+
+  /** Context spec copied from the built context. */
+  get spec(): ContextSpec {
+    return createContextSpec(this.#contextSnapshot.spec);
+  }
+
+  /** Repository identity snapshots copied from the built context. */
+  get repositories(): readonly RepositoryIdentitySnapshot[] {
+    return cloneRepositorySnapshots(this.#contextSnapshot.repositories);
+  }
+
+  /** Copy-safe immutable snapshot of the built context metadata. */
+  get contextSnapshot(): BuiltBoundedContextSnapshot {
+    return cloneContextSnapshot(this.#contextSnapshot);
+  }
+
+  /** Current state of the delegated runtime lifecycle. */
+  get state(): ServerRuntimeState {
+    return this.#runtime.state;
+  }
+
+  /** Starts the delegated runtime lifecycle. */
+  start(): Promise<void> {
+    return this.#runtime.start();
+  }
+
+  /** Closes the delegated runtime lifecycle. */
+  close(): Promise<void> {
+    return this.#runtime.close();
+  }
+}
+
 function requireFrameworkConstructionToken(token: unknown, message: string): void {
   if (token !== frameworkConstructionToken) {
     throw new TypeError(message);
   }
+}
+
+function validateRuntimeLifecycle(runtime: unknown): asserts runtime is ServerRuntimeLifecycle {
+  if (
+    !isRecord(runtime) ||
+    !isRuntimeState(runtime.state) ||
+    typeof runtime.start !== "function" ||
+    typeof runtime.close !== "function"
+  ) {
+    throw new TypeError(
+      "BoundedContextRuntime options.runtime must implement ServerRuntimeLifecycle.",
+    );
+  }
+}
+
+function isRuntimeState(value: unknown): value is ServerRuntimeState {
+  return value === "created" || value === "running" || value === "closing" || value === "closed";
 }
 
 function createContextSpec(specSnapshot: ContextSpecSnapshot): ContextSpec {
