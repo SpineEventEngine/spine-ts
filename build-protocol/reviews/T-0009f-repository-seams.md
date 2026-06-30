@@ -1,6 +1,6 @@
 # Review Log: T-0009f Repository Seams And Bounded-Context Registration Skeleton
 
-Status: Complete; Parent Verification Passed
+Status: Integrated To Main; Main Verification Passed
 
 ## Required Review Lanes
 
@@ -67,3 +67,9 @@ Spec And Builder Shell` was the first selected subtask.
 - Current parent review state: all required review lanes are clean for
   T-0009f.1 through T-0009f.5, all five subtasks are integrated into the parent
   branch, and T-0009f is complete.
+- T-0009f integrated into `main` at merge commit `730be05` on `2026-06-30
+14:54 WEST`; main verification passed with the same 17 test files / 212 tests,
+  coverage 96.39% statements / 90.8% branches / 99.09% functions / 96.32%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 97 server / 26 storage
+  expected exports, proto lint/generate checksum verification, and generated
+  proto output clean.

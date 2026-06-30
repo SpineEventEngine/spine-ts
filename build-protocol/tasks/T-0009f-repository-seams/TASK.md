@@ -1,6 +1,6 @@
 # T-0009f: Repository Seams And Bounded-Context Registration Skeleton
 
-Status: Complete; Parent Verification Passed
+Status: Integrated To Main; Main Verification Passed
 Start: `2026-06-30 05:21 WEST`
 Baseline commit: `ec70945`
 Task log path: `build-protocol/tasks/T-0009f-repository-seams/TASK.md`
@@ -295,6 +295,12 @@ WEST` with no server runtime/API code changes. Focused tests passed 2 files /
   lines, TypeDoc/API checks with 100 proto / 28 core / 97 server / 26 storage
   expected exports, proto lint/generate checksum verification, and generated
   proto output clean.
+- Integrated into `main` on `2026-06-30 14:54 WEST` with merge commit
+  `730be05`. Main `CI=true corepack pnpm verify` passed with 17 test files /
+  212 tests, coverage 96.39% statements / 90.8% branches / 99.09% functions /
+  96.32% lines, TypeDoc/API checks with 100 proto / 28 core / 97 server / 26
+  storage expected exports, proto lint/generate checksum verification, and
+  generated proto output clean.
 
 ## Human Questions And Answers
 
