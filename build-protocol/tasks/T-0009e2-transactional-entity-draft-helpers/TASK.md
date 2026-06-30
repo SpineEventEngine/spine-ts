@@ -156,9 +156,17 @@ Skipped relevant-looking skills:
 - Implementation commit `13f8a05` and verification evidence commit `a7acaca`
   were reviewed in Round 1 over range `4e250b2..a7acaca`.
 - Round 1 review requested changes for rejected commit version result snapshot
-  isolation and stale durable status wording. The focused fix is implemented,
-  verified, and ready for Round 2 review.
+  isolation and stale durable status wording. The focused fix was implemented,
+  verified, and reviewed in Round 2.
 - Round 2 reviewed committed range `a7acaca..4246385`; four lanes returned
   clean and documentation requested one header-status cleanup. All Round 2
-  reviewers were closed. The docs-only cleanup is verified and ready for Round 3
-  review.
+  reviewers were closed. The docs-only cleanup is verified and was reviewed in
+  Round 3.
+- Round 3 reviewed committed range `4246385..bd4052a`; three lanes returned
+  clean and maintainability/documentation/reliability requested stale live-state
+  routing cleanup. All Round 3 reviewers were closed.
+- Round 3 docs-only cleanup verification passed on `2026-06-30 01:07 WEST`:
+  full `CI=true corepack pnpm verify` reported 15 test files / 152 tests,
+  coverage statements 97.23%, branches 91.41%, functions 99.15%, lines 97.17%;
+  TypeDoc/API/proto gates passed with 68 expected server exports and generated
+  proto output clean.

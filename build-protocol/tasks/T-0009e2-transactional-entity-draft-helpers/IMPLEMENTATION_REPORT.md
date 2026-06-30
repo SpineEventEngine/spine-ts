@@ -104,3 +104,12 @@ repositories, handlers, phase propagation, storage, and lifecycle events.
   coverage 97.23% statements / 91.41% branches / 99.15% functions / 97.17%
   lines, TypeDoc/API/proto gates passed with 68 expected server exports, and
   generated proto output clean.
+- Round 3 reviewed committed range `4246385..bd4052a`; result: documentation
+  cleanup requested. TypeScript/API docs and security returned clean; the
+  accepted findings are stale live-state/risk-routing text after Round 2 had
+  completed.
+- Round 3 docs-only cleanup verification passed on `2026-06-30 01:07 WEST`:
+  full `CI=true corepack pnpm verify` passed with 15 test files / 152 tests,
+  coverage 97.23% statements / 91.41% branches / 99.15% functions / 97.17%
+  lines, TypeDoc/API/proto gates passed with 68 expected server exports, and
+  generated proto output clean.
