@@ -4,6 +4,10 @@ export {
   type EntityOptions,
   type EntityVersionMetadata,
   type PlainEntityVersionMetadata,
+  TransactionalEntity,
+  TransactionalEntityScopeError,
+  type TransactionalEntityScopeErrorReason,
+  type TransactionalEntityScopeOperation,
 } from "./entity.js";
 
 export {

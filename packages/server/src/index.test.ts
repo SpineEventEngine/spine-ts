@@ -145,6 +145,8 @@ describe("@spine-ts/server", () => {
         "HandlerMetadataRegistry",
         "HandlerMetadataRegistryError",
         "Entity",
+        "TransactionalEntity",
+        "TransactionalEntityScopeError",
         "React",
         "Subscribe",
         "defineEntityHandlers",

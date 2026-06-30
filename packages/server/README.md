@@ -9,6 +9,9 @@ Current slice exposes:
   identity, descriptor-derived metadata, cloned Protobuf-ES state snapshots,
   caller-owned plain version metadata, lifecycle flags, and
   active/archive/delete accessors; and
+- `TransactionalEntity<Id, Schema, Version>` for protected, scoped draft helpers
+  over `EntityTransaction`, with one active in-memory transaction per entity;
+  and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
 - first-field routing hints from descriptor order;
@@ -132,6 +135,21 @@ later framework-owned subclasses; there are no public state setters, automatic
 version increments, transactions, handler invocation, repository writes,
 storage calls, lifecycle events, routing, queries, buses, transports, or global
 runtime state.
+
+`TransactionalEntity` is the small protected draft layer for future
+framework-owned entity families. Subclasses can start one active transaction,
+read/update the draft state snapshot, replace explicit draft version metadata,
+adjust draft lifecycle flags, and then commit or roll back. Accepted commits
+apply state, version metadata, and lifecycle flags back into the entity through
+the base protected replacement hooks. Rejected commits do not apply anything and
+keep the transaction active so subclass code can correct the draft or roll it
+back explicitly. `changed` reports accepted state changes or committed
+lifecycle flag changes only; it is not a repository storage decision. Missing
+or duplicate transaction scopes throw `TransactionalEntityScopeError`
+deterministically. Public state, version, and lifecycle accessors remain cloned
+snapshots, and the class still does not invoke handlers, write storage, emit
+events, increment versions, route messages, or provide async-local/global
+transaction state.
 
 ## Entity State Transition Validation
 

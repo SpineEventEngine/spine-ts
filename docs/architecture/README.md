@@ -208,6 +208,23 @@ lifecycle evidence, but the public shell has no state setters and does not own
 transactions, repositories, handler invocation, storage, lifecycle events,
 routing, queries, buses, transports, or process-global runtime state.
 
+`TransactionalEntity` is the protected OOP draft layer over `EntityTransaction`.
+It adds one active transaction slot per entity instance, scoped helpers for
+reading and updating draft state, draft version metadata, and draft lifecycle
+flags, and commit/rollback helpers that close over the existing transaction
+kernel. Accepted commits apply only the accepted state, explicit version
+metadata, and lifecycle flags back through the `Entity` replacement hooks.
+Rejected commits apply nothing and intentionally keep the transaction active so
+subclass code can correct the draft or roll it back explicitly, matching the
+current `EntityTransaction.commit()` behavior. The `changed` signal records
+accepted state changes or committed lifecycle flag changes without making
+repository storage decisions. Scope errors are deterministic
+`TransactionalEntityScopeError` instances for missing or duplicate active
+transactions. The layer still avoids handler invocation, repositories, storage,
+lifecycle events, automatic version increments, transaction listeners, recent
+history, async-local/global transaction state, and entity-family-specific
+aggregate/projection/process-manager behavior.
+
 `EntityTransaction` is the first server-owned draft/result commit boundary over
 one entity state. It buffers a draft state, explicit previous/draft version
 metadata, lifecycle flags, and visible status (`active`, `committed`, or
