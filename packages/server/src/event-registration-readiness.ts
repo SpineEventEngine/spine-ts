@@ -239,7 +239,9 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
 export function isAuthenticEventRegistrationReadiness(
   value: unknown,
 ): value is EventRegistrationReadiness {
-  return value !== null && typeof value === "object" && authenticEventRegistrationReadiness.has(value);
+  return (
+    value !== null && typeof value === "object" && authenticEventRegistrationReadiness.has(value)
+  );
 }
 
 function createSubscriberMetadata(

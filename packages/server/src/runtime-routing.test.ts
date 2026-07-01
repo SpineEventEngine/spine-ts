@@ -119,6 +119,30 @@ function overrideReadiness<Readiness extends object>(
   return clone as Readiness;
 }
 
+function withPatchedPrototypeMethod<Result>(
+  prototype: object,
+  methodName: string,
+  replacement: unknown,
+  run: () => Result,
+): Result {
+  const descriptor = Object.getOwnPropertyDescriptor(prototype, methodName);
+
+  Object.defineProperty(prototype, methodName, {
+    configurable: true,
+    value: replacement,
+  });
+
+  try {
+    return run();
+  } finally {
+    if (descriptor === undefined) {
+      Reflect.deleteProperty(prototype, methodName);
+    } else {
+      Object.defineProperty(prototype, methodName, descriptor);
+    }
+  }
+}
+
 describe("server runtime routing", () => {
   it("plans deterministic command topics and one competing-consumer command worker", () => {
     const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
@@ -596,5 +620,194 @@ describe("server runtime routing", () => {
         events: forgedEventReadiness,
       }),
     ).toThrow(/must be an authentic EventRegistrationReadiness instance/);
+  });
+
+  it("rejects malformed authentic command readiness metadata deterministically", () => {
+    const commandHandlers = defineEntityHandlers(
+      TaskProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.assign(CommandSchema, "assignCreate")],
+    );
+    const commandReadiness = CommandRegistrationReadiness.fromEntityHandlers([commandHandlers]);
+    const assignee = commandReadiness.findCommandAssignee(CommandSchema.typeName);
+
+    if (assignee === undefined) {
+      throw new Error("Expected valid command assignee metadata.");
+    }
+
+    const expectPatchedAssignee = (value: unknown, pattern: RegExp) => {
+      withPatchedPrototypeMethod(
+        CommandRegistrationReadiness.prototype,
+        "findCommandAssignee",
+        () => value,
+        () => {
+          expect(() =>
+            createServerRuntimeRoutingPlan({
+              context: BoundedContext.singleTenant("Tasks").build(),
+              commands: commandReadiness,
+            }),
+          ).toThrow(pattern);
+        },
+      );
+    };
+
+    expectPatchedAssignee(undefined, /must return assignee metadata/);
+    expectPatchedAssignee(null, /must be an object/);
+    expectPatchedAssignee(
+      Object.freeze({
+        ...assignee,
+        commandFullTypeName: "example.WrongCommand",
+      }),
+      /must preserve commandFullTypeName/,
+    );
+    expectPatchedAssignee(
+      Object.freeze({
+        ...assignee,
+        handler: null,
+      }),
+      /must expose a command-assignment handler/,
+    );
+    expectPatchedAssignee(
+      Object.freeze({
+        ...assignee,
+        handler: Object.freeze({
+          ...assignee.handler,
+          messageFullTypeName: "example.WrongCommand",
+        }),
+      }),
+      /must preserve the requested command message type/,
+    );
+    expectPatchedAssignee(
+      Object.freeze({
+        ...assignee,
+        handler: Object.freeze({
+          ...assignee.handler,
+          schema: null,
+        }),
+      }),
+      /must preserve the requested command message type/,
+    );
+    expectPatchedAssignee(
+      Object.freeze({
+        ...assignee,
+        handler: Object.freeze({
+          ...assignee.handler,
+          schema: Object.freeze({ typeName: "example.WrongCommand" }),
+        }),
+      }),
+      /must preserve the requested command message type/,
+    );
+    expectPatchedAssignee(
+      Object.freeze({
+        ...assignee,
+        handler: Object.freeze({
+          ...assignee.handler,
+          schema: Object.freeze({ typeName: CommandSchema.typeName }),
+        }),
+      }),
+      /command metadata for "spine.core.Command" is malformed/,
+    );
+  });
+
+  it("rejects malformed authentic event readiness metadata deterministically", () => {
+    const projectionHandlers = defineEntityHandlers(
+      TaskProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.subscribe(EventSchema, "subscribeCreated")],
+    );
+    const eventReadiness = EventRegistrationReadiness.fromEntityHandlers([projectionHandlers]);
+    const subscriber = eventReadiness.findEventSubscribers(EventSchema.typeName)[0];
+
+    if (subscriber === undefined) {
+      throw new Error("Expected valid event subscriber metadata.");
+    }
+
+    const expectPatchedSubscribers = (value: unknown, pattern: RegExp) => {
+      withPatchedPrototypeMethod(
+        EventRegistrationReadiness.prototype,
+        "findEventSubscribers",
+        () => value,
+        () => {
+          expect(() =>
+            createServerRuntimeRoutingPlan({
+              context: BoundedContext.singleTenant("Tasks").build(),
+              events: eventReadiness,
+            }),
+          ).toThrow(pattern);
+        },
+      );
+    };
+
+    expectPatchedSubscribers(undefined, /receivers for "spine.core.Event" must be an array/);
+    expectPatchedSubscribers(Object.freeze([null]), /must be an object/);
+    expectPatchedSubscribers(
+      Object.freeze([
+        Object.freeze({
+          ...subscriber,
+          eventFullTypeName: "example.WrongEvent",
+        }),
+      ]),
+      /must match the requested eventFullTypeName/,
+    );
+    expectPatchedSubscribers(
+      Object.freeze([
+        Object.freeze({
+          ...subscriber,
+          handler: Object.freeze({
+            ...subscriber.handler,
+            kind: "event-reaction" as const,
+          }),
+        }),
+      ]),
+      /must expose an event-subscription handler/,
+    );
+    expectPatchedSubscribers(
+      Object.freeze([
+        Object.freeze({
+          ...subscriber,
+          handler: Object.freeze({
+            ...subscriber.handler,
+            messageFullTypeName: "example.WrongEvent",
+          }),
+        }),
+      ]),
+      /must preserve the requested event message type/,
+    );
+    expectPatchedSubscribers(
+      Object.freeze([
+        Object.freeze({
+          ...subscriber,
+          handler: Object.freeze({
+            ...subscriber.handler,
+            schema: null,
+          }),
+        }),
+      ]),
+      /must preserve the requested event message type/,
+    );
+    expectPatchedSubscribers(
+      Object.freeze([
+        Object.freeze({
+          ...subscriber,
+          handler: Object.freeze({
+            ...subscriber.handler,
+            schema: Object.freeze({ typeName: "example.WrongEvent" }),
+          }),
+        }),
+      ]),
+      /must preserve the requested event message type/,
+    );
+    expectPatchedSubscribers(
+      Object.freeze([
+        Object.freeze({
+          ...subscriber,
+          handler: Object.freeze({
+            ...subscriber.handler,
+            schema: Object.freeze({ typeName: EventSchema.typeName }),
+          }),
+        }),
+      ]),
+      /event metadata for "spine.core.Event" is malformed/,
+    );
   });
 });

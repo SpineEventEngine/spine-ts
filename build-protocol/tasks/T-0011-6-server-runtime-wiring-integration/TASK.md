@@ -1,6 +1,6 @@
 # T-0011.6: Server Runtime Wiring Integration
 
-Status: In Progress
+Status: Complete
 Parent task: `T-0011 Transport Foundation`
 Start: `2026-07-01 03:06 WEST`
 Baseline commit: `78346ab`
@@ -10,7 +10,7 @@ Branch: `task/T-0011-6-server-runtime-wiring-integration`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-6-server-runtime-wiring-integration`
 Authoring sub-agent: `019f1b72-d92b-77c3-bea5-b734213b1035`
-Reviewer sub-agents: pending
+Reviewer sub-agents: all required lanes complete and closed
 
 ## Objective
 
@@ -233,6 +233,22 @@ Skipped relevant-looking skills:
   checks with 100 proto / 28 core / 130 server / 26 storage / 46 transport
   exports, copied Spine proto checksum verification, proto lint/generate, and
   generated-clean all passed. TypeDoc emitted the existing invalid-`origin`
+  warning only.
+- Round 2 verification passed on `2026-07-01 04:16 WEST`:
+  `corepack pnpm typecheck`, `corepack pnpm docs:check`, `git diff --check`,
+  and escalated `CI=true corepack pnpm verify` all passed. Full verify covered
+  24 test files / 290 tests with coverage 95.88% statements / 90.05%
+  branches / 99.38% functions / 95.82% lines. TypeDoc emitted the existing
+  invalid-`origin` warning only.
+- Final verification after the authenticity hardening and coverage patch passed
+  on `2026-07-01 04:36-04:37 WEST`: focused routing/index tests passed with 23
+  tests, `corepack pnpm lint` passed, `git diff --check` passed, and escalated
+  `CI=true corepack pnpm verify` passed with native IPC access. Full verify
+  covered 24 test files / 293 tests with coverage 96.12% statements / 90.53%
+  branches / 99.38% functions / 96.07% lines, TypeDoc/API counts 100 proto /
+  28 core / 130 server / 26 storage / 46 transport, copied Spine proto
+  checksum verification, proto lint/generate, generated proto output clean,
+  and generated files clean. TypeDoc emitted the existing invalid-`origin`
   warning only.
 
 ## Implementation Notes

@@ -1,6 +1,6 @@
 # Implementation Report: T-0011.6 Server Runtime Wiring Integration
 
-Status: Implemented
+Status: Complete
 Task log: `build-protocol/tasks/T-0011-6-server-runtime-wiring-integration/TASK.md`
 Work log: `build-protocol/work-logs/T-0011-6.md`
 Review log:
@@ -64,6 +64,32 @@ delivery, scheduling, and process supervision outside this slice.
   TypeDoc emitted the existing invalid-`origin` warning only. The command used
   native IPC access because inherited ZeroMQ smoke tests bind `ipc://`
   endpoints.
+
+- Final full verification attempt on `2026-07-01 04:31 WEST` stopped at
+  `pnpm format:check` because three touched files needed Prettier formatting:
+  `packages/server/src/command-registration-readiness.ts`,
+  `packages/server/src/event-registration-readiness.ts`, and
+  `build-protocol/reviews/T-0011-6-server-runtime-wiring-integration.md`.
+  The orchestrator ran `corepack pnpm prettier --write` on those files and is
+  rerunning full verification.
+
+- Final full verification rerun after formatting passed typecheck, lint,
+  formatting, unit tests, and coverage test execution, but failed the global
+  branch coverage threshold: 88.86% branches versus the required 90%. The
+  uncovered branches are in runtime-routing deterministic malformed-metadata
+  validation that is now normally hidden behind the authentic-readiness gate.
+  Focused tests are being added to exercise those branches through temporary,
+  restored prototype patches on authentic readiness instances.
+- Final verification after adding those focused coverage tests passed on
+  `2026-07-01 04:36-04:37 WEST`: focused routing/index tests passed with 23
+  tests, `corepack pnpm lint` passed, `git diff --check` passed, and escalated
+  `CI=true corepack pnpm verify` passed with native IPC access. Full verify
+  covered 24 test files / 293 tests with coverage 96.12% statements / 90.53%
+  branches / 99.38% functions / 96.07% lines, TypeDoc/API counts 100 proto /
+  28 core / 130 server / 26 storage / 46 transport, copied Spine proto
+  checksum verification, proto lint/generate, generated proto output clean,
+  and generated files clean. TypeDoc emitted the existing invalid-`origin`
+  warning only.
 - RED on `2026-07-01 03:19 WEST`:
   `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts`
   failed with 4/4 tests red because `createServerRuntimeRoutingPlan` did not
@@ -123,6 +149,8 @@ delivery, scheduling, and process supervision outside this slice.
 - `docs/architecture/README.md`
 - `packages/server/README.md`
 - `packages/server/package.json`
+- `packages/server/src/command-registration-readiness.ts`
+- `packages/server/src/event-registration-readiness.ts`
 - `packages/server/src/index.test.ts`
 - `packages/server/src/index.ts`
 - `packages/server/src/runtime-routing.test.ts`
@@ -151,7 +179,8 @@ delivery, scheduling, and process supervision outside this slice.
 
 ## Open Items
 
-- Run all required reviewer lanes and close all participating sub-agents.
+- Integrate the completed T-0011.6 branch into the parent
+  `task/T-0011-transport-foundation` branch and run parent verification.
 
 ## Round 2 Fix Summary
 

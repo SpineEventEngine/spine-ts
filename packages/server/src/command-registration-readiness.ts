@@ -132,7 +132,9 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
 export function isAuthenticCommandRegistrationReadiness(
   value: unknown,
 ): value is CommandRegistrationReadiness {
-  return value !== null && typeof value === "object" && authenticCommandRegistrationReadiness.has(value);
+  return (
+    value !== null && typeof value === "object" && authenticCommandRegistrationReadiness.has(value)
+  );
 }
 
 function createAssigneeMetadata(
