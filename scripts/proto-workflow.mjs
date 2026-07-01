@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -12,6 +12,7 @@ if (command !== "lint" && command !== "generate") {
 
 const protoRoot = fileURLToPath(new URL("../proto", import.meta.url));
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const generatedRoot = join(repoRoot, "packages/proto/generated");
 
 function runCommand(label, executable, args) {
   const result = spawnSync(executable, args, {
@@ -51,6 +52,34 @@ function findProtoFiles(directory) {
   });
 }
 
+function lstatIfPresent(path) {
+  try {
+    return lstatSync(path);
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+function cleanGeneratedOutput() {
+  const generatedStat = lstatIfPresent(generatedRoot);
+
+  if (generatedStat !== undefined) {
+    if (generatedStat.isSymbolicLink()) {
+      console.error("Generated directory must not be a symlink: packages/proto/generated");
+      return 1;
+    }
+
+    rmSync(generatedRoot, { recursive: true });
+  }
+
+  mkdirSync(generatedRoot, { recursive: true });
+  return 0;
+}
+
 const protoFiles = findProtoFiles(protoRoot);
 
 if (protoFiles.length === 0) {
@@ -67,6 +96,15 @@ if (verifyStatus !== 0) {
 }
 
 const bufArgs = command === "lint" ? ["lint"] : ["generate"];
+
+if (command === "generate") {
+  const cleanStatus = cleanGeneratedOutput();
+
+  if (cleanStatus !== 0) {
+    process.exit(cleanStatus);
+  }
+}
+
 const bufStatus = runCommand(`buf ${command}`, resolveBufExecutable(), bufArgs);
 
 process.exit(bufStatus);

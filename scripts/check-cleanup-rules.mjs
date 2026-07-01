@@ -8,71 +8,140 @@ const defaultRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const maxLineLength = 120;
 const maxSemanticComponents = 4;
 const generatedNamePatterns = [/^file_spine_/, /^generated[A-Z]/, /^[A-Z0-9_]+$/];
-const inheritedSemanticNameExceptions = new Set([
-  "BoundedContextRepositoryRegistrationErrorCode",
-  "BoundedContextRepositoryRegistrationOperation",
-  "BoundedContextRepositoryRegistrationConflictErrorDetails",
-  "BoundedContextRepositorySnapshotErrorDetails",
-  "BoundedContextRepositoryRegistrationErrorDetails",
-  "BoundedContextRepositoryRegistrationError",
-  "cloneRepositoryFieldMetadataList",
-  "freezeRepositoryRegistrationErrorDetails",
-  "validateRepositoryFieldMetadataList",
-  "readCanonicalRepositorySemanticTags",
-  "validateCanonicalRepositorySemanticTagList",
-  "assigneesByCommandFullTypeName",
-  "registeredCommandMessageFullTypeNames",
-  "isAuthenticCommandRegistrationReadiness",
-  "EntityTransactionCommittedVersionMetadata",
-  "EntityTransactionDraftStateReason",
-  "EntityTransactionDraftStateError",
-  "EntityStateTransitionValidationRequest",
-  "EntityStateTransitionValidationResult",
-  "createSetOnceTransitionRule",
-  "fieldValueShapeIsSafe",
-  "fieldValueShapeIsSafeUnchecked",
-  "readSafeUint8ArrayBytes",
-  "hasOnlyDenseIndexedDataProperties",
-  "isUnsupportedSetOnceField",
-  "TransactionalEntityScopeErrorReason",
-  "NonPlainEntityVersionMetadata",
-  "PlainEntityVersionMetadataAtDepth",
-  "nonPlainVersionMetadataError",
-  "subscribersByEventFullTypeName",
-  "reactorsByEventFullTypeName",
-  "applicationsByEventFullTypeName",
-  "registeredEventMessageFullTypeNames",
-  "isAuthenticEventRegistrationReadiness",
-  "HandlerMetadataRegistryErrorCode",
-  "entityStateFullTypeName",
-  "findEntityHandlersByState",
-  "findHandlersByMessageFullTypeName",
-  "ServerRuntimeStateErrorCode",
-  "createServerRuntimeRoutingPlan",
-  "DeferredServerRuntimeRoutingSeam",
-  "ServerRuntimeRoutingPlanInput",
-  "ServerRuntimeRouteMessageDescriptor",
-  "ServerRuntimeRouteTransportReference",
-  "eventReceiverGroupToHandlerKind",
-  "createCommandRuntimeRoutingPlan",
-  "createEventRuntimeRoutingPlan",
-  "topicByEventFullTypeName",
-  "createEventWorkersById",
-  "expectedMessageFullTypeName",
-  "createInMemoryStorageAdapter",
-  "InMemoryAggregateEventStore",
-  "InMemoryTenantIndexStore",
-  "InMemoryDiagnosticRecordStore",
-  "transportDeliveryFailureKindSet",
-  "TransportDeliveryFailureDetailValue",
-  "TransportDeliveryFailureClassificationInput",
-  "TransportDeliveryResultInputBase",
-  "normalizeTransportDeliveryFailureKind",
-  "isSafeFailureDetailKey",
-  "isTransportDeliveryFailureDetailValue",
-  "ZeroMqAdapterConfigInput",
-  "createZeroMqAdapterConfig",
-  "readRepositoryEntityTypeOption",
+const inheritedSemanticNameExceptionOccurrences = new Set(
+  [
+    ["applicationsByEventFullTypeName", "packages/server/src/event-registration-readiness.ts", 122],
+    ["applicationsByEventFullTypeName", "packages/server/src/event-registration-readiness.ts", 147],
+    ["assigneesByCommandFullTypeName", "packages/server/src/command-registration-readiness.ts", 61],
+    ["assigneesByCommandFullTypeName", "packages/server/src/command-registration-readiness.ts", 85],
+    [
+      "BoundedContextRepositoryRegistrationConflictErrorDetails",
+      "packages/server/src/bounded-context.ts",
+      77,
+    ],
+    ["BoundedContextRepositoryRegistrationError", "packages/server/src/bounded-context.ts", 110],
+    ["BoundedContextRepositoryRegistrationErrorCode", "packages/server/src/bounded-context.ts", 70],
+    [
+      "BoundedContextRepositoryRegistrationErrorDetails",
+      "packages/server/src/bounded-context.ts",
+      95,
+    ],
+    ["BoundedContextRepositoryRegistrationOperation", "packages/server/src/bounded-context.ts", 74],
+    ["BoundedContextRepositorySnapshotErrorDetails", "packages/server/src/bounded-context.ts", 87],
+    ["cloneRepositoryFieldMetadataList", "packages/server/src/bounded-context.ts", 601],
+    ["createCommandRuntimeRoutingPlan", "packages/server/src/runtime-routing.ts", 174],
+    ["createEventRuntimeRoutingPlan", "packages/server/src/runtime-routing.ts", 262],
+    ["createEventWorkersById", "packages/server/src/runtime-routing.ts", 391],
+    ["createInMemoryStorageAdapter", "packages/storage/src/index.ts", 237],
+    ["createServerRuntimeRoutingPlan", "packages/server/src/runtime-routing.ts", 158],
+    ["createSetOnceTransitionRule", "packages/server/src/entity-transition-validation.ts", 96],
+    ["createZeroMqAdapterConfig", "packages/transport/src/zeromq-adapter-config.ts", 24],
+    ["DeferredServerRuntimeRoutingSeam", "packages/server/src/runtime-routing.ts", 33],
+    ["entityStateFullTypeName", "packages/server/src/handler-metadata.ts", 222],
+    ["entityStateFullTypeName", "packages/server/src/handler-metadata.ts", 237],
+    ["entityStateFullTypeName", "packages/server/src/handler-metadata.ts", 334],
+    ["entityStateFullTypeName", "packages/server/src/handler-metadata.ts", 365],
+    ["entityStateFullTypeName", "packages/server/src/handler-metadata.ts", 534],
+    [
+      "EntityStateTransitionValidationRequest",
+      "packages/server/src/entity-transition-validation.ts",
+      28,
+    ],
+    [
+      "EntityStateTransitionValidationResult",
+      "packages/server/src/entity-transition-validation.ts",
+      40,
+    ],
+    ["EntityTransactionCommittedVersionMetadata", "packages/server/src/entity-transaction.ts", 26],
+    ["EntityTransactionDraftStateError", "packages/server/src/entity-transaction.ts", 161],
+    ["EntityTransactionDraftStateReason", "packages/server/src/entity-transaction.ts", 49],
+    ["eventReceiverGroupToHandlerKind", "packages/server/src/runtime-routing.ts", 147],
+    ["expectedMessageFullTypeName", "packages/server/src/runtime-routing.ts", 632],
+    ["fieldValueShapeIsSafe", "packages/server/src/entity-transition-validation.ts", 204],
+    ["fieldValueShapeIsSafeUnchecked", "packages/server/src/entity-transition-validation.ts", 212],
+    ["findEntityHandlersByState", "packages/server/src/handler-metadata.ts", 334],
+    ["findHandlersByMessageFullTypeName", "packages/server/src/handler-metadata.ts", 350],
+    ["freezeRepositoryRegistrationErrorDetails", "packages/server/src/bounded-context.ts", 844],
+    ["HandlerMetadataRegistryErrorCode", "packages/server/src/handler-metadata.ts", 187],
+    [
+      "hasOnlyDenseIndexedDataProperties",
+      "packages/server/src/entity-transition-validation.ts",
+      388,
+    ],
+    ["InMemoryAggregateEventStore", "packages/storage/src/index.ts", 354],
+    ["InMemoryDiagnosticRecordStore", "packages/storage/src/index.ts", 414],
+    ["InMemoryTenantIndexStore", "packages/storage/src/index.ts", 400],
+    [
+      "isAuthenticCommandRegistrationReadiness",
+      "packages/server/src/command-registration-readiness.ts",
+      132,
+    ],
+    [
+      "isAuthenticEventRegistrationReadiness",
+      "packages/server/src/event-registration-readiness.ts",
+      239,
+    ],
+    ["isSafeFailureDetailKey", "packages/transport/src/index.ts", 990],
+    ["isTransportDeliveryFailureDetailValue", "packages/transport/src/index.ts", 994],
+    ["isUnsupportedSetOnceField", "packages/server/src/entity-transition-validation.ts", 431],
+    ["NonPlainEntityVersionMetadata", "packages/server/src/entity.ts", 75],
+    ["nonPlainVersionMetadataError", "packages/server/src/entity.ts", 790],
+    ["normalizeTransportDeliveryFailureKind", "packages/transport/src/index.ts", 773],
+    ["PlainEntityVersionMetadataAtDepth", "packages/server/src/entity.ts", 102],
+    ["reactorsByEventFullTypeName", "packages/server/src/event-registration-readiness.ts", 121],
+    ["reactorsByEventFullTypeName", "packages/server/src/event-registration-readiness.ts", 146],
+    ["readCanonicalRepositorySemanticTags", "packages/server/src/bounded-context.ts", 979],
+    ["readRepositoryEntityTypeOption", "packages/server/src/repository.ts", 286],
+    ["readSafeUint8ArrayBytes", "packages/server/src/entity-transition-validation.ts", 361],
+    [
+      "registeredCommandMessageFullTypeNames",
+      "packages/server/src/command-registration-readiness.ts",
+      118,
+    ],
+    [
+      "registeredEventMessageFullTypeNames",
+      "packages/server/src/event-registration-readiness.ts",
+      207,
+    ],
+    ["ServerRuntimeRouteMessageDescriptor", "packages/server/src/runtime-routing.ts", 43],
+    ["ServerRuntimeRouteTransportReference", "packages/server/src/runtime-routing.ts", 50],
+    ["ServerRuntimeRoutingPlanInput", "packages/server/src/runtime-routing.ts", 23],
+    ["ServerRuntimeStateErrorCode", "packages/server/src/runtime.ts", 62],
+    ["subscribersByEventFullTypeName", "packages/server/src/event-registration-readiness.ts", 117],
+    ["subscribersByEventFullTypeName", "packages/server/src/event-registration-readiness.ts", 145],
+    ["topicByEventFullTypeName", "packages/server/src/runtime-routing.ts", 279],
+    ["TransactionalEntityScopeErrorReason", "packages/server/src/entity.ts", 26],
+    ["TransportDeliveryFailureClassificationInput", "packages/transport/src/index.ts", 332],
+    ["TransportDeliveryFailureDetailValue", "packages/transport/src/index.ts", 322],
+    ["transportDeliveryFailureKindSet", "packages/transport/src/index.ts", 316],
+    ["TransportDeliveryResultInputBase", "packages/transport/src/index.ts", 388],
+    ["validateCanonicalRepositorySemanticTagList", "packages/server/src/bounded-context.ts", 1015],
+    ["validateRepositoryFieldMetadataList", "packages/server/src/bounded-context.ts", 965],
+    ["ZeroMqAdapterConfigInput", "packages/transport/src/zeromq-adapter-config.ts", 9],
+  ].map(([name, file, line]) => `${name}|${file}|${line}`),
+);
+const allowedFlatPackageSourceFiles = new Set([
+  "packages/core/src/index.ts",
+  "packages/proto/src/index.ts",
+  "packages/server/src/bounded-context.ts",
+  "packages/server/src/command-registration-readiness.ts",
+  "packages/server/src/entity-metadata.ts",
+  "packages/server/src/entity-transaction.ts",
+  "packages/server/src/entity-transition-validation.ts",
+  "packages/server/src/entity.ts",
+  "packages/server/src/event-registration-readiness.ts",
+  "packages/server/src/handler-decorators.ts",
+  "packages/server/src/handler-metadata.ts",
+  "packages/server/src/index.ts",
+  "packages/server/src/registration-readiness-metadata.ts",
+  "packages/server/src/repository.ts",
+  "packages/server/src/runtime-routing.ts",
+  "packages/server/src/runtime.ts",
+  "packages/server/src/signal-intake.ts",
+  "packages/storage/src/index.ts",
+  "packages/testing/src/index.ts",
+  "packages/transport/src/index.ts",
+  "packages/transport/src/zeromq-adapter-config.ts",
 ]);
 
 function parseArgs(argv) {
@@ -201,7 +270,7 @@ function checkPackageTests(repoRoot, packages) {
 
 function authoredCodeFiles(files) {
   return files.filter((file) => {
-    if (!/^(packages\/[^/]+\/src\/|scripts\/)/.test(file)) {
+    if (!/^(packages\/[^/]+\/(src|test)\/|scripts\/)/.test(file)) {
       return false;
     }
 
@@ -209,9 +278,7 @@ function authoredCodeFiles(files) {
       return false;
     }
 
-    return (
-      !file.includes("/generated/") && !file.endsWith(".test.ts") && !file.endsWith(".test.mjs")
-    );
+    return !file.includes("/generated/") && !file.endsWith(".test.mjs");
   });
 }
 
@@ -240,14 +307,24 @@ function checkLineLength(repoRoot, files) {
     : [{ title: "lines longer than 120 characters", details: longLines }];
 }
 
+function checkFlatSourceGrowth(files) {
+  const newFlatFiles = files.filter(
+    (file) =>
+      /^packages\/[^/]+\/src\/[^/]+\.ts$/.test(file) &&
+      !file.endsWith(".test.ts") &&
+      !file.endsWith("/src/index.ts") &&
+      !allowedFlatPackageSourceFiles.has(file),
+  );
+
+  return newFlatFiles.length === 0
+    ? []
+    : [{ title: "package src files must not grow flat", details: newFlatFiles }];
+}
+
 function semanticComponents(name) {
   const trimmed = name.replace(/^_+/, "");
 
-  if (
-    trimmed.length === 0 ||
-    generatedNamePatterns.some((pattern) => pattern.test(trimmed)) ||
-    inheritedSemanticNameExceptions.has(trimmed)
-  ) {
+  if (trimmed.length === 0 || generatedNamePatterns.some((pattern) => pattern.test(trimmed))) {
     return [];
   }
 
@@ -257,12 +334,24 @@ function semanticComponents(name) {
     .filter(Boolean);
 }
 
+function isAllowedInheritedSemanticName(name, file, line) {
+  return inheritedSemanticNameExceptionOccurrences.has(`${name}|${file}|${line}`);
+}
+
 function hasCallbackType(node) {
   if (node.type === undefined) {
     return false;
   }
 
-  return node.type.getText().endsWith("Callback");
+  return isVoidFunctionType(node.type) || node.type.getText().endsWith("Callback");
+}
+
+function isVoidFunctionType(type) {
+  if (!ts.isFunctionTypeNode(type) || type.type === undefined) {
+    return false;
+  }
+
+  return type.type.kind === ts.SyntaxKind.VoidKeyword;
 }
 
 function readIdentifierName(name) {
@@ -292,9 +381,13 @@ function checkTypeScriptNames(repoRoot, files) {
 
       if (components.length > maxSemanticComponents) {
         const position = source.getLineAndCharacterOfPosition(node.getStart(source));
-        semanticViolations.push(
-          `${file}:${position.line + 1} ${name} (${components.length} components)`,
-        );
+        const line = position.line + 1;
+
+        if (isAllowedInheritedSemanticName(name, file, line)) {
+          return;
+        }
+
+        semanticViolations.push(`${file}:${line} ${name} (${components.length} components)`);
       }
     }
 
@@ -384,6 +477,7 @@ export function checkCleanupRules(repoRoot) {
   return [
     ...checkGeneratedLayout(root, files, packages),
     ...checkPackageTests(root, packages),
+    ...checkFlatSourceGrowth(files),
     ...checkLineLength(root, codeFiles),
     ...checkTypeScriptNames(root, packageSourceFiles(files)),
   ];

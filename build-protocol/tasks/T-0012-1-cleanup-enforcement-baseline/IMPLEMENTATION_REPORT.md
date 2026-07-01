@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.1 Cleanup Enforcement Baseline
 
-Status: Started
+Status: Round 1 follow-up verified; ready for re-review
 Branch: `task/T-0012-1-cleanup-enforcement-baseline`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-1-cleanup-enforcement-baseline`
@@ -95,3 +95,62 @@ Baseline commit: `a65ac4d`
   lint, format, and cleanup checks passed.
 - Escalated `env CI=true corepack pnpm verify` passed, including coverage:
   statements 96.12%, branches 90.53%, functions 99.38%, lines 96.07%.
+
+## Round 1 Follow-up
+
+Round 1 review findings are addressed in a focused follow-up pass:
+
+- `pnpm verify`, `typecheck:build`, and docs commands now generate ignored
+  Protobuf-ES output before build/typecheck/docs consumers run.
+- `proto:generate` cleans `packages/proto/generated` and refuses symlinked
+  generated output.
+- `proto:check-generated` rejects tracked, unignored, missing, symlinked,
+  stale, or orphaned generated output by comparing against a clean generation.
+- Cleanup-rule tests now cover anchored inherited long-name exceptions, inline
+  function callback parameters, flat package `src` growth, and package test
+  line length.
+- Inherited semantic-name exceptions are anchored to exact current
+  occurrence/path/line entries, and current non-entry flat `src/*.ts` files are
+  explicitly listed so new flat files fail.
+- `@spine-ts/proto` generated subpath exports now support both extensionless
+  and `.js` ESM imports.
+- Public docs and durable task/review/work logs record package tests under
+  `packages/*/test`, cleanup checks through `pnpm lint`/`pnpm verify`, the
+  `D-0047` generated-output path supersession, and the actual review-log path.
+
+Focused RED evidence:
+
+- `corepack pnpm vitest run scripts/check-cleanup-rules.test.mjs
+scripts/check-generated-clean.test.mjs scripts/package-metadata.test.mjs`
+  failed before fixes with 8 expected failures covering the Round 1 gaps.
+
+Focused GREEN evidence:
+
+- The same focused command passed after fixes with 3 files and 12 tests.
+
+Round 1 follow-up verification evidence:
+
+- `corepack pnpm typecheck:build` passed and generated proto output before
+  `tsc -b`.
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm lint` passed, including `scripts/check-cleanup-rules.mjs`.
+- `corepack pnpm format:check` passed.
+- `git diff --check` passed.
+- Sandboxed `corepack pnpm test` failed only in
+  `packages/transport/test/zeromq-local-ipc-smoke.test.ts` with
+  `Error: Operation not permitted` for both ZeroMQ local IPC smoke tests.
+- Escalated `corepack pnpm test` passed with 27 test files and 305 tests.
+- `corepack pnpm docs:check` passed with the existing TypeDoc invalid-`origin`
+  warning only.
+- `corepack pnpm proto:lint` passed.
+- `corepack pnpm proto:generate` passed.
+- `corepack pnpm proto:check-generated` passed and reported generated output
+  ignored, untracked, and freshly regenerated.
+- Sandboxed `env CI=true corepack pnpm verify` reached the test step after
+  node, proto generation, typecheck, lint, and format checks passed, then
+  failed only on the same two ZeroMQ local IPC smoke tests with
+  `Error: Operation not permitted`.
+- Escalated `env CI=true corepack pnpm verify` passed, including 27 test files,
+  305 tests, coverage statements 96.12%, branches 90.53%, functions 99.38%,
+  lines 96.07%, docs/API checks with the existing TypeDoc invalid-`origin`
+  warning only, proto lint/generate, and generated-clean comparison.

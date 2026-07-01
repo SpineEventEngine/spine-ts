@@ -6,7 +6,7 @@ Branch: `task/T-0012-1-cleanup-enforcement-baseline`
 Baseline commit: `a65ac4d`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-1-cleanup-enforcement-baseline`
-Status: Implementation verified; review pending.
+Status: Round 1 follow-up verified; ready for re-review
 Reviewed commit/diff basis: `147d496..8349abc`
 Review package: `.superpowers/sdd/review-147d496..8349abc.diff`
 
@@ -65,3 +65,26 @@ verify`; older decision history still says generated output lives under
 All Round 1 reviewer agents are closed. Author follow-up must address the
 Critical/Important findings before re-review; the line-length test coverage
 minor should be fixed in the same batch if it stays small.
+
+## Round 1 Author Follow-up
+
+Follow-up fixes are authored for all Round 1 findings:
+
+- Fresh-clone reliability: generation now runs before build/typecheck/docs
+  consumers, with focused package-metadata regression coverage.
+- Generated cleanliness: generation cleans the output directory, rejects
+  symlinked generated output, and `proto:check-generated` compares against a
+  clean generation to catch stale and orphaned files.
+- Cleanup enforcement: inherited long-name exceptions are anchored to exact
+  current occurrences, inline function callback parameters are checked, flat
+  package `src` growth is guarded, and package tests are included in line-length
+  enforcement.
+- Documentation/API: public docs cover package tests and cleanup gates, stale
+  D-0023 generated-path history is explicitly superseded by D-0047, task/log
+  statuses and the review-log path are refreshed, and generated `.js` ESM
+  subpath imports are exported.
+
+Focused RED/GREEN evidence is recorded in
+`build-protocol/tasks/T-0012-1-cleanup-enforcement-baseline/IMPLEMENTATION_REPORT.md`.
+Final required verification passed after escalation for the known ZeroMQ local
+IPC sandbox restriction.

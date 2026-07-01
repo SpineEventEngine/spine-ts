@@ -1,6 +1,6 @@
 # T-0012.1: Cleanup Enforcement Baseline
 
-Status: Started
+Status: Round 1 follow-up verified; ready for re-review
 Start: `2026-07-01 17:01 WEST`
 Baseline commit: `a65ac4d`
 Branch: `task/T-0012-1-cleanup-enforcement-baseline`

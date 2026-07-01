@@ -718,7 +718,8 @@ describe("repository identity", () => {
       > {}
       void ManuallySpelledFamilyBroadRepositorySubclass;
       abstract class PublicStringBrandFamilyBroadRepositorySubclass extends Repository<
-        // @ts-expect-error subclasses must not bind manually spelled constructor shapes by spelling the old public string brand.
+        // @ts-expect-error subclasses must not bind manually spelled constructor
+        // shapes by spelling the old public string brand.
         PublicStringBrandFamilyBroadAggregateEntityType
       > {}
       void PublicStringBrandFamilyBroadRepositorySubclass;

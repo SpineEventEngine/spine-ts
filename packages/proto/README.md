@@ -20,10 +20,12 @@ Generation writes to `packages/proto/generated`, and the public package
 entry point imports from those generated files to expose documented aliases for
 the file descriptors, message schemas, message types, and the `type_url_prefix`
 custom option. Generated implementation modules are not broadly re-exported from
-the package root. Build output also exposes `@spine-ts/proto/generated/*`
-subpaths for callers that intentionally need a generated module directly.
-High-level `Any` packing helpers and command/event factory APIs are deferred to
-later framework tasks.
+the package root. Build output also exposes generated subpaths for callers that
+intentionally need a generated module directly, including both extensionless
+imports such as `@spine-ts/proto/generated/spine/core/command_pb` and natural
+ESM `.js` imports such as
+`@spine-ts/proto/generated/spine/core/command_pb.js`. High-level `Any` packing
+helpers and command/event factory APIs are deferred to later framework tasks.
 
 Run:
 

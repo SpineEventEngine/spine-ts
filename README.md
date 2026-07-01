@@ -20,10 +20,14 @@ are intentionally deferred to later tasks.
   `proto/spine-sources.json`.
 - `@spine-ts/proto` exposes curated Protobuf-ES schemas, descriptors, message
   types, and Spine custom options for the first intake set.
+- Package tests live outside package source under `packages/<package>/test`.
+- Cleanup enforcement runs through `pnpm lint` and therefore also through
+  `pnpm verify`.
 
 ## Useful Commands
 
 - `pnpm install`
+- `pnpm lint`
 - `pnpm verify`
 - `pnpm docs:api`
 - `pnpm proto:generate`

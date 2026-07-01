@@ -52,7 +52,8 @@ type RequiredName = Message<"example.validation.RequiredName"> & {
 // syntax = "proto3"; package example.validation;
 // message RequiredName { string name = 1 [(required) = true]; }
 const fileExampleValidationFixture = fileDesc(
-  "CiBleGFtcGxlL3ZhbGlkYXRpb25fZml4dHVyZS5wcm90bxISZXhhbXBsZS52YWxpZGF0aW9uIiIKDFJlcXVpcmVkTmFtZRISCgRuYW1lGAEgASgJQgSghSQBYgZwcm90bzM",
+  "CiBleGFtcGxlL3ZhbGlkYXRpb25fZml4dHVyZS5wcm90bxISZXhhbXBsZS52YWxpZGF0aW9uIiIK" +
+    "DFJlcXVpcmVkTmFtZRISCgRuYW1lGAEgASgJQgSghSQBYgZwcm90bzM",
   [file_spine_options],
 );
 const RequiredNameSchema = messageDesc(fileExampleValidationFixture, 0) as GenMessage<RequiredName>;
@@ -164,7 +165,10 @@ describe("@spine-ts/core type registry", () => {
         typeUrl: "type.example.test/example.WrongType",
       }),
     ).toThrow(
-      /Explicit type URL "type\.example\.test\/example\.WrongType" must have the form "<prefix>\/spine\.base\.FieldPath"/,
+      new RegExp(
+        'Explicit type URL "type\\.example\\.test/example\\.WrongType" must have ' +
+          'the form "<prefix>/spine\\.base\\.FieldPath"',
+      ),
     );
 
     const metadata = registry.register(FieldPathSchema, {

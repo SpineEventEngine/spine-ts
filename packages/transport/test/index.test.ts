@@ -211,7 +211,9 @@ describe("@spine-ts/transport", () => {
       ],
       signalKinds: ["event", "subscription"],
       registrationKey:
-        "worker#projection-worker#projection-a#event:type.spine.io%2Fexample.TaskCreated:projection,tasks#fan-out#projection-a|subscription:type.spine.io%2Fexample.TaskWatch#competing-consumer#projection-a",
+        "worker#projection-worker#projection-a#" +
+        "event:type.spine.io%2Fexample.TaskCreated:projection,tasks#fan-out#projection-a|" +
+        "subscription:type.spine.io%2Fexample.TaskWatch#competing-consumer#projection-a",
     });
     expect(registration.subscriptions[0]).not.toHaveProperty("frames");
     expect(registration).not.toHaveProperty("retries");
@@ -267,7 +269,9 @@ describe("@spine-ts/transport", () => {
       "subscription:type.spine.io%2Fexample.TaskWatch#competing-consumer#projection-a",
     ]);
     expect(rebuilt.registrationKey).toBe(
-      "worker#projection-worker#projection-a#event:type.spine.io%2Fexample.TaskCreated:projection#fan-out#projection-a|subscription:type.spine.io%2Fexample.TaskWatch#competing-consumer#projection-a",
+      "worker#projection-worker#projection-a#" +
+        "event:type.spine.io%2Fexample.TaskCreated:projection#fan-out#projection-a|" +
+        "subscription:type.spine.io%2Fexample.TaskWatch#competing-consumer#projection-a",
     );
   });
 
@@ -361,7 +365,8 @@ describe("@spine-ts/transport", () => {
         workerRole: "delivery-worker",
       },
       attemptKey:
-        "delivery:type.spine.io%2Fexample.TaskDelivery:aggregate#competing-consumer#delivery-a#worker#delivery-worker#delivery-a#command-abc-123#task-42#2",
+        "delivery:type.spine.io%2Fexample.TaskDelivery:aggregate#competing-consumer#delivery-a#" +
+        "worker#delivery-worker#delivery-a#command-abc-123#task-42#2",
     });
     expect(attempt).not.toHaveProperty("endpoint");
     expect(attempt).not.toHaveProperty("socketType");

@@ -12,6 +12,10 @@
     "./generated/*": {
       "types": "./dist/generated/*.d.ts",
       "default": "./dist/generated/*.js"
+    },
+    "./generated/*.js": {
+      "types": "./dist/generated/*.d.ts",
+      "default": "./dist/generated/*.js"
     }
   },
   "files": [
