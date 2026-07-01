@@ -1,6 +1,6 @@
 # Work Log: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.4 integrated; T-0012.5 selected
+Status: T-0012.5 integrated; T-0012.6 selected
 
 ## Entries
 
@@ -20,6 +20,7 @@ Status: T-0012.4 integrated; T-0012.5 selected
 | `2026-07-02 00:14 WEST` | Main orchestrator     | Verified parent branch after `T-0012.3` integration.                                          | Escalated `env CI=true corepack pnpm verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Passed with 28 test files, 291 tests, coverage statements 96.5%, branches 91.22%, functions 99.31%, lines 96.44%, docs/API checks with existing invalid-`origin` TypeDoc warning only, proto lint/generate, and generated-clean comparison.                                                                                                                                              |
 | `2026-07-01 21:51 WEST` | Main orchestrator     | Integrated `T-0012.4` and selected next subtask.                                              | Merged `task/T-0012-4-storage-factory-record-storage` into parent branch; updated parent task/report/review/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                        | `T-0012.4` is complete with all review lanes clean and escalated `env CI=true corepack pnpm verify` passing. Next selected subtask is `T-0012.5 CommandBus, EventBus, And Handler Registration`.                                                                                                                                                                                         |
 | `2026-07-01 21:49 WEST` | Main orchestrator     | Verified parent branch after `T-0012.4` integration.                                          | Escalated `env CI=true corepack pnpm verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Passed with 32 test files, 294 tests, coverage statements 95.64%, branches 90.44%, functions 98.31%, lines 95.64%, docs/API checks with existing invalid-`origin` TypeDoc warning only, proto lint/generate, and generated-clean comparison.                                                                                                                                             |
+| `2026-07-01 22:55 WEST` | Main orchestrator     | Integrated `T-0012.5` and selected next subtask.                                              | Merged `task/T-0012-5-buses-handler-registration` into parent branch; updated parent task/report/review/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                            | `T-0012.5` is complete with all review lanes clean and escalated `env CI=true corepack pnpm verify` passing at task branch HEAD. Next selected subtask is `T-0012.6 BoundedContext Assembly`.                                                                                                                                                                                            |
 
 ## Current State
 
@@ -30,10 +31,12 @@ Status: T-0012.4 integrated; T-0012.5 selected
 - `T-0012.2 Source Folder Repack` is integrated.
 - `T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions` is integrated.
 - `T-0012.4 Storage Factory And Record Storage Reset` is integrated.
+- `T-0012.5 CommandBus, EventBus, And Handler Registration` is integrated.
 - Next selected implementable cleanup subtask is
-  `T-0012.5 CommandBus, EventBus, And Handler Registration`.
+  `T-0012.6 BoundedContext Assembly`.
 - Parent verification passed after `T-0012.1` integration.
 - Parent verification passed after `T-0012.2` integration.
 - Parent verification passed after `T-0012.3` integration.
 - Parent verification passed after `T-0012.4` integration.
+- Parent verification after `T-0012.5` integration is next.
 - No blocking human question is known.

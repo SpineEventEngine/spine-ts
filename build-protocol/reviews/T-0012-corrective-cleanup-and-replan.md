@@ -119,3 +119,19 @@ focus on:
 - asynchronous signal processing without delivery, gRPC, stand, repositories,
   scheduler, import bus, or system audit behavior;
 - handler decorators/metadata staying small and JVM-named.
+
+`T-0012.5` is integrated. All required review lanes are clean, including
+focused documentation re-reviews, and final escalated
+`env CI=true corepack pnpm verify` passed.
+
+## Next Review Focus
+
+For `T-0012.6 BoundedContext Assembly`, reviewers must focus on:
+
+- close alignment with Spine JVM `BoundedContext` and builder responsibilities;
+- using the already implemented storage and bus seams instead of invented
+  snapshot/detail hierarchies;
+- no repository lifecycle, delivery, stand, gRPC, transport execution,
+  scheduler, import bus, or system audit behavior;
+- a small public API with JVM-familiar names and simple errors; and
+- updated docs/API docs and task logs for every public assembly change.

@@ -1,6 +1,6 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.4 integrated; T-0012.5 selected
+Status: T-0012.5 integrated; T-0012.6 selected
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
@@ -25,8 +25,9 @@ and selected the first implementable cleanup subtask.
 `T-0012.2 Source Folder Repack` is integrated on this parent branch.
 `T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions` is integrated on
 this parent branch. `T-0012.4 Storage Factory And Record Storage Reset` is
-integrated on this parent branch. The next selected subtask is
-`T-0012.5 CommandBus, EventBus, And Handler Registration`.
+integrated on this parent branch. `T-0012.5 CommandBus, EventBus, And Handler
+Registration` is integrated on this parent branch. The next selected subtask is
+`T-0012.6 BoundedContext Assembly`.
 
 `T-0012.4` replaced the broad `StorageAdapter` surface with a JVM-like
 `StorageFactory` / `RecordStorage` seam, added declarative `RecordSpec` and
@@ -38,6 +39,17 @@ Parent verification after integrating `T-0012.4` passed with escalated
 statements 95.64%, branches 90.44%, functions 98.31%, lines 95.64%, docs/API
 checks with the existing invalid-`origin` TypeDoc warning only, proto
 lint/generate, and generated-clean comparison.
+
+`T-0012.5` added small JVM-familiar `CommandBus` and `EventBus` seams,
+dispatcher registries, event store-before-dispatch, and focused bus tests. It
+removed the public dispatch bypass during review so public intake is only
+queued `post()`, switched dispatcher schema contracts to `MessageSchema`, and
+documented no-dispatch and dispatcher-failure event semantics. All required
+review lanes are clean. Final escalated `env CI=true corepack pnpm verify`
+passed with 35 test files, 302 tests, coverage statements 95.61%, branches
+90.08%, functions 98.37%, lines 95.60%, docs/API checks with the existing
+invalid-`origin` TypeDoc warning only, proto lint/generate, and generated-clean
+comparison.
 
 `T-0012.3` removed bounded-context runtime/detail exports, simplified
 repository diagnostics to code/message, removed transport lifecycle/delivery
