@@ -160,7 +160,8 @@ The framework starts storage with one adapter seam:
 For now `EventStore` is storage-only. It persists and queries `Event` records,
 but it does not dispatch those events on its own to buses, subscribers,
 delivery workers, or retry infrastructure. The first TS `EventBus` now owns
-append-before-dispatch by delegating to `EventStore`.
+append-before-dispatch by delegating to `EventStore`; events with no registered
+dispatcher still remain stored and resolve.
 
 Later repository, delivery, and read-side storage layers must delegate to this
 record-storage seam instead of widening the adapter interface prematurely.

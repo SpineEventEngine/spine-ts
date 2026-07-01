@@ -1,6 +1,5 @@
 import type { Command } from "@spine-ts/proto";
-
-import type { DescriptorMessageSchema } from "../entity/entity-metadata.js";
+import type { MessageSchema } from "@spine-ts/core";
 
 /**
  * Small unicast command-dispatch seam for later repository/runtime owners.
@@ -11,7 +10,7 @@ import type { DescriptorMessageSchema } from "../entity/entity-metadata.js";
  */
 export interface CommandDispatcher {
   /** Generated command message schemas accepted by this dispatcher. */
-  messageSchemas(): readonly DescriptorMessageSchema[];
+  messageSchemas(): readonly MessageSchema[];
 
   /** Dispatch one generated Spine command envelope. */
   dispatch(command: Command): Promise<void>;

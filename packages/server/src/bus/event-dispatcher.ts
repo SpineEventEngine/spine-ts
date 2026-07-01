@@ -1,6 +1,5 @@
 import type { Event } from "@spine-ts/proto";
-
-import type { DescriptorMessageSchema } from "../entity/entity-metadata.js";
+import type { MessageSchema } from "@spine-ts/core";
 
 /**
  * Small multicast event-dispatch seam for later repository/runtime owners.
@@ -11,7 +10,7 @@ import type { DescriptorMessageSchema } from "../entity/entity-metadata.js";
  */
 export interface EventDispatcher {
   /** Generated event message schemas accepted by this dispatcher. */
-  messageSchemas(): readonly DescriptorMessageSchema[];
+  messageSchemas(): readonly MessageSchema[];
 
   /** Dispatch one generated Spine event envelope. */
   dispatch(event: Event): Promise<void>;

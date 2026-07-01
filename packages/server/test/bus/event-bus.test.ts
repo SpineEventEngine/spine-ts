@@ -3,7 +3,7 @@ import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny, packEvent } from "@spine-ts/core";
+import { packAny, packEvent } from "@spine-ts/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -106,7 +106,7 @@ describe("EventBus", () => {
     expect(observed).toEqual(["after-post", "first:event-2", "second:event-2"]);
   });
 
-  it("rejects posting events without a registered dispatcher after storing them", async () => {
+  it("stores events without a registered dispatcher and resolves", async () => {
     const store = new EventStore(
       { name: "Tasks", multitenant: false },
       new InMemoryStorageFactory(),
@@ -114,10 +114,24 @@ describe("EventBus", () => {
     const bus = new EventBus(store);
     const event = createProjectionEvent("event-3");
 
-    await expect(bus.post(event)).rejects.toThrow(
-      `No event dispatcher registered for "${deriveTypeUrl(ProjectionStateSchema)}".`,
-    );
+    await expect(bus.post(event)).resolves.toBeUndefined();
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-3" } }]);
+  });
+
+  it("does not invoke dispatchers when EventStore append fails", async () => {
+    const observed: string[] = [];
+    const store = {
+      append: () => Promise.reject(new Error("append failed")),
+    } as unknown as EventStore;
+    const bus = new EventBus(store, [
+      createEventDispatcher([ProjectionStateSchema], (event) => {
+        observed.push(`dispatch:${event.id?.value ?? "missing"}`);
+      }),
+    ]);
+
+    await expect(bus.post(createProjectionEvent("event-4"))).rejects.toThrow("append failed");
+
+    expect(observed).toEqual([]);
   });
 });
 

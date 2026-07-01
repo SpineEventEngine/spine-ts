@@ -35,10 +35,6 @@ export class CommandBus {
     return this.#started.then(() => this.#runtime.enqueue(() => this.#dispatch(accepted)));
   }
 
-  dispatch(command: Command): Promise<void> {
-    return this.#dispatch(clone(CommandSchema, command));
-  }
-
   async #dispatch(command: Command): Promise<void> {
     const typeUrl = command.message?.typeUrl;
 

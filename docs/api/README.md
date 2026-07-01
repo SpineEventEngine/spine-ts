@@ -170,9 +170,12 @@ Bus exports include `CommandBus`, `CommandDispatcher`, `EventBus`, and
 queues accepted work asynchronously, and routes by enclosed message type URL to
 exactly one registered dispatcher, rejecting duplicate dispatcher registration
 for a command message type. `EventBus` accepts generated Spine `Event`
-envelopes, appends them to an injected `EventStore`, and then dispatches to all
-matching registered dispatchers in deterministic registration order. The bus
-layer does not instantiate entities, invoke entity methods directly, create
+envelopes, appends them to an injected `EventStore`, and then dispatches to
+matching registered dispatchers in deterministic registration order. Events
+with no registered dispatcher are stored and resolve. If append fails, no
+dispatcher runs. If a dispatcher rejects, earlier dispatchers may already have
+run, later dispatchers are skipped, and the stored event remains. The bus layer
+does not instantiate entities, invoke entity methods directly, create
 repositories, map `Ack`, or introduce delivery/inbox behavior.
 Runtime routing exports include `createServerRuntimeRoutingPlan()`,
 `ServerRuntimeRoutingPlan`, `ServerRuntimeRoutingPlanInput`,

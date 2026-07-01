@@ -250,6 +250,8 @@ describe("@spine-ts/server", () => {
     expect(acceptSignalIntake("command").acceptedFor).toBe("async-work");
     expect(failSignalIntake("event", "MALFORMED_ENVELOPE").failure.code).toBe("MALFORMED_ENVELOPE");
     expect(new CommandBus()).toBeInstanceOf(CommandBus);
+    expect("dispatch" in new CommandBus()).toBe(false);
+    expectTypeOf<CommandBus>().not.toHaveProperty("dispatch");
     expectTypeOf<CommandDispatcher>().toExtend<{
       messageSchemas(): readonly object[];
       dispatch(command: object): Promise<void>;
@@ -259,6 +261,8 @@ describe("@spine-ts/server", () => {
       readonly commandFullTypeName: string;
     }>();
     expect(new EventBus({} as never)).toBeInstanceOf(EventBus);
+    expect("dispatch" in new EventBus({} as never)).toBe(false);
+    expectTypeOf<EventBus>().not.toHaveProperty("dispatch");
     expectTypeOf<EventDispatcher>().toExtend<{
       messageSchemas(): readonly object[];
       dispatch(event: object): Promise<void>;

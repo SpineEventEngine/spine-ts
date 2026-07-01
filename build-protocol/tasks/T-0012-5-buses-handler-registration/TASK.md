@@ -1,6 +1,6 @@
 # T-0012.5: CommandBus, EventBus, And Handler Registration
 
-Status: implementation selected
+Status: Ready for review round 2
 Start: `2026-07-01 21:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-5-buses-handler-registration`
@@ -97,3 +97,14 @@ Fresh baseline in this worktree:
 - Reviewer comments feed back to the authoring sub-agent until all lanes are
   clean.
 - All participating sub-agents are closed after their role is complete.
+
+## Review Round 1 Fix Log
+
+- `2026-07-01 22:30 WEST`: T-0012.5 review-fix worker accepted round 1
+  findings. Public bus intake is now `post()` only, dispatcher contracts use
+  `MessageSchema`, no-dispatch event posts store and resolve, append failure
+  skips dispatchers, event failure semantics are documented, stale current docs
+  are corrected, and task/review/work logs were updated.
+- `2026-07-01 22:35 WEST`: Focused bus tests, typecheck, docs/API checks,
+  lint, and escalated full `pnpm verify` passed. The first non-escalated full
+  verify stopped only on the known sandboxed ZeroMQ IPC permission failure.

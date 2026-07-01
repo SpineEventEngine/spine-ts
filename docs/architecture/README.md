@@ -328,7 +328,7 @@ The following runtime pieces are still deferred to later explicit tasks:
 - runtime repository registration, default repository construction from entity
   classes, storage opening, visibility/type-supplier registration, and
   lifecycle callbacks over the repository identity seam;
-- handler invocation and executable command/event routing or dispatch;
+- handler invocation and integrated command/event routing;
 - inbox, delivery, storage, and tenant-index persistence;
 - stand/query/subscription execution;
 - system-context pairing and server/gRPC services; and

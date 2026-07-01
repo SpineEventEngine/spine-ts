@@ -138,9 +138,9 @@ the to-do application remain later slices.
 - gRPC service implementations.
 - Runtime repository registration, default repository construction from entity
   classes, handler invocation, entity runtime dispatch, system context
-  construction, command/event/import buses, query/subscription stands, tenant
-  index persistence, ZeroMQ endpoint topology, broker process supervision,
-  retry workers, durable delivery storage, transport-backed service execution,
+  construction, import buses, query/subscription stands, tenant index
+  persistence, ZeroMQ endpoint topology, broker process supervision, retry
+  workers, durable delivery storage, transport-backed service execution,
   durable production storage, and to-do domain runtime behavior.
 
 ## Type Registry
@@ -526,9 +526,12 @@ await eventBus.post(eventEnvelope);
 `CommandBus` is unicast by enclosed message type URL: one registered
 dispatcher handles a posted command. Registering a second dispatcher for the
 same command type is rejected. `EventBus` is multicast by enclosed message type
-URL: every registered dispatcher for the event type runs in registration order.
-Before the first event dispatcher runs, `EventBus` appends the accepted event
-to the injected `EventStore`.
+URL: registered dispatchers for the event type run in registration order.
+Before multicast, `EventBus` appends the accepted event to the injected
+`EventStore`. If no dispatcher is registered, the event is still stored and
+`post()` resolves. If append fails, no dispatcher is invoked. If a dispatcher
+rejects, earlier dispatchers may already have run, later dispatchers are not
+invoked, and the stored event remains.
 
 ## Transport Foundation
 

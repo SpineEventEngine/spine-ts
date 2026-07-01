@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.5 CommandBus, EventBus, And Handler Registration
 
-Status: implemented
+Status: ready for review round 2
 Branch: `task/T-0012-5-buses-handler-registration`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-5-buses-handler-registration`
@@ -23,6 +23,12 @@ runtime wiring, repositories, delivery/inbox behavior, stand/query/subscription
 execution, gRPC, transport execution, or direct entity method invocation from
 the buses.
 
+Review round 1 fixes remove public `dispatch()` from both buses so all public
+intake goes through queued `post()`, switch dispatcher schema contracts to
+`@spine-ts/core` `MessageSchema`, and make no-dispatch event posts store and
+resolve. Event append failure now has regression coverage proving dispatchers
+are not invoked.
+
 ## JVM Alignment
 
 Spine JVM establishes:
@@ -43,6 +49,19 @@ Fresh implementation verification:
 - `pnpm test packages/server/test` passed with 16 test files and 217 tests.
 - `pnpm test packages/storage/test` passed with 5 test files and 18 tests.
 - `pnpm typecheck:build` passed.
+- Review-fix focused checks passed:
+  `pnpm test packages/server/test/bus packages/server/test/index.test.ts`,
+  `pnpm typecheck:tooling`, and `pnpm typecheck:build`.
+- Review-fix final verification passed:
+  - `pnpm test packages/server/test/bus packages/server/test/index.test.ts`
+    passed with 4 test files and 18 tests.
+  - `pnpm typecheck` passed.
+  - `pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
+    warning only.
+  - Sandbox `pnpm verify` reached 34 passed files plus 300 passed tests, then
+    failed only on the known ZeroMQ local IPC permission error.
+  - Escalated `pnpm verify` passed with 35 test files and 302 tests; coverage
+    statements 95.61%, branches 90.08%, functions 98.37%, lines 95.60%.
 - Escalated `env CI=true corepack pnpm verify` passed after rerunning outside
   the sandbox because the existing ZeroMQ local IPC smoke tests require local
   IPC permissions the sandbox blocks.
