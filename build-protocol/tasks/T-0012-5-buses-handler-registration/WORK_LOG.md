@@ -7,7 +7,7 @@ Worktree:
 Baseline commit: `746e862`
 Authoring worker: `T-0012.5 review-fix worker`
 Implementation commit: `aab96c715e5b86d8b73204703331383ca6117f7b`
-Final branch HEAD: `aab96c715e5b86d8b73204703331383ca6117f7b`
+Final branch HEAD: `7a19e684fed14e77466e206e6182d436161a5119`
 
 ## Purpose
 
@@ -47,12 +47,15 @@ Record chronological branch activity for the round 1 review-fix pass.
 - `2026-07-01 22:41 WEST`: Ran `pnpm docs:check`; it passed with the existing
   invalid-`origin` TypeDoc warning only and reported 100 proto, 28 core, 126
   server, 14 storage, and 17 transport expected exports.
+- `2026-07-01 22:43 WEST`: Committed docs cleanup as
+  `7a19e684fed14e77466e206e6182d436161a5119`.
 
 ## Current State
 
-- Last completed step: Round 2 docs cleanup, reviewer finding disposition, and
-  docs verification.
-- Next step: Send the committed docs cleanup for re-review.
+- Last completed step: Round 2 docs cleanup, reviewer finding disposition, docs
+  verification, and focused docs re-review.
+- Next step: Record the focused re-review minor cleanup and commit the updated
+  work log.
 - Known risks: None for this fix; non-escalated verification still cannot bind
   ZeroMQ local IPC endpoints in the sandbox.
 - Open questions: None.
@@ -70,9 +73,13 @@ Record chronological branch activity for the round 1 review-fix pass.
   naming, and process supervision.
 - Contradictory implementation report evidence: fixed by keeping the 35-file,
   302-test review-fix evidence and removing the stale 301-test coverage line.
-- Pending commit placeholders: replaced with
-  `aab96c715e5b86d8b73204703331383ca6117f7b`; this cleanup will add a separate
-  follow-up commit on the current branch.
+- Pending commit placeholders: replaced first with
+  `aab96c715e5b86d8b73204703331383ca6117f7b`, then final branch HEAD was
+  updated to the committed docs-cleanup HEAD
+  `7a19e684fed14e77466e206e6182d436161a5119`.
+- Focused docs re-review minor: final branch HEAD and future-tense cleanup note
+  were stale after `7a19e684fed14e77466e206e6182d436161a5119`; this work-log
+  update corrects both.
 
 ## Open Risks And Follow-Up Routing
 
