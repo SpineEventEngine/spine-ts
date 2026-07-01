@@ -1,6 +1,6 @@
 # Implementation Report: T-0011.6 Server Runtime Wiring Integration
 
-Status: In Progress
+Status: Implemented
 Task log: `build-protocol/tasks/T-0011-6-server-runtime-wiring-integration/TASK.md`
 Work log: `build-protocol/work-logs/T-0011-6.md`
 Review log:
@@ -16,6 +16,20 @@ subtask owns the smallest server/runtime seam that connects existing
 `@spine-ts/server` metadata to `@spine-ts/transport` routing contracts. It must
 not implement service hosting, handler dispatch, durable delivery, storage, or
 process supervision.
+
+Implemented result:
+
+- added `packages/server/src/runtime-routing.ts` with
+  `createServerRuntimeRoutingPlan()` plus immutable command/event routing-plan
+  types;
+- derived command topics plus one competing-consumer command-worker
+  registration from `CommandRegistrationReadiness`;
+- derived event topics plus fan-out subscriptions and event-worker
+  registrations for subscriber/reactor/application receiver groups from
+  `EventRegistrationReadiness`;
+- recorded explicit deferred seams for query/subscription/system routing; and
+- updated package/docs/API guardrails without widening the slice into buses,
+  endpoints, dispatch, storage, or service hosting.
 
 ## JVM Source Guardrail
 
@@ -50,15 +64,57 @@ delivery, scheduling, and process supervision outside this slice.
   TypeDoc emitted the existing invalid-`origin` warning only. The command used
   native IPC access because inherited ZeroMQ smoke tests bind `ipc://`
   endpoints.
+- RED on `2026-07-01 03:19 WEST`:
+  `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts`
+  failed with 4/4 tests red because `createServerRuntimeRoutingPlan` did not
+  exist yet.
+- GREEN on `2026-07-01 03:32 WEST`:
+  `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts packages/server/src/index.test.ts`
+  passed with 2 files / 16 tests.
+- Final verification passed on `2026-07-01 03:33 WEST`:
+  `corepack pnpm typecheck`, `corepack pnpm docs:check`, and
+  `git diff --check` all passed. `CI=true corepack pnpm verify` passed with
+  native IPC access: 24 test files / 286 tests, coverage 95.99% statements /
+  90.14% branches / 99.38% functions / 95.93% lines, TypeDoc/API checks with
+  100 proto / 28 core / 134 server / 26 storage / 46 transport exports, proto
+  checksum verification, proto lint/generate, and generated-clean all passed.
+  TypeDoc emitted the existing invalid-`origin` warning only.
+
+## Skill Applicability
+
+- Implementation sub-agent re-read these selected skill entrypoints before
+  coding on `2026-07-01 03:15 WEST`:
+  `test-driven-development`, `typescript-advanced-types`,
+  `javascript-testing-patterns`, `codebase-design`,
+  `nodejs-backend-patterns`, and `verification-before-completion`.
+- Directly applied skills:
+  `test-driven-development`, `typescript-advanced-types`,
+  `javascript-testing-patterns`, `codebase-design`,
+  and `verification-before-completion`.
+- `nodejs-backend-patterns` was reviewed for boundary/input-validation guidance
+  but not used as the primary design driver because this slice deliberately
+  avoids service hosting and broader runtime infrastructure.
+- Implementation target: a narrow `runtime-routing` planner that consumes built
+  bounded-context metadata plus command/event readiness and emits immutable
+  transport topics, subscriptions, worker registrations, and explicit deferred
+  seams for unsupported signal kinds.
 
 ## Files Changed
 
 - `build-protocol/tasks/T-0011-6-server-runtime-wiring-integration/TASK.md`
 - `build-protocol/tasks/T-0011-6-server-runtime-wiring-integration/IMPLEMENTATION_REPORT.md`
 - `build-protocol/work-logs/T-0011-6.md`
-- `build-protocol/reviews/T-0011-6-server-runtime-wiring-integration.md`
+- `docs/api/README.md`
+- `docs/architecture/README.md`
+- `packages/server/README.md`
+- `packages/server/package.json`
+- `packages/server/src/index.test.ts`
+- `packages/server/src/index.ts`
+- `packages/server/src/runtime-routing.test.ts`
+- `packages/server/src/runtime-routing.ts`
+- `pnpm-lock.yaml`
+- `scripts/check-api-docs.mjs`
 
 ## Open Items
 
-- Spawn the T-0011.6 implementation sub-agent.
 - Run all required reviewer lanes and close all participating sub-agents.

@@ -346,22 +346,28 @@ than a server graph. The verified public composition is:
 - bind that built context to `BoundedContextRuntime`, using either its private
   `SingleProcessServerRuntime` or a caller-owned `ServerRuntimeLifecycle`;
 - derive command and event registration-readiness metadata from existing
-  `HandlerMetadataRegistry` entries; and
+  `HandlerMetadataRegistry` entries;
+- derive an immutable runtime-routing plan from the built context plus command
+  and event readiness using `createServerRuntimeRoutingPlan()`; and
 - start/close the context runtime through deterministic lifecycle state.
 
 This is intentionally enough for later runtime tasks to share vocabulary and
 tests around "context metadata plus lifecycle plus readiness." It is not an
 equivalent of Spine JVM `Server` or a running JVM-style `BoundedContext`.
 `BoundedContextRuntime` does not expose queue intake, and the readiness views do
-not dispatch or invoke handlers. The package root does not export service,
-transport, bus, storage, delivery, stand, integration-broker, repository
-runtime-registration, validation, or `Ack` abstractions as part of this closure.
+not dispatch or invoke handlers. The runtime-routing plan does not open
+transport endpoints, expose ZeroMQ details, or start workers; it only turns
+existing metadata into transport-owned topics, subscriptions, worker
+registrations, and explicit deferred seams. The package root does not export
+service, transport, bus, storage, delivery, stand, integration-broker,
+repository runtime-registration, validation, or `Ack` abstractions as part of
+this closure.
 
 The architectural consequence is that later work must add those collaborators
 as explicit tasks at their own seams. Command and event intake can consume the
-existing readiness views, but must still design validation, `Ack` mapping,
-filtering, storage-before-dispatch, dispatch outcomes, delivery, and transport
-integration separately.
+existing readiness views and runtime-routing plan, but must still design
+validation, `Ack` mapping, filtering, storage-before-dispatch, dispatch
+outcomes, delivery, and transport integration separately.
 
 ## Storage Boundary
 

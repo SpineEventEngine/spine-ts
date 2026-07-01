@@ -47,6 +47,10 @@ Current slice exposes:
   `EventRegistrationReadiness.fromEntityHandlers()` for deterministic,
   metadata-only event type readiness over subscriber fan-out, reactor fan-out,
   and event applications already validated by `HandlerMetadataRegistry`.
+- `createServerRuntimeRoutingPlan({ context, commands, events })` for the
+  smallest immutable server/runtime wiring seam from built bounded-context
+  metadata plus command/event readiness to transport topics, subscriptions,
+  worker registrations, and explicit deferred routing seams.
 - `@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply` standard method
   decorators that require explicit Protobuf-ES schemas and materialize into the
   same handler metadata contract.
@@ -65,11 +69,13 @@ Current slice exposes:
 import {
   Apply,
   Assign,
+  BoundedContext,
   CommandRegistrationReadiness,
   EventRegistrationReadiness,
   HandlerMetadataRegistry,
   React,
   Subscribe,
+  createServerRuntimeRoutingPlan,
   defineEntityHandlers,
   materializeDecoratedEntityHandlers,
 } from "@spine-ts/server";
@@ -122,6 +128,16 @@ eventReadiness.findEventSubscribers(TaskCreatedSchema.typeName)[0]?.handler.meth
 eventReadiness.findEventReactors(TaskCreatedSchema.typeName)[0]?.handler.methodName;
 // "reactToCreated"
 eventReadiness.findEventApplications(TaskCreatedSchema.typeName)[0]?.handler.allowImport; // true
+
+const routingPlan = createServerRuntimeRoutingPlan({
+  context: BoundedContext.singleTenant("Tasks").build(),
+  commands: readiness,
+  events: eventReadiness,
+});
+routingPlan.commands.workers[0]?.worker.workerRole; // "command-worker"
+routingPlan.events.subscriberRoutes[0]?.subscription.mode; // "fan-out"
+routingPlan.deferred.map(({ signalKind }) => signalKind);
+// ["query", "subscription", "system"]
 
 explicitTaskHandlers.handlers.map((handler) => handler.methodName); // same contract
 ```
@@ -176,6 +192,17 @@ This surface is not an event bus, integration broker, import bus, event store,
 delivery mechanism, stand, subscription service, command-result subscription,
 dispatcher, router, validator, repository runtime registration hook, storage
 writer, transport adapter, handler invoker, or Spine `Ack` producer.
+
+`createServerRuntimeRoutingPlan()` is the first server-owned runtime-wiring seam
+over that metadata. It requires a built `BoundedContext`, derives command
+topics plus one competing-consumer command-worker registration from command
+readiness, derives event topics plus fan-out subscriptions and event-worker
+registrations from subscriber/reactor/application readiness, and returns only
+immutable transport-owned contracts from `@spine-ts/transport`. Query,
+subscription, and system routing remain explicit deferred seams because this
+slice has no concrete server readiness metadata for them. The planner does not
+open sockets, name IPC endpoints, start workers, dispatch handlers, validate
+signals, store delivery state, or expose buses/services.
 
 ## Single-Process Runtime Kernel
 

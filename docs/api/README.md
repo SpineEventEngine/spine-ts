@@ -176,6 +176,21 @@ broker, import bus, event store, delivery mechanism, stand, subscription
 service, command-result subscription, dispatcher, router, event posting API,
 validator, repository runtime registration hook, storage writer, transport
 adapter, handler invoker, or Spine `Ack` producer.
+Runtime routing exports include `createServerRuntimeRoutingPlan()`,
+`ServerRuntimeRoutingPlan`, `ServerRuntimeRoutingPlanInput`,
+`CommandRuntimeRoutingPlan`, `CommandRuntimeRoutingRoute`,
+`EventRuntimeRoutingPlan`, `EventSubscriberRuntimeRoutingRoute`,
+`EventReactorRuntimeRoutingRoute`, `EventApplicationRuntimeRoutingRoute`, and
+`DeferredServerRuntimeRoutingSeam`. The planner requires a built
+`BoundedContext`, plus optional command/event readiness lookups, and derives
+only immutable `@spine-ts/transport` topics, subscriptions, and worker
+registrations. Command routing produces one logical command-worker
+competing-consumer registration over registered command topics. Event routing
+produces fan-out subscriptions and event-worker registrations for subscriber,
+reactor, and application receiver groups while keeping handler invocation,
+storage-before-dispatch, buses, IPC endpoint naming, and process supervision
+deferred. Query, subscription, and system routing remain explicit deferred
+seams until concrete server readiness metadata exists.
 Server runtime exports include `SingleProcessServerRuntime`,
 `ServerRuntimeLifecycle`, `ServerRuntimeState`, `ServerRuntimeWork`,
 `ServerRuntimeStateOperation`, `ServerRuntimeStateErrorCode`, and
@@ -202,14 +217,15 @@ dispatcher, integration broker, gRPC server, ZeroMQ transport, or worker-process
 runtime.
 The public runtime closure smoke path composes these exports with
 `BoundedContext`, `Repository`, `HandlerMetadataRegistry`,
-`CommandRegistrationReadiness`, and `EventRegistrationReadiness` to prove the
-metadata and lifecycle interfaces fit together without adding new public API.
-That composition produces context-scoped metadata, command/event readiness
-views, and deterministic lifecycle state only. It deliberately does not expose a
-`Server` export, service routing, command/event/import bus behavior,
-repository runtime registration, storage lifecycle, read-side execution,
-transport lifecycle, validation, delivery, integration-broker behavior, handler
-invocation, or Spine `Ack` mapping.
+`CommandRegistrationReadiness`, `EventRegistrationReadiness`, and
+`createServerRuntimeRoutingPlan()` to prove the metadata and lifecycle
+interfaces fit together without adding new public API. That composition
+produces context-scoped metadata, command/event readiness views, immutable
+runtime-routing plans, and deterministic lifecycle state only. It deliberately
+does not expose a `Server` export, service routing, command/event/import bus
+behavior, repository runtime registration, storage lifecycle, read-side
+execution, transport lifecycle, validation, delivery, integration-broker
+behavior, handler invocation, or Spine `Ack` mapping.
 Write-side signal intake exports include `SignalKind`, `SignalIntakeResult`,
 `SignalIntakeAccepted`, `SignalIntakeAcceptedFor`, `SignalIntakeFailure`,
 `SignalIntakeFailureCode`, `SignalIntakeFailureDetails`,

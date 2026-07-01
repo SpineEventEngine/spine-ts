@@ -9,7 +9,7 @@ Task log path:
 Branch: `task/T-0011-6-server-runtime-wiring-integration`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-6-server-runtime-wiring-integration`
-Authoring sub-agent: pending
+Authoring sub-agent: `019f1b72-d92b-77c3-bea5-b734213b1035`
 Reviewer sub-agents: pending
 
 ## Objective
@@ -144,6 +144,28 @@ Selected implementer/reviewer advisory skills to pass by reference:
   `cqrs-implementation`: relevant to keeping server/read/write boundaries
   explicit and small.
 
+Implementation sub-agent applicability check (`2026-07-01 03:15 WEST`):
+
+- Re-read selected skill entrypoints before task actions:
+  `test-driven-development`, `typescript-advanced-types`,
+  `javascript-testing-patterns`, `codebase-design`,
+  `nodejs-backend-patterns`, and `verification-before-completion`.
+- Selected for direct application in this slice:
+  `test-driven-development` for the required RED/GREEN loop,
+  `typescript-advanced-types` for narrow immutable routing-plan contracts,
+  `javascript-testing-patterns` for focused Vitest coverage,
+  `codebase-design` for a small deep runtime-routing seam, and
+  `verification-before-completion` for fresh evidence before completion.
+- Reviewed but not selected as a primary driver:
+  `nodejs-backend-patterns`, because this task stops at metadata/runtime wiring
+  and intentionally does not add HTTP services, lifecycle hosting, or process
+  supervision. Its input-validation and dependency-boundary guidance still
+  informed the design.
+- Implementation intent remains the smallest pure planner module over
+  `BoundedContext`, `CommandRegistrationReadiness`, `EventRegistrationReadiness`,
+  and `@spine-ts/transport` helpers only. Query/subscription/system remain
+  explicit deferred seams rather than speculative runtime APIs.
+
 Skipped relevant-looking skills:
 
 - `security-threat-model`, `stride-analysis-patterns`, and
@@ -180,6 +202,22 @@ Skipped relevant-looking skills:
   TypeDoc emitted the existing invalid-`origin` warning only. The command used
   native IPC access because inherited ZeroMQ smoke tests bind `ipc://`
   endpoints.
+- RED on `2026-07-01 03:19 WEST`:
+  `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts`
+  failed with 4/4 tests red because `createServerRuntimeRoutingPlan` did not
+  exist yet.
+- GREEN on `2026-07-01 03:32 WEST`:
+  `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts packages/server/src/index.test.ts`
+  passed with 2 files / 16 tests.
+- Final verification passed on `2026-07-01 03:33 WEST`:
+  `corepack pnpm typecheck`, `corepack pnpm docs:check`, and
+  `git diff --check` all passed. `CI=true corepack pnpm verify` passed with
+  native IPC access: 24 test files / 286 tests, coverage 95.99% statements /
+  90.14% branches / 99.38% functions / 95.93% lines, TypeDoc/API checks with
+  100 proto / 28 core / 134 server / 26 storage / 46 transport exports, proto
+  checksum verification, proto lint/generate, generated proto output clean,
+  and generated files clean. TypeDoc emitted the existing invalid-`origin`
+  warning only.
 
 ## Implementation Notes
 
@@ -187,6 +225,9 @@ Skipped relevant-looking skills:
   command-readiness, event-readiness, and runtime lifecycle code.
 - Prefer a pure deterministic plan/helper API over runtime objects.
 - Do not introduce new external dependencies.
+- Implement the seam as one pure routing planner over existing metadata,
+  transport topics/subscriptions/worker registrations, and explicit deferred
+  placeholders for query/subscription/system routing.
 - If implementation pressure suggests a larger `Server`, bus, storage,
   delivery, or process API, defer it to a later task and record the decision
   instead of widening this slice.
