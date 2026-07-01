@@ -1,6 +1,6 @@
 # T-0012.3: Delete Or Shrink Abandoned Runtime Abstractions
 
-Status: All review lanes clean; final verification pending
+Status: Complete; ready to merge into parent corrective branch
 Start: `2026-07-01 19:11 WEST`
 Baseline commit: `cb5ace3`
 Branch: `task/T-0012-3-shrink-runtime-abstractions`
@@ -93,6 +93,7 @@ passed before closure.
 Final focused documentation re-reviewer
 `019f1f12-e51e-7c20-a70a-3a2b5cc3740a` reported `CLEAN` for the second
 re-review work-log entry and is closed. All required review lanes are clean.
+Final escalated `env CI=true corepack pnpm verify` passed.
 
 ## Required Skills
 

@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions
 
-Status: All review lanes clean; final verification pending
+Status: Complete; ready to merge into parent corrective branch
 Branch: `task/T-0012-3-shrink-runtime-abstractions`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-3-shrink-runtime-abstractions`
@@ -113,6 +113,14 @@ recorded parent setup commit `cb5ace3`.
   `019f1f12-e51e-7c20-a70a-3a2b5cc3740a` reported `CLEAN` for
   `.superpowers/sdd/review-worklog-9080c49..1ead356.diff` and is closed.
 - All required review lanes are clean.
+
+## Final Verification
+
+- Escalated `env CI=true corepack pnpm verify` passed.
+- Evidence: 28 test files, 291 tests, coverage statements 96.5%, branches
+  91.22%, functions 99.31%, lines 96.44%, docs/API checks with the existing
+  invalid-`origin` TypeDoc warning only, proto lint/generate, and
+  generated-clean comparison.
 
 ## Intentionally Kept
 
