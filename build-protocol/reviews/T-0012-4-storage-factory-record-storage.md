@@ -1,6 +1,6 @@
 # Review Log: T-0012.4 Storage Factory And Record Storage Reset
 
-Status: implementation selected
+Status: ready for review
 Branch: `task/T-0012-4-storage-factory-record-storage`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-4-storage-factory-record-storage`
@@ -33,4 +33,5 @@ Reviewers must reject:
 
 ## Rounds
 
-No implementation review has run yet.
+Implementation is ready for the required reviewer lanes. No reviewer round has
+run in this worktree yet.

@@ -150,14 +150,15 @@ Requirements:
 
 ## Storage Boundaries
 
-The framework must define storage adapters around record-oriented capabilities:
+The framework starts storage with one adapter seam:
 
-- entity records;
-- aggregate event histories and snapshots;
-- read-side projection records and columns;
-- delivery inbox records;
-- tenant index records;
-- system diagnostics and logs.
+- `StorageFactory.createRecordStorage(context, spec)`;
+- `RecordSpec` for identified Protobuf records and query columns;
+- `RecordStorage` for write/read/delete/query operations;
+- `EventStore` as a delegate over `RecordStorage<EventId, Event>`.
+
+Later repository, delivery, and read-side storage layers must delegate to this
+record-storage seam instead of widening the adapter interface prematurely.
 
 Initial implementation may include in-memory storage, but production storage is pluggable. The bus transport is not storage.
 
