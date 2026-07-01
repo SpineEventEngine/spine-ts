@@ -1,6 +1,6 @@
 # T-0012: Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.2 integrated; T-0012.3 selected
+Status: T-0012.3 integrated; T-0012.4 selected
 Start: `2026-07-01 16:48 WEST`
 Baseline commit: `a9769d4`
 Branch: `task/T-0012-cleanup-replan`
@@ -74,8 +74,12 @@ No blocking human question is known.
 server and transport source/test folders by semantics, passed all review lanes,
 and passed escalated `env CI=true corepack pnpm verify`.
 
-Next selected subtask: `T-0012.3 Delete Or Shrink Abandoned Runtime
-Abstractions`.
+`T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions` is integrated on the
+parent branch. It removed or shrank ahead-of-roadmap runtime abstractions,
+passed all review lanes, and passed escalated `env CI=true corepack pnpm
+verify`.
+
+Next selected subtask: `T-0012.4 Storage Factory And Record Storage Reset`.
 
 ## T-0012.2 Selection Rationale
 
@@ -97,6 +101,15 @@ Rationale:
 - The task should delete or reduce abandoned command-execution-first concepts
   and long detail/error hierarchies without adding replacement behavior before
   storage and buses are rebuilt.
+
+## T-0012.4 Selection Rationale
+
+- The cleanup tasks have removed the worst ahead-of-roadmap surfaces.
+- The corrected implementation order starts real framework behavior with
+  `StorageFactory`, `RecordStorage`, an in-memory storage implementation, and
+  event store.
+- This task should inspect Spine JVM storage source closely and keep the TS API
+  small, with higher-level stores built later over the record-storage seam.
 
 ## Requirements Splitter Skill Applicability
 

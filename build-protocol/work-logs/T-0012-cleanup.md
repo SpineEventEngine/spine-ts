@@ -1,6 +1,6 @@
 # Work Log: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.2 integrated; T-0012.3 selected
+Status: T-0012.3 integrated; T-0012.4 selected
 
 ## Entries
 
@@ -16,6 +16,7 @@ Status: T-0012.2 integrated; T-0012.3 selected
 | `2026-07-01 18:56 WEST` | Documentation fix     | Recorded `T-0012.2` review status correction.                                                 | Updated parent task/report/review/work logs plus `T-0012.2` report/review/work log.                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Parent current-state language now says `T-0012.2 Source Folder Repack` is implemented and awaiting review. Historical selection entries remain unchanged as history.                                                                                                                                                                                                                     |
 | `2026-07-01 19:07 WEST` | Main orchestrator     | Integrated `T-0012.2` and selected next subtask.                                              | Merged `task/T-0012-2-source-folder-repack` into parent branch; updated parent task/report/review/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                                  | `T-0012.2` is complete with all review lanes clean and escalated `env CI=true corepack pnpm verify` passing. Next selected subtask is `T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions`.                                                                                                                                                                                        |
 | `2026-07-01 19:09 WEST` | Main orchestrator     | Verified parent branch after `T-0012.2` integration.                                          | Escalated `env CI=true corepack pnpm verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Passed with 28 test files, 307 tests, coverage above 90%, docs/API checks, proto lint/generate, and generated-clean comparison.                                                                                                                                                                                                                                                          |
+| `2026-07-02 00:10 WEST` | Main orchestrator     | Integrated `T-0012.3` and selected next subtask.                                              | Merged `task/T-0012-3-shrink-runtime-abstractions` into parent branch; updated parent task/report/review/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                           | `T-0012.3` is complete with all review lanes clean and escalated `env CI=true corepack pnpm verify` passing. Next selected subtask is `T-0012.4 Storage Factory And Record Storage Reset`.                                                                                                                                                                                               |
 
 ## Current State
 
@@ -24,8 +25,9 @@ Status: T-0012.2 integrated; T-0012.3 selected
 - Requirements splitter agent `019f1e60-fd4e-7ef0-b5ec-223d6928f739` is
   closed after commit `62164aa`.
 - `T-0012.2 Source Folder Repack` is integrated.
+- `T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions` is integrated.
 - Next selected implementable cleanup subtask is
-  `T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions`.
+  `T-0012.4 Storage Factory And Record Storage Reset`.
 - Parent verification passed after `T-0012.1` integration.
 - Parent verification passed after `T-0012.2` integration.
 - No blocking human question is known.

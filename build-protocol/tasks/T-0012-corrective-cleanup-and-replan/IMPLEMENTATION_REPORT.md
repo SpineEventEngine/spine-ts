@@ -1,6 +1,6 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.2 integrated; T-0012.3 selected
+Status: T-0012.3 integrated; T-0012.4 selected
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
@@ -22,8 +22,15 @@ and task-relevant JVM source. The splitter produced a staged corrective roadmap
 and selected the first implementable cleanup subtask.
 
 `T-0012.1 Cleanup Enforcement Baseline` is integrated on this parent branch.
-`T-0012.2 Source Folder Repack` is integrated on this parent branch. The next
-selected subtask is `T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions`.
+`T-0012.2 Source Folder Repack` is integrated on this parent branch.
+`T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions` is integrated on
+this parent branch. The next selected subtask is
+`T-0012.4 Storage Factory And Record Storage Reset`.
+
+`T-0012.3` removed bounded-context runtime/detail exports, simplified
+repository diagnostics to code/message, removed transport lifecycle/delivery
+helper families, preserved the core transport abstraction, passed all review
+lanes, and passed escalated `env CI=true corepack pnpm verify`.
 Parent verification after integrating `T-0012.2` passed with escalated
 `env CI=true corepack pnpm verify`: 28 test files, 307 tests, coverage
 statements 96.12%, branches 90.53%, functions 99.38%, lines 96.07%, docs/API

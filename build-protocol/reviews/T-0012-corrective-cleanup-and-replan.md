@@ -6,7 +6,7 @@ Branch: `task/T-0012-cleanup-replan`
 Baseline commit: `a9769d4`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
-Status: T-0012.2 integrated; T-0012.3 selected.
+Status: T-0012.3 integrated; T-0012.4 selected.
 
 ## Required Review Lanes
 
@@ -61,7 +61,7 @@ For later cleanup subtasks, reviewers should flag:
   by a focused documentation re-review. Final escalated `env CI=true corepack
 pnpm verify` passed.
 
-## Next Review Focus
+## T-0012.3 Review Focus
 
 For `T-0012.2 Source Folder Repack`, reviewers must focus on:
 
@@ -79,8 +79,8 @@ escalated `env CI=true corepack pnpm verify` passed.
 
 ## Next Review Focus
 
-For `T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions`, reviewers must
-focus on:
+For `T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions`, reviewers
+focused on:
 
 - removal or shrinking of abandoned command-execution-first concepts;
 - deletion of over-specific detail/error hierarchies unless JVM evidence
@@ -89,3 +89,17 @@ focus on:
   gRPC behavior before the roadmap reaches those tasks;
 - public API shrinkage being documented and deliberate;
 - no new helper sprawl while deleting code.
+
+`T-0012.3` is integrated. All required review lanes are clean and final
+escalated `env CI=true corepack pnpm verify` passed.
+
+## Next Review Focus
+
+For `T-0012.4 Storage Factory And Record Storage Reset`, reviewers must focus
+on:
+
+- close alignment with Spine JVM `StorageFactory` and `RecordStorage`;
+- a small general storage contract with no in-memory-specific leakage;
+- event store built over the storage seam, not buses or delivery first;
+- no reintroduction of broad adapter surfaces or detail hierarchies;
+- generated Protobuf contracts, type URLs, and validation rules preserved.
