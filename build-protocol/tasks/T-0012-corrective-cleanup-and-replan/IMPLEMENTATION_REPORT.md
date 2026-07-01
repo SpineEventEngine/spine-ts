@@ -31,6 +31,11 @@ this parent branch. The next selected subtask is
 repository diagnostics to code/message, removed transport lifecycle/delivery
 helper families, preserved the core transport abstraction, passed all review
 lanes, and passed escalated `env CI=true corepack pnpm verify`.
+Parent verification after integrating `T-0012.3` passed with escalated
+`env CI=true corepack pnpm verify`: 28 test files, 291 tests, coverage
+statements 96.5%, branches 91.22%, functions 99.31%, lines 96.44%, docs/API
+checks with the existing invalid-`origin` TypeDoc warning only, proto
+lint/generate, and generated-clean comparison.
 Parent verification after integrating `T-0012.2` passed with escalated
 `env CI=true corepack pnpm verify`: 28 test files, 307 tests, coverage
 statements 96.12%, branches 90.53%, functions 99.38%, lines 96.07%, docs/API

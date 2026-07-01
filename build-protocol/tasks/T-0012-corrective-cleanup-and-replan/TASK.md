@@ -77,7 +77,9 @@ and passed escalated `env CI=true corepack pnpm verify`.
 `T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions` is integrated on the
 parent branch. It removed or shrank ahead-of-roadmap runtime abstractions,
 passed all review lanes, and passed escalated `env CI=true corepack pnpm
-verify`.
+verify`. Parent verification after integration also passed with 28 test files,
+291 tests, coverage above 90%, docs/API checks, proto lint/generate, and
+generated-clean comparison.
 
 Next selected subtask: `T-0012.4 Storage Factory And Record Storage Reset`.
 
