@@ -1,6 +1,6 @@
 # T-0011: Transport Foundation
 
-Status: T-0011.5 Integrated
+Status: T-0011.6 In Progress
 Start: `2026-06-30 20:32 WEST`
 Baseline commit: `194ce9e`
 Task log path: `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
@@ -9,8 +9,8 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-transport-foundation`
 Requirements splitter:
 `2026-06-30 20:40 WEST` splitter session (closed by orchestrator after handoff)
-Authoring sub-agents: T-0011.1, T-0011.2, T-0011.3, T-0011.4, and T-0011.5 complete; later subtasks pending
-Reviewer sub-agents: T-0011.1, T-0011.2, T-0011.3, T-0011.4, and T-0011.5 complete; later subtasks pending
+Authoring sub-agents: T-0011.1, T-0011.2, T-0011.3, T-0011.4, and T-0011.5 complete; T-0011.6 pending
+Reviewer sub-agents: T-0011.1, T-0011.2, T-0011.3, T-0011.4, and T-0011.5 complete; T-0011.6 pending
 
 ## Objective
 
@@ -290,4 +290,5 @@ side execution.
 
 ## Next Subtask
 
-- `T-0011.6 Server Runtime Wiring Integration`.
+- `T-0011.6 Server Runtime Wiring Integration`: worktree and logs created on
+  `2026-07-01 03:06 WEST` from parent commit `78346ab`; implementation pending.

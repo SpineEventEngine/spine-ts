@@ -1,0 +1,269 @@
+# T-0011.6: Server Runtime Wiring Integration
+
+Status: Complete
+Parent task: `T-0011 Transport Foundation`
+Start: `2026-07-01 03:06 WEST`
+Baseline commit: `78346ab`
+Task log path:
+`build-protocol/tasks/T-0011-6-server-runtime-wiring-integration/TASK.md`
+Branch: `task/T-0011-6-server-runtime-wiring-integration`
+Worktree:
+`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-6-server-runtime-wiring-integration`
+Authoring sub-agent: `019f1b72-d92b-77c3-bea5-b734213b1035`
+Reviewer sub-agents: all required lanes complete and closed
+
+## Objective
+
+Connect the `@spine-ts/server` runtime side to the existing transport
+abstractions by exposing a small, immutable routing-plan seam for registered
+command/event/query/subscription/system signal interests. This slice prepares
+later runtime workers to subscribe or publish through `@spine-ts/transport`
+without making `BoundedContext`, repositories, or handler metadata depend on
+ZeroMQ, socket endpoints, process supervision, durable delivery storage, gRPC
+services, or real handler dispatch.
+
+## Acceptance Criteria
+
+- `@spine-ts/server` exposes a minimal public API that derives transport topics
+  and subscriptions from existing bounded-context metadata plus
+  `CommandRegistrationReadiness` and `EventRegistrationReadiness`.
+- Command routing preserves Spine-style unicast semantics by assigning command
+  topics to a competing-consumer subscription owned by a command worker role.
+- Event routing preserves Spine-style fan-out semantics by assigning event
+  topics to fan-out subscriptions for subscriber/reactor/application readiness
+  groups without implementing event storage, enrichment, import, or delivery.
+- Query, subscription, and system routing are represented only as explicit
+  deferred seams when no concrete server readiness metadata exists yet.
+- The API is deterministic and copy-safe, rejects malformed context/runtime
+  wiring inputs, and does not expose ZeroMQ, IPC endpoints, socket names,
+  multipart frames, storage records, or handler invocation details.
+- Tests are written test-first and cover command unicast topic planning, event
+  fan-out topic planning, deferred read-side/system seams, copy safety,
+  malformed input rejection, and explicit out-of-scope behavior.
+- Package docs, architecture docs, API docs, and task logs explain the new seam
+  and keep full command/event/query/subscription services, repository dispatch,
+  durable delivery, read-side execution, and process supervision deferred.
+- TypeScript, lint, format, docs/API checks, proto workflow, and full
+  verification remain green with coverage at or above 90%.
+
+## Out Of Scope
+
+- Command/event/query/subscription service implementations or gRPC hosting.
+- Handler invocation, repository dispatch, aggregate transactions, projections,
+  process managers, event import, event enrichment, event persistence, command
+  scheduling, command result subscriptions, or acknowledgement monitoring.
+- Durable inbox/outbox storage, delivery workers, retry scheduling, delivery
+  deduplication, or storage-backed recovery.
+- Broker startup, worker process supervision, IPC endpoint allocation, ZeroMQ
+  socket topology, frame formats, or multi-host networking.
+- A broad `Server` facade or lifecycle supervisor beyond the routing-plan seam.
+
+## Applicable Decisions
+
+- D-0007: ZeroMQ is local IPC only and must remain hidden behind transport
+  abstractions.
+- D-0045: server-module work must inspect task-relevant Spine JVM
+  `core-jvm/server` source and avoid over-engineering.
+- D-0054: T-0011 owns transport foundations in small slices. T-0011.6 owns
+  server/runtime wiring seams, not runtime execution or service hosting.
+
+## JVM Research Evidence
+
+Task-relevant JVM research notes inspected before implementation:
+
+- `spine-jvm-docs/spine-server-runtime-and-bounded-context.md`: a bounded
+  context owns command bus, event bus, import bus, integration broker, stand,
+  tenant index, repositories, and system context. Application code assembles
+  contexts through builders; `BoundedContext` is not an extension point.
+- `spine-jvm-docs/spine-routing-dispatch-and-delivery.md`: `CommandBus` is
+  unicast and rejects duplicate command dispatchers; `EventBus` is multicast
+  and dispatches to all eligible event receptors.
+
+Task-relevant local `core-jvm/server` source inspected before implementation:
+
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/BoundedContext.java`:
+  context initialization wires `EventBus`, `IntegrationBroker`, and command-bus
+  observers; dispatcher registration attaches command dispatchers to the
+  command bus and event dispatchers to the event bus or integration broker.
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/BoundedContextBuilder.java`:
+  builder owns registration lists and later builds runtime objects; repository
+  registration is distinct from bus/service execution.
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/commandbus/CommandBus.java`:
+  command handling is a unicast bus concern, with filters, scheduling,
+  monitoring, tenant consumption, and dispatch kept inside bus/runtime code.
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/event/EventBus.java`:
+  event handling is a multicast bus concern; posted events are stored before
+  subscriber delivery, and enrichment/dead-event behavior are bus concerns.
+- `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/Server.java`:
+  service hosting builds and exposes standard services over contexts, and
+  shutdown closes contexts after network shutdown.
+
+Implementation impact: T-0011.6 should produce only server-owned routing
+metadata that a future bus/worker/service layer can consume. It should not make
+the context object itself publish, subscribe, dispatch, schedule, persist, or
+supervise processes.
+
+## Skill Applicability
+
+Canonical checklist: `build-protocol/BUILD_PROTOCOL.md#skills-and-tooling`.
+
+Session inventory exposed task-relevant skills including
+`subagent-driven-development`, `using-git-worktrees`,
+`verification-before-completion`, `requesting-code-review`,
+`receiving-code-review`, `systematic-debugging`, `test-driven-development`,
+`typescript-advanced-types`, `javascript-testing-patterns`,
+`nodejs-backend-patterns`, `architecture-patterns`, `codebase-design`,
+`cqrs-implementation`, `performance`, and `security-best-practices`.
+
+Repo-local expected-skill manifest checked:
+`build-protocol/skills/EXPECTED_SKILLS.md`.
+
+Installed-skill entrypoints checked with:
+`find ~/.agents/skills -maxdepth 2 -type f -name SKILL.md -print | sort |
+sed -n '1,120p'`.
+
+Installed-skill lock checked at `~/.agents/.skill-lock.json`; the manifest is
+readable and records expected sources including `obra/superpowers`,
+`mattpocock/skills`, and `wshobson/agents`. The setup read was truncated in
+terminal output after the relevant expected entries, which is non-blocking.
+
+Selected orchestrator skills:
+
+- `subagent-driven-development`: required for the implementation/review loop.
+- `using-git-worktrees`: isolated worktree created for this subtask.
+- `test-driven-development`: required before production code changes.
+- `verification-before-completion`: required before completion claims.
+- `requesting-code-review`: required for reviewer dispatch.
+
+Selected implementer/reviewer advisory skills to pass by reference:
+
+- `typescript-advanced-types`: relevant to generic immutable routing contracts.
+- `javascript-testing-patterns`: relevant to Vitest coverage and copy-safety
+  tests.
+- `nodejs-backend-patterns`, `architecture-patterns`, `codebase-design`, and
+  `cqrs-implementation`: relevant to keeping server/read/write boundaries
+  explicit and small.
+
+Implementation sub-agent applicability check (`2026-07-01 03:15 WEST`):
+
+- Re-read selected skill entrypoints before task actions:
+  `test-driven-development`, `typescript-advanced-types`,
+  `javascript-testing-patterns`, `codebase-design`,
+  `nodejs-backend-patterns`, and `verification-before-completion`.
+- Selected for direct application in this slice:
+  `test-driven-development` for the required RED/GREEN loop,
+  `typescript-advanced-types` for narrow immutable routing-plan contracts,
+  `javascript-testing-patterns` for focused Vitest coverage,
+  `codebase-design` for a small deep runtime-routing seam, and
+  `verification-before-completion` for fresh evidence before completion.
+- Reviewed but not selected as a primary driver:
+  `nodejs-backend-patterns`, because this task stops at metadata/runtime wiring
+  and intentionally does not add HTTP services, lifecycle hosting, or process
+  supervision. Its input-validation and dependency-boundary guidance still
+  informed the design.
+- Implementation intent remains the smallest pure planner module over
+  `BoundedContext`, `CommandRegistrationReadiness`, `EventRegistrationReadiness`,
+  and `@spine-ts/transport` helpers only. Query/subscription/system remain
+  explicit deferred seams rather than speculative runtime APIs.
+
+Skipped relevant-looking skills:
+
+- `security-threat-model`, `stride-analysis-patterns`, and
+  `threat-mitigation-mapping`: not explicitly requested; the required security
+  reviewer will inspect transport-boundary and input-validation risks.
+- `event-store-design`, `projection-patterns`, and `saga-orchestration`: later
+  storage/read-side/workflow concerns, out of scope for this routing-plan seam.
+
+## Verification
+
+- Parent branch verification after T-0011.5 log commit passed on
+  `2026-07-01 03:04 WEST` with `CI=true corepack pnpm verify`; result was 23
+  test files / 280 tests, coverage 96.16% statements / 90.48% branches /
+  99.33% functions / 96.10% lines, TypeDoc/API checks with 100 proto / 28 core
+  / 124 server / 26 storage / 46 transport exports, copied Spine proto
+  checksum verification, proto lint/generate, generated proto output clean,
+  and generated files clean. TypeDoc emitted the existing invalid-`origin`
+  warning only. The command used native IPC access because inherited ZeroMQ
+  smoke tests bind `ipc://` endpoints.
+- T-0011.6 worktree created from `task/T-0011-transport-foundation` at
+  `78346ab`.
+- T-0011.6 setup dependency install on `2026-07-01 03:10 WEST`:
+  sandboxed `corepack pnpm install --frozen-lockfile` was interrupted after
+  npm registry `ENOTFOUND` retries while populating the fresh worktree.
+  Escalated `corepack pnpm install --frozen-lockfile` passed with the lockfile
+  unchanged, reused 197 packages, and ran the approved `zeromq@6.5.0` install
+  script.
+- T-0011.6 setup baseline verification passed on `2026-07-01 03:11 WEST`:
+  `CI=true corepack pnpm verify` passed with 23 test files / 280 tests,
+  coverage 96.16% statements / 90.48% branches / 99.33% functions / 96.10%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
+  / 46 transport exports, copied Spine proto checksum verification, proto
+  lint/generate, generated proto output clean, and generated files clean.
+  TypeDoc emitted the existing invalid-`origin` warning only. The command used
+  native IPC access because inherited ZeroMQ smoke tests bind `ipc://`
+  endpoints.
+- RED on `2026-07-01 03:19 WEST`:
+  `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts`
+  failed with 4/4 tests red because `createServerRuntimeRoutingPlan` did not
+  exist yet.
+- GREEN on `2026-07-01 03:32 WEST`:
+  `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts packages/server/src/index.test.ts`
+  passed with 2 files / 16 tests.
+- Final verification passed on `2026-07-01 03:33 WEST`:
+  `corepack pnpm typecheck`, `corepack pnpm docs:check`, and
+  `git diff --check` all passed. `CI=true corepack pnpm verify` passed with
+  native IPC access: 24 test files / 286 tests, coverage 95.99% statements /
+  90.14% branches / 99.38% functions / 95.93% lines, TypeDoc/API checks with
+  100 proto / 28 core / 134 server / 26 storage / 46 transport exports, proto
+  checksum verification, proto lint/generate, generated proto output clean,
+  and generated files clean. TypeDoc emitted the existing invalid-`origin`
+  warning only.
+- Round 1 fix RED/GREEN on `2026-07-01 03:46-03:56 WEST`:
+  `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts`
+  first failed against the old public route shape and readiness-input behavior,
+  then `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts packages/server/src/index.test.ts`
+  passed with 2 files / 18 tests after the planner was narrowed to concrete
+  readiness classes, public routes were sanitized, and planner-local worker IDs
+  replaced handler/entity-derived identifiers.
+- Round 1 fix verification passed on `2026-07-01 03:56 WEST`:
+  `corepack pnpm typecheck`, `corepack pnpm docs:check`, and
+  `git diff --check` all passed. Escalated `CI=true corepack pnpm verify`
+  passed with native IPC access: 24 test files / 288 tests, coverage 95.85%
+  statements / 90.01% branches / 99.38% functions / 95.79% lines, TypeDoc/API
+  checks with 100 proto / 28 core / 130 server / 26 storage / 46 transport
+  exports, copied Spine proto checksum verification, proto lint/generate, and
+  generated-clean all passed. TypeDoc emitted the existing invalid-`origin`
+  warning only.
+- Round 2 verification passed on `2026-07-01 04:16 WEST`:
+  `corepack pnpm typecheck`, `corepack pnpm docs:check`, `git diff --check`,
+  and escalated `CI=true corepack pnpm verify` all passed. Full verify covered
+  24 test files / 290 tests with coverage 95.88% statements / 90.05%
+  branches / 99.38% functions / 95.82% lines. TypeDoc emitted the existing
+  invalid-`origin` warning only.
+- Final verification after the authenticity hardening and coverage patch passed
+  on `2026-07-01 04:36-04:37 WEST`: focused routing/index tests passed with 23
+  tests, `corepack pnpm lint` passed, `git diff --check` passed, and escalated
+  `CI=true corepack pnpm verify` passed with native IPC access. Full verify
+  covered 24 test files / 293 tests with coverage 96.12% statements / 90.53%
+  branches / 99.38% functions / 96.07% lines, TypeDoc/API counts 100 proto /
+  28 core / 130 server / 26 storage / 46 transport, copied Spine proto
+  checksum verification, proto lint/generate, generated proto output clean,
+  and generated files clean. TypeDoc emitted the existing invalid-`origin`
+  warning only.
+
+## Implementation Notes
+
+- Start from existing `packages/server` metadata-only bounded context,
+  command-readiness, event-readiness, and runtime lifecycle code.
+- Prefer a pure deterministic plan/helper API over runtime objects.
+- Do not introduce new external dependencies.
+- Implement the seam as one pure routing planner over existing metadata,
+  transport topics/subscriptions/worker registrations, and explicit deferred
+  placeholders for query/subscription/system routing.
+- Keep the public route shape intentionally small: planner-local indexed IDs,
+  receiver groups, and sanitized message descriptors only. Do not retain or
+  expose readiness metadata objects, handler method names, entity names, or
+  additional planner internals through route entries.
+- If implementation pressure suggests a larger `Server`, bus, storage,
+  delivery, or process API, defer it to a later task and record the decision
+  instead of widening this slice.

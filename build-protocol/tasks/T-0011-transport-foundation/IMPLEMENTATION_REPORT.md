@@ -1,6 +1,6 @@
 # Implementation Report: T-0011 Transport Foundation
 
-Status: T-0011.5 Integrated
+Status: T-0011.6 In Progress
 Task log: `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
 Work log: `build-protocol/work-logs/T-0011.md`
 Review log: `build-protocol/reviews/T-0011-transport-foundation.md`
@@ -175,9 +175,18 @@ performs native smoke tests.
   checks, and T-0011.5 durable logs. See
   `build-protocol/tasks/T-0011-5-delivery-retry-boundary-contracts/IMPLEMENTATION_REPORT.md`.
 
+## T-0011.6 Setup
+
+`T-0011.6 Server Runtime Wiring Integration` started on `2026-07-01 03:06 WEST`
+from parent commit `78346ab` in worktree
+`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-6-server-runtime-wiring-integration`.
+
+The setup inspected task-relevant Spine JVM `core-jvm/server` notes and source
+before implementation, per D-0045 and the build protocol server guardrail. The
+chosen scope is a small server-owned routing-plan seam from existing readiness
+metadata to transport topics/subscriptions, not service hosting, dispatch,
+storage, delivery, or process supervision.
+
 ## Open Items
 
-- `T-0011.6 Server Runtime Wiring Integration` is next.
-- Server/runtime routing seams remain deferred to T-0011.6. Any server-module
-  changes must first inspect task-relevant Spine JVM `core-jvm/server` code per
-  D-0045 and the build protocol guardrail.
+- Complete `T-0011.6 Server Runtime Wiring Integration`.
