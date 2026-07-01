@@ -18,6 +18,37 @@ before `packages/server`.
 No runtime behavior, source implementation, package dependencies, or generated
 files were changed.
 
+## Skill Applicability
+
+- Task prompt provided no explicit skill names or paths.
+- Session skill inventory exposed task-relevant workflow skills including
+  `implement` and `verification-before-completion`; both selected `SKILL.md`
+  files were read for the implementation pass.
+- Repo expected-skill manifest checked:
+  `build-protocol/skills/EXPECTED_SKILLS.md`.
+- Readable user-installed skill entrypoints checked with
+  `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print`.
+- Installed skill lock checked at `/Users/armiol/.agents/.skill-lock.json`;
+  `rg` confirmed entries for expected task-relevant skills including
+  `verification-before-completion`, `typescript-advanced-types`,
+  `nodejs-backend-patterns`, `using-git-worktrees`,
+  `requesting-code-review`, `subagent-driven-development`,
+  `planning-with-files`, and `architecture-decision-records`.
+- Selected for implementation: `implement` for focused task execution and
+  `verification-before-completion` for verified completion reporting.
+- Selected for the round 1 review fix: `receiving-code-review` and
+  `verification-before-completion`; both `SKILL.md` files were read before docs
+  edits and completion reporting.
+- Skipped relevant-looking skills: `typescript-advanced-types` and
+  `nodejs-backend-patterns` because this was a TypeScript build-graph config
+  fix with no type modeling or runtime/backend behavior change;
+  `using-git-worktrees` because the worktree already existed in the task
+  prompt; `requesting-code-review` and `subagent-driven-development` because
+  this sub-agent was not asked to spawn reviewers or sub-agents;
+  `planning-with-files` because the task was small and already used the
+  project durable-log protocol; `architecture-decision-records` because no
+  architecture decision was made.
+
 ## Verification
 
 - `CI=true corepack pnpm verify` initially failed with pnpm dependency-state
