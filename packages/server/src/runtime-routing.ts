@@ -8,19 +8,15 @@ import {
   type TransportWorkerRegistration,
 } from "@spine-ts/transport";
 import { type BuiltBoundedContextSnapshot, BoundedContext } from "./bounded-context.js";
-import { CommandRegistrationReadiness } from "./command-registration-readiness.js";
-import { EventRegistrationReadiness } from "./event-registration-readiness.js";
+import {
+  CommandRegistrationReadiness,
+  isAuthenticCommandRegistrationReadiness,
+} from "./command-registration-readiness.js";
+import {
+  EventRegistrationReadiness,
+  isAuthenticEventRegistrationReadiness,
+} from "./event-registration-readiness.js";
 import { compareFullTypeNames } from "./registration-readiness-metadata.js";
-
-declare const process: {
-  readonly getBuiltinModule: (specifier: "node:util") => {
-    readonly types: {
-      readonly isProxy: (value: object) => boolean;
-    };
-  };
-};
-
-const isProxy = process.getBuiltinModule("node:util").types.isProxy;
 const deterministicValidationErrorTag = Symbol("runtimeRoutingDeterministicValidation");
 
 /** Input accepted by {@link createServerRuntimeRoutingPlan}. */
@@ -497,15 +493,9 @@ function validateContext(input: unknown): BoundedContext {
 }
 
 function validateCommandReadiness(readiness: unknown): CommandRegistrationReadiness {
-  if (isConcreteReadinessProxy(readiness)) {
+  if (!isAuthenticCommandRegistrationReadiness(readiness)) {
     throw new TypeError(
-      "Server runtime routing commands must not be a Proxy-wrapped CommandRegistrationReadiness instance.",
-    );
-  }
-
-  if (!(readiness instanceof CommandRegistrationReadiness)) {
-    throw new TypeError(
-      "Server runtime routing commands must be a CommandRegistrationReadiness instance.",
+      "Server runtime routing commands must be an authentic CommandRegistrationReadiness instance.",
     );
   }
 
@@ -513,23 +503,13 @@ function validateCommandReadiness(readiness: unknown): CommandRegistrationReadin
 }
 
 function validateEventReadiness(readiness: unknown): EventRegistrationReadiness {
-  if (isConcreteReadinessProxy(readiness)) {
+  if (!isAuthenticEventRegistrationReadiness(readiness)) {
     throw new TypeError(
-      "Server runtime routing events must not be a Proxy-wrapped EventRegistrationReadiness instance.",
-    );
-  }
-
-  if (!(readiness instanceof EventRegistrationReadiness)) {
-    throw new TypeError(
-      "Server runtime routing events must be an EventRegistrationReadiness instance.",
+      "Server runtime routing events must be an authentic EventRegistrationReadiness instance.",
     );
   }
 
   return readiness;
-}
-
-function isConcreteReadinessProxy(value: unknown): value is object {
-  return value !== null && typeof value === "object" && isProxy(value);
 }
 
 function normalizeRegisteredMessageNames(

@@ -359,7 +359,7 @@ describe("server runtime routing", () => {
     expect(emptyReadinessPlan.events.subscriberRoutes).toEqual([]);
   });
 
-  it("rejects malformed context and non-readiness lookup inputs", () => {
+  it("rejects malformed context and non-authentic readiness inputs", () => {
     const projectionHandlers = defineEntityHandlers(
       TaskProjection,
       ProjectionStateSchema,
@@ -386,7 +386,7 @@ describe("server runtime routing", () => {
           findCommandAssignee: () => undefined,
         } as unknown as CommandRegistrationReadiness,
       }),
-    ).toThrow(/must be a CommandRegistrationReadiness instance/);
+    ).toThrow(/must be an authentic CommandRegistrationReadiness instance/);
 
     expect(() =>
       createServerRuntimeRoutingPlan({
@@ -404,85 +404,73 @@ describe("server runtime routing", () => {
           findEventApplications: () => Object.freeze([]),
         } as unknown as EventRegistrationReadiness,
       }),
-    ).toThrow(/must be an EventRegistrationReadiness instance/);
+    ).toThrow(/must be an authentic EventRegistrationReadiness instance/);
   });
 
-  it("rejects malformed readiness metadata and receiverless event listings", () => {
+  it("rejects prototype-forged command readiness before override methods run", () => {
     const commandHandlers = defineEntityHandlers(
       TaskProjection,
       ProjectionStateSchema,
       (builder) => [builder.assign(CommandSchema, "assignCreate")],
     );
     const commandReadiness = CommandRegistrationReadiness.fromEntityHandlers([commandHandlers]);
-    const assignee = commandReadiness.findCommandAssignee(CommandSchema.typeName);
+    let overrideCalls = 0;
 
-    if (assignee === undefined) {
-      throw new Error("Expected valid command assignee metadata.");
-    }
-
-    const malformedCommandReadiness = overrideReadiness(commandReadiness, {
-      findCommandAssignee: () =>
-        Object.freeze({
-          ...assignee,
-          handler: Object.freeze({
-            ...assignee.handler,
-            kind: "event-subscription" as const,
-          }),
-        }),
+    const forgedCommandReadiness = overrideReadiness(commandReadiness, {
+      registeredCommandMessageFullTypeNames: () => {
+        overrideCalls += 1;
+        throw new Error("forged command readiness names override should not run");
+      },
+      findCommandAssignee: () => {
+        overrideCalls += 1;
+        throw new Error("forged command readiness assignee override should not run");
+      },
     });
 
     expect(() =>
       createServerRuntimeRoutingPlan({
         context: BoundedContext.singleTenant("Tasks").build(),
-        commands: malformedCommandReadiness,
+        commands: forgedCommandReadiness,
       }),
-    ).toThrow(/must expose a command-assignment handler/);
+    ).toThrow(/must be an authentic CommandRegistrationReadiness instance/);
+    expect(overrideCalls).toBe(0);
+  });
 
+  it("rejects prototype-forged event readiness before override methods run", () => {
     const projectionHandlers = defineEntityHandlers(
       TaskProjection,
       ProjectionStateSchema,
       (builder) => [builder.subscribe(EventSchema, "subscribeCreated")],
     );
     const eventReadiness = EventRegistrationReadiness.fromEntityHandlers([projectionHandlers]);
-    const receiverlessEventReadiness = overrideReadiness(eventReadiness, {
-      registeredEventMessageFullTypeNames: () => Object.freeze([EventSchema.typeName]),
-      findEventSubscribers: () => Object.freeze([]),
-      findEventReactors: () => Object.freeze([]),
-      findEventApplications: () => Object.freeze([]),
+    let overrideCalls = 0;
+
+    const forgedEventReadiness = overrideReadiness(eventReadiness, {
+      registeredEventMessageFullTypeNames: () => {
+        overrideCalls += 1;
+        throw new Error("forged event readiness names override should not run");
+      },
+      findEventSubscribers: () => {
+        overrideCalls += 1;
+        throw new Error("forged event readiness subscribers override should not run");
+      },
+      findEventReactors: () => {
+        overrideCalls += 1;
+        throw new Error("forged event readiness reactors override should not run");
+      },
+      findEventApplications: () => {
+        overrideCalls += 1;
+        throw new Error("forged event readiness applications override should not run");
+      },
     });
 
     expect(() =>
       createServerRuntimeRoutingPlan({
         context: BoundedContext.singleTenant("Tasks").build(),
-        events: receiverlessEventReadiness,
+        events: forgedEventReadiness,
       }),
-    ).toThrow(/must return at least one receiver/);
-
-    const subscriber = eventReadiness.findEventSubscribers(EventSchema.typeName)[0];
-
-    if (subscriber === undefined) {
-      throw new Error("Expected valid event subscriber metadata.");
-    }
-
-    const malformedEventReadiness = overrideReadiness(eventReadiness, {
-      findEventSubscribers: () =>
-        Object.freeze([
-          Object.freeze({
-            ...subscriber,
-            handler: Object.freeze({
-              ...subscriber.handler,
-              messageFullTypeName: "example.WrongEvent",
-            }),
-          }),
-        ]),
-    });
-
-    expect(() =>
-      createServerRuntimeRoutingPlan({
-        context: BoundedContext.singleTenant("Tasks").build(),
-        events: malformedEventReadiness,
-      }),
-    ).toThrow(/must preserve the requested event message type/);
+    ).toThrow(/must be an authentic EventRegistrationReadiness instance/);
+    expect(overrideCalls).toBe(0);
   });
 
   it("rejects proxy-wrapped command readiness before proxy traps can run", () => {
@@ -510,7 +498,7 @@ describe("server runtime routing", () => {
       }),
     ).toThrow(
       new TypeError(
-        "Server runtime routing commands must not be a Proxy-wrapped CommandRegistrationReadiness instance.",
+        "Server runtime routing commands must be an authentic CommandRegistrationReadiness instance.",
       ),
     );
     expect(trapCalls).toBe(0);
@@ -541,55 +529,29 @@ describe("server runtime routing", () => {
       }),
     ).toThrow(
       new TypeError(
-        "Server runtime routing events must not be a Proxy-wrapped EventRegistrationReadiness instance.",
+        "Server runtime routing events must be an authentic EventRegistrationReadiness instance.",
       ),
     );
     expect(trapCalls).toBe(0);
   });
 
-  it("uses planner-local indexed event worker identities without lossy merges", () => {
+  it("uses planner-local indexed event worker identities for authentic event fan-out", () => {
     const projectionHandlers = defineEntityHandlers(
       TaskProjection,
       ProjectionStateSchema,
       (builder) => [builder.subscribe(EventSchema, "subscribeCreated")],
     );
-    const eventReadiness = EventRegistrationReadiness.fromEntityHandlers([projectionHandlers]);
-    const subscriber = eventReadiness.findEventSubscribers(EventSchema.typeName)[0];
-
-    if (subscriber === undefined) {
-      throw new Error("Expected valid event subscriber metadata.");
-    }
-
-    const collidingEventReadiness = overrideReadiness(eventReadiness, {
-      findEventSubscribers: () =>
-        Object.freeze([
-          Object.freeze({
-            ...subscriber,
-            entity: Object.freeze({
-              ...subscriber.entity,
-              fullTypeName: "Example.Foo_Bar",
-            }),
-            handler: Object.freeze({
-              ...subscriber.handler,
-              methodName: "handleValue",
-            }),
-          }),
-          Object.freeze({
-            ...subscriber,
-            entity: Object.freeze({
-              ...subscriber.entity,
-              fullTypeName: "Example.Foo-Bar",
-            }),
-            handler: Object.freeze({
-              ...subscriber.handler,
-              methodName: "handle-value",
-            }),
-          }),
-        ]),
-    });
+    const aggregateHandlers = defineEntityHandlers(
+      TaskAggregate,
+      AggregateStateSchema,
+      (builder) => [builder.subscribe(EventSchema, "subscribeCreated")],
+    );
     const plan = createServerRuntimeRoutingPlan({
       context: BoundedContext.singleTenant("Tasks").build(),
-      events: collidingEventReadiness,
+      events: EventRegistrationReadiness.fromEntityHandlers([
+        projectionHandlers,
+        aggregateHandlers,
+      ]),
     });
 
     expect(plan.events.subscriberRoutes.map(({ workerId }) => workerId)).toEqual([
@@ -597,93 +559,42 @@ describe("server runtime routing", () => {
       "event-subscriber-worker-2",
     ]);
     expect(new Set(plan.events.workers.map(({ worker }) => worker.participantId)).size).toBe(2);
-    expect(JSON.stringify(plan.events.subscriberRoutes)).not.toMatch(/Foo|handle/i);
   });
 
-  it("fails closed when handler schemas are missing, mismatched, or malformed", () => {
+  it("rejects prototype-forged readiness even when forged metadata looks malformed", () => {
     const commandHandlers = defineEntityHandlers(
       TaskProjection,
       ProjectionStateSchema,
       (builder) => [builder.assign(CommandSchema, "assignCreate")],
     );
-    const commandReadiness = CommandRegistrationReadiness.fromEntityHandlers([commandHandlers]);
-    const assignee = commandReadiness.findCommandAssignee(CommandSchema.typeName);
-
-    if (assignee === undefined) {
-      throw new Error("Expected valid command assignee metadata.");
-    }
-
-    const nullSchemaCommandReadiness = overrideReadiness(commandReadiness, {
-      findCommandAssignee: () =>
-        Object.freeze({
-          ...assignee,
-          handler: Object.freeze({
-            ...assignee.handler,
-            schema: null,
-          }),
-        }),
-    });
-
-    expect(() =>
-      createServerRuntimeRoutingPlan({
-        context: BoundedContext.singleTenant("Tasks").build(),
-        commands: nullSchemaCommandReadiness,
-      }),
-    ).toThrow(/must preserve the requested command message type/);
-
-    const malformedSchemaCommandReadiness = overrideReadiness(commandReadiness, {
-      findCommandAssignee: () =>
-        Object.freeze({
-          ...assignee,
-          handler: Object.freeze({
-            ...assignee.handler,
-            schema: Object.freeze({
-              typeName: CommandSchema.typeName,
-            }),
-          }),
-        }),
-    });
-
-    expect(() =>
-      createServerRuntimeRoutingPlan({
-        context: BoundedContext.singleTenant("Tasks").build(),
-        commands: malformedSchemaCommandReadiness,
-      }),
-    ).toThrow(/Server runtime routing command metadata for "spine\.core\.Command" is malformed/);
-
     const projectionHandlers = defineEntityHandlers(
       TaskProjection,
       ProjectionStateSchema,
       (builder) => [builder.subscribe(EventSchema, "subscribeCreated")],
     );
+    const commandReadiness = CommandRegistrationReadiness.fromEntityHandlers([commandHandlers]);
     const eventReadiness = EventRegistrationReadiness.fromEntityHandlers([projectionHandlers]);
-    const subscriber = eventReadiness.findEventSubscribers(EventSchema.typeName)[0];
-
-    if (subscriber === undefined) {
-      throw new Error("Expected valid event subscriber metadata.");
-    }
-
-    const mismatchedEventSchemaReadiness = overrideReadiness(eventReadiness, {
-      findEventSubscribers: () =>
-        Object.freeze([
-          Object.freeze({
-            ...subscriber,
-            handler: Object.freeze({
-              ...subscriber.handler,
-              schema: Object.freeze({
-                ...subscriber.handler.schema,
-                typeName: "example.WrongEvent",
-              }),
-            }),
-          }),
-        ]),
+    const forgedCommandReadiness = overrideReadiness(commandReadiness, {
+      findCommandAssignee: () => undefined,
+    });
+    const forgedEventReadiness = overrideReadiness(eventReadiness, {
+      findEventSubscribers: () => Object.freeze([]),
+      findEventReactors: () => Object.freeze([]),
+      findEventApplications: () => Object.freeze([]),
     });
 
     expect(() =>
       createServerRuntimeRoutingPlan({
         context: BoundedContext.singleTenant("Tasks").build(),
-        events: mismatchedEventSchemaReadiness,
+        commands: forgedCommandReadiness,
       }),
-    ).toThrow(/must preserve the requested event message type/);
+    ).toThrow(/must be an authentic CommandRegistrationReadiness instance/);
+
+    expect(() =>
+      createServerRuntimeRoutingPlan({
+        context: BoundedContext.singleTenant("Tasks").build(),
+        events: forgedEventReadiness,
+      }),
+    ).toThrow(/must be an authentic EventRegistrationReadiness instance/);
   });
 });

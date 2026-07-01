@@ -16,6 +16,9 @@ import {
   createReadinessMetadataFields,
 } from "./registration-readiness-metadata.js";
 
+const eventRegistrationReadinessToken = Symbol("eventRegistrationReadinessToken");
+const authenticEventRegistrationReadiness = new WeakSet<object>();
+
 /** Event subscriber entry exposed by event registration readiness lookups. */
 export interface EventRegistrationSubscriberMetadata {
   /** Fully qualified event message type name subscribed to by one entity handler. */
@@ -109,6 +112,7 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
   >;
 
   private constructor(
+    authenticityToken: typeof eventRegistrationReadinessToken,
     eventFullTypeNames: readonly string[],
     subscribersByEventFullTypeName: ReadonlyMap<
       string,
@@ -120,10 +124,17 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
       readonly EventRegistrationApplicationMetadata[]
     >,
   ) {
+    if (authenticityToken !== eventRegistrationReadinessToken) {
+      throw new TypeError(
+        "EventRegistrationReadiness instances must be created by the package factory methods.",
+      );
+    }
+
     this.#eventFullTypeNames = Object.freeze([...eventFullTypeNames]);
     this.#subscribersByEventFullTypeName = copyMetadataArrayMap(subscribersByEventFullTypeName);
     this.#reactorsByEventFullTypeName = copyMetadataArrayMap(reactorsByEventFullTypeName);
     this.#applicationsByEventFullTypeName = copyMetadataArrayMap(applicationsByEventFullTypeName);
+    authenticEventRegistrationReadiness.add(this);
     Object.freeze(this);
   }
 
@@ -172,6 +183,7 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
     }
 
     return new EventRegistrationReadiness(
+      eventRegistrationReadinessToken,
       [...eventFullTypeNames].sort(compareFullTypeNames),
       subscribersByEventFullTypeName,
       reactorsByEventFullTypeName,
@@ -222,6 +234,12 @@ export class EventRegistrationReadiness implements EventRegistrationReadinessLoo
       ),
     );
   }
+}
+
+export function isAuthenticEventRegistrationReadiness(
+  value: unknown,
+): value is EventRegistrationReadiness {
+  return value !== null && typeof value === "object" && authenticEventRegistrationReadiness.has(value);
 }
 
 function createSubscriberMetadata(

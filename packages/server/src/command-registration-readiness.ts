@@ -13,6 +13,9 @@ import {
   createReadinessMetadataFields,
 } from "./registration-readiness-metadata.js";
 
+const commandRegistrationReadinessToken = Symbol("commandRegistrationReadinessToken");
+const authenticCommandRegistrationReadiness = new WeakSet<object>();
+
 /** Command assignment entry exposed by command registration readiness lookups. */
 export interface CommandRegistrationAssigneeMetadata {
   /** Fully qualified command message type name assigned to one entity handler. */
@@ -53,11 +56,19 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
   >;
 
   private constructor(
+    authenticityToken: typeof commandRegistrationReadinessToken,
     commandFullTypeNames: readonly string[],
     assigneesByCommandFullTypeName: ReadonlyMap<string, CommandRegistrationAssigneeMetadata>,
   ) {
+    if (authenticityToken !== commandRegistrationReadinessToken) {
+      throw new TypeError(
+        "CommandRegistrationReadiness instances must be created by the package factory methods.",
+      );
+    }
+
     this.#commandFullTypeNames = Object.freeze([...commandFullTypeNames]);
     this.#assigneesByCommandFullTypeName = new Map(assigneesByCommandFullTypeName);
+    authenticCommandRegistrationReadiness.add(this);
     Object.freeze(this);
   }
 
@@ -85,6 +96,7 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
     }
 
     return new CommandRegistrationReadiness(
+      commandRegistrationReadinessToken,
       [...assigneesByCommandFullTypeName.keys()].sort(compareFullTypeNames),
       assigneesByCommandFullTypeName,
     );
@@ -115,6 +127,12 @@ export class CommandRegistrationReadiness implements CommandRegistrationReadines
 
     return assignee === undefined ? undefined : copyAssigneeMetadata(assignee);
   }
+}
+
+export function isAuthenticCommandRegistrationReadiness(
+  value: unknown,
+): value is CommandRegistrationReadiness {
+  return value !== null && typeof value === "object" && authenticCommandRegistrationReadiness.has(value);
 }
 
 function createAssigneeMetadata(
