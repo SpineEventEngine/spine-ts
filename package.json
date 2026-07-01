@@ -12,7 +12,7 @@
     "typecheck": "pnpm typecheck:build && pnpm typecheck:tooling",
     "typecheck:build": "pnpm proto:generate && tsc -b",
     "typecheck:tooling": "tsc --noEmit -p tsconfig.eslint.json",
-    "lint": "pnpm proto:generate && eslint . && node scripts/check-cleanup-rules.mjs",
+    "lint": "pnpm typecheck:build && eslint . && node scripts/check-cleanup-rules.mjs",
     "format:check": "prettier --check \"*.{json,md,yaml,yml,mjs,ts}\" \".*.json\" \"docs/**/*.md\" \"packages/**/*.{json,md,ts}\" \"examples/**/*.{json,md,ts}\" \"proto/**/*.md\" \"scripts/**/*.mjs\" \"build-protocol/**/*.md\"",
     "format": "prettier --write \"*.{json,md,yaml,yml,mjs,ts}\" \".*.json\" \"docs/**/*.md\" \"packages/**/*.{json,md,ts}\" \"examples/**/*.{json,md,ts}\" \"proto/**/*.md\" \"scripts/**/*.mjs\" \"build-protocol/**/*.md\"",
     "test": "vitest run --passWithNoTests",

@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.1 Cleanup Enforcement Baseline
 
-Status: Round 2 follow-up verified; ready for re-review
+Status: Round 3 follow-up verified; ready for re-review
 Branch: `task/T-0012-1-cleanup-enforcement-baseline`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-1-cleanup-enforcement-baseline`
@@ -193,6 +193,54 @@ Round 2 follow-up verification evidence:
   `tsc -b`.
 - `corepack pnpm typecheck` passed.
 - `corepack pnpm lint` passed and generated proto output before ESLint.
+- `corepack pnpm format:check` passed.
+- `git diff --check` passed.
+- Sandboxed `corepack pnpm test` failed only in
+  `packages/transport/test/zeromq-local-ipc-smoke.test.ts` with
+  `Error: Operation not permitted` for both ZeroMQ local IPC smoke tests.
+- Escalated `corepack pnpm test` passed with 28 test files and 307 tests.
+- `corepack pnpm docs:check` passed with the existing TypeDoc invalid-`origin`
+  warning only.
+- `corepack pnpm proto:lint` passed.
+- `corepack pnpm proto:generate` passed.
+- `corepack pnpm proto:check-generated` passed and reported generated output
+  ignored, untracked, and freshly regenerated.
+- Sandboxed `env CI=true corepack pnpm verify` reached the test step after
+  node, proto generation, typecheck, lint, and format checks passed, then
+  failed only on the same two ZeroMQ local IPC smoke tests with
+  `Error: Operation not permitted`.
+- Escalated `env CI=true corepack pnpm verify` passed, including 28 test files,
+  307 tests, coverage statements 96.12%, branches 90.53%, functions 99.38%,
+  lines 96.07%, docs/API checks with the existing TypeDoc invalid-`origin`
+  warning only, proto lint/generate, and generated-clean comparison.
+
+## Round 3 Follow-up
+
+Round 3 review findings are addressed in a focused follow-up pass:
+
+- Durable review/task/work-log status and review-package pointers now identify
+  the Round 3 package `.superpowers/sdd/review-147d496..a45a9bc.diff`.
+- Direct `pnpm lint` now runs `pnpm typecheck:build` before ESLint so a fresh
+  checkout has generated proto output and built package declarations before
+  type-aware linting resolves `@spine-ts/proto` types from `dist`.
+
+Focused RED evidence:
+
+- `corepack pnpm vitest run scripts/package-metadata.test.mjs` failed before
+  the script fix because `lint` still started with `pnpm proto:generate`.
+
+Focused GREEN evidence:
+
+- `corepack pnpm vitest run scripts/package-metadata.test.mjs` passed with
+  1 file and 2 tests after the script fix.
+
+Round 3 follow-up verification evidence:
+
+- `corepack pnpm lint` passed after removing ignored `packages/*/dist` output
+  and `packages/proto/generated`, proving direct lint regenerates proto output
+  and rebuilds package declarations before ESLint.
+- `corepack pnpm typecheck:build` passed.
+- `corepack pnpm typecheck` passed.
 - `corepack pnpm format:check` passed.
 - `git diff --check` passed.
 - Sandboxed `corepack pnpm test` failed only in

@@ -6,9 +6,9 @@ Branch: `task/T-0012-1-cleanup-enforcement-baseline`
 Baseline commit: `a65ac4d`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-1-cleanup-enforcement-baseline`
-Status: Round 2 follow-up verified; ready for re-review
-Reviewed commit/diff basis: `147d496..3d33805`
-Review package: `.superpowers/sdd/review-147d496..3d33805.diff`
+Status: Round 3 follow-up verified; ready for re-review
+Reviewed commit/diff basis: `147d496..a45a9bc`
+Review package: `.superpowers/sdd/review-147d496..a45a9bc.diff`
 
 ## Required Review Lanes
 
@@ -159,3 +159,18 @@ Reviewer lanes:
 
 All Round 3 reviewer agents are closed. Author follow-up must address the
 remaining documentation and reliability findings before another re-review.
+
+## Round 3 Author Follow-up
+
+Follow-up fixes are authored for all remaining Round 3 findings:
+
+- Durable review/task/work-log pointers now identify the Round 3 package
+  `.superpowers/sdd/review-147d496..a45a9bc.diff`.
+- Direct `pnpm lint` now runs `pnpm typecheck:build` before ESLint so a fresh
+  checkout has generated proto output and built package declarations before
+  type-aware linting resolves `@spine-ts/proto` types from `dist`.
+
+Focused RED/GREEN evidence is recorded in
+`build-protocol/tasks/T-0012-1-cleanup-enforcement-baseline/IMPLEMENTATION_REPORT.md`.
+Final required verification passed after escalation for the known ZeroMQ local
+IPC sandbox restriction.

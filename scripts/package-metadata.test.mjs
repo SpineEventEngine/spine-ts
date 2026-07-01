@@ -13,7 +13,7 @@ describe("package metadata", () => {
     const rootPackage = readJson("package.json");
 
     expect(rootPackage.scripts["typecheck:build"]).toMatch(/^pnpm proto:generate && /);
-    expect(rootPackage.scripts.lint).toMatch(/^pnpm proto:generate && /);
+    expect(rootPackage.scripts.lint).toMatch(/^pnpm typecheck:build && /);
     expect(rootPackage.scripts["docs:api"]).toMatch(/^pnpm proto:generate && /);
     expect(rootPackage.scripts["docs:check"]).toMatch(/^pnpm proto:generate && /);
 
