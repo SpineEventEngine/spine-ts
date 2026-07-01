@@ -1,6 +1,6 @@
 # T-0011: Transport Foundation
 
-Status: T-0011.6 Integrated
+Status: T-0011.7 In Progress
 Start: `2026-06-30 20:32 WEST`
 Baseline commit: `194ce9e`
 Task log path: `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
@@ -9,8 +9,8 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-transport-foundation`
 Requirements splitter:
 `2026-06-30 20:40 WEST` splitter session (closed by orchestrator after handoff)
-Authoring sub-agents: T-0011.1 through T-0011.6 complete
-Reviewer sub-agents: T-0011.1 through T-0011.6 complete
+Authoring sub-agents: T-0011.1 through T-0011.6 complete; T-0011.7 pending
+Reviewer sub-agents: T-0011.1 through T-0011.6 complete; T-0011.7 pending
 
 ## Objective
 
@@ -309,4 +309,5 @@ verify` passed with native IPC access: 24 test files / 293 tests, coverage
 ## Next Subtask
 
 - `T-0011.7 Documentation And Closure`: prepare the transport-foundation
-  closure docs, parent verification evidence, and final review gate.
+  closure docs, parent verification evidence, and final review gate. Worktree
+  and logs created on `2026-07-01 04:44 WEST` from parent commit `bac132c`.
