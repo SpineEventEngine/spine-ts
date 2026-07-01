@@ -112,6 +112,15 @@ export {
 } from "./event-registration-readiness.js";
 
 export {
+  createServerRuntimeRoutingPlan,
+  type CommandRuntimeRoutingPlan,
+  type DeferredServerRuntimeRoutingSeam,
+  type EventRuntimeRoutingPlan,
+  type ServerRuntimeRoutingPlan,
+  type ServerRuntimeRoutingPlanInput,
+} from "./runtime-routing.js";
+
+export {
   type ConcreteRepositoryEntityType,
   Repository,
   type RepositoryEntityType,

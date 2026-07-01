@@ -8,8 +8,9 @@ registry and validation facade APIs, the first `@spine-ts/server`
 descriptor-derived entity metadata, metadata-only `Repository` identity,
 set-once transition validation, explicit handler metadata APIs, and the first
 server runtime lifecycle/async queue kernel with a bounded-context runtime
-handle, write-side signal intake result exports, and the first
-`@spine-ts/storage` contracts.
+handle, write-side signal intake result exports, the runtime-routing planner
+seam, the first
+`@spine-ts/transport` contracts, and the first `@spine-ts/storage` contracts.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
@@ -176,6 +177,25 @@ broker, import bus, event store, delivery mechanism, stand, subscription
 service, command-result subscription, dispatcher, router, event posting API,
 validator, repository runtime registration hook, storage writer, transport
 adapter, handler invoker, or Spine `Ack` producer.
+Runtime routing exports include `createServerRuntimeRoutingPlan()`,
+`ServerRuntimeRoutingPlan`, `ServerRuntimeRoutingPlanInput`,
+`CommandRuntimeRoutingPlan`, `EventRuntimeRoutingPlan`, and
+`DeferredServerRuntimeRoutingSeam`. The planner requires a built
+`BoundedContext`, plus optional concrete `CommandRegistrationReadiness` /
+`EventRegistrationReadiness` instances, and derives immutable
+`@spine-ts/transport` topics, subscriptions, and worker registrations plus
+small sanitized route descriptors. Command routing produces one planner-local
+command-worker competing-consumer registration over registered command topics.
+Event routing produces fan-out subscriptions and event-worker registrations
+for subscriber, reactor, and application receiver groups while keeping handler
+invocation, storage-before-dispatch, buses, IPC endpoint naming, and process
+supervision deferred. Public route descriptors expose only planner-local route
+and worker IDs, message full type names/type URLs, stable receiver groups, and
+transport correlation keys back to the top-level topics/subscriptions/workers;
+they do not retain raw readiness metadata, entity names, handler method names,
+ZeroMQ endpoint data, socket topology, or duplicate full transport contracts on
+each route. Query, subscription, and system routing remain explicit deferred
+seams until concrete server readiness metadata exists.
 Server runtime exports include `SingleProcessServerRuntime`,
 `ServerRuntimeLifecycle`, `ServerRuntimeState`, `ServerRuntimeWork`,
 `ServerRuntimeStateOperation`, `ServerRuntimeStateErrorCode`, and
@@ -202,14 +222,15 @@ dispatcher, integration broker, gRPC server, ZeroMQ transport, or worker-process
 runtime.
 The public runtime closure smoke path composes these exports with
 `BoundedContext`, `Repository`, `HandlerMetadataRegistry`,
-`CommandRegistrationReadiness`, and `EventRegistrationReadiness` to prove the
-metadata and lifecycle interfaces fit together without adding new public API.
-That composition produces context-scoped metadata, command/event readiness
-views, and deterministic lifecycle state only. It deliberately does not expose a
-`Server` export, service routing, command/event/import bus behavior,
-repository runtime registration, storage lifecycle, read-side execution,
-transport lifecycle, validation, delivery, integration-broker behavior, handler
-invocation, or Spine `Ack` mapping.
+`CommandRegistrationReadiness`, `EventRegistrationReadiness`, and
+`createServerRuntimeRoutingPlan()` to prove the metadata and lifecycle
+interfaces fit together without adding new public API. That composition
+produces context-scoped metadata, command/event readiness views, immutable
+runtime-routing plans, and deterministic lifecycle state only. It deliberately
+does not expose a `Server` export, service routing, command/event/import bus
+behavior, repository runtime registration, storage lifecycle, read-side
+execution, transport lifecycle, validation, delivery, integration-broker
+behavior, handler invocation, or Spine `Ack` mapping.
 Write-side signal intake exports include `SignalKind`, `SignalIntakeResult`,
 `SignalIntakeAccepted`, `SignalIntakeAcceptedFor`, `SignalIntakeFailure`,
 `SignalIntakeFailureCode`, `SignalIntakeFailureDetails`,
@@ -235,6 +256,57 @@ contracts, tenant/diagnostic stores, `StorageVersionConflictError`,
 checks, safe structured-clone failure reporting, write-side/read-side
 segregation, deterministic in-memory behavior, and non-durability.
 
+Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
+`TransportTopicInput`, `TransportTopic`, `TransportRoutingDescriptor`,
+`TransportSubscriptionInput`, `TransportSubscription`, `TransportSubscriptionMode`,
+`PublishTransportOperation`, `RequestTransportOperation`,
+`PublishTransportHandler`, `RequestTransportHandler`, `AsyncCloseable`,
+`TransportSubscriptionHandle`, `SignalTransport`, `TransportParticipantKind`,
+`TransportWorkerRole`, `TransportLifecycleState`, `TransportReadinessState`,
+`TransportParticipantIdentityInput`, `TransportParticipantIdentity`,
+`TransportWorkerRegistrationInput`, `TransportWorkerRegistration`,
+`TransportLifecycleSnapshotInput`, `TransportLifecycleSnapshot`,
+`TransportLifecycleParticipant`, `TransportDeliveryStatus`,
+`TransportDeliveryOutcome`, `TransportDeliveryFailureKind`,
+`TransportRetryEligibility`, `TransportDeliveryFailureDetailValue`,
+`TransportDeliveryFailureDetails`,
+`TransportDeliveryFailureClassificationInput`,
+`TransportDeliveryFailureClassification`, `TransportDeliveryAttemptInput`,
+`TransportDeliveryAttempt`, `TransportDeliveryResultInput`,
+`TransportDeliveryResult`, `createTransportTopic()`,
+`createTransportSubscription()`, `createTransportParticipantIdentity()`,
+`createTransportWorkerRegistration()`, `createTransportLifecycleSnapshot()`,
+`createTransportDeliveryAttempt()`, `classifyTransportDeliveryFailure()`, and
+`createTransportDeliveryResult()`. This surface is contract-only: it defines
+immutable topic/subscription value objects, deterministic adapter-agnostic
+routing keys, stable broker/worker lifecycle identities, subscription-backed
+worker registrations, readiness/lifecycle snapshots, delivery attempt/result
+boundary values, redacted failure classifications, retry eligibility data,
+handler callback signatures, and graceful async close behavior. It does not
+expose ZeroMQ socket types, endpoint strings, multipart frames, production
+endpoint topology, broker processes, child process supervision, retry timers or
+workers, durable storage, runtime handler invocation, or server runtime wiring.
+Delivery attempt helpers derive keys from semantic subscription/worker/delivery
+fields and reject forged prebuilt keys. Delivery result helpers derive status
+from the observed outcome, keep failed outcomes as `failed`, preserve retry
+eligibility as separate policy data, and reject mismatched caller-supplied
+statuses or result keys. Failure classification preserves only stable failure
+codes, failure kinds, retry eligibility, and allowlisted scalar details; raw
+exceptions, process details, endpoint strings, frames, payloads, inbox/outbox
+records, scheduling decisions, and monitor policy execution stay outside the
+transport API.
+The transport package pins `zeromq@6.5.0` for local IPC adapter work, but that
+native dependency remains outside the public TypeDoc entry point.
+Adapter-private wiring validates local IPC configuration and native module
+typing, and package-private smoke tests prove same-host publish/subscribe and
+request/reply IPC over temporary endpoints. Socket creation, endpoint strings,
+multipart frames, and native binding types remain absent from the public API;
+production endpoint layout, frame protocols, broker topology, process
+supervision, worker registration handshakes, delivery retries, and server
+runtime wiring remain deferred. Managed sandboxes may reject ZeroMQ `ipc://`
+binds with `EPERM`, so live local IPC smoke tests can require native IPC
+filesystem/socket permissions outside the sandbox.
+
 The generated Protobuf-ES implementation files themselves remain excluded from
 TypeDoc output and are not broadly re-exported from the package root.
 
@@ -248,6 +320,8 @@ pnpm docs:check
 Generated output is written to `docs/api/reference`.
 
 `docs:check` also emits temporary TypeDoc JSON, verifies that expected
-`@spine-ts/proto`, `@spine-ts/core`, `@spine-ts/server`, and
-`@spine-ts/storage` entry-point exports are present in the API model, and
-rejects broad generated wildcard re-exports from the proto package root.
+`@spine-ts/proto`, `@spine-ts/core`, `@spine-ts/server`,
+`@spine-ts/transport`, and `@spine-ts/storage` entry-point exports are present
+in the API model, rejects unexpected `@spine-ts/server` root exports that are
+not in the curated allowlist, and rejects broad generated wildcard re-exports
+from the proto package root.

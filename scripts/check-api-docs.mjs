@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { createSourceFile, ScriptTarget, SyntaxKind } from "typescript";
 
 const expectedProtoExports = [
   "ActorContext",
@@ -163,6 +164,54 @@ const expectedStorageExports = [
   "createInMemoryStorageAdapter",
   "InMemoryStorageAdapter",
 ];
+const expectedTransportExports = [
+  "AsyncCloseable",
+  "PublishTransportHandler",
+  "PublishTransportOperation",
+  "RequestTransportHandler",
+  "RequestTransportOperation",
+  "SignalTransport",
+  "TransportDeliveryAttempt",
+  "TransportDeliveryAttemptInput",
+  "TransportDeliveryFailureClassification",
+  "TransportDeliveryFailureClassificationInput",
+  "TransportDeliveryFailureDetails",
+  "TransportDeliveryFailureDetailValue",
+  "TransportDeliveryFailureKind",
+  "TransportDeliveryOutcome",
+  "TransportDeliveryResult",
+  "TransportDeliveryResultInput",
+  "TransportDeliveryStatus",
+  "TransportLifecycleParticipant",
+  "TransportLifecycleSnapshot",
+  "TransportLifecycleSnapshotInput",
+  "TransportLifecycleState",
+  "TransportParticipantIdentity",
+  "TransportParticipantIdentityInput",
+  "TransportParticipantKind",
+  "TransportRoutingDescriptor",
+  "TransportReadinessState",
+  "TransportSemanticTag",
+  "TransportSignalKind",
+  "TransportSubscription",
+  "TransportSubscriptionHandle",
+  "TransportSubscriptionInput",
+  "TransportSubscriptionMode",
+  "TransportTopic",
+  "TransportTopicInput",
+  "TransportRetryEligibility",
+  "TransportWorkerRegistration",
+  "TransportWorkerRegistrationInput",
+  "TransportWorkerRole",
+  "classifyTransportDeliveryFailure",
+  "createTransportDeliveryAttempt",
+  "createTransportDeliveryResult",
+  "createTransportLifecycleSnapshot",
+  "createTransportParticipantIdentity",
+  "createTransportSubscription",
+  "createTransportTopic",
+  "createTransportWorkerRegistration",
+];
 const expectedServerExports = [
   "Aggregate",
   "Apply",
@@ -184,12 +233,15 @@ const expectedServerExports = [
   "BoundedContextSnapshot",
   "Command",
   "CommandAssignmentHandlerMetadata",
+  "CommandRuntimeRoutingPlan",
   "CommandRegistrationAssigneeMetadata",
   "CommandRegistrationReadiness",
   "CommandRegistrationReadinessLookup",
   "CommandReactionHandlerMetadata",
   "ContextSpec",
   "ContextSpecSnapshot",
+  "createServerRuntimeRoutingPlan",
+  "DeferredServerRuntimeRoutingSeam",
   "DeclaredEntityVisibility",
   "DescriptorFieldMetadata",
   "DescriptorMessageSchema",
@@ -216,6 +268,8 @@ const expectedServerExports = [
   "RepositoryRegistrationConflictDetails",
   "RepositoryStateSchema",
   "ServerRuntimeLifecycle",
+  "ServerRuntimeRoutingPlan",
+  "ServerRuntimeRoutingPlanInput",
   "ServerRuntimeState",
   "ServerRuntimeStateError",
   "ServerRuntimeStateErrorCode",
@@ -263,6 +317,7 @@ const expectedServerExports = [
   "EventRegistrationReadinessLookup",
   "EventRegistrationReactorMetadata",
   "EventRegistrationSubscriberMetadata",
+  "EventRuntimeRoutingPlan",
   "EventReactionHandlerMetadata",
   "EventSubscriptionHandlerMetadata",
   "HandlerKind",
@@ -290,6 +345,7 @@ const expectedServerExports = [
   "validateEntityStateTransition",
 ];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
+const serverIndexPath = join("packages", "server", "src", "index.ts");
 
 const typedocExecutable = process.platform === "win32" ? "typedoc.cmd" : "typedoc";
 const typedocBin = join("node_modules", ".bin", typedocExecutable);
@@ -433,6 +489,9 @@ const missingExports = expectedProtoExports.filter((name) => !documentedNames.ha
 const missingCoreExports = expectedCoreExports.filter((name) => !documentedNames.has(name));
 const missingServerExports = expectedServerExports.filter((name) => !documentedNames.has(name));
 const missingStorageExports = expectedStorageExports.filter((name) => !documentedNames.has(name));
+const missingTransportExports = expectedTransportExports.filter(
+  (name) => !documentedNames.has(name),
+);
 const forbiddenTypeDocNames = [
   "BuiltInEntityConstructor",
   "BuiltInEntityConstructorBase",
@@ -459,6 +518,10 @@ const forbiddenTypeDocNamePatterns = [
   /\b\w*EntityConstructor\w*Brand\w*\b/u,
   /\bspineTs\w*\b/u,
 ];
+const declaredServerExports = collectNamedExports(serverIndexPath);
+const unexpectedServerExports = declaredServerExports.filter(
+  (name) => !expectedServerExports.includes(name),
+);
 
 if (missingExports.length > 0) {
   console.error(
@@ -481,9 +544,23 @@ if (missingServerExports.length > 0) {
   process.exit(1);
 }
 
+if (unexpectedServerExports.length > 0) {
+  console.error(
+    `@spine-ts/server root exports changed without updating docs expectations: ${unexpectedServerExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
 if (missingStorageExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-ts/storage exports: ${missingStorageExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingTransportExports.length > 0) {
+  console.error(
+    `TypeDoc JSON is missing expected @spine-ts/transport exports: ${missingTransportExports.join(", ")}`,
   );
   process.exit(1);
 }
@@ -525,5 +602,33 @@ if (/export\s+\*\s+from\s+["']\.\/generated\//.test(protoIndexSource)) {
 }
 
 console.log(
-  `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-ts/proto exports, ${expectedCoreExports.length} expected @spine-ts/core exports, ${expectedServerExports.length} expected @spine-ts/server exports, and ${expectedStorageExports.length} expected @spine-ts/storage exports.`,
+  `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-ts/proto exports, ${expectedCoreExports.length} expected @spine-ts/core exports, ${expectedServerExports.length} expected @spine-ts/server exports, ${expectedStorageExports.length} expected @spine-ts/storage exports, and ${expectedTransportExports.length} expected @spine-ts/transport exports.`,
 );
+
+function collectNamedExports(indexPath) {
+  const source = createSourceFile(
+    indexPath,
+    readFileSync(indexPath, "utf8"),
+    ScriptTarget.Latest,
+    true,
+  );
+  const names = new Set();
+
+  for (const statement of source.statements) {
+    if (statement.kind !== SyntaxKind.ExportDeclaration) {
+      continue;
+    }
+
+    const exportClause = statement.exportClause;
+
+    if (exportClause === undefined || exportClause.kind !== SyntaxKind.NamedExports) {
+      continue;
+    }
+
+    for (const element of exportClause.elements) {
+      names.add(element.name.text);
+    }
+  }
+
+  return [...names].sort();
+}

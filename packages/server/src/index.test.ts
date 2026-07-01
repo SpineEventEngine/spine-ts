@@ -2,6 +2,7 @@ import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import { deriveTypeUrl } from "@spine-ts/core";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { CommandSchema, file_spine_options } from "@spine-ts/proto";
 import {
@@ -49,6 +50,7 @@ import {
   type SignalIntakeResult,
   type SignalKind,
   SingleProcessServerRuntime,
+  createServerRuntimeRoutingPlan,
 } from "./index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -208,6 +210,7 @@ describe("@spine-ts/server", () => {
         "React",
         "Subscribe",
         "acceptSignalIntake",
+        "createServerRuntimeRoutingPlan",
         "defineEntityHandlers",
         "describeEntityMetadata",
         "createEntityTransaction",
@@ -322,6 +325,11 @@ describe("@spine-ts/server", () => {
     const registry = new HandlerMetadataRegistry([handlers]);
     const commandReadiness = CommandRegistrationReadiness.fromRegistry(registry);
     const eventReadiness = EventRegistrationReadiness.fromRegistry(registry);
+    const routingPlan = createServerRuntimeRoutingPlan({
+      context,
+      commands: commandReadiness,
+      events: eventReadiness,
+    });
 
     expect(runtime.name.value).toBe("PublicRuntimeSmoke");
     expect(
@@ -332,6 +340,17 @@ describe("@spine-ts/server", () => {
     ]);
     expect(eventReadiness.registeredEventMessageFullTypeNames()).toEqual([
       AggregateStateSchema.typeName,
+    ]);
+    expect(routingPlan.commands.topics.map(({ messageTypeUrl }) => messageTypeUrl)).toEqual([
+      "type.spine.io/spine.core.Command",
+    ]);
+    expect(routingPlan.events.topics.map(({ messageTypeUrl }) => messageTypeUrl)).toEqual([
+      deriveTypeUrl(AggregateStateSchema),
+    ]);
+    expect(routingPlan.deferred.map(({ signalKind }) => signalKind)).toEqual([
+      "query",
+      "subscription",
+      "system",
     ]);
 
     await runtime.start();
