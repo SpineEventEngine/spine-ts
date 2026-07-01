@@ -93,11 +93,6 @@ Round 2 fix follow-up:
   numeric/bigint sort ordering (`10` vs `2`, `10n` vs `2n`), deterministic
   mixed-kind ordering, NaN/null/undefined tie behavior, and the
   `StorageFactory.close()` guard.
-
-Round 3 documentation follow-up:
-
-- Corrected the replacement storage example in `docs/USER_GUIDE.md` so
-  `eventStore.append(create(...))` is syntactically valid.
 - Build check:
   `corepack pnpm exec tsc -b packages/proto packages/storage`
   passed after removing the public `StorageObject` hierarchy from storage types
@@ -112,6 +107,11 @@ Round 3 documentation follow-up:
   statements 95.64%, branches 90.44%, functions 98.31%, lines 95.64%, TypeDoc
   / API checks, proto lint/generate, and generated-clean comparison. Existing
   warning only: the local `origin` remote is invalid for TypeDoc source links.
+
+Round 3 documentation follow-up:
+
+- Corrected the replacement storage example in `docs/USER_GUIDE.md` so
+  `eventStore.append(create(...))` is syntactically valid.
 
 ## Changed Files
 
