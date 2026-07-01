@@ -1,6 +1,6 @@
 # T-0012.2: Source Folder Repack
 
-Status: Implemented; awaiting review
+Status: All review lanes clean; final verification pending
 Start: `2026-07-01 18:47 WEST`
 Baseline commit: `480feb02ebde00e03f13a30162d31b9f427e7d18`
 Branch: `task/T-0012-2-source-folder-repack`
