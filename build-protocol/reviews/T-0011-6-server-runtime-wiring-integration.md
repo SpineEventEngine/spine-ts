@@ -13,6 +13,16 @@ Status: Pending
 - Security: `019f1b8a-3342-7a72-b1c6-b32040073bc2` comments; closed.
 - Performance/reliability: `019f1b8a-33de-7bb0-829e-10d711f556c0` comments;
   closed.
+- Round 2 code style/maintainability:
+  `019f1b9f-83c9-7ae0-ab53-d61e191ada51` comments; closed.
+- Round 2 documentation completeness:
+  `019f1b9f-8469-75e1-8745-4e94a46f4dea` clean; closed.
+- Round 2 TypeScript/API docs:
+  `019f1b9f-84d0-76c3-ae45-be17e36aad26` comments; closed.
+- Round 2 security: `019f1b9f-8567-7520-a4cd-0ad64db5cd9c` comments;
+  closed.
+- Round 2 performance/reliability:
+  `019f1b9f-85da-7ef3-8a73-3d585d5be9ac` comments; closed.
 
 ## Agent Ledger
 
@@ -37,11 +47,30 @@ Status: Pending
   returned comments; closed.
 - Round 1 fix sub-agent:
   `019f1b8e-bc7f-73e3-a79e-53b93615b055` (`Mill the 7th`) spawned to address
-  all round-one findings; status pending.
+  all round-one findings; returned `STATUS: DONE` with commit `2375ee5`;
+  closed by orchestrator after report was consumed.
 
 The root thread does not expose `list_agents`; the orchestrator must track every
 spawned T-0011.6 sub-agent ID here and close each agent immediately after its
 result is consumed.
+
+## Round 2 Reviewer Agents
+
+- Round 2 code style/maintainability reviewer:
+  `019f1b9f-83c9-7ae0-ab53-d61e191ada51` (`Arendt the 7th`) spawned;
+  returned comments; closed.
+- Round 2 documentation reviewer:
+  `019f1b9f-8469-75e1-8745-4e94a46f4dea` (`Planck the 7th`) spawned;
+  returned `STATUS: CLEAN`; closed.
+- Round 2 TypeScript/API reviewer:
+  `019f1b9f-84d0-76c3-ae45-be17e36aad26` (`Descartes the 8th`) spawned;
+  returned comments; closed.
+- Round 2 security reviewer:
+  `019f1b9f-8567-7520-a4cd-0ad64db5cd9c` (`Franklin the 8th`) spawned;
+  returned comments; closed.
+- Round 2 performance/reliability reviewer:
+  `019f1b9f-85da-7ef3-8a73-3d585d5be9ac` (`Jason the 8th`) spawned;
+  returned comments; closed.
 
 ## Round 1 Findings
 
@@ -124,3 +153,40 @@ result is consumed.
 - Full verification GREEN on `2026-07-01 03:56 WEST`:
   `CI=true corepack pnpm verify` passed with 24 files / 288 tests and coverage
   95.85% statements / 90.01% branches / 99.38% functions / 95.79% lines.
+
+## Round 2 Findings
+
+### Code Style/Maintainability
+
+- Low: `withDeterministicValidation()` preserves or rewrites errors by
+  matching human-readable message prefixes, creating maintenance coupling
+  between validation branches and the prefix list.
+
+### Documentation
+
+- Clean: no documentation findings remain.
+
+### Security
+
+- High: proxy-wrapped concrete readiness instances can still execute
+  attacker-controlled proxy traps during planning before deterministic
+  validation rejects the metadata. The raw route-shape leak,
+  handler/entity-derived transport IDs, and ZeroMQ/socket/process/storage
+  exposure remain closed.
+
+### Performance/Reliability
+
+- High: proxy-wrapped concrete readiness instances can still surface raw
+  exceptions before deterministic validation runs. Worker-ID collision,
+  deterministic ordering, and no-dispatch/storage/network/process/retry
+  boundaries remain closed.
+
+### TypeScript/API
+
+- Medium: public command/event route types still expose full topic,
+  subscription, and worker contracts on every route even though those are
+  already available at the plan level, broadening the route shape beyond the
+  documented minimal descriptor.
+- Medium: `scripts/check-api-docs.mjs` only checks for missing expected server
+  exports and does not reject unexpected new exports, so the smaller public API
+  surface is not actually frozen by `docs:check`.
