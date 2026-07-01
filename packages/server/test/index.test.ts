@@ -30,7 +30,6 @@ import {
   isEntitySchema,
   type BoundedContextName,
   type BoundedContextSnapshot,
-  type BoundedContextRepositoryRegistrationOperation,
   type TenantMode,
   Aggregate,
   type EntityVersionMetadata,
@@ -183,7 +182,6 @@ describe("@spine-ts/server", () => {
         "BoundedContext",
         "BoundedContextBuilder",
         "BoundedContextNameError",
-        "BoundedContextRepositoryRegistrationError",
         "CommandBus",
         "CommandRegistrationReadiness",
         "EntityTransactionDraftStateError",
@@ -237,7 +235,6 @@ describe("@spine-ts/server", () => {
     expectTypeOf(
       BoundedContext.singleTenant("Exports").build().snapshot,
     ).toEqualTypeOf<BoundedContextSnapshot>();
-    expectTypeOf<BoundedContextRepositoryRegistrationOperation>().toEqualTypeOf<"add" | "remove">();
     expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
     expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);
     expectTypeOf<SignalKind>().toEqualTypeOf<"command" | "event">();
@@ -331,9 +328,8 @@ describe("@spine-ts/server", () => {
     });
 
     expect(context.name.value).toBe("PublicRuntimeSmoke");
-    expect(context.snapshot.repositories.map((snapshot) => snapshot.stateFullTypeName)).toEqual([
-      AggregateStateSchema.typeName,
-    ]);
+    expect(context.commandBus()).toBeInstanceOf(CommandBus);
+    expect(context.eventBus()).toBeInstanceOf(EventBus);
     expect(commandReadiness.registeredCommandMessageFullTypeNames()).toEqual([
       CommandSchema.typeName,
     ]);
@@ -358,8 +354,6 @@ describe("@spine-ts/server", () => {
 
     for (const member of [
       "enqueue",
-      "commandBus",
-      "eventBus",
       "importBus",
       "storage",
       "stand",

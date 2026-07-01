@@ -1,6 +1,6 @@
 # T-0012.6: BoundedContext Assembly
 
-Status: setup complete; implementation selected
+Status: implementation complete; verified
 Start: `2026-07-01 22:58 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-6-bounded-context-assembly`
@@ -77,18 +77,33 @@ Relevant JVM shape:
 
 ## Acceptance
 
-- Built single-tenant and multitenant contexts expose the configured name and
-  tenant mode.
-- Built contexts expose working `commandBus()` and `eventBus()` methods.
-- Dispatchers added to the builder are registered in the built buses.
-- Removed dispatchers are not registered in the built buses.
-- Event posting through `context.eventBus().post(event)` stores events in the
-  context event store before dispatch.
-- Command posting through `context.commandBus().post(command)` reaches the
-  registered command dispatcher.
-- No repository lifecycle, delivery, stand, gRPC, transport execution,
-  scheduler, import bus, or system-context runtime behavior is introduced.
-- The public API is smaller than the previous snapshot-heavy context surface.
+- [x] Built single-tenant and multitenant contexts expose the configured name and
+      tenant mode.
+- [x] Built contexts expose working `commandBus()` and `eventBus()` methods.
+- [x] Dispatchers added to the builder are registered in the built buses.
+- [x] Removed dispatchers are not registered in the built buses.
+- [x] Event posting through `context.eventBus().post(event)` stores events in the
+      context event store before dispatch.
+- [x] Command posting through `context.commandBus().post(command)` reaches the
+      registered command dispatcher.
+- [x] No repository lifecycle, delivery, stand, gRPC, transport execution,
+      scheduler, import bus, or system-context runtime behavior is introduced.
+- [x] The public API is smaller than the previous snapshot-heavy context surface.
+
+## Implementation Notes
+
+- `BoundedContextBuilder` now collects command and event dispatchers with
+  JVM-familiar add/remove methods and builds fresh `CommandBus` / `EventBus`
+  instances for each built context.
+- `BoundedContextBuilder.withStorageFactory(factory)` supplies the
+  `StorageFactory` used to create the context `EventStore`; the default remains
+  in-memory storage for this slice.
+- `BoundedContext` exposes `commandBus()` and `eventBus()` only, plus small
+  name/spec/tenant metadata.
+- `add(repository)` / `remove(repository)` remain as a private builder-side
+  pending seam. Built contexts no longer expose repository arrays.
+- The bounded-context repository registration error/code/operation exports were
+  removed from the package root.
 
 ## Baseline Verification
 

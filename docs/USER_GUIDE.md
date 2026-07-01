@@ -93,12 +93,12 @@ the to-do application remain later slices.
   entity handler metadata, rejects duplicate command assignments and duplicate
   event appliers for the same entity/event pair, and exposes frozen
   deterministic lookup views.
-- A metadata-only bounded-context builder shell in `@spine-ts/server` with
+- A bounded-context builder shell in `@spine-ts/server` with
   `BoundedContext.singleTenant(name)`, `BoundedContext.multitenant(name)`,
   immutable context names, framework-owned `ContextSpec` values from
-  `builder.spec` and `context.spec`, tenant mode metadata, explicit repository
-  identity registration, deterministic repository ownership conflict checks,
-  frozen metadata-only built contexts, and copy-safe context snapshots.
+  `builder.spec` and `context.spec`, tenant mode metadata, dispatcher
+  collection, storage-factory injection for event storage, owned built-context
+  command/event buses, and copy-safe small context snapshots.
 - A first single-process server runtime lifecycle/queue kernel, typed
   write-side signal intake result values, and command/event
   registration-readiness metadata derived from handler metadata.
@@ -107,10 +107,10 @@ the to-do application remain later slices.
   rejects duplicate command dispatcher registration by message type, and
   appends events to `EventStore` before event fan-out.
 - A smoke-tested public assembly path that combines a built bounded context,
-  repository identity metadata, handler metadata registry, command/event
+  handler metadata registry, command/event
   readiness views, and `createServerRuntimeRoutingPlan()` without exposing a
-  server facade, buses, services, storage, dispatch, handler invocation, worker
-  lifecycle registration, or transport endpoint execution.
+  server facade, services, repository runtime registration, handler invocation,
+  worker lifecycle registration, or transport endpoint execution.
 - Adapter-agnostic transport contracts in `@spine-ts/transport` for immutable
   signal topics, logical subscriptions, publish/request operations, and async
   close behavior.
@@ -401,44 +401,36 @@ open storage; convert records; register with a bounded context; route or
 dispatch messages; write inboxes; invoke handlers; manage caches; run catch-up;
 emit lifecycle events; expose query stands; start buses; or use gRPC/transport.
 
-## Bounded Context Repository Registration
+## Bounded Context Assembly
 
-Use `BoundedContextBuilder.add(repository)` when a bounded context should record
-which repository identity owns an entity/state type pair:
+Use the JVM-familiar builder to assemble the first context-owned runtime parts:
 
 ```ts
-import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
-import { TaskStateSchema } from "./generated/tasks_pb.js";
+import { BoundedContext } from "@spine-ts/server";
+import { InMemoryStorageFactory } from "@spine-ts/storage";
 
-class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
-
-const taskRepository = new Repository({
-  entityType: TaskAggregate,
-  schema: TaskStateSchema,
-});
-
-const builder = BoundedContext.singleTenant("Tasks").add(taskRepository);
+const builder = BoundedContext.singleTenant("Tasks")
+  .withStorageFactory(new InMemoryStorageFactory())
+  .addCommandDispatcher(commandDispatcher)
+  .addEventDispatcher(eventDispatcher);
 const context = builder.build();
 
-context.repositories[0]?.entityType === TaskAggregate; // true
-const builtSnapshot = context.snapshot; // BoundedContextSnapshot shape
+await context.commandBus().post(commandEnvelope);
+await context.eventBus().post(eventEnvelope);
 ```
 
-`add()` and `remove()` return the same builder for JVM-familiar chaining.
-Repeatedly adding the same repository identity is a no-op. The builder rejects
-conflicting ownership with `BoundedContextRepositoryRegistrationError` when one
-entity constructor is paired with a different state schema identity, or when one
-state type is claimed by multiple entity constructors. Builder and context
-repository arrays are frozen fresh-copy snapshots, so later `add()` or
-`remove()` calls do not mutate snapshots already returned by the API or contexts
-already built. `BoundedContextSnapshot` is the immutable registration contract
-produced by `build()`.
+`addCommandDispatcher()` / `removeCommandDispatcher()` and
+`addEventDispatcher()` / `removeEventDispatcher()` affect only contexts built
+after the call. `withStorageFactory()` supplies the `StorageFactory` used to
+create the context `EventStore`; if omitted, the current builder uses in-memory
+storage. Event posting stores through that event store before dispatcher
+fan-out.
 
-This registration is still metadata-only. It does not create default
-repositories from entity classes, register repositories into a live context,
-open storage, register type suppliers with a stand, route messages, invoke
-handlers, write inboxes, emit lifecycle events, construct buses, or start
-transport.
+`add(repository)` and `remove(repository)` still exist only as a pending,
+builder-only repository seam. They do not create default repositories, register
+repositories into a live context, open repository storage, register type
+suppliers with a stand, route repository messages, invoke handlers, write
+inboxes, emit lifecycle events, or start transport.
 
 ## Runtime Assembly Closure
 
