@@ -3,8 +3,8 @@
   "references": [
     { "path": "./packages/proto" },
     { "path": "./packages/core" },
-    { "path": "./packages/server" },
     { "path": "./packages/transport" },
+    { "path": "./packages/server" },
     { "path": "./packages/storage" },
     { "path": "./packages/testing" },
     { "path": "./examples/todo" }
