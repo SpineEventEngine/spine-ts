@@ -89,6 +89,24 @@ Focused RED/GREEN evidence is recorded in
 Final required verification passed after escalation for the known ZeroMQ local
 IPC sandbox restriction.
 
+Author follow-up agent `019f1eaa-e1e5-7f02-99db-1856dbcc7fe9` committed
+`5c0f0c3` and is closed.
+
+## Round 4 Re-review
+
+Round 4 reviewers must re-check the full package
+`.superpowers/sdd/review-147d496..5c0f0c3.diff`, with special attention to
+direct `pnpm lint` fresh-checkout behavior and updated durable review/status
+pointers.
+
+Reviewer lanes:
+
+- Code style/maintainability: pending.
+- Documentation: pending.
+- TypeScript/API docs: pending.
+- Security: pending.
+- Performance/reliability: pending.
+
 Author follow-up agent `019f1e81-646b-7c51-a325-59dbf7c4c9c6` committed
 `3d33805` and is closed.
 
