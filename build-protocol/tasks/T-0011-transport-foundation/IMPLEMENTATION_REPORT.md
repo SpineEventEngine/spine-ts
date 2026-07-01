@@ -1,6 +1,6 @@
 # Implementation Report: T-0011 Transport Foundation
 
-Status: T-0011.6 In Progress
+Status: T-0011.6 Integrated
 Task log: `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
 Work log: `build-protocol/work-logs/T-0011.md`
 Review log: `build-protocol/reviews/T-0011-transport-foundation.md`
@@ -57,6 +57,15 @@ boundary contracts. Failed outcomes remain `failed`; retry eligibility is
 separate policy data. It keeps durable inbox/outbox storage, retry scheduling,
 handler invocation, repository dispatch, process supervision, and server
 runtime wiring deferred to later subtasks.
+
+`T-0011.6` was integrated into this parent branch by merge commit `05b63fb` on
+`2026-07-01 04:40 WEST`. The integrated slice adds a narrow
+`@spine-ts/server` runtime-routing seam that derives immutable transport
+topics, subscriptions, and worker registrations from built bounded-context
+metadata plus authentic command/event readiness instances. It keeps query,
+subscription, and system routing explicit deferred seams and does not introduce
+services, dispatch, storage, delivery, process supervision, IPC endpoint
+allocation, or a broad `Server` facade.
 
 ## Scope Guardrails
 
@@ -129,6 +138,18 @@ runtime wiring deferred to later subtasks.
   warning only. The command ran with native IPC access because inherited
   ZeroMQ smoke tests bind `ipc://` endpoints and the managed sandbox rejects
   those binds with `EPERM`.
+- Parent verification after integrating T-0011.6 passed on
+  `2026-07-01 04:40 WEST`: the first `CI=true corepack pnpm verify` attempt
+  stopped at pnpm's dependency-state guard because the merged lockfile changed
+  this worktree's dependency state; `corepack pnpm install --frozen-lockfile`
+  passed with the lockfile unchanged; the subsequent escalated `CI=true
+corepack pnpm verify` passed with native IPC access. Full verify covered 24
+  test files / 293 tests with coverage 96.12% statements / 90.53% branches /
+  99.38% functions / 96.07% lines, TypeDoc/API checks with 100 proto / 28 core
+  / 130 server / 26 storage / 46 transport expected exports, copied Spine
+  proto checksum verification, proto lint/generate, generated proto output
+  clean, and generated files clean. TypeDoc emitted the existing
+  invalid-`origin` warning only.
 
 ## Splitter Research And Recommendation
 
@@ -174,6 +195,11 @@ performs native smoke tests.
   contracts/tests, package docs, architecture/API docs, transport API export
   checks, and T-0011.5 durable logs. See
   `build-protocol/tasks/T-0011-5-delivery-retry-boundary-contracts/IMPLEMENTATION_REPORT.md`.
+- T-0011.6 integration changed server runtime-routing contracts/tests,
+  command/event readiness authenticity internals, package docs,
+  architecture/API docs, the server API export guard, and T-0011.6 durable
+  logs. See
+  `build-protocol/tasks/T-0011-6-server-runtime-wiring-integration/IMPLEMENTATION_REPORT.md`.
 
 ## T-0011.6 Setup
 
@@ -189,4 +215,4 @@ storage, delivery, or process supervision.
 
 ## Open Items
 
-- Complete `T-0011.6 Server Runtime Wiring Integration`.
+- Complete `T-0011.7 Documentation And Closure`.

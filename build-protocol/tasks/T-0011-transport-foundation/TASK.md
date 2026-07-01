@@ -1,6 +1,6 @@
 # T-0011: Transport Foundation
 
-Status: T-0011.6 In Progress
+Status: T-0011.6 Integrated
 Start: `2026-06-30 20:32 WEST`
 Baseline commit: `194ce9e`
 Task log path: `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
@@ -9,8 +9,8 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-transport-foundation`
 Requirements splitter:
 `2026-06-30 20:40 WEST` splitter session (closed by orchestrator after handoff)
-Authoring sub-agents: T-0011.1, T-0011.2, T-0011.3, T-0011.4, and T-0011.5 complete; T-0011.6 pending
-Reviewer sub-agents: T-0011.1, T-0011.2, T-0011.3, T-0011.4, and T-0011.5 complete; T-0011.6 pending
+Authoring sub-agents: T-0011.1 through T-0011.6 complete
+Reviewer sub-agents: T-0011.1 through T-0011.6 complete
 
 ## Objective
 
@@ -264,6 +264,19 @@ side execution.
   with native IPC access because the inherited ZeroMQ smoke tests bind
   `ipc://` endpoints and the managed sandbox rejects those binds with `EPERM`.
 
+- T-0011.6 parent integration verification passed on `2026-07-01 04:40 WEST`
+  after merge commit `05b63fb`:
+  the first `CI=true corepack pnpm verify` attempt stopped at pnpm's
+  dependency-state guard because the merged lockfile changed this worktree's
+  dependency state. `corepack pnpm install --frozen-lockfile` then passed with
+  the lockfile unchanged. The subsequent escalated `CI=true corepack pnpm
+verify` passed with native IPC access: 24 test files / 293 tests, coverage
+  96.12% statements / 90.53% branches / 99.38% functions / 96.07% lines,
+  TypeDoc/API checks with 100 proto / 28 core / 130 server / 26 storage / 46
+  transport expected exports, copied Spine proto checksum verification, proto
+  lint/generate, generated proto output clean, and generated files clean.
+  TypeDoc emitted the existing invalid-`origin` warning only.
+
 ## Integrated Subtasks
 
 - `T-0011.1 Transport Contracts, Topics, And Envelope Routing Keys`: integrated
@@ -287,8 +300,13 @@ side execution.
   retry-status, type-safety, failure-detail allowlist, and wording/log-order
   follow-ups; final subtask verification passed; parent native IPC verification
   passed after merge.
+- `T-0011.6 Server Runtime Wiring Integration`: integrated by merge commit
+  `05b63fb` on `2026-07-01 04:40 WEST`. Required five-lane review clean after
+  route-shape, proxy-validation, readiness-authenticity, documentation, and
+  coverage follow-ups; final subtask verification passed; parent native IPC
+  verification passed after merge.
 
 ## Next Subtask
 
-- `T-0011.6 Server Runtime Wiring Integration`: worktree and logs created on
-  `2026-07-01 03:06 WEST` from parent commit `78346ab`; implementation pending.
+- `T-0011.7 Documentation And Closure`: prepare the transport-foundation
+  closure docs, parent verification evidence, and final review gate.
