@@ -7,7 +7,8 @@ Current scope:
 - immutable transport topics framed in signal kinds, payload type URLs, semantic
   tags, and deterministic routing keys;
 - immutable subscription descriptors with logical subscriber IDs and delivery
-  mode only;
+  mode only, never process IDs, filesystem paths, hostnames, socket names, or
+  endpoints;
 - immutable broker/worker participant identities, worker registrations, and
   lifecycle/readiness snapshots expressed only in logical roles and transport
   subscriptions;
@@ -16,13 +17,13 @@ Current scope:
 - publish/request operation contracts plus handler callback types; and
 - async close behavior for future transport implementations.
 
-This package pins the maintained official `zeromq@6.5.0` package for the later
-local IPC adapter and keeps focused adapter-private smoke tests for same-host
-publish/subscribe and request/reply IPC behavior. The package root remains
-adapter-agnostic. ZeroMQ socket classes, endpoint strings, multipart frames,
-native binding types, broker processes, retry executors, durable delivery,
-handler invocation, and server wiring are not exported from the public
-transport API.
+This package pins the maintained official `zeromq@6.5.0` package for the local
+IPC adapter foundation and keeps focused adapter-private smoke tests for
+same-host publish/subscribe and request/reply IPC behavior. The package root
+remains adapter-agnostic. ZeroMQ socket classes, endpoint strings, multipart
+frames, native binding types, broker processes, retry executors, durable
+delivery, handler invocation, and server wiring are not exported from the
+public transport API.
 
 The lifecycle seam is contract-and-helper state only. It exposes stable broker
 and worker participant identities, logical worker roles, deterministic worker
@@ -54,7 +55,9 @@ CI environments must allow that build step when restoring dependencies. Current
 adapter-private helpers only normalize local IPC configuration and module
 typing. The smoke tests open sockets only under temporary IPC directories and
 clean them up within the test process; they do not define production endpoint
-layout, frame formats, retries, delivery semantics, process supervision, or
-server runtime wiring. Managed sandboxes may reject ZeroMQ `ipc://` binds with
-`EPERM`, so live local IPC smoke runs can require native IPC filesystem/socket
-permissions outside the sandbox.
+layout, frame formats, retries, delivery semantics, process supervision, broker
+topology, worker registration handshakes, or server runtime wiring. Managed
+sandboxes may reject ZeroMQ `ipc://` binds with `EPERM`, so live local IPC smoke
+runs can require native IPC filesystem/socket permissions outside the sandbox.
+Scaling beyond one host must use another adapter behind the same public
+transport contracts.

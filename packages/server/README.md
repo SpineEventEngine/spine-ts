@@ -1,7 +1,8 @@
 # @spine-ts/server
 
 Descriptor-derived server metadata for Spine entity schemas, explicit handler
-metadata, and standard decorator metadata adapters.
+metadata, standard decorator metadata adapters, and the first runtime routing
+plan seam over `@spine-ts/transport` contracts.
 
 Current slice exposes:
 
@@ -203,17 +204,19 @@ instances. When readiness is present, it derives command topics plus one
 competing-consumer command-worker registration from command readiness and event
 topics plus fan-out subscriptions and event-worker registrations from
 subscriber/reactor/application readiness. Without readiness, the corresponding
-command or event plan is empty. It returns immutable transport contracts plus
-small server-owned route descriptors. Those public route descriptors contain
-planner-local route and
+command or event plan is empty. It returns immutable `@spine-ts/transport`
+topics, subscriptions, worker registrations, and small server-owned route
+descriptors. Those public route descriptors contain planner-local route and
 worker IDs, sanitized message full type names/type URLs, stable receiver
 groups, and transport correlation keys for the top-level topic/subscription/
 worker arrays only; they do not expose handler methods, entity type names, raw
-readiness metadata, or duplicate full transport contracts on each route.
+readiness metadata, ZeroMQ endpoints, socket topology, or duplicate full
+transport contracts on each route.
 Query, subscription, and system routing remain explicit deferred seams because
 this slice has no concrete server readiness metadata for them. The planner does
 not open sockets, name IPC endpoints, start workers, dispatch handlers,
-validate signals, store delivery state, or expose buses/services.
+validate signals, store delivery state, supervise broker or worker processes,
+run retry policy, or expose buses/services.
 
 ## Single-Process Runtime Kernel
 

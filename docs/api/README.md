@@ -193,9 +193,9 @@ supervision deferred. Public route descriptors expose only planner-local route
 and worker IDs, message full type names/type URLs, stable receiver groups, and
 transport correlation keys back to the top-level topics/subscriptions/workers;
 they do not retain raw readiness metadata, entity names, handler method names,
-or duplicate full transport contracts on each route. Query, subscription, and
-system routing remain explicit deferred seams until concrete server readiness
-metadata exists.
+ZeroMQ endpoint data, socket topology, or duplicate full transport contracts on
+each route. Query, subscription, and system routing remain explicit deferred
+seams until concrete server readiness metadata exists.
 Server runtime exports include `SingleProcessServerRuntime`,
 `ServerRuntimeLifecycle`, `ServerRuntimeState`, `ServerRuntimeWork`,
 `ServerRuntimeStateOperation`, `ServerRuntimeStateErrorCode`, and
@@ -283,9 +283,9 @@ routing keys, stable broker/worker lifecycle identities, subscription-backed
 worker registrations, readiness/lifecycle snapshots, delivery attempt/result
 boundary values, redacted failure classifications, retry eligibility data,
 handler callback signatures, and graceful async close behavior. It does not
-expose ZeroMQ socket types, endpoint strings, multipart frames, broker
-processes, child process supervision, retry timers or workers, durable storage,
-runtime handler invocation, or server runtime wiring.
+expose ZeroMQ socket types, endpoint strings, multipart frames, production
+endpoint topology, broker processes, child process supervision, retry timers or
+workers, durable storage, runtime handler invocation, or server runtime wiring.
 Delivery attempt helpers derive keys from semantic subscription/worker/delivery
 fields and reject forged prebuilt keys. Delivery result helpers derive status
 from the observed outcome, keep failed outcomes as `failed`, preserve retry
@@ -295,16 +295,17 @@ codes, failure kinds, retry eligibility, and allowlisted scalar details; raw
 exceptions, process details, endpoint strings, frames, payloads, inbox/outbox
 records, scheduling decisions, and monitor policy execution stay outside the
 transport API.
-The transport package pins `zeromq@6.5.0` for later local IPC adapter work, but
-that native dependency remains outside the public TypeDoc entry point.
+The transport package pins `zeromq@6.5.0` for local IPC adapter work, but that
+native dependency remains outside the public TypeDoc entry point.
 Adapter-private wiring validates local IPC configuration and native module
 typing, and package-private smoke tests prove same-host publish/subscribe and
 request/reply IPC over temporary endpoints. Socket creation, endpoint strings,
 multipart frames, and native binding types remain absent from the public API;
-production endpoint layout, frame protocols, process supervision, delivery
-retries, and server runtime wiring remain deferred. Managed sandboxes may
-reject ZeroMQ `ipc://` binds with `EPERM`, so live local IPC smoke tests can
-require native IPC filesystem/socket permissions outside the sandbox.
+production endpoint layout, frame protocols, broker topology, process
+supervision, worker registration handshakes, delivery retries, and server
+runtime wiring remain deferred. Managed sandboxes may reject ZeroMQ `ipc://`
+binds with `EPERM`, so live local IPC smoke tests can require native IPC
+filesystem/socket permissions outside the sandbox.
 
 The generated Protobuf-ES implementation files themselves remain excluded from
 TypeDoc output and are not broadly re-exported from the package root.

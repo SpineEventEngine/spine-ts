@@ -1,6 +1,6 @@
 # T-0011.7: Documentation And Closure
 
-Status: In Progress
+Status: Implementation Complete; Pending Review/Integration
 Parent task: `T-0011 Transport Foundation`
 Start: `2026-07-01 04:44 WEST`
 Baseline commit: `bac132c`
@@ -9,7 +9,7 @@ Task log path:
 Branch: `task/T-0011-7-documentation-closure`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-7-documentation-closure`
-Authoring sub-agent: pending
+Authoring sub-agent: implementation completed on `2026-07-01 04:54 WEST`
 Reviewer sub-agents: pending
 
 ## Objective
@@ -89,6 +89,24 @@ Selected implementer/reviewer advisory skills to pass by reference:
   lint/generate, generated proto output clean, and generated files clean.
   TypeDoc emitted the existing invalid-`origin` warning only.
 
+- T-0011.7 implementation verification on `2026-07-01 04:54 WEST`:
+  `corepack pnpm format:check` passed after Prettier reflowed the two touched
+  work-log tables; `git diff --check` passed; initial
+  `corepack pnpm docs:check` failed because this fresh worktree had no package
+  `dist` declarations for workspace package export resolution; dependency-order
+  `corepack pnpm exec tsc -b packages/proto packages/core packages/transport packages/server packages/storage packages/testing examples/todo`
+  passed; rerun `corepack pnpm docs:check` passed with the existing
+  invalid-`origin` TypeDoc warning only and API counts 100 proto / 28 core /
+  130 server / 26 storage / 46 transport.
+- Full T-0011.7 branch verification passed on `2026-07-01 04:59 WEST`:
+  escalated `CI=true corepack pnpm verify` passed with native IPC access, 24
+  test files / 293 tests, coverage 96.12% statements / 90.53% branches /
+  99.38% functions / 96.07% lines, TypeDoc/API counts 100 proto / 28 core /
+  130 server / 26 storage / 46 transport, copied Spine proto checksum
+  verification, proto lint/generate, generated proto output clean, and
+  generated files clean. TypeDoc emitted the existing invalid-`origin` warning
+  only.
+
 ## Implementation Notes
 
 - Keep the slice documentation-only unless verification reveals a necessary
@@ -97,3 +115,16 @@ Selected implementer/reviewer advisory skills to pass by reference:
   top-level concepts.
 - Record every verification run and reviewer outcome before marking the task
   complete.
+
+## Implementation Handoff
+
+- Updated framework user-facing docs to describe the T-0011 transport
+  foundation: adapter-agnostic topics/subscriptions, ZeroMQ local IPC
+  adapter-private constraints, broker/worker lifecycle contracts,
+  delivery/retry boundary data, and `createServerRuntimeRoutingPlan()`.
+- Updated the to-do example docs to state that the example is still not
+  runnable while naming the transport/runtime seams available for later work.
+- Updated package/API/architecture docs for consistency without duplicating the
+  generated API reference.
+- Parent T-0011 remains in progress for orchestrator review, integration, and
+  final closure.
