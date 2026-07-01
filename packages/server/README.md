@@ -8,10 +8,10 @@ contracts.
 Current slice exposes:
 
 - `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)` for
-  creating metadata-only builder shells with immutable context names,
+  creating builder shells with immutable context names,
   `ContextSpec` values exposed through `builder.spec` and `context.spec`, tenant
-  mode metadata, explicit `Repository` identity registration, deterministic
-  repository ownership conflict checks, and copy-safe built context snapshots;
+  mode metadata, command/event dispatcher collection, storage-factory injection
+  for event storage, and built contexts that own `CommandBus` and `EventBus`;
   and
 - `Entity<Id, Schema, Version>` for a common abstract OOP state shell with
   identity, descriptor-derived metadata, cloned Protobuf-ES state snapshots,
@@ -378,7 +378,7 @@ delivery, handler invocation, service hosting, or `Ack` behavior. The routing
 plan deliberately does not create worker registrations, lifecycle handles,
 queues, buses, repositories, storage, services, or transport endpoints.
 
-## Bounded Context Shell
+## Bounded Context Assembly
 
 Create a bounded-context shell through the JVM-familiar entry points:
 
@@ -394,37 +394,33 @@ customers.isMultitenant; // true
 ```
 
 Names must be non-empty and non-blank. `ContextSpec` is a framework-owned
-immutable value exposed from the builder and built context, `build()` returns a
-frozen metadata-only `BoundedContext`, and `.snapshot` returns a copy-safe
-immutable `BoundedContextSnapshot`. Builders accept explicit metadata-only
-`Repository` identity objects:
+immutable value exposed from the builder and built context. `build()` returns a
+`BoundedContext` that owns mutable command/event buses internally while exposing
+post-only `commandBus()` and `eventBus()` endpoints. The endpoints do not expose
+late dispatcher registration. Builders collect dispatchers and can inject the
+`StorageFactory` used to create the context `EventStore`:
 
 ```ts
-import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
-import { TaskStateSchema } from "./generated/tasks_pb.js";
+import { BoundedContext } from "@spine-ts/server";
+import { InMemoryStorageFactory } from "@spine-ts/storage";
 
-class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
+const tasks = BoundedContext.singleTenant("Tasks")
+  .withStorageFactory(new InMemoryStorageFactory())
+  .addCommandDispatcher(commandDispatcher)
+  .addEventDispatcher(eventDispatcher)
+  .build();
 
-const taskRepository = new Repository({
-  entityType: TaskAggregate,
-  schema: TaskStateSchema,
-});
-
-const tasks = BoundedContext.singleTenant("Tasks").add(taskRepository).build();
-
-tasks.repositories[0]?.stateFullTypeName; // TaskStateSchema.typeName
+await tasks.commandBus().post(commandEnvelope);
+await tasks.eventBus().post(eventEnvelope);
 ```
 
-Adding the same repository identity repeatedly is idempotent. The builder
-rejects conflicting ownership when one entity constructor is paired with a
-different state schema identity, or when one state type is claimed by multiple
-entity constructors. Returned repository arrays and built context snapshots are
-fresh frozen copies.
+`add(repository)` and `remove(repository)` are tiny chainable pending no-ops for
+the later repository runtime task.
 
 This slice deliberately does not create default repositories from entity
-classes, perform runtime repository registration, invoke handlers, open storage,
-construct system contexts, start command/event/query/subscription buses, write
-tenant indexes, expose gRPC services, or integrate transports.
+classes, perform runtime repository registration, invoke handlers, open
+repository storage, construct system contexts, start query/subscription buses,
+write tenant indexes, expose gRPC services, or integrate transports.
 
 ## Entity State Shell
 
@@ -501,8 +497,8 @@ workflow execution, handler invocation, storage, buses, or lifecycle events.
 
 ## Repository Identity
 
-Use `Repository` when a `BoundedContextBuilder` needs to record that one entity
-constructor owns one descriptor-backed state schema:
+Use `Repository` to describe that one entity constructor owns one
+descriptor-backed state schema:
 
 ```ts
 import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
@@ -520,7 +516,6 @@ repository.stateFullTypeName; // TaskStateSchema.typeName
 repository.snapshot.stateFullTypeName; // immutable fresh-copy snapshot
 
 const tasks = BoundedContext.singleTenant("Tasks").add(repository).build();
-tasks.repositories[0]?.stateFullTypeName; // TaskStateSchema.typeName
 ```
 
 The constructor derives descriptor metadata with `describeEntityMetadata()` and
@@ -531,15 +526,13 @@ are accepted. Explicitly reparented same-realm ES classes are trusted as
 metadata; this is not a sandbox boundary. The API rejects constructors outside
 those families and rejects mismatched family/schema pairs, such as an aggregate
 class with a projection state schema, with simple `RepositoryIdentityError`
-code/message diagnostics. `BoundedContextBuilder.add(repository)` uses these
-metadata-only identities for duplicate and conflict checks before
-`builder.build()` creates an immutable bounded-context snapshot. Runtime
-context registration remains deferred. This identity seam follows Spine
-`core-jvm` `Repository` identity concepts closely. This API is
-metadata-only: it does not create, find, or store
-entities; open storage; register with a bounded context; route messages; invoke
-handlers; write inboxes; manage caches; emit lifecycle events; start buses; or
-touch transport.
+code/message diagnostics. `BoundedContextBuilder.add(repository)` and
+`remove(repository)` currently accept these identities as chainable pending
+no-ops only. Runtime context registration remains deferred. This identity seam
+follows Spine `core-jvm` `Repository` identity concepts closely. This API is
+metadata-only: it does not create, find, or store entities; open storage;
+register with a bounded context; route messages; invoke handlers; write inboxes;
+manage caches; emit lifecycle events; or touch transport.
 
 ## Entity State Transition Validation
 

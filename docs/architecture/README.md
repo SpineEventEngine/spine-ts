@@ -296,7 +296,8 @@ async-local transaction state, or start transport.
 server metadata. It follows the Spine JVM entry points closely while keeping
 the implementation boundary deliberately smaller than the eventual runtime.
 
-Current bounded-context scope is intentionally limited to immutable metadata:
+Current bounded-context scope is intentionally limited to a small assembly
+surface:
 
 - `BoundedContext.singleTenant(name)` and
   `BoundedContext.multitenant(name)` are the only public entry points for
@@ -304,24 +305,24 @@ Current bounded-context scope is intentionally limited to immutable metadata:
 - `ContextSpec` is a framework-owned immutable value exposed through
   `builder.spec` and `context.spec`; it carries the validated bounded-context
   name, tenant mode, and event-storage metadata for future runtime work;
-- `BoundedContextBuilder.add(repository)` and `remove(repository)` record
-  explicit metadata-only `Repository` identities and expose fresh frozen
-  repository snapshots from the builder and built context;
-- repeated registration of the same repository identity is idempotent, while
-  conflicting entity-constructor/state-schema ownership and state-type
-  ownership are rejected before runtime assembly;
+- `BoundedContextBuilder.addCommandDispatcher()` /
+  `removeCommandDispatcher()` and `addEventDispatcher()` /
+  `removeEventDispatcher()` collect dispatchers for the context being built;
+- `BoundedContextBuilder.withStorageFactory(factory)` selects the
+  `StorageFactory` used to create the context `EventStore`;
+- `BoundedContextBuilder.add(repository)` and `remove(repository)` are
+  chainable pending no-ops for a later runtime-registration task;
 - `BoundedContextBuilder.build()` is the only supported path for constructing a
   built `BoundedContext`; and
-- built contexts expose frozen metadata only: name, tenant mode, spec,
-  repository identities, and a copy-safe `BoundedContextSnapshot`.
+- built contexts expose name, tenant mode, spec, a copy-safe small snapshot,
+  and post-only `commandBus()` / `eventBus()` endpoints backed by internally
+  owned buses.
 
 This keeps the TypeScript API JVM-familiar without pretending that later
 runtime collaborators already exist. Application code does not subclass
-`BoundedContext`, directly instantiate shell classes, or reach executable
-runtime parts such as command buses, event buses, stands, tenant indexes,
-storage, or transport endpoints from this shell. Runtime constructor guards also
-reject direct JavaScript escape hatches so callers cannot bypass name validation
-or the builder-only build path by passing ad hoc objects.
+`BoundedContext` or directly instantiate shell classes. Runtime constructor
+guards also reject direct JavaScript escape hatches so callers cannot bypass
+name validation or the builder-only build path by passing ad hoc objects.
 
 The following runtime pieces are still deferred to later explicit tasks:
 
@@ -339,8 +340,8 @@ The following runtime pieces are still deferred to later explicit tasks:
 T-0010 closes the first single-process runtime slice as an assembly seam rather
 than a server graph. Its verified public composition is:
 
-- build a metadata-only `BoundedContext` through the existing builder and
-  explicit `Repository` identity registration;
+- build a `BoundedContext` through the existing builder, optionally collecting
+  dispatchers and a storage factory;
 - derive command and event registration-readiness metadata from existing
   `HandlerMetadataRegistry` entries; and
 - post executable commands/events through the first small `CommandBus` and

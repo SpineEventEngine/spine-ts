@@ -1,11 +1,15 @@
-import {
+import type { Command, Event } from "@spine-ts/proto";
+import { EventStore, InMemoryStorageFactory, type StorageFactory } from "@spine-ts/storage";
+
+import { CommandBus } from "../bus/command-bus.js";
+import type { CommandDispatcher } from "../bus/command-dispatcher.js";
+import { EventBus } from "../bus/event-bus.js";
+import type { EventDispatcher } from "../bus/event-dispatcher.js";
+import type {
+  ConcreteRepositoryEntityType,
   Repository,
-  type ConcreteRepositoryEntityType,
-  type RepositoryEntityType,
-  type RepositoryIdentitySnapshot,
-  resolveRepositoryEntityFamily,
+  RepositoryEntityType,
 } from "../repository/repository.js";
-import { describeEntityMetadata } from "../entity/entity-metadata.js";
 
 /** Tenant isolation mode declared by a bounded context specification. */
 export type TenantMode = "single-tenant" | "multitenant";
@@ -16,7 +20,7 @@ export interface BoundedContextName {
   readonly value: string;
 }
 
-/** Immutable bounded context specification snapshot. */
+/** Small immutable bounded-context specification snapshot. */
 export interface ContextSpecSnapshot {
   /** Bounded context name value. */
   readonly name: BoundedContextName;
@@ -26,36 +30,26 @@ export interface ContextSpecSnapshot {
   readonly storesEvents: boolean;
 }
 
-/** Immutable built bounded context snapshot. */
+/** Small built bounded-context metadata snapshot. */
 export interface BoundedContextSnapshot {
   /** Bounded context name value. */
   readonly name: BoundedContextName;
-  /** Tenant isolation mode for future runtime parts. */
+  /** Tenant isolation mode for the built context. */
   readonly tenantMode: TenantMode;
   /** Context specification used to build the context. */
   readonly spec: ContextSpecSnapshot;
-  /** Repository identities registered with the builder before this context was built. */
-  readonly repositories: readonly RepositoryIdentitySnapshot[];
 }
 
-/** Machine-readable bounded-context repository registration failure codes. */
-export type BoundedContextRepositoryRegistrationErrorCode =
-  "ENTITY_TYPE_CONFLICT" | "STATE_TYPE_CONFLICT" | "INVALID_REPOSITORY_SNAPSHOT";
+/** Post-only command endpoint exposed by a built bounded context. */
+export interface CommandEndpoint {
+  /** Posts a command into the context-owned command bus. */
+  post(command: Command): Promise<void>;
+}
 
-/** Builder operation that rejected repository registration metadata. */
-export type BoundedContextRepositoryRegistrationOperation = "add" | "remove";
-
-/** Error thrown when a bounded context builder rejects repository ownership metadata. */
-export class BoundedContextRepositoryRegistrationError extends Error {
-  /** Stable code for callers/tests that need structured failure handling. */
-  readonly code: BoundedContextRepositoryRegistrationErrorCode;
-
-  constructor(code: BoundedContextRepositoryRegistrationErrorCode, message: string) {
-    super(message);
-    this.name = "BoundedContextRepositoryRegistrationError";
-    this.code = code;
-    Object.setPrototypeOf(this, new.target.prototype);
-  }
+/** Post-only event endpoint exposed by a built bounded context. */
+export interface EventEndpoint {
+  /** Posts an event into the context-owned event bus. */
+  post(event: Event): Promise<void>;
 }
 
 /** Error thrown when a bounded context name cannot be accepted. */
@@ -79,36 +73,61 @@ interface FrameworkConstructionToken {
 const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
   frameworkConstructionToken: true,
 });
-let constructContextSpec:
-  ((snapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) => ContextSpec) | undefined;
+let constructBoundedContext:
+  | ((
+      snapshot: BoundedContextSnapshot,
+      commandBus: CommandBus,
+      eventBus: EventBus,
+      token: FrameworkConstructionToken,
+    ) => BoundedContext)
+  | undefined;
 let constructBoundedContextBuilder:
   | ((snapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) => BoundedContextBuilder)
   | undefined;
-let constructBoundedContext:
-  | ((snapshot: BoundedContextSnapshot, token: FrameworkConstructionToken) => BoundedContext)
-  | undefined;
+let constructContextSpec:
+  ((snapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) => ContextSpec) | undefined;
 
-/** Immutable context spec used by the bounded-context builder shell. */
-export class ContextSpec {
-  readonly #snapshot: ContextSpecSnapshot;
+/** Built bounded context that owns the write-side and event-side buses. */
+export class BoundedContext {
+  readonly #snapshot: BoundedContextSnapshot;
+  readonly #commandBus: CommandBus;
+  readonly #eventBus: EventBus;
+  readonly #commandEndpoint: CommandEndpoint;
+  readonly #eventEndpoint: EventEndpoint;
 
   static {
-    constructContextSpec = (
-      snapshot: ContextSpecSnapshot,
-      token: FrameworkConstructionToken,
-    ): ContextSpec => new ContextSpec(snapshot, token);
+    constructBoundedContext = (snapshot, commandBus, eventBus, token): BoundedContext =>
+      new BoundedContext(snapshot, commandBus, eventBus, token);
   }
 
   /** Framework-owned constructor. Use `BoundedContext.singleTenant(name)` or `.multitenant(name)`. */
-  protected constructor(snapshot: ContextSpecSnapshot, token: typeof frameworkConstructionToken) {
-    const validatedSnapshot = validateSpecSnapshot(snapshot, "ContextSpec");
-    requireFrameworkConstructionToken(
-      token,
-      "ContextSpec instances are framework-owned. Use BoundedContext.singleTenant(name) " +
-        "or BoundedContext.multitenant(name).",
-    );
-    this.#snapshot = validatedSnapshot;
+  protected constructor(
+    snapshot: BoundedContextSnapshot,
+    commandBus: CommandBus,
+    eventBus: EventBus,
+    token: FrameworkConstructionToken,
+  ) {
+    requireFrameworkConstructionToken(token, "BoundedContext instances are framework-owned.");
+    this.#snapshot = cloneContextSnapshot(snapshot);
+    this.#commandBus = commandBus;
+    this.#eventBus = eventBus;
+    this.#commandEndpoint = Object.freeze({
+      post: (command: Command) => this.#commandBus.post(command),
+    });
+    this.#eventEndpoint = Object.freeze({
+      post: (event: Event) => this.#eventBus.post(event),
+    });
     Object.freeze(this);
+  }
+
+  /** Creates a builder for a single-tenant bounded context. */
+  static singleTenant(name: string): BoundedContextBuilder {
+    return createBoundedContextBuilder(createSpecSnapshot(name, false));
+  }
+
+  /** Creates a builder for a multitenant bounded context. */
+  static multitenant(name: string): BoundedContextBuilder {
+    return createBoundedContextBuilder(createSpecSnapshot(name, true));
   }
 
   /** Bounded context name. */
@@ -116,53 +135,56 @@ export class ContextSpec {
     return this.#snapshot.name;
   }
 
-  /** Whether the context requires tenant isolation. */
-  get multitenant(): boolean {
-    return this.#snapshot.multitenant;
-  }
-
-  /** Tenant mode derived from {@link multitenant}. */
+  /** Tenant mode declared for this context. */
   get tenantMode(): TenantMode {
-    return this.#snapshot.multitenant ? "multitenant" : "single-tenant";
+    return this.#snapshot.tenantMode;
   }
 
-  /** Whether this spec stores its event log. Domain context specs do. */
-  get storesEvents(): boolean {
-    return this.#snapshot.storesEvents;
+  /** Whether this context is multitenant. */
+  get isMultitenant(): boolean {
+    return this.#snapshot.tenantMode === "multitenant";
   }
 
-  /** Copy-safe immutable snapshot of this spec. */
-  get snapshot(): ContextSpecSnapshot {
-    return cloneSpecSnapshot(this.#snapshot);
+  /** Context spec used to build this context. */
+  get spec(): ContextSpec {
+    return createContextSpec(this.#snapshot.spec);
+  }
+
+  /** Copy-safe immutable metadata snapshot of this context. */
+  get snapshot(): BoundedContextSnapshot {
+    return cloneContextSnapshot(this.#snapshot);
+  }
+
+  /** Post-only command endpoint owned by this context. */
+  commandBus(): CommandEndpoint {
+    return this.#commandEndpoint;
+  }
+
+  /** Post-only event endpoint owned by this context. */
+  eventBus(): EventEndpoint {
+    return this.#eventEndpoint;
   }
 }
 
-/** Metadata-only builder shell for a future {@link BoundedContext}. */
+/** Builder for assembling a JVM-familiar {@link BoundedContext}. */
 export class BoundedContextBuilder {
   readonly #specSnapshot: ContextSpecSnapshot;
-  readonly #repositorySnapshots: RepositoryIdentitySnapshot[];
+  readonly #commandDispatchers = new Set<CommandDispatcher>();
+  readonly #eventDispatchers = new Set<EventDispatcher>();
+  #storageFactory: StorageFactory | undefined;
 
   static {
-    constructBoundedContextBuilder = (
-      snapshot: ContextSpecSnapshot,
-      token: FrameworkConstructionToken,
-    ): BoundedContextBuilder => new BoundedContextBuilder(snapshot, token);
+    constructBoundedContextBuilder = (snapshot, token): BoundedContextBuilder =>
+      new BoundedContextBuilder(snapshot, token);
   }
 
   /** Framework-owned constructor. Use `BoundedContext.singleTenant(name)` or `.multitenant(name)`. */
-  protected constructor(
-    specSnapshot: ContextSpecSnapshot,
-    token: typeof frameworkConstructionToken,
-    repositorySnapshots: readonly RepositoryIdentitySnapshot[] = [],
-  ) {
-    const validatedSnapshot = validateSpecSnapshot(specSnapshot, "BoundedContextBuilder");
+  protected constructor(specSnapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) {
     requireFrameworkConstructionToken(
       token,
-      "BoundedContextBuilder instances are framework-owned. Use BoundedContext.singleTenant(name) " +
-        "or BoundedContext.multitenant(name).",
+      "BoundedContextBuilder instances are framework-owned.",
     );
-    this.#specSnapshot = validatedSnapshot;
-    this.#repositorySnapshots = copyRepositorySnapshots(repositorySnapshots);
+    this.#specSnapshot = cloneSpecSnapshot(specSnapshot);
     Object.freeze(this);
   }
 
@@ -186,76 +208,85 @@ export class BoundedContextBuilder {
     return this.#specSnapshot.multitenant;
   }
 
-  /** Repository identities registered with this builder as immutable fresh-copy snapshots. */
-  get repositories(): readonly RepositoryIdentitySnapshot[] {
-    return cloneRepositorySnapshots(this.#repositorySnapshots);
-  }
-
-  /** Adds an explicit metadata-only repository identity for the context to build. */
+  /** Pending repository seam. Repository runtime registration is not implemented yet. */
   add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
     repository: Repository<EntityType>,
   ): this {
-    const incoming = readRepositorySnapshot(repository, "add", this.#specSnapshot.name.value);
-    registerRepositorySnapshot(this.#repositorySnapshots, incoming);
+    void repository;
     return this;
   }
 
-  /** Removes an explicit metadata-only repository identity from the context to build. */
+  /** Pending repository seam. Repository runtime registration is not implemented yet. */
   remove<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
     repository: Repository<EntityType>,
   ): this {
-    const incoming = readRepositorySnapshot(repository, "remove", this.#specSnapshot.name.value);
-    const matchIndex = this.#repositorySnapshots.findIndex((existing) =>
-      isSameRepositoryIdentity(existing, incoming),
-    );
-
-    if (matchIndex >= 0) {
-      this.#repositorySnapshots.splice(matchIndex, 1);
-    }
-
+    void repository;
     return this;
   }
 
-  /** Builds an immutable metadata-only bounded context snapshot. */
+  /** Adds a command dispatcher to the context being built. */
+  addCommandDispatcher(dispatcher: CommandDispatcher): this {
+    this.#commandDispatchers.add(dispatcher);
+    return this;
+  }
+
+  /** Removes a command dispatcher from the context being built. */
+  removeCommandDispatcher(dispatcher: CommandDispatcher): this {
+    this.#commandDispatchers.delete(dispatcher);
+    return this;
+  }
+
+  /** Adds an event dispatcher to the context being built. */
+  addEventDispatcher(dispatcher: EventDispatcher): this {
+    this.#eventDispatchers.add(dispatcher);
+    return this;
+  }
+
+  /** Removes an event dispatcher from the context being built. */
+  removeEventDispatcher(dispatcher: EventDispatcher): this {
+    this.#eventDispatchers.delete(dispatcher);
+    return this;
+  }
+
+  /** Uses the passed storage factory for the context's event store. */
+  withStorageFactory(storageFactory: StorageFactory): this {
+    this.#storageFactory = storageFactory;
+    return this;
+  }
+
+  /** Builds a bounded context that owns configured command and event buses. */
   build(): BoundedContext {
-    return createBoundedContext(this.#specSnapshot, this.#repositorySnapshots);
+    const commandBus = new CommandBus([...this.#commandDispatchers]);
+    const eventStore = this.createEventStore();
+    const eventBus = new EventBus(eventStore, [...this.#eventDispatchers]);
+
+    return createBoundedContext(this.#specSnapshot, commandBus, eventBus);
+  }
+
+  private createEventStore(): EventStore {
+    return new EventStore(
+      {
+        name: this.#specSnapshot.name.value,
+        multitenant: this.#specSnapshot.multitenant,
+      },
+      this.#storageFactory ?? new InMemoryStorageFactory(),
+    );
   }
 }
 
-/** Metadata-only bounded context shell built from a {@link BoundedContextBuilder}. */
-export class BoundedContext {
-  readonly #snapshot: BoundedContextSnapshot;
+/** Immutable context spec used by the bounded-context builder. */
+export class ContextSpec {
+  readonly #snapshot: ContextSpecSnapshot;
 
   static {
-    constructBoundedContext = (
-      snapshot: BoundedContextSnapshot,
-      token: FrameworkConstructionToken,
-    ): BoundedContext => new BoundedContext(snapshot, token);
+    constructContextSpec = (snapshot, token): ContextSpec => new ContextSpec(snapshot, token);
   }
 
   /** Framework-owned constructor. Use `BoundedContext.singleTenant(name)` or `.multitenant(name)`. */
-  protected constructor(
-    snapshot: BoundedContextSnapshot,
-    token: typeof frameworkConstructionToken,
-  ) {
-    const validatedSnapshot = validateContextSnapshot(snapshot);
-    requireFrameworkConstructionToken(
-      token,
-      "BoundedContext instances are framework-owned. Use BoundedContext.singleTenant(name) " +
-        "or BoundedContext.multitenant(name), then call builder.build().",
-    );
-    this.#snapshot = validatedSnapshot;
+  protected constructor(snapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) {
+    requireFrameworkConstructionToken(token, "ContextSpec instances are framework-owned.");
+    this.#snapshot = cloneSpecSnapshot(snapshot);
     Object.freeze(this);
-  }
-
-  /** Creates a builder for a single-tenant bounded context. */
-  static singleTenant(name: string): BoundedContextBuilder {
-    return createBoundedContextBuilder(createSpecSnapshot(name, false, true));
-  }
-
-  /** Creates a builder for a multitenant bounded context. */
-  static multitenant(name: string): BoundedContextBuilder {
-    return createBoundedContextBuilder(createSpecSnapshot(name, true, true));
   }
 
   /** Bounded context name. */
@@ -263,29 +294,24 @@ export class BoundedContext {
     return this.#snapshot.name;
   }
 
-  /** Tenant mode declared for this context. */
+  /** Whether the context requires tenant isolation. */
+  get multitenant(): boolean {
+    return this.#snapshot.multitenant;
+  }
+
+  /** Tenant mode derived from {@link multitenant}. */
   get tenantMode(): TenantMode {
-    return this.#snapshot.tenantMode;
+    return toTenantMode(this.#snapshot.multitenant);
   }
 
-  /** Whether this context is multitenant. */
-  get isMultitenant(): boolean {
-    return this.#snapshot.tenantMode === "multitenant";
+  /** Whether this spec stores its event log. Domain context specs do. */
+  get storesEvents(): boolean {
+    return this.#snapshot.storesEvents;
   }
 
-  /** Context spec used to build this metadata-only context. */
-  get spec(): ContextSpec {
-    return createContextSpec(this.#snapshot.spec);
-  }
-
-  /** Repository identities registered when this metadata-only context was built. */
-  get repositories(): readonly RepositoryIdentitySnapshot[] {
-    return cloneRepositorySnapshots(this.#snapshot.repositories);
-  }
-
-  /** Copy-safe immutable snapshot of this context shell. */
-  get snapshot(): BoundedContextSnapshot {
-    return cloneContextSnapshot(this.#snapshot);
+  /** Copy-safe immutable snapshot of this spec. */
+  get snapshot(): ContextSpecSnapshot {
+    return cloneSpecSnapshot(this.#snapshot);
   }
 }
 
@@ -296,7 +322,6 @@ function requireFrameworkConstructionToken(token: unknown, message: string): voi
 }
 
 function createContextSpec(specSnapshot: ContextSpecSnapshot): ContextSpec {
-  /* c8 ignore next 3 -- static class initialization installs the factory at module load. */
   if (constructContextSpec === undefined) {
     throw new TypeError("ContextSpec factory is unavailable.");
   }
@@ -305,7 +330,6 @@ function createContextSpec(specSnapshot: ContextSpecSnapshot): ContextSpec {
 }
 
 function createBoundedContextBuilder(specSnapshot: ContextSpecSnapshot): BoundedContextBuilder {
-  /* c8 ignore next 3 -- static class initialization installs the factory at module load. */
   if (constructBoundedContextBuilder === undefined) {
     throw new TypeError("BoundedContextBuilder factory is unavailable.");
   }
@@ -315,9 +339,9 @@ function createBoundedContextBuilder(specSnapshot: ContextSpecSnapshot): Bounded
 
 function createBoundedContext(
   specSnapshot: ContextSpecSnapshot,
-  repositorySnapshots: readonly RepositoryIdentitySnapshot[],
+  commandBus: CommandBus,
+  eventBus: EventBus,
 ): BoundedContext {
-  /* c8 ignore next 3 -- static class initialization installs the factory at module load. */
   if (constructBoundedContext === undefined) {
     throw new TypeError("BoundedContext factory is unavailable.");
   }
@@ -327,8 +351,9 @@ function createBoundedContext(
       name: specSnapshot.name,
       tenantMode: toTenantMode(specSnapshot.multitenant),
       spec: specSnapshot,
-      repositories: repositorySnapshots,
     },
+    commandBus,
+    eventBus,
     frameworkConstructionToken,
   );
 }
@@ -337,34 +362,23 @@ function createBoundedContextName(value: string): BoundedContextName {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new BoundedContextNameError(value);
   }
-  return freezeName({ value });
+  return Object.freeze({ value });
 }
 
-function createSpecSnapshot(
-  name: string,
-  multitenant: boolean,
-  storesEvents: boolean,
-): ContextSpecSnapshot {
-  return validateSpecSnapshot(
-    {
-      name: createBoundedContextName(name),
-      multitenant,
-      storesEvents,
-    },
-    "ContextSpec",
-  );
-}
-
-function toTenantMode(multitenant: boolean): TenantMode {
-  return multitenant ? "multitenant" : "single-tenant";
+function createSpecSnapshot(name: string, multitenant: boolean): ContextSpecSnapshot {
+  return Object.freeze({
+    name: createBoundedContextName(name),
+    multitenant,
+    storesEvents: true,
+  });
 }
 
 function cloneName(name: BoundedContextName): BoundedContextName {
-  return freezeName({ value: name.value });
+  return createBoundedContextName(name.value);
 }
 
 function cloneSpecSnapshot(spec: ContextSpecSnapshot): ContextSpecSnapshot {
-  return freezeSpecSnapshot({
+  return Object.freeze({
     name: cloneName(spec.name),
     multitenant: spec.multitenant,
     storesEvents: spec.storesEvents,
@@ -372,442 +386,13 @@ function cloneSpecSnapshot(spec: ContextSpecSnapshot): ContextSpecSnapshot {
 }
 
 function cloneContextSnapshot(snapshot: BoundedContextSnapshot): BoundedContextSnapshot {
-  return freezeContextSnapshot({
+  return Object.freeze({
     name: cloneName(snapshot.name),
     tenantMode: snapshot.tenantMode,
     spec: cloneSpecSnapshot(snapshot.spec),
-    repositories: cloneRepositorySnapshots(snapshot.repositories),
   });
 }
 
-function cloneRepositorySnapshots(
-  snapshots: readonly RepositoryIdentitySnapshot[],
-): RepositoryIdentitySnapshot[] {
-  return Object.freeze(
-    mapArray(snapshots, cloneRepositorySnapshot),
-  ) as RepositoryIdentitySnapshot[];
-}
-
-function cloneRepositorySnapshot<EntityType extends RepositoryEntityType>(
-  snapshot: RepositoryIdentitySnapshot<EntityType>,
-): RepositoryIdentitySnapshot<EntityType> {
-  const metadata = Object.freeze({
-    schema: snapshot.metadata.schema,
-    descriptor: snapshot.metadata.descriptor,
-    fullTypeName: snapshot.metadata.fullTypeName,
-    fileDescriptor: snapshot.metadata.fileDescriptor,
-    fileName: snapshot.metadata.fileName,
-    kind: snapshot.metadata.kind,
-    declaredVisibility: snapshot.metadata.declaredVisibility,
-    visibility: snapshot.metadata.visibility,
-    visibilitySource: snapshot.metadata.visibilitySource,
-    idField: cloneRepositoryFieldMetadata(snapshot.metadata.idField),
-    firstFieldRoutingHint: Object.freeze({
-      strategy: snapshot.metadata.firstFieldRoutingHint.strategy,
-      field: cloneRepositoryFieldMetadata(snapshot.metadata.firstFieldRoutingHint.field),
-    }),
-    columns: cloneRepositoryFieldMetadataList(
-      snapshot.metadata.columns,
-      "Repository snapshot metadata.columns",
-    ),
-    setOnceFields: cloneRepositoryFieldMetadataList(
-      snapshot.metadata.setOnceFields,
-      "Repository snapshot metadata.setOnceFields",
-    ),
-    semanticTags: Object.freeze(
-      readCanonicalRepositorySemanticTags(
-        snapshot.metadata.semanticTags,
-        "Repository snapshot metadata.semanticTags",
-      ),
-    ),
-  });
-
-  return Object.freeze({
-    entityType: snapshot.entityType,
-    entityFamily: snapshot.entityFamily,
-    stateSchema: snapshot.stateSchema,
-    metadata,
-    stateFullTypeName: snapshot.stateFullTypeName,
-    idField: cloneRepositoryFieldMetadata(snapshot.idField),
-  });
-}
-
-function cloneRepositoryFieldMetadataList(
-  fields: unknown,
-  owner: string,
-): readonly RepositoryIdentitySnapshot["idField"][] {
-  if (!Array.isArray(fields)) {
-    throw new TypeError(`${owner} must be an array.`);
-  }
-
-  const fieldValues = fields as readonly unknown[];
-  const clonedFields: RepositoryIdentitySnapshot["idField"][] = [];
-
-  for (let index = 0; index < fieldValues.length; index += 1) {
-    if (!Object.hasOwn(fieldValues, index)) {
-      throw new TypeError(`${owner}[${String(index)}] must be present.`);
-    }
-
-    clonedFields.push(
-      cloneRepositoryFieldMetadata(fieldValues[index] as RepositoryIdentitySnapshot["idField"]),
-    );
-  }
-
-  return Object.freeze(clonedFields);
-}
-
-function cloneRepositoryFieldMetadata(
-  field: RepositoryIdentitySnapshot["idField"],
-): RepositoryIdentitySnapshot["idField"] {
-  return Object.freeze({
-    descriptor: field.descriptor,
-    name: field.name,
-    localName: field.localName,
-    jsonName: field.jsonName,
-    number: field.number,
-  });
-}
-
-function freezeName(name: BoundedContextName): BoundedContextName {
-  return Object.freeze(name);
-}
-
-function isRecord(value: unknown): value is Record<PropertyKey, unknown> {
-  return typeof value === "object" && value !== null;
-}
-
-function mapArray<Value, Result>(
-  values: readonly Value[],
-  mapper: (value: Value, index: number) => Result,
-): Result[] {
-  return Array.prototype.map.call(values, mapper) as Result[];
-}
-
-function validateNameSnapshot(name: unknown, owner: string): BoundedContextName {
-  if (!isRecord(name) || typeof name.value !== "string") {
-    throw new TypeError(`${owner}.name must be a bounded-context name object.`);
-  }
-
-  return createBoundedContextName(name.value);
-}
-
-function validateSpecSnapshot(snapshot: unknown, owner: string): ContextSpecSnapshot {
-  if (!isRecord(snapshot)) {
-    throw new TypeError(`${owner} snapshot must be an object.`);
-  }
-
-  const name = validateNameSnapshot(snapshot.name, owner);
-  const { multitenant, storesEvents } = snapshot;
-
-  if (typeof multitenant !== "boolean") {
-    throw new TypeError("ContextSpec.multitenant must be a boolean.");
-  }
-  if (typeof storesEvents !== "boolean") {
-    throw new TypeError("ContextSpec.storesEvents must be a boolean.");
-  }
-
-  return freezeSpecSnapshot({
-    name,
-    multitenant,
-    storesEvents,
-  });
-}
-
-function validateTenantMode(tenantMode: unknown): TenantMode {
-  if (tenantMode !== "single-tenant" && tenantMode !== "multitenant") {
-    throw new TypeError("BoundedContext.tenantMode must be a supported tenant mode.");
-  }
-
-  return tenantMode;
-}
-
-function validateContextSnapshot(snapshot: unknown): BoundedContextSnapshot {
-  if (!isRecord(snapshot)) {
-    throw new TypeError("BoundedContext snapshot must be an object.");
-  }
-
-  const name = validateNameSnapshot(snapshot.name, "BoundedContext");
-  const tenantMode = validateTenantMode(snapshot.tenantMode);
-  const spec = validateSpecSnapshot(snapshot.spec, "BoundedContext.spec");
-  const repositories =
-    snapshot.repositories === undefined
-      ? []
-      : validateRepositorySnapshots(snapshot.repositories, "BoundedContext.repositories");
-
-  if (name.value !== spec.name.value) {
-    throw new TypeError("BoundedContext.name must match BoundedContext.spec.name.");
-  }
-  if (tenantMode !== toTenantMode(spec.multitenant)) {
-    throw new TypeError("BoundedContext.tenantMode must match BoundedContext.spec.multitenant.");
-  }
-
-  return freezeContextSnapshot({
-    name,
-    tenantMode,
-    spec,
-    repositories,
-  });
-}
-
-function validateRepositorySnapshots(
-  snapshots: unknown,
-  owner: string,
-): readonly RepositoryIdentitySnapshot[] {
-  if (!Array.isArray(snapshots)) {
-    throw new TypeError(`${owner} must be an array.`);
-  }
-
-  return Object.freeze(
-    mapArray(snapshots, (snapshot, index) => {
-      if (!isRecord(snapshot)) {
-        throw new TypeError(`${owner}[${String(index)}] must be a repository identity snapshot.`);
-      }
-
-      return cloneRepositorySnapshot(snapshot as unknown as RepositoryIdentitySnapshot);
-    }),
-  );
-}
-
-function freezeSpecSnapshot(snapshot: ContextSpecSnapshot): ContextSpecSnapshot {
-  return Object.freeze({
-    name: cloneName(snapshot.name),
-    multitenant: snapshot.multitenant,
-    storesEvents: snapshot.storesEvents,
-  });
-}
-
-function freezeContextSnapshot(snapshot: BoundedContextSnapshot): BoundedContextSnapshot {
-  return Object.freeze({
-    name: snapshot.name,
-    tenantMode: snapshot.tenantMode,
-    spec: snapshot.spec,
-    repositories: snapshot.repositories,
-  });
-}
-
-function readRepositorySnapshot<
-  EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
->(
-  repository: Repository<EntityType>,
-  operation: BoundedContextRepositoryRegistrationOperation,
-  contextName: string,
-): RepositoryIdentitySnapshot<EntityType> {
-  if (!(repository instanceof Repository)) {
-    throw new TypeError(
-      `BoundedContextBuilder.${operation}(repository) requires a Repository identity object.`,
-    );
-  }
-
-  try {
-    const snapshot = cloneRepositorySnapshot(repository.snapshot);
-    validateRepositorySnapshot(snapshot);
-    return snapshot;
-  } catch {
-    throwInvalidRepositorySnapshot(operation, contextName);
-  }
-}
-
-function registerRepositorySnapshot(
-  existingRepositories: RepositoryIdentitySnapshot[],
-  incoming: RepositoryIdentitySnapshot,
-): void {
-  for (const existing of existingRepositories) {
-    if (isSameRepositoryIdentity(existing, incoming)) {
-      return;
-    }
-
-    if (existing.entityType === incoming.entityType) {
-      throwRepositoryRegistrationConflict("ENTITY_TYPE_CONFLICT");
-    }
-
-    if (existing.stateFullTypeName === incoming.stateFullTypeName) {
-      throwRepositoryRegistrationConflict("STATE_TYPE_CONFLICT");
-    }
-  }
-
-  existingRepositories.push(incoming);
-}
-
-function throwRepositoryRegistrationConflict(
-  code: BoundedContextRepositoryRegistrationErrorCode,
-): never {
-  throw new BoundedContextRepositoryRegistrationError(
-    code,
-    "Bounded context already has conflicting repository ownership.",
-  );
-}
-
-function isSameRepositoryIdentity(
-  left: RepositoryIdentitySnapshot,
-  right: RepositoryIdentitySnapshot,
-): boolean {
-  return (
-    left.entityType === right.entityType &&
-    left.entityFamily === right.entityFamily &&
-    left.stateSchema === right.stateSchema &&
-    left.stateFullTypeName === right.stateFullTypeName
-  );
-}
-
-function throwInvalidRepositorySnapshot(
-  operation: BoundedContextRepositoryRegistrationOperation,
-  contextName: string,
-): never {
-  throw new BoundedContextRepositoryRegistrationError(
-    "INVALID_REPOSITORY_SNAPSHOT",
-    `BoundedContextBuilder.${operation}(repository) requires a repository snapshot with ` +
-      `supported repository identity metadata in bounded context "${contextName}".`,
-  );
-}
-
-function validateRepositorySnapshot(snapshot: RepositoryIdentitySnapshot): void {
-  const entityFamily = resolveRepositoryEntityFamily(snapshot.entityType);
-  if (entityFamily === undefined) {
-    throw new TypeError(
-      "Repository snapshot entityType must be a supported entity class constructor.",
-    );
-  }
-  if (!isEntityFamily(snapshot.entityFamily)) {
-    throw new TypeError("Repository snapshot entityFamily must be supported.");
-  }
-  if (entityFamily !== snapshot.entityFamily) {
-    throw new TypeError("Repository snapshot entityType must match entityFamily.");
-  }
-  const stateSchema = snapshot.stateSchema as unknown;
-  if (!isRecord(stateSchema)) {
-    throw new TypeError("Repository snapshot stateSchema must be an object.");
-  }
-  const stateFullTypeName = snapshot.stateFullTypeName as unknown;
-  if (typeof stateFullTypeName !== "string" || stateFullTypeName.length === 0) {
-    throw new TypeError("Repository snapshot stateFullTypeName must be a non-empty string.");
-  }
-  if (stateSchema.typeName !== stateFullTypeName) {
-    throw new TypeError("Repository snapshot stateSchema.typeName must match stateFullTypeName.");
-  }
-  const trustedMetadata = describeEntityMetadata(snapshot.stateSchema);
-  if (trustedMetadata.kind !== snapshot.entityFamily) {
-    throw new TypeError("Repository snapshot stateSchema entity kind must match entityFamily.");
-  }
-  if (!isRecord(snapshot.metadata)) {
-    throw new TypeError("Repository snapshot metadata must be an object.");
-  }
-  if (snapshot.metadata.schema !== snapshot.stateSchema) {
-    throw new TypeError("Repository snapshot metadata.schema must match stateSchema.");
-  }
-  if (snapshot.metadata.fullTypeName !== snapshot.stateFullTypeName) {
-    throw new TypeError("Repository snapshot metadata.fullTypeName must match stateFullTypeName.");
-  }
-  if (snapshot.metadata.kind !== snapshot.entityFamily) {
-    throw new TypeError("Repository snapshot metadata.kind must match entityFamily.");
-  }
-  validateRepositoryFieldMetadata(snapshot.idField, "Repository snapshot idField");
-  validateRepositoryFieldMetadata(
-    snapshot.metadata.idField,
-    "Repository snapshot metadata.idField",
-  );
-  validateRepositoryFieldMetadata(
-    snapshot.metadata.firstFieldRoutingHint.field,
-    "Repository snapshot metadata.firstFieldRoutingHint.field",
-  );
-  validateRepositoryFieldMetadataList(
-    snapshot.metadata.columns,
-    "Repository snapshot metadata.columns",
-  );
-  validateRepositoryFieldMetadataList(
-    snapshot.metadata.setOnceFields,
-    "Repository snapshot metadata.setOnceFields",
-  );
-  readCanonicalRepositorySemanticTags(
-    snapshot.metadata.semanticTags,
-    "Repository snapshot metadata.semanticTags",
-  );
-}
-
-function isEntityFamily(value: unknown): value is RepositoryIdentitySnapshot["entityFamily"] {
-  return value === "aggregate" || value === "projection" || value === "process-manager";
-}
-
-function validateRepositoryFieldMetadata(field: unknown, owner: string): void {
-  if (
-    !isRecord(field) ||
-    typeof field.name !== "string" ||
-    typeof field.localName !== "string" ||
-    typeof field.jsonName !== "string" ||
-    typeof field.number !== "number"
-  ) {
-    throw new TypeError(`${owner} must be supported field metadata.`);
-  }
-}
-
-function validateRepositoryFieldMetadataList(fields: unknown, owner: string): void {
-  if (!Array.isArray(fields)) {
-    throw new TypeError(`${owner} must be an array.`);
-  }
-
-  for (let index = 0; index < fields.length; index += 1) {
-    if (!Object.hasOwn(fields, index)) {
-      throw new TypeError(`${owner}[${String(index)}] must be present.`);
-    }
-
-    validateRepositoryFieldMetadata(fields[index], `${owner}[${String(index)}]`);
-  }
-}
-
-function readCanonicalRepositorySemanticTags(tags: unknown, owner: string): string[] {
-  if (!Array.isArray(tags)) {
-    throw new TypeError(`${owner} must be an array.`);
-  }
-
-  const tagValues = tags as readonly unknown[];
-  const canonicalTags: string[] = [];
-
-  for (let index = 0; index < tagValues.length; index += 1) {
-    if (!Object.hasOwn(tagValues, index)) {
-      throw new TypeError(`${owner}[${String(index)}] must be present.`);
-    }
-
-    const tag = tagValues[index];
-    if (typeof tag !== "string") {
-      throw new TypeError(`${owner}[${String(index)}] must be a string.`);
-    }
-    canonicalTags.push(canonicalRepositorySemanticTag(tag, `${owner}[${String(index)}]`));
-  }
-
-  validateCanonicalRepositorySemanticTagList(canonicalTags, owner);
-  return canonicalTags;
-}
-
-function canonicalRepositorySemanticTag(tag: string, owner: string): string {
-  const canonicalTag = tag.trim();
-
-  if (canonicalTag.length === 0) {
-    throw new TypeError(`${owner} must be a non-empty string.`);
-  }
-  if (tag !== canonicalTag) {
-    throw new TypeError(`${owner} must not require trimming.`);
-  }
-  return canonicalTag;
-}
-
-function validateCanonicalRepositorySemanticTagList(tags: readonly string[], owner: string): void {
-  for (let index = 1; index < tags.length; index += 1) {
-    const previousTag = tags[index - 1];
-    const tag = tags[index];
-
-    if (previousTag === undefined || tag === undefined) {
-      throw new TypeError(`${owner} must be a dense array.`);
-    }
-    if (previousTag === tag) {
-      throw new TypeError(`${owner} must not contain duplicate tags.`);
-    }
-    if (previousTag > tag) {
-      throw new TypeError(`${owner} must be sorted.`);
-    }
-  }
-}
-
-function copyRepositorySnapshots(
-  snapshots: readonly RepositoryIdentitySnapshot[],
-): RepositoryIdentitySnapshot[] {
-  return mapArray(snapshots, cloneRepositorySnapshot);
+function toTenantMode(multitenant: boolean): TenantMode {
+  return multitenant ? "multitenant" : "single-tenant";
 }

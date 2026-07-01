@@ -27,24 +27,22 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 
 Server exports include `BoundedContext`, `BoundedContextBuilder`,
 `ContextSpec`, `BoundedContextName`, `TenantMode`, `BoundedContextSnapshot`,
-immutable snapshot contracts, `BoundedContextNameError`, and
-`BoundedContextRepositoryRegistrationError` for the first bounded-context
-assembly shell.
+small immutable snapshot contracts, `CommandEndpoint`, `EventEndpoint`, and
+`BoundedContextNameError` for bounded-context assembly.
 The public entry points mirror Spine JVM's
 `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
 `ContextSpec` remains a framework-owned immutable value surfaced through
-`builder.spec` and `context.spec`; `build()` currently returns a frozen
-metadata-only `BoundedContext`; `.snapshot` returns a copy-safe immutable
-snapshot; and `builder.add(repository)` / `builder.remove(repository)` record
-explicit metadata-only `Repository` identities for later runtime slices. The
-builder keeps repeated registration of the same repository identity idempotent
-and rejects conflicting ownership when one entity constructor receives multiple
-state schema identities or one state type is claimed by multiple constructors.
-The shell validates non-empty/non-blank names and records tenant mode plus
-repository ownership metadata for later runtime parts without creating default
-repositories from entity classes, registering repositories at runtime, invoking
-handlers, creating system contexts, opening storage, constructing buses/stands,
-writing tenant indexes, exposing gRPC services, or integrating transports.
+`builder.spec` and `context.spec`; the builder collects command and event
+dispatchers; `withStorageFactory(factory)` selects the storage factory used for
+the context event store; and `build()` returns a `BoundedContext` that owns
+mutable `CommandBus` and `EventBus` instances internally while exposing
+post-only `CommandEndpoint` and `EventEndpoint` values through `commandBus()`
+and `eventBus()`. The shell validates non-empty/non-blank names and records
+tenant mode. `builder.add(repository)` / `builder.remove(repository)` are tiny
+chainable pending no-ops only. This slice does not create default repositories
+from entity classes, register repositories at runtime, invoke handlers, create
+system contexts, expose stands, write tenant indexes, expose gRPC services, or
+integrate transports.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,
