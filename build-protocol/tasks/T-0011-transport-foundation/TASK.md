@@ -1,6 +1,6 @@
 # T-0011: Transport Foundation
 
-Status: T-0011.7 Implementation Complete; Pending Review/Integration
+Status: Complete
 Start: `2026-06-30 20:32 WEST`
 Baseline commit: `194ce9e`
 Task log path: `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
@@ -9,8 +9,8 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-transport-foundation`
 Requirements splitter:
 `2026-06-30 20:40 WEST` splitter session (closed by orchestrator after handoff)
-Authoring sub-agents: T-0011.1 through T-0011.6 complete; T-0011.7 implementation complete
-Reviewer sub-agents: T-0011.1 through T-0011.6 complete; T-0011.7 pending
+Authoring sub-agents: T-0011.1 through T-0011.7 complete
+Reviewer sub-agents: T-0011.1 through T-0011.7 complete
 
 ## Objective
 
@@ -276,6 +276,15 @@ verify` passed with native IPC access: 24 test files / 293 tests, coverage
   transport expected exports, copied Spine proto checksum verification, proto
   lint/generate, generated proto output clean, and generated files clean.
   TypeDoc emitted the existing invalid-`origin` warning only.
+- T-0011.7 parent integration verification passed on `2026-07-01 05:16 WEST`
+  after merge commit `b9253ba`:
+  escalated `CI=true corepack pnpm verify` passed with native IPC access, 24
+  test files / 293 tests, coverage 96.12% statements / 90.53% branches /
+  99.38% functions / 96.07% lines, TypeDoc/API checks with 100 proto / 28 core
+  / 130 server / 26 storage / 46 transport expected exports, copied Spine
+  proto checksum verification, proto lint/generate, generated proto output
+  clean, and generated files clean. TypeDoc emitted the existing
+  invalid-`origin` warning only.
 
 ## Integrated Subtasks
 
@@ -305,11 +314,14 @@ verify` passed with native IPC access: 24 test files / 293 tests, coverage
   route-shape, proxy-validation, readiness-authenticity, documentation, and
   coverage follow-ups; final subtask verification passed; parent native IPC
   verification passed after merge.
+- `T-0011.7 Documentation And Closure`: integrated by merge commit `b9253ba`
+  on `2026-07-01 05:16 WEST`. Required five-lane review clean after
+  maintainability and documentation follow-ups; final subtask verification
+  passed; parent native IPC verification passed after merge.
 
-## Next Subtask
+## Closure
 
-- `T-0011.7 Documentation And Closure`: implementation completed on
-  `2026-07-01 04:54 WEST` in the subtask worktree. It updates framework,
-  package/API/architecture, and to-do example docs plus durable logs. Required
-  review lanes, parent integration, and parent branch verification remain
-  pending for the orchestrator.
+T-0011 is complete. No blocking human questions are open. Remaining transport,
+server execution, storage-backed delivery, process supervision, read-side
+execution, and to-do runtime behavior are deferred to later explicit roadmap
+tasks rather than hidden in this transport-foundation slice.

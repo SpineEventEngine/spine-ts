@@ -1,6 +1,6 @@
 # Implementation Report: T-0011 Transport Foundation
 
-Status: T-0011.7 Implementation Complete; Pending Review/Integration
+Status: Complete
 Task log: `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
 Work log: `build-protocol/work-logs/T-0011.md`
 Review log: `build-protocol/reviews/T-0011-transport-foundation.md`
@@ -67,18 +67,12 @@ subscription, and system routing explicit deferred seams and does not introduce
 services, dispatch, storage, delivery, process supervision, IPC endpoint
 allocation, or a broad `Server` facade.
 
-`T-0011.7` implementation completed in its subtask worktree on
-`2026-07-01 04:54 WEST`. The implementation updates framework user-facing docs,
-package/API/architecture docs, to-do example docs, and durable logs so the
-transport foundation is discoverable and accurately scoped. Parent T-0011
-remains in progress for required review lanes, integration, and parent
-verification. The subtask branch full verification passed on
-`2026-07-01 04:59 WEST` with native IPC access: 24 test files / 293 tests,
-coverage 96.12% statements / 90.53% branches / 99.38% functions / 96.07%
-lines, TypeDoc/API counts 100 proto / 28 core / 130 server / 26 storage / 46
-transport, copied Spine proto checksum verification, proto lint/generate,
-generated proto output clean, and generated files clean. TypeDoc emitted the
-existing invalid-`origin` warning only.
+`T-0011.7` was integrated into this parent branch by merge commit `b9253ba` on
+`2026-07-01 05:16 WEST`. The integrated docs-only closure updates framework
+user-facing docs, package/API/architecture docs, to-do example docs, and
+durable logs so the transport foundation is discoverable and accurately
+scoped. Required review lanes are clean after maintainability and documentation
+follow-ups, and all participating sub-agents were closed.
 
 ## Scope Guardrails
 
@@ -163,6 +157,14 @@ corepack pnpm verify` passed with native IPC access. Full verify covered 24
   proto checksum verification, proto lint/generate, generated proto output
   clean, and generated files clean. TypeDoc emitted the existing
   invalid-`origin` warning only.
+- Parent verification after integrating T-0011.7 passed on
+  `2026-07-01 05:16 WEST`: escalated `CI=true corepack pnpm verify` passed
+  with native IPC access, 24 test files / 293 tests, coverage 96.12%
+  statements / 90.53% branches / 99.38% functions / 96.07% lines, TypeDoc/API
+  checks with 100 proto / 28 core / 130 server / 26 storage / 46 transport
+  expected exports, copied Spine proto checksum verification, proto
+  lint/generate, generated proto output clean, and generated files clean.
+  TypeDoc emitted the existing invalid-`origin` warning only.
 
 ## Splitter Research And Recommendation
 
@@ -213,9 +215,9 @@ performs native smoke tests.
   architecture/API docs, the server API export guard, and T-0011.6 durable
   logs. See
   `build-protocol/tasks/T-0011-6-server-runtime-wiring-integration/IMPLEMENTATION_REPORT.md`.
-- T-0011.7 implementation changed framework docs, package/API/architecture
-  docs, to-do example docs, T-0011.7 durable logs, and parent T-0011 handoff
-  logs. See
+- T-0011.7 integration changed framework docs, package/API/architecture docs,
+  to-do example docs, T-0011.7 durable logs, and parent T-0011 closure logs.
+  See
   `build-protocol/tasks/T-0011-7-documentation-closure/IMPLEMENTATION_REPORT.md`.
 
 ## T-0011.6 Setup
@@ -232,6 +234,5 @@ storage, delivery, or process supervision.
 
 ## Open Items
 
-- Run required T-0011.7 review lanes, integrate the completed branch into the
-  parent T-0011 branch, run parent verification, and close the parent task only
-  after that evidence is recorded.
+- None for T-0011. Later executable transport/server work remains deferred to
+  subsequent roadmap tasks.
