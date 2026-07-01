@@ -21,17 +21,17 @@ import {
   type StorageContext,
   StorageFactory,
 } from "@spine-ts/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   Aggregate,
   BoundedContext,
   BoundedContextBuilder,
   BoundedContextNameError,
-  CommandBus,
-  EventBus,
   Repository,
+  type CommandEndpoint,
   type CommandDispatcher,
+  type EventEndpoint,
   type EventDispatcher,
 } from "../../src/index.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
@@ -100,11 +100,15 @@ describe("BoundedContext assembly", () => {
     expect(multitenant.spec.multitenant).toBe(true);
   });
 
-  it("exposes commandBus() and eventBus() from the built context", () => {
+  it("exposes stable post-only commandBus() and eventBus() endpoints from the built context", () => {
     const context = BoundedContext.singleTenant("Tasks").build();
 
-    expect(context.commandBus()).toBeInstanceOf(CommandBus);
-    expect(context.eventBus()).toBeInstanceOf(EventBus);
+    expectTypeOf(context.commandBus()).toEqualTypeOf<CommandEndpoint>();
+    expectTypeOf(context.eventBus()).toEqualTypeOf<EventEndpoint>();
+    expect(typeof context.commandBus().post).toBe("function");
+    expect(typeof context.eventBus().post).toBe("function");
+    expect("register" in context.commandBus()).toBe(false);
+    expect("register" in context.eventBus()).toBe(false);
     expect(context.commandBus()).toBe(context.commandBus());
     expect(context.eventBus()).toBe(context.eventBus());
   });
@@ -176,7 +180,7 @@ describe("BoundedContext assembly", () => {
     expect(observed).toEqual(["store:event-3", "dispatch:event-3"]);
   });
 
-  it("keeps repository registration as a pending builder-only seam", () => {
+  it("keeps repository add/remove as pending no-op builder-only seams", () => {
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: AggregateStateSchema,
@@ -185,6 +189,9 @@ describe("BoundedContext assembly", () => {
 
     expect(builder.add(repository)).toBe(builder);
     expect(builder.remove(repository)).toBe(builder);
+    expect(builder.add(repository).build().snapshot).toEqual(
+      builder.remove(repository).build().snapshot,
+    );
     expect(builder).toBeInstanceOf(BoundedContextBuilder);
   });
 

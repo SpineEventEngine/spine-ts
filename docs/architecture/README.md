@@ -296,7 +296,8 @@ async-local transaction state, or start transport.
 server metadata. It follows the Spine JVM entry points closely while keeping
 the implementation boundary deliberately smaller than the eventual runtime.
 
-Current bounded-context scope is intentionally limited to immutable metadata:
+Current bounded-context scope is intentionally limited to a small assembly
+surface:
 
 - `BoundedContext.singleTenant(name)` and
   `BoundedContext.multitenant(name)` are the only public entry points for
@@ -309,12 +310,13 @@ Current bounded-context scope is intentionally limited to immutable metadata:
   `removeEventDispatcher()` collect dispatchers for the context being built;
 - `BoundedContextBuilder.withStorageFactory(factory)` selects the
   `StorageFactory` used to create the context `EventStore`;
-- `BoundedContextBuilder.add(repository)` and `remove(repository)` remain a
-  pending builder-only repository seam for a later runtime-registration task;
+- `BoundedContextBuilder.add(repository)` and `remove(repository)` are
+  chainable pending no-ops for a later runtime-registration task;
 - `BoundedContextBuilder.build()` is the only supported path for constructing a
   built `BoundedContext`; and
 - built contexts expose name, tenant mode, spec, a copy-safe small snapshot,
-  and owned `commandBus()` / `eventBus()` runtime parts.
+  and post-only `commandBus()` / `eventBus()` endpoints backed by internally
+  owned buses.
 
 This keeps the TypeScript API JVM-familiar without pretending that later
 runtime collaborators already exist. Application code does not subclass

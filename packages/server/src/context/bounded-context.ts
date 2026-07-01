@@ -1,13 +1,14 @@
+import type { Command, Event } from "@spine-ts/proto";
 import { EventStore, InMemoryStorageFactory, type StorageFactory } from "@spine-ts/storage";
 
 import { CommandBus } from "../bus/command-bus.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import { EventBus } from "../bus/event-bus.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
-import {
+import type {
+  ConcreteRepositoryEntityType,
   Repository,
-  type ConcreteRepositoryEntityType,
-  type RepositoryEntityType,
+  RepositoryEntityType,
 } from "../repository/repository.js";
 
 /** Tenant isolation mode declared by a bounded context specification. */
@@ -39,6 +40,18 @@ export interface BoundedContextSnapshot {
   readonly spec: ContextSpecSnapshot;
 }
 
+/** Post-only command endpoint exposed by a built bounded context. */
+export interface CommandEndpoint {
+  /** Posts a command into the context-owned command bus. */
+  post(command: Command): Promise<void>;
+}
+
+/** Post-only event endpoint exposed by a built bounded context. */
+export interface EventEndpoint {
+  /** Posts an event into the context-owned event bus. */
+  post(event: Event): Promise<void>;
+}
+
 /** Error thrown when a bounded context name cannot be accepted. */
 export class BoundedContextNameError extends Error {
   /** Rejected raw value. */
@@ -60,11 +73,6 @@ interface FrameworkConstructionToken {
 const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
   frameworkConstructionToken: true,
 });
-let constructContextSpec:
-  ((snapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) => ContextSpec) | undefined;
-let constructBoundedContextBuilder:
-  | ((snapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) => BoundedContextBuilder)
-  | undefined;
 let constructBoundedContext:
   | ((
       snapshot: BoundedContextSnapshot,
@@ -73,20 +81,53 @@ let constructBoundedContext:
       token: FrameworkConstructionToken,
     ) => BoundedContext)
   | undefined;
+let constructBoundedContextBuilder:
+  | ((snapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) => BoundedContextBuilder)
+  | undefined;
+let constructContextSpec:
+  ((snapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) => ContextSpec) | undefined;
 
-/** Immutable context spec used by the bounded-context builder. */
-export class ContextSpec {
-  readonly #snapshot: ContextSpecSnapshot;
+/** Built bounded context that owns the write-side and event-side buses. */
+export class BoundedContext {
+  readonly #snapshot: BoundedContextSnapshot;
+  readonly #commandBus: CommandBus;
+  readonly #eventBus: EventBus;
+  readonly #commandEndpoint: CommandEndpoint;
+  readonly #eventEndpoint: EventEndpoint;
 
   static {
-    constructContextSpec = (snapshot, token): ContextSpec => new ContextSpec(snapshot, token);
+    constructBoundedContext = (snapshot, commandBus, eventBus, token): BoundedContext =>
+      new BoundedContext(snapshot, commandBus, eventBus, token);
   }
 
   /** Framework-owned constructor. Use `BoundedContext.singleTenant(name)` or `.multitenant(name)`. */
-  protected constructor(snapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) {
-    requireFrameworkConstructionToken(token, "ContextSpec instances are framework-owned.");
-    this.#snapshot = cloneSpecSnapshot(snapshot);
+  protected constructor(
+    snapshot: BoundedContextSnapshot,
+    commandBus: CommandBus,
+    eventBus: EventBus,
+    token: FrameworkConstructionToken,
+  ) {
+    requireFrameworkConstructionToken(token, "BoundedContext instances are framework-owned.");
+    this.#snapshot = cloneContextSnapshot(snapshot);
+    this.#commandBus = commandBus;
+    this.#eventBus = eventBus;
+    this.#commandEndpoint = Object.freeze({
+      post: (command: Command) => this.#commandBus.post(command),
+    });
+    this.#eventEndpoint = Object.freeze({
+      post: (event: Event) => this.#eventBus.post(event),
+    });
     Object.freeze(this);
+  }
+
+  /** Creates a builder for a single-tenant bounded context. */
+  static singleTenant(name: string): BoundedContextBuilder {
+    return createBoundedContextBuilder(createSpecSnapshot(name, false));
+  }
+
+  /** Creates a builder for a multitenant bounded context. */
+  static multitenant(name: string): BoundedContextBuilder {
+    return createBoundedContextBuilder(createSpecSnapshot(name, true));
   }
 
   /** Bounded context name. */
@@ -94,31 +135,40 @@ export class ContextSpec {
     return this.#snapshot.name;
   }
 
-  /** Whether the context requires tenant isolation. */
-  get multitenant(): boolean {
-    return this.#snapshot.multitenant;
-  }
-
-  /** Tenant mode derived from {@link multitenant}. */
+  /** Tenant mode declared for this context. */
   get tenantMode(): TenantMode {
-    return toTenantMode(this.#snapshot.multitenant);
+    return this.#snapshot.tenantMode;
   }
 
-  /** Whether this spec stores its event log. Domain context specs do. */
-  get storesEvents(): boolean {
-    return this.#snapshot.storesEvents;
+  /** Whether this context is multitenant. */
+  get isMultitenant(): boolean {
+    return this.#snapshot.tenantMode === "multitenant";
   }
 
-  /** Copy-safe immutable snapshot of this spec. */
-  get snapshot(): ContextSpecSnapshot {
-    return cloneSpecSnapshot(this.#snapshot);
+  /** Context spec used to build this context. */
+  get spec(): ContextSpec {
+    return createContextSpec(this.#snapshot.spec);
+  }
+
+  /** Copy-safe immutable metadata snapshot of this context. */
+  get snapshot(): BoundedContextSnapshot {
+    return cloneContextSnapshot(this.#snapshot);
+  }
+
+  /** Post-only command endpoint owned by this context. */
+  commandBus(): CommandEndpoint {
+    return this.#commandEndpoint;
+  }
+
+  /** Post-only event endpoint owned by this context. */
+  eventBus(): EventEndpoint {
+    return this.#eventEndpoint;
   }
 }
 
 /** Builder for assembling a JVM-familiar {@link BoundedContext}. */
 export class BoundedContextBuilder {
   readonly #specSnapshot: ContextSpecSnapshot;
-  readonly #repositories = new Set<object>();
   readonly #commandDispatchers = new Set<CommandDispatcher>();
   readonly #eventDispatchers = new Set<EventDispatcher>();
   #storageFactory: StorageFactory | undefined;
@@ -158,19 +208,19 @@ export class BoundedContextBuilder {
     return this.#specSnapshot.multitenant;
   }
 
-  /** Adds a pending repository identity for a later repository-runtime slice. */
+  /** Pending repository seam. Repository runtime registration is not implemented yet. */
   add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
     repository: Repository<EntityType>,
   ): this {
-    this.#repositories.add(repository);
+    void repository;
     return this;
   }
 
-  /** Removes a pending repository identity from this builder. */
+  /** Pending repository seam. Repository runtime registration is not implemented yet. */
   remove<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
     repository: Repository<EntityType>,
   ): this {
-    this.#repositories.delete(repository);
+    void repository;
     return this;
   }
 
@@ -224,39 +274,19 @@ export class BoundedContextBuilder {
   }
 }
 
-/** Built bounded context that owns the write-side and event-side buses. */
-export class BoundedContext {
-  readonly #snapshot: BoundedContextSnapshot;
-  readonly #commandBus: CommandBus;
-  readonly #eventBus: EventBus;
+/** Immutable context spec used by the bounded-context builder. */
+export class ContextSpec {
+  readonly #snapshot: ContextSpecSnapshot;
 
   static {
-    constructBoundedContext = (snapshot, commandBus, eventBus, token): BoundedContext =>
-      new BoundedContext(snapshot, commandBus, eventBus, token);
+    constructContextSpec = (snapshot, token): ContextSpec => new ContextSpec(snapshot, token);
   }
 
   /** Framework-owned constructor. Use `BoundedContext.singleTenant(name)` or `.multitenant(name)`. */
-  protected constructor(
-    snapshot: BoundedContextSnapshot,
-    commandBus: CommandBus,
-    eventBus: EventBus,
-    token: FrameworkConstructionToken,
-  ) {
-    requireFrameworkConstructionToken(token, "BoundedContext instances are framework-owned.");
-    this.#snapshot = cloneContextSnapshot(snapshot);
-    this.#commandBus = commandBus;
-    this.#eventBus = eventBus;
+  protected constructor(snapshot: ContextSpecSnapshot, token: FrameworkConstructionToken) {
+    requireFrameworkConstructionToken(token, "ContextSpec instances are framework-owned.");
+    this.#snapshot = cloneSpecSnapshot(snapshot);
     Object.freeze(this);
-  }
-
-  /** Creates a builder for a single-tenant bounded context. */
-  static singleTenant(name: string): BoundedContextBuilder {
-    return createBoundedContextBuilder(createSpecSnapshot(name, false));
-  }
-
-  /** Creates a builder for a multitenant bounded context. */
-  static multitenant(name: string): BoundedContextBuilder {
-    return createBoundedContextBuilder(createSpecSnapshot(name, true));
   }
 
   /** Bounded context name. */
@@ -264,34 +294,24 @@ export class BoundedContext {
     return this.#snapshot.name;
   }
 
-  /** Tenant mode declared for this context. */
+  /** Whether the context requires tenant isolation. */
+  get multitenant(): boolean {
+    return this.#snapshot.multitenant;
+  }
+
+  /** Tenant mode derived from {@link multitenant}. */
   get tenantMode(): TenantMode {
-    return this.#snapshot.tenantMode;
+    return toTenantMode(this.#snapshot.multitenant);
   }
 
-  /** Whether this context is multitenant. */
-  get isMultitenant(): boolean {
-    return this.#snapshot.tenantMode === "multitenant";
+  /** Whether this spec stores its event log. Domain context specs do. */
+  get storesEvents(): boolean {
+    return this.#snapshot.storesEvents;
   }
 
-  /** Context spec used to build this context. */
-  get spec(): ContextSpec {
-    return createContextSpec(this.#snapshot.spec);
-  }
-
-  /** Copy-safe immutable metadata snapshot of this context. */
-  get snapshot(): BoundedContextSnapshot {
-    return cloneContextSnapshot(this.#snapshot);
-  }
-
-  /** The command bus owned by this context. */
-  commandBus(): CommandBus {
-    return this.#commandBus;
-  }
-
-  /** The event bus owned by this context. */
-  eventBus(): EventBus {
-    return this.#eventBus;
+  /** Copy-safe immutable snapshot of this spec. */
+  get snapshot(): ContextSpecSnapshot {
+    return cloneSpecSnapshot(this.#snapshot);
   }
 }
 

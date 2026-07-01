@@ -30,6 +30,8 @@ import {
   isEntitySchema,
   type BoundedContextName,
   type BoundedContextSnapshot,
+  type CommandEndpoint,
+  type EventEndpoint,
   type TenantMode,
   Aggregate,
   type EntityVersionMetadata,
@@ -235,6 +237,12 @@ describe("@spine-ts/server", () => {
     expectTypeOf(
       BoundedContext.singleTenant("Exports").build().snapshot,
     ).toEqualTypeOf<BoundedContextSnapshot>();
+    expectTypeOf(
+      BoundedContext.singleTenant("Exports").build().commandBus(),
+    ).toEqualTypeOf<CommandEndpoint>();
+    expectTypeOf(
+      BoundedContext.singleTenant("Exports").build().eventBus(),
+    ).toEqualTypeOf<EventEndpoint>();
     expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
     expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);
     expectTypeOf<SignalKind>().toEqualTypeOf<"command" | "event">();
@@ -328,8 +336,10 @@ describe("@spine-ts/server", () => {
     });
 
     expect(context.name.value).toBe("PublicRuntimeSmoke");
-    expect(context.commandBus()).toBeInstanceOf(CommandBus);
-    expect(context.eventBus()).toBeInstanceOf(EventBus);
+    expect(typeof context.commandBus().post).toBe("function");
+    expect(typeof context.eventBus().post).toBe("function");
+    expect("register" in context.commandBus()).toBe(false);
+    expect("register" in context.eventBus()).toBe(false);
     expect(commandReadiness.registeredCommandMessageFullTypeNames()).toEqual([
       CommandSchema.typeName,
     ]);

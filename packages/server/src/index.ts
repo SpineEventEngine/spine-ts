@@ -4,8 +4,10 @@ export {
   type BoundedContextName,
   BoundedContextNameError,
   type BoundedContextSnapshot,
+  type CommandEndpoint,
   ContextSpec,
   type ContextSpecSnapshot,
+  type EventEndpoint,
   type TenantMode,
 } from "./context/bounded-context.js";
 

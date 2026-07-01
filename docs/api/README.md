@@ -27,21 +27,22 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 
 Server exports include `BoundedContext`, `BoundedContextBuilder`,
 `ContextSpec`, `BoundedContextName`, `TenantMode`, `BoundedContextSnapshot`,
-small immutable snapshot contracts, and `BoundedContextNameError` for
-bounded-context assembly.
+small immutable snapshot contracts, `CommandEndpoint`, `EventEndpoint`, and
+`BoundedContextNameError` for bounded-context assembly.
 The public entry points mirror Spine JVM's
 `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
 `ContextSpec` remains a framework-owned immutable value surfaced through
 `builder.spec` and `context.spec`; the builder collects command and event
 dispatchers; `withStorageFactory(factory)` selects the storage factory used for
 the context event store; and `build()` returns a `BoundedContext` that owns
-`CommandBus` and `EventBus` instances exposed through `commandBus()` and
-`eventBus()`. The shell validates non-empty/non-blank names and records tenant
-mode. `builder.add(repository)` / `builder.remove(repository)` remain a narrow
-pending repository-registration seam only. This slice does not create default
-repositories from entity classes, register repositories at runtime, invoke
-handlers, create system contexts, expose stands, write tenant indexes, expose
-gRPC services, or integrate transports.
+mutable `CommandBus` and `EventBus` instances internally while exposing
+post-only `CommandEndpoint` and `EventEndpoint` values through `commandBus()`
+and `eventBus()`. The shell validates non-empty/non-blank names and records
+tenant mode. `builder.add(repository)` / `builder.remove(repository)` are tiny
+chainable pending no-ops only. This slice does not create default repositories
+from entity classes, register repositories at runtime, invoke handlers, create
+system contexts, expose stands, write tenant indexes, expose gRPC services, or
+integrate transports.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,

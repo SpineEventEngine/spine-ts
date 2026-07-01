@@ -79,7 +79,8 @@ Relevant JVM shape:
 
 - [x] Built single-tenant and multitenant contexts expose the configured name and
       tenant mode.
-- [x] Built contexts expose working `commandBus()` and `eventBus()` methods.
+- [x] Built contexts expose working post-only `commandBus()` and `eventBus()`
+      endpoints that do not expose dispatcher `register()`.
 - [x] Dispatchers added to the builder are registered in the built buses.
 - [x] Removed dispatchers are not registered in the built buses.
 - [x] Event posting through `context.eventBus().post(event)` stores events in the
@@ -98,12 +99,32 @@ Relevant JVM shape:
 - `BoundedContextBuilder.withStorageFactory(factory)` supplies the
   `StorageFactory` used to create the context `EventStore`; the default remains
   in-memory storage for this slice.
-- `BoundedContext` exposes `commandBus()` and `eventBus()` only, plus small
-  name/spec/tenant metadata.
-- `add(repository)` / `remove(repository)` remain as a private builder-side
-  pending seam. Built contexts no longer expose repository arrays.
+- `BoundedContext` exposes post-only `commandBus()` and `eventBus()` endpoints,
+  plus small name/spec/tenant metadata. The concrete bus `register()` methods
+  remain outside the public context API.
+- `add(repository)` / `remove(repository)` are chainable pending no-ops for the
+  later repository-runtime slice. Built contexts do not expose repository
+  arrays.
 - The bounded-context repository registration error/code/operation exports were
   removed from the package root.
+
+## Round-1 Review Fixes
+
+- Reordered `packages/server/src/context/bounded-context.ts` so the primary
+  `BoundedContext` declaration precedes `BoundedContextBuilder` and
+  `ContextSpec`.
+- Converted repository references in bounded-context assembly to type-only
+  imports.
+- Added small exported `CommandEndpoint` and `EventEndpoint` types, and changed
+  context bus accessors to return stable post-only endpoints.
+- Removed the write-only repository set from the builder; repository
+  `add()`/`remove()` are documented and tested as pending no-ops.
+- Updated docs/logs to describe the current assembly surface and keep
+  repositories, delivery, Stand, gRPC, transport execution, scheduler, import
+  bus, system context runtime, tenant index, and server builder out of scope.
+- Known concern carried forward: multitenant event storage has no tenant
+  selection seam yet; tenant-specific event-store scoping belongs with later
+  tenancy/runtime work.
 
 ## Baseline Verification
 

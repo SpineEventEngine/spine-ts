@@ -97,8 +97,9 @@ the to-do application remain later slices.
   `BoundedContext.singleTenant(name)`, `BoundedContext.multitenant(name)`,
   immutable context names, framework-owned `ContextSpec` values from
   `builder.spec` and `context.spec`, tenant mode metadata, dispatcher
-  collection, storage-factory injection for event storage, owned built-context
-  command/event buses, and copy-safe small context snapshots.
+  collection, storage-factory injection for event storage, internally owned
+  built-context command/event buses, post-only context bus endpoints, and
+  copy-safe small context snapshots.
 - A first single-process server runtime lifecycle/queue kernel, typed
   write-side signal intake result values, and command/event
   registration-readiness metadata derived from handler metadata.
@@ -423,14 +424,15 @@ await context.eventBus().post(eventEnvelope);
 `addEventDispatcher()` / `removeEventDispatcher()` affect only contexts built
 after the call. `withStorageFactory()` supplies the `StorageFactory` used to
 create the context `EventStore`; if omitted, the current builder uses in-memory
-storage. Event posting stores through that event store before dispatcher
-fan-out.
+storage. `commandBus()` and `eventBus()` expose only `post()`; late dispatcher
+registration stays on the builder and concrete bus classes. Event posting stores
+through that event store before dispatcher fan-out.
 
-`add(repository)` and `remove(repository)` still exist only as a pending,
-builder-only repository seam. They do not create default repositories, register
-repositories into a live context, open repository storage, register type
-suppliers with a stand, route repository messages, invoke handlers, write
-inboxes, emit lifecycle events, or start transport.
+`add(repository)` and `remove(repository)` still exist only as chainable pending
+no-ops for a later repository runtime seam. They do not create default
+repositories, register repositories into a live context, open repository
+storage, register type suppliers with a stand, route repository messages, invoke
+handlers, write inboxes, emit lifecycle events, or start transport.
 
 ## Runtime Assembly Closure
 

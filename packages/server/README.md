@@ -395,9 +395,10 @@ customers.isMultitenant; // true
 
 Names must be non-empty and non-blank. `ContextSpec` is a framework-owned
 immutable value exposed from the builder and built context. `build()` returns a
-`BoundedContext` with owned `commandBus()` and `eventBus()` runtime parts.
-Builders collect dispatchers and can inject the `StorageFactory` used to create
-the context `EventStore`:
+`BoundedContext` that owns mutable command/event buses internally while exposing
+post-only `commandBus()` and `eventBus()` endpoints. The endpoints do not expose
+late dispatcher registration. Builders collect dispatchers and can inject the
+`StorageFactory` used to create the context `EventStore`:
 
 ```ts
 import { BoundedContext } from "@spine-ts/server";
@@ -413,8 +414,8 @@ await tasks.commandBus().post(commandEnvelope);
 await tasks.eventBus().post(eventEnvelope);
 ```
 
-`add(repository)` and `remove(repository)` remain only a pending builder-side
-repository seam for the later repository runtime task.
+`add(repository)` and `remove(repository)` are tiny chainable pending no-ops for
+the later repository runtime task.
 
 This slice deliberately does not create default repositories from entity
 classes, perform runtime repository registration, invoke handlers, open
@@ -496,8 +497,8 @@ workflow execution, handler invocation, storage, buses, or lifecycle events.
 
 ## Repository Identity
 
-Use `Repository` when a `BoundedContextBuilder` needs to record that one entity
-constructor owns one descriptor-backed state schema:
+Use `Repository` to describe that one entity constructor owns one
+descriptor-backed state schema:
 
 ```ts
 import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
@@ -525,13 +526,13 @@ are accepted. Explicitly reparented same-realm ES classes are trusted as
 metadata; this is not a sandbox boundary. The API rejects constructors outside
 those families and rejects mismatched family/schema pairs, such as an aggregate
 class with a projection state schema, with simple `RepositoryIdentityError`
-code/message diagnostics. `BoundedContextBuilder.add(repository)` uses these
-metadata-only identities only as a pending builder seam. Runtime context
-registration remains deferred. This identity seam follows Spine `core-jvm`
-`Repository` identity concepts closely. This API is metadata-only: it does not
-create, find, or store entities; open storage; register with a bounded context;
-route messages; invoke handlers; write inboxes; manage caches; emit lifecycle
-events; or touch transport.
+code/message diagnostics. `BoundedContextBuilder.add(repository)` and
+`remove(repository)` currently accept these identities as chainable pending
+no-ops only. Runtime context registration remains deferred. This identity seam
+follows Spine `core-jvm` `Repository` identity concepts closely. This API is
+metadata-only: it does not create, find, or store entities; open storage;
+register with a bounded context; route messages; invoke handlers; write inboxes;
+manage caches; emit lifecycle events; or touch transport.
 
 ## Entity State Transition Validation
 
