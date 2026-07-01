@@ -470,6 +470,15 @@ const forbiddenTypeDocNamePatterns = [
   /\b\w*EntityConstructor\w*Brand\w*\b/u,
   /\bspineTs\w*\b/u,
 ];
+const forbiddenStorageTypeDocNames = [
+  "RecordEntry",
+  "RecordIdSchema",
+  "RecordMaskApi",
+  "RecordQueryApi",
+  "RecordSpecInput",
+  "StorageObject",
+  "createEventStore",
+];
 const declaredServerExports = collectNamedExports(serverIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
 const unexpectedServerExports = declaredServerExports.filter(
@@ -538,12 +547,24 @@ if (forbiddenMatches.length > 0) {
 }
 
 const apiDocsText = JSON.stringify(apiDocs);
+const forbiddenStorageTypeDocNameMatches = forbiddenStorageTypeDocNames.filter((name) =>
+  apiDocsText.includes(name),
+);
 const forbiddenTypeDocNameMatches = forbiddenTypeDocNames.filter((name) =>
   apiDocsText.includes(name),
 );
 const forbiddenTypeDocPatternMatches = forbiddenTypeDocNamePatterns
   .filter((pattern) => pattern.test(apiDocsText))
   .map((pattern) => pattern.toString());
+
+if (forbiddenStorageTypeDocNameMatches.length > 0) {
+  console.error(
+    `TypeDoc JSON exposes internal or removed @spine-ts/storage symbols: ${[
+      ...new Set(forbiddenStorageTypeDocNameMatches),
+    ].join(", ")}`,
+  );
+  process.exit(1);
+}
 
 if (forbiddenTypeDocNameMatches.length > 0 || forbiddenTypeDocPatternMatches.length > 0) {
   console.error(

@@ -1,7 +1,7 @@
 import type { Message } from "@bufbuild/protobuf";
 
 import type { RecordQuery } from "../record/record-query.js";
-import type { RecordEntry } from "../record/record-spec.js";
+import type { RecordSpec } from "../record/record-spec.js";
 import { RecordStorage } from "../record/record-storage.js";
 import { TenantRecords } from "./tenant-records.js";
 
@@ -21,12 +21,14 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     return Promise.resolve(this.records().read(id));
   }
 
-  protected writeAllRecords(records: readonly RecordEntry<I, R>[]): Promise<void> {
+  protected writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
     this.records().writeAll(records);
     return Promise.resolve();
   }
 
-  protected writeRecord(record: RecordEntry<I, R>): Promise<void> {
+  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
     this.records().write(record);
     return Promise.resolve();
   }

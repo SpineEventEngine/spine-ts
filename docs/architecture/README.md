@@ -375,38 +375,38 @@ outcomes, delivery, and transport integration separately.
 
 ## Storage Boundary
 
-`@spine-ts/storage` now owns the first framework storage seam. The package
-exports asynchronous, record-oriented contracts and an in-memory adapter, but it
-does not implement repositories, transactions, buses, delivery workers, service
+`@spine-ts/storage` now owns a smaller record-storage seam. The package exports
+`StorageFactory` with one mandatory adapter method,
+`createRecordStorage(context, spec)`, plus `RecordStorage`, `RecordSpec`,
+`RecordColumn`, query/mask contracts, and an in-memory implementation. It does
+not implement repositories, transactions, buses, delivery workers, service
 APIs, ZeroMQ transport, or production database adapters.
 
-The adapter surface is deliberately split by runtime role:
+`RecordSpec` binds one generated Protobuf record schema, optional generated ID
+schema, ID extraction, and deterministic query columns. `RecordStorage` stores
+identified Protobuf records, clones them on write/read, deletes by ID, and
+queries by exact IDs, exact column filters, deterministic sort order on `id`,
+stored columns, or dotted record paths, positive limits, and simple masks on
+cloned results. `StorageContext` carries the bounded-context storage namespace
+plus optional tenant scoping for multitenant storages.
 
-- write-side stores: `writeEntities`, `aggregateEvents`,
-  `aggregateSnapshots`, and `deliveryRecords`;
-- read-side stores: `readProjections`;
-- shared framework support stores: `tenantIndex` and `diagnostics`.
+`EventStore` is a higher-level framework delegate over
+`RecordStorage<EventId, Event>`. It is intentionally created directly by
+framework code rather than by `StorageFactory`, so the foundational storage
+package stays independent of the event layer. In this slice `EventStore` is
+storage-only: it persists and reads generated Spine events, but it does not
+dispatch them, manage delivery attempts, fan out to subscribers, or implement
+retry/bus behavior.
 
-Entity, snapshot, projection, and delivery stores use versioned records with
-optimistic `expectedVersion` checks. Their payload type is bound to the store
-interface rather than to each read call, so package-level storage defaults to
-`unknown` while caller-owned seams can declare a typed store. Aggregate event
-histories append ordered stream records with expected stream versions and
-adapter-local global positions. Empty appends validate the expected stream
-version but do not retain an empty stream. These metadata fields provide the
-future repository runtime/storage seam. The server package now has a
-metadata-only `Repository` identity class for entity/schema ownership, but
-create/find/store behavior, storage opening, and repository runtime classes
-remain deferred.
+`InMemoryStorageFactory` and `InMemoryRecordStorage` are the first
+test/development adapter. They are process-local, keep deterministic tenant
+slices, and clone stored values so later caller mutation cannot affect stored
+records. Payloads must remain cloneable, which preserves byte arrays used by
+packed Protobuf `Any` payloads.
 
-`InMemoryStorageAdapter` is a test/development adapter. Each instance is
-isolated, keeps deterministic counters, snapshots values on write/read with
-Node's `structuredClone()`, and advertises `durability.durable === false`.
-Payloads stored in this adapter must be structured-clone compatible, which
-preserves byte arrays used by packed Protobuf `Any` payloads. Diagnostics are
-intended for safe framework metadata only; storage errors and diagnostics must
-not include credentials, auth headers, packed bytes, or sensitive payload
-contents.
+Aggregate histories, snapshots, delivery records, tenant indexes, diagnostics,
+repository storage policy, read-side projection stores, and durable production
+storage remain deferred.
 
 ## Transport Boundary
 

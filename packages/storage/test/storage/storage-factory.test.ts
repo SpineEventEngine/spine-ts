@@ -36,6 +36,18 @@ describe("StorageFactory", () => {
 
     await expect(second.read(create(EventIdSchema, { value: "event-1" }))).resolves.toBeUndefined();
   });
+
+  it("rejects record storage creation after the factory closes", () => {
+    const factory = new InMemoryStorageFactory();
+    const spec = createEventSpec();
+
+    factory.close();
+
+    expect(factory.isOpen()).toBe(false);
+    expect(() => factory.createRecordStorage({ name: "Tasks", multitenant: false }, spec)).toThrow(
+      /closed/,
+    );
+  });
 });
 
 function createEventSpec() {

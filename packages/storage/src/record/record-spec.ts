@@ -6,37 +6,46 @@ import { RecordColumn } from "./record-column.js";
 
 /** Declarative specification for one identified Protobuf record type. */
 export class RecordSpec<I, R extends Message> {
-  readonly columns: readonly RecordColumn<R>[];
-  readonly extractId: (record: R) => I;
-  readonly idSchema: RecordIdSchema<I> | undefined;
-  readonly record: GenMessage<R>;
+  readonly #columns: readonly RecordColumn<R>[];
+  readonly #extractId: (record: R) => I;
+  readonly #idSchema: (I extends Message ? GenMessage<I> : undefined) | undefined;
+  readonly #record: GenMessage<R>;
 
-  constructor(input: RecordSpecInput<I, R>) {
-    this.columns = input.columns ?? [];
-    this.extractId = input.extractId;
-    this.idSchema = input.idSchema;
-    this.record = input.schema;
+  constructor(input: {
+    readonly schema: GenMessage<R>;
+    readonly idSchema?: I extends Message ? GenMessage<I> : undefined;
+    readonly extractId: (record: R) => I;
+    readonly columns?: readonly RecordColumn<R>[];
+  }) {
+    this.#columns = input.columns ?? [];
+    this.#extractId = input.extractId;
+    this.#idSchema = input.idSchema;
+    this.#record = input.schema;
   }
 
   /** Clone an ID value according to this spec. */
   cloneId(id: I): I {
-    const idSchema = this.idSchema;
+    const idSchema = this.#idSchema;
 
     return idSchema === undefined ? RecordCloner.value(id) : RecordCloner.message(idSchema, id);
   }
 
   /** Clone one record value according to this spec. */
   cloneRecord(record: R): R {
-    return RecordCloner.message(this.record, record);
+    return RecordCloner.message(this.#record, record);
   }
 
   /** Extract the identifier from one stored record. */
   idValueIn(record: R): I {
-    return this.extractId(record);
+    return this.#extractId(record);
   }
 
   /** Clone and materialize one record with its identifier and columns. */
-  materialize(record: R): RecordEntry<I, R> {
+  materialize(record: R): {
+    readonly columns: ReadonlyMap<string, unknown>;
+    readonly id: I;
+    readonly record: R;
+  } {
     const storedRecord = this.cloneRecord(record);
     const id = this.cloneId(this.idValueIn(storedRecord));
 
@@ -44,7 +53,7 @@ export class RecordSpec<I, R extends Message> {
       id,
       record: storedRecord,
       columns: new Map(
-        this.columns.map((column) => [
+        this.#columns.map((column) => [
           column.name,
           RecordCloner.value(column.valueIn(storedRecord)),
         ]),
@@ -53,27 +62,7 @@ export class RecordSpec<I, R extends Message> {
   }
 }
 
-/** Input used to define one stored-record specification. */
-export interface RecordSpecInput<I, R extends Message> {
-  /** Generated schema for the stored record type. */
-  readonly schema: GenMessage<R>;
-  /** Generated schema for the record ID when the ID is also a Protobuf message. */
-  readonly idSchema?: RecordIdSchema<I>;
-  /** Extract the identifier from one stored record. */
-  readonly extractId: (record: R) => I;
-  /** Queryable stored columns derived from the record. */
-  readonly columns?: readonly RecordColumn<R>[];
-}
-
-/** Fully prepared stored record data, safe to persist atomically. */
-export interface RecordEntry<I, R extends Message> {
-  readonly columns: ReadonlyMap<string, unknown>;
-  readonly id: I;
-  readonly record: R;
-}
-
 type CloneMethod = (this: object) => unknown;
-type RecordIdSchema<I> = I extends Message ? GenMessage<I> : undefined;
 
 const RecordCloner = Object.freeze({
   message<R extends Message>(schema: GenMessage<R>, record: R): R {

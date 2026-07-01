@@ -233,13 +233,17 @@ data. The surface is not Spine `Ack`, a command bus, event bus, import bus,
 filter chain, storage write, dispatcher, delivery mechanism, tenant/message
 validator, service, transport, or handler invocation.
 
-Storage exports include `StorageAdapter`, `StorageRecord`,
-`WriteSideRecordStore`, `ReadSideRecordStore`, aggregate event history
-contracts, tenant/diagnostic stores, `StorageVersionConflictError`,
-`StoragePayloadCloneError`, `InMemoryStorageAdapter`, and
-`createInMemoryStorageAdapter()`. These APIs document optimistic version
-checks, safe structured-clone failure reporting, write-side/read-side
-segregation, deterministic in-memory behavior, and non-durability.
+Storage exports include `Storage`, `StorageContext`, `StorageFactory`,
+`RecordStorage`, `RecordSpec`, `RecordColumn`, `RecordQuery`, `RecordFilter`,
+`RecordOrder`, `RecordReadOptions`, `RecordMask`, `InMemoryStorageFactory`,
+`InMemoryRecordStorage`, and `EventStore`. `StorageFactory` owns one mandatory
+adapter seam, `createRecordStorage(context, spec)`. `RecordStorage` persists
+identified Protobuf records with deterministic ID/column/path queries, positive
+limits, and simple field masks over cloned results. The in-memory adapter is
+process-local, tenant-aware through `StorageContext`, and non-durable.
+`EventStore` is a framework delegate over `RecordStorage<EventId, Event>` and
+is storage-only in this slice: it persists and reads generated Spine events,
+but it does not dispatch them, manage delivery, or fan out to subscribers.
 
 Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
 `TransportTopicInput`, `TransportTopic`, `TransportRoutingDescriptor`,

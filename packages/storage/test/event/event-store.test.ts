@@ -3,15 +3,12 @@ import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { EventIdSchema, EventSchema } from "@spine-ts/proto";
 import { describe, expect, it } from "vitest";
 
-import { InMemoryStorageFactory } from "../../src/index.js";
+import { EventStore, InMemoryStorageFactory } from "../../src/index.js";
 
 describe("EventStore", () => {
   it("persists generated Spine events through record storage", async () => {
     const factory = new InMemoryStorageFactory();
-    const store = factory.createEventStore({
-      name: "Tasks",
-      multitenant: false,
-    });
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     const earlier = createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n);
     const later = createEvent("event-2", "type.spine.io/tasks.TaskRenamed", 2n);
@@ -30,13 +27,16 @@ describe("EventStore", () => {
   it("uses the current tenant slice from the storage context", async () => {
     let currentTenantId = "tenant-a";
     const factory = new InMemoryStorageFactory();
-    const store = factory.createEventStore({
-      name: "Tasks",
-      multitenant: true,
-      get tenantId() {
-        return currentTenantId;
+    const store = new EventStore(
+      {
+        name: "Tasks",
+        multitenant: true,
+        get tenantId() {
+          return currentTenantId;
+        },
       },
-    });
+      factory,
+    );
 
     await store.append(createEvent("event-a", "type.spine.io/tasks.TaskCreated", 1n));
     currentTenantId = "tenant-b";
@@ -50,10 +50,7 @@ describe("EventStore", () => {
 
   it("supports empty appends and closes with the delegated record storage", async () => {
     const factory = new InMemoryStorageFactory();
-    const store = factory.createEventStore({
-      name: "Tasks",
-      multitenant: false,
-    });
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(store.appendAll([])).resolves.toBeUndefined();
     expect(store.isOpen()).toBe(true);
@@ -66,10 +63,7 @@ describe("EventStore", () => {
 
   it("rejects events without IDs and persists none from the batch", async () => {
     const factory = new InMemoryStorageFactory();
-    const store = factory.createEventStore({
-      name: "Tasks",
-      multitenant: false,
-    });
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(
       store.appendAll([

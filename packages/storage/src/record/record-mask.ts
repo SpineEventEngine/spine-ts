@@ -4,7 +4,9 @@ interface MaskNode {
   readonly children: Map<string, MaskNode>;
 }
 
-export const RecordMask: Readonly<RecordMaskApi> = Object.freeze({
+export const RecordMask: Readonly<{
+  apply<R>(record: R, mask: RecordMask | undefined): R;
+}> = Object.freeze({
   /** Apply a simple field mask to a cloned record. */
   apply<R>(record: R, mask: RecordMask | undefined): R {
     if (mask === undefined || mask.length === 0) {
@@ -16,10 +18,6 @@ export const RecordMask: Readonly<RecordMaskApi> = Object.freeze({
     return record;
   },
 });
-
-interface RecordMaskApi {
-  apply<R>(record: R, mask: RecordMask | undefined): R;
-}
 
 function createMaskTree(mask: RecordMask): MaskNode {
   const root = createNode();

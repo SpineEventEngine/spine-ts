@@ -10,7 +10,9 @@ export interface RecordQuery<I> extends RecordReadOptions {
   readonly limit?: number;
 }
 
-export const RecordQuery: Readonly<RecordQueryApi> = Object.freeze({
+export const RecordQuery: Readonly<{
+  validate<I>(query: RecordQuery<I>): void;
+}> = Object.freeze({
   /** Validate a record query before execution. */
   validate<I>(query: RecordQuery<I>): void {
     if (query.limit !== undefined && query.limit <= 0) {
@@ -39,8 +41,4 @@ export interface RecordFilter {
   readonly column: string;
   /** One accepted value or a small accepted set. */
   readonly value: unknown;
-}
-
-interface RecordQueryApi {
-  validate<I>(query: RecordQuery<I>): void;
 }

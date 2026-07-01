@@ -23,6 +23,14 @@ writes materialize all records before mutation, query ties break by record ID,
 `EventStore` rejects missing `event.id` values, and storage docs now state
 explicitly that `EventStore` is storage-only for now.
 
+Round 2 follow-up closes the remaining review findings: storage docs now
+describe only the current record-storage seam, `StorageFactory` no longer
+depends upward on `EventStore`, `RecordMask` behavior coverage lives under the
+semantic `record/` test folder, TypeDoc checks now reject internal storage
+symbols beyond the root export list, the in-memory comparator sorts numbers and
+bigints numerically, and `StorageFactory.close()` is verified to block further
+storage creation.
+
 ## JVM Alignment
 
 The selected design follows the JVM storage seam:
@@ -77,6 +85,29 @@ Round 1 fix follow-up:
   comparison. Existing warning only: the local `origin` remote is invalid for
   TypeDoc source links.
 
+Round 2 fix follow-up:
+
+- Focused storage regressions:
+  `corepack pnpm vitest run packages/storage/test/index.test.ts packages/storage/test/record/record-mask.test.ts packages/storage/test/storage/storage-factory.test.ts packages/storage/test/memory/in-memory-record-storage.test.ts packages/storage/test/event/event-store.test.ts`
+  passed with 5 files / 18 tests, covering moved `RecordMask` behavior,
+  numeric/bigint sort ordering (`10` vs `2`, `10n` vs `2n`), deterministic
+  mixed-kind ordering, NaN/null/undefined tie behavior, and the
+  `StorageFactory.close()` guard.
+- Build check:
+  `corepack pnpm exec tsc -b packages/proto packages/storage`
+  passed after removing the public `StorageObject` hierarchy from storage types
+  and simplifying storage helper signatures.
+- Docs/API check:
+  `node scripts/check-api-docs.mjs` passed and now rejects internal or removed
+  `@spine-ts/storage` TypeDoc symbols beyond root-export drift.
+- Full verify:
+  sandboxed `env CI=true corepack pnpm verify` reproduced the expected local
+  IPC `Operation not permitted` failure in transport smoke tests; escalated
+  rerun of the same command passed with 32 files / 294 tests, coverage
+  statements 95.64%, branches 90.44%, functions 98.31%, lines 95.64%, TypeDoc
+  / API checks, proto lint/generate, and generated-clean comparison. Existing
+  warning only: the local `origin` remote is invalid for TypeDoc source links.
+
 ## Changed Files
 
 - `packages/storage/package.json`
@@ -97,9 +128,13 @@ Round 1 fix follow-up:
 - `packages/storage/test/index.test.ts`
 - `packages/storage/test/event/event-store.test.ts`
 - `packages/storage/test/memory/in-memory-record-storage.test.ts`
+- `packages/storage/test/record/record-mask.test.ts`
 - `packages/storage/test/storage/storage-factory.test.ts`
 - `build-protocol/RUNTIME_ARCHITECTURE.md`
 - `build-protocol/DEVELOPER_API.md`
+- `docs/api/README.md`
+- `docs/USER_GUIDE.md`
+- `docs/architecture/README.md`
 - `build-protocol/tasks/T-0012-4-storage-factory-record-storage/TASK.md`
 - `build-protocol/reviews/T-0012-4-storage-factory-record-storage.md`
 - `build-protocol/tasks/T-0012-4-storage-factory-record-storage/IMPLEMENTATION_REPORT.md`
