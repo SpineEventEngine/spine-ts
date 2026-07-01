@@ -360,7 +360,7 @@ workers; it only turns existing metadata into transport-owned topics,
 subscriptions, planner-local worker IDs, explicit deferred seams, and sanitized route
 descriptors. Those route descriptors expose message type names/type URLs plus
 stable receiver-group and local route/worker identities, along with transport
-correlation keys back to the top-level topic/subscription/worker arrays only;
+correlation keys back to topic/subscription arrays and planner-local worker IDs;
 they do not retain entity names, handler names, raw readiness metadata, or
 duplicate full transport contracts on each route. The package root does not
 export service, transport, bus, storage, delivery, stand,

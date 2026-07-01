@@ -499,8 +499,8 @@ namespace/member base-class expressions, and intermediate domain base classes
 are accepted. Explicitly reparented same-realm ES classes are trusted as
 metadata; this is not a sandbox boundary. The API rejects constructors outside
 those families and rejects mismatched family/schema pairs, such as an aggregate
-class with a projection state schema, with structured `RepositoryIdentityError`
-codes and details. `BoundedContextBuilder.add(repository)` uses these
+class with a projection state schema, with simple `RepositoryIdentityError`
+code/message diagnostics. `BoundedContextBuilder.add(repository)` uses these
 metadata-only identities for duplicate and conflict checks before
 `builder.build()` creates an immutable bounded-context snapshot. Runtime
 context registration remains deferred. This identity seam follows Spine

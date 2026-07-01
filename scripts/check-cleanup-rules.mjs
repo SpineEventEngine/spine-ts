@@ -126,7 +126,7 @@ const inheritedSemanticNameExceptionOccurrences = new Set(
       "packages/server/src/handler/event-registration-readiness.ts",
       146,
     ],
-    ["readCanonicalRepositorySemanticTags", "packages/server/src/context/bounded-context.ts", 771],
+    ["readCanonicalRepositorySemanticTags", "packages/server/src/context/bounded-context.ts", 756],
     ["readRepositoryEntityTypeOption", "packages/server/src/repository/repository.ts", 256],
     ["readSafeUint8ArrayBytes", "packages/server/src/entity/entity-transition-validation.ts", 361],
     [
@@ -158,9 +158,9 @@ const inheritedSemanticNameExceptionOccurrences = new Set(
     [
       "validateCanonicalRepositorySemanticTagList",
       "packages/server/src/context/bounded-context.ts",
-      807,
+      792,
     ],
-    ["validateRepositoryFieldMetadataList", "packages/server/src/context/bounded-context.ts", 757],
+    ["validateRepositoryFieldMetadataList", "packages/server/src/context/bounded-context.ts", 742],
     ["ZeroMqAdapterConfigInput", "packages/transport/src/zeromq/adapter-config.ts", 9],
   ].map(([name, file, line]) => `${name}|${file}|${line}`),
 );

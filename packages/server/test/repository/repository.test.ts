@@ -377,8 +377,8 @@ describe("repository identity", () => {
       expectRepositoryIdentityError(error, "ENTITY_SCHEMA_KIND_MISMATCH", [
         "RuntimeCheckedAggregate",
         "aggregate",
-        "BrokenState",
       ]);
+      expect((error as RepositoryIdentityError).message).not.toContain("BrokenState");
     }
 
     try {

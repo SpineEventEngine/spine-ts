@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions
 
-Status: Implemented; verification passed
+Status: Review fixes applied; verification passed
 Branch: `task/T-0012-3-shrink-runtime-abstractions`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-3-shrink-runtime-abstractions`
@@ -80,6 +80,24 @@ recorded parent setup commit `cb5ace3`.
   registrations. The planner now exposes topics, subscriptions, planner-local
   `workerIds`, and route correlation keys only.
 
+## Review Fix Notes
+
+- Removed stale `await runtime.start()` / `await runtime.close()` lines from the
+  user-guide routing-plan example after `BoundedContextRuntime` deletion.
+- Clarified architecture docs so route descriptors correlate to
+  topic/subscription arrays and planner-local worker IDs, not a top-level
+  worker array.
+- Updated server README repository mismatch wording from structured
+  `RepositoryIdentityError` details to simple code/message diagnostics.
+- Replaced bounded-context repository conflict diagnostics with a generic
+  public message and left `code` as the branchable contract.
+- Removed rejected schema `typeName` detail from repository schema mismatch
+  diagnostics and deleted the now-unused schema-name message helper.
+- Updated focused bounded-context and repository tests to assert the sanitized
+  public messages.
+- Updated cleanup-rule exception line numbers after deleting the helper shifted
+  existing long-name exception locations.
+
 ## Intentionally Kept
 
 - Kept `BoundedContext`, `BoundedContextBuilder`, `ContextSpec`, and
@@ -108,6 +126,19 @@ recorded parent setup commit `cb5ace3`.
 
 ## Verification Results
 
+- Review-fix focused tests:
+  `corepack pnpm exec vitest run packages/server/test/context/bounded-context.test.ts packages/server/test/repository/repository.test.ts`
+  passed: 2 files, 52 tests.
+- Review-fix `corepack pnpm lint` passed after dead-helper cleanup and
+  cleanup-rule exception line updates.
+- Review-fix `corepack pnpm typecheck` passed.
+- Review-fix `corepack pnpm docs:check` passed with the known TypeDoc
+  invalid-origin warning and unchanged export counts.
+- Review-fix `git diff --check` passed.
+- Review-fix sandbox `corepack pnpm test` failed only the two ZeroMQ
+  `ipc://` smoke tests with `Operation not permitted`; 27 of 28 files and 289
+  of 291 tests passed.
+- Review-fix native/escalated `corepack pnpm test` passed: 28 files, 291 tests.
 - Focused tests:
   `npx vitest run packages/transport/test/index.test.ts packages/server/test/context/bounded-context.test.ts packages/server/test/repository/repository.test.ts packages/server/test/runtime/runtime-routing.test.ts packages/server/test/index.test.ts`
   passed: 5 files, 81 tests.

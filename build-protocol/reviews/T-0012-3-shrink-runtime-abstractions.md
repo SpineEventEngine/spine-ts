@@ -6,7 +6,7 @@ Branch: `task/T-0012-3-shrink-runtime-abstractions`
 Baseline commit: `cb5ace3`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-3-shrink-runtime-abstractions`
-Status: Implementation complete; review pending
+Status: Review fixes applied; verification passed
 
 ## Required Review Lanes
 
@@ -65,3 +65,37 @@ Verification recorded by the implementer:
   typecheck, tests, docs check, proto generation, and generated proto check.
 
 Independent review lanes remain pending.
+
+## Review Findings And Fixes
+
+- Documentation medium: `docs/USER_GUIDE.md` still showed
+  `runtime.start()` / `runtime.close()` after the bounded-context runtime shell
+  was removed. Fixed by deleting those stale lines from the routing-plan
+  example.
+- Architecture docs low: `docs/architecture/README.md` still described
+  correlation to top-level topic/subscription/worker arrays. Fixed wording to
+  name topic/subscription arrays and planner-local worker IDs.
+- Server README low: `packages/server/README.md` described structured
+  `RepositoryIdentityError` codes and details. Fixed wording to simple
+  code/message diagnostics.
+- Security medium:
+  `packages/server/src/context/bounded-context.ts` exposed context, entity
+  constructor, and state type names in conflict messages. Fixed by using the
+  generic message `Bounded context already has conflicting repository
+  ownership.` with only `code` for branching.
+- Security low: `packages/server/src/repository/repository.ts` appended
+  rejected schema `typeName` values to public schema mismatch messages. Fixed
+  by removing that detail and deleting the unused helper.
+- Cleanup follow-up: deleting that helper shifted existing cleanup-rule
+  exception line numbers in `scripts/check-cleanup-rules.mjs`; fixed those
+  pinned locations without changing the rule.
+
+Review-fix focused verification passed:
+`corepack pnpm exec vitest run packages/server/test/context/bounded-context.test.ts packages/server/test/repository/repository.test.ts`
+reported 2 files and 52 tests passed.
+
+Review-fix final verification passed:
+`corepack pnpm lint`, `corepack pnpm typecheck`, `corepack pnpm docs:check`,
+and `git diff --check` passed. Sandboxed `corepack pnpm test` failed only the
+known ZeroMQ `ipc://` permission path with 289 of 291 tests passing; native
+`corepack pnpm test` passed 28 files and 291 tests.

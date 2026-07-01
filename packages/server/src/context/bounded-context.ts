@@ -196,7 +196,7 @@ export class BoundedContextBuilder {
     repository: Repository<EntityType>,
   ): this {
     const incoming = readRepositorySnapshot(repository, "add", this.#specSnapshot.name.value);
-    registerRepositorySnapshot(this.#repositorySnapshots, incoming, this.#specSnapshot.name.value);
+    registerRepositorySnapshot(this.#repositorySnapshots, incoming);
     return this;
   }
 
@@ -610,7 +610,6 @@ function readRepositorySnapshot<
 function registerRepositorySnapshot(
   existingRepositories: RepositoryIdentitySnapshot[],
   incoming: RepositoryIdentitySnapshot,
-  contextName: string,
 ): void {
   for (const existing of existingRepositories) {
     if (isSameRepositoryIdentity(existing, incoming)) {
@@ -618,11 +617,11 @@ function registerRepositorySnapshot(
     }
 
     if (existing.entityType === incoming.entityType) {
-      throwRepositoryRegistrationConflict("ENTITY_TYPE_CONFLICT", contextName, existing, incoming);
+      throwRepositoryRegistrationConflict("ENTITY_TYPE_CONFLICT");
     }
 
     if (existing.stateFullTypeName === incoming.stateFullTypeName) {
-      throwRepositoryRegistrationConflict("STATE_TYPE_CONFLICT", contextName, existing, incoming);
+      throwRepositoryRegistrationConflict("STATE_TYPE_CONFLICT");
     }
   }
 
@@ -631,24 +630,10 @@ function registerRepositorySnapshot(
 
 function throwRepositoryRegistrationConflict(
   code: BoundedContextRepositoryRegistrationErrorCode,
-  contextName: string,
-  existing: RepositoryIdentitySnapshot,
-  incoming: RepositoryIdentitySnapshot,
 ): never {
-  const existingEntity = safeEntityTypeName(existing.entityType);
-  const incomingEntity = safeEntityTypeName(incoming.entityType);
-  const existingStateType = String(existing.stateFullTypeName);
-  const incomingStateType = String(incoming.stateFullTypeName);
-  const ownership =
-    code === "ENTITY_TYPE_CONFLICT"
-      ? `entity constructor "${incomingEntity}"`
-      : `state type "${incomingStateType}"`;
-
   throw new BoundedContextRepositoryRegistrationError(
     code,
-    `Bounded context "${contextName}" already has repository ownership for ${ownership}; ` +
-      `existing repository "${existingEntity}" owns state "${existingStateType}", ` +
-      `incoming repository "${incomingEntity}" owns state "${incomingStateType}".`,
+    "Bounded context already has conflicting repository ownership.",
   );
 }
 
@@ -818,15 +803,6 @@ function validateCanonicalRepositorySemanticTagList(tags: readonly string[], own
     if (previousTag > tag) {
       throw new TypeError(`${owner} must be sorted.`);
     }
-  }
-}
-
-function safeEntityTypeName(entityType: RepositoryIdentitySnapshot["entityType"]): string {
-  try {
-    const name = (entityType as { readonly name?: unknown }).name;
-    return typeof name === "string" && name.length > 0 ? name : "(anonymous)";
-  } catch {
-    return "(anonymous)";
   }
 }
 

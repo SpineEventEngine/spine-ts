@@ -359,18 +359,9 @@ function describeRepositoryEntityMetadata<Schema extends DescriptorMessageSchema
     throw new RepositoryIdentityError(
       "ENTITY_SCHEMA_KIND_MISMATCH",
       `Repository entity type "${entityTypeDisplayName}" is a ${entityFamily}, but ` +
-        `the supplied state schema${schemaNameMessage(schema)} does not expose supported entity metadata.`,
+        "the supplied state schema does not expose supported entity metadata.",
     );
   }
-}
-
-function schemaNameMessage(schema: unknown): string {
-  if ((typeof schema !== "object" && typeof schema !== "function") || schema === null) {
-    return "";
-  }
-
-  const typeName = safeStringProperty(schema, "typeName");
-  return typeof typeName === "string" && typeName.length > 0 ? ` "${typeName}"` : "";
 }
 
 function cloneEntityMetadata<Schema extends DescriptorMessageSchema>(

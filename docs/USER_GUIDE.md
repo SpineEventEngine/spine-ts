@@ -480,9 +480,6 @@ const routingPlan = createServerRuntimeRoutingPlan({
 routingPlan.commands.routes[0]?.receiverGroup; // "command-assignee"
 routingPlan.events.applicationRoutes[0]?.receiverGroup; // "application"
 routingPlan.deferred.map(({ signalKind }) => signalKind); // ["query", "subscription", "system"]
-
-await runtime.start();
-await runtime.close();
 ```
 
 This assembly records what a later runtime can consume: context identity,

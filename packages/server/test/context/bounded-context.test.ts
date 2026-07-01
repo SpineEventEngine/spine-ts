@@ -498,10 +498,13 @@ describe("BoundedContext builder shell", () => {
       expect(error).toBeInstanceOf(BoundedContextRepositoryRegistrationError);
       const registrationError = error as BoundedContextRepositoryRegistrationError;
       expect(registrationError.code).toBe("ENTITY_TYPE_CONFLICT");
-      expect(registrationError.message).toContain('Bounded context "Tasks"');
-      expect(registrationError.message).toContain('entity constructor "ConflictingTaskAggregate"');
-      expect(registrationError.message).toContain(AggregateStateSchema.typeName);
-      expect(registrationError.message).toContain(AlternateAggregateStateSchema.typeName);
+      expect(registrationError.message).toBe(
+        "Bounded context already has conflicting repository ownership.",
+      );
+      expect(registrationError.message).not.toContain("Tasks");
+      expect(registrationError.message).not.toContain("ConflictingTaskAggregate");
+      expect(registrationError.message).not.toContain(AggregateStateSchema.typeName);
+      expect(registrationError.message).not.toContain(AlternateAggregateStateSchema.typeName);
       expect(registrationError).not.toHaveProperty("details");
     }
   });
@@ -524,10 +527,13 @@ describe("BoundedContext builder shell", () => {
       expect(error).toBeInstanceOf(BoundedContextRepositoryRegistrationError);
       const registrationError = error as BoundedContextRepositoryRegistrationError;
       expect(registrationError.code).toBe("STATE_TYPE_CONFLICT");
-      expect(registrationError.message).toContain('Bounded context "Tasks"');
-      expect(registrationError.message).toContain(`state type "${ProjectionStateSchema.typeName}"`);
-      expect(registrationError.message).toContain('existing repository "TaskProjection"');
-      expect(registrationError.message).toContain('incoming repository "TaskSummaryProjection"');
+      expect(registrationError.message).toBe(
+        "Bounded context already has conflicting repository ownership.",
+      );
+      expect(registrationError.message).not.toContain("Tasks");
+      expect(registrationError.message).not.toContain(ProjectionStateSchema.typeName);
+      expect(registrationError.message).not.toContain("TaskProjection");
+      expect(registrationError.message).not.toContain("TaskSummaryProjection");
       expect(registrationError).not.toHaveProperty("details");
     }
   });
@@ -891,8 +897,11 @@ describe("BoundedContext builder shell", () => {
       expect(error).toBeInstanceOf(BoundedContextRepositoryRegistrationError);
       const registrationError = error as BoundedContextRepositoryRegistrationError;
       expect(registrationError.code).toBe("STATE_TYPE_CONFLICT");
+      expect(registrationError.message).toBe(
+        "Bounded context already has conflicting repository ownership.",
+      );
       expect(registrationError.message).not.toContain("raw name leak");
-      expect(registrationError.message).toContain('incoming repository "(anonymous)"');
+      expect(registrationError.message).not.toContain("(anonymous)");
       expect(registrationError).not.toHaveProperty("details");
     }
 
@@ -908,7 +917,10 @@ describe("BoundedContext builder shell", () => {
       expect(error).toBeInstanceOf(BoundedContextRepositoryRegistrationError);
       const registrationError = error as BoundedContextRepositoryRegistrationError;
       expect(registrationError.code).toBe("STATE_TYPE_CONFLICT");
-      expect(registrationError.message).toContain('incoming repository "(anonymous)"');
+      expect(registrationError.message).toBe(
+        "Bounded context already has conflicting repository ownership.",
+      );
+      expect(registrationError.message).not.toContain("(anonymous)");
       expect(registrationError).not.toHaveProperty("details");
     }
   });
