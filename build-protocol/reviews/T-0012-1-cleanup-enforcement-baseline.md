@@ -88,3 +88,22 @@ Focused RED/GREEN evidence is recorded in
 `build-protocol/tasks/T-0012-1-cleanup-enforcement-baseline/IMPLEMENTATION_REPORT.md`.
 Final required verification passed after escalation for the known ZeroMQ local
 IPC sandbox restriction.
+
+Author follow-up agent `019f1e81-646b-7c51-a325-59dbf7c4c9c6` committed
+`3d33805` and is closed.
+
+## Round 2 Re-review
+
+Round 2 reviewers must re-check the full package
+`.superpowers/sdd/review-147d496..3d33805.diff`, with special attention to
+fresh-clone generated output, generated-clean symlink/staleness behavior,
+cleanup-checker false negatives, public docs, and generated `.js` ESM subpath
+imports.
+
+Reviewer lanes:
+
+- Code style/maintainability: pending.
+- Documentation: pending.
+- TypeScript/API docs: pending.
+- Security: pending.
+- Performance/reliability: pending.
