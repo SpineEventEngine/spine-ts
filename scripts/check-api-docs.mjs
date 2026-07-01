@@ -137,32 +137,20 @@ const expectedCoreExports = [
   "packEvent",
 ];
 const expectedStorageExports = [
-  "ExpectedStorageVersion",
-  "StorageRecordKey",
-  "StorageRecordKind",
-  "StorageDurability",
-  "StorageRecord",
-  "PutStorageRecordInput",
-  "DeleteStorageRecordInput",
-  "WriteSideRecordStore",
-  "ReadSideRecordStore",
-  "EntityRecord",
-  "AggregateSnapshotRecord",
-  "ProjectionRecord",
-  "DeliveryRecord",
-  "AggregateEventRecord",
-  "AppendAggregateEventsInput",
-  "AggregateEventStore",
-  "TenantIndexStore",
-  "DiagnosticSeverity",
-  "AppendDiagnosticInput",
-  "DiagnosticRecord",
-  "DiagnosticRecordStore",
-  "StorageAdapter",
-  "StorageVersionConflictError",
-  "StoragePayloadCloneError",
-  "createInMemoryStorageAdapter",
-  "InMemoryStorageAdapter",
+  "EventStore",
+  "InMemoryRecordStorage",
+  "InMemoryStorageFactory",
+  "RecordColumn",
+  "RecordFilter",
+  "RecordMask",
+  "RecordOrder",
+  "RecordQuery",
+  "RecordReadOptions",
+  "RecordSpec",
+  "RecordStorage",
+  "Storage",
+  "StorageContext",
+  "StorageFactory",
 ];
 const expectedTransportExports = [
   "AsyncCloseable",
@@ -308,6 +296,7 @@ const expectedServerExports = [
   "validateEntityStateTransition",
 ];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
+const storageIndexPath = join("packages", "storage", "src", "index.ts");
 const serverIndexPath = join("packages", "server", "src", "index.ts");
 
 const typedocExecutable = process.platform === "win32" ? "typedoc.cmd" : "typedoc";
@@ -481,9 +470,22 @@ const forbiddenTypeDocNamePatterns = [
   /\b\w*EntityConstructor\w*Brand\w*\b/u,
   /\bspineTs\w*\b/u,
 ];
+const forbiddenStorageTypeDocNames = [
+  "RecordEntry",
+  "RecordIdSchema",
+  "RecordMaskApi",
+  "RecordQueryApi",
+  "RecordSpecInput",
+  "StorageObject",
+  "createEventStore",
+];
 const declaredServerExports = collectNamedExports(serverIndexPath);
+const declaredStorageExports = collectNamedExports(storageIndexPath);
 const unexpectedServerExports = declaredServerExports.filter(
   (name) => !expectedServerExports.includes(name),
+);
+const unexpectedStorageExports = declaredStorageExports.filter(
+  (name) => !expectedStorageExports.includes(name),
 );
 
 if (missingExports.length > 0) {
@@ -521,6 +523,13 @@ if (missingStorageExports.length > 0) {
   process.exit(1);
 }
 
+if (unexpectedStorageExports.length > 0) {
+  console.error(
+    `@spine-ts/storage root exports changed without updating docs expectations: ${unexpectedStorageExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
 if (missingTransportExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-ts/transport exports: ${missingTransportExports.join(", ")}`,
@@ -538,12 +547,24 @@ if (forbiddenMatches.length > 0) {
 }
 
 const apiDocsText = JSON.stringify(apiDocs);
+const forbiddenStorageTypeDocNameMatches = forbiddenStorageTypeDocNames.filter((name) =>
+  apiDocsText.includes(name),
+);
 const forbiddenTypeDocNameMatches = forbiddenTypeDocNames.filter((name) =>
   apiDocsText.includes(name),
 );
 const forbiddenTypeDocPatternMatches = forbiddenTypeDocNamePatterns
   .filter((pattern) => pattern.test(apiDocsText))
   .map((pattern) => pattern.toString());
+
+if (forbiddenStorageTypeDocNameMatches.length > 0) {
+  console.error(
+    `TypeDoc JSON exposes internal or removed @spine-ts/storage symbols: ${[
+      ...new Set(forbiddenStorageTypeDocNameMatches),
+    ].join(", ")}`,
+  );
+  process.exit(1);
+}
 
 if (forbiddenTypeDocNameMatches.length > 0 || forbiddenTypeDocPatternMatches.length > 0) {
   console.error(

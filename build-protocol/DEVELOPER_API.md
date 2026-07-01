@@ -103,6 +103,14 @@ The framework may create default repositories from entity classes, but it must a
 - dependency injection;
 - domain-specific repository methods.
 
+The current storage API is intentionally smaller than those future repository
+seams. Adapters implement `StorageFactory.createRecordStorage(context, spec)`,
+and framework-owned delegates such as `EventStore` build on `RecordStorage`
+plus `RecordSpec` instead of depending on a broad storage adapter surface.
+`EventStore` currently stops at persistence and query behavior; it does not
+implement bus dispatch, subscriber delivery, fan-out, retries, or inbox-style
+delivery records.
+
 ## Public Services
 
 The TS framework must keep the Spine gRPC services:

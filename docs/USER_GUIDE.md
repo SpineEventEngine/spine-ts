@@ -111,12 +111,13 @@ the to-do application remain later slices.
   for same-host publish/subscribe and request/reply behavior. The public
   transport API still hides ZeroMQ sockets, endpoint strings, multipart frames,
   native binding types, and production endpoint topology.
-- Storage contracts in `@spine-ts/storage` for write-side entity records,
-  aggregate event histories/snapshots, read-side projection records, delivery
-  records, tenant indexes, and safe diagnostics.
-- `InMemoryStorageAdapter` for deterministic tests and local development. It is
-  isolated per instance, snapshots stored values, supports optimistic version
-  checks, and is not durable across process restarts.
+- Storage contracts in `@spine-ts/storage` for `StorageFactory`,
+  `RecordStorage`, `RecordSpec`, deterministic record queries, and the first
+  storage-only `EventStore` delegate.
+- `InMemoryStorageFactory` and `InMemoryRecordStorage` for deterministic tests
+  and local development. They are isolated per factory/storage instance, keep
+  tenant slices separate, clone stored values, and are not durable across
+  process restarts.
 - A placeholder to-do example workspace.
 
 ## What Is Deferred
@@ -768,47 +769,64 @@ storage, or start transport.
 ## Storage
 
 Use `@spine-ts/storage` when a test or later runtime slice needs framework-owned
-record stores without a repository or database adapter:
+record storage without a repository runtime or database adapter:
 
 ```ts
-import { createInMemoryStorageAdapter, StorageVersionConflictError } from "@spine-ts/storage";
+import { create } from "@bufbuild/protobuf";
+import { EventIdSchema, EventSchema } from "@spine-ts/proto";
+import { EventStore, InMemoryStorageFactory, RecordColumn, RecordSpec } from "@spine-ts/storage";
 
-const storage = createInMemoryStorageAdapter<{ title: string }>();
+const factory = new InMemoryStorageFactory();
+const spec = new RecordSpec({
+  schema: EventSchema,
+  idSchema: EventIdSchema,
+  extractId: (event) => {
+    if (event.id === undefined) {
+      throw new Error("Expected event.id.");
+    }
 
-const created = await storage.writeEntities.put({
-  key: "Task:1",
-  payload: { title: "Draft" },
-  expectedVersion: "absent",
+    return event.id;
+  },
+  columns: [new RecordColumn("typeUrl", (event) => event.message?.typeUrl)],
+});
+const storage = factory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);
+
+await storage.write(
+  create(EventSchema, {
+    id: create(EventIdSchema, { value: "event-1" }),
+  }),
+);
+
+const records = await storage.query({
+  sort: [{ field: "id", direction: "asc" }],
 });
 
-await storage.aggregateEvents.append({
-  streamId: "Task:1",
-  expectedVersion: 0,
-  events: [{ id: "event-1", typeUrl: "type.spine.io/tasks.TaskCreated" }],
-});
-
-try {
-  await storage.writeEntities.put({
-    key: "Task:1",
-    payload: { title: "Stale write" },
-    expectedVersion: created.version - 1,
-  });
-} catch (error) {
-  if (error instanceof StorageVersionConflictError) {
-    console.warn(`Retry record ${error.key} at version ${error.actualVersion}.`);
-  }
-}
+const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+await eventStore.append(
+  create(EventSchema, {
+    id: create(EventIdSchema, { value: "event-2" }),
+  }),
+);
 ```
 
-The storage surface keeps write-side stores (`writeEntities`,
-`aggregateEvents`, `aggregateSnapshots`, and `deliveryRecords`) distinct from
-the read-side projection store (`readProjections`). Command-side runtime code
-must not query read-side projections inside write transactions. The in-memory
-adapter binds payload types to stores, snapshots values with
-`structuredClone()`, and preserves structured-clone-compatible byte payloads
-such as packed `Any.value` data. It does not log payloads, and diagnostic
-records should contain only safe labels, not credentials, auth headers, packed
-bytes, or sensitive payload contents.
+`StorageFactory` owns one mandatory seam: `createRecordStorage(context, spec)`.
+`RecordSpec` binds a generated record schema, optional generated ID schema, ID
+extraction, and query columns. `RecordStorage` then provides cloned writes,
+point reads, deletes, deterministic ID queries, exact column filters, sorting
+by `id`/columns/dotted paths, positive limits, and simple masks on read/query
+results.
+
+`InMemoryStorageFactory` and `InMemoryRecordStorage` are the first concrete
+adapter. They keep multitenant slices separate by `StorageContext.tenantId`,
+clone records on write and read, and are not durable across process restarts.
+
+`EventStore` is the first higher-level delegate over `RecordStorage<EventId,
+Event>`. In this slice it is storage-only: it persists and reads generated
+Spine `Event` messages, but it does not dispatch them to subscribers, manage
+delivery attempts, or implement retry/bus behavior.
+
+Aggregate histories/snapshots, delivery records, tenant indexes, diagnostics,
+repository storage policy, and read-side projection stores are deferred.
 
 ## First Commands
 

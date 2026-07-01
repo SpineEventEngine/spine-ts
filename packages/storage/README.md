@@ -1,62 +1,67 @@
 # @spine-ts/storage
 
-Record-oriented storage contracts and the first in-memory adapter for Spine TS.
+Small JVM-like storage seam for Spine TS runtime records.
 
-The package owns storage interfaces for framework runtime records without
-introducing repositories, buses, services, ZeroMQ, or production database
-dependencies. All storage methods are asynchronous so tests and development can
-use the same seam that future durable adapters will implement.
+The package owns the first corrected storage layer:
 
-## Stores
+- `StorageFactory.createRecordStorage(context, spec)` is the one mandatory
+  adapter method;
+- `RecordSpec` describes identified Protobuf records and query columns;
+- `RecordStorage` stores, reads, deletes, and queries those records;
+- `InMemoryStorageFactory` and `InMemoryRecordStorage` are the first concrete
+  adapter;
+- `EventStore` is a framework delegate over `RecordStorage<EventId, Event>`.
 
-`StorageAdapter` separates write-side and read-side storage concepts:
+`EventStore` is storage-only in this task. It persists and reads `Event`
+records, but it does not implement event-bus dispatch, delivery queues,
+subscriber fan-out, or retry behavior.
 
-- `writeEntities` stores versioned entity state records for future repositories.
-- `aggregateEvents` appends aggregate event histories with expected stream
-  versions.
-- `aggregateSnapshots` stores versioned aggregate snapshots.
-- `readProjections` stores read-side projection/query-model records.
-- `deliveryRecords` stores future inbox/outbox retry records.
-- `tenantIndex` tracks tenant IDs for future multi-tenant runtime discovery.
-- `diagnostics` stores safe framework diagnostics without payload bytes or
-  secret values.
+The package stays independent of `@spine-ts/server`. Storage scoping uses a
+small structural `StorageContext` with `name`, `multitenant`, and optional
+`tenantId`.
 
-Payload types bind to stores, not individual read calls. Package boundaries
-default to `unknown`, and callers that own a typed seam can declare it through
-`StorageAdapter<EntityPayload, AggregateEventPayload, AggregateSnapshotPayload,
-ProjectionPayload, DeliveryPayload>` or the corresponding store interface.
+## Query Model
 
-Record writes use `expectedVersion` for optimistic concurrency. Pass a numeric
-version, `"absent"` for create-only writes, or `"any"` when the caller
-intentionally bypasses the version check. Failed checks throw
-`StorageVersionConflictError` with only key/version metadata.
+`RecordStorage` queries are intentionally small and deterministic:
 
-Payloads that cannot be cloned safely throw `StoragePayloadCloneError` with a
-fixed message. The error does not include payload contents or the original
-structured-clone failure text.
+- exact ID filters;
+- exact column filters;
+- sorting by `id`, stored columns, or simple dotted record paths;
+- positive limits;
+- simple field masks applied to cloned results.
+
+Stored records are cloned on write and read. Generated clone methods are used
+first when available, then Protobuf-ES `clone(schema, message)`, and finally
+`structuredClone()` for non-message values such as stored column data.
 
 ## In-Memory Adapter
 
 ```ts
-import { createInMemoryStorageAdapter } from "@spine-ts/storage";
+import { create } from "@bufbuild/protobuf";
+import { EventIdSchema, EventSchema } from "@spine-ts/proto";
+import { InMemoryStorageFactory, RecordColumn, RecordSpec } from "@spine-ts/storage";
 
-const storage = createInMemoryStorageAdapter<{ title: string }>();
+const factory = new InMemoryStorageFactory();
+const spec = new RecordSpec({
+  schema: EventSchema,
+  idSchema: EventIdSchema,
+  extractId: (event) => {
+    if (event.id === undefined) {
+      throw new Error("Expected event.id.");
+    }
 
-const record = await storage.writeEntities.put({
-  key: "Task:1",
-  payload: { title: "Draft" },
-  expectedVersion: "absent",
+    return event.id;
+  },
+  columns: [new RecordColumn("typeUrl", (event) => event.message?.typeUrl)],
 });
+const storage = factory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);
 
-await storage.writeEntities.put({
-  key: "Task:1",
-  payload: { title: "Published" },
-  expectedVersion: record.version,
-});
+await storage.write(
+  create(EventSchema, {
+    id: create(EventIdSchema, { value: "event-1" }),
+  }),
+);
 ```
 
-`InMemoryStorageAdapter` is deterministic and isolated per instance. It snapshots
-stored values on write and read with Node's `structuredClone()`, preserving
-framework payload shapes such as byte arrays. Payloads must be structured-clone
-compatible. The adapter is explicitly non-durable: data is process-local and is
-lost on restart.
+`InMemoryRecordStorage` keeps deterministic per-tenant slices when the context
+is multitenant. It is process-local and not durable across restarts.

@@ -80,7 +80,14 @@ importers:
         specifier: workspace:*
         version: link:../transport
 
-  packages/storage: {}
+  packages/storage:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-ts/proto':
+        specifier: workspace:*
+        version: link:../proto
 
   packages/testing: {}
 
