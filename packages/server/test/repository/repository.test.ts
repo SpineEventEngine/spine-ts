@@ -4,7 +4,7 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { file_spine_options } from "@spine-ts/proto";
-import { serverEntityMetadataTestFixtures } from "../test-fixtures/entity-metadata-fixtures.js";
+import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 import {
   Aggregate,
@@ -20,7 +20,7 @@ import {
   type RepositoryEntityType,
   type RepositoryIdentitySnapshot,
   type RepositoryOptions,
-} from "../src/index.js";
+} from "../../src/index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;

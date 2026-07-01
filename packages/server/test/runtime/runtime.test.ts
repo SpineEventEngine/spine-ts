@@ -7,7 +7,7 @@ import {
   type ServerRuntimeState,
   type ServerRuntimeStateErrorCode,
   type ServerRuntimeWork,
-} from "../src/runtime.js";
+} from "../../src/runtime/runtime.js";
 
 describe("SingleProcessServerRuntime", () => {
   it("starts and closes with deterministic lifecycle states", async () => {

@@ -9,7 +9,7 @@ import {
   type SignalIntakeFailureDiagnostics,
   type SignalIntakeResult,
   type SignalKind,
-} from "../src/signal-intake.js";
+} from "../../src/runtime/signal-intake.js";
 
 describe("signal intake results", () => {
   it("creates accepted-for-async-work results for command and event signals", () => {

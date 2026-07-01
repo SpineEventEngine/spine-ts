@@ -5,7 +5,7 @@ import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/pr
 import { deriveTypeUrl } from "@spine-ts/core";
 import { CommandSchema, EventSchema, file_spine_options } from "@spine-ts/proto";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { serverEntityMetadataTestFixtures } from "../test-fixtures/entity-metadata-fixtures.js";
+import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 import {
   BoundedContext,
@@ -18,7 +18,7 @@ import {
   type DeferredServerRuntimeRoutingSeam,
   type EventRuntimeRoutingPlan,
   type ServerRuntimeRoutingPlan,
-} from "../src/index.js";
+} from "../../src/index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;

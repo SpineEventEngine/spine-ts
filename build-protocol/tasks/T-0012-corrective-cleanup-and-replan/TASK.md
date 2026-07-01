@@ -1,6 +1,6 @@
 # T-0012: Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.1 integrated; T-0012.2 selected
+Status: T-0012.1 integrated; T-0012.2 implemented and awaiting review
 Start: `2026-07-01 16:48 WEST`
 Baseline commit: `a9769d4`
 Branch: `task/T-0012-cleanup-replan`
@@ -68,9 +68,12 @@ No blocking human question is known.
   `src`, added cleanup checks, passed all review lanes, and passed escalated
   `env CI=true corepack pnpm verify`.
 
-## Next Selected Subtask
+## Current Subtask State
 
-Selected: `T-0012.2 Source Folder Repack`.
+`T-0012.2 Source Folder Repack` is implemented on
+`task/T-0012-2-source-folder-repack` and awaiting review.
+
+## T-0012.2 Selection Rationale
 
 Rationale:
 

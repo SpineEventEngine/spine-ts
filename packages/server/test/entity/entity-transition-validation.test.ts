@@ -4,10 +4,10 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 import { file_spine_options } from "@spine-ts/proto";
-import { serverEntityMetadataTestFixtures } from "../test-fixtures/entity-metadata-fixtures.js";
+import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
-import * as serverRoot from "../src/index.js";
-import { validateEntityStateTransition } from "../src/index.js";
+import * as serverRoot from "../../src/index.js";
+import { validateEntityStateTransition } from "../../src/index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;

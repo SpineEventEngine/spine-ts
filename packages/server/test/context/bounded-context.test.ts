@@ -4,7 +4,7 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 import { file_spine_options } from "@spine-ts/proto";
-import { serverEntityMetadataTestFixtures } from "../test-fixtures/entity-metadata-fixtures.js";
+import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 import {
   Aggregate,
@@ -13,7 +13,7 @@ import {
   Repository,
   type EntityFamily,
   type RepositoryIdentitySnapshot,
-} from "../src/index.js";
+} from "../../src/index.js";
 import {
   BoundedContext,
   BoundedContextBuilder,
@@ -24,8 +24,8 @@ import {
   type BoundedContextRuntimeOptions,
   type ContextSpecSnapshot,
   type TenantMode,
-} from "../src/bounded-context.js";
-import type { ServerRuntimeLifecycle, ServerRuntimeState } from "../src/runtime.js";
+} from "../../src/context/bounded-context.js";
+import type { ServerRuntimeLifecycle, ServerRuntimeState } from "../../src/runtime/runtime.js";
 
 type UntypedConstructor<T> = new (...args: unknown[]) => T;
 
