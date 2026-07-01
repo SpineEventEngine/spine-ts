@@ -9,7 +9,6 @@ import {
   describeEntityMetadata,
   type DescriptorFieldMetadata,
   type DescriptorMessageSchema,
-  type EntityKind,
   type EntityMetadata,
   type FirstFieldRoutingHint,
 } from "../entity/entity-metadata.js";
@@ -122,35 +121,15 @@ export interface RepositoryIdentitySnapshot<
 /** Machine-readable codes for repository identity failures. */
 export type RepositoryIdentityErrorCode = "ENTITY_SCHEMA_KIND_MISMATCH" | "UNSUPPORTED_ENTITY_TYPE";
 
-/** Structured repository identity failure details. */
-export interface RepositoryIdentityErrorDetails {
-  /** Name of the rejected entity constructor. */
-  readonly entityTypeName: string;
-  /** Entity family inferred from the constructor, when one is known. */
-  readonly entityFamily?: EntityFamily;
-  /** Fully qualified Protobuf type name of the rejected state schema, when known. */
-  readonly stateFullTypeName?: string;
-  /** Entity kind declared by the rejected state schema, when known. */
-  readonly stateKind?: EntityKind;
-}
-
 /** Error thrown when repository identity metadata cannot be constructed. */
 export class RepositoryIdentityError extends Error {
   /** Stable code for callers/tests that need structured failure handling. */
   readonly code: RepositoryIdentityErrorCode;
 
-  /** Structured details describing the rejected identity inputs. */
-  readonly details: RepositoryIdentityErrorDetails;
-
-  constructor(
-    code: RepositoryIdentityErrorCode,
-    message: string,
-    details: RepositoryIdentityErrorDetails,
-  ) {
+  constructor(code: RepositoryIdentityErrorCode, message: string) {
     super(message);
     this.name = "RepositoryIdentityError";
     this.code = code;
-    this.details = Object.freeze({ ...details });
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -181,9 +160,6 @@ export class Repository<
         "UNSUPPORTED_ENTITY_TYPE",
         "Repository options must be a non-null object with an entity type class constructor " +
           "extending Aggregate, Projection, or ProcessManager.",
-        {
-          entityTypeName: "(anonymous)",
-        },
       );
     }
 
@@ -195,9 +171,6 @@ export class Repository<
         "UNSUPPORTED_ENTITY_TYPE",
         `Repository entity type "${entityTypeDisplayName}" must be a class constructor ` +
           "extending Aggregate, Projection, or ProcessManager.",
-        {
-          entityTypeName: entityTypeDisplayName,
-        },
       );
     }
 
@@ -207,9 +180,6 @@ export class Repository<
       throw new RepositoryIdentityError(
         "UNSUPPORTED_ENTITY_TYPE",
         `Repository entity type "${entityTypeDisplayName}" must extend Aggregate, Projection, or ProcessManager.`,
-        {
-          entityTypeName: entityTypeDisplayName,
-        },
       );
     }
 
@@ -226,12 +196,6 @@ export class Repository<
         "ENTITY_SCHEMA_KIND_MISMATCH",
         `Repository entity type "${entityTypeDisplayName}" is a ${entityFamily}, but ` +
           `state schema "${metadata.fullTypeName}" declares entity kind "${metadata.kind}".`,
-        {
-          entityTypeName: entityTypeDisplayName,
-          entityFamily,
-          stateFullTypeName: metadata.fullTypeName,
-          stateKind: metadata.kind,
-        },
       );
     }
 
@@ -297,9 +261,6 @@ function readRepositoryEntityTypeOption(options: object): unknown {
       "UNSUPPORTED_ENTITY_TYPE",
       "Repository options entityType must be readable and resolve to a class constructor " +
         "extending Aggregate, Projection, or ProcessManager.",
-      {
-        entityTypeName: "(anonymous)",
-      },
     );
   }
 }
@@ -316,10 +277,6 @@ function readRepositorySchemaOption(
       "ENTITY_SCHEMA_KIND_MISMATCH",
       `Repository entity type "${entityTypeDisplayName}" is a ${entityFamily}, but ` +
         "the supplied state schema could not be read.",
-      {
-        entityTypeName: entityTypeDisplayName,
-        entityFamily,
-      },
     );
   }
 }
@@ -402,25 +359,18 @@ function describeRepositoryEntityMetadata<Schema extends DescriptorMessageSchema
     throw new RepositoryIdentityError(
       "ENTITY_SCHEMA_KIND_MISMATCH",
       `Repository entity type "${entityTypeDisplayName}" is a ${entityFamily}, but ` +
-        "the supplied state schema does not expose supported entity metadata.",
-      {
-        entityTypeName: entityTypeDisplayName,
-        entityFamily,
-        ...schemaNameDetails(schema),
-      },
+        `the supplied state schema${schemaNameMessage(schema)} does not expose supported entity metadata.`,
     );
   }
 }
 
-function schemaNameDetails(
-  schema: unknown,
-): Pick<RepositoryIdentityErrorDetails, "stateFullTypeName"> {
+function schemaNameMessage(schema: unknown): string {
   if ((typeof schema !== "object" && typeof schema !== "function") || schema === null) {
-    return {};
+    return "";
   }
 
   const typeName = safeStringProperty(schema, "typeName");
-  return typeof typeName === "string" && typeName.length > 0 ? { stateFullTypeName: typeName } : {};
+  return typeof typeName === "string" && typeName.length > 0 ? ` "${typeName}"` : "";
 }
 
 function cloneEntityMetadata<Schema extends DescriptorMessageSchema>(

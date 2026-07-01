@@ -13,8 +13,6 @@ import {
 import * as serverRoot from "../src/index.js";
 import {
   BoundedContext,
-  BoundedContextRuntime,
-  type BoundedContextRuntimeOptions,
   CommandRegistrationReadiness,
   type CommandRegistrationAssigneeMetadata,
   type CommandRegistrationReadinessLookup,
@@ -26,13 +24,9 @@ import {
   describeEntityMetadata,
   DescriptorMetadataError,
   isEntitySchema,
-  type BuiltBoundedContextSnapshot,
   type BoundedContextName,
   type BoundedContextSnapshot,
-  type BoundedContextRepositoryRegistrationConflictErrorDetails,
-  type BoundedContextRepositoryRegistrationErrorDetails,
   type BoundedContextRepositoryRegistrationOperation,
-  type BoundedContextRepositorySnapshotErrorDetails,
   type TenantMode,
   Aggregate,
   type EntityVersionMetadata,
@@ -186,7 +180,6 @@ describe("@spine-ts/server", () => {
         "BoundedContextBuilder",
         "BoundedContextNameError",
         "BoundedContextRepositoryRegistrationError",
-        "BoundedContextRuntime",
         "CommandRegistrationReadiness",
         "EntityTransactionDraftStateError",
         "EntityTransaction",
@@ -235,23 +228,11 @@ describe("@spine-ts/server", () => {
     expectTypeOf<PlainEntityVersionMetadata<Date>>().toBeNever();
     expectTypeOf<BoundedContextName>().toEqualTypeOf<{ readonly value: string }>();
     expectTypeOf<TenantMode>().toEqualTypeOf<"single-tenant" | "multitenant">();
-    expectTypeOf<BuiltBoundedContextSnapshot>().toEqualTypeOf<BoundedContextSnapshot>();
     expectTypeOf(
       BoundedContext.singleTenant("Exports").build().snapshot,
-    ).toEqualTypeOf<BuiltBoundedContextSnapshot>();
+    ).toEqualTypeOf<BoundedContextSnapshot>();
     expectTypeOf<BoundedContextRepositoryRegistrationOperation>().toEqualTypeOf<"add" | "remove">();
-    expectTypeOf<BoundedContextRepositoryRegistrationErrorDetails>().toEqualTypeOf<
-      | BoundedContextRepositoryRegistrationConflictErrorDetails
-      | BoundedContextRepositorySnapshotErrorDetails
-    >();
     expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
-    expect(
-      new BoundedContextRuntime(BoundedContext.singleTenant("Exports").build()),
-    ).toBeInstanceOf(BoundedContextRuntime);
-    expectTypeOf<BoundedContextRuntime>().toExtend<ServerRuntimeLifecycle>();
-    expectTypeOf<BoundedContextRuntimeOptions>().toEqualTypeOf<{
-      readonly runtime?: ServerRuntimeLifecycle;
-    }>();
     expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);
     expectTypeOf<SignalKind>().toEqualTypeOf<"command" | "event">();
     expectTypeOf<SignalIntakeAcceptedFor>().toEqualTypeOf<"async-work">();
@@ -306,14 +287,12 @@ describe("@spine-ts/server", () => {
     expectTypeOf<ServerRuntimeStateErrorCode>().toEqualTypeOf<"INVALID_RUNTIME_STATE">();
   });
 
-  it("assembles a bounded-context runtime smoke slice from public APIs", async () => {
+  it("assembles a bounded-context metadata and routing smoke slice from public APIs", () => {
     const repository = new Repository({
       entityType: PublicRuntimeSmokeAggregate,
       schema: AggregateStateSchema,
     });
     const context = BoundedContext.singleTenant("PublicRuntimeSmoke").add(repository).build();
-    const lifecycle = new SingleProcessServerRuntime();
-    const runtime = new BoundedContextRuntime(context, { runtime: lifecycle });
     const handlers = defineEntityHandlers(
       PublicRuntimeSmokeAggregate,
       AggregateStateSchema,
@@ -331,10 +310,10 @@ describe("@spine-ts/server", () => {
       events: eventReadiness,
     });
 
-    expect(runtime.name.value).toBe("PublicRuntimeSmoke");
-    expect(
-      runtime.contextSnapshot.repositories.map((snapshot) => snapshot.stateFullTypeName),
-    ).toEqual([AggregateStateSchema.typeName]);
+    expect(context.name.value).toBe("PublicRuntimeSmoke");
+    expect(context.snapshot.repositories.map((snapshot) => snapshot.stateFullTypeName)).toEqual([
+      AggregateStateSchema.typeName,
+    ]);
     expect(commandReadiness.registeredCommandMessageFullTypeNames()).toEqual([
       CommandSchema.typeName,
     ]);
@@ -352,15 +331,6 @@ describe("@spine-ts/server", () => {
       "subscription",
       "system",
     ]);
-
-    await runtime.start();
-
-    expect(runtime.state).toBe("running");
-
-    await lifecycle.enqueue(() => undefined);
-    await runtime.close();
-
-    expect(runtime.state).toBe("closed");
 
     for (const member of [
       "Server",
@@ -391,8 +361,8 @@ describe("@spine-ts/server", () => {
       "dispatch",
       "ack",
     ]) {
-      expect(member in runtime).toBe(false);
-      expect(Object.hasOwn(runtime, member)).toBe(false);
+      expect(member in context).toBe(false);
+      expect(Object.hasOwn(context, member)).toBe(false);
     }
   });
 

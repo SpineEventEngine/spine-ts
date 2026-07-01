@@ -1,6 +1,6 @@
 # T-0012.3: Delete Or Shrink Abandoned Runtime Abstractions
 
-Status: Created; implementation pending
+Status: Implemented; verification passed; review pending
 Start: `2026-07-01 19:11 WEST`
 Baseline commit: `cb5ace3`
 Branch: `task/T-0012-3-shrink-runtime-abstractions`

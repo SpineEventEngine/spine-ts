@@ -313,10 +313,7 @@ Current bounded-context scope is intentionally limited to immutable metadata:
 - `BoundedContextBuilder.build()` is the only supported path for constructing a
   built `BoundedContext`; and
 - built contexts expose frozen metadata only: name, tenant mode, spec,
-  repository identities, and a copy-safe snapshot of that shell state.
-  `BuiltBoundedContextSnapshot` is the public name for this closed built-context
-  registration contract and is intentionally equivalent to
-  `BoundedContextSnapshot`.
+  repository identities, and a copy-safe `BoundedContextSnapshot`.
 
 This keeps the TypeScript API JVM-familiar without pretending that later
 runtime collaborators already exist. Application code does not subclass
@@ -344,11 +341,10 @@ than a server graph. Its verified public composition is:
 
 - build a metadata-only `BoundedContext` through the existing builder and
   explicit `Repository` identity registration;
-- bind that built context to `BoundedContextRuntime`, using either its private
-  `SingleProcessServerRuntime` or a caller-owned `ServerRuntimeLifecycle`;
 - derive command and event registration-readiness metadata from existing
   `HandlerMetadataRegistry` entries; and
-- start/close the context runtime through deterministic lifecycle state.
+- optionally use `SingleProcessServerRuntime` directly where a caller needs the
+  current lifecycle/queue kernel.
 
 T-0011.6 and T-0011.7 then close the metadata-only runtime-routing/transport
 foundation layer. That later closure derives an immutable runtime-routing plan
@@ -358,11 +354,10 @@ from the built context plus command and event readiness using
 This is intentionally enough for later runtime tasks to share vocabulary and
 tests around "context metadata plus lifecycle plus readiness." It is not an
 equivalent of Spine JVM `Server` or a running JVM-style `BoundedContext`.
-`BoundedContextRuntime` does not expose queue intake, and the readiness views do
-not dispatch or invoke handlers. The runtime-routing plan does not open
-transport endpoints, expose ZeroMQ details, or start workers; it only turns
-existing metadata into transport-owned topics, subscriptions, worker
-registrations, explicit deferred seams, and sanitized planner-local route
+The readiness views do not dispatch or invoke handlers. The runtime-routing
+plan does not open transport endpoints, expose ZeroMQ details, or start
+workers; it only turns existing metadata into transport-owned topics,
+subscriptions, planner-local worker IDs, explicit deferred seams, and sanitized route
 descriptors. Those route descriptors expose message type names/type URLs plus
 stable receiver-group and local route/worker identities, along with transport
 correlation keys back to the top-level topic/subscription/worker arrays only;
@@ -421,7 +416,7 @@ runtime code or expose ZeroMQ through its root API. It defines immutable value
 objects and interfaces that later adapters can implement:
 
 - `TransportSignalKind` names framework-level signal families (`command`,
-  `event`, `query`, `subscription`, `delivery`, and `system`);
+  `event`, `query`, `subscription`, and `system`);
 - `createTransportTopic()` builds immutable topics from a signal kind, a payload
   type URL, and optional semantic tags;
 - `TransportRoutingDescriptor.routingKey` is derived deterministically from the
@@ -429,31 +424,16 @@ objects and interfaces that later adapters can implement:
 - `createTransportSubscription()` builds immutable logical subscription
   descriptors from a topic, a logical subscriber ID, and a transport delivery
   mode; and
-- `createTransportParticipantIdentity()`,
-  `createTransportWorkerRegistration()`, and
-  `createTransportLifecycleSnapshot()` add the first adapter-agnostic
-  broker/worker lifecycle seam using stable participant identities, logical
-  worker roles, subscription-backed registrations, lifecycle states, and
-  readiness states only;
-- `createTransportDeliveryAttempt()`,
-  `classifyTransportDeliveryFailure()`, and
-  `createTransportDeliveryResult()` add data-only delivery/retry boundary
-  values over logical subscriptions, worker identities, stable delivery/target
-  IDs, and redacted failure classification; and
 - `SignalTransport` plus publish/request handler contracts define the minimal
   adapter seam for later runtime integration and graceful async close behavior.
 
 The boundary is intentionally smaller than a bus implementation. It does not
 choose ZeroMQ socket topology, endpoint naming, durable delivery, retry loops
 or timers, process supervision, readiness probes over IPC, handler invocation,
-repository dispatch, storage lifecycle, or read-side execution policy. The
-lifecycle seam records helper state only; it does not start broker or worker
-processes, wire `@spine-ts/server`, or decide restart behavior. Delivery
-attempt/result helpers reject forged derived keys/statuses, classify retry
-eligibility as immutable data, and redact failure details to scalar fields, but
-they do not create inbox/outbox records, deduplicate storage records, schedule
-workers, or run monitor policy. Those decisions remain in later transport and
-runtime tasks.
+repository dispatch, storage lifecycle, read-side execution policy,
+participant lifecycle, worker registrations, delivery attempts/results, or
+retry classification. Those decisions remain in later transport and runtime
+tasks.
 
 The transport package now pins the maintained official `zeromq@6.5.0` line for
 the local IPC adapter foundation. That native dependency is adapter-private: current

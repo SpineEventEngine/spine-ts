@@ -144,7 +144,7 @@ function withPatchedPrototypeMethod<Result>(
 }
 
 describe("server runtime routing", () => {
-  it("plans deterministic command topics and one competing-consumer command worker", () => {
+  it("plans deterministic command topics and one competing-consumer command worker id", () => {
     const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
       builder.assign(AggregateStateSchema, "assignArchive"),
@@ -176,16 +176,7 @@ describe("server runtime routing", () => {
       { subscriberId: "command-worker-1", mode: "competing-consumer" },
       { subscriberId: "command-worker-1", mode: "competing-consumer" },
     ]);
-    expect(plan.commands.workers).toHaveLength(1);
-    expect(plan.commands.workers[0]).toMatchObject({
-      worker: {
-        participantKind: "worker",
-        participantId: "command-worker-1",
-        workerRole: "command-worker",
-      },
-      signalKinds: ["command"],
-    });
-    expect(plan.commands.workers[0]?.subscriptions).toEqual(plan.commands.subscriptions);
+    expect(plan.commands.workerIds).toEqual(["command-worker-1"]);
     expect(plan.commands.routes).toMatchObject([
       {
         routeId: "command-route-1",
@@ -193,7 +184,6 @@ describe("server runtime routing", () => {
         receiverGroup: "command-assignee",
         topicRoutingKey: plan.commands.topics[0]?.routing.routingKey,
         subscriptionDescriptorKey: plan.commands.subscriptions[0]?.descriptorKey,
-        workerRegistrationKey: plan.commands.workers[0]?.registrationKey,
         message: {
           fullTypeName: "AggregateState",
           typeUrl: deriveTypeUrl(AggregateStateSchema),
@@ -205,7 +195,6 @@ describe("server runtime routing", () => {
         receiverGroup: "command-assignee",
         topicRoutingKey: plan.commands.topics[1]?.routing.routingKey,
         subscriptionDescriptorKey: plan.commands.subscriptions[1]?.descriptorKey,
-        workerRegistrationKey: plan.commands.workers[0]?.registrationKey,
         message: {
           fullTypeName: "spine.core.Command",
           typeUrl: deriveTypeUrl(CommandSchema),
@@ -215,6 +204,7 @@ describe("server runtime routing", () => {
     expect(plan.commands.routes[0]).not.toHaveProperty("topic");
     expect(plan.commands.routes[0]).not.toHaveProperty("subscription");
     expect(plan.commands.routes[0]).not.toHaveProperty("worker");
+    expect(plan.commands.routes[0]).not.toHaveProperty("workerRegistrationKey");
   });
 
   it("plans event fan-out routes for subscribers, reactors, and applications while deferring other seams", () => {
@@ -251,9 +241,12 @@ describe("server runtime routing", () => {
     expect(plan.events.reactorRoutes).toHaveLength(1);
     expect(plan.events.applicationRoutes).toHaveLength(1);
     expect(plan.events.subscriptions.every(({ mode }) => mode === "fan-out")).toBe(true);
-    expect(plan.events.workers.every(({ worker }) => worker.workerRole === "event-worker")).toBe(
-      true,
-    );
+    expect(plan.events.workerIds).toEqual([
+      "event-application-worker-1",
+      "event-reactor-worker-1",
+      "event-subscriber-worker-1",
+      "event-subscriber-worker-2",
+    ]);
 
     const subscriberDescriptorKeys = plan.events.subscriberRoutes.map(
       ({ subscriptionDescriptorKey }) => subscriptionDescriptorKey,
@@ -263,13 +256,6 @@ describe("server runtime routing", () => {
     );
     const firstSubscriberRoute = plan.events.subscriberRoutes[0];
     const secondSubscriberRoute = plan.events.subscriberRoutes[1];
-    const firstSubscriberWorker = plan.events.workers.find(
-      ({ worker }) => worker.participantId === firstSubscriberRoute?.workerId,
-    );
-    const secondSubscriberWorker = plan.events.workers.find(
-      ({ worker }) => worker.participantId === secondSubscriberRoute?.workerId,
-    );
-
     expect(new Set(subscriberDescriptorKeys).size).toBe(2);
     expect(new Set(subscriberTopicKeys).size).toBe(1);
     expect(plan.events.subscriberRoutes).toMatchObject([
@@ -279,7 +265,6 @@ describe("server runtime routing", () => {
         receiverGroup: "subscriber",
         topicRoutingKey: plan.events.topics[0]?.routing.routingKey,
         subscriptionDescriptorKey: firstSubscriberRoute?.subscriptionDescriptorKey,
-        workerRegistrationKey: firstSubscriberWorker?.registrationKey,
         message: {
           fullTypeName: EventSchema.typeName,
           typeUrl: deriveTypeUrl(EventSchema),
@@ -291,7 +276,6 @@ describe("server runtime routing", () => {
         receiverGroup: "subscriber",
         topicRoutingKey: plan.events.topics[0]?.routing.routingKey,
         subscriptionDescriptorKey: secondSubscriberRoute?.subscriptionDescriptorKey,
-        workerRegistrationKey: secondSubscriberWorker?.registrationKey,
         message: {
           fullTypeName: EventSchema.typeName,
           typeUrl: deriveTypeUrl(EventSchema),
@@ -301,6 +285,7 @@ describe("server runtime routing", () => {
     expect(plan.events.subscriberRoutes[0]).not.toHaveProperty("topic");
     expect(plan.events.subscriberRoutes[0]).not.toHaveProperty("subscription");
     expect(plan.events.subscriberRoutes[0]).not.toHaveProperty("worker");
+    expect(plan.events.subscriberRoutes[0]).not.toHaveProperty("workerRegistrationKey");
     expect(plan.deferred.map(({ signalKind, status }) => ({ signalKind, status }))).toEqual([
       { signalKind: "query", status: "deferred" },
       { signalKind: "subscription", status: "deferred" },
@@ -368,13 +353,13 @@ describe("server runtime routing", () => {
     expect(absentReadinessPlan.commands).toEqual({
       topics: [],
       subscriptions: [],
-      workers: [],
+      workerIds: [],
       routes: [],
     });
     expect(absentReadinessPlan.events).toEqual({
       topics: [],
       subscriptions: [],
-      workers: [],
+      workerIds: [],
       subscriberRoutes: [],
       reactorRoutes: [],
       applicationRoutes: [],
@@ -582,7 +567,7 @@ describe("server runtime routing", () => {
       "event-subscriber-worker-1",
       "event-subscriber-worker-2",
     ]);
-    expect(new Set(plan.events.workers.map(({ worker }) => worker.participantId)).size).toBe(2);
+    expect(new Set(plan.events.workerIds).size).toBe(2);
   });
 
   it("rejects prototype-forged readiness even when forged metadata looks malformed", () => {
