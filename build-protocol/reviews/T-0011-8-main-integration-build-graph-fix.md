@@ -67,4 +67,11 @@ Verification reported by the authoring sub-agent:
 
 ## Outcome
 
-Round 1 author follow-up completed; pending reviewer re-check.
+Round 1 comments resolved after re-review:
+
+- Code style/maintainability reviewer
+  `019f1bfb-b094-7a42-b178-5501aa7a965a`: no remaining comments.
+- Performance/reliability reviewer
+  `019f1bfc-6edc-7261-9873-cd356aebf37b`: no remaining comments.
+
+All required T-0011.8 review lanes report no remaining comments.
