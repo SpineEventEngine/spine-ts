@@ -443,8 +443,9 @@ transport.
 ## Runtime Assembly Closure
 
 Use the current runtime and transport foundation when framework-owned setup code
-needs to assemble bounded-context metadata, command/event readiness, immutable
-transport routing contracts before buses, services, and storage exist:
+needs to assemble bounded-context metadata, command/event readiness, and
+immutable transport routing contracts for later integrated service hosting,
+bounded-context runtime wiring, and transport/service assembly:
 
 ```ts
 import {

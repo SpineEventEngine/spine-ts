@@ -29,6 +29,12 @@ intake goes through queued `post()`, switch dispatcher schema contracts to
 resolve. Event append failure now has regression coverage proving dispatchers
 are not invoked.
 
+Review round 2 docs cleanup removes stale wording that described command/event
+buses or storage as deferred after this branch introduced them. Remaining
+runtime deferrals are scoped to integrated service hosting, bounded-context
+runtime wiring, handler invocation from runtime workers, transport/service
+assembly, IPC endpoint naming, and process supervision.
+
 ## JVM Alignment
 
 Spine JVM establishes:
@@ -65,10 +71,25 @@ Fresh implementation verification:
 - Escalated `env CI=true corepack pnpm verify` passed after rerunning outside
   the sandbox because the existing ZeroMQ local IPC smoke tests require local
   IPC permissions the sandbox blocks.
-- Final `verify` evidence: 35 test files and 301 tests passed; coverage
-  statements 95.51%, branches 90.10%, functions 97.97%, lines 95.49%.
+- Final `verify` evidence: 35 test files and 302 tests passed; coverage
+  statements 95.61%, branches 90.08%, functions 98.37%, lines 95.60%.
 - Docs/API checks passed with the existing invalid-`origin` TypeDoc warning
   only.
+- Round 2 docs cleanup verification: `pnpm docs:check` passed with the existing
+  invalid-`origin` TypeDoc warning only. TypeDoc JSON reported 100
+  `@spine-ts/proto` exports, 28 `@spine-ts/core` exports, 126
+  `@spine-ts/server` exports, 14 `@spine-ts/storage` exports, and 17
+  `@spine-ts/transport` exports.
+
+## Reviewer Finding Disposition
+
+- Stale deferred-bus/storage wording: fixed in user guide, package README, and
+  API README by scoping deferred work to integrated runtime/service hosting,
+  worker handler invocation, transport/service assembly, IPC endpoint naming,
+  and process supervision.
+- Contradictory final verification evidence: fixed by replacing the stale
+  301-test coverage line with the review-fix final evidence: 35 files, 302
+  tests, statements 95.61%, branches 90.08%, functions 98.37%, lines 95.60%.
 
 ## Changed Files
 

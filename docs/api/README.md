@@ -188,10 +188,11 @@ small sanitized route descriptors. Command routing produces one planner-local
 command-worker competing-consumer subscription over registered command topics.
 Event routing produces fan-out subscriptions and event-worker IDs
 for subscriber, reactor, and application receiver groups while keeping handler
-invocation, storage-before-dispatch, buses, IPC endpoint naming, and process
-supervision deferred. Public route descriptors expose only planner-local route
-and worker IDs, message full type names/type URLs, stable receiver groups, and
-transport correlation keys back to the top-level topics/subscriptions;
+invocation from runtime workers, integrated runtime wiring, service hosting,
+IPC endpoint naming, and process supervision deferred. Public route descriptors
+expose only planner-local route and worker IDs, message full type names/type
+URLs, stable receiver groups, and transport correlation keys back to the
+top-level topics/subscriptions;
 they do not retain raw readiness metadata, entity names, handler method names,
 ZeroMQ endpoint data, socket topology, or duplicate full transport contracts on
 each route. Query, subscription, and system routing remain explicit deferred

@@ -248,9 +248,9 @@ run retry policy, or expose buses/services.
 
 ## Single-Process Runtime Kernel
 
-Use `SingleProcessServerRuntime` when a server runtime part needs an explicit
-local lifecycle and an asynchronous intake boundary before command/event buses,
-delivery, storage, or service hosting exist:
+Use `SingleProcessServerRuntime` as the small local lifecycle and asynchronous
+intake kernel underneath command/event buses and later delivery,
+process-supervision, and service-hosting runtime parts:
 
 ```ts
 import { SingleProcessServerRuntime } from "@spine-ts/server";
