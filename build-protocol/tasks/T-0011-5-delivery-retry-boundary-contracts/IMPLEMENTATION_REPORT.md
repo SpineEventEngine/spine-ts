@@ -22,8 +22,8 @@ contracts:
   identities, delivery IDs, target IDs, and 1-based attempt numbers;
 - `TransportDeliveryFailureClassification*` values with stable failure kind,
   failure code, retry eligibility, and redacted scalar details;
-- `TransportDeliveryResult*` values that derive status from outcome plus retry
-  eligibility and reject forged statuses/result keys; and
+- `TransportDeliveryResult*` values that derive status from outcome, expose
+  retry eligibility separately, and reject forged statuses/result keys; and
 - package/API/architecture docs and API export checks for the new public
   surface.
 
@@ -109,11 +109,19 @@ is committing the verified diff to keep the task resumable.
 - Focused lint-fix verification passed before commit: `corepack pnpm lint`;
   `corepack pnpm test packages/transport/src/index.test.ts` with 1 test file /
   17 tests; `corepack pnpm typecheck`; and `git diff --check`.
-- Full branch-tip verification passed on `2026-07-01 02:38 WEST` after
-  mechanical formatting: `CI=true corepack pnpm verify` passed with 23 test
-  files / 280 tests, coverage 96.16% statements / 90.48% branches / 99.33%
-  functions / 96.10% lines, TypeDoc/API counts 100 proto / 28 core / 124 server
-  / 26 storage / 46 transport exports, copied Spine proto checksum
+- Full branch-tip verification passed after the `2026-07-01 02:39 WEST` lint
+  fix and mechanical formatting follow-up: `CI=true corepack pnpm verify` passed
+  with 23 test files / 280 tests, coverage 96.16% statements / 90.48% branches /
+  99.33% functions / 96.10% lines, TypeDoc/API counts 100 proto / 28 core / 124
+  server / 26 storage / 46 transport exports, copied Spine proto checksum
   verification, proto lint/generate, and generated-clean all passed.
+- Round-two wording/log-order fix on `2026-07-01` updated stale comments, error
+  text, and focused test wording so delivery status derives from outcome only
+  while retry eligibility remains separate data, and clarified the log/report
+  verification chronology as passing after the lint fix.
+- Round-two focused verification passed: focused transport tests with 1 test
+  file / 17 tests; typecheck; docs check with the existing invalid-`origin`
+  TypeDoc warning and 100 proto / 28 core / 124 server / 26 storage / 46
+  transport exports; Prettier check for touched files; and diff check.
 - Fresh branch-tip verification after commit `b2b35d9` passed on
   `2026-07-01 02:41 WEST` with the same counts and coverage.

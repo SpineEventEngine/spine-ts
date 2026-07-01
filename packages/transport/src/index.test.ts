@@ -495,7 +495,7 @@ describe("@spine-ts/transport", () => {
     expect(Object.isFrozen(failure.details)).toBe(true);
   });
 
-  it("derives delivery result status from retry boundary data", () => {
+  it("derives delivery result status from outcome and exposes retry eligibility separately", () => {
     const attempt = createTransportDeliveryAttempt({
       deliveryId: "command-abc-123",
       targetId: "task-42",

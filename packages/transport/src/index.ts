@@ -425,7 +425,7 @@ export interface TransportDeliveryResult<Kind extends TransportSignalKind = Tran
   readonly attempt: TransportDeliveryAttempt<Kind>;
   /** Attempt outcome observed at the boundary. */
   readonly outcome: TransportDeliveryOutcome;
-  /** Status derived from outcome and retry eligibility. */
+  /** Status derived from the delivery outcome. */
   readonly status: TransportDeliveryStatus;
   /** Retry boundary data for later policy consumers. */
   readonly retryEligibility: TransportRetryEligibility;
@@ -640,7 +640,7 @@ export function createTransportDeliveryResult<Kind extends TransportSignalKind>(
   const resultKey = `${attempt.attemptKey}#${status}`;
 
   if (input.status !== undefined && normalizeTransportDeliveryStatus(input.status) !== status) {
-    throw new Error("Transport delivery status must match outcome and retry eligibility.");
+    throw new Error("Transport delivery status must match delivery outcome.");
   }
 
   if (input.resultKey !== undefined && input.resultKey !== resultKey) {
