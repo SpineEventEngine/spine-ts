@@ -133,3 +133,21 @@ Follow-up fixes are authored for all remaining Round 2 Important findings:
 
 Focused RED/GREEN evidence and final verification are recorded in
 `build-protocol/tasks/T-0012-1-cleanup-enforcement-baseline/IMPLEMENTATION_REPORT.md`.
+
+Author follow-up agent `019f1e97-2701-79d0-8d2e-291409d45caf` committed
+`a45a9bc` and is closed.
+
+## Round 3 Re-review
+
+Round 3 reviewers must re-check the full package
+`.superpowers/sdd/review-147d496..a45a9bc.diff`, with special attention to
+Round 2 documentation pointers, generated-path symlink ancestor rejection, and
+fresh-clone `pnpm lint` behavior.
+
+Reviewer lanes:
+
+- Code style/maintainability: pending.
+- Documentation: pending.
+- TypeScript/API docs: pending.
+- Security: pending.
+- Performance/reliability: pending.
