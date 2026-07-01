@@ -11,7 +11,8 @@ Current slice exposes:
   creating builder shells with immutable context names,
   `ContextSpec` values exposed through `builder.spec` and `context.spec`, tenant
   mode metadata, command/event dispatcher collection, storage-factory injection
-  for event storage, and built contexts that own `CommandBus` and `EventBus`;
+  for event and repository record storage, repository registration lists, and
+  built contexts that own `CommandBus` and `EventBus`;
   and
 - `Entity<Id, Schema, Version>` for a common abstract OOP state shell with
   identity, descriptor-derived metadata, cloned Protobuf-ES state snapshots,
@@ -23,8 +24,9 @@ Current slice exposes:
 - `Aggregate`, `Projection`, and `ProcessManager` abstract family marker classes
   over `TransactionalEntity`, each exposing a stable `entityFamily` identity;
   and
-- `new Repository({ entityType, schema })` for metadata-only repository identity
-  over one entity constructor and matching entity state schema;
+- `new Repository({ entityType, schema })` for repository identity and bounded
+  context registration over one entity constructor and matching entity state
+  schema;
   and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
@@ -398,7 +400,8 @@ immutable value exposed from the builder and built context. `build()` returns a
 `BoundedContext` that owns mutable command/event buses internally while exposing
 post-only `commandBus()` and `eventBus()` endpoints. The endpoints do not expose
 late dispatcher registration. Builders collect dispatchers and can inject the
-`StorageFactory` used to create the context `EventStore`:
+`StorageFactory` used to create the context `EventStore` and repository record
+storages:
 
 ```ts
 import { BoundedContext } from "@spine-ts/server";
@@ -414,13 +417,17 @@ await tasks.commandBus().post(commandEnvelope);
 await tasks.eventBus().post(eventEnvelope);
 ```
 
-`add(repository)` and `remove(repository)` are tiny chainable pending no-ops for
-the later repository runtime task.
+`add(repository)` appends a repository to the builder registration list, and
+`remove(repository)` removes it before build. `build()` registers the listed
+repositories with the built context, opens repository `RecordStorage` through
+the context storage factory, and exposes `registeredRepositories()` as a
+copy-safe list for later routing slices. Repeated add/register of the same
+repository in the same context is idempotent. Registering the same repository
+instance with another built context is rejected.
 
 This slice deliberately does not create default repositories from entity
-classes, perform runtime repository registration, invoke handlers, open
-repository storage, construct system contexts, start query/subscription buses,
-write tenant indexes, expose gRPC services, or integrate transports.
+classes, invoke handlers, construct system contexts, start query/subscription
+buses, write tenant indexes, expose gRPC services, or integrate transports.
 
 ## Entity State Shell
 
@@ -514,8 +521,12 @@ const repository = new Repository({
 repository.entityFamily; // "aggregate"
 repository.stateFullTypeName; // TaskStateSchema.typeName
 repository.snapshot.stateFullTypeName; // immutable fresh-copy snapshot
+repository.isRegistered(); // false
 
 const tasks = BoundedContext.singleTenant("Tasks").add(repository).build();
+repository.isRegistered(); // true
+repository.registeredContextName?.value; // "Tasks"
+tasks.registeredRepositories(); // [repository]
 ```
 
 The constructor derives descriptor metadata with `describeEntityMetadata()` and
@@ -527,12 +538,15 @@ metadata; this is not a sandbox boundary. The API rejects constructors outside
 those families and rejects mismatched family/schema pairs, such as an aggregate
 class with a projection state schema, with simple `RepositoryIdentityError`
 code/message diagnostics. `BoundedContextBuilder.add(repository)` and
-`remove(repository)` currently accept these identities as chainable pending
-no-ops only. Runtime context registration remains deferred. This identity seam
-follows Spine `core-jvm` `Repository` identity concepts closely. This API is
-metadata-only: it does not create, find, or store entities; open storage;
-register with a bounded context; route messages; invoke handlers; write inboxes;
-manage caches; emit lifecycle events; or touch transport.
+`remove(repository)` maintain the builder registration list, and `build()`
+registers each listed repository with the built context. Registration opens a
+state `RecordStorage` using the repository state schema and the context
+`StorageFactory`. The same repository can be registered with the same context
+again without reopening storage, but cannot be registered with a different
+context. This seam follows Spine `core-jvm` `Repository` identity and
+registration concepts closely. This API does not create, find, or store
+entities; route messages; invoke handlers; write inboxes; manage caches; emit
+lifecycle events; or touch transport.
 
 ## Entity State Transition Validation
 

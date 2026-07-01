@@ -1,13 +1,21 @@
-import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
+import {
+  InMemoryRecordStorage,
+  type RecordSpec,
+  type RecordStorage,
+  type StorageContext,
+  StorageFactory,
+} from "@spine-ts/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { file_spine_options } from "@spine-ts/proto";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 import {
   Aggregate,
+  BoundedContext,
   describeEntityMetadata,
   ProcessManager,
   Projection,
@@ -551,6 +559,91 @@ describe("repository identity", () => {
     expect(new NamedProjectionRepository().label).toBe("task-projections");
   });
 
+  it("registers with one built context and exposes copy-safe registration metadata", () => {
+    const storageFactory = new CreationTrackingStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks").withStorageFactory(storageFactory).build();
+    const repository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+
+    expect(repository.isRegistered()).toBe(false);
+    expect(repository.registeredContextName).toBeUndefined();
+
+    repository.registerWith(context);
+
+    const firstName = repository.registeredContextName;
+    const secondName = repository.registeredContextName;
+    expect(repository.isRegistered()).toBe(true);
+    expect(firstName?.value).toBe("Tasks");
+    expect(secondName).toEqual(firstName);
+    expect(secondName).not.toBe(firstName);
+    expect(storageFactory.creations).toHaveLength(2);
+    expect(stateTypeName(storageFactory.creations[1])).toBe(AggregateStateSchema.typeName);
+  });
+
+  it("keeps repeated registration with the same context idempotent", () => {
+    const storageFactory = new CreationTrackingStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks").withStorageFactory(storageFactory).build();
+    const repository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+
+    repository.registerWith(context);
+    repository.registerWith(context);
+
+    expect(repository.isRegistered()).toBe(true);
+    expect(storageFactory.creations).toHaveLength(2);
+  });
+
+  it("rejects registering the same repository with two built contexts", () => {
+    const repository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+
+    repository.registerWith(BoundedContext.singleTenant("Tasks").build());
+
+    expect(() => {
+      repository.registerWith(BoundedContext.singleTenant("Customers").build());
+    }).toThrow("already registered with Bounded Context");
+    expect(repository.registeredContextName?.value).toBe("Tasks");
+  });
+
+  it("does not expose repository query, routing, cache, delivery, or default factory APIs", () => {
+    const repository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const forbiddenMembers = [
+      "create",
+      "store",
+      "find",
+      "index",
+      "iterator",
+      "dispatch",
+      "invoke",
+      "route",
+      "cache",
+      "repositoryCache",
+      "delivery",
+      "inbox",
+      "stand",
+      "defaultRepository",
+      "of",
+      "createEntity",
+      "storage",
+      "recordStorage",
+      "openStorage",
+    ];
+
+    for (const member of forbiddenMembers) {
+      expect(member in repository).toBe(false);
+      expect(Object.hasOwn(repository, member)).toBe(false);
+    }
+  });
+
   it("constrains entity constructor and schema pairs at compile time", () => {
     const assertRepositoryOptionTypes = () => {
       new Repository({
@@ -732,3 +825,36 @@ describe("repository identity", () => {
     expectTypeOf(assertRepositoryOptionTypes).not.toBeAny();
   });
 });
+
+interface StorageCreation {
+  readonly context: StorageContext;
+  readonly recordSpec: RecordSpec<unknown, Message>;
+}
+
+class CreationTrackingStorageFactory extends StorageFactory {
+  readonly creations: StorageCreation[] = [];
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    this.creations.push({ context, recordSpec });
+    return new InMemoryRecordStorage(context, recordSpec);
+  }
+}
+
+function stateTypeName(creation: StorageCreation | undefined): string | undefined {
+  if (creation === undefined) {
+    return undefined;
+  }
+
+  const record = creation.recordSpec.materialize(
+    create(AggregateStateSchema, {
+      id: "task-1",
+      name: "Task",
+      archived: false,
+    }),
+  ).record;
+
+  return record.$typeName;
+}

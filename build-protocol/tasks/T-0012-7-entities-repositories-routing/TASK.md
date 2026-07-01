@@ -1,6 +1,6 @@
 # T-0012.7: Repository Registration And Storage Opening
 
-Status: setup complete; implementation selected
+Status: implemented; verification passed
 Start: `2026-07-01 23:41 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7-entities-repositories-routing`

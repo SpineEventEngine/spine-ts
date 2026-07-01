@@ -180,7 +180,72 @@ describe("BoundedContext assembly", () => {
     expect(observed).toEqual(["store:event-3", "dispatch:event-3"]);
   });
 
-  it("keeps repository add/remove as pending no-op builder-only seams", () => {
+  it("registers repositories added to the builder with the built context", () => {
+    const storageFactory = new ObservingStorageFactory([]);
+    const repository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .add(repository)
+      .build();
+
+    const firstRepositories = context.registeredRepositories();
+    const secondRepositories = context.registeredRepositories();
+
+    expect(repository.isRegistered()).toBe(true);
+    expect(repository.registeredContextName?.value).toBe("Tasks");
+    expect(firstRepositories).toEqual([repository]);
+    expect(secondRepositories).toEqual(firstRepositories);
+    expect(secondRepositories).not.toBe(firstRepositories);
+    expect(storageFactory.creations).toHaveLength(2);
+    expect(stateTypeName(storageFactory.creations[1])).toBe(AggregateStateSchema.typeName);
+  });
+
+  it("does not register repositories removed before build", () => {
+    const repository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).remove(repository).build();
+
+    expect(repository.isRegistered()).toBe(false);
+    expect(context.registeredRepositories()).toEqual([]);
+  });
+
+  it("keeps repeated add of the same repository idempotent for one built context", () => {
+    const storageFactory = new ObservingStorageFactory([]);
+    const repository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .add(repository)
+      .add(repository)
+      .build();
+
+    expect(repository.isRegistered()).toBe(true);
+    expect(context.registeredRepositories()).toEqual([repository]);
+    expect(storageFactory.creations).toHaveLength(2);
+  });
+
+  it("rejects registering one repository instance with two built contexts", () => {
+    const repository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+
+    BoundedContext.singleTenant("Tasks").add(repository).build();
+
+    expect(() => BoundedContext.singleTenant("Customers").add(repository).build()).toThrow(
+      "already registered with Bounded Context",
+    );
+    expect(repository.registeredContextName?.value).toBe("Tasks");
+  });
+
+  it("keeps add and remove chainable while maintaining the registration list", () => {
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: AggregateStateSchema,
@@ -189,9 +254,6 @@ describe("BoundedContext assembly", () => {
 
     expect(builder.add(repository)).toBe(builder);
     expect(builder.remove(repository)).toBe(builder);
-    expect(builder.add(repository).build().snapshot).toEqual(
-      builder.remove(repository).build().snapshot,
-    );
     expect(builder).toBeInstanceOf(BoundedContextBuilder);
   });
 
@@ -201,6 +263,8 @@ describe("BoundedContext assembly", () => {
       "repositories",
       "register",
       "registerRepository",
+      "storage",
+      "storageFactory",
       "delivery",
       "stand",
       "grpc",
@@ -222,6 +286,8 @@ describe("BoundedContext assembly", () => {
 });
 
 class ObservingStorageFactory extends StorageFactory {
+  readonly creations: StorageCreation[] = [];
+
   constructor(private readonly observed: string[]) {
     super();
   }
@@ -230,6 +296,7 @@ class ObservingStorageFactory extends StorageFactory {
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
   ): RecordStorage<I, R> {
+    this.creations.push({ context, recordSpec });
     return new ObservingRecordStorage(context, recordSpec, this.observed);
   }
 }
@@ -303,4 +370,25 @@ function createProjectionEvent(id: string) {
       priority: 1,
     }),
   });
+}
+
+interface StorageCreation {
+  readonly context: StorageContext;
+  readonly recordSpec: RecordSpec<unknown, Message>;
+}
+
+function stateTypeName(creation: StorageCreation | undefined): string | undefined {
+  if (creation === undefined) {
+    return undefined;
+  }
+
+  const record = creation.recordSpec.materialize(
+    create(AggregateStateSchema, {
+      id: "task-1",
+      name: "Task",
+      archived: false,
+    }),
+  ).record;
+
+  return record.$typeName;
 }

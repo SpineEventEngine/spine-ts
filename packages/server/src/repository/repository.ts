@@ -1,3 +1,6 @@
+import type { Message } from "@bufbuild/protobuf";
+import { RecordColumn, RecordSpec, type RecordStorage } from "@spine-ts/storage";
+
 import {
   Aggregate,
   type Entity,
@@ -5,6 +8,12 @@ import {
   Projection,
   type EntityFamily,
 } from "../entity/entity.js";
+import {
+  boundedContextRegistrations,
+  type BoundedContext,
+  type BoundedContextName,
+  type BoundedContextRegistration,
+} from "../context/bounded-context.js";
 import {
   describeEntityMetadata,
   type DescriptorFieldMetadata,
@@ -137,10 +146,11 @@ export class RepositoryIdentityError extends Error {
 /**
  * Metadata-only repository identity over one entity constructor and state schema.
  *
- * The class records the ownership facts later bounded-context registration will
- * need for duplicate and conflict checks. It does not create entities, find or
- * store records, open storage, register with a context, route messages, invoke
- * handlers, manage caches, emit lifecycle events, or start buses/transports.
+ * The class records the ownership facts bounded-context registration needs for
+ * duplicate and conflict checks. Registration assigns one built context and
+ * opens state record storage through that context's storage factory. It does
+ * not create entities, find or store records, route messages, invoke handlers,
+ * manage caches, emit lifecycle events, or start buses/transports.
  *
  * @typeParam EntityType - A single concrete aggregate, projection, or process-manager constructor
  * with one concrete generated state schema. Broad constructor, constructor-union, broad-schema, and
@@ -152,6 +162,9 @@ export class Repository<
   readonly #entityType: EntityType;
   readonly #entityFamily: EntityFamily;
   readonly #metadata: EntityMetadata<RepositoryStateSchema<EntityType>>;
+  #contextIdentity: object | undefined;
+  #contextName: BoundedContextName | undefined;
+  #storage: RecordStorage<unknown, Message> | undefined;
 
   /** Create repository identity metadata for exactly one entity family/state schema pair. */
   constructor(options: RepositoryOptions<EntityType>) {
@@ -163,7 +176,7 @@ export class Repository<
       );
     }
 
-    const entityType = readRepositoryEntityTypeOption(options);
+    const entityType = readEntityTypeOption(options);
     const entityTypeDisplayName = entityTypeName(entityType);
 
     if (typeof entityType !== "function" || !isClassConstructor(entityType)) {
@@ -247,13 +260,92 @@ export class Repository<
       idField: cloneFieldMetadata(metadata.idField),
     });
   }
+
+  /** Whether this repository has been registered with a built bounded context. */
+  isRegistered(): boolean {
+    return this.#contextIdentity !== undefined && this.#storage !== undefined;
+  }
+
+  /** Copy-safe name of the bounded context this repository is registered with, if any. */
+  get registeredContextName(): BoundedContextName | undefined {
+    return this.#contextName === undefined ? undefined : cloneBoundedContextName(this.#contextName);
+  }
+
+  /** Registers this repository with one built bounded context and opens its state storage. */
+  registerWith(context: BoundedContext): void {
+    const registration = boundedContextRegistrations.get(context);
+
+    if (registration === undefined) {
+      throw new Error("Repository registration requires a built Bounded Context.");
+    }
+
+    if (registration.identity === this.#contextIdentity) {
+      return;
+    }
+    if (this.#contextIdentity !== undefined) {
+      throw new Error(
+        `Repository for "${this.stateFullTypeName}" is already registered with Bounded Context ` +
+          `"${this.#contextName?.value ?? "(unknown)"}".`,
+      );
+    }
+
+    const storage = createRepositoryStorage(
+      registration,
+      createRepositoryRecordSpec(this.#metadata),
+    );
+    this.#contextIdentity = registration.identity;
+    this.#contextName = cloneBoundedContextName(registration.name);
+    this.#storage = storage;
+  }
+}
+
+function createRepositoryStorage(
+  registration: BoundedContextRegistration,
+  recordSpec: RecordSpec<unknown, Message>,
+): RecordStorage<unknown, Message> {
+  return registration.storageFactory.createRecordStorage(registration.storageContext, recordSpec);
+}
+
+function createRepositoryRecordSpec<Schema extends DescriptorMessageSchema>(
+  metadata: EntityMetadata<Schema>,
+): RecordSpec<unknown, Message> {
+  return new RecordSpec<unknown, Message>({
+    schema: metadata.schema,
+    extractId: (record) => readRecordId(record, metadata),
+    columns: metadata.columns.map(
+      (field) => new RecordColumn(field.name, (record) => readRecordField(record, field.localName)),
+    ),
+  });
+}
+
+function readRecordId<Schema extends DescriptorMessageSchema>(
+  record: Message,
+  metadata: EntityMetadata<Schema>,
+): unknown {
+  const value = readRecordField(record, metadata.idField.localName);
+
+  if (value === undefined || value === null) {
+    throw new Error(
+      `Repository state "${metadata.fullTypeName}" requires ID field "${metadata.idField.name}".`,
+    );
+  }
+
+  return value;
+}
+
+function readRecordField(record: Message, localName: string): unknown {
+  return (record as Record<string, unknown>)[localName];
+}
+
+function cloneBoundedContextName(name: BoundedContextName): BoundedContextName {
+  return Object.freeze({ value: name.value });
 }
 
 function isRepositoryOptionsObject(options: unknown): options is object {
   return typeof options === "object" && options !== null;
 }
 
-function readRepositoryEntityTypeOption(options: object): unknown {
+function readEntityTypeOption(options: object): unknown {
   try {
     return (options as { readonly entityType: unknown }).entityType;
   } catch {

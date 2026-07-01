@@ -2,7 +2,7 @@
 
 Current status: early framework guide for the descriptor registry,
 single-message validation facade, core envelope construction helpers, the first
-server entity, handler, repository identity, and bounded-context metadata
+server entity, handler, repository, and bounded-context metadata
 layers, the first command/event bus seam, the first server runtime routing
 seam, adapter-agnostic transport contracts, and the first storage contracts
 with an in-memory adapter.
@@ -19,7 +19,7 @@ handlers or mutating global runtime state. It also exposes built-in
 `(set_once)` entity state transition validation, a buffered entity transaction
 boundary, thin aggregate/projection/process-manager family base classes, a
 caller-owned handler metadata registry for duplicate validation and lookup-only
-views, a metadata-only repository identity seam, and a first metadata-only
+views, a repository identity and registration seam, and a first
 bounded-context builder shell.
 `@spine-ts/transport` now exposes adapter-agnostic topics, subscriptions,
 broker/worker lifecycle contracts, delivery/retry boundary data, and
@@ -72,10 +72,11 @@ the to-do application remain later slices.
   the entity shell.
 - Thin abstract `Aggregate`, `Projection`, and `ProcessManager` family marker
   classes over `TransactionalEntity`, each with stable `entityFamily` identity.
-- A metadata-only `Repository` identity API that binds one aggregate,
+- A `Repository` identity and registration API that binds one aggregate,
   projection, or process-manager constructor to one matching entity state
-  schema and returns immutable fresh-copy snapshots for later registration
-  checks.
+  schema, returns immutable fresh-copy snapshots for later checks, registers
+  with one built bounded context, and opens state record storage through that
+  context's storage factory.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.
@@ -367,11 +368,11 @@ buses, or lifecycle events.
 
 ## Repository Identity
 
-Use `Repository` when code needs to record entity ownership metadata before
-runtime bounded-context registration exists:
+Use `Repository` when code needs to record entity ownership metadata and attach
+that repository to one built bounded context:
 
 ```ts
-import { Aggregate, Repository } from "@spine-ts/server";
+import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
 import { TaskStateSchema } from "./generated/tasks_pb.js";
 
 class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
@@ -384,6 +385,12 @@ const repository = new Repository({
 repository.entityFamily; // "aggregate"
 repository.metadata.fullTypeName; // TaskStateSchema.typeName
 repository.snapshot.idField.name; // "id"
+repository.isRegistered(); // false
+
+const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+repository.isRegistered(); // true
+repository.registeredContextName?.value; // "Tasks"
+context.registeredRepositories(); // [repository]
 ```
 
 `Repository` infers the family from the constructor and instance prototype
@@ -394,13 +401,16 @@ same-realm metadata boundary: code that explicitly reparents an ES class onto an
 entity family is trusted as entity metadata, not rejected as an adversarial
 sandbox escape. Mismatches, such as an aggregate constructor paired with a
 projection state schema, throw `RepositoryIdentityError` with stable
-code/message diagnostics. `snapshot` returns a frozen fresh copy suitable for later
-bounded-context duplicate and conflict checks.
+code/message diagnostics. `snapshot` returns a frozen fresh copy suitable for
+bounded-context duplicate and conflict checks. Registration with the same built
+context is idempotent. Registration with a different built context is rejected.
+Registration opens a `RecordStorage` for the repository state schema using the
+context `StorageFactory`.
 
-This is explicitly metadata-only. It does not create, find, or store entities;
-open storage; convert records; register with a bounded context; route or
-dispatch messages; write inboxes; invoke handlers; manage caches; run catch-up;
-emit lifecycle events; expose query stands; start buses; or use gRPC/transport.
+This slice still does not create, find, or store entities; convert entity
+records; route or dispatch messages through repositories; write inboxes; invoke
+handlers; manage caches; run catch-up; emit lifecycle events; expose query
+stands; start buses from repositories; or use gRPC/transport.
 
 ## Bounded Context Assembly
 
@@ -428,11 +438,14 @@ storage. `commandBus()` and `eventBus()` expose only `post()`; late dispatcher
 registration stays on the builder and concrete bus classes. Event posting stores
 through that event store before dispatcher fan-out.
 
-`add(repository)` and `remove(repository)` still exist only as chainable pending
-no-ops for a later repository runtime seam. They do not create default
-repositories, register repositories into a live context, open repository
-storage, register type suppliers with a stand, route repository messages, invoke
-handlers, write inboxes, emit lifecycle events, or start transport.
+`add(repository)` and `remove(repository)` maintain the builder's repository
+registration list. `build()` registers the listed repositories with the built
+context and opens their state record storage through the context
+`StorageFactory`. Repeated add/register of the same repository in the same
+context is idempotent, and `registeredRepositories()` returns a copy-safe list.
+This slice still does not create default repositories, register type suppliers
+with a stand, route repository messages, invoke handlers, write inboxes, emit
+lifecycle events, or start transport.
 
 ## Runtime Assembly Closure
 

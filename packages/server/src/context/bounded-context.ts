@@ -1,5 +1,10 @@
 import type { Command, Event } from "@spine-ts/proto";
-import { EventStore, InMemoryStorageFactory, type StorageFactory } from "@spine-ts/storage";
+import {
+  EventStore,
+  InMemoryStorageFactory,
+  type StorageContext,
+  type StorageFactory,
+} from "@spine-ts/storage";
 
 import { CommandBus } from "../bus/command-bus.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
@@ -40,6 +45,22 @@ export interface BoundedContextSnapshot {
   readonly spec: ContextSpecSnapshot;
 }
 
+/** @internal Context-owned storage data needed when repositories register. */
+export interface BoundedContextRegistration {
+  /** Built context identity used for idempotence checks. */
+  readonly identity: object;
+  /** Bounded context name. */
+  readonly name: BoundedContextName;
+  /** Storage context derived from the bounded context spec. */
+  readonly storageContext: StorageContext;
+  /** Context storage factory. */
+  readonly storageFactory: StorageFactory;
+}
+
+/** @internal Built-context registration data for repository lifecycle registration. */
+export const boundedContextRegistrations: WeakMap<BoundedContext, BoundedContextRegistration> =
+  new WeakMap<BoundedContext, BoundedContextRegistration>();
+
 /** Post-only command endpoint exposed by a built bounded context. */
 export interface CommandEndpoint {
   /** Posts a command into the context-owned command bus. */
@@ -78,6 +99,8 @@ let constructBoundedContext:
       snapshot: BoundedContextSnapshot,
       commandBus: CommandBus,
       eventBus: EventBus,
+      storageFactory: StorageFactory,
+      repositories: readonly RegisteredRepository[],
       token: FrameworkConstructionToken,
     ) => BoundedContext)
   | undefined;
@@ -94,10 +117,19 @@ export class BoundedContext {
   readonly #eventBus: EventBus;
   readonly #commandEndpoint: CommandEndpoint;
   readonly #eventEndpoint: EventEndpoint;
+  readonly #registeredRepositories = new Set<RegisteredRepository>();
+  readonly #storageFactory: StorageFactory;
 
   static {
-    constructBoundedContext = (snapshot, commandBus, eventBus, token): BoundedContext =>
-      new BoundedContext(snapshot, commandBus, eventBus, token);
+    constructBoundedContext = (
+      snapshot,
+      commandBus,
+      eventBus,
+      storageFactory,
+      repositories,
+      token,
+    ): BoundedContext =>
+      new BoundedContext(snapshot, commandBus, eventBus, storageFactory, repositories, token);
   }
 
   /** Framework-owned constructor. Use `BoundedContext.singleTenant(name)` or `.multitenant(name)`. */
@@ -105,18 +137,30 @@ export class BoundedContext {
     snapshot: BoundedContextSnapshot,
     commandBus: CommandBus,
     eventBus: EventBus,
+    storageFactory: StorageFactory,
+    repositories: readonly RegisteredRepository[],
     token: FrameworkConstructionToken,
   ) {
     requireFrameworkConstructionToken(token, "BoundedContext instances are framework-owned.");
     this.#snapshot = cloneContextSnapshot(snapshot);
     this.#commandBus = commandBus;
     this.#eventBus = eventBus;
+    this.#storageFactory = storageFactory;
     this.#commandEndpoint = Object.freeze({
       post: (command: Command) => this.#commandBus.post(command),
     });
     this.#eventEndpoint = Object.freeze({
       post: (event: Event) => this.#eventBus.post(event),
     });
+    boundedContextRegistrations.set(this, {
+      identity: this,
+      name: cloneName(this.#snapshot.name),
+      storageContext: createStorageContext(this.#snapshot.spec),
+      storageFactory: this.#storageFactory,
+    });
+    for (const repository of repositories) {
+      this.#registerRepository(repository);
+    }
     Object.freeze(this);
   }
 
@@ -164,6 +208,16 @@ export class BoundedContext {
   eventBus(): EventEndpoint {
     return this.#eventEndpoint;
   }
+
+  /** Copy-safe list of repositories registered with this context. */
+  registeredRepositories(): readonly RegisteredRepository[] {
+    return [...this.#registeredRepositories];
+  }
+
+  #registerRepository(repository: RegisteredRepository): void {
+    repository.registerWith(this);
+    this.#registeredRepositories.add(repository);
+  }
 }
 
 /** Builder for assembling a JVM-familiar {@link BoundedContext}. */
@@ -171,6 +225,7 @@ export class BoundedContextBuilder {
   readonly #specSnapshot: ContextSpecSnapshot;
   readonly #commandDispatchers = new Set<CommandDispatcher>();
   readonly #eventDispatchers = new Set<EventDispatcher>();
+  readonly #repositories = new Set<RegisteredRepository>();
   #storageFactory: StorageFactory | undefined;
 
   static {
@@ -208,19 +263,19 @@ export class BoundedContextBuilder {
     return this.#specSnapshot.multitenant;
   }
 
-  /** Pending repository seam. Repository runtime registration is not implemented yet. */
+  /** Adds a repository to the context registration list. */
   add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
     repository: Repository<EntityType>,
   ): this {
-    void repository;
+    this.#repositories.add(repository);
     return this;
   }
 
-  /** Pending repository seam. Repository runtime registration is not implemented yet. */
+  /** Removes a repository from the context registration list. */
   remove<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
     repository: Repository<EntityType>,
   ): this {
-    void repository;
+    this.#repositories.delete(repository);
     return this;
   }
 
@@ -256,21 +311,18 @@ export class BoundedContextBuilder {
 
   /** Builds a bounded context that owns configured command and event buses. */
   build(): BoundedContext {
+    const storageFactory = this.#storageFactory ?? new InMemoryStorageFactory();
     const commandBus = new CommandBus([...this.#commandDispatchers]);
-    const eventStore = this.createEventStore();
+    const eventStore = this.createEventStore(storageFactory);
     const eventBus = new EventBus(eventStore, [...this.#eventDispatchers]);
 
-    return createBoundedContext(this.#specSnapshot, commandBus, eventBus);
+    return createBoundedContext(this.#specSnapshot, commandBus, eventBus, storageFactory, [
+      ...this.#repositories,
+    ]);
   }
 
-  private createEventStore(): EventStore {
-    return new EventStore(
-      {
-        name: this.#specSnapshot.name.value,
-        multitenant: this.#specSnapshot.multitenant,
-      },
-      this.#storageFactory ?? new InMemoryStorageFactory(),
-    );
+  private createEventStore(storageFactory: StorageFactory): EventStore {
+    return new EventStore(createStorageContext(this.#specSnapshot), storageFactory);
   }
 }
 
@@ -341,6 +393,8 @@ function createBoundedContext(
   specSnapshot: ContextSpecSnapshot,
   commandBus: CommandBus,
   eventBus: EventBus,
+  storageFactory: StorageFactory,
+  repositories: readonly RegisteredRepository[],
 ): BoundedContext {
   if (constructBoundedContext === undefined) {
     throw new TypeError("BoundedContext factory is unavailable.");
@@ -354,8 +408,17 @@ function createBoundedContext(
     },
     commandBus,
     eventBus,
+    storageFactory,
+    repositories,
     frameworkConstructionToken,
   );
+}
+
+function createStorageContext(specSnapshot: ContextSpecSnapshot): StorageContext {
+  return Object.freeze({
+    name: specSnapshot.name.value,
+    multitenant: specSnapshot.multitenant,
+  });
 }
 
 function createBoundedContextName(value: string): BoundedContextName {
@@ -395,4 +458,8 @@ function cloneContextSnapshot(snapshot: BoundedContextSnapshot): BoundedContextS
 
 function toTenantMode(multitenant: boolean): TenantMode {
   return multitenant ? "multitenant" : "single-tenant";
+}
+
+interface RegisteredRepository {
+  registerWith(context: BoundedContext): void;
 }
