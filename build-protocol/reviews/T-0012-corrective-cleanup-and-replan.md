@@ -135,3 +135,21 @@ For `T-0012.6 BoundedContext Assembly`, reviewers must focus on:
   scheduler, import bus, or system audit behavior;
 - a small public API with JVM-familiar names and simple errors; and
 - updated docs/API docs and task logs for every public assembly change.
+
+`T-0012.6` is integrated. All required review lanes are clean and final
+escalated `env CI=true corepack pnpm verify` passed.
+
+## Next Review Focus
+
+For `T-0012.7 Entities, Repositories, Routing, And Aggregate Storage`,
+reviewers must focus on:
+
+- close alignment with Spine JVM entity and repository ownership;
+- repository lifecycle/storage opening built on the existing `StorageFactory`
+  and `RecordStorage` seams;
+- aggregate storage as snapshots plus events, without inventing a broad storage
+  adapter;
+- signal routing through already implemented bounded-context buses;
+- no delivery, Stand, gRPC, transport execution, scheduler, import bus, or
+  system context runtime behavior; and
+- keeping public APIs small and JVM-familiar.

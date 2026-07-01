@@ -1,6 +1,6 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.5 integrated; T-0012.6 selected
+Status: T-0012.6 integrated; T-0012.7 selected
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
@@ -56,6 +56,19 @@ Parent verification after integrating `T-0012.5` passed with escalated
 statements 95.61%, branches 90.08%, functions 98.37%, lines 95.60%, docs/API
 checks with the existing invalid-`origin` TypeDoc warning only, proto
 lint/generate, and generated-clean comparison.
+
+`T-0012.6` replaced the metadata-only bounded-context shell with a small
+JVM-familiar assembly surface. `BoundedContextBuilder` collects command/event
+dispatchers and a `StorageFactory`, `build()` creates a `BoundedContext` owning
+`CommandBus` and `EventBus`, and built contexts expose post-only command/event
+endpoints. Repository registration remains a chainable pending seam for
+`T-0012.7`; delivery, Stand, gRPC, transport execution, scheduler, import bus,
+tenant index, and system context runtime remain deferred. All required review
+lanes are clean. Final escalated `env CI=true corepack pnpm verify` passed
+with 35 test files, 276 tests, coverage statements 95.45%, branches 90.37%,
+functions 96.81%, lines 95.44%, docs/API checks with the existing
+invalid-`origin` TypeDoc warning only, proto lint/generate, and generated-clean
+comparison.
 
 `T-0012.3` removed bounded-context runtime/detail exports, simplified
 repository diagnostics to code/message, removed transport lifecycle/delivery
