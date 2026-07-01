@@ -1,17 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-
-const command = process.argv[2];
-
-if (command !== "lint" && command !== "generate") {
-  console.error("Usage: node scripts/proto-workflow.mjs <lint|generate>");
-  process.exit(1);
-}
+import { dirname, join, resolve } from "node:path";
+import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.mjs";
 
 const protoRoot = fileURLToPath(new URL("../proto", import.meta.url));
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
+const generatedPath = "packages/proto/generated";
 
 function runCommand(label, executable, args) {
   const result = spawnSync(executable, args, {
@@ -51,22 +46,74 @@ function findProtoFiles(directory) {
   });
 }
 
-const protoFiles = findProtoFiles(protoRoot);
+export function cleanGeneratedOutput(root = repoRoot) {
+  const generatedRoot = join(root, generatedPath);
+  const ancestorFailures = findSymlinkedAncestors(root, generatedPath);
 
-if (protoFiles.length === 0) {
-  console.log(`No .proto files found under proto; buf ${command} is deferred until proto intake.`);
-  process.exit(0);
+  if (ancestorFailures.length > 0) {
+    for (const failure of ancestorFailures) {
+      console.error(`Generated path ancestor must not be a symlink: ${failure}`);
+    }
+
+    return 1;
+  }
+
+  const generatedStat = lstatIfPresent(generatedRoot);
+
+  if (generatedStat !== undefined) {
+    if (generatedStat.isSymbolicLink()) {
+      console.error(`Generated directory must not be a symlink: ${generatedPath}`);
+      return 1;
+    }
+
+    rmSync(generatedRoot, { recursive: true });
+  }
+
+  mkdirSync(generatedRoot, { recursive: true });
+  return 0;
 }
 
-const verifyStatus = runCommand("proto source verification", process.execPath, [
-  join(repoRoot, "scripts/verify-proto-sources.mjs"),
-]);
+export function main(argv = process.argv.slice(2)) {
+  const command = argv[0];
 
-if (verifyStatus !== 0) {
-  process.exit(verifyStatus);
+  if (command !== "lint" && command !== "generate") {
+    console.error("Usage: node scripts/proto-workflow.mjs <lint|generate>");
+    return 1;
+  }
+
+  const protoFiles = findProtoFiles(protoRoot);
+
+  if (protoFiles.length === 0) {
+    console.log(
+      `No .proto files found under proto; buf ${command} is deferred until proto intake.`,
+    );
+    return 0;
+  }
+
+  const verifyStatus = runCommand("proto source verification", process.execPath, [
+    join(repoRoot, "scripts/verify-proto-sources.mjs"),
+  ]);
+
+  if (verifyStatus !== 0) {
+    return verifyStatus;
+  }
+
+  const bufArgs = command === "lint" ? ["lint"] : ["generate"];
+
+  if (command === "generate") {
+    const cleanStatus = cleanGeneratedOutput();
+
+    if (cleanStatus !== 0) {
+      return cleanStatus;
+    }
+  }
+
+  return runCommand(`buf ${command}`, resolveBufExecutable(), bufArgs);
 }
 
-const bufArgs = command === "lint" ? ["lint"] : ["generate"];
-const bufStatus = runCommand(`buf ${command}`, resolveBufExecutable(), bufArgs);
+const isMain =
+  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 
-process.exit(bufStatus);
+if (isMain) {
+  process.exit(main());
+}

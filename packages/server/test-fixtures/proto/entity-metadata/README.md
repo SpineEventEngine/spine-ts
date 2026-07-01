@@ -1,6 +1,6 @@
 # Server Entity Metadata Test Fixtures
 
-These `.proto` files are test-only fixtures for `packages/server/src/index.test.ts`.
+These `.proto` files are test-only fixtures for `packages/server/test/index.test.ts`.
 They intentionally live outside the curated production `proto/` root so the
 server tests can exercise descriptor options without broadening the public
 schema surface.

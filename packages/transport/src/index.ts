@@ -530,7 +530,9 @@ export function createTransportWorkerRegistration(
     worker,
     subscriptions,
     signalKinds,
-    registrationKey: `${worker.participantKey}#${subscriptions.map((subscription) => subscription.descriptorKey).join("|")}`,
+    registrationKey: `${worker.participantKey}#${subscriptions
+      .map((subscription) => subscription.descriptorKey)
+      .join("|")}`,
   });
 }
 
@@ -672,7 +674,8 @@ function normalizeLogicalTransportId(value: string, name: string): string {
 
   if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/u.test(normalized) || /^\d+$/u.test(normalized)) {
     throw new Error(
-      `Transport ${name} must use logical-name format (letters/digits followed by letters/digits/underscores/hyphens, not endpoints, paths, hostnames, or PIDs).`,
+      `Transport ${name} must use logical-name format (letters/digits followed by ` +
+        "letters/digits/underscores/hyphens, not endpoints, paths, hostnames, or PIDs).",
     );
   }
 

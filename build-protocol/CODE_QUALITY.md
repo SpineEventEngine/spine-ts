@@ -42,6 +42,11 @@ Generated Protobuf-ES output is not source. It must live under
 `packages/<package>/generated/`, be ignored by Git, and be removed and
 regenerated during builds.
 
+`pnpm lint` runs the repository cleanup enforcement checker for generated-code
+layout, package test placement, line length, semantic-name length, callback
+naming, and flat package `src` growth. `pnpm verify` runs `pnpm lint` and
+therefore includes those cleanup gates.
+
 ## Naming And Declarations
 
 - Keep declaration order aligned with file intent: the primary declaration

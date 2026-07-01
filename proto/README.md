@@ -51,6 +51,10 @@ Buf lint uses narrow compatibility exceptions because Spine upstream
 legacy enum and field names, including lowercase ISO language enum values in
 `spine/ui/language.proto`.
 
-`proto:check-generated` fails when tracked or untracked generated output under
-`packages/proto/src/generated` is dirty after generation. `pnpm verify` runs it
-after `proto:generate`.
+`proto:generate` removes and regenerates `packages/proto/generated` before Buf
+runs. It refuses a symlinked generated directory so cleanup cannot follow a
+link outside the package tree. `proto:check-generated` fails when generated
+output is tracked by Git, not ignored, missing, symlinked, stale, or contains
+orphaned files compared with a clean temporary generation. `pnpm verify` runs
+`proto:generate` before typecheck/build/doc consumers and checks generated
+cleanliness again near the end.
