@@ -6,7 +6,7 @@ Branch: `task/T-0012-cleanup-replan`
 Baseline commit: `a9769d4`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
-Status: T-0012.1 integrated; T-0012.2 implemented and awaiting review.
+Status: T-0012.2 integrated; T-0012.3 selected.
 
 ## Required Review Lanes
 
@@ -73,7 +73,19 @@ For `T-0012.2 Source Folder Repack`, reviewers must focus on:
 
 ## T-0012.2 Review Status
 
-The `T-0012.2` implementation is complete on
-`task/T-0012-2-source-folder-repack` and awaiting review. A focused
-documentation follow-up corrected stale parent current-state language that still
-said `T-0012.2` was merely selected.
+The `T-0012.2` implementation is integrated on the parent branch. All required
+review lanes are clean, including a focused documentation re-review, and final
+escalated `env CI=true corepack pnpm verify` passed.
+
+## Next Review Focus
+
+For `T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions`, reviewers must
+focus on:
+
+- removal or shrinking of abandoned command-execution-first concepts;
+- deletion of over-specific detail/error hierarchies unless JVM evidence
+  justifies them;
+- no replacement storage, bus, bounded-context, repository, delivery, stand, or
+  gRPC behavior before the roadmap reaches those tasks;
+- public API shrinkage being documented and deliberate;
+- no new helper sprawl while deleting code.

@@ -1,6 +1,6 @@
 # T-0012: Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.1 integrated; T-0012.2 implemented and awaiting review
+Status: T-0012.2 integrated; T-0012.3 selected
 Start: `2026-07-01 16:48 WEST`
 Baseline commit: `a9769d4`
 Branch: `task/T-0012-cleanup-replan`
@@ -70,8 +70,12 @@ No blocking human question is known.
 
 ## Current Subtask State
 
-`T-0012.2 Source Folder Repack` is implemented on
-`task/T-0012-2-source-folder-repack` and awaiting review.
+`T-0012.2 Source Folder Repack` is integrated on the parent branch. It repacked
+server and transport source/test folders by semantics, passed all review lanes,
+and passed escalated `env CI=true corepack pnpm verify`.
+
+Next selected subtask: `T-0012.3 Delete Or Shrink Abandoned Runtime
+Abstractions`.
 
 ## T-0012.2 Selection Rationale
 
@@ -83,6 +87,16 @@ Rationale:
 - This task is non-blocked and should remain mostly mechanical: move files into
   semantic package folders, update exports/imports, and avoid behavioral
   redesign.
+
+## T-0012.3 Selection Rationale
+
+- The source/test folder structure is now navigable enough to safely remove or
+  shrink wrong abstractions.
+- This is the next roadmap item and directly addresses the user's main
+  over-engineering complaint.
+- The task should delete or reduce abandoned command-execution-first concepts
+  and long detail/error hierarchies without adding replacement behavior before
+  storage and buses are rebuilt.
 
 ## Requirements Splitter Skill Applicability
 
