@@ -190,3 +190,51 @@ result is consumed.
 - Medium: `scripts/check-api-docs.mjs` only checks for missing expected server
   exports and does not reject unexpected new exports, so the smaller public API
   surface is not actually frozen by `docs:check`.
+
+## Round 2 Fix Agent
+
+- Round 2 fix sub-agent:
+  `019f1ba4-1b69-79d0-ac8d-e90bdff91112` (`Curie the 8th`) spawned to address
+  the remaining proxy/raw-exception, validation sentinel, minimal route shape,
+  and unexpected-export guard findings; returned `STATUS: DONE`; closed by
+  orchestrator after report was consumed.
+
+## Round 2 Fix Evidence
+
+- Updated `packages/server/src/runtime-routing.ts` to reject Proxy-wrapped
+  `CommandRegistrationReadiness` / `EventRegistrationReadiness` instances
+  before `instanceof` checks or readiness method calls, using the same
+  `node:util` `types.isProxy()` pattern already used elsewhere in the repo.
+  Planning now fails closed with deterministic `TypeError` messages instead of
+  surfacing proxy trap exceptions.
+- Replaced the message-prefix preserve list inside
+  `withDeterministicValidation()` with a tagged internal
+  `DeterministicValidationError`, so targeted validation failures survive
+  wrapping without depending on human-readable prefixes.
+- Shrunk public command/event route descriptors so each route now exposes only
+  planner-local route/worker IDs, receiver group, sanitized message
+  full-type/type-URL data, and correlation keys back to the plan-level
+  topics/subscriptions/workers. Full transport topic/subscription/worker
+  contracts remain available only through the plan-level arrays.
+- Tightened `scripts/check-api-docs.mjs` so `docs:check` rejects unexpected
+  `@spine-ts/server` root exports in addition to missing expected exports from
+  the TypeDoc model.
+- Added regression coverage in `packages/server/src/runtime-routing.test.ts`
+  proving proxy-wrapped readiness inputs are rejected deterministically before
+  any proxy trap runs, and that public routes expose correlation keys instead
+  of embedded transport contracts.
+- Round 2 fix RED/GREEN on `2026-07-01 04:13-04:15 WEST`:
+  `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts`
+  first failed against embedded route contracts and late proxy rejection, then
+  `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts packages/server/src/index.test.ts`
+  passed with 2 files / 20 tests after the planner emitted correlation-key
+  route descriptors and rejected proxy readiness inputs up front.
+- Round 2 verification passed on `2026-07-01 04:16 WEST`:
+  `corepack pnpm typecheck`, `corepack pnpm docs:check`, and
+  `git diff --check` all passed. Escalated `CI=true corepack pnpm verify`
+  passed with native IPC access: 24 test files / 290 tests, coverage 95.88%
+  statements / 90.05% branches / 99.38% functions / 95.82% lines, TypeDoc/API
+  checks with 100 proto / 28 core / 130 server / 26 storage / 46 transport
+  exports, copied Spine proto checksum verification, proto lint/generate, and
+  generated-clean all passed. TypeDoc emitted the existing invalid-`origin`
+  warning only.

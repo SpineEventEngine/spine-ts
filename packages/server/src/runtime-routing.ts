@@ -12,6 +12,17 @@ import { CommandRegistrationReadiness } from "./command-registration-readiness.j
 import { EventRegistrationReadiness } from "./event-registration-readiness.js";
 import { compareFullTypeNames } from "./registration-readiness-metadata.js";
 
+declare const process: {
+  readonly getBuiltinModule: (specifier: "node:util") => {
+    readonly types: {
+      readonly isProxy: (value: object) => boolean;
+    };
+  };
+};
+
+const isProxy = process.getBuiltinModule("node:util").types.isProxy;
+const deterministicValidationErrorTag = Symbol("runtimeRoutingDeterministicValidation");
+
 /** Input accepted by {@link createServerRuntimeRoutingPlan}. */
 export interface ServerRuntimeRoutingPlanInput {
   /** Built bounded-context metadata shell that owns the routing plan. */
@@ -40,8 +51,17 @@ export interface ServerRuntimeRouteMessageDescriptor {
   readonly typeUrl: string;
 }
 
+interface ServerRuntimeRouteTransportReference {
+  /** Topic routing key that matches one entry in the plan's top-level topics array. */
+  readonly topicRoutingKey: string;
+  /** Subscription descriptor key that matches one top-level subscription entry. */
+  readonly subscriptionDescriptorKey: string;
+  /** Worker registration key that matches one top-level worker entry. */
+  readonly workerRegistrationKey: string;
+}
+
 /** Stable public command route descriptor. */
-export interface CommandRuntimeRoutingRoute {
+export interface CommandRuntimeRoutingRoute extends ServerRuntimeRouteTransportReference {
   /** Planner-local stable route identifier. */
   readonly routeId: string;
   /** Stable public receiver group marker. */
@@ -50,12 +70,6 @@ export interface CommandRuntimeRoutingRoute {
   readonly workerId: string;
   /** Sanitized message descriptor for the routed command. */
   readonly message: ServerRuntimeRouteMessageDescriptor;
-  /** Command transport topic for the message type. */
-  readonly topic: TransportTopic<"command">;
-  /** Competing-consumer command worker subscription. */
-  readonly subscription: TransportSubscription<"command">;
-  /** Command worker registration that owns the subscription. */
-  readonly worker: TransportWorkerRegistration;
 }
 
 /** Command routing plan derived from command readiness. */
@@ -74,7 +88,7 @@ export interface CommandRuntimeRoutingPlan {
 export type EventRuntimeReceiverGroup = "application" | "reactor" | "subscriber";
 
 /** Stable public event route descriptor. */
-export interface EventRuntimeRoutingRoute {
+export interface EventRuntimeRoutingRoute extends ServerRuntimeRouteTransportReference {
   /** Planner-local stable route identifier. */
   readonly routeId: string;
   /** Stable public receiver group marker. */
@@ -83,12 +97,6 @@ export interface EventRuntimeRoutingRoute {
   readonly workerId: string;
   /** Sanitized message descriptor for the routed event. */
   readonly message: ServerRuntimeRouteMessageDescriptor;
-  /** Event transport topic for the message type. */
-  readonly topic: TransportTopic<"event">;
-  /** Fan-out subscription for one logical event receiver. */
-  readonly subscription: TransportSubscription<"event">;
-  /** Event worker registration that owns the subscription. */
-  readonly worker: TransportWorkerRegistration;
 }
 
 /** Event routing plan derived from event readiness. */
@@ -146,6 +154,10 @@ const eventReceiverGroupToHandlerKind = Object.freeze({
   subscriber: "event-subscription",
 }) satisfies Record<EventRuntimeReceiverGroup, EventHandlerKind>;
 
+class DeterministicValidationError extends TypeError {
+  readonly [deterministicValidationErrorTag] = true;
+}
+
 /** Create an immutable runtime routing plan from bounded-context and readiness metadata. */
 export function createServerRuntimeRoutingPlan(
   input: ServerRuntimeRoutingPlanInput,
@@ -193,14 +205,7 @@ function createCommandRuntimeRoutingPlan(
     },
     subscriptions: routeDrafts.map(({ subscription }) => subscription),
   });
-  const routes = Object.freeze(
-    routeDrafts.map((route) =>
-      Object.freeze({
-        ...route,
-        worker,
-      }),
-    ),
-  );
+  const routes = finalizeCommandRoutes(routeDrafts, worker);
 
   return Object.freeze({
     topics: Object.freeze(routeDrafts.map(({ topic }) => topic)),
@@ -208,6 +213,25 @@ function createCommandRuntimeRoutingPlan(
     workers: Object.freeze([worker]),
     routes,
   });
+}
+
+function finalizeCommandRoutes(
+  drafts: readonly CommandRouteDraft[],
+  worker: TransportWorkerRegistration,
+): readonly CommandRuntimeRoutingRoute[] {
+  return Object.freeze(
+    drafts.map((route) =>
+      Object.freeze({
+        routeId: route.routeId,
+        receiverGroup: route.receiverGroup,
+        workerId: route.workerId,
+        topicRoutingKey: route.topic.routing.routingKey,
+        subscriptionDescriptorKey: route.subscription.descriptorKey,
+        workerRegistrationKey: worker.registrationKey,
+        message: route.message,
+      }),
+    ),
+  );
 }
 
 function createCommandRouteDraft(
@@ -305,16 +329,13 @@ function createEventRuntimeRoutingPlan(
     );
   }
 
-  const workersById = createEventWorkersById([
-    ...subscriberDrafts,
-    ...reactorDrafts,
-    ...applicationDrafts,
-  ]);
+  const allDrafts = [...subscriberDrafts, ...reactorDrafts, ...applicationDrafts];
+  const workersById = createEventWorkersById(allDrafts);
   const subscriberRoutes = finalizeEventRoutes(subscriberDrafts, workersById);
   const reactorRoutes = finalizeEventRoutes(reactorDrafts, workersById);
   const applicationRoutes = finalizeEventRoutes(applicationDrafts, workersById);
   const subscriptions = Object.freeze(
-    [...subscriberRoutes, ...reactorRoutes, ...applicationRoutes]
+    allDrafts
       .map(({ subscription }) => subscription)
       .sort((left, right) => compareFullTypeNames(left.descriptorKey, right.descriptorKey)),
   );
@@ -398,12 +419,19 @@ function finalizeEventRoutes(
   workersById: ReadonlyMap<string, TransportWorkerRegistration>,
 ): readonly EventRuntimeRoutingRoute[] {
   return Object.freeze(
-    drafts.map((route) =>
-      Object.freeze({
-        ...route,
-        worker: getWorkerRegistration(workersById, route.workerId),
-      }),
-    ),
+    drafts.map((route) => {
+      const worker = getWorkerRegistration(workersById, route.workerId);
+
+      return Object.freeze({
+        routeId: route.routeId,
+        receiverGroup: route.receiverGroup,
+        workerId: route.workerId,
+        topicRoutingKey: route.topic.routing.routingKey,
+        subscriptionDescriptorKey: route.subscription.descriptorKey,
+        workerRegistrationKey: worker.registrationKey,
+        message: route.message,
+      });
+    }),
   );
 }
 
@@ -468,9 +496,13 @@ function validateContext(input: unknown): BoundedContext {
   return context;
 }
 
-function validateCommandReadiness(
-  readiness: CommandRegistrationReadiness,
-): CommandRegistrationReadiness {
+function validateCommandReadiness(readiness: unknown): CommandRegistrationReadiness {
+  if (isConcreteReadinessProxy(readiness)) {
+    throw new TypeError(
+      "Server runtime routing commands must not be a Proxy-wrapped CommandRegistrationReadiness instance.",
+    );
+  }
+
   if (!(readiness instanceof CommandRegistrationReadiness)) {
     throw new TypeError(
       "Server runtime routing commands must be a CommandRegistrationReadiness instance.",
@@ -480,7 +512,13 @@ function validateCommandReadiness(
   return readiness;
 }
 
-function validateEventReadiness(readiness: EventRegistrationReadiness): EventRegistrationReadiness {
+function validateEventReadiness(readiness: unknown): EventRegistrationReadiness {
+  if (isConcreteReadinessProxy(readiness)) {
+    throw new TypeError(
+      "Server runtime routing events must not be a Proxy-wrapped EventRegistrationReadiness instance.",
+    );
+  }
+
   if (!(readiness instanceof EventRegistrationReadiness)) {
     throw new TypeError(
       "Server runtime routing events must be an EventRegistrationReadiness instance.",
@@ -488,6 +526,10 @@ function validateEventReadiness(readiness: EventRegistrationReadiness): EventReg
   }
 
   return readiness;
+}
+
+function isConcreteReadinessProxy(value: unknown): value is object {
+  return value !== null && typeof value === "object" && isProxy(value);
 }
 
 function normalizeRegisteredMessageNames(
@@ -529,12 +571,12 @@ function sanitizeCommandRouteMessage(
     `command metadata for "${commandFullTypeName}" is malformed`,
     () => {
       if (assignee === undefined) {
-        throw new TypeError(
+        throw new DeterministicValidationError(
           `Command registration readiness must return assignee metadata for "${commandFullTypeName}".`,
         );
       }
       if (assignee === null || typeof assignee !== "object") {
-        throw new TypeError(`${label} must be an object.`);
+        throw new DeterministicValidationError(`${label} must be an object.`);
       }
 
       const candidate = assignee as {
@@ -543,7 +585,7 @@ function sanitizeCommandRouteMessage(
       };
 
       if (candidate.commandFullTypeName !== commandFullTypeName) {
-        throw new TypeError(`${label} must preserve commandFullTypeName.`);
+        throw new DeterministicValidationError(`${label} must preserve commandFullTypeName.`);
       }
 
       const handler = validateHandlerShape(
@@ -577,7 +619,7 @@ function sanitizeEventRouteMessages(
     (values as readonly unknown[]).map((value) =>
       withDeterministicValidation(`event metadata for "${eventFullTypeName}" is malformed`, () => {
         if (value === null || typeof value !== "object") {
-          throw new TypeError(`${receiverLabel} must be an object.`);
+          throw new DeterministicValidationError(`${receiverLabel} must be an object.`);
         }
 
         const candidate = value as {
@@ -586,7 +628,9 @@ function sanitizeEventRouteMessages(
         };
 
         if (candidate.eventFullTypeName !== eventFullTypeName) {
-          throw new TypeError(`${receiverLabel} must match the requested eventFullTypeName.`);
+          throw new DeterministicValidationError(
+            `${receiverLabel} must match the requested eventFullTypeName.`,
+          );
         }
 
         const handler = validateHandlerShape(
@@ -611,7 +655,7 @@ function validateHandlerShape(
   wrongMessageMessage: string,
 ): { readonly schema: { readonly typeName: string } } {
   if (value === null || typeof value !== "object") {
-    throw new TypeError(wrongKindMessage);
+    throw new DeterministicValidationError(wrongKindMessage);
   }
 
   const candidate = value as {
@@ -621,21 +665,21 @@ function validateHandlerShape(
   };
 
   if (candidate.kind !== expectedKind) {
-    throw new TypeError(wrongKindMessage);
+    throw new DeterministicValidationError(wrongKindMessage);
   }
 
   if (candidate.messageFullTypeName !== expectedMessageFullTypeName) {
-    throw new TypeError(wrongMessageMessage);
+    throw new DeterministicValidationError(wrongMessageMessage);
   }
 
   if (candidate.schema === null || typeof candidate.schema !== "object") {
-    throw new TypeError(wrongMessageMessage);
+    throw new DeterministicValidationError(wrongMessageMessage);
   }
 
   const schema = candidate.schema as { readonly typeName?: unknown };
 
   if (schema.typeName !== expectedMessageFullTypeName) {
-    throw new TypeError(wrongMessageMessage);
+    throw new DeterministicValidationError(wrongMessageMessage);
   }
 
   return Object.freeze({
@@ -678,16 +722,17 @@ function withDeterministicValidation<Value>(
   try {
     return operation();
   } catch (error) {
-    if (
-      error instanceof TypeError &&
-      (error.message.startsWith("Command ") ||
-        error.message.startsWith("Event ") ||
-        error.message.startsWith("Missing worker registration") ||
-        error.message.startsWith("Server runtime routing"))
-    ) {
+    if (isDeterministicValidationError(error)) {
       throw error;
     }
 
     throw new TypeError(`Server runtime routing ${fallbackMessage}.`);
   }
+}
+
+function isDeterministicValidationError(error: unknown): error is TypeError {
+  return (
+    error instanceof TypeError &&
+    deterministicValidationErrorTag in (error as unknown as Record<PropertyKey, unknown>)
+  );
 }

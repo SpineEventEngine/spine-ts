@@ -137,7 +137,7 @@ const routingPlan = createServerRuntimeRoutingPlan({
 routingPlan.commands.workers[0]?.worker.workerRole; // "command-worker"
 routingPlan.commands.routes[0]?.message.typeUrl; // "type.spine.io/..."
 routingPlan.commands.routes[0]?.receiverGroup; // "command-assignee"
-routingPlan.events.subscriberRoutes[0]?.subscription.mode; // "fan-out"
+routingPlan.events.subscriberRoutes[0]?.subscriptionDescriptorKey; // correlate to top-level subscriptions
 routingPlan.events.subscriberRoutes[0]?.workerId; // planner-local event worker id
 routingPlan.deferred.map(({ signalKind }) => signalKind);
 // ["query", "subscription", "system"]
@@ -204,13 +204,14 @@ from command readiness, derives event topics plus fan-out subscriptions and
 event-worker registrations from subscriber/reactor/application readiness, and
 returns immutable transport contracts plus small server-owned route
 descriptors. Those public route descriptors contain planner-local route and
-worker IDs, sanitized message full type names/type URLs, and stable receiver
-groups only; they do not expose handler methods, entity type names, or raw
-readiness metadata. Query, subscription, and system routing remain explicit
-deferred seams because this slice has no concrete server readiness metadata for
-them. The planner does not open sockets, name IPC endpoints, start workers,
-dispatch handlers, validate signals, store delivery state, or expose
-buses/services.
+worker IDs, sanitized message full type names/type URLs, stable receiver
+groups, and transport correlation keys for the top-level topic/subscription/
+worker arrays only; they do not expose handler methods, entity type names, raw
+readiness metadata, or duplicate full transport contracts on each route.
+Query, subscription, and system routing remain explicit deferred seams because
+this slice has no concrete server readiness metadata for them. The planner does
+not open sockets, name IPC endpoints, start workers, dispatch handlers,
+validate signals, store delivery state, or expose buses/services.
 
 ## Single-Process Runtime Kernel
 

@@ -93,25 +93,30 @@ const AggregateStateSchema = messageDesc(
   1,
 ) as GenMessage<AggregateState>;
 
-function proxyReadiness<Readiness extends object>(
+function overrideReadiness<Readiness extends object>(
   readiness: Readiness,
   overrides: Partial<Record<keyof Readiness, unknown>>,
 ): Readiness {
-  return new Proxy(readiness, {
-    get(target, property, receiver) {
-      if (property in overrides) {
-        return overrides[property as keyof Readiness];
-      }
+  const prototype = Object.getPrototypeOf(readiness) as object;
+  const clone = Object.create(prototype) as Record<PropertyKey, unknown>;
 
-      const value = Reflect.get(target, property, receiver);
+  for (const property of Reflect.ownKeys(prototype)) {
+    if (property === "constructor") {
+      continue;
+    }
 
-      if (typeof value === "function") {
-        return (value as (...arguments_: readonly unknown[]) => unknown).bind(target) as unknown;
-      }
+    const value = Reflect.get(readiness, property);
 
-      return value;
-    },
-  });
+    if (typeof value === "function") {
+      clone[property] = value.bind(readiness);
+    }
+  }
+
+  for (const [property, value] of Object.entries(overrides)) {
+    clone[property] = value;
+  }
+
+  return clone as Readiness;
 }
 
 describe("server runtime routing", () => {
@@ -162,6 +167,9 @@ describe("server runtime routing", () => {
         routeId: "command-route-1",
         workerId: "command-worker-1",
         receiverGroup: "command-assignee",
+        topicRoutingKey: plan.commands.topics[0]?.routing.routingKey,
+        subscriptionDescriptorKey: plan.commands.subscriptions[0]?.descriptorKey,
+        workerRegistrationKey: plan.commands.workers[0]?.registrationKey,
         message: {
           fullTypeName: "AggregateState",
           typeUrl: deriveTypeUrl(AggregateStateSchema),
@@ -171,12 +179,18 @@ describe("server runtime routing", () => {
         routeId: "command-route-2",
         workerId: "command-worker-1",
         receiverGroup: "command-assignee",
+        topicRoutingKey: plan.commands.topics[1]?.routing.routingKey,
+        subscriptionDescriptorKey: plan.commands.subscriptions[1]?.descriptorKey,
+        workerRegistrationKey: plan.commands.workers[0]?.registrationKey,
         message: {
           fullTypeName: "spine.core.Command",
           typeUrl: deriveTypeUrl(CommandSchema),
         },
       },
     ]);
+    expect(plan.commands.routes[0]).not.toHaveProperty("topic");
+    expect(plan.commands.routes[0]).not.toHaveProperty("subscription");
+    expect(plan.commands.routes[0]).not.toHaveProperty("worker");
   });
 
   it("plans event fan-out routes for subscribers, reactors, and applications while deferring other seams", () => {
@@ -218,10 +232,18 @@ describe("server runtime routing", () => {
     );
 
     const subscriberDescriptorKeys = plan.events.subscriberRoutes.map(
-      ({ subscription }) => subscription.descriptorKey,
+      ({ subscriptionDescriptorKey }) => subscriptionDescriptorKey,
     );
     const subscriberTopicKeys = plan.events.subscriberRoutes.map(
-      ({ topic }) => topic.routing.routingKey,
+      ({ topicRoutingKey }) => topicRoutingKey,
+    );
+    const firstSubscriberRoute = plan.events.subscriberRoutes[0];
+    const secondSubscriberRoute = plan.events.subscriberRoutes[1];
+    const firstSubscriberWorker = plan.events.workers.find(
+      ({ worker }) => worker.participantId === firstSubscriberRoute?.workerId,
+    );
+    const secondSubscriberWorker = plan.events.workers.find(
+      ({ worker }) => worker.participantId === secondSubscriberRoute?.workerId,
     );
 
     expect(new Set(subscriberDescriptorKeys).size).toBe(2);
@@ -231,6 +253,9 @@ describe("server runtime routing", () => {
         routeId: "event-subscriber-route-1",
         workerId: "event-subscriber-worker-1",
         receiverGroup: "subscriber",
+        topicRoutingKey: plan.events.topics[0]?.routing.routingKey,
+        subscriptionDescriptorKey: firstSubscriberRoute?.subscriptionDescriptorKey,
+        workerRegistrationKey: firstSubscriberWorker?.registrationKey,
         message: {
           fullTypeName: EventSchema.typeName,
           typeUrl: deriveTypeUrl(EventSchema),
@@ -240,12 +265,18 @@ describe("server runtime routing", () => {
         routeId: "event-subscriber-route-2",
         workerId: "event-subscriber-worker-2",
         receiverGroup: "subscriber",
+        topicRoutingKey: plan.events.topics[0]?.routing.routingKey,
+        subscriptionDescriptorKey: secondSubscriberRoute?.subscriptionDescriptorKey,
+        workerRegistrationKey: secondSubscriberWorker?.registrationKey,
         message: {
           fullTypeName: EventSchema.typeName,
           typeUrl: deriveTypeUrl(EventSchema),
         },
       },
     ]);
+    expect(plan.events.subscriberRoutes[0]).not.toHaveProperty("topic");
+    expect(plan.events.subscriberRoutes[0]).not.toHaveProperty("subscription");
+    expect(plan.events.subscriberRoutes[0]).not.toHaveProperty("worker");
     expect(plan.deferred.map(({ signalKind, status }) => ({ signalKind, status }))).toEqual([
       { signalKind: "query", status: "deferred" },
       { signalKind: "subscription", status: "deferred" },
@@ -278,8 +309,11 @@ describe("server runtime routing", () => {
       ).push({ signalKind: "event" });
     }).toThrow(TypeError);
     expect(() => {
-      (plan.events.subscriberRoutes[0]?.subscription as { subscriberId: string }).subscriberId =
-        "mutated-subscriber";
+      (
+        plan.events.subscriberRoutes[0] as unknown as {
+          subscriptionDescriptorKey: string;
+        }
+      ).subscriptionDescriptorKey = "mutated-subscriber";
     }).toThrow(TypeError);
     expect(plan).not.toHaveProperty("dispatch");
     expect(plan).not.toHaveProperty("publish");
@@ -386,7 +420,7 @@ describe("server runtime routing", () => {
       throw new Error("Expected valid command assignee metadata.");
     }
 
-    const malformedCommandReadiness = proxyReadiness(commandReadiness, {
+    const malformedCommandReadiness = overrideReadiness(commandReadiness, {
       findCommandAssignee: () =>
         Object.freeze({
           ...assignee,
@@ -410,7 +444,7 @@ describe("server runtime routing", () => {
       (builder) => [builder.subscribe(EventSchema, "subscribeCreated")],
     );
     const eventReadiness = EventRegistrationReadiness.fromEntityHandlers([projectionHandlers]);
-    const receiverlessEventReadiness = proxyReadiness(eventReadiness, {
+    const receiverlessEventReadiness = overrideReadiness(eventReadiness, {
       registeredEventMessageFullTypeNames: () => Object.freeze([EventSchema.typeName]),
       findEventSubscribers: () => Object.freeze([]),
       findEventReactors: () => Object.freeze([]),
@@ -430,7 +464,7 @@ describe("server runtime routing", () => {
       throw new Error("Expected valid event subscriber metadata.");
     }
 
-    const malformedEventReadiness = proxyReadiness(eventReadiness, {
+    const malformedEventReadiness = overrideReadiness(eventReadiness, {
       findEventSubscribers: () =>
         Object.freeze([
           Object.freeze({
@@ -451,6 +485,68 @@ describe("server runtime routing", () => {
     ).toThrow(/must preserve the requested event message type/);
   });
 
+  it("rejects proxy-wrapped command readiness before proxy traps can run", () => {
+    const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+      builder.assign(CommandSchema, "assignCreate"),
+    ]);
+    const readiness = CommandRegistrationReadiness.fromEntityHandlers([handlers]);
+    let trapCalls = 0;
+
+    const proxiedReadiness = new Proxy(readiness, {
+      get() {
+        trapCalls += 1;
+        throw new Error("command proxy trap should not run");
+      },
+      getPrototypeOf() {
+        trapCalls += 1;
+        throw new Error("command proxy prototype trap should not run");
+      },
+    });
+
+    expect(() =>
+      createServerRuntimeRoutingPlan({
+        context: BoundedContext.singleTenant("Tasks").build(),
+        commands: proxiedReadiness,
+      }),
+    ).toThrow(
+      new TypeError(
+        "Server runtime routing commands must not be a Proxy-wrapped CommandRegistrationReadiness instance.",
+      ),
+    );
+    expect(trapCalls).toBe(0);
+  });
+
+  it("rejects proxy-wrapped event readiness before proxy traps can run", () => {
+    const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+      builder.subscribe(EventSchema, "subscribeCreated"),
+    ]);
+    const readiness = EventRegistrationReadiness.fromEntityHandlers([handlers]);
+    let trapCalls = 0;
+
+    const proxiedReadiness = new Proxy(readiness, {
+      get() {
+        trapCalls += 1;
+        throw new Error("event proxy trap should not run");
+      },
+      getPrototypeOf() {
+        trapCalls += 1;
+        throw new Error("event proxy prototype trap should not run");
+      },
+    });
+
+    expect(() =>
+      createServerRuntimeRoutingPlan({
+        context: BoundedContext.singleTenant("Tasks").build(),
+        events: proxiedReadiness,
+      }),
+    ).toThrow(
+      new TypeError(
+        "Server runtime routing events must not be a Proxy-wrapped EventRegistrationReadiness instance.",
+      ),
+    );
+    expect(trapCalls).toBe(0);
+  });
+
   it("uses planner-local indexed event worker identities without lossy merges", () => {
     const projectionHandlers = defineEntityHandlers(
       TaskProjection,
@@ -464,7 +560,7 @@ describe("server runtime routing", () => {
       throw new Error("Expected valid event subscriber metadata.");
     }
 
-    const collidingEventReadiness = proxyReadiness(eventReadiness, {
+    const collidingEventReadiness = overrideReadiness(eventReadiness, {
       findEventSubscribers: () =>
         Object.freeze([
           Object.freeze({
@@ -517,7 +613,7 @@ describe("server runtime routing", () => {
       throw new Error("Expected valid command assignee metadata.");
     }
 
-    const nullSchemaCommandReadiness = proxyReadiness(commandReadiness, {
+    const nullSchemaCommandReadiness = overrideReadiness(commandReadiness, {
       findCommandAssignee: () =>
         Object.freeze({
           ...assignee,
@@ -535,7 +631,7 @@ describe("server runtime routing", () => {
       }),
     ).toThrow(/must preserve the requested command message type/);
 
-    const malformedSchemaCommandReadiness = proxyReadiness(commandReadiness, {
+    const malformedSchemaCommandReadiness = overrideReadiness(commandReadiness, {
       findCommandAssignee: () =>
         Object.freeze({
           ...assignee,
@@ -553,7 +649,7 @@ describe("server runtime routing", () => {
         context: BoundedContext.singleTenant("Tasks").build(),
         commands: malformedSchemaCommandReadiness,
       }),
-    ).toThrow(/Command assignee metadata for "spine\.core\.Command" is malformed/);
+    ).toThrow(/Server runtime routing command metadata for "spine\.core\.Command" is malformed/);
 
     const projectionHandlers = defineEntityHandlers(
       TaskProjection,
@@ -567,7 +663,7 @@ describe("server runtime routing", () => {
       throw new Error("Expected valid event subscriber metadata.");
     }
 
-    const mismatchedEventSchemaReadiness = proxyReadiness(eventReadiness, {
+    const mismatchedEventSchemaReadiness = overrideReadiness(eventReadiness, {
       findEventSubscribers: () =>
         Object.freeze([
           Object.freeze({

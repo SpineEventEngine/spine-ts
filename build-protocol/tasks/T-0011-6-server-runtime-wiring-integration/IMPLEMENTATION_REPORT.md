@@ -152,3 +152,36 @@ delivery, scheduling, and process supervision outside this slice.
 ## Open Items
 
 - Run all required reviewer lanes and close all participating sub-agents.
+
+## Round 2 Fix Summary
+
+- Closed the remaining proxy gap in `packages/server/src/runtime-routing.ts`
+  by rejecting Proxy-wrapped concrete readiness instances before `instanceof`
+  checks or readiness method calls, so planning now fails closed with stable
+  `TypeError` messages and never triggers attacker-controlled proxy traps.
+- Replaced the message-prefix preserve list inside
+  `withDeterministicValidation()` with a tagged internal
+  `DeterministicValidationError`, removing maintenance coupling to
+  human-readable error prefixes while preserving the existing deterministic
+  validation surface.
+- Slimmed public command/event route descriptors further: routes now expose
+  only planner-local route/worker IDs, receiver group, sanitized message
+  descriptor, and correlation keys back to the plan-level topics,
+  subscriptions, and workers. The full transport contracts now live only in
+  the plan-level arrays.
+- Tightened `scripts/check-api-docs.mjs` so `docs:check` now rejects
+  unexpected `@spine-ts/server` root exports in addition to missing expected
+  exports, and refreshed `packages/server/README.md`, `docs/api/README.md`,
+  and `docs/architecture/README.md` to describe the smaller route shape and
+  stronger API guard.
+- Round 2 focused RED/GREEN on `2026-07-01 04:13-04:15 WEST`:
+  `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts`
+  first failed, then
+  `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts packages/server/src/index.test.ts`
+  passed with 2 files / 20 tests.
+- Round 2 verification passed on `2026-07-01 04:16 WEST`:
+  `corepack pnpm typecheck`, `corepack pnpm docs:check`, `git diff --check`,
+  and escalated `CI=true corepack pnpm verify` all passed. Full verify covered
+  24 test files / 290 tests with coverage 95.88% statements / 90.05%
+  branches / 99.38% functions / 95.82% lines. TypeDoc emitted the existing
+  invalid-`origin` warning only.

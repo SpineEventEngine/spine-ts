@@ -360,9 +360,11 @@ transport endpoints, expose ZeroMQ details, or start workers; it only turns
 existing metadata into transport-owned topics, subscriptions, worker
 registrations, explicit deferred seams, and sanitized planner-local route
 descriptors. Those route descriptors expose message type names/type URLs plus
-stable receiver-group and local route/worker identities only; they do not
-retain entity names, handler names, or raw readiness metadata. The package
-root does not export service, transport, bus, storage, delivery, stand,
+stable receiver-group and local route/worker identities, along with transport
+correlation keys back to the top-level topic/subscription/worker arrays only;
+they do not retain entity names, handler names, raw readiness metadata, or
+duplicate full transport contracts on each route. The package root does not
+export service, transport, bus, storage, delivery, stand,
 integration-broker, repository runtime-registration, validation, or `Ack`
 abstractions as part of this closure.
 

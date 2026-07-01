@@ -190,10 +190,12 @@ Event routing produces fan-out subscriptions and event-worker registrations
 for subscriber, reactor, and application receiver groups while keeping handler
 invocation, storage-before-dispatch, buses, IPC endpoint naming, and process
 supervision deferred. Public route descriptors expose only planner-local route
-and worker IDs, message full type names/type URLs, and stable receiver groups;
-they do not retain raw readiness metadata, entity names, or handler method
-names. Query, subscription, and system routing remain explicit deferred seams
-until concrete server readiness metadata exists.
+and worker IDs, message full type names/type URLs, stable receiver groups, and
+transport correlation keys back to the top-level topics/subscriptions/workers;
+they do not retain raw readiness metadata, entity names, handler method names,
+or duplicate full transport contracts on each route. Query, subscription, and
+system routing remain explicit deferred seams until concrete server readiness
+metadata exists.
 Server runtime exports include `SingleProcessServerRuntime`,
 `ServerRuntimeLifecycle`, `ServerRuntimeState`, `ServerRuntimeWork`,
 `ServerRuntimeStateOperation`, `ServerRuntimeStateErrorCode`, and
@@ -319,5 +321,6 @@ Generated output is written to `docs/api/reference`.
 `docs:check` also emits temporary TypeDoc JSON, verifies that expected
 `@spine-ts/proto`, `@spine-ts/core`, `@spine-ts/server`,
 `@spine-ts/transport`, and `@spine-ts/storage` entry-point exports are present
-in the API model, and rejects broad generated wildcard re-exports from the
-proto package root.
+in the API model, rejects unexpected `@spine-ts/server` root exports that are
+not in the curated allowlist, and rejects broad generated wildcard re-exports
+from the proto package root.
