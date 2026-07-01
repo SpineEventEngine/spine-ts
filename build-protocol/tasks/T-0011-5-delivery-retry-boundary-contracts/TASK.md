@@ -1,6 +1,6 @@
 # T-0011.5: Delivery And Retry Boundary Contracts
 
-Status: Setup; Baseline Verification Passed
+Status: Implemented; Verified; Pending Review
 Parent task: `T-0011 Transport Foundation`
 Start: `2026-06-30 23:52 WEST`
 Baseline commit: `bc028bc`
@@ -9,7 +9,8 @@ Task log path:
 Branch: `task/T-0011-5-delivery-retry-boundary-contracts`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-5-delivery-retry-boundary-contracts`
-Authoring sub-agent: pending
+Authoring sub-agent: `019f1ac0-673f-76b3-a7f6-58c84f0d3e85` authored the
+implementation; closed by orchestrator after it stalled before commit
 Reviewer sub-agents: pending
 
 ## Objective
@@ -128,6 +129,34 @@ Skipped relevant-looking skills:
   with native IPC access because the inherited ZeroMQ smoke tests bind
   `ipc://` endpoints and the managed sandbox rejects those binds with `EPERM`.
 
+- Implementation RED on `2026-07-01 00:01 WEST`:
+  `corepack pnpm vitest run packages/transport/src/index.test.ts` failed as
+  expected with 4 failing delivery/retry boundary tests because
+  `createTransportDeliveryAttempt()`, `classifyTransportDeliveryFailure()`,
+  and `createTransportDeliveryResult()` were not implemented yet.
+
+- Focused implementation GREEN on `2026-07-01 00:03 WEST`:
+  `corepack pnpm vitest run packages/transport/src/index.test.ts` passed with
+  1 test file / 17 tests after adding transport-only delivery attempt, failure
+  classification, and result/status helpers.
+
+- Required focused/final verification passed before commit:
+  `corepack pnpm typecheck` passed; `corepack pnpm docs:check` passed with the
+  existing invalid-`origin` TypeDoc warning only and TypeDoc/API counts 100
+  proto / 28 core / 124 server / 26 storage / 46 transport exports;
+  `git diff --check` passed; privileged branch-tip
+  `CI=true corepack pnpm verify` passed on `2026-07-01 00:50 WEST` with 23
+  test files / 280 tests, coverage 96.04% statements / 90.31% branches /
+  99.33% functions / 95.98% lines, copied Spine proto checksum verification,
+  proto lint/generate, and generated-clean all passed. The full verify used
+  native IPC access because inherited ZeroMQ smoke tests bind `ipc://`
+  endpoints.
+- Authoring handoff note: implementation sub-agent
+  `019f1ac0-673f-76b3-a7f6-58c84f0d3e85` authored the code/docs/log updates,
+  but did not complete its final commit handoff after verification. The
+  orchestrator closed the still-running agent and is committing the verified
+  diff to keep the task resumable and avoid leaving verified work stranded.
+
 ## Implementation Notes
 
 - Start from existing `packages/transport` contracts and keep additions in the
@@ -140,3 +169,22 @@ Skipped relevant-looking skills:
 - If any `@spine-ts/server` code becomes necessary, first inspect the
   corresponding Spine JVM `core-jvm/server` sources and record the evidence in
   this task log before making changes.
+
+Implementation sub-agent notes:
+
+- Stayed transport-only; no `packages/server` files were touched, so no
+  additional `core-jvm/server` source inspection was required.
+- Added immutable delivery attempt/result/failure-classification contracts to
+  `@spine-ts/transport` root API. Helpers rebuild values from semantic
+  subscription, worker, delivery, target, outcome, and failure inputs.
+- Delivery attempt/result helpers reject forged prebuilt attempt keys, worker
+  participant keys, subscription descriptor keys, result statuses, and result
+  keys. Existing generic topic/subscription lifecycle helpers keep their
+  previous canonicalization behavior.
+- Failure classification redacts details to sorted scalar own data fields and
+  drops raw exception, endpoint, socket/frame, process, payload, and
+  storage-record shaped fields.
+- Retry eligibility is exposed only as classification/result data; no retry
+  loops, timers, worker scheduling, durable inbox/outbox storage, handler
+  invocation, repository dispatch, process supervision, or server runtime wiring
+  were added.

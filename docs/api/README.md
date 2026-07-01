@@ -245,17 +245,34 @@ Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
 `TransportParticipantIdentityInput`, `TransportParticipantIdentity`,
 `TransportWorkerRegistrationInput`, `TransportWorkerRegistration`,
 `TransportLifecycleSnapshotInput`, `TransportLifecycleSnapshot`,
-`TransportLifecycleParticipant`, `createTransportTopic()`,
+`TransportLifecycleParticipant`, `TransportDeliveryStatus`,
+`TransportDeliveryOutcome`, `TransportDeliveryFailureKind`,
+`TransportRetryEligibility`, `TransportDeliveryFailureDetailValue`,
+`TransportDeliveryFailureDetails`,
+`TransportDeliveryFailureClassificationInput`,
+`TransportDeliveryFailureClassification`, `TransportDeliveryAttemptInput`,
+`TransportDeliveryAttempt`, `TransportDeliveryResultInput`,
+`TransportDeliveryResult`, `createTransportTopic()`,
 `createTransportSubscription()`, `createTransportParticipantIdentity()`,
-`createTransportWorkerRegistration()`, and
-`createTransportLifecycleSnapshot()`. This surface is contract-only: it defines
+`createTransportWorkerRegistration()`, `createTransportLifecycleSnapshot()`,
+`createTransportDeliveryAttempt()`, `classifyTransportDeliveryFailure()`, and
+`createTransportDeliveryResult()`. This surface is contract-only: it defines
 immutable topic/subscription value objects, deterministic adapter-agnostic
 routing keys, stable broker/worker lifecycle identities, subscription-backed
-worker registrations, readiness/lifecycle snapshots, handler callback
-signatures, and graceful async close behavior. It does not expose ZeroMQ
-socket types, endpoint strings, multipart frames, broker processes, child
-process supervision, delivery retries, durable storage, runtime handler
-invocation, or server runtime wiring.
+worker registrations, readiness/lifecycle snapshots, delivery attempt/result
+boundary values, redacted failure classifications, retry eligibility data,
+handler callback signatures, and graceful async close behavior. It does not
+expose ZeroMQ socket types, endpoint strings, multipart frames, broker
+processes, child process supervision, retry timers or workers, durable storage,
+runtime handler invocation, or server runtime wiring.
+Delivery attempt helpers derive keys from semantic subscription/worker/delivery
+fields and reject forged prebuilt keys. Delivery result helpers derive status
+from outcome plus retry eligibility and reject mismatched caller-supplied
+statuses or result keys. Failure classification preserves only stable failure
+codes, failure kinds, retry eligibility, and scalar redacted details; raw
+exceptions, process details, endpoint strings, frames, payloads, inbox/outbox
+records, scheduling decisions, and monitor policy execution stay outside the
+transport API.
 The transport package pins `zeromq@6.5.0` for later local IPC adapter work, but
 that native dependency remains outside the public TypeDoc entry point.
 Adapter-private wiring validates local IPC configuration and native module

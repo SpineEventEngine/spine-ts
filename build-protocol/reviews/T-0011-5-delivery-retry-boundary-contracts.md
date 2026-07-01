@@ -1,6 +1,6 @@
 # Review Log: T-0011.5 Delivery And Retry Boundary Contracts
 
-Status: Setup; Baseline Verification Passed; Reviews Pending
+Status: Implemented; Verified; Reviews Pending
 
 ## Required Review Lanes
 
@@ -26,8 +26,12 @@ warning only.
 
 ## Current Review Gate
 
-Implementation has not started. The next gate is the implementation sub-agent
-for delivery and retry boundary contracts.
+Implementation sub-agent authored the transport-only delivery/retry boundary
+contracts and recorded focused RED/GREEN evidence. Branch-tip verification
+passed on `2026-07-01 00:50 WEST` with 23 test files / 280 tests, coverage
+96.04% statements / 90.31% branches / 99.33% functions / 95.98% lines, and
+TypeDoc/API counts 100 / 28 / 124 / 26 / 46. The next gate is the required
+review lanes.
 
 ## Reviewer Rounds
 

@@ -419,17 +419,26 @@ objects and interfaces that later adapters can implement:
   `createTransportLifecycleSnapshot()` add the first adapter-agnostic
   broker/worker lifecycle seam using stable participant identities, logical
   worker roles, subscription-backed registrations, lifecycle states, and
-  readiness states only; and
+  readiness states only;
+- `createTransportDeliveryAttempt()`,
+  `classifyTransportDeliveryFailure()`, and
+  `createTransportDeliveryResult()` add data-only delivery/retry boundary
+  values over logical subscriptions, worker identities, stable delivery/target
+  IDs, and redacted failure classification; and
 - `SignalTransport` plus publish/request handler contracts define the minimal
   adapter seam for later runtime integration and graceful async close behavior.
 
 The boundary is intentionally smaller than a bus implementation. It does not
-choose ZeroMQ socket topology, endpoint naming, durable delivery, retries,
-process supervision, readiness probes over IPC, handler invocation, repository
-dispatch, storage lifecycle, or read-side execution policy. The lifecycle seam
-records helper state only; it does not start broker or worker processes, wire
-`@spine-ts/server`, or decide restart behavior. Those decisions remain in later
-transport and runtime tasks.
+choose ZeroMQ socket topology, endpoint naming, durable delivery, retry loops
+or timers, process supervision, readiness probes over IPC, handler invocation,
+repository dispatch, storage lifecycle, or read-side execution policy. The
+lifecycle seam records helper state only; it does not start broker or worker
+processes, wire `@spine-ts/server`, or decide restart behavior. Delivery
+attempt/result helpers reject forged derived keys/statuses, classify retry
+eligibility as immutable data, and redact failure details to scalar fields, but
+they do not create inbox/outbox records, deduplicate storage records, schedule
+workers, or run monitor policy. Those decisions remain in later transport and
+runtime tasks.
 
 The transport package now pins the maintained official `zeromq@6.5.0` line for
 the later local IPC adapter. That native dependency is adapter-private: current

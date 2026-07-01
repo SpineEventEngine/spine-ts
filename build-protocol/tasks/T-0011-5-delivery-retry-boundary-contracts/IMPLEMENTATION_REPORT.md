@@ -1,6 +1,6 @@
 # Implementation Report: T-0011.5 Delivery And Retry Boundary Contracts
 
-Status: Setup; Baseline Verification Passed
+Status: Implemented; Verified; Pending Review
 Task log:
 `build-protocol/tasks/T-0011-5-delivery-retry-boundary-contracts/TASK.md`
 Work log: `build-protocol/work-logs/T-0011-5.md`
@@ -14,6 +14,18 @@ Worktree:
 T-0011.5 starts from parent T-0011 commit `bc028bc`, after T-0011.4 added
 adapter-agnostic broker/worker lifecycle contracts. This subtask owns the
 transport-adjacent delivery and retry boundary contracts only.
+
+Implementation sub-agent added the first transport-only delivery/retry boundary
+contracts:
+
+- `TransportDeliveryAttempt*` values over logical subscriptions, worker
+  identities, delivery IDs, target IDs, and 1-based attempt numbers;
+- `TransportDeliveryFailureClassification*` values with stable failure kind,
+  failure code, retry eligibility, and redacted scalar details;
+- `TransportDeliveryResult*` values that derive status from outcome plus retry
+  eligibility and reject forged statuses/result keys; and
+- package/API/architecture docs and API export checks for the new public
+  surface.
 
 Expected implementation shape:
 
@@ -33,6 +45,8 @@ Expected implementation shape:
 - Do not touch `@spine-ts/server` without first recording task-relevant Spine
   JVM `core-jvm/server` source evidence.
 
+No `@spine-ts/server` files were touched.
+
 ## Verification
 
 Setup dependency install on `2026-06-30 23:52 WEST`: sandboxed
@@ -51,6 +65,34 @@ emitted the existing invalid-`origin` warning only. The command ran with native
 IPC access because the inherited ZeroMQ smoke tests bind `ipc://` endpoints and
 the managed sandbox rejects those binds with `EPERM`.
 
+Implementation RED on `2026-07-01 00:01 WEST`:
+`corepack pnpm vitest run packages/transport/src/index.test.ts` failed with 4
+failing tests because the new delivery/retry public functions were missing.
+
+Focused GREEN on `2026-07-01 00:03 WEST`:
+`corepack pnpm vitest run packages/transport/src/index.test.ts` passed with 1
+test file / 17 tests.
+
+Required final verification passed before commit:
+
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
+  warning only and TypeDoc/API counts 100 proto / 28 core / 124 server / 26
+  storage / 46 transport exports.
+- `git diff --check` passed.
+- Privileged branch-tip `CI=true corepack pnpm verify` passed on
+  `2026-07-01 00:50 WEST` with 23 test files / 280 tests, coverage 96.04%
+  statements / 90.31% branches / 99.33% functions / 95.98% lines, copied Spine
+  proto checksum verification, proto lint/generate, and generated-clean all
+  passed. Native IPC access was used because inherited ZeroMQ smoke tests bind
+  `ipc://` endpoints.
+
+Authoring handoff note: implementation sub-agent
+`019f1ac0-673f-76b3-a7f6-58c84f0d3e85` authored the implementation and
+recorded focused RED/GREEN evidence, but did not complete its final commit
+handoff after verification. The orchestrator closed the still-running agent and
+is committing the verified diff to keep the task resumable.
+
 ## Open Items
 
-- Spawn the implementation sub-agent after baseline verification is recorded.
+- Required reviewer lanes are next.

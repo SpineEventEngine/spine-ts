@@ -7,6 +7,11 @@ import {
   type RequestTransportHandler,
   type RequestTransportOperation,
   type SignalTransport,
+  type TransportDeliveryAttempt,
+  type TransportDeliveryAttemptInput,
+  type TransportDeliveryFailureClassification,
+  type TransportDeliveryResult,
+  type TransportDeliveryStatus,
   type TransportLifecycleParticipant,
   type TransportLifecycleSnapshotInput,
   type TransportLifecycleState,
@@ -16,6 +21,9 @@ import {
   type TransportSignalKind,
   type TransportWorkerRegistration,
   type TransportWorkerRegistrationInput,
+  classifyTransportDeliveryFailure,
+  createTransportDeliveryAttempt,
+  createTransportDeliveryResult,
   createTransportParticipantIdentity,
   createTransportSubscription,
   createTransportLifecycleSnapshot,
@@ -301,6 +309,231 @@ describe("@spine-ts/transport", () => {
     expect(snapshot).not.toHaveProperty("childProcess");
     expect(Object.isFrozen(snapshot)).toBe(true);
     expect(Object.isFrozen(snapshot.workerRegistrations)).toBe(true);
+  });
+
+  it("creates delivery attempts from logical subscriptions and worker identities", () => {
+    const attempt = createTransportDeliveryAttempt({
+      deliveryId: "command-abc-123",
+      targetId: "task-42",
+      attemptNumber: 2,
+      subscription: {
+        subscriberId: "delivery-a",
+        mode: "competing-consumer",
+        topic: {
+          signalKind: "delivery",
+          messageTypeUrl: "type.spine.io/example.TaskDelivery",
+          semanticTags: ["aggregate"],
+        },
+      },
+      worker: {
+        participantKind: "worker",
+        participantId: "delivery-a",
+        workerRole: "delivery-worker",
+      },
+    });
+
+    expect(attempt).toEqual({
+      deliveryId: "command-abc-123",
+      targetId: "task-42",
+      attemptNumber: 2,
+      subscription: {
+        subscriberId: "delivery-a",
+        mode: "competing-consumer",
+        topic: {
+          signalKind: "delivery",
+          messageTypeUrl: "type.spine.io/example.TaskDelivery",
+          semanticTags: ["aggregate"],
+          routing: {
+            signalKind: "delivery",
+            messageTypeUrl: "type.spine.io/example.TaskDelivery",
+            semanticTags: ["aggregate"],
+            routingKey: "delivery:type.spine.io%2Fexample.TaskDelivery:aggregate",
+          },
+        },
+        descriptorKey:
+          "delivery:type.spine.io%2Fexample.TaskDelivery:aggregate#competing-consumer#delivery-a",
+      },
+      worker: {
+        participantKind: "worker",
+        participantId: "delivery-a",
+        participantKey: "worker#delivery-worker#delivery-a",
+        workerRole: "delivery-worker",
+      },
+      attemptKey:
+        "delivery:type.spine.io%2Fexample.TaskDelivery:aggregate#competing-consumer#delivery-a#worker#delivery-worker#delivery-a#command-abc-123#task-42#2",
+    });
+    expect(attempt).not.toHaveProperty("endpoint");
+    expect(attempt).not.toHaveProperty("socketType");
+    expect(attempt).not.toHaveProperty("inboxRecord");
+    expect(Object.isFrozen(attempt)).toBe(true);
+  });
+
+  it("rejects forged delivery attempt keys and mismatched delivery workers", () => {
+    const attempt = createTransportDeliveryAttempt({
+      deliveryId: "command-abc-123",
+      targetId: "task-42",
+      attemptNumber: 1,
+      subscription: {
+        subscriberId: "delivery-a",
+        topic: {
+          signalKind: "delivery",
+          messageTypeUrl: "type.spine.io/example.TaskDelivery",
+        },
+      },
+      worker: {
+        participantKind: "worker",
+        participantId: "delivery-a",
+        workerRole: "delivery-worker",
+      },
+    });
+
+    expect(() =>
+      createTransportDeliveryAttempt({
+        ...attempt,
+        attemptKey: "forged",
+      }),
+    ).toThrow(/attemptKey/);
+    expect(() =>
+      createTransportDeliveryAttempt({
+        deliveryId: "command-abc-123",
+        targetId: "task-42",
+        attemptNumber: 1,
+        subscription: {
+          subscriberId: "delivery-a",
+          topic: {
+            signalKind: "delivery",
+            messageTypeUrl: "type.spine.io/example.TaskDelivery",
+          },
+        },
+        worker: {
+          participantKind: "worker",
+          participantId: "delivery-b",
+          workerRole: "delivery-worker",
+        },
+      }),
+    ).toThrow(/must match subscription subscriberId/);
+  });
+
+  it("classifies delivery failures with retry eligibility and redacted details", () => {
+    const failure = classifyTransportDeliveryFailure({
+      failureKind: "transient",
+      failureCode: "TEMPORARY_STORAGE_UNAVAILABLE",
+      details: {
+        stage: "pickup",
+        attempt: 3,
+        retryable: true,
+        endpoint: "ipc://leaked",
+        message: "contains payload bytes",
+        nested: { payload: "secret" },
+        stack: "process stack",
+        processId: 12345,
+      },
+    });
+    const duplicate = classifyTransportDeliveryFailure({
+      failureKind: "duplicate",
+      failureCode: "DUPLICATE_DELIVERY",
+      details: new Error("raw runtime error"),
+    });
+
+    expect(failure).toEqual({
+      failureKind: "transient",
+      retryEligibility: "eligible",
+      failureCode: "TEMPORARY_STORAGE_UNAVAILABLE",
+      details: {
+        attempt: 3,
+        retryable: true,
+        stage: "pickup",
+      },
+    });
+    expect(duplicate).toEqual({
+      failureKind: "duplicate",
+      retryEligibility: "ineligible",
+      failureCode: "DUPLICATE_DELIVERY",
+      details: {},
+    });
+    expect(failure.details).not.toHaveProperty("endpoint");
+    expect(failure.details).not.toHaveProperty("message");
+    expect(failure.details).not.toHaveProperty("stack");
+    expect(failure).not.toHaveProperty("error");
+    expect(Object.isFrozen(failure)).toBe(true);
+    expect(Object.isFrozen(failure.details)).toBe(true);
+  });
+
+  it("derives delivery result status from retry boundary data", () => {
+    const attempt = createTransportDeliveryAttempt({
+      deliveryId: "command-abc-123",
+      targetId: "task-42",
+      attemptNumber: 1,
+      subscription: {
+        subscriberId: "delivery-a",
+        topic: {
+          signalKind: "delivery",
+          messageTypeUrl: "type.spine.io/example.TaskDelivery",
+        },
+      },
+      worker: {
+        participantKind: "worker",
+        participantId: "delivery-a",
+        workerRole: "delivery-worker",
+      },
+    });
+    const retryableResult = createTransportDeliveryResult({
+      attempt,
+      outcome: "failed",
+      failure: {
+        failureKind: "transient",
+        failureCode: "TEMPORARY_STORAGE_UNAVAILABLE",
+      },
+    });
+    const terminalResult = createTransportDeliveryResult({
+      attempt,
+      outcome: "failed",
+      failure: {
+        failureKind: "permanent",
+        failureCode: "MALFORMED_ENVELOPE",
+        details: { stage: "decode" },
+      },
+    });
+    const deliveredResult = createTransportDeliveryResult({
+      attempt,
+      outcome: "delivered",
+    });
+
+    expect(retryableResult.status).toBe("scheduled");
+    expect(retryableResult.retryEligibility).toBe("eligible");
+    expect(terminalResult.status).toBe("failed");
+    expect(terminalResult.retryEligibility).toBe("ineligible");
+    expect(deliveredResult).toEqual({
+      attempt,
+      outcome: "delivered",
+      status: "delivered",
+      retryEligibility: "ineligible",
+      resultKey: `${attempt.attemptKey}#delivered`,
+    });
+    expect(() =>
+      createTransportDeliveryResult({
+        attempt,
+        outcome: "failed",
+        status: "delivered",
+        failure: {
+          failureKind: "transient",
+          failureCode: "TEMPORARY_STORAGE_UNAVAILABLE",
+        },
+      }),
+    ).toThrow(/status/);
+    expect(() =>
+      createTransportDeliveryResult({
+        attempt,
+        outcome: "delivered",
+        failure: {
+          failureKind: "transient",
+          failureCode: "TEMPORARY_STORAGE_UNAVAILABLE",
+        },
+      }),
+    ).toThrow(/must not include failure/);
+    expect(retryableResult).not.toHaveProperty("retryTimer");
+    expect(retryableResult).not.toHaveProperty("workerSchedule");
+    expect(Object.isFrozen(retryableResult)).toBe(true);
   });
 
   it("normalizes lifecycle snapshots from broker inputs without worker registrations", () => {
@@ -676,6 +909,24 @@ describe("@spine-ts/transport", () => {
     expectTypeOf<TransportWorkerRegistrationInput["worker"]>().toEqualTypeOf<
       TransportParticipantIdentityInput<"worker">
     >();
+    expectTypeOf<TransportDeliveryStatus>().toEqualTypeOf<
+      "to-deliver" | "scheduled" | "delivered" | "failed"
+    >();
+    expectTypeOf<TransportDeliveryAttemptInput["attemptNumber"]>().toEqualTypeOf<number>();
+    expectTypeOf<TransportDeliveryAttempt>().toExtend<{
+      readonly attemptKey: string;
+      readonly subscription: object;
+      readonly worker: object;
+    }>();
+    expectTypeOf<TransportDeliveryFailureClassification>().toExtend<{
+      readonly retryEligibility: "eligible" | "ineligible";
+      readonly details: Readonly<Record<string, string | number | boolean | null>>;
+    }>();
+    expectTypeOf<TransportDeliveryResult>().toExtend<{
+      readonly attempt: TransportDeliveryAttempt;
+      readonly status: TransportDeliveryStatus;
+      readonly resultKey: string;
+    }>();
     expectTypeOf<TransportLifecycleSnapshotInput<"broker">["participant"]>().toEqualTypeOf<
       TransportParticipantIdentityInput<"broker">
     >();
