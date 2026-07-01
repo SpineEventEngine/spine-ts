@@ -1,16 +1,9 @@
 import { spawnSync } from "node:child_process";
-import {
-  existsSync,
-  lstatSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.mjs";
 
 const defaultRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const generatedPath = "packages/proto/generated";
@@ -82,34 +75,29 @@ function resolveBufExecutable(repoRoot) {
   return existsSync(localBuf) ? localBuf : executable;
 }
 
-function lstatIfPresent(path) {
-  try {
-    return lstatSync(path);
-  } catch (error) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      return undefined;
-    }
+function assertGeneratedDirectorySafe(repoRoot, root, displayPath, options = {}) {
+  const ancestorFailures =
+    options.checkAncestors === false ? [] : findSymlinkedAncestors(repoRoot, displayPath);
 
-    throw error;
+  if (ancestorFailures.length > 0) {
+    return ancestorFailures;
   }
-}
 
-function assertGeneratedDirectorySafe(root, displayPath) {
   const rootStat = lstatIfPresent(root);
 
   if (rootStat === undefined) {
-    return [`missing directory: ${displayPath}`];
+    return [...ancestorFailures, `missing directory: ${displayPath}`];
   }
 
   if (rootStat.isSymbolicLink()) {
-    return [`symlink directory: ${displayPath}`];
+    return [...ancestorFailures, `symlink directory: ${displayPath}`];
   }
 
   if (!rootStat.isDirectory()) {
-    return [`not a directory: ${displayPath}`];
+    return [...ancestorFailures, `not a directory: ${displayPath}`];
   }
 
-  const failures = [];
+  const failures = [...ancestorFailures];
 
   function visit(directory) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -242,12 +230,23 @@ function main() {
 
   const trackedFiles = trackedResult.stdout.trim();
   const generatedDirectory = resolve(repoRoot, generatedPath);
-  const generatedSafetyFailures = assertGeneratedDirectorySafe(generatedDirectory, generatedPath);
+  const generatedSafetyFailures = assertGeneratedDirectorySafe(
+    repoRoot,
+    generatedDirectory,
+    generatedPath,
+  );
   const generatedDirectoryNotIgnored = ignoredResult.status !== 0;
   const tempGeneration =
     expectedGeneratedRoot === undefined ? createExpectedGeneratedRoot(repoRoot) : undefined;
   const expectedRoot = expectedGeneratedRoot ?? tempGeneration.outputRoot;
-  const expectedSafetyFailures = assertGeneratedDirectorySafe(expectedRoot, expectedRoot);
+  const expectedSafetyFailures = assertGeneratedDirectorySafe(
+    repoRoot,
+    expectedRoot,
+    expectedRoot,
+    {
+      checkAncestors: false,
+    },
+  );
 
   try {
     if (
@@ -266,7 +265,9 @@ function main() {
         console.error(
           failure.startsWith("symlink directory")
             ? `Generated directory must not be a symlink: ${generatedPath}`
-            : `Generated output is unsafe: ${failure}`,
+            : failure.startsWith("symlink ancestor")
+              ? `Generated path ancestor must not be a symlink: ${failure.replace("symlink ancestor: ", "")}`
+              : `Generated output is unsafe: ${failure}`,
         );
       }
 

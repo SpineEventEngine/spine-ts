@@ -6,9 +6,9 @@ Branch: `task/T-0012-1-cleanup-enforcement-baseline`
 Baseline commit: `a65ac4d`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-1-cleanup-enforcement-baseline`
-Status: Round 1 follow-up verified; ready for re-review
-Reviewed commit/diff basis: `147d496..8349abc`
-Review package: `.superpowers/sdd/review-147d496..8349abc.diff`
+Status: Round 2 follow-up verified; ready for re-review
+Reviewed commit/diff basis: `147d496..3d33805`
+Review package: `.superpowers/sdd/review-147d496..3d33805.diff`
 
 ## Required Review Lanes
 
@@ -117,3 +117,19 @@ Reviewer lanes:
 
 All Round 2 reviewer agents are closed. Author follow-up must address the
 remaining Important findings before another re-review.
+
+## Round 2 Author Follow-up
+
+Follow-up fixes are authored for all remaining Round 2 Important findings:
+
+- Durable review/work-log pointers now reference the Round 2 review package
+  `.superpowers/sdd/review-147d496..3d33805.diff`.
+- Generated-output cleanup/checking now rejects symlinked ancestors such as
+  `packages/proto`, not only a symlinked final `generated` directory.
+- Direct `pnpm lint` now preflights `pnpm proto:generate` before ESLint resolves
+  generated imports.
+- The concurrent generated-check race remains documented as non-blocking
+  because the required `verify` flow runs generated commands sequentially.
+
+Focused RED/GREEN evidence and final verification are recorded in
+`build-protocol/tasks/T-0012-1-cleanup-enforcement-baseline/IMPLEMENTATION_REPORT.md`.

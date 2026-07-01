@@ -65,6 +65,34 @@ describe("check-generated-clean", () => {
     expect(result.stderr).toContain("Generated directory must not be a symlink");
   });
 
+  it("rejects symlinked generated output ancestors", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-generated-clean-"));
+    const linkedProtoRoot = mkdtempSync(join(tmpdir(), "spine-linked-proto-"));
+    const expectedOutput = mkdtempSync(join(tmpdir(), "spine-expected-generated-"));
+
+    run("git", ["init"], repoRoot);
+    writeFileSync(join(repoRoot, ".gitignore"), "packages/proto/generated/\n");
+    mkdirSync(join(repoRoot, "packages"), { recursive: true });
+    mkdirSync(join(linkedProtoRoot, "generated/spine/core"), { recursive: true });
+    writeFileSync(
+      join(linkedProtoRoot, "generated/spine/core/command_pb.ts"),
+      "export const command = 'fresh';\n",
+    );
+    mkdirSync(join(expectedOutput, "spine/core"), { recursive: true });
+    writeFileSync(
+      join(expectedOutput, "spine/core/command_pb.ts"),
+      "export const command = 'fresh';\n",
+    );
+    symlinkSync(linkedProtoRoot, join(repoRoot, "packages/proto"), "dir");
+
+    const result = runChecker(repoRoot, expectedOutput);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "Generated path ancestor must not be a symlink: packages/proto",
+    );
+  });
+
   it("rejects stale or orphaned generated output compared with clean generation", () => {
     const repoRoot = createFixture();
     const expectedOutput = mkdtempSync(join(tmpdir(), "spine-expected-generated-"));
