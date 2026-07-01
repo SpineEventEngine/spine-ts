@@ -112,6 +112,17 @@ Round 3 documentation follow-up:
 
 - Corrected the replacement storage example in `docs/USER_GUIDE.md` so
   `eventStore.append(create(...))` is syntactically valid.
+- Focused `corepack pnpm docs:check` passed with only the existing
+  invalid-`origin` TypeDoc source-link warning.
+- Final documentation re-review passed clean after the report grouping fix.
+
+Final task verification:
+
+- Escalated `env CI=true corepack pnpm verify` passed with 32 files / 294
+  tests, coverage statements 95.64%, branches 90.44%, functions 98.31%, lines
+  95.64%, TypeDoc/API checks, proto lint/generate, and generated-clean
+  comparison. Existing warning only: the local `origin` remote is invalid for
+  TypeDoc source links.
 
 ## Changed Files
 
