@@ -7,9 +7,8 @@ root API for copied Spine contracts, the `@spine-ts/core` metadata/type
 registry and validation facade APIs, the first `@spine-ts/server`
 descriptor-derived entity metadata, metadata-only `Repository` identity,
 set-once transition validation, explicit handler metadata APIs, and the first
-server runtime lifecycle/async queue kernel with a bounded-context runtime
-handle, write-side signal intake result exports, the runtime-routing planner
-seam, the first
+server runtime lifecycle/async queue kernel, write-side signal intake result
+exports, the runtime-routing planner seam, the first
 `@spine-ts/transport` contracts, and the first `@spine-ts/storage` contracts.
 
 Proto exports include message types, generated schemas, enum values and enum
@@ -27,9 +26,7 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 
 Server exports include `BoundedContext`, `BoundedContextBuilder`,
 `ContextSpec`, `BoundedContextName`, `TenantMode`, `BoundedContextSnapshot`,
-`BuiltBoundedContextSnapshot`, immutable snapshot contracts,
-`BoundedContextRuntime`, `BoundedContextRuntimeOptions`,
-`BoundedContextNameError`, and
+immutable snapshot contracts, `BoundedContextNameError`, and
 `BoundedContextRepositoryRegistrationError` for the first bounded-context
 assembly shell.
 The public entry points mirror Spine JVM's
@@ -47,16 +44,6 @@ repository ownership metadata for later runtime parts without creating default
 repositories from entity classes, registering repositories at runtime, invoking
 handlers, creating system contexts, opening storage, constructing buses/stands,
 writing tenant indexes, exposing gRPC services, or integrating transports.
-`BoundedContextRuntime` is the runtime-facing handle for one already built
-context. It owns a private `SingleProcessServerRuntime` by default or accepts an
-injected `ServerRuntimeLifecycle`; injected lifecycle sharing remains caller
-owned. The handle delegates `state`, `start()`, and `close()`, and exposes
-fresh immutable copies for the context name, spec, repository identity
-snapshots, and `contextSnapshot`. It does not expose `enqueue()` for injected or
-default runtimes and is not a JVM `Server` equivalent, command/event/import bus,
-repository dispatcher, stand, event store, tenant index, integration broker,
-system context, gRPC/ZeroMQ transport, service host, delivery inbox, or handler
-invocation mechanism.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,
@@ -90,14 +77,14 @@ events.
 `Repository`, `RepositoryOptions`, `RepositoryEntityType`,
 `ConcreteRepositoryEntityType`, `RepositoryStateSchema`,
 `RepositoryIdentitySnapshot`, `RepositoryIdentityError`,
-`RepositoryIdentityErrorCode`, and `RepositoryIdentityErrorDetails` form the
-metadata-only repository identity seam. A repository identity records one
+and `RepositoryIdentityErrorCode` form the metadata-only repository identity
+seam. A repository identity records one
 entity constructor, the inferred aggregate/projection/process-manager family,
 the matching descriptor-backed state schema, descriptor metadata, state full
 type name, and ID-field metadata. Snapshots are frozen fresh-copy values for
 later bounded-context duplicate/conflict checks. The seam rejects unsupported
-constructors and entity-family/state-kind mismatches with structured
-`RepositoryIdentityError` details. Family inference trusts same-realm class
+constructors and entity-family/state-kind mismatches with simple
+`RepositoryIdentityError` code/message diagnostics. Family inference trusts same-realm class
 constructor and instance prototype metadata, so alias imports, member
 expressions, intermediate domain base classes, and explicitly reparented ES
 classes with matching same-realm prototype chains are treated as metadata. It
@@ -183,15 +170,15 @@ Runtime routing exports include `createServerRuntimeRoutingPlan()`,
 `DeferredServerRuntimeRoutingSeam`. The planner requires a built
 `BoundedContext`, plus optional concrete `CommandRegistrationReadiness` /
 `EventRegistrationReadiness` instances, and derives immutable
-`@spine-ts/transport` topics, subscriptions, and worker registrations plus
+`@spine-ts/transport` topics, subscriptions, and planner-local worker IDs plus
 small sanitized route descriptors. Command routing produces one planner-local
-command-worker competing-consumer registration over registered command topics.
-Event routing produces fan-out subscriptions and event-worker registrations
+command-worker competing-consumer subscription over registered command topics.
+Event routing produces fan-out subscriptions and event-worker IDs
 for subscriber, reactor, and application receiver groups while keeping handler
 invocation, storage-before-dispatch, buses, IPC endpoint naming, and process
 supervision deferred. Public route descriptors expose only planner-local route
 and worker IDs, message full type names/type URLs, stable receiver groups, and
-transport correlation keys back to the top-level topics/subscriptions/workers;
+transport correlation keys back to the top-level topics/subscriptions;
 they do not retain raw readiness metadata, entity names, handler method names,
 ZeroMQ endpoint data, socket topology, or duplicate full transport contracts on
 each route. Query, subscription, and system routing remain explicit deferred
@@ -200,8 +187,7 @@ Server runtime exports include `SingleProcessServerRuntime`,
 `ServerRuntimeLifecycle`, `ServerRuntimeState`, `ServerRuntimeWork`,
 `ServerRuntimeStateOperation`, `ServerRuntimeStateErrorCode`, and
 `ServerRuntimeStateError` for the first single-process lifecycle and async queue
-kernel, plus `BoundedContextRuntime` for context-scoped lifecycle delegation
-over a built bounded-context snapshot. The lifecycle state machine is
+kernel. The lifecycle state machine is
 deterministic: `created -> running` on
 `start()`, `created -> closed` when closed before start, and
 `running -> closing -> closed` when close drains already accepted work.
@@ -213,8 +199,7 @@ running, returns that item's completion promise, and runs accepted work in a
 later microtask in FIFO order. Enqueued callbacks are trusted server-owned work
 only. The queue has no timeout, cancellation, fairness, queue bound, or
 hostile-callback protection, so non-settling or reentrant work can keep
-`close()` pending. `BoundedContextRuntime` does not expose queue intake; it only
-delegates lifecycle and exposes copied context metadata. This surface is a
+`close()` pending. This surface is a
 server-runtime kernel only; it is not a
 process-wide singleton, process supervisor, generic job framework,
 command/event/import bus, durable storage or inbox, read-side stand, repository
@@ -261,40 +246,15 @@ Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
 `TransportSubscriptionInput`, `TransportSubscription`, `TransportSubscriptionMode`,
 `PublishTransportOperation`, `RequestTransportOperation`,
 `PublishTransportHandler`, `RequestTransportHandler`, `AsyncCloseable`,
-`TransportSubscriptionHandle`, `SignalTransport`, `TransportParticipantKind`,
-`TransportWorkerRole`, `TransportLifecycleState`, `TransportReadinessState`,
-`TransportParticipantIdentityInput`, `TransportParticipantIdentity`,
-`TransportWorkerRegistrationInput`, `TransportWorkerRegistration`,
-`TransportLifecycleSnapshotInput`, `TransportLifecycleSnapshot`,
-`TransportLifecycleParticipant`, `TransportDeliveryStatus`,
-`TransportDeliveryOutcome`, `TransportDeliveryFailureKind`,
-`TransportRetryEligibility`, `TransportDeliveryFailureDetailValue`,
-`TransportDeliveryFailureDetails`,
-`TransportDeliveryFailureClassificationInput`,
-`TransportDeliveryFailureClassification`, `TransportDeliveryAttemptInput`,
-`TransportDeliveryAttempt`, `TransportDeliveryResultInput`,
-`TransportDeliveryResult`, `createTransportTopic()`,
-`createTransportSubscription()`, `createTransportParticipantIdentity()`,
-`createTransportWorkerRegistration()`, `createTransportLifecycleSnapshot()`,
-`createTransportDeliveryAttempt()`, `classifyTransportDeliveryFailure()`, and
-`createTransportDeliveryResult()`. This surface is contract-only: it defines
+`TransportSubscriptionHandle`, `SignalTransport`, `createTransportTopic()`, and
+`createTransportSubscription()`. This surface is contract-only: it defines
 immutable topic/subscription value objects, deterministic adapter-agnostic
-routing keys, stable broker/worker lifecycle identities, subscription-backed
-worker registrations, readiness/lifecycle snapshots, delivery attempt/result
-boundary values, redacted failure classifications, retry eligibility data,
-handler callback signatures, and graceful async close behavior. It does not
-expose ZeroMQ socket types, endpoint strings, multipart frames, production
-endpoint topology, broker processes, child process supervision, retry timers or
-workers, durable storage, runtime handler invocation, or server runtime wiring.
-Delivery attempt helpers derive keys from semantic subscription/worker/delivery
-fields and reject forged prebuilt keys. Delivery result helpers derive status
-from the observed outcome, keep failed outcomes as `failed`, preserve retry
-eligibility as separate policy data, and reject mismatched caller-supplied
-statuses or result keys. Failure classification preserves only stable failure
-codes, failure kinds, retry eligibility, and allowlisted scalar details; raw
-exceptions, process details, endpoint strings, frames, payloads, inbox/outbox
-records, scheduling decisions, and monitor policy execution stay outside the
-transport API.
+routing keys, handler callback signatures, and graceful async close behavior.
+It does not expose ZeroMQ socket types, endpoint strings, multipart frames,
+production endpoint topology, broker processes, child process supervision,
+participant lifecycle values, worker registrations, delivery attempt/result
+values, retry policy, durable storage, runtime handler invocation, or server
+runtime wiring.
 The transport package pins `zeromq@6.5.0` for local IPC adapter work, but that
 native dependency remains outside the public TypeDoc entry point.
 Adapter-private wiring validates local IPC configuration and native module

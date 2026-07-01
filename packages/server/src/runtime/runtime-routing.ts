@@ -2,12 +2,10 @@ import { deriveTypeUrl } from "@spine-ts/core";
 import {
   createTransportSubscription,
   createTransportTopic,
-  createTransportWorkerRegistration,
   type TransportSubscription,
   type TransportTopic,
-  type TransportWorkerRegistration,
 } from "@spine-ts/transport";
-import { type BuiltBoundedContextSnapshot, BoundedContext } from "../context/bounded-context.js";
+import { BoundedContext, type BoundedContextSnapshot } from "../context/bounded-context.js";
 import {
   CommandRegistrationReadiness,
   isAuthenticCommandRegistrationReadiness,
@@ -52,8 +50,6 @@ interface ServerRuntimeRouteTransportReference {
   readonly topicRoutingKey: string;
   /** Subscription descriptor key that matches one top-level subscription entry. */
   readonly subscriptionDescriptorKey: string;
-  /** Worker registration key that matches one top-level worker entry. */
-  readonly workerRegistrationKey: string;
 }
 
 /** Stable public command route descriptor. */
@@ -74,8 +70,8 @@ export interface CommandRuntimeRoutingPlan {
   readonly topics: readonly TransportTopic<"command">[];
   /** Deterministic competing-consumer subscriptions for the command worker. */
   readonly subscriptions: readonly TransportSubscription<"command">[];
-  /** Worker registrations suitable for later command-worker wiring. */
-  readonly workers: readonly TransportWorkerRegistration[];
+  /** Planner-local worker ids referenced by command routes. */
+  readonly workerIds: readonly string[];
   /** Sanitized command routes. */
   readonly routes: readonly CommandRuntimeRoutingRoute[];
 }
@@ -101,8 +97,8 @@ export interface EventRuntimeRoutingPlan {
   readonly topics: readonly TransportTopic<"event">[];
   /** Deterministic fan-out subscriptions across all event receiver groups. */
   readonly subscriptions: readonly TransportSubscription<"event">[];
-  /** Worker registrations suitable for later event-worker wiring. */
-  readonly workers: readonly TransportWorkerRegistration[];
+  /** Planner-local worker ids referenced by event routes. */
+  readonly workerIds: readonly string[];
   /** Sanitized subscriber fan-out routes. */
   readonly subscriberRoutes: readonly EventRuntimeRoutingRoute[];
   /** Sanitized reactor fan-out routes. */
@@ -114,7 +110,7 @@ export interface EventRuntimeRoutingPlan {
 /** Immutable runtime routing plan derived from server metadata only. */
 export interface ServerRuntimeRoutingPlan {
   /** Copy-safe built bounded-context metadata that owns the routing plan. */
-  readonly context: BuiltBoundedContextSnapshot;
+  readonly context: BoundedContextSnapshot;
   /** Command routing metadata derived from command readiness. */
   readonly commands: CommandRuntimeRoutingPlan;
   /** Event routing metadata derived from event readiness. */
@@ -193,27 +189,18 @@ function createCommandRuntimeRoutingPlan(
       createCommandRouteDraft(validatedReadiness, commandFullTypeName, index + 1),
     ),
   );
-  const worker = createTransportWorkerRegistration({
-    worker: {
-      participantKind: "worker",
-      participantId: commandWorkerId,
-      workerRole: "command-worker",
-    },
-    subscriptions: routeDrafts.map(({ subscription }) => subscription),
-  });
-  const routes = finalizeCommandRoutes(routeDrafts, worker);
+  const routes = finalizeCommandRoutes(routeDrafts);
 
   return Object.freeze({
     topics: Object.freeze(routeDrafts.map(({ topic }) => topic)),
     subscriptions: Object.freeze(routeDrafts.map(({ subscription }) => subscription)),
-    workers: Object.freeze([worker]),
+    workerIds: Object.freeze([commandWorkerId]),
     routes,
   });
 }
 
 function finalizeCommandRoutes(
   drafts: readonly CommandRouteDraft[],
-  worker: TransportWorkerRegistration,
 ): readonly CommandRuntimeRoutingRoute[] {
   return Object.freeze(
     drafts.map((route) =>
@@ -223,7 +210,6 @@ function finalizeCommandRoutes(
         workerId: route.workerId,
         topicRoutingKey: route.topic.routing.routingKey,
         subscriptionDescriptorKey: route.subscription.descriptorKey,
-        workerRegistrationKey: worker.registrationKey,
         message: route.message,
       }),
     ),
@@ -326,25 +312,22 @@ function createEventRuntimeRoutingPlan(
   }
 
   const allDrafts = [...subscriberDrafts, ...reactorDrafts, ...applicationDrafts];
-  const workersById = createEventWorkersById(allDrafts);
-  const subscriberRoutes = finalizeEventRoutes(subscriberDrafts, workersById);
-  const reactorRoutes = finalizeEventRoutes(reactorDrafts, workersById);
-  const applicationRoutes = finalizeEventRoutes(applicationDrafts, workersById);
+  const subscriberRoutes = finalizeEventRoutes(subscriberDrafts);
+  const reactorRoutes = finalizeEventRoutes(reactorDrafts);
+  const applicationRoutes = finalizeEventRoutes(applicationDrafts);
   const subscriptions = Object.freeze(
     allDrafts
       .map(({ subscription }) => subscription)
       .sort((left, right) => compareFullTypeNames(left.descriptorKey, right.descriptorKey)),
   );
-  const workers = Object.freeze(
-    [...workersById.values()].sort((left, right) =>
-      compareFullTypeNames(left.registrationKey, right.registrationKey),
-    ),
+  const workerIds = Object.freeze(
+    [...new Set(allDrafts.map(({ workerId }) => workerId))].sort(compareFullTypeNames),
   );
 
   return Object.freeze({
     topics: Object.freeze([...topicByEventFullTypeName.values()]),
     subscriptions,
-    workers,
+    workerIds,
     subscriberRoutes,
     reactorRoutes,
     applicationRoutes,
@@ -388,46 +371,20 @@ function createEventRouteDrafts(
   return Object.freeze(drafts);
 }
 
-function createEventWorkersById(
-  routes: readonly EventRouteDraft[],
-): ReadonlyMap<string, TransportWorkerRegistration> {
-  const workersById = new Map<string, TransportWorkerRegistration>();
-
-  for (const route of routes) {
-    workersById.set(
-      route.workerId,
-      createTransportWorkerRegistration({
-        worker: {
-          participantKind: "worker",
-          participantId: route.workerId,
-          workerRole: "event-worker",
-        },
-        subscriptions: [route.subscription],
-      }),
-    );
-  }
-
-  return workersById;
-}
-
 function finalizeEventRoutes(
   drafts: readonly EventRouteDraft[],
-  workersById: ReadonlyMap<string, TransportWorkerRegistration>,
 ): readonly EventRuntimeRoutingRoute[] {
   return Object.freeze(
-    drafts.map((route) => {
-      const worker = getWorkerRegistration(workersById, route.workerId);
-
-      return Object.freeze({
+    drafts.map((route) =>
+      Object.freeze({
         routeId: route.routeId,
         receiverGroup: route.receiverGroup,
         workerId: route.workerId,
         topicRoutingKey: route.topic.routing.routingKey,
         subscriptionDescriptorKey: route.subscription.descriptorKey,
-        workerRegistrationKey: worker.registrationKey,
         message: route.message,
-      });
-    }),
+      }),
+    ),
   );
 }
 
@@ -463,7 +420,7 @@ function createEmptyCommandPlan(): CommandRuntimeRoutingPlan {
   return Object.freeze({
     topics: Object.freeze([]),
     subscriptions: Object.freeze([]),
-    workers: Object.freeze([]),
+    workerIds: Object.freeze([]),
     routes: Object.freeze([]),
   });
 }
@@ -472,7 +429,7 @@ function createEmptyEventPlan(): EventRuntimeRoutingPlan {
   return Object.freeze({
     topics: Object.freeze([]),
     subscriptions: Object.freeze([]),
-    workers: Object.freeze([]),
+    workerIds: Object.freeze([]),
     subscriberRoutes: Object.freeze([]),
     reactorRoutes: Object.freeze([]),
     applicationRoutes: Object.freeze([]),
@@ -680,19 +637,6 @@ function createMessageDescriptor(
     fullTypeName,
     typeUrl,
   });
-}
-
-function getWorkerRegistration(
-  workersById: ReadonlyMap<string, TransportWorkerRegistration>,
-  workerId: string,
-): TransportWorkerRegistration {
-  const worker = workersById.get(workerId);
-
-  if (worker === undefined) {
-    throw new TypeError(`Missing worker registration for runtime routing worker "${workerId}".`);
-  }
-
-  return worker;
 }
 
 function withDeterministicValidation<Value>(

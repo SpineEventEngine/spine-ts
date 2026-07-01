@@ -19,13 +19,10 @@ import {
   BoundedContextBuilder,
   BoundedContextNameError,
   BoundedContextRepositoryRegistrationError,
-  BoundedContextRuntime,
   ContextSpec,
-  type BoundedContextRuntimeOptions,
   type ContextSpecSnapshot,
   type TenantMode,
 } from "../../src/context/bounded-context.js";
-import type { ServerRuntimeLifecycle, ServerRuntimeState } from "../../src/runtime/runtime.js";
 
 type UntypedConstructor<T> = new (...args: unknown[]) => T;
 
@@ -98,23 +95,6 @@ const ContextSpecConstructor = ContextSpec as unknown as UntypedConstructor<Cont
 const BoundedContextBuilderConstructor =
   BoundedContextBuilder as unknown as UntypedConstructor<BoundedContextBuilder>;
 const BoundedContextConstructor = BoundedContext as unknown as UntypedConstructor<BoundedContext>;
-
-class RecordingRuntime implements ServerRuntimeLifecycle {
-  readonly calls: string[] = [];
-  state: ServerRuntimeState = "created";
-
-  start(): Promise<void> {
-    this.calls.push("start");
-    this.state = "running";
-    return Promise.resolve();
-  }
-
-  close(): Promise<void> {
-    this.calls.push("close");
-    this.state = "closed";
-    return Promise.resolve();
-  }
-}
 
 function repositoryWithTaskAggregateSnapshot(
   transformSnapshot: (snapshot: RepositoryIdentitySnapshot<typeof TaskAggregate>) => unknown,
@@ -518,19 +498,14 @@ describe("BoundedContext builder shell", () => {
       expect(error).toBeInstanceOf(BoundedContextRepositoryRegistrationError);
       const registrationError = error as BoundedContextRepositoryRegistrationError;
       expect(registrationError.code).toBe("ENTITY_TYPE_CONFLICT");
-      expect(registrationError.details).toEqual({
-        contextName: "Tasks",
-        existing: {
-          entityTypeName: "ConflictingTaskAggregate",
-          entityFamily: "aggregate",
-          stateFullTypeName: AggregateStateSchema.typeName,
-        },
-        incoming: {
-          entityTypeName: "ConflictingTaskAggregate",
-          entityFamily: "aggregate",
-          stateFullTypeName: AlternateAggregateStateSchema.typeName,
-        },
-      });
+      expect(registrationError.message).toBe(
+        "Bounded context already has conflicting repository ownership.",
+      );
+      expect(registrationError.message).not.toContain("Tasks");
+      expect(registrationError.message).not.toContain("ConflictingTaskAggregate");
+      expect(registrationError.message).not.toContain(AggregateStateSchema.typeName);
+      expect(registrationError.message).not.toContain(AlternateAggregateStateSchema.typeName);
+      expect(registrationError).not.toHaveProperty("details");
     }
   });
 
@@ -552,19 +527,14 @@ describe("BoundedContext builder shell", () => {
       expect(error).toBeInstanceOf(BoundedContextRepositoryRegistrationError);
       const registrationError = error as BoundedContextRepositoryRegistrationError;
       expect(registrationError.code).toBe("STATE_TYPE_CONFLICT");
-      expect(registrationError.details).toEqual({
-        contextName: "Tasks",
-        existing: {
-          entityTypeName: "TaskProjection",
-          entityFamily: "projection",
-          stateFullTypeName: ProjectionStateSchema.typeName,
-        },
-        incoming: {
-          entityTypeName: "TaskSummaryProjection",
-          entityFamily: "projection",
-          stateFullTypeName: ProjectionStateSchema.typeName,
-        },
-      });
+      expect(registrationError.message).toBe(
+        "Bounded context already has conflicting repository ownership.",
+      );
+      expect(registrationError.message).not.toContain("Tasks");
+      expect(registrationError.message).not.toContain(ProjectionStateSchema.typeName);
+      expect(registrationError.message).not.toContain("TaskProjection");
+      expect(registrationError.message).not.toContain("TaskSummaryProjection");
+      expect(registrationError).not.toHaveProperty("details");
     }
   });
 
@@ -592,11 +562,9 @@ describe("BoundedContext builder shell", () => {
       const registrationError = error as BoundedContextRepositoryRegistrationError;
       expect(registrationError.code).toBe("INVALID_REPOSITORY_SNAPSHOT");
       expect(registrationError.message).toContain("BoundedContextBuilder.add");
+      expect(registrationError.message).toContain('bounded context "Tasks"');
       expect(registrationError.message).not.toContain("raw snapshot leak");
-      expect(registrationError.details).toEqual({
-        contextName: "Tasks",
-        operation: "add",
-      });
+      expect(registrationError).not.toHaveProperty("details");
     }
   });
 
@@ -636,11 +604,9 @@ describe("BoundedContext builder shell", () => {
       const registrationError = error as BoundedContextRepositoryRegistrationError;
       expect(registrationError.code).toBe("INVALID_REPOSITORY_SNAPSHOT");
       expect(registrationError.message).toContain("BoundedContextBuilder.remove");
+      expect(registrationError.message).toContain('bounded context "Tasks"');
       expect(registrationError.message).not.toContain("raw metadata leak");
-      expect(registrationError.details).toEqual({
-        contextName: "Tasks",
-        operation: "remove",
-      });
+      expect(registrationError).not.toHaveProperty("details");
     }
   });
 
@@ -890,10 +856,9 @@ describe("BoundedContext builder shell", () => {
         expect(error).toBeInstanceOf(BoundedContextRepositoryRegistrationError);
         const registrationError = error as BoundedContextRepositoryRegistrationError;
         expect(registrationError.code).toBe("INVALID_REPOSITORY_SNAPSHOT");
-        expect(registrationError.details).toEqual({
-          contextName: "Tasks",
-          operation: "add",
-        });
+        expect(registrationError.message).toContain("BoundedContextBuilder.add");
+        expect(registrationError.message).toContain('bounded context "Tasks"');
+        expect(registrationError).not.toHaveProperty("details");
       }
     },
   );
@@ -932,12 +897,12 @@ describe("BoundedContext builder shell", () => {
       expect(error).toBeInstanceOf(BoundedContextRepositoryRegistrationError);
       const registrationError = error as BoundedContextRepositoryRegistrationError;
       expect(registrationError.code).toBe("STATE_TYPE_CONFLICT");
+      expect(registrationError.message).toBe(
+        "Bounded context already has conflicting repository ownership.",
+      );
       expect(registrationError.message).not.toContain("raw name leak");
-      expect(registrationError.details).toMatchObject({
-        incoming: {
-          entityTypeName: "(anonymous)",
-        },
-      });
+      expect(registrationError.message).not.toContain("(anonymous)");
+      expect(registrationError).not.toHaveProperty("details");
     }
 
     const numericNameConflictingRepository = new Repository({
@@ -952,141 +917,11 @@ describe("BoundedContext builder shell", () => {
       expect(error).toBeInstanceOf(BoundedContextRepositoryRegistrationError);
       const registrationError = error as BoundedContextRepositoryRegistrationError;
       expect(registrationError.code).toBe("STATE_TYPE_CONFLICT");
-      expect(registrationError.details).toMatchObject({
-        incoming: {
-          entityTypeName: "(anonymous)",
-        },
-      });
-    }
-  });
-});
-
-describe("BoundedContextRuntime", () => {
-  it("owns a default single-process runtime lifecycle for a built context", async () => {
-    const context = BoundedContext.singleTenant("Tasks").build();
-    const runtime = new BoundedContextRuntime(context);
-
-    expect(runtime.state).toBe("created");
-
-    await runtime.start();
-
-    expect(runtime.state).toBe("running");
-
-    await runtime.close();
-
-    expect(runtime.state).toBe("closed");
-  });
-
-  it("delegates lifecycle state, start, and close to an injected lifecycle", async () => {
-    const lifecycle = new RecordingRuntime();
-    const runtime = new BoundedContextRuntime(BoundedContext.multitenant("Tasks").build(), {
-      runtime: lifecycle,
-    });
-
-    expect(runtime.state).toBe("created");
-
-    await runtime.start();
-    await runtime.close();
-
-    expect(lifecycle.calls).toEqual(["start", "close"]);
-    expect(runtime.state).toBe("closed");
-  });
-
-  it("ignores inherited options.runtime and owns a default lifecycle", async () => {
-    const inheritedLifecycle = new RecordingRuntime();
-    const options = Object.create({
-      runtime: inheritedLifecycle,
-    }) as BoundedContextRuntimeOptions;
-
-    expect("runtime" in options).toBe(true);
-    expect(Object.hasOwn(options, "runtime")).toBe(false);
-
-    const runtime = new BoundedContextRuntime(
-      BoundedContext.singleTenant("Tasks").build(),
-      options,
-    );
-
-    expect(runtime.state).toBe("created");
-
-    await runtime.start();
-    await runtime.close();
-
-    expect(runtime.state).toBe("closed");
-    expect(inheritedLifecycle.calls).toEqual([]);
-  });
-
-  it("exposes copy-safe built context metadata snapshots", () => {
-    const repository = new Repository({
-      entityType: TaskAggregate,
-      schema: AggregateStateSchema,
-    });
-    const context = BoundedContext.multitenant("Tasks").add(repository).build();
-    const runtime = new BoundedContextRuntime(context);
-    const firstSnapshot = runtime.contextSnapshot;
-    const secondSnapshot = runtime.contextSnapshot;
-    const firstRepositories = runtime.repositories;
-    const secondRepositories = runtime.repositories;
-    const firstSpec = runtime.spec;
-    const secondSpec = runtime.spec;
-
-    expect(runtime.name.value).toBe("Tasks");
-    expect(runtime.tenantMode).toBe<TenantMode>("multitenant");
-    expect(runtime.isMultitenant).toBe(true);
-    expect(firstSnapshot).toEqual(context.snapshot);
-    expect(firstSnapshot).not.toBe(secondSnapshot);
-    expect(firstSnapshot.name).not.toBe(secondSnapshot.name);
-    expect(firstSnapshot.spec).not.toBe(secondSnapshot.spec);
-    expect(firstSnapshot.repositories).not.toBe(secondSnapshot.repositories);
-    expect(firstSnapshot.repositories[0]).not.toBe(secondSnapshot.repositories[0]);
-    expect(Object.isFrozen(firstSnapshot)).toBe(true);
-    expect(Object.isFrozen(firstSnapshot.repositories[0])).toBe(true);
-    expect(firstRepositories).toEqual(secondRepositories);
-    expect(firstRepositories).not.toBe(secondRepositories);
-    expect(firstRepositories[0]).not.toBe(secondRepositories[0]);
-    expect(firstSpec.snapshot).toEqual(secondSpec.snapshot);
-    expect(firstSpec).not.toBe(secondSpec);
-    expect(() => {
-      (firstRepositories[0] as { entityFamily: EntityFamily }).entityFamily = "projection";
-    }).toThrow(TypeError);
-  });
-
-  it("keeps queue methods and out-of-scope server graph members absent", () => {
-    const runtime = new BoundedContextRuntime(BoundedContext.singleTenant("Tasks").build());
-    const forbiddenRuntimeMembers = [
-      "enqueue",
-      "register",
-      "registerRepository",
-      "registerCommandDispatcher",
-      "registerEventDispatcher",
-      "commandBus",
-      "eventBus",
-      "importBus",
-      "stand",
-      "storage",
-      "tenantIndex",
-      "systemContext",
-      "integrationBroker",
-      "commandService",
-      "queryService",
-      "subscriptionService",
-    ];
-
-    expect(Object.getOwnPropertyNames(BoundedContextRuntime.prototype).sort()).toEqual([
-      "close",
-      "constructor",
-      "contextSnapshot",
-      "isMultitenant",
-      "name",
-      "repositories",
-      "spec",
-      "start",
-      "state",
-      "tenantMode",
-    ]);
-
-    for (const member of forbiddenRuntimeMembers) {
-      expect(member in runtime).toBe(false);
-      expect(Object.hasOwn(runtime, member)).toBe(false);
+      expect(registrationError.message).toBe(
+        "Bounded context already has conflicting repository ownership.",
+      );
+      expect(registrationError.message).not.toContain("(anonymous)");
+      expect(registrationError).not.toHaveProperty("details");
     }
   });
 });

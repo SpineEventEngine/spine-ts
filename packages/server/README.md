@@ -51,16 +51,13 @@ Current slice exposes:
 - `createServerRuntimeRoutingPlan({ context, commands, events })` for the
   smallest immutable server/runtime wiring seam from built bounded-context
   metadata plus command/event readiness to transport topics, subscriptions,
-  worker registrations, and explicit deferred routing seams.
+  planner-local worker IDs, and explicit deferred routing seams.
 - `@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply` standard method
   decorators that require explicit Protobuf-ES schemas and materialize into the
   same handler metadata contract.
 - `SingleProcessServerRuntime` for the first explicit server-owned lifecycle
   and async queue kernel with `start()`, `close()`, deterministic states, and
   post-intake work execution in a later microtask.
-- `BoundedContextRuntime` for a context-scoped runtime handle that binds one
-  built `BoundedContext` snapshot to a lifecycle without exposing queue intake,
-  buses, storage, services, dispatch, or repository runtime registration.
 - `acceptSignalIntake()` / `failSignalIntake()` and `SignalIntakeResult` for
   typed write-side command/event intake outcomes that distinguish
   accepted-for-async-work from immediate intake failure without implementing
@@ -135,7 +132,7 @@ const routingPlan = createServerRuntimeRoutingPlan({
   commands: readiness,
   events: eventReadiness,
 });
-routingPlan.commands.workers[0]?.worker.workerRole; // "command-worker"
+routingPlan.commands.workerIds[0]; // "command-worker-1"
 routingPlan.commands.routes[0]?.message.typeUrl; // "type.spine.io/..."
 routingPlan.commands.routes[0]?.receiverGroup; // "command-assignee"
 routingPlan.events.subscriberRoutes[0]?.subscriptionDescriptorKey; // correlate to top-level subscriptions
@@ -201,15 +198,15 @@ writer, transport adapter, handler invoker, or Spine `Ack` producer.
 over that metadata. It requires a built `BoundedContext` and accepts optional
 concrete `CommandRegistrationReadiness` / `EventRegistrationReadiness`
 instances. When readiness is present, it derives command topics plus one
-competing-consumer command-worker registration from command readiness and event
-topics plus fan-out subscriptions and event-worker registrations from
+competing-consumer command-worker ID from command readiness and event
+topics plus fan-out subscriptions and event-worker IDs from
 subscriber/reactor/application readiness. Without readiness, the corresponding
 command or event plan is empty. It returns immutable `@spine-ts/transport`
-topics, subscriptions, worker registrations, and small server-owned route
+topics, subscriptions, planner-local worker IDs, and small server-owned route
 descriptors. Those public route descriptors contain planner-local route and
 worker IDs, sanitized message full type names/type URLs, stable receiver
-groups, and transport correlation keys for the top-level topic/subscription/
-worker arrays only; they do not expose handler methods, entity type names, raw
+groups, transport correlation keys for the topic/subscription arrays, and
+planner-local worker IDs; they do not expose handler methods, entity type names, raw
 readiness metadata, ZeroMQ endpoints, socket topology, or duplicate full
 transport contracts on each route.
 Query, subscription, and system routing remain explicit deferred seams because
@@ -298,38 +295,21 @@ This seam deliberately does not call `SingleProcessServerRuntime.enqueue()`,
 create Spine `Ack` messages, validate tenants or messages, filter signals,
 store events, dispatch handlers, run services, or expose transport behavior.
 
-## Bounded Context Runtime Handle
+## Metadata And Routing Smoke Slice
 
-Use `BoundedContextRuntime` when later runtime code needs a context-scoped
-lifecycle handle for an already built `BoundedContext`:
-
-```ts
-import { BoundedContext, BoundedContextRuntime } from "@spine-ts/server";
-
-const tasks = BoundedContext.singleTenant("Tasks").build();
-const runtime = new BoundedContextRuntime(tasks);
-
-runtime.name.value; // "Tasks"
-runtime.contextSnapshot.repositories; // copied built-context metadata
-
-await runtime.start();
-await runtime.close();
-```
-
-The current runtime slice can be assembled with repository identity and
-registration-readiness metadata, but the result is still lifecycle plus
-metadata only:
+The current slice can be assembled with repository identity and
+registration-readiness metadata, but the result is still metadata and routing
+descriptors only:
 
 ```ts
 import {
   Aggregate,
   BoundedContext,
-  BoundedContextRuntime,
   CommandRegistrationReadiness,
   EventRegistrationReadiness,
   HandlerMetadataRegistry,
   Repository,
-  SingleProcessServerRuntime,
+  createServerRuntimeRoutingPlan,
   defineEntityHandlers,
 } from "@spine-ts/server";
 import { CreateTaskSchema } from "./generated/task_commands_pb.js";
@@ -345,44 +325,27 @@ const taskRepository = new Repository({
   schema: TaskStateSchema,
 });
 const tasks = BoundedContext.singleTenant("Tasks").add(taskRepository).build();
-const lifecycle = new SingleProcessServerRuntime();
-const runtime = new BoundedContextRuntime(tasks, { runtime: lifecycle });
 const handlers = defineEntityHandlers(TaskAggregate, TaskStateSchema, (builder) => [
   builder.assign(CreateTaskSchema, "create"),
   builder.apply(TaskCreatedSchema, "onCreated", { allowImport: true }),
 ]);
 const registry = new HandlerMetadataRegistry([handlers]);
+const routingPlan = createServerRuntimeRoutingPlan({
+  context: tasks,
+  commands: CommandRegistrationReadiness.fromRegistry(registry),
+  events: EventRegistrationReadiness.fromRegistry(registry),
+});
 
 CommandRegistrationReadiness.fromRegistry(registry).registeredCommandMessageFullTypeNames();
 EventRegistrationReadiness.fromRegistry(registry).registeredEventMessageFullTypeNames();
-
-await runtime.start();
-await runtime.close();
+routingPlan.commands.topics;
 ```
 
 This assembly proves the current public seams fit together; it does not turn
 registered command/event metadata into routing, dispatch, validation, storage,
-delivery, handler invocation, service hosting, or `Ack` behavior.
-
-By default the handle creates and owns a private `SingleProcessServerRuntime`.
-You may inject a `ServerRuntimeLifecycle` when a caller owns the lifecycle
-object:
-
-```ts
-const runtime = new BoundedContextRuntime(tasks, { runtime: sharedLifecycle });
-```
-
-Injected lifecycle ownership stays with the caller. The handle delegates
-`state`, `start()`, and `close()` deterministically to that lifecycle and
-returns fresh immutable copies for `name`, `spec`, `repositories`, and
-`contextSnapshot`.
-
-The handle deliberately does not expose `enqueue()` unless a later typed
-context queue boundary is designed. It is not a JVM `Server` equivalent, a
-running bounded-context graph, command/event/import bus, repository dispatcher,
-stand, event store, tenant index, integration broker, command/query/subscription
-service, gRPC server, ZeroMQ transport, system context, delivery inbox, or
-handler invocation mechanism.
+delivery, handler invocation, service hosting, or `Ack` behavior. The routing
+plan deliberately does not create worker registrations, lifecycle handles,
+queues, buses, repositories, storage, services, or transport endpoints.
 
 ## Bounded Context Shell
 
@@ -402,8 +365,8 @@ customers.isMultitenant; // true
 Names must be non-empty and non-blank. `ContextSpec` is a framework-owned
 immutable value exposed from the builder and built context, `build()` returns a
 frozen metadata-only `BoundedContext`, and `.snapshot` returns a copy-safe
-immutable `BuiltBoundedContextSnapshot` / `BoundedContextSnapshot`. Builders
-accept explicit metadata-only `Repository` identity objects:
+immutable `BoundedContextSnapshot`. Builders accept explicit metadata-only
+`Repository` identity objects:
 
 ```ts
 import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
@@ -425,8 +388,7 @@ Adding the same repository identity repeatedly is idempotent. The builder
 rejects conflicting ownership when one entity constructor is paired with a
 different state schema identity, or when one state type is claimed by multiple
 entity constructors. Returned repository arrays and built context snapshots are
-fresh frozen copies. `BuiltBoundedContextSnapshot` is a public name for this
-closed registration contract; it is not a runtime context handle.
+fresh frozen copies.
 
 This slice deliberately does not create default repositories from entity
 classes, perform runtime repository registration, invoke handlers, open storage,
@@ -537,8 +499,8 @@ namespace/member base-class expressions, and intermediate domain base classes
 are accepted. Explicitly reparented same-realm ES classes are trusted as
 metadata; this is not a sandbox boundary. The API rejects constructors outside
 those families and rejects mismatched family/schema pairs, such as an aggregate
-class with a projection state schema, with structured `RepositoryIdentityError`
-codes and details. `BoundedContextBuilder.add(repository)` uses these
+class with a projection state schema, with simple `RepositoryIdentityError`
+code/message diagnostics. `BoundedContextBuilder.add(repository)` uses these
 metadata-only identities for duplicate and conflict checks before
 `builder.build()` creates an immutable bounded-context snapshot. Runtime
 context registration remains deferred. This identity seam follows Spine

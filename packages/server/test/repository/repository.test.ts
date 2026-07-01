@@ -22,6 +22,21 @@ import {
   type RepositoryOptions,
 } from "../../src/index.js";
 
+function expectRepositoryIdentityError(
+  error: unknown,
+  code: RepositoryIdentityError["code"],
+  messageParts: readonly string[],
+): void {
+  expect(error).toBeInstanceOf(RepositoryIdentityError);
+  const identityError = error as RepositoryIdentityError;
+  expect(identityError.code).toBe(code);
+  expect(identityError).not.toHaveProperty("details");
+
+  for (const messagePart of messageParts) {
+    expect(identityError.message).toContain(messagePart);
+  }
+}
+
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
   name: string;
@@ -167,19 +182,18 @@ describe("repository identity", () => {
       });
       throw new Error("Expected repository identity construction to fail.");
     } catch (error) {
-      expect(error).toBeInstanceOf(RepositoryIdentityError);
-      const identityError = error as RepositoryIdentityError;
-      expect(identityError.code).toBe("ENTITY_SCHEMA_KIND_MISMATCH");
-      expect(identityError.details).toEqual({
-        entityTypeName: "RuntimeCheckedAggregate",
-        entityFamily: "aggregate",
-        stateFullTypeName: ProjectionStateSchema.typeName,
-        stateKind: "projection",
-      });
+      expectRepositoryIdentityError(error, "ENTITY_SCHEMA_KIND_MISMATCH", [
+        "RuntimeCheckedAggregate",
+        "supplied state schema",
+      ]);
+      expect((error as RepositoryIdentityError).message).not.toContain(
+        ProjectionStateSchema.typeName,
+      );
+      expect((error as RepositoryIdentityError).message).not.toContain("projection");
     }
   });
 
-  it("rejects generic entity schemas and non-family constructors with structured errors", () => {
+  it("rejects generic entity schemas and non-family constructors with simple errors", () => {
     expect(
       () =>
         new Repository({
@@ -195,9 +209,10 @@ describe("repository identity", () => {
       });
       throw new Error("Expected generic state schema to fail.");
     } catch (error) {
-      expect(error).toBeInstanceOf(RepositoryIdentityError);
-      expect((error as RepositoryIdentityError).code).toBe("ENTITY_SCHEMA_KIND_MISMATCH");
-      expect((error as RepositoryIdentityError).details.stateKind).toBe("entity");
+      expectRepositoryIdentityError(error, "ENTITY_SCHEMA_KIND_MISMATCH", [
+        "RuntimeCheckedAggregate",
+        "supplied state schema",
+      ]);
     }
 
     try {
@@ -207,11 +222,7 @@ describe("repository identity", () => {
       });
       throw new Error("Expected plain entity class to fail.");
     } catch (error) {
-      expect(error).toBeInstanceOf(RepositoryIdentityError);
-      expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
-      expect((error as RepositoryIdentityError).details).toEqual({
-        entityTypeName: "PlainEntityClass",
-      });
+      expectRepositoryIdentityError(error, "UNSUPPORTED_ENTITY_TYPE", ["PlainEntityClass"]);
     }
 
     try {
@@ -221,11 +232,7 @@ describe("repository identity", () => {
       });
       throw new Error("Expected unsupported entity type to fail before schema introspection.");
     } catch (error) {
-      expect(error).toBeInstanceOf(RepositoryIdentityError);
-      expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
-      expect((error as RepositoryIdentityError).details).toEqual({
-        entityTypeName: "PlainEntityClass",
-      });
+      expectRepositoryIdentityError(error, "UNSUPPORTED_ENTITY_TYPE", ["PlainEntityClass"]);
     }
 
     const forgedAggregatePrototype = {};
@@ -241,11 +248,7 @@ describe("repository identity", () => {
       });
       throw new Error("Expected forged non-function entity type to fail.");
     } catch (error) {
-      expect(error).toBeInstanceOf(RepositoryIdentityError);
-      expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
-      expect((error as RepositoryIdentityError).details).toEqual({
-        entityTypeName: "FakeAggregate",
-      });
+      expectRepositoryIdentityError(error, "UNSUPPORTED_ENTITY_TYPE", ["FakeAggregate"]);
     }
 
     function ForgedAggregateConstructor() {
@@ -261,11 +264,9 @@ describe("repository identity", () => {
       });
       throw new Error("Expected forged function entity type to fail.");
     } catch (error) {
-      expect(error).toBeInstanceOf(RepositoryIdentityError);
-      expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
-      expect((error as RepositoryIdentityError).details).toEqual({
-        entityTypeName: "ForgedAggregateConstructor",
-      });
+      expectRepositoryIdentityError(error, "UNSUPPORTED_ENTITY_TYPE", [
+        "ForgedAggregateConstructor",
+      ]);
     }
   });
 
@@ -294,7 +295,7 @@ describe("repository identity", () => {
     }
   });
 
-  it("rejects malformed nameless entity types with structured errors", () => {
+  it("rejects malformed nameless entity types with simple errors", () => {
     const entityTypeWithThrowingName = {
       get name(): string {
         throw new Error("entity name accessor should not escape diagnostics");
@@ -316,11 +317,7 @@ describe("repository identity", () => {
         });
         throw new Error("Expected malformed entity type to fail.");
       } catch (error) {
-        expect(error).toBeInstanceOf(RepositoryIdentityError);
-        expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
-        expect((error as RepositoryIdentityError).details).toEqual({
-          entityTypeName: "(anonymous)",
-        });
+        expectRepositoryIdentityError(error, "UNSUPPORTED_ENTITY_TYPE", ["(anonymous)"]);
       }
     }
   });
@@ -350,17 +347,12 @@ describe("repository identity", () => {
       });
       throw new Error("Expected volatile named entity type to fail.");
     } catch (error) {
-      expect(error).toBeInstanceOf(RepositoryIdentityError);
-      const identityError = error as RepositoryIdentityError;
-      expect(identityError.message).toContain('"VolatileEntityType1"');
-      expect(identityError.details).toEqual({
-        entityTypeName: "VolatileEntityType1",
-      });
+      expectRepositoryIdentityError(error, "UNSUPPORTED_ENTITY_TYPE", ['"VolatileEntityType1"']);
       expect(nameReadCount).toBe(1);
     }
   });
 
-  it("rejects missing or malformed schemas for supported entity types with structured errors", () => {
+  it("rejects missing or malformed schemas for supported entity types with simple errors", () => {
     for (const schema of [undefined, null, {}, { typeName: "BrokenState" }, { typeName: "" }]) {
       try {
         new Repository({
@@ -369,12 +361,10 @@ describe("repository identity", () => {
         });
         throw new Error("Expected malformed repository schema to fail.");
       } catch (error) {
-        expect(error).toBeInstanceOf(RepositoryIdentityError);
-        expect((error as RepositoryIdentityError).code).toBe("ENTITY_SCHEMA_KIND_MISMATCH");
-        expect((error as RepositoryIdentityError).details.entityTypeName).toBe(
+        expectRepositoryIdentityError(error, "ENTITY_SCHEMA_KIND_MISMATCH", [
           "RuntimeCheckedAggregate",
-        );
-        expect((error as RepositoryIdentityError).details.entityFamily).toBe("aggregate");
+          "supplied state schema",
+        ]);
       }
     }
 
@@ -385,12 +375,11 @@ describe("repository identity", () => {
       });
       throw new Error("Expected malformed named schema to fail.");
     } catch (error) {
-      expect(error).toBeInstanceOf(RepositoryIdentityError);
-      expect((error as RepositoryIdentityError).details).toEqual({
-        entityTypeName: "RuntimeCheckedAggregate",
-        entityFamily: "aggregate",
-        stateFullTypeName: "BrokenState",
-      });
+      expectRepositoryIdentityError(error, "ENTITY_SCHEMA_KIND_MISMATCH", [
+        "RuntimeCheckedAggregate",
+        "supplied state schema",
+      ]);
+      expect((error as RepositoryIdentityError).message).not.toContain("BrokenState");
     }
 
     try {
@@ -404,30 +393,27 @@ describe("repository identity", () => {
       });
       throw new Error("Expected malformed schema with throwing typeName to fail.");
     } catch (error) {
-      expect(error).toBeInstanceOf(RepositoryIdentityError);
-      expect((error as RepositoryIdentityError).details).toEqual({
-        entityTypeName: "RuntimeCheckedAggregate",
-        entityFamily: "aggregate",
-      });
+      expectRepositoryIdentityError(error, "ENTITY_SCHEMA_KIND_MISMATCH", [
+        "RuntimeCheckedAggregate",
+        "supplied state schema",
+      ]);
     }
   });
 
-  it("rejects nullish options with structured errors", () => {
+  it("rejects nullish options with simple errors", () => {
     for (const options of [null, undefined]) {
       try {
         new Repository(options as unknown as RepositoryOptions<typeof RuntimeCheckedAggregate>);
         throw new Error("Expected malformed repository options to fail.");
       } catch (error) {
-        expect(error).toBeInstanceOf(RepositoryIdentityError);
-        expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
-        expect((error as RepositoryIdentityError).details).toEqual({
-          entityTypeName: "(anonymous)",
-        });
+        expectRepositoryIdentityError(error, "UNSUPPORTED_ENTITY_TYPE", [
+          "Repository options must be a non-null object",
+        ]);
       }
     }
   });
 
-  it("rejects options whose entity type or schema cannot be read with structured errors", () => {
+  it("rejects options whose entity type or schema cannot be read with simple errors", () => {
     const entityThrowingOptions = {
       get entityType(): typeof RuntimeCheckedAggregate {
         throw new Error("entityType accessor should not escape construction");
@@ -439,11 +425,9 @@ describe("repository identity", () => {
       new Repository(entityThrowingOptions);
       throw new Error("Expected throwing entityType options to fail.");
     } catch (error) {
-      expect(error).toBeInstanceOf(RepositoryIdentityError);
-      expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
-      expect((error as RepositoryIdentityError).details).toEqual({
-        entityTypeName: "(anonymous)",
-      });
+      expectRepositoryIdentityError(error, "UNSUPPORTED_ENTITY_TYPE", [
+        "entityType must be readable",
+      ]);
     }
 
     const schemaThrowingOptions = {
@@ -457,12 +441,10 @@ describe("repository identity", () => {
       new Repository(schemaThrowingOptions);
       throw new Error("Expected throwing schema options to fail.");
     } catch (error) {
-      expect(error).toBeInstanceOf(RepositoryIdentityError);
-      expect((error as RepositoryIdentityError).code).toBe("ENTITY_SCHEMA_KIND_MISMATCH");
-      expect((error as RepositoryIdentityError).details).toEqual({
-        entityTypeName: "RuntimeCheckedAggregate",
-        entityFamily: "aggregate",
-      });
+      expectRepositoryIdentityError(error, "ENTITY_SCHEMA_KIND_MISMATCH", [
+        "RuntimeCheckedAggregate",
+        "supplied state schema",
+      ]);
     }
 
     const revokedOptions = Proxy.revocable(
@@ -478,15 +460,13 @@ describe("repository identity", () => {
       new Repository(revokedOptions.proxy);
       throw new Error("Expected revoked proxy options to fail.");
     } catch (error) {
-      expect(error).toBeInstanceOf(RepositoryIdentityError);
-      expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
-      expect((error as RepositoryIdentityError).details).toEqual({
-        entityTypeName: "(anonymous)",
-      });
+      expectRepositoryIdentityError(error, "UNSUPPORTED_ENTITY_TYPE", [
+        "entityType must be readable",
+      ]);
     }
   });
 
-  it("rejects hostile entity inheritance chains with structured errors", () => {
+  it("rejects hostile entity inheritance chains with simple errors", () => {
     class HostileAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
     class StaticParent {
       marker(): string {
@@ -507,11 +487,7 @@ describe("repository identity", () => {
       });
       throw new Error("Expected hostile entity inheritance chain to fail.");
     } catch (error) {
-      expect(error).toBeInstanceOf(RepositoryIdentityError);
-      expect((error as RepositoryIdentityError).code).toBe("UNSUPPORTED_ENTITY_TYPE");
-      expect((error as RepositoryIdentityError).details).toEqual({
-        entityTypeName: "HostileAggregate",
-      });
+      expectRepositoryIdentityError(error, "UNSUPPORTED_ENTITY_TYPE", ["HostileAggregate"]);
     }
   });
 

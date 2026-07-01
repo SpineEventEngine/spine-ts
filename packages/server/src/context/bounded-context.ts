@@ -6,11 +6,6 @@ import {
   resolveRepositoryEntityFamily,
 } from "../repository/repository.js";
 import { describeEntityMetadata } from "../entity/entity-metadata.js";
-import {
-  SingleProcessServerRuntime,
-  type ServerRuntimeLifecycle,
-  type ServerRuntimeState,
-} from "../runtime/runtime.js";
 
 /** Tenant isolation mode declared by a bounded context specification. */
 export type TenantMode = "single-tenant" | "multitenant";
@@ -43,29 +38,6 @@ export interface BoundedContextSnapshot {
   readonly repositories: readonly RepositoryIdentitySnapshot[];
 }
 
-/**
- * Public alias for the immutable snapshot closed by {@link BoundedContextBuilder.build}.
- *
- * The alias names the built-context contract explicitly while preserving the
- * same metadata-only shape as {@link BoundedContextSnapshot}. It does not imply
- * a running server, registered repository runtime, storage, dispatch, delivery,
- * stand, tenant-index, or lifecycle capability.
- */
-export type BuiltBoundedContextSnapshot = BoundedContextSnapshot;
-
-/**
- * Runtime lifecycle boundary used by {@link BoundedContextRuntime}.
- *
- * When omitted, the handle creates and owns a private
- * {@link SingleProcessServerRuntime}. When supplied, the caller owns any
- * sharing policy for that lifecycle object; the handle delegates `start()`,
- * `close()`, and `state` without exposing queue intake.
- */
-export interface BoundedContextRuntimeOptions {
-  /** Runtime lifecycle to delegate to instead of creating a default runtime. */
-  readonly runtime?: ServerRuntimeLifecycle;
-}
-
 /** Machine-readable bounded-context repository registration failure codes. */
 export type BoundedContextRepositoryRegistrationErrorCode =
   "ENTITY_TYPE_CONFLICT" | "STATE_TYPE_CONFLICT" | "INVALID_REPOSITORY_SNAPSHOT";
@@ -73,56 +45,15 @@ export type BoundedContextRepositoryRegistrationErrorCode =
 /** Builder operation that rejected repository registration metadata. */
 export type BoundedContextRepositoryRegistrationOperation = "add" | "remove";
 
-/** Stable repository ownership conflict details included in registration errors. */
-export interface BoundedContextRepositoryRegistrationConflictErrorDetails {
-  /** Name of the bounded context receiving the repository. */
-  readonly contextName: string;
-  /** Already registered repository ownership facts. */
-  readonly existing: RepositoryRegistrationConflictDetails;
-  /** Incoming repository ownership facts. */
-  readonly incoming: RepositoryRegistrationConflictDetails;
-}
-
-/** Stable unreadable or malformed repository snapshot details included in registration errors. */
-export interface BoundedContextRepositorySnapshotErrorDetails {
-  /** Name of the bounded context receiving the repository. */
-  readonly contextName: string;
-  /** Builder operation that attempted to read the repository snapshot. */
-  readonly operation: BoundedContextRepositoryRegistrationOperation;
-}
-
-/** Stable details included in repository registration errors. */
-export type BoundedContextRepositoryRegistrationErrorDetails =
-  | BoundedContextRepositoryRegistrationConflictErrorDetails
-  | BoundedContextRepositorySnapshotErrorDetails;
-
-/** Stable repository identity fields used in registration diagnostics. */
-export interface RepositoryRegistrationConflictDetails {
-  /** Name of the entity constructor owned by the repository. */
-  readonly entityTypeName: string;
-  /** Entity family owned by the repository. */
-  readonly entityFamily: RepositoryIdentitySnapshot["entityFamily"];
-  /** Fully qualified Protobuf state type owned by the repository. */
-  readonly stateFullTypeName: string;
-}
-
 /** Error thrown when a bounded context builder rejects repository ownership metadata. */
 export class BoundedContextRepositoryRegistrationError extends Error {
   /** Stable code for callers/tests that need structured failure handling. */
   readonly code: BoundedContextRepositoryRegistrationErrorCode;
 
-  /** Structured details describing the rejected registration. */
-  readonly details: BoundedContextRepositoryRegistrationErrorDetails;
-
-  constructor(
-    code: BoundedContextRepositoryRegistrationErrorCode,
-    message: string,
-    details: BoundedContextRepositoryRegistrationErrorDetails,
-  ) {
+  constructor(code: BoundedContextRepositoryRegistrationErrorCode, message: string) {
     super(message);
     this.name = "BoundedContextRepositoryRegistrationError";
     this.code = code;
-    this.details = freezeRepositoryRegistrationErrorDetails(details);
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
@@ -265,7 +196,7 @@ export class BoundedContextBuilder {
     repository: Repository<EntityType>,
   ): this {
     const incoming = readRepositorySnapshot(repository, "add", this.#specSnapshot.name.value);
-    registerRepositorySnapshot(this.#repositorySnapshots, incoming, this.#specSnapshot.name.value);
+    registerRepositorySnapshot(this.#repositorySnapshots, incoming);
     return this;
   }
 
@@ -352,89 +283,9 @@ export class BoundedContext {
     return cloneRepositorySnapshots(this.#snapshot.repositories);
   }
 
-  /** Copy-safe immutable built-context snapshot of this context shell. */
-  get snapshot(): BuiltBoundedContextSnapshot {
+  /** Copy-safe immutable snapshot of this context shell. */
+  get snapshot(): BoundedContextSnapshot {
     return cloneContextSnapshot(this.#snapshot);
-  }
-}
-
-/**
- * Runtime-facing handle scoped to one built {@link BoundedContext} snapshot.
- *
- * The handle binds copy-safe bounded-context metadata to a server runtime
- * lifecycle. It is not a JVM `Server` equivalent and does not expose command,
- * event, import, query, subscription, stand, storage, tenant-index, transport,
- * repository-dispatch, or handler-invocation behavior.
- */
-export class BoundedContextRuntime implements ServerRuntimeLifecycle {
-  readonly #contextSnapshot: BuiltBoundedContextSnapshot;
-  readonly #runtime: ServerRuntimeLifecycle;
-
-  /**
-   * Creates a runtime handle for an already built bounded context.
-   *
-   * Without `options.runtime`, the handle owns a private
-   * {@link SingleProcessServerRuntime}. With an injected runtime lifecycle, the
-   * caller owns that runtime's sharing and queue-intake policy.
-   */
-  constructor(context: BoundedContext, options: BoundedContextRuntimeOptions = {}) {
-    if (!(context instanceof BoundedContext)) {
-      throw new TypeError("BoundedContextRuntime requires a built BoundedContext.");
-    }
-
-    const runtime = Object.hasOwn(options, "runtime")
-      ? options.runtime
-      : new SingleProcessServerRuntime();
-    validateRuntimeLifecycle(runtime);
-
-    this.#contextSnapshot = context.snapshot;
-    this.#runtime = runtime;
-    Object.freeze(this);
-  }
-
-  /** Bounded context name as a fresh immutable value object. */
-  get name(): BoundedContextName {
-    return cloneName(this.#contextSnapshot.name);
-  }
-
-  /** Tenant mode declared by the built context. */
-  get tenantMode(): TenantMode {
-    return this.#contextSnapshot.tenantMode;
-  }
-
-  /** Whether the built context is multitenant. */
-  get isMultitenant(): boolean {
-    return this.#contextSnapshot.tenantMode === "multitenant";
-  }
-
-  /** Context spec copied from the built context. */
-  get spec(): ContextSpec {
-    return createContextSpec(this.#contextSnapshot.spec);
-  }
-
-  /** Repository identity snapshots copied from the built context. */
-  get repositories(): readonly RepositoryIdentitySnapshot[] {
-    return cloneRepositorySnapshots(this.#contextSnapshot.repositories);
-  }
-
-  /** Copy-safe immutable snapshot of the built context metadata. */
-  get contextSnapshot(): BuiltBoundedContextSnapshot {
-    return cloneContextSnapshot(this.#contextSnapshot);
-  }
-
-  /** Current state of the delegated runtime lifecycle. */
-  get state(): ServerRuntimeState {
-    return this.#runtime.state;
-  }
-
-  /** Starts the delegated runtime lifecycle. */
-  start(): Promise<void> {
-    return this.#runtime.start();
-  }
-
-  /** Closes the delegated runtime lifecycle. */
-  close(): Promise<void> {
-    return this.#runtime.close();
   }
 }
 
@@ -442,23 +293,6 @@ function requireFrameworkConstructionToken(token: unknown, message: string): voi
   if (token !== frameworkConstructionToken) {
     throw new TypeError(message);
   }
-}
-
-function validateRuntimeLifecycle(runtime: unknown): asserts runtime is ServerRuntimeLifecycle {
-  if (
-    !isRecord(runtime) ||
-    !isRuntimeState(runtime.state) ||
-    typeof runtime.start !== "function" ||
-    typeof runtime.close !== "function"
-  ) {
-    throw new TypeError(
-      "BoundedContextRuntime options.runtime must implement ServerRuntimeLifecycle.",
-    );
-  }
-}
-
-function isRuntimeState(value: unknown): value is ServerRuntimeState {
-  return value === "created" || value === "running" || value === "closing" || value === "closed";
 }
 
 function createContextSpec(specSnapshot: ContextSpecSnapshot): ContextSpec {
@@ -776,7 +610,6 @@ function readRepositorySnapshot<
 function registerRepositorySnapshot(
   existingRepositories: RepositoryIdentitySnapshot[],
   incoming: RepositoryIdentitySnapshot,
-  contextName: string,
 ): void {
   for (const existing of existingRepositories) {
     if (isSameRepositoryIdentity(existing, incoming)) {
@@ -784,11 +617,11 @@ function registerRepositorySnapshot(
     }
 
     if (existing.entityType === incoming.entityType) {
-      throwRepositoryRegistrationConflict("ENTITY_TYPE_CONFLICT", contextName, existing, incoming);
+      throwRepositoryRegistrationConflict("ENTITY_TYPE_CONFLICT");
     }
 
     if (existing.stateFullTypeName === incoming.stateFullTypeName) {
-      throwRepositoryRegistrationConflict("STATE_TYPE_CONFLICT", contextName, existing, incoming);
+      throwRepositoryRegistrationConflict("STATE_TYPE_CONFLICT");
     }
   }
 
@@ -797,25 +630,10 @@ function registerRepositorySnapshot(
 
 function throwRepositoryRegistrationConflict(
   code: BoundedContextRepositoryRegistrationErrorCode,
-  contextName: string,
-  existing: RepositoryIdentitySnapshot,
-  incoming: RepositoryIdentitySnapshot,
 ): never {
-  const existingDetails = repositoryConflictDetails(existing);
-  const incomingDetails = repositoryConflictDetails(incoming);
-  const ownership =
-    code === "ENTITY_TYPE_CONFLICT"
-      ? `entity constructor "${incomingDetails.entityTypeName}"`
-      : `state type "${incomingDetails.stateFullTypeName}"`;
-
   throw new BoundedContextRepositoryRegistrationError(
     code,
-    `Bounded context "${contextName}" already has repository ownership for ${ownership}.`,
-    {
-      contextName,
-      existing: existingDetails,
-      incoming: incomingDetails,
-    },
+    "Bounded context already has conflicting repository ownership.",
   );
 }
 
@@ -831,43 +649,6 @@ function isSameRepositoryIdentity(
   );
 }
 
-function repositoryConflictDetails(
-  snapshot: RepositoryIdentitySnapshot,
-): RepositoryRegistrationConflictDetails {
-  return freezeConflictDetails({
-    entityTypeName: safeEntityTypeName(snapshot.entityType),
-    entityFamily: snapshot.entityFamily,
-    stateFullTypeName: snapshot.stateFullTypeName,
-  });
-}
-
-function freezeRepositoryRegistrationErrorDetails(
-  details: BoundedContextRepositoryRegistrationErrorDetails,
-): BoundedContextRepositoryRegistrationErrorDetails {
-  if ("operation" in details) {
-    return Object.freeze({
-      contextName: details.contextName,
-      operation: details.operation,
-    });
-  }
-
-  return Object.freeze({
-    contextName: details.contextName,
-    existing: freezeConflictDetails(details.existing),
-    incoming: freezeConflictDetails(details.incoming),
-  });
-}
-
-function freezeConflictDetails(
-  details: RepositoryRegistrationConflictDetails,
-): RepositoryRegistrationConflictDetails {
-  return Object.freeze({
-    entityTypeName: details.entityTypeName,
-    entityFamily: details.entityFamily,
-    stateFullTypeName: details.stateFullTypeName,
-  });
-}
-
 function throwInvalidRepositorySnapshot(
   operation: BoundedContextRepositoryRegistrationOperation,
   contextName: string,
@@ -875,11 +656,7 @@ function throwInvalidRepositorySnapshot(
   throw new BoundedContextRepositoryRegistrationError(
     "INVALID_REPOSITORY_SNAPSHOT",
     `BoundedContextBuilder.${operation}(repository) requires a repository snapshot with ` +
-      "supported repository identity metadata.",
-    {
-      contextName,
-      operation,
-    },
+      `supported repository identity metadata in bounded context "${contextName}".`,
   );
 }
 
@@ -1026,15 +803,6 @@ function validateCanonicalRepositorySemanticTagList(tags: readonly string[], own
     if (previousTag > tag) {
       throw new TypeError(`${owner} must be sorted.`);
     }
-  }
-}
-
-function safeEntityTypeName(entityType: RepositoryIdentitySnapshot["entityType"]): string {
-  try {
-    const name = (entityType as { readonly name?: unknown }).name;
-    return typeof name === "string" && name.length > 0 ? name : "(anonymous)";
-  } catch {
-    return "(anonymous)";
   }
 }
 

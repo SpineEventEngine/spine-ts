@@ -96,20 +96,17 @@ the to-do application remain later slices.
   `builder.spec` and `context.spec`, tenant mode metadata, explicit repository
   identity registration, deterministic repository ownership conflict checks,
   frozen metadata-only built contexts, and copy-safe context snapshots.
-- A first single-process server runtime lifecycle/queue kernel,
-  context-scoped `BoundedContextRuntime` handle, typed write-side signal intake
-  result values, and command/event registration-readiness metadata derived from
-  handler metadata.
+- A first single-process server runtime lifecycle/queue kernel, typed
+  write-side signal intake result values, and command/event
+  registration-readiness metadata derived from handler metadata.
 - A smoke-tested public assembly path that combines a built bounded context,
   repository identity metadata, handler metadata registry, command/event
-  readiness views, `createServerRuntimeRoutingPlan()`, and a lifecycle-only
-  context runtime without exposing a server facade, buses, services, storage,
-  dispatch, handler invocation, or transport endpoint execution.
+  readiness views, and `createServerRuntimeRoutingPlan()` without exposing a
+  server facade, buses, services, storage, dispatch, handler invocation, worker
+  lifecycle registration, or transport endpoint execution.
 - Adapter-agnostic transport contracts in `@spine-ts/transport` for immutable
-  signal topics, logical subscriptions, publish/request operations, broker and
-  worker lifecycle snapshots, subscription-backed worker registrations,
-  delivery attempts/results, failure classifications, retry eligibility data,
-  and async close behavior.
+  signal topics, logical subscriptions, publish/request operations, and async
+  close behavior.
 - A pinned adapter-private `zeromq@6.5.0` dependency and local IPC smoke tests
   for same-host publish/subscribe and request/reply behavior. The public
   transport API still hides ZeroMQ sockets, endpoint strings, multipart frames,
@@ -387,8 +384,8 @@ expressions, and intermediate domain base classes are accepted. This is a
 same-realm metadata boundary: code that explicitly reparents an ES class onto an
 entity family is trusted as entity metadata, not rejected as an adversarial
 sandbox escape. Mismatches, such as an aggregate constructor paired with a
-projection state schema, throw `RepositoryIdentityError` with stable codes and
-structured details. `snapshot` returns a frozen fresh copy suitable for later
+projection state schema, throw `RepositoryIdentityError` with stable
+code/message diagnostics. `snapshot` returns a frozen fresh copy suitable for later
 bounded-context duplicate and conflict checks.
 
 This is explicitly metadata-only. It does not create, find, or store entities;
@@ -416,7 +413,7 @@ const builder = BoundedContext.singleTenant("Tasks").add(taskRepository);
 const context = builder.build();
 
 context.repositories[0]?.entityType === TaskAggregate; // true
-const builtSnapshot = context.snapshot; // BuiltBoundedContextSnapshot shape
+const builtSnapshot = context.snapshot; // BoundedContextSnapshot shape
 ```
 
 `add()` and `remove()` return the same builder for JVM-familiar chaining.
@@ -426,9 +423,8 @@ entity constructor is paired with a different state schema identity, or when one
 state type is claimed by multiple entity constructors. Builder and context
 repository arrays are frozen fresh-copy snapshots, so later `add()` or
 `remove()` calls do not mutate snapshots already returned by the API or contexts
-already built. `BuiltBoundedContextSnapshot` names the immutable registration
-contract produced by `build()`; it is intentionally the same metadata-only shape
-as `BoundedContextSnapshot`.
+already built. `BoundedContextSnapshot` is the immutable registration contract
+produced by `build()`.
 
 This registration is still metadata-only. It does not create default
 repositories from entity classes, register repositories into a live context,
@@ -440,19 +436,16 @@ transport.
 
 Use the current runtime and transport foundation when framework-owned setup code
 needs to assemble bounded-context metadata, command/event readiness, immutable
-transport routing contracts, and a local lifecycle handle before buses,
-services, and storage exist:
+transport routing contracts before buses, services, and storage exist:
 
 ```ts
 import {
   Aggregate,
   BoundedContext,
-  BoundedContextRuntime,
   CommandRegistrationReadiness,
   EventRegistrationReadiness,
   HandlerMetadataRegistry,
   Repository,
-  SingleProcessServerRuntime,
   createServerRuntimeRoutingPlan,
   defineEntityHandlers,
 } from "@spine-ts/server";
@@ -469,8 +462,6 @@ const repository = new Repository({
   schema: TaskStateSchema,
 });
 const tasks = BoundedContext.singleTenant("Tasks").add(repository).build();
-const lifecycle = new SingleProcessServerRuntime();
-const runtime = new BoundedContextRuntime(tasks, { runtime: lifecycle });
 const handlers = defineEntityHandlers(TaskAggregate, TaskStateSchema, (builder) => [
   builder.assign(CreateTaskSchema, "create"),
   builder.apply(TaskCreatedSchema, "onCreated", { allowImport: true }),
@@ -489,28 +480,25 @@ const routingPlan = createServerRuntimeRoutingPlan({
 routingPlan.commands.routes[0]?.receiverGroup; // "command-assignee"
 routingPlan.events.applicationRoutes[0]?.receiverGroup; // "application"
 routingPlan.deferred.map(({ signalKind }) => signalKind); // ["query", "subscription", "system"]
-
-await runtime.start();
-await runtime.close();
 ```
 
 This assembly records what a later runtime can consume: context identity,
 repository ownership metadata, handler metadata, command assignment readiness,
 event subscriber/reactor/applier readiness, transport-owned command/event
-topics, subscriptions, worker registrations, deferred query/subscription/system
-routing seams, and deterministic lifecycle state. The routing plan is metadata:
+topics, subscriptions, planner-local worker IDs, and deferred
+query/subscription/system routing seams. The routing plan is metadata:
 route descriptors expose sanitized message type names/type URLs, receiver
 groups, planner-local route/worker IDs, and correlation keys back to plan-level
 transport arrays. They do not retain handler names, entity names, raw readiness
 metadata, or ZeroMQ details.
 
-It does not expose `enqueue()` through the context runtime handle and does not
-create a TypeScript `Server`, command/event/import bus, service router, storage
-lifecycle, delivery engine, integration broker, read-side stand, transport
-endpoint, broker supervisor, retry worker, durable delivery store, or handler
-invocation path. Accepted signal intake values still mean only accepted for
-later asynchronous work; they are not `Ack` messages and do not claim
-validation, storage, dispatch, delivery, or successful handling.
+It does not create a TypeScript `Server`, context runtime handle,
+command/event/import bus, service router, storage lifecycle, delivery engine,
+integration broker, read-side stand, transport endpoint, broker supervisor,
+retry worker, durable delivery store, or handler invocation path. Accepted
+signal intake values still mean only accepted for later asynchronous work; they
+are not `Ack` messages and do not claim validation, storage, dispatch,
+delivery, or successful handling.
 
 ## Transport Foundation
 
@@ -518,15 +506,7 @@ Use `@spine-ts/transport` when later runtime code needs to describe how a
 signal should be routed without choosing a concrete adapter:
 
 ```ts
-import {
-  createTransportDeliveryAttempt,
-  createTransportDeliveryResult,
-  createTransportParticipantIdentity,
-  createTransportSubscription,
-  createTransportTopic,
-  createTransportWorkerRegistration,
-  classifyTransportDeliveryFailure,
-} from "@spine-ts/transport";
+import { createTransportSubscription, createTransportTopic } from "@spine-ts/transport";
 
 const topic = createTransportTopic({
   signalKind: "command",
@@ -539,61 +519,17 @@ const subscription = createTransportSubscription({
   mode: "competing-consumer",
 });
 
-const workerInput = {
-  participantKind: "worker",
-  participantId: "command-worker-1",
-  workerRole: "command-worker",
-} as const;
-
-const worker = createTransportParticipantIdentity(workerInput);
-
-const registration = createTransportWorkerRegistration({
-  worker: workerInput,
-  subscriptions: [subscription],
-});
-
-const attempt = createTransportDeliveryAttempt({
-  deliveryId: "delivery-1",
-  targetId: "task-1",
-  attemptNumber: 1,
-  subscription,
-  worker,
-});
-
-const failure = classifyTransportDeliveryFailure({
-  failureKind: "transient",
-  failureCode: "WORKER_NOT_READY",
-  details: { stage: "dispatch", retryable: true, ignoredPayload: "redacted" },
-});
-
-const result = createTransportDeliveryResult({
-  attempt,
-  outcome: "failed",
-  failure,
-});
-
-registration.signalKinds; // ["command"]
-result.status; // "failed"
-result.retryEligibility; // "eligible"
+topic.routing.routingKey; // "command:type.spine.io%2Ftodo.commands.CreateTask"
+subscription.descriptorKey;
 ```
 
 Topics are immutable and derive adapter-agnostic routing keys from signal kind,
 message type URL, and sorted unique semantic tags. Subscriptions use logical
 subscriber IDs and `"fan-out"` or `"competing-consumer"` delivery mode; they are
-not process IDs, paths, hostnames, socket names, or endpoints. Broker/worker
-lifecycle values record participant identity, worker role, lifecycle/readiness
-state, and subscription-backed worker registrations only. They do not open
-sockets, spawn or supervise processes, probe readiness over IPC, invoke
-handlers, or decide restart policy.
-
-Delivery/retry helpers are boundary data. Failed outcomes remain `failed`;
-retry eligibility is separate immutable policy evidence derived from the
-failure classification. Failure details keep only allowlisted scalar fields and
-discard endpoint strings, raw exceptions, frames, payloads, and process data.
-The helpers derive attempt/result keys from semantic fields and reject forged
-keys or statuses, but they do not write inbox/outbox records, deduplicate
-delivery storage, run retry timers, schedule workers, dispatch repositories, or
-invoke handlers.
+not process IDs, paths, hostnames, socket names, or endpoints. The transport
+root does not model broker/worker lifecycle, worker registrations, delivery
+attempt/result data, failure classification, retry eligibility, or inbox
+storage. Those concepts belong to later delivery and lifecycle tasks.
 
 ZeroMQ is present only as the current adapter-private local IPC foundation. The
 workspace pins `zeromq@6.5.0` and explicitly allows its native install script.
