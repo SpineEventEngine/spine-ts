@@ -340,17 +340,20 @@ The following runtime pieces are still deferred to later explicit tasks:
 ## Server Runtime Closure
 
 T-0010 closes the first single-process runtime slice as an assembly seam rather
-than a server graph. The verified public composition is:
+than a server graph. Its verified public composition is:
 
 - build a metadata-only `BoundedContext` through the existing builder and
   explicit `Repository` identity registration;
 - bind that built context to `BoundedContextRuntime`, using either its private
   `SingleProcessServerRuntime` or a caller-owned `ServerRuntimeLifecycle`;
 - derive command and event registration-readiness metadata from existing
-  `HandlerMetadataRegistry` entries;
-- derive an immutable runtime-routing plan from the built context plus command
-  and event readiness using `createServerRuntimeRoutingPlan()`; and
+  `HandlerMetadataRegistry` entries; and
 - start/close the context runtime through deterministic lifecycle state.
+
+T-0011.6 and T-0011.7 then close the metadata-only runtime-routing/transport
+foundation layer. That later closure derives an immutable runtime-routing plan
+from the built context plus command and event readiness using
+`createServerRuntimeRoutingPlan()`.
 
 This is intentionally enough for later runtime tasks to share vocabulary and
 tests around "context metadata plus lifecycle plus readiness." It is not an
