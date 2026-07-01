@@ -1,6 +1,6 @@
 # T-0012: Corrective Cleanup And Roadmap Reset
 
-Status: Requirements split complete
+Status: Requirements split complete; first cleanup subtask selected
 Start: `2026-07-01 16:48 WEST`
 Baseline commit: `a9769d4`
 Branch: `task/T-0012-cleanup-replan`
@@ -426,3 +426,9 @@ Implementer constraints:
   by test/generated-code relocation.
 - Do not add new framework features.
 - Record any unavoidable temporary exception with a specific follow-up subtask.
+
+## Splitter Closure
+
+Requirements splitter agent `019f1e60-fd4e-7ef0-b5ec-223d6928f739` completed
+the roadmap in commit `62164aa` and is closed. The first selected subtask is
+`T-0012.1 Cleanup Enforcement Baseline`.

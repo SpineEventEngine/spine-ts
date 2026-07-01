@@ -1,6 +1,6 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: Requirements split complete
+Status: Requirements split complete; first cleanup subtask selected
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
@@ -112,6 +112,9 @@ Rationale:
 - It can be implemented without new architectural choices beyond `D-0047`.
 - It does not require changing framework behavior except path/import updates
   needed by generated-code and test relocation.
+
+The requirements splitter agent `019f1e60-fd4e-7ef0-b5ec-223d6928f739`
+completed the roadmap in commit `62164aa` and is closed.
 
 ## Verification
 
