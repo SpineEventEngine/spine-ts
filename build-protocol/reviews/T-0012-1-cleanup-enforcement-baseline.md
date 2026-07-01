@@ -102,8 +102,18 @@ imports.
 
 Reviewer lanes:
 
-- Code style/maintainability: pending.
-- Documentation: pending.
-- TypeScript/API docs: pending.
-- Security: pending.
-- Performance/reliability: pending.
+- Code style/maintainability: no remaining comments.
+- Documentation: comments remain. Important findings: the top-level review log
+  still points to the Round 1 package `147d496..8349abc`, and the current
+  work-log state still says the old Round 1 package is ready.
+- TypeScript/API docs: no remaining comments.
+- Security: comments remain. Important finding: proto generated-path symlink
+  checks do not reject symlinked ancestors such as `packages/proto`, so
+  generation/checks could operate outside the worktree.
+- Performance/reliability: comments remain. Important finding: direct
+  `pnpm lint` is not fresh-clone reliable because it can type-resolve generated
+  imports before generation. Minor finding: concurrent generated checks in one
+  worktree can race, but current `verify` is sequential.
+
+All Round 2 reviewer agents are closed. Author follow-up must address the
+remaining Important findings before another re-review.
