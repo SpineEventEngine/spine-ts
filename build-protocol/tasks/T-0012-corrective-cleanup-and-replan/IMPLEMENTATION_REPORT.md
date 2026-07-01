@@ -51,6 +51,12 @@ passed with 35 test files, 302 tests, coverage statements 95.61%, branches
 invalid-`origin` TypeDoc warning only, proto lint/generate, and generated-clean
 comparison.
 
+Parent verification after integrating `T-0012.5` passed with escalated
+`env CI=true corepack pnpm verify`: 35 test files, 302 tests, coverage
+statements 95.61%, branches 90.08%, functions 98.37%, lines 95.60%, docs/API
+checks with the existing invalid-`origin` TypeDoc warning only, proto
+lint/generate, and generated-clean comparison.
+
 `T-0012.3` removed bounded-context runtime/detail exports, simplified
 repository diagnostics to code/message, removed transport lifecycle/delivery
 helper families, preserved the core transport abstraction, passed all review
