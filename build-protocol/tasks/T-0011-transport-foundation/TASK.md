@@ -293,6 +293,15 @@ verify` passed with native IPC access: 24 test files / 293 tests, coverage
   expected exports, copied Spine proto checksum verification, proto
   lint/generate, generated proto output clean, and generated files clean.
   TypeDoc emitted the existing invalid-`origin` warning only.
+- T-0011.8 main integration verification passed on `2026-07-01 05:52 WEST`
+  after merge commit `0d7d369` repaired the post-main-merge TypeScript
+  build-graph ordering issue: escalated `CI=true corepack pnpm verify` passed
+  with native IPC access, 24 test files / 293 tests, coverage 96.12%
+  statements / 90.53% branches / 99.38% functions / 96.07% lines, TypeDoc/API
+  checks with 100 proto / 28 core / 130 server / 26 storage / 46 transport
+  expected exports, copied Spine proto checksum verification, proto
+  lint/generate, generated proto output clean, and generated files clean.
+  TypeDoc emitted the existing invalid-`origin` warning only.
 
 ## Integrated Subtasks
 
@@ -326,6 +335,10 @@ verify` passed with native IPC access: 24 test files / 293 tests, coverage
   on `2026-07-01 05:16 WEST`. Required five-lane review clean after
   maintainability and documentation follow-ups; final subtask verification
   passed; parent native IPC verification passed after merge.
+- `T-0011.8 Main Integration Build-Graph Fix`: integrated by merge commit
+  `0d7d369` on `2026-07-01 05:52 WEST`. Required five-lane review clean after
+  skill-applicability log follow-up; final subtask verification passed; main
+  native IPC verification passed after merge.
 
 ## Closure
 

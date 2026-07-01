@@ -173,6 +173,15 @@ corepack pnpm verify` passed with native IPC access. Full verify covered 24
   expected exports, copied Spine proto checksum verification, proto
   lint/generate, generated proto output clean, and generated files clean.
   TypeDoc emitted the existing invalid-`origin` warning only.
+- T-0011.8 main integration verification passed on `2026-07-01 05:52 WEST`
+  after merge commit `0d7d369`:
+  escalated `CI=true corepack pnpm verify` passed with native IPC access, 24
+  test files / 293 tests, coverage 96.12% statements / 90.53% branches /
+  99.38% functions / 96.07% lines, TypeDoc/API checks with 100 proto / 28 core
+  / 130 server / 26 storage / 46 transport expected exports, copied Spine
+  proto checksum verification, proto lint/generate, generated proto output
+  clean, and generated files clean. TypeDoc emitted the existing
+  invalid-`origin` warning only.
 
 ## Splitter Research And Recommendation
 
@@ -227,6 +236,10 @@ performs native smoke tests.
   to-do example docs, T-0011.7 durable logs, and parent T-0011 closure logs.
   See
   `build-protocol/tasks/T-0011-7-documentation-closure/IMPLEMENTATION_REPORT.md`.
+- T-0011.8 integration changed root/server TypeScript project references and
+  T-0011.8 durable logs/reviews after the initial `main` merge exposed a
+  project-reference ordering issue. See
+  `build-protocol/tasks/T-0011-8-main-integration-build-graph-fix/IMPLEMENTATION_REPORT.md`.
 
 ## T-0011.6 Setup
 
