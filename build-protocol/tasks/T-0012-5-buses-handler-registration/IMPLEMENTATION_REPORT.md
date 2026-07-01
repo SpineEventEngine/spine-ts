@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.5 CommandBus, EventBus, And Handler Registration
 
-Status: ready for review round 2
+Status: complete; verified and ready for parent integration
 Branch: `task/T-0012-5-buses-handler-registration`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-5-buses-handler-registration`
@@ -80,6 +80,16 @@ Fresh implementation verification:
   `@spine-ts/proto` exports, 28 `@spine-ts/core` exports, 126
   `@spine-ts/server` exports, 14 `@spine-ts/storage` exports, and 17
   `@spine-ts/transport` exports.
+- Final T-0012.5 verification:
+  - sandboxed `env CI=true corepack pnpm verify` reached 34 passed files and
+    300 passed tests, then stopped only on the known ZeroMQ local IPC sandbox
+    permission failure;
+  - escalated `env CI=true corepack pnpm verify` passed with 35 test files and
+    302 tests;
+  - coverage remained statements 95.61%, branches 90.08%, functions 98.37%,
+    lines 95.60%; and
+  - docs/API/proto checks passed with the existing invalid-`origin` TypeDoc
+    warning only.
 
 ## Reviewer Finding Disposition
 
@@ -90,6 +100,7 @@ Fresh implementation verification:
 - Contradictory final verification evidence: fixed by replacing the stale
   301-test coverage line with the review-fix final evidence: 35 files, 302
   tests, statements 95.61%, branches 90.08%, functions 98.37%, lines 95.60%.
+- Round 2 documentation lanes were rerun until no findings remained.
 
 ## Changed Files
 
