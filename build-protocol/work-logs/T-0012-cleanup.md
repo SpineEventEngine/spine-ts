@@ -1,6 +1,6 @@
 # Work Log: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: Started
+Status: T-0012.1 integrated; T-0012.2 selected
 
 ## Entries
 
@@ -11,13 +11,14 @@ Status: Started
 | `2026-07-01 16:54 WEST` | Requirements splitter | Performed skill applicability check, inspected TS/JVM evidence, and split corrective roadmap. | Read protocol/task/report/work/review docs; inspected `EXPECTED_SKILLS.md`, `/Users/armiol/.agents/skills`, and `/Users/armiol/.agents/.skill-lock.json`; fully read selected `epic-breakdown-advisor`, `architecture-decision-records`, and `codebase-design` skill instructions; inspected current `packages/**` layout, `packages/server/src/bounded-context.ts`, `packages/storage/src/index.ts`, local `spine-jvm-docs`, and task-relevant JVM source under `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server`. | Selected a staged corrective roadmap starting with cleanup enforcement, then source repack, abstraction deletion, storage/event-store reset, buses, bounded context, repositories, delivery, stand, gRPC services, missing details, and the to-do example. First selected cleanup subtask: `T-0012.1 Cleanup Enforcement Baseline`. No new ADR needed because `D-0047` covers the reset. |
 | `2026-07-01 16:58 WEST` | Requirements splitter | Formatted and verified splitter docs.                                                         | `corepack pnpm exec prettier --write build-protocol/tasks/T-0012-corrective-cleanup-and-replan/TASK.md build-protocol/tasks/T-0012-corrective-cleanup-and-replan/IMPLEMENTATION_REPORT.md build-protocol/work-logs/T-0012-cleanup.md build-protocol/reviews/T-0012-corrective-cleanup-and-replan.md`; `git diff --check`.                                                                                                                                                                                                                     | Prettier completed successfully. `git diff --check` reported no whitespace errors. No implementation tests were run because no implementation code was changed.                                                                                                                                                                                                                          |
 | `2026-07-01 17:00 WEST` | Main orchestrator     | Closed requirements splitter.                                                                 | Closed agent `019f1e60-fd4e-7ef0-b5ec-223d6928f739`; splitter commit `62164aa`; updated parent task/report/work log.                                                                                                                                                                                                                                                                                                                                                                                                                          | Corrective roadmap is recorded. First selected subtask is `T-0012.1 Cleanup Enforcement Baseline`.                                                                                                                                                                                                                                                                                       |
+| `2026-07-01 18:43 WEST` | Main orchestrator     | Integrated `T-0012.1` and selected next subtask.                                              | Merged `task/T-0012-1-cleanup-enforcement-baseline` into parent branch; updated parent task/report/review/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                          | `T-0012.1` is complete with all review lanes clean and escalated `env CI=true corepack pnpm verify` passing. Next selected subtask is `T-0012.2 Source Folder Repack`.                                                                                                                                                                                                                   |
 
 ## Current State
 
 - Corrective branch/worktree exists from `main`.
-- No implementation code has been changed.
+- `T-0012.1 Cleanup Enforcement Baseline` is integrated.
 - Requirements splitter agent `019f1e60-fd4e-7ef0-b5ec-223d6928f739` is
   closed after commit `62164aa`.
-- First selected implementable cleanup subtask is
-  `T-0012.1 Cleanup Enforcement Baseline`.
+- Next selected implementable cleanup subtask is
+  `T-0012.2 Source Folder Repack`.
 - No blocking human question is known.

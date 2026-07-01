@@ -1,6 +1,6 @@
 # T-0012: Corrective Cleanup And Roadmap Reset
 
-Status: Requirements split complete; first cleanup subtask selected
+Status: T-0012.1 integrated; T-0012.2 selected
 Start: `2026-07-01 16:48 WEST`
 Baseline commit: `a9769d4`
 Branch: `task/T-0012-cleanup-replan`
@@ -60,6 +60,26 @@ and enforce the new quality gates for:
 - corrected implementation order.
 
 No blocking human question is known.
+
+## Integrated Subtasks
+
+- `T-0012.1 Cleanup Enforcement Baseline` is integrated on the parent branch.
+  It removed tracked generated Protobuf-ES output, moved package tests out of
+  `src`, added cleanup checks, passed all review lanes, and passed escalated
+  `env CI=true corepack pnpm verify`.
+
+## Next Selected Subtask
+
+Selected: `T-0012.2 Source Folder Repack`.
+
+Rationale:
+
+- The cleanup enforcement baseline is now in place.
+- Source/test folder structure must be corrected before deleting or rebuilding
+  runtime abstractions.
+- This task is non-blocked and should remain mostly mechanical: move files into
+  semantic package folders, update exports/imports, and avoid behavioral
+  redesign.
 
 ## Requirements Splitter Skill Applicability
 

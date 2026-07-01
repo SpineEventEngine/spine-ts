@@ -6,7 +6,7 @@ Branch: `task/T-0012-cleanup-replan`
 Baseline commit: `a9769d4`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
-Status: Requirements split complete; first cleanup subtask selected.
+Status: T-0012.1 integrated; T-0012.2 selected.
 
 ## Required Review Lanes
 
@@ -53,3 +53,20 @@ For later cleanup subtasks, reviewers should flag:
 - storage APIs that keep a broad adapter surface instead of the JVM-like
   `StorageFactory`/`RecordStorage` seam;
 - gRPC service work before real buses and `Stand` exist.
+
+## Integrated Subtask Reviews
+
+- `T-0012.1 Cleanup Enforcement Baseline`: all five required review lanes are
+  clean. Round 4 left only documentation status comments, which were resolved
+  by a focused documentation re-review. Final escalated `env CI=true corepack
+pnpm verify` passed.
+
+## Next Review Focus
+
+For `T-0012.2 Source Folder Repack`, reviewers must focus on:
+
+- semantic folder grouping without behavioral redesign;
+- package-root `src` folders containing only a handful of entry/global files;
+- mirrored `packages/<package>/test` structure;
+- imports and package exports staying coherent;
+- no new helper sprawl or renamed long concepts while moving files.

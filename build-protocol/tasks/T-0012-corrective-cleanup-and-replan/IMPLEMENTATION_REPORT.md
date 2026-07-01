@@ -1,6 +1,6 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: Requirements split complete; first cleanup subtask selected
+Status: T-0012.1 integrated; T-0012.2 selected
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
@@ -21,7 +21,22 @@ the negative `bounded-context.ts` example, the local Spine JVM research notes,
 and task-relevant JVM source. The splitter produced a staged corrective roadmap
 and selected the first implementable cleanup subtask.
 
-No implementation code has been changed yet.
+`T-0012.1 Cleanup Enforcement Baseline` is integrated on this parent branch.
+The next selected subtask is `T-0012.2 Source Folder Repack`.
+
+## T-0012.1 Integration
+
+The integrated subtask:
+
+- removes tracked generated Protobuf-ES output from `packages/proto/src`;
+- regenerates ignored output under `packages/proto/generated`;
+- moves package tests under `packages/<package>/test`;
+- adds cleanup enforcement for generated-code location, co-located tests,
+  semantic name component limits, callback naming, line length, and flat `src`
+  growth;
+- records clean five-lane review results, including focused documentation
+  re-review;
+- passes escalated `env CI=true corepack pnpm verify`.
 
 ## Skill Applicability Summary
 
