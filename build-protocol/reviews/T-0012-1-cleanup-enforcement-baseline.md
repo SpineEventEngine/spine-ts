@@ -6,9 +6,9 @@ Branch: `task/T-0012-1-cleanup-enforcement-baseline`
 Baseline commit: `a65ac4d`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-1-cleanup-enforcement-baseline`
-Status: Round 4 complete except docs-only header/status follow-up
-Reviewed commit/diff basis: `147d496..5c0f0c3`
-Review package: `.superpowers/sdd/review-147d496..5c0f0c3.diff`
+Status: Round 5 focused documentation re-review pending
+Reviewed commit/diff basis: baseline `147d496` through current branch head
+Review package: `.superpowers/sdd/review-current-docs.diff`
 
 ## Required Review Lanes
 
@@ -88,43 +88,6 @@ Focused RED/GREEN evidence is recorded in
 `build-protocol/tasks/T-0012-1-cleanup-enforcement-baseline/IMPLEMENTATION_REPORT.md`.
 Final required verification passed after escalation for the known ZeroMQ local
 IPC sandbox restriction.
-
-## Round 4 Re-review
-
-Round 4 reviewers checked the full package
-`.superpowers/sdd/review-147d496..5c0f0c3.diff`.
-
-Reviewer lanes:
-
-- Code style/maintainability: no remaining comments.
-- Documentation: comments remain. Important finding: top-level review/task/report/work-log
-  status fields still identified Round 3 as the active state while Round 4 was
-  running.
-- TypeScript/API docs: no remaining comments.
-- Security: no remaining comments.
-- Performance/reliability: no remaining comments.
-
-All Round 4 reviewer agents are closed. The remaining follow-up is docs-only:
-refresh the durable header/status fields to the Round 4 state and run a focused
-documentation re-review.
-
-Author follow-up agent `019f1eaa-e1e5-7f02-99db-1856dbcc7fe9` committed
-`5c0f0c3` and is closed.
-
-## Round 4 Re-review
-
-Round 4 reviewers must re-check the full package
-`.superpowers/sdd/review-147d496..5c0f0c3.diff`, with special attention to
-direct `pnpm lint` fresh-checkout behavior and updated durable review/status
-pointers.
-
-Reviewer lanes:
-
-- Code style/maintainability: pending.
-- Documentation: pending.
-- TypeScript/API docs: pending.
-- Security: pending.
-- Performance/reliability: pending.
 
 Author follow-up agent `019f1e81-646b-7c51-a325-59dbf7c4c9c6` committed
 `3d33805` and is closed.
@@ -211,3 +174,45 @@ Focused RED/GREEN evidence is recorded in
 `build-protocol/tasks/T-0012-1-cleanup-enforcement-baseline/IMPLEMENTATION_REPORT.md`.
 Final required verification passed after escalation for the known ZeroMQ local
 IPC sandbox restriction.
+
+Author follow-up agent `019f1eaa-e1e5-7f02-99db-1856dbcc7fe9` committed
+`5c0f0c3` and is closed.
+
+## Round 4 Re-review
+
+Round 4 reviewers checked the full package
+`.superpowers/sdd/review-147d496..5c0f0c3.diff`, with special attention to
+direct `pnpm lint` fresh-checkout behavior and updated durable review/status
+pointers.
+
+Reviewer lanes:
+
+- Code style/maintainability: no remaining comments.
+- Documentation: comments remain. Important finding: top-level
+  review/task/report/work-log status fields still identified Round 3 as the
+  active state while Round 4 was running.
+- TypeScript/API docs: no remaining comments.
+- Security: no remaining comments.
+- Performance/reliability: no remaining comments.
+
+All Round 4 reviewer agents are closed. The remaining follow-up is docs-only:
+refresh the durable header/status fields and run a focused documentation
+re-review.
+
+## Round 5 Focused Documentation Follow-up
+
+The durable review log, task log, implementation report, and work log now use a
+stable current-review package path:
+`.superpowers/sdd/review-current-docs.diff`.
+
+Focused documentation re-review must verify:
+
+- the top-level statuses no longer claim an already-complete or stale review
+  state;
+- the review package pointer matches the focused documentation package;
+- Round 2, Round 3, and Round 4 entries are in chronological order;
+- no stale "ready for re-review" or obsolete active-package pointer remains.
+
+Reviewer lane:
+
+- Documentation: pending.

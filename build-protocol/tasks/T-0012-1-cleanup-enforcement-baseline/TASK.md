@@ -1,6 +1,6 @@
 # T-0012.1: Cleanup Enforcement Baseline
 
-Status: Round 4 complete except docs-only header/status follow-up
+Status: Round 5 focused documentation re-review pending
 Start: `2026-07-01 17:01 WEST`
 Baseline commit: `a65ac4d`
 Branch: `task/T-0012-1-cleanup-enforcement-baseline`

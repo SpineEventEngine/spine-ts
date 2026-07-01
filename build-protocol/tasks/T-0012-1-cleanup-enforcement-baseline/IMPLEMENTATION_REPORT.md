@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.1 Cleanup Enforcement Baseline
 
-Status: Round 4 complete except docs-only header/status follow-up
+Status: Round 5 focused documentation re-review pending
 Branch: `task/T-0012-1-cleanup-enforcement-baseline`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-1-cleanup-enforcement-baseline`
