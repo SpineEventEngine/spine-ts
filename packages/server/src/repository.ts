@@ -173,7 +173,8 @@ export class Repository<
     if (!isRepositoryOptionsObject(options)) {
       throw new RepositoryIdentityError(
         "UNSUPPORTED_ENTITY_TYPE",
-        `Repository options must be a non-null object with an entity type class constructor extending Aggregate, Projection, or ProcessManager.`,
+        "Repository options must be a non-null object with an entity type class constructor " +
+          "extending Aggregate, Projection, or ProcessManager.",
         {
           entityTypeName: "(anonymous)",
         },
@@ -186,7 +187,8 @@ export class Repository<
     if (typeof entityType !== "function" || !isClassConstructor(entityType)) {
       throw new RepositoryIdentityError(
         "UNSUPPORTED_ENTITY_TYPE",
-        `Repository entity type "${entityTypeDisplayName}" must be a class constructor extending Aggregate, Projection, or ProcessManager.`,
+        `Repository entity type "${entityTypeDisplayName}" must be a class constructor ` +
+          "extending Aggregate, Projection, or ProcessManager.",
         {
           entityTypeName: entityTypeDisplayName,
         },
@@ -216,7 +218,8 @@ export class Repository<
     if (metadata.kind !== entityFamily) {
       throw new RepositoryIdentityError(
         "ENTITY_SCHEMA_KIND_MISMATCH",
-        `Repository entity type "${entityTypeDisplayName}" is a ${entityFamily}, but state schema "${metadata.fullTypeName}" declares entity kind "${metadata.kind}".`,
+        `Repository entity type "${entityTypeDisplayName}" is a ${entityFamily}, but ` +
+          `state schema "${metadata.fullTypeName}" declares entity kind "${metadata.kind}".`,
         {
           entityTypeName: entityTypeDisplayName,
           entityFamily,
@@ -286,7 +289,8 @@ function readRepositoryEntityTypeOption(options: object): unknown {
   } catch {
     throw new RepositoryIdentityError(
       "UNSUPPORTED_ENTITY_TYPE",
-      `Repository options entityType must be readable and resolve to a class constructor extending Aggregate, Projection, or ProcessManager.`,
+      "Repository options entityType must be readable and resolve to a class constructor " +
+        "extending Aggregate, Projection, or ProcessManager.",
       {
         entityTypeName: "(anonymous)",
       },
@@ -304,7 +308,8 @@ function readRepositorySchemaOption(
   } catch {
     throw new RepositoryIdentityError(
       "ENTITY_SCHEMA_KIND_MISMATCH",
-      `Repository entity type "${entityTypeDisplayName}" is a ${entityFamily}, but the supplied state schema could not be read.`,
+      `Repository entity type "${entityTypeDisplayName}" is a ${entityFamily}, but ` +
+        "the supplied state schema could not be read.",
       {
         entityTypeName: entityTypeDisplayName,
         entityFamily,
@@ -390,7 +395,8 @@ function describeRepositoryEntityMetadata<Schema extends DescriptorMessageSchema
   } catch {
     throw new RepositoryIdentityError(
       "ENTITY_SCHEMA_KIND_MISMATCH",
-      `Repository entity type "${entityTypeDisplayName}" is a ${entityFamily}, but the supplied state schema does not expose supported entity metadata.`,
+      `Repository entity type "${entityTypeDisplayName}" is a ${entityFamily}, but ` +
+        "the supplied state schema does not expose supported entity metadata.",
       {
         entityTypeName: entityTypeDisplayName,
         entityFamily,

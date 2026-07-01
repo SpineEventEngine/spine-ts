@@ -9,7 +9,7 @@ export default tseslint.config(
       "**/coverage/**",
       ".worktrees/**",
       "docs/api/reference/**",
-      "packages/proto/src/generated/**",
+      "packages/*/generated/**",
       "eslint.config.mjs",
       "vitest.config.ts",
     ],

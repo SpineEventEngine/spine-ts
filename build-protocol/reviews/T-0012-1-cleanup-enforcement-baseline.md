@@ -6,7 +6,7 @@ Branch: `task/T-0012-1-cleanup-enforcement-baseline`
 Baseline commit: `a65ac4d`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-1-cleanup-enforcement-baseline`
-Status: Setup in progress.
+Status: Implementation verified; commit pending.
 
 ## Required Review Lanes
 
@@ -26,3 +26,10 @@ Reviewers must enforce `D-0047`, `CODE_QUALITY.md`, and the reset constraints:
 - new automated checks cover the forbidden old patterns;
 - no new framework behavior is introduced;
 - any public API/path changes are documented.
+
+Implementation note: generated Protobuf-ES output is now regenerated under
+ignored `packages/proto/generated`; package tests moved under
+`packages/<package>/test`; `pnpm lint` runs the cleanup checker. The checker
+allows explicitly listed inherited pre-reset long semantic names so this
+enforcement task does not redesign runtime APIs outside scope, but it rejects
+new long semantic names.

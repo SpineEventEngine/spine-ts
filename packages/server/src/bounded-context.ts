@@ -173,7 +173,8 @@ export class ContextSpec {
     const validatedSnapshot = validateSpecSnapshot(snapshot, "ContextSpec");
     requireFrameworkConstructionToken(
       token,
-      "ContextSpec instances are framework-owned. Use BoundedContext.singleTenant(name) or BoundedContext.multitenant(name).",
+      "ContextSpec instances are framework-owned. Use BoundedContext.singleTenant(name) " +
+        "or BoundedContext.multitenant(name).",
     );
     this.#snapshot = validatedSnapshot;
     Object.freeze(this);
@@ -226,7 +227,8 @@ export class BoundedContextBuilder {
     const validatedSnapshot = validateSpecSnapshot(specSnapshot, "BoundedContextBuilder");
     requireFrameworkConstructionToken(
       token,
-      "BoundedContextBuilder instances are framework-owned. Use BoundedContext.singleTenant(name) or BoundedContext.multitenant(name).",
+      "BoundedContextBuilder instances are framework-owned. Use BoundedContext.singleTenant(name) " +
+        "or BoundedContext.multitenant(name).",
     );
     this.#specSnapshot = validatedSnapshot;
     this.#repositorySnapshots = copyRepositorySnapshots(repositorySnapshots);
@@ -308,7 +310,8 @@ export class BoundedContext {
     const validatedSnapshot = validateContextSnapshot(snapshot);
     requireFrameworkConstructionToken(
       token,
-      "BoundedContext instances are framework-owned. Use BoundedContext.singleTenant(name) or BoundedContext.multitenant(name), then call builder.build().",
+      "BoundedContext instances are framework-owned. Use BoundedContext.singleTenant(name) " +
+        "or BoundedContext.multitenant(name), then call builder.build().",
     );
     this.#snapshot = validatedSnapshot;
     Object.freeze(this);
@@ -871,7 +874,8 @@ function throwInvalidRepositorySnapshot(
 ): never {
   throw new BoundedContextRepositoryRegistrationError(
     "INVALID_REPOSITORY_SNAPSHOT",
-    `BoundedContextBuilder.${operation}(repository) requires a repository snapshot with supported repository identity metadata.`,
+    `BoundedContextBuilder.${operation}(repository) requires a repository snapshot with ` +
+      "supported repository identity metadata.",
     {
       contextName,
       operation,

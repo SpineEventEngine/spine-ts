@@ -256,7 +256,8 @@ function validateColumnField(schema: DescriptorMessageSchema, field: DescField):
   if (field.fieldKind === "list" || field.fieldKind === "map") {
     throw new DescriptorMetadataError(
       "INVALID_COLUMN_FIELD",
-      `Entity column field "${schema.typeName}.${field.name}" must be singular; repeated and map fields are unsupported.`,
+      `Entity column field "${schema.typeName}.${field.name}" must be singular; ` +
+        "repeated and map fields are unsupported.",
     );
   }
 }

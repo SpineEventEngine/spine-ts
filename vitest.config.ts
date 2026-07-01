@@ -3,7 +3,7 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     include: [
-      "packages/*/src/**/*.test.ts",
+      "packages/*/test/**/*.test.ts",
       "examples/*/src/**/*.test.ts",
       "scripts/**/*.test.mjs",
     ],
@@ -11,7 +11,7 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "lcov"],
       include: ["packages/*/src/**/*.ts", "examples/*/src/**/*.ts"],
-      exclude: ["**/*.test.ts", "packages/proto/src/generated/**"],
+      exclude: ["**/*.test.ts", "packages/*/generated/**"],
       thresholds: {
         branches: 90,
         functions: 90,

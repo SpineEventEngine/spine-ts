@@ -9,5 +9,10 @@
     "types": ["node", "vitest"],
     "noEmit": true
   },
-  "include": ["packages/*/src/**/*.ts", "examples/*/src/**/*.ts", "vitest.config.ts"]
+  "include": [
+    "packages/*/src/**/*.ts",
+    "packages/*/test/**/*.ts",
+    "examples/*/src/**/*.ts",
+    "vitest.config.ts"
+  ]
 }

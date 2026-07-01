@@ -470,7 +470,8 @@ function validateHandlerMethod<Instance extends object>(
   ) {
     throw new HandlerMetadataError(
       "UNKNOWN_HANDLER_METHOD",
-      `Handler method "${methodName}" must be an own prototype data method declared with normal class method syntax on the registered entity prototype.`,
+      `Handler method "${methodName}" must be an own prototype data method declared with ` +
+        "normal class method syntax on the registered entity prototype.",
     );
   }
 }

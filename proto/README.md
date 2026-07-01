@@ -51,6 +51,6 @@ Buf lint uses narrow compatibility exceptions because Spine upstream
 legacy enum and field names, including lowercase ISO language enum values in
 `spine/ui/language.proto`.
 
-`proto:check-generated` fails when tracked or untracked generated output under
-`packages/proto/src/generated` is dirty after generation. `pnpm verify` runs it
-after `proto:generate`.
+`proto:check-generated` fails when generated output under
+`packages/proto/generated` is tracked by Git, not ignored, or missing after
+generation. `pnpm verify` runs it after `proto:generate`.

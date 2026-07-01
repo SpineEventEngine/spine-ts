@@ -3,13 +3,13 @@ import type { FieldOptions, FileOptions, MessageOptions } from "@bufbuild/protob
 import {
   FieldPathSchema as generatedFieldPathSchema,
   file_spine_base_field_path as generatedFileSpineBaseFieldPath,
-} from "./generated/spine/base/field_path_pb.js";
-import type { FieldPath } from "./generated/spine/base/field_path_pb.js";
+} from "../generated/spine/base/field_path_pb.js";
+import type { FieldPath } from "../generated/spine/base/field_path_pb.js";
 import {
   ActorContextSchema as generatedActorContextSchema,
   file_spine_core_actor_context as generatedFileSpineCoreActorContext,
-} from "./generated/spine/core/actor_context_pb.js";
-import type { ActorContext } from "./generated/spine/core/actor_context_pb.js";
+} from "../generated/spine/core/actor_context_pb.js";
+import type { ActorContext } from "../generated/spine/core/actor_context_pb.js";
 import {
   CommandContextSchema as generatedCommandContextSchema,
   CommandContext_ScheduleSchema as generatedCommandContextScheduleSchema,
@@ -19,7 +19,7 @@ import {
   CommandValidationErrorSchema as generatedCommandValidationErrorSchema,
   Command_SystemPropertiesSchema as generatedCommandSystemPropertiesSchema,
   file_spine_core_command as generatedFileSpineCoreCommand,
-} from "./generated/spine/core/command_pb.js";
+} from "../generated/spine/core/command_pb.js";
 import type {
   Command,
   CommandContext,
@@ -27,19 +27,19 @@ import type {
   CommandId,
   CommandValidationError as CommandValidationErrorType,
   Command_SystemProperties,
-} from "./generated/spine/core/command_pb.js";
+} from "../generated/spine/core/command_pb.js";
 import {
   MessageIdSchema as generatedMessageIdSchema,
   OriginSchema as generatedOriginSchema,
   file_spine_core_diagnostics as generatedFileSpineCoreDiagnostics,
-} from "./generated/spine/core/diagnostics_pb.js";
-import type { MessageId, Origin } from "./generated/spine/core/diagnostics_pb.js";
+} from "../generated/spine/core/diagnostics_pb.js";
+import type { MessageId, Origin } from "../generated/spine/core/diagnostics_pb.js";
 import {
   EnrichmentSchema as generatedEnrichmentSchema,
   Enrichment_ContainerSchema as generatedEnrichmentContainerSchema,
   file_spine_core_enrichment as generatedFileSpineCoreEnrichment,
-} from "./generated/spine/core/enrichment_pb.js";
-import type { Enrichment, Enrichment_Container } from "./generated/spine/core/enrichment_pb.js";
+} from "../generated/spine/core/enrichment_pb.js";
+import type { Enrichment, Enrichment_Container } from "../generated/spine/core/enrichment_pb.js";
 import {
   EventContextSchema as generatedEventContextSchema,
   EventIdSchema as generatedEventIdSchema,
@@ -48,39 +48,39 @@ import {
   EventValidationErrorSchema as generatedEventValidationErrorSchema,
   RejectionEventContextSchema as generatedRejectionEventContextSchema,
   file_spine_core_event as generatedFileSpineCoreEvent,
-} from "./generated/spine/core/event_pb.js";
+} from "../generated/spine/core/event_pb.js";
 import type {
   Event,
   EventContext,
   EventId,
   EventValidationError as EventValidationErrorType,
   RejectionEventContext,
-} from "./generated/spine/core/event_pb.js";
+} from "../generated/spine/core/event_pb.js";
 import {
   TenantIdSchema as generatedTenantIdSchema,
   file_spine_core_tenant_id as generatedFileSpineCoreTenantId,
-} from "./generated/spine/core/tenant_id_pb.js";
-import type { TenantId } from "./generated/spine/core/tenant_id_pb.js";
+} from "../generated/spine/core/tenant_id_pb.js";
+import type { TenantId } from "../generated/spine/core/tenant_id_pb.js";
 import {
   UserIdSchema as generatedUserIdSchema,
   file_spine_core_user_id as generatedFileSpineCoreUserId,
-} from "./generated/spine/core/user_id_pb.js";
-import type { UserId } from "./generated/spine/core/user_id_pb.js";
+} from "../generated/spine/core/user_id_pb.js";
+import type { UserId } from "../generated/spine/core/user_id_pb.js";
 import {
   VersionSchema as generatedVersionSchema,
   file_spine_core_version as generatedFileSpineCoreVersion,
-} from "./generated/spine/core/version_pb.js";
-import type { Version } from "./generated/spine/core/version_pb.js";
+} from "../generated/spine/core/version_pb.js";
+import type { Version } from "../generated/spine/core/version_pb.js";
 import {
   EmailAddressSchema as generatedEmailAddressSchema,
   file_spine_net_email_address as generatedFileSpineNetEmailAddress,
-} from "./generated/spine/net/email_address_pb.js";
-import type { EmailAddress } from "./generated/spine/net/email_address_pb.js";
+} from "../generated/spine/net/email_address_pb.js";
+import type { EmailAddress } from "../generated/spine/net/email_address_pb.js";
 import {
   InternetDomainSchema as generatedInternetDomainSchema,
   file_spine_net_internet_domain as generatedFileSpineNetInternetDomain,
-} from "./generated/spine/net/internet_domain_pb.js";
-import type { InternetDomain } from "./generated/spine/net/internet_domain_pb.js";
+} from "../generated/spine/net/internet_domain_pb.js";
+import type { InternetDomain } from "../generated/spine/net/internet_domain_pb.js";
 import {
   EntityOptionSchema as generatedEntityOptionSchema,
   EntityOption_Kind as generatedEntityOptionKind,
@@ -96,13 +96,13 @@ import {
   IsOptionSchema as generatedIsOptionSchema,
   set_once as generatedSetOnce,
   type_url_prefix as generatedTypeUrlPrefix,
-} from "./generated/spine/options_pb.js";
-import type { EntityOption, EveryIsOption, IsOption } from "./generated/spine/options_pb.js";
+} from "../generated/spine/options_pb.js";
+import type { EntityOption, EveryIsOption, IsOption } from "../generated/spine/options_pb.js";
 import {
   TemplateStringSchema as generatedTemplateStringSchema,
   file_spine_string_template_string as generatedFileSpineStringTemplateString,
-} from "./generated/spine/string/template_string_pb.js";
-import type { TemplateString } from "./generated/spine/string/template_string_pb.js";
+} from "../generated/spine/string/template_string_pb.js";
+import type { TemplateString } from "../generated/spine/string/template_string_pb.js";
 import {
   DayOfWeek as generatedDayOfWeek,
   DayOfWeekSchema as generatedDayOfWeekSchema,
@@ -115,7 +115,7 @@ import {
   ZoneIdSchema as generatedZoneIdSchema,
   ZonedDateTimeSchema as generatedZonedDateTimeSchema,
   file_spine_time_time as generatedFileSpineTimeTime,
-} from "./generated/spine/time/time_pb.js";
+} from "../generated/spine/time/time_pb.js";
 import type {
   DayOfWeek as DayOfWeekType,
   LocalDate,
@@ -125,22 +125,22 @@ import type {
   YearMonth,
   ZoneId,
   ZonedDateTime,
-} from "./generated/spine/time/time_pb.js";
+} from "../generated/spine/time/time_pb.js";
 import {
   Language as generatedLanguage,
   LanguageSchema as generatedLanguageSchema,
   file_spine_ui_language as generatedFileSpineUiLanguage,
-} from "./generated/spine/ui/language_pb.js";
-import type { Language as LanguageType } from "./generated/spine/ui/language_pb.js";
+} from "../generated/spine/ui/language_pb.js";
+import type { Language as LanguageType } from "../generated/spine/ui/language_pb.js";
 import {
   ConstraintViolationSchema as generatedConstraintViolationSchema,
   ValidationErrorSchema as generatedValidationErrorSchema,
   file_spine_validation_validation_error as generatedFileSpineValidationValidationError,
-} from "./generated/spine/validation/validation_error_pb.js";
+} from "../generated/spine/validation/validation_error_pb.js";
 import type {
   ConstraintViolation,
   ValidationError,
-} from "./generated/spine/validation/validation_error_pb.js";
+} from "../generated/spine/validation/validation_error_pb.js";
 
 /**
  * Curated Protobuf-ES root exports for copied Spine proto contracts.

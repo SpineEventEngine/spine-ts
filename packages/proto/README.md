@@ -16,12 +16,14 @@ The package root currently exposes a curated Spine proto intake set:
 - Minimal transitive support contracts from `spine.time`, `spine.net`, and
   `spine.ui` required by the core context messages.
 
-Generation writes to `packages/proto/src/generated`, and the public package
+Generation writes to `packages/proto/generated`, and the public package
 entry point imports from those generated files to expose documented aliases for
 the file descriptors, message schemas, message types, and the `type_url_prefix`
 custom option. Generated implementation modules are not broadly re-exported from
-the package root. High-level `Any` packing helpers and command/event factory
-APIs are deferred to later framework tasks.
+the package root. Build output also exposes `@spine-ts/proto/generated/*`
+subpaths for callers that intentionally need a generated module directly.
+High-level `Any` packing helpers and command/event factory APIs are deferred to
+later framework tasks.
 
 Run:
 

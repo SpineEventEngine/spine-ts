@@ -602,7 +602,13 @@ if (/export\s+\*\s+from\s+["']\.\/generated\//.test(protoIndexSource)) {
 }
 
 console.log(
-  `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-ts/proto exports, ${expectedCoreExports.length} expected @spine-ts/core exports, ${expectedServerExports.length} expected @spine-ts/server exports, ${expectedStorageExports.length} expected @spine-ts/storage exports, and ${expectedTransportExports.length} expected @spine-ts/transport exports.`,
+  [
+    `TypeDoc JSON includes ${expectedProtoExports.length} expected @spine-ts/proto exports`,
+    `${expectedCoreExports.length} expected @spine-ts/core exports`,
+    `${expectedServerExports.length} expected @spine-ts/server exports`,
+    `${expectedStorageExports.length} expected @spine-ts/storage exports`,
+    `${expectedTransportExports.length} expected @spine-ts/transport exports.`,
+  ].join(", "),
 );
 
 function collectNamedExports(indexPath) {
