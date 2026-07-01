@@ -24,6 +24,11 @@ and selected the first implementable cleanup subtask.
 `T-0012.1 Cleanup Enforcement Baseline` is integrated on this parent branch.
 `T-0012.2 Source Folder Repack` is integrated on this parent branch. The next
 selected subtask is `T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions`.
+Parent verification after integrating `T-0012.2` passed with escalated
+`env CI=true corepack pnpm verify`: 28 test files, 307 tests, coverage
+statements 96.12%, branches 90.53%, functions 99.38%, lines 96.07%, docs/API
+checks with the existing invalid-`origin` TypeDoc warning only, proto
+lint/generate, and generated-clean comparison.
 
 ## T-0012.1 Integration
 
