@@ -85,7 +85,9 @@ generated-clean comparison.
 parent branch. It replaced the broad storage adapter with a JVM-like
 `StorageFactory` / `RecordStorage` seam, added in-memory record storage and a
 storage-only event store delegate, passed all review lanes, and passed
-escalated `env CI=true corepack pnpm verify`.
+escalated `env CI=true corepack pnpm verify`. Parent verification after
+integration also passed with 32 test files, 294 tests, coverage above 90%,
+docs/API checks, proto lint/generate, and generated-clean comparison.
 
 Next selected subtask: `T-0012.5 CommandBus, EventBus, And Handler Registration`.
 

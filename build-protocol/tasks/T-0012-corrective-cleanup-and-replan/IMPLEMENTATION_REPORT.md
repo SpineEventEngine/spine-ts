@@ -33,6 +33,11 @@ integrated on this parent branch. The next selected subtask is
 `RecordColumn`, implemented multitenant in-memory record storage, added a
 storage-only `EventStore` delegate, updated public docs and API checks, passed
 all review lanes, and passed escalated `env CI=true corepack pnpm verify`.
+Parent verification after integrating `T-0012.4` passed with escalated
+`env CI=true corepack pnpm verify`: 32 test files, 294 tests, coverage
+statements 95.64%, branches 90.44%, functions 98.31%, lines 95.64%, docs/API
+checks with the existing invalid-`origin` TypeDoc warning only, proto
+lint/generate, and generated-clean comparison.
 
 `T-0012.3` removed bounded-context runtime/detail exports, simplified
 repository diagnostics to code/message, removed transport lifecycle/delivery
