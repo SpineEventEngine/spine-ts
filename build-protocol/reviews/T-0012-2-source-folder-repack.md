@@ -32,3 +32,12 @@ Reviewers must enforce `D-0047`, `CODE_QUALITY.md`, and the reset constraints:
 Implementation complete. Review should focus on the committed source/test path
 repack, import updates, cleanup-rule path updates, and verification evidence in
 the implementation report.
+
+## Documentation Review Findings
+
+- P2 stale parent task status: parent task/report/work/review docs still said
+  `T-0012.2` was selected. Fixed by updating current-state/status language to
+  say `T-0012.2 Source Folder Repack` is implemented and awaiting review.
+- P3 T-0012.2 work-log chronology: implementation entries were timestamped
+  before worktree/log creation. Fixed by correcting those timestamps so the log
+  reads in sequence.

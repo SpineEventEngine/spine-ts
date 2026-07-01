@@ -1,6 +1,6 @@
 # Work Log: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.1 integrated; T-0012.2 selected
+Status: T-0012.1 integrated; T-0012.2 implemented and awaiting review
 
 ## Entries
 
@@ -13,6 +13,7 @@ Status: T-0012.1 integrated; T-0012.2 selected
 | `2026-07-01 17:00 WEST` | Main orchestrator     | Closed requirements splitter.                                                                 | Closed agent `019f1e60-fd4e-7ef0-b5ec-223d6928f739`; splitter commit `62164aa`; updated parent task/report/work log.                                                                                                                                                                                                                                                                                                                                                                                                                          | Corrective roadmap is recorded. First selected subtask is `T-0012.1 Cleanup Enforcement Baseline`.                                                                                                                                                                                                                                                                                       |
 | `2026-07-01 18:43 WEST` | Main orchestrator     | Integrated `T-0012.1` and selected next subtask.                                              | Merged `task/T-0012-1-cleanup-enforcement-baseline` into parent branch; updated parent task/report/review/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                          | `T-0012.1` is complete with all review lanes clean and escalated `env CI=true corepack pnpm verify` passing. Next selected subtask is `T-0012.2 Source Folder Repack`.                                                                                                                                                                                                                   |
 | `2026-07-01 18:45 WEST` | Main orchestrator     | Verified parent branch after `T-0012.1` integration.                                          | Escalated `env CI=true corepack pnpm verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Passed with 28 test files, 307 tests, coverage above 90%, docs/API checks, proto lint/generate, and generated-clean comparison.                                                                                                                                                                                                                                                          |
+| `2026-07-01 18:56 WEST` | Documentation fix     | Recorded `T-0012.2` review status correction.                                                 | Updated parent task/report/review/work logs plus `T-0012.2` report/review/work log.                                                                                                                                                                                                                                                                                                                                                                                                                                                           | Parent current-state language now says `T-0012.2 Source Folder Repack` is implemented and awaiting review. Historical selection entries remain unchanged as history.                                                                                                                                                                                                                     |
 
 ## Current State
 
@@ -20,7 +21,7 @@ Status: T-0012.1 integrated; T-0012.2 selected
 - `T-0012.1 Cleanup Enforcement Baseline` is integrated.
 - Requirements splitter agent `019f1e60-fd4e-7ef0-b5ec-223d6928f739` is
   closed after commit `62164aa`.
-- Next selected implementable cleanup subtask is
-  `T-0012.2 Source Folder Repack`.
+- `T-0012.2 Source Folder Repack` is implemented on
+  `task/T-0012-2-source-folder-repack` and awaiting review.
 - Parent verification passed after `T-0012.1` integration.
 - No blocking human question is known.

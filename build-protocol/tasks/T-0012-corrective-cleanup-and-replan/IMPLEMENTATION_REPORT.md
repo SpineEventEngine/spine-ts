@@ -1,6 +1,6 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.1 integrated; T-0012.2 selected
+Status: T-0012.1 integrated; T-0012.2 implemented and awaiting review
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
@@ -22,7 +22,8 @@ and task-relevant JVM source. The splitter produced a staged corrective roadmap
 and selected the first implementable cleanup subtask.
 
 `T-0012.1 Cleanup Enforcement Baseline` is integrated on this parent branch.
-The next selected subtask is `T-0012.2 Source Folder Repack`.
+`T-0012.2 Source Folder Repack` is implemented on
+`task/T-0012-2-source-folder-repack` and awaiting review.
 
 ## T-0012.1 Integration
 

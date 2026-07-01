@@ -76,3 +76,13 @@ Baseline commit: `480feb02ebde00e03f13a30162d31b9f427e7d18`
 - `env CI=true corepack pnpm verify`: passed with native IPC access after the
   sandbox ZeroMQ `ipc://` bind failure was confirmed. Coverage: 96.12%
   statements, 90.53% branches, 99.38% functions, 96.07% lines.
+
+## Documentation Review Fix
+
+- Review found stale parent current-state language saying `T-0012.2` was still
+  selected after this branch implemented it. Parent task, implementation
+  report, work log, and review log now say `T-0012.2 Source Folder Repack` is
+  implemented and awaiting review.
+- Review found the T-0012.2 work-log chronology listed implementation entries
+  before worktree/log creation. The implementation timestamps were corrected so
+  the log reads in actual sequence.
