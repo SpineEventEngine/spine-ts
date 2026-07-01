@@ -146,8 +146,16 @@ fresh-clone `pnpm lint` behavior.
 
 Reviewer lanes:
 
-- Code style/maintainability: pending.
-- Documentation: pending.
-- TypeScript/API docs: pending.
-- Security: pending.
-- Performance/reliability: pending.
+- Code style/maintainability: no remaining comments.
+- Documentation: comments remain. Important finding: the top-level review log
+  still points to the Round 2 package `147d496..3d33805` while the active Round
+  3 package is `147d496..a45a9bc`. Minor finding: the task status is stale.
+- TypeScript/API docs: no remaining comments.
+- Security: no remaining comments.
+- Performance/reliability: comments remain. Important finding: direct
+  `pnpm lint` from a fresh checkout still fails after generating proto files
+  because type-aware ESLint resolves `@spine-ts/proto` types from `dist`, which
+  does not exist until `typecheck:build` runs.
+
+All Round 3 reviewer agents are closed. Author follow-up must address the
+remaining documentation and reliability findings before another re-review.
