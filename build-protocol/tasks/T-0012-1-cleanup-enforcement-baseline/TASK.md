@@ -1,6 +1,6 @@
 # T-0012.1: Cleanup Enforcement Baseline
 
-Status: All review lanes clean; final verification pending
+Status: Complete; ready to merge into parent corrective branch
 Start: `2026-07-01 17:01 WEST`
 Baseline commit: `a65ac4d`
 Branch: `task/T-0012-1-cleanup-enforcement-baseline`

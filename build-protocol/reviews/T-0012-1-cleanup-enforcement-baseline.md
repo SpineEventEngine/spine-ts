@@ -6,7 +6,7 @@ Branch: `task/T-0012-1-cleanup-enforcement-baseline`
 Baseline commit: `a65ac4d`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-1-cleanup-enforcement-baseline`
-Status: All review lanes clean; final verification pending
+Status: All review lanes clean; final verification passed
 Reviewed commit/diff basis: baseline `147d496` through current branch head
 Review package: `.superpowers/sdd/review-current-docs.diff`
 
