@@ -16,6 +16,31 @@ The framework provides a TypeScript/Node.js implementation of the core server-si
 
 The framework does not need source-level compatibility with Spine JVM. It should feel familiar to JVM Spine users by preserving names, concepts, message contracts, and domain modeling conventions.
 
+## Corrected Implementation Order
+
+Human review on `2026-07-01` reset the roadmap. The framework must now be
+implemented in this order:
+
+1. Storage factory, `Storage` contract, in-memory storage implementation, and
+   event store.
+2. `CommandBus`, `EventBus`, dispatching mechanisms, and JVM-like handler
+   annotations/decorators for command handlers, event subscribers, event
+   reactors, command-producing methods, and related dispatch endpoints.
+3. `BoundedContext`, assembly, and registration.
+4. Entity kinds, repositories, signal routing, and aggregate storage. Aggregate
+   storage must account for snapshots plus events.
+5. Delivery, `Inbox`, signal endpoints, and transactions during event
+   dispatch.
+6. `Stand` and entity-updated system events.
+7. Real gRPC `CommandService`, `QueryService`, and `SubscriptionService`
+   interfaces matching Spine JVM protobuf definitions.
+8. Previously omitted details.
+9. To-do example app. If the example reveals a missing framework feature,
+   implement the framework feature first and then continue the example.
+
+This order supersedes the abandoned command-execution-first `T-0012` branch
+line.
+
 ## Non-Negotiable Constraints
 
 1. Use Buf's Protobuf-ES stack for Protobuf-to-TypeScript generation.
@@ -28,6 +53,10 @@ The framework does not need source-level compatibility with Spine JVM. It should
 8. Prefer OOP APIs and TypeScript generics over procedural registration.
 9. Provide annotation-like handler declaration through standard TypeScript decorators if viable, with code generation or explicit registration as fallback where decorators cannot express the needed metadata.
 10. Use `@spine-event-engine/validation-ts` for message validation and add framework-level state-transition validation where that package does not cover stateful rules such as `(set_once)`.
+11. Generated Protobuf-ES files must live under `packages/<package>/generated/`,
+    must be ignored by Git, and must be regenerated during builds.
+12. Production code may import generated code directly. Do not add generated
+    facades unless a later task records a concrete reason.
 
 ## High-Level Architecture
 
@@ -59,6 +88,9 @@ The exact package manager and build tooling are deferred to the build protocol, 
 - `testing`: black-box bounded-context testing utilities.
 - `example-todo`: standalone server-side to-do list example.
 
+The generated Protobuf-ES output for each package belongs in that package's
+`generated/` directory, not under `src/`, and is not version-controlled.
+
 ## Runtime Roles
 
 - Main service process: owns gRPC endpoints, server assembly, process supervision, and public API routing.
@@ -87,4 +119,3 @@ Compatibility is defined at the Protobuf message and behavior level:
 - Implementing distributed multi-host transport.
 - Replacing the JVM compiler ecosystem.
 - Architecture diagrams beyond the minimal orientation diagram above.
-

@@ -4,6 +4,71 @@ Navigation: [README](README.md) | Related: [Build Protocol](BUILD_PROTOCOL.md)
 
 This document defines the standards that future implementation and review sub-agents must apply. It intentionally specifies criteria first; exact tooling choices are made during implementation after current library investigation.
 
+## Simplicity Directive
+
+Human review on `2026-07-01` found the current framework code too
+over-engineered. Simplicity is now a hard quality gate:
+
+- prefer the Spine JVM concept name when one exists;
+- prefer a small class/object API over exported standalone functions;
+- add helper functions only when they make the caller easier to understand, not
+  when they merely relocate branching or state;
+- delete invented concepts that do not map to current task needs or Spine JVM
+  source;
+- use simple errors/exceptions for programmer and configuration mistakes;
+- use small result objects only for runtime signal outcomes such as public
+  acknowledgements;
+- do not create large `*Details` error hierarchies without a recorded,
+  JVM-backed reason.
+
+`bounded-context.ts` and names such as
+`BoundedContextRepositorySnapshotErrorDetails` are recorded as negative
+examples. Future code should be shorter, flatter in behavior, and closer to
+the JVM meaning.
+
+## Source And Test Layout
+
+Each package defines its own semantic folder layout. The general shape is
+onion-like:
+
+- package-root `src/` contains only a handful of top-level entry files;
+- first-level folders group the main package semantics;
+- second-level folders exist only when a semantic detail needs its own layer;
+- tests live under `packages/<package>/test/`;
+- test folders mirror the corresponding `src/` folder structure;
+- production test files must not be co-located under `src/`.
+
+Generated Protobuf-ES output is not source. It must live under
+`packages/<package>/generated/`, be ignored by Git, and be removed and
+regenerated during builds.
+
+## Naming And Declarations
+
+- Keep declaration order aligned with file intent: the primary declaration
+  matching the file purpose comes first, followed by supporting types, classes,
+  objects, and constants.
+- Keep methods and constructors small. Target 35 lines including the
+  declaration; split by semantic sub-step only when the result is clearer.
+- Keep names short and explicit. Avoid `Utils`. Avoid repeating domain context
+  already fixed by the file, class, package, or subsystem.
+- Code names must have no more than four semantic components, counting each
+  capitalized word boundary as a component. Prefer up to three components.
+- Callback names must start with `on`; callback type names must start with
+  `On`. The exact parameter name `callback` is allowed for intentionally
+  generic callbacks.
+- Keep line length at 120 characters maximum; prefer 100 when readable.
+  Reflow naturally.
+- For multi-line parameter lists, prefer one parameter per line when clearer.
+- For Buf-generated Protobuf messages, use the generated API first. Prefer
+  `.clone()` for copying and do not invent ad-hoc clone helpers.
+
+## Generated Type Extensions
+
+When behavior naturally belongs to one generated message instance, framework
+code may extend the generated interface/prototype in regular `src` code. Place
+the extension where the equivalent helper would live semantically. Do not add a
+facade merely to hide generated imports.
+
 ## Tool Selection Criteria
 
 Before choosing a library or dev dependency, the implementing sub-agent must:
@@ -37,7 +102,8 @@ Implementation must use current TypeScript best practices:
 - no implicit `any`;
 - explicit public API types;
 - ESM-first package design unless a documented compatibility reason says otherwise;
-- typed errors or structured result types for framework-level outcomes;
+- simple errors for programmer/configuration failures and structured result
+  types only for runtime outcomes where the caller must branch;
 - no global mutable state except isolated registries with deterministic lifecycle;
 - async APIs return `Promise` or async iterables;
 - public APIs documented with TypeDoc comments;
@@ -110,4 +176,3 @@ Performance review must check:
 ## Non-Duplication Rule
 
 Code style and quality rules must be assembled into a single authoritative file during implementation. Sub-agents must not create overlapping rule files that duplicate or conflict with each other. This document is the seed for that later authoritative file.
-

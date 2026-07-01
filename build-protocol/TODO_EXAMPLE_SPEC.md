@@ -8,7 +8,11 @@ The framework implementation must include a standalone server-side to-do list ex
 
 ## Timing
 
-The example should be developed after the initial framework shape is defined enough to support:
+The example should be developed after the framework is defined enough to
+support a fully fledged app. In-memory storage is acceptable for the example,
+but gRPC, query, and subscription behavior must be real, not simulated.
+
+Prerequisites:
 
 - copied Spine Protobuf definitions;
 - domain `.proto` generation with Protobuf-ES;
@@ -20,6 +24,8 @@ The example should be developed after the initial framework shape is defined eno
 - subscriptions;
 - validation;
 - test utilities.
+- real gRPC `CommandService`, `QueryService`, and `SubscriptionService`
+  interfaces matching Spine JVM service definitions.
 
 ## Required Domain Shape
 
@@ -48,6 +54,10 @@ The example must demonstrate:
 - local multi-process mode through the bus abstraction when available;
 - black-box tests for the bounded context.
 
+If building the example exposes a missing framework feature, implementation
+returns to the framework first, adds the missing feature, and then resumes the
+example.
+
 ## Documentation
 
 The example must have its own `USER_GUIDE.md`. The guide should explain:
@@ -61,4 +71,3 @@ The example must have its own `USER_GUIDE.md`. The guide should explain:
 - which framework features the example demonstrates.
 
 The example guide may link to the framework `USER_GUIDE.md` and package READMEs.
-

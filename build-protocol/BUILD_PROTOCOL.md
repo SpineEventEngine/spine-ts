@@ -4,6 +4,35 @@ Navigation: [README](README.md) | Related: [Code Quality](CODE_QUALITY.md)
 
 This protocol governs future autonomous development of the TypeScript framework in Codex on macOS with sub-agents and worktrees available.
 
+## Human Review Reset
+
+On `2026-07-01`, human review rejected the current implementation direction as
+over-engineered and required an aggressive cleanup before new feature work. The
+previous `T-0012` command-execution branch line is abandoned. Corrective work
+starts from the repository trunk; this repository has no local `master` ref, so
+`main` is the effective trunk unless a real `master` branch is later created by
+the human.
+
+The cleanup and replanning work is autonomous and follows this protocol. The
+human does not intend to review intermediate tasks unless they explicitly
+interrupt the process.
+
+Binding reset requirements:
+
+- Prefer the smallest JVM-familiar concept over a precise but large
+  TypeScript-specific abstraction.
+- Delete or replace wrong abstractions aggressively; no external users depend
+  on the framework yet.
+- Do not continue the abandoned roadmap until package structure, generated code
+  policy, code-style enforcement, API simplification, and the corrected
+  implementation order are recorded and enforced.
+- Treat `bounded-context.ts` as a cautionary example: redundant error-detail
+  hierarchies and invented "snapshot"/"registration conflict details" concepts
+  are defects unless corresponding Spine JVM code proves they belong.
+- Look at the relevant Spine JVM `core-jvm/server` code before shaping server
+  concepts. Do not ask the human to explain concepts already present in Spine
+  JVM when local JVM docs/source can answer the question.
+
 ## Prime Directive
 
 The main agent must keep development resumable after sudden interruption, including computer restart, lost internet, or thread compaction. No change may be made without updating the appropriate log first or in the same atomic work step.
@@ -40,6 +69,12 @@ When spawning sub-agents, the orchestrator must instruct each to impersonate a s
 8. Review repeats until no comments remain.
 9. The orchestrator integrates the branch.
 10. All participating sub-agents are closed.
+
+The corrected roadmap must be split only after the cleanup guardrails are in
+place. It must follow the order recorded in `D-0047` and in
+`TECHNICAL_SPEC.md`: storage/event store first, then buses/dispatch, bounded
+context, entities/repositories/routing, delivery/inbox, stand, real gRPC
+services, missing details, and finally the to-do example.
 
 ## Branch and Worktree Rules
 
@@ -196,6 +231,17 @@ A task cannot be marked complete until:
 - framework or example `USER_GUIDE.md` is updated when user workflow changes;
 - all reviewer rounds are complete;
 - all participating sub-agents are closed.
+
+Additional cleanup-era gates:
+
+- code names have no more than four semantic components, counting capitalized
+  word boundaries;
+- callback names start with `on` and callback type names with `On`, except the
+  exact parameter name `callback` for intentionally generic callbacks;
+- production files and tests are separated according to `CODE_QUALITY.md`;
+- generated Protobuf-ES output is ignored and regenerated, not committed;
+- reviewers find no unnecessary standalone helper functions, long names, or
+  speculative framework concepts.
 
 ## Documentation Deliverables
 

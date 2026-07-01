@@ -3,6 +3,7 @@ node_modules/
 dist/
 coverage/
 docs/api/reference/
+packages/*/generated/
 .pnpm-store/
 .eslintcache
 .turbo/

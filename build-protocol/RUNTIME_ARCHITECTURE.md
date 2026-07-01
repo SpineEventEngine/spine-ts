@@ -16,6 +16,12 @@ The TS runtime centers on the same conceptual objects as Spine JVM:
 
 Generic names should be familiar to JVM Spine users, but TypeScript API shape should be idiomatic.
 
+The API should not expand these names into long, hyper-specific TypeScript
+types unless the current implementation needs that precision. Prefer `Inbox`,
+`Delivery`, `Repository`, `Stand`, `CommandBus`, and `EventBus` to invented
+long names. Public standalone helper functions are disallowed unless a task log
+records why a class/object/prototype method would be worse.
+
 ## Read-Side and Write-Side Segregation
 
 The write side owns:
@@ -155,6 +161,10 @@ The framework must define storage adapters around record-oriented capabilities:
 
 Initial implementation may include in-memory storage, but production storage is pluggable. The bus transport is not storage.
 
+Storage is the first corrected implementation layer. The common `Storage`
+contract must not contain in-memory-specific behavior; in-memory storage is one
+adapter behind the same contract.
+
 ## Delivery and Reliability
 
 The framework should preserve Spine-like reliability semantics:
@@ -164,4 +174,3 @@ The framework should preserve Spine-like reliability semantics:
 - workers can retry failed delivery;
 - duplicate delivery is tolerated by idempotent repository/entity handling;
 - broker restart must not lose durable signals already accepted into storage.
-

@@ -4,6 +4,66 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+## D-0047: Reset implementation toward simpler JVM-aligned architecture
+
+Status: Accepted
+
+Date: 2026-07-01
+
+Context: Human review on `2026-07-01` rejected the current framework direction
+as over-engineered. The review specifically called out flat package structure,
+co-located tests, long names, scattered standalone helpers, generated code in
+version control, and server concepts much larger than their Spine JVM
+counterparts. `bounded-context.ts` was named as representative evidence:
+redundant error-detail types such as `BoundedContextRepositorySnapshotErrorDetails`
+and `BoundedContextRepositoryRegistrationConflictErrorDetails` do not map to a
+clear JVM concept and make the API harder to read. The human clarified that no
+external users depend on the current framework code, so cleanup may be
+aggressive and may delete or replace wrong abstractions.
+
+Decision: Abandon the current `T-0012` command-execution branch line and restart
+corrective work from the repository trunk. The repository has no local
+`master` ref; `main` is the available trunk and is used as the reset base. The
+new implementation roadmap must follow this order:
+
+1. `StorageFactory`, `Storage`, in-memory storage, and event store.
+2. `CommandBus`, `EventBus`, dispatching mechanisms, and JVM-like handler
+   annotations/decorators.
+3. `BoundedContext`, assembly, and registration.
+4. Entity kinds, repositories, signal routing, and aggregate storage as
+   snapshots plus events.
+5. Delivery, `Inbox`, signal endpoints, and event-dispatch transactions.
+6. `Stand` and entity-updated system events.
+7. Real gRPC `CommandService`, `QueryService`, and `SubscriptionService`
+   interfaces matching Spine JVM protobuf contracts.
+8. Previously omitted details.
+9. Then implement the to-do example app; when the example exposes a missing
+   framework feature, implement the framework feature first and continue.
+
+Code should prefer Spine JVM concept names and small APIs over precise but long
+TypeScript-specific names. Public standalone functions are disallowed unless a
+strong reason is recorded. Programmer/configuration mistakes should use simple
+errors/exceptions; runtime signal outcomes may use small result objects. The
+implementation must not introduce large "details" error hierarchies or
+speculative concepts merely because a later framework may need something
+related.
+
+Consequences:
+
+- Future splitter, implementer, and reviewer prompts must treat simplicity as a
+  hard requirement, not taste feedback.
+- Generated Protobuf-ES output belongs under `packages/<package>/generated/`,
+  is removed and regenerated during builds, and is entirely ignored by Git.
+- Production source files must be grouped by package-specific semantics under
+  `src/`; package-root `src` folders should contain only a few top-level entry
+  files. Tests must live under `packages/<package>/test/` and mirror the
+  corresponding `src` folder structure.
+- The to-do example may use in-memory storage, but it must start only after real
+  gRPC, query, and subscription APIs exist. It is not a simulation.
+- Reviewers must flag over-engineered names, excessive error-detail types,
+  standalone helper sprawl, flat source layouts, co-located tests, committed
+  generated code, and any divergence from the corrected implementation order.
+
 ## D-0046: T-0009f starts repository and bounded-context seams without dispatch execution
 
 Status: Accepted
