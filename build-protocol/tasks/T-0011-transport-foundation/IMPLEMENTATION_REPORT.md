@@ -10,10 +10,10 @@ Worktree:
 
 ## Summary
 
-T-0011 starts from verified `main` commit `194ce9e`, after T-0010 was merged
+T-0011 started from verified `main` commit `194ce9e`, after T-0010 was merged
 and verified. The task owns the first transport foundation for local
-multi-process Node.js execution. The splitter must decide the smallest safe
-subtask before implementation starts.
+multi-process Node.js execution. The splitter selected the staged subtasks
+before implementation began.
 
 Requirements splitter completed on `2026-06-30 20:40 WEST` with no blocking
 questions. The recommended first slice is `T-0011.1 Transport Contracts,
@@ -160,6 +160,14 @@ corepack pnpm verify` passed with native IPC access. Full verify covered 24
 - Parent verification after integrating T-0011.7 passed on
   `2026-07-01 05:16 WEST`: escalated `CI=true corepack pnpm verify` passed
   with native IPC access, 24 test files / 293 tests, coverage 96.12%
+  statements / 90.53% branches / 99.38% functions / 96.07% lines, TypeDoc/API
+  checks with 100 proto / 28 core / 130 server / 26 storage / 46 transport
+  expected exports, copied Spine proto checksum verification, proto
+  lint/generate, generated proto output clean, and generated files clean.
+  TypeDoc emitted the existing invalid-`origin` warning only.
+- Final parent closure verification passed on `2026-07-01 05:27 WEST` for the
+  final closure-log cleanup tree: escalated `CI=true corepack pnpm verify`
+  passed with native IPC access, 24 test files / 293 tests, coverage 96.12%
   statements / 90.53% branches / 99.38% functions / 96.07% lines, TypeDoc/API
   checks with 100 proto / 28 core / 130 server / 26 storage / 46 transport
   expected exports, copied Spine proto checksum verification, proto
