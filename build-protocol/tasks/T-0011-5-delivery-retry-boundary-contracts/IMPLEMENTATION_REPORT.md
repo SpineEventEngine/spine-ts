@@ -115,3 +115,5 @@ is committing the verified diff to keep the task resumable.
   functions / 96.10% lines, TypeDoc/API counts 100 proto / 28 core / 124 server
   / 26 storage / 46 transport exports, copied Spine proto checksum
   verification, proto lint/generate, and generated-clean all passed.
+- Fresh branch-tip verification after commit `b2b35d9` passed on
+  `2026-07-01 02:41 WEST` with the same counts and coverage.
