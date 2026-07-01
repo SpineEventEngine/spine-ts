@@ -267,9 +267,10 @@ processes, child process supervision, retry timers or workers, durable storage,
 runtime handler invocation, or server runtime wiring.
 Delivery attempt helpers derive keys from semantic subscription/worker/delivery
 fields and reject forged prebuilt keys. Delivery result helpers derive status
-from outcome plus retry eligibility and reject mismatched caller-supplied
+from the observed outcome, keep failed outcomes as `failed`, preserve retry
+eligibility as separate policy data, and reject mismatched caller-supplied
 statuses or result keys. Failure classification preserves only stable failure
-codes, failure kinds, retry eligibility, and scalar redacted details; raw
+codes, failure kinds, retry eligibility, and allowlisted scalar details; raw
 exceptions, process details, endpoint strings, frames, payloads, inbox/outbox
 records, scheduling decisions, and monitor policy execution stay outside the
 transport API.

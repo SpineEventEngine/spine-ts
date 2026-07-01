@@ -39,13 +39,14 @@ The delivery/retry boundary is data-only. `createTransportDeliveryAttempt()`
 derives attempt keys from a logical subscription, worker identity, delivery ID,
 target ID, and 1-based attempt number, rejecting forged prebuilt attempt keys
 or subscription/worker keys. `classifyTransportDeliveryFailure()` maps stable
-failure kinds to retry eligibility and keeps only redacted scalar diagnostic
-details. `createTransportDeliveryResult()` derives `delivered`, `scheduled`,
-or `failed` status from the attempt outcome plus retry eligibility and rejects
-caller-supplied statuses or result keys that do not match. These helpers do not
-write durable inbox/outbox records, deduplicate delivery records, run retry
-loops or timers, schedule workers, invoke handlers, dispatch repositories,
-supervise processes, or define server runtime behavior.
+failure kinds to retry eligibility and keeps only allowlisted scalar diagnostic
+details. `createTransportDeliveryResult()` derives `delivered` or `failed`
+status from the attempt outcome and preserves retry eligibility as separate
+data for later policy consumers. It rejects caller-supplied statuses or result
+keys that do not match. These helpers do not write durable inbox/outbox
+records, deduplicate delivery records, run retry loops or timers, schedule
+workers, invoke handlers, dispatch repositories, supervise processes, or define
+server runtime behavior.
 
 ZeroMQ is reserved for local IPC on one host. The native binding install script
 is explicitly approved in the workspace pnpm configuration, and development or
