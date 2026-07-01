@@ -1,6 +1,6 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.3 integrated; T-0012.4 selected
+Status: T-0012.4 integrated; T-0012.5 selected
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
@@ -24,8 +24,15 @@ and selected the first implementable cleanup subtask.
 `T-0012.1 Cleanup Enforcement Baseline` is integrated on this parent branch.
 `T-0012.2 Source Folder Repack` is integrated on this parent branch.
 `T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions` is integrated on
-this parent branch. The next selected subtask is
-`T-0012.4 Storage Factory And Record Storage Reset`.
+this parent branch. `T-0012.4 Storage Factory And Record Storage Reset` is
+integrated on this parent branch. The next selected subtask is
+`T-0012.5 CommandBus, EventBus, And Handler Registration`.
+
+`T-0012.4` replaced the broad `StorageAdapter` surface with a JVM-like
+`StorageFactory` / `RecordStorage` seam, added declarative `RecordSpec` and
+`RecordColumn`, implemented multitenant in-memory record storage, added a
+storage-only `EventStore` delegate, updated public docs and API checks, passed
+all review lanes, and passed escalated `env CI=true corepack pnpm verify`.
 
 `T-0012.3` removed bounded-context runtime/detail exports, simplified
 repository diagnostics to code/message, removed transport lifecycle/delivery

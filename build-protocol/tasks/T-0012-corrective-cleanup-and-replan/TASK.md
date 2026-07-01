@@ -1,6 +1,6 @@
 # T-0012: Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.3 integrated; T-0012.4 selected
+Status: T-0012.4 integrated; T-0012.5 selected
 Start: `2026-07-01 16:48 WEST`
 Baseline commit: `a9769d4`
 Branch: `task/T-0012-cleanup-replan`
@@ -81,7 +81,13 @@ verify`. Parent verification after integration also passed with 28 test files,
 291 tests, coverage above 90%, docs/API checks, proto lint/generate, and
 generated-clean comparison.
 
-Next selected subtask: `T-0012.4 Storage Factory And Record Storage Reset`.
+`T-0012.4 Storage Factory And Record Storage Reset` is integrated on the
+parent branch. It replaced the broad storage adapter with a JVM-like
+`StorageFactory` / `RecordStorage` seam, added in-memory record storage and a
+storage-only event store delegate, passed all review lanes, and passed
+escalated `env CI=true corepack pnpm verify`.
+
+Next selected subtask: `T-0012.5 CommandBus, EventBus, And Handler Registration`.
 
 ## T-0012.2 Selection Rationale
 
@@ -112,6 +118,16 @@ Rationale:
   event store.
 - This task should inspect Spine JVM storage source closely and keep the TS API
   small, with higher-level stores built later over the record-storage seam.
+
+## T-0012.5 Selection Rationale
+
+- Storage now exists as the first mandatory seam in the corrected implementation
+  order.
+- The next user-specified step is adding `CommandBus`, `EventBus`, and
+  dispatching mechanisms around JVM-familiar handler annotations/metadata.
+- The task must keep store-before-dispatch for events and avoid bounded-context
+  assembly, repositories, delivery, stand, gRPC, scheduler, import bus, or
+  system audit until their later slices.
 
 ## Requirements Splitter Skill Applicability
 
