@@ -35,6 +35,9 @@ Status: Pending
 - Round 1 performance/reliability reviewer:
   `019f1b8a-33de-7bb0-829e-10d711f556c0` (`Peirce the 7th`) spawned;
   returned comments; closed.
+- Round 1 fix sub-agent:
+  `019f1b8e-bc7f-73e3-a79e-53b93615b055` (`Mill the 7th`) spawned to address
+  all round-one findings; status pending.
 
 The root thread does not expose `list_agents`; the orchestrator must track every
 spawned T-0011.6 sub-agent ID here and close each agent immediately after its
@@ -88,3 +91,36 @@ result is consumed.
   plan after creation.
 - Custom readiness metadata is only partially validated, producing incidental
   low-level failures instead of deterministic routing-plan rejections.
+
+## Round 1 Fix Evidence
+
+- Fixed the public routing seam in `packages/server/src/runtime-routing.ts` so
+  command/event routes expose only planner-local route IDs, planner-local
+  worker IDs, receiver groups, and sanitized message full type names/type URLs.
+  Raw readiness metadata objects (`assignee`, `receiver`, `entityHandlers`,
+  `entityType`, `registeredHandler`, and handler objects) are no longer
+  retained by public route entries.
+- Replaced handler/entity-derived transport participant IDs with deterministic
+  indexed planner-local IDs (`command-worker-1`,
+  `event-<group>-worker-<n>`, `command-route-<n>`,
+  `event-<group>-route-<n>`). This removes handler/entity leakage and removes
+  the lossy server-local normalization path that previously collapsed distinct
+  receivers.
+- Narrowed `ServerRuntimeRoutingPlanInput` to concrete
+  `CommandRegistrationReadiness` / `EventRegistrationReadiness` instances and
+  added deterministic malformed-metadata validation for handler kind,
+  message-full-type, and schema/type-name consistency before deriving topics.
+  Malformed schemas now fail closed with stable `TypeError` messages instead of
+  surfacing raw JS/proxy errors.
+- Reduced the root `@spine-ts/server` public API by dropping the intermediate
+  route-flavor type re-exports from `packages/server/src/index.ts` and updating
+  `scripts/check-api-docs.mjs` to the smaller 130-export server surface.
+- Added focused regression coverage in
+  `packages/server/src/runtime-routing.test.ts` for sanitized route descriptors,
+  rejection of non-readiness lookup objects, malformed metadata handling, and
+  planner-local ID collision resistance. Focused GREEN:
+  `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts packages/server/src/index.test.ts`
+  passed with 2 files / 18 tests on `2026-07-01 03:56 WEST`.
+- Full verification GREEN on `2026-07-01 03:56 WEST`:
+  `CI=true corepack pnpm verify` passed with 24 files / 288 tests and coverage
+  95.85% statements / 90.01% branches / 99.38% functions / 95.79% lines.

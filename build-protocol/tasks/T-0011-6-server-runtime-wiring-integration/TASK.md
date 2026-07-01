@@ -218,6 +218,22 @@ Skipped relevant-looking skills:
   checksum verification, proto lint/generate, generated proto output clean,
   and generated files clean. TypeDoc emitted the existing invalid-`origin`
   warning only.
+- Round 1 fix RED/GREEN on `2026-07-01 03:46-03:56 WEST`:
+  `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts`
+  first failed against the old public route shape and readiness-input behavior,
+  then `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts packages/server/src/index.test.ts`
+  passed with 2 files / 18 tests after the planner was narrowed to concrete
+  readiness classes, public routes were sanitized, and planner-local worker IDs
+  replaced handler/entity-derived identifiers.
+- Round 1 fix verification passed on `2026-07-01 03:56 WEST`:
+  `corepack pnpm typecheck`, `corepack pnpm docs:check`, and
+  `git diff --check` all passed. Escalated `CI=true corepack pnpm verify`
+  passed with native IPC access: 24 test files / 288 tests, coverage 95.85%
+  statements / 90.01% branches / 99.38% functions / 95.79% lines, TypeDoc/API
+  checks with 100 proto / 28 core / 130 server / 26 storage / 46 transport
+  exports, copied Spine proto checksum verification, proto lint/generate, and
+  generated-clean all passed. TypeDoc emitted the existing invalid-`origin`
+  warning only.
 
 ## Implementation Notes
 
@@ -228,6 +244,10 @@ Skipped relevant-looking skills:
 - Implement the seam as one pure routing planner over existing metadata,
   transport topics/subscriptions/worker registrations, and explicit deferred
   placeholders for query/subscription/system routing.
+- Keep the public route shape intentionally small: planner-local indexed IDs,
+  receiver groups, and sanitized message descriptors only. Do not retain or
+  expose readiness metadata objects, handler method names, entity names, or
+  additional planner internals through route entries.
 - If implementation pressure suggests a larger `Server`, bus, storage,
   delivery, or process API, defer it to a later task and record the decision
   instead of widening this slice.

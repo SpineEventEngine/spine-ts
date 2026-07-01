@@ -135,7 +135,10 @@ const routingPlan = createServerRuntimeRoutingPlan({
   events: eventReadiness,
 });
 routingPlan.commands.workers[0]?.worker.workerRole; // "command-worker"
+routingPlan.commands.routes[0]?.message.typeUrl; // "type.spine.io/..."
+routingPlan.commands.routes[0]?.receiverGroup; // "command-assignee"
 routingPlan.events.subscriberRoutes[0]?.subscription.mode; // "fan-out"
+routingPlan.events.subscriberRoutes[0]?.workerId; // planner-local event worker id
 routingPlan.deferred.map(({ signalKind }) => signalKind);
 // ["query", "subscription", "system"]
 
@@ -194,15 +197,20 @@ dispatcher, router, validator, repository runtime registration hook, storage
 writer, transport adapter, handler invoker, or Spine `Ack` producer.
 
 `createServerRuntimeRoutingPlan()` is the first server-owned runtime-wiring seam
-over that metadata. It requires a built `BoundedContext`, derives command
-topics plus one competing-consumer command-worker registration from command
-readiness, derives event topics plus fan-out subscriptions and event-worker
-registrations from subscriber/reactor/application readiness, and returns only
-immutable transport-owned contracts from `@spine-ts/transport`. Query,
-subscription, and system routing remain explicit deferred seams because this
-slice has no concrete server readiness metadata for them. The planner does not
-open sockets, name IPC endpoints, start workers, dispatch handlers, validate
-signals, store delivery state, or expose buses/services.
+over that metadata. It requires a built `BoundedContext` plus concrete
+`CommandRegistrationReadiness` / `EventRegistrationReadiness` instances,
+derives command topics plus one competing-consumer command-worker registration
+from command readiness, derives event topics plus fan-out subscriptions and
+event-worker registrations from subscriber/reactor/application readiness, and
+returns immutable transport contracts plus small server-owned route
+descriptors. Those public route descriptors contain planner-local route and
+worker IDs, sanitized message full type names/type URLs, and stable receiver
+groups only; they do not expose handler methods, entity type names, or raw
+readiness metadata. Query, subscription, and system routing remain explicit
+deferred seams because this slice has no concrete server readiness metadata for
+them. The planner does not open sockets, name IPC endpoints, start workers,
+dispatch handlers, validate signals, store delivery state, or expose
+buses/services.
 
 ## Single-Process Runtime Kernel
 

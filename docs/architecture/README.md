@@ -358,10 +358,13 @@ equivalent of Spine JVM `Server` or a running JVM-style `BoundedContext`.
 not dispatch or invoke handlers. The runtime-routing plan does not open
 transport endpoints, expose ZeroMQ details, or start workers; it only turns
 existing metadata into transport-owned topics, subscriptions, worker
-registrations, and explicit deferred seams. The package root does not export
-service, transport, bus, storage, delivery, stand, integration-broker,
-repository runtime-registration, validation, or `Ack` abstractions as part of
-this closure.
+registrations, explicit deferred seams, and sanitized planner-local route
+descriptors. Those route descriptors expose message type names/type URLs plus
+stable receiver-group and local route/worker identities only; they do not
+retain entity names, handler names, or raw readiness metadata. The package
+root does not export service, transport, bus, storage, delivery, stand,
+integration-broker, repository runtime-registration, validation, or `Ack`
+abstractions as part of this closure.
 
 The architectural consequence is that later work must add those collaborators
 as explicit tasks at their own seams. Command and event intake can consume the

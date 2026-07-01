@@ -79,6 +79,21 @@ delivery, scheduling, and process supervision outside this slice.
   100 proto / 28 core / 134 server / 26 storage / 46 transport exports, proto
   checksum verification, proto lint/generate, and generated-clean all passed.
   TypeDoc emitted the existing invalid-`origin` warning only.
+- Round 1 fix RED/GREEN on `2026-07-01 03:46-03:56 WEST`:
+  `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts`
+  first failed against the leaking route shape and custom-lookup acceptance,
+  then `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts packages/server/src/index.test.ts`
+  passed with 2 files / 18 tests after the planner emitted only sanitized
+  route descriptors and planner-local indexed worker IDs.
+- Round 1 fix verification passed on `2026-07-01 03:56 WEST`:
+  `corepack pnpm typecheck`, `corepack pnpm docs:check`, and
+  `git diff --check` all passed. Escalated `CI=true corepack pnpm verify`
+  passed with native IPC access: 24 test files / 288 tests, coverage 95.85%
+  statements / 90.01% branches / 99.38% functions / 95.79% lines, TypeDoc/API
+  checks with 100 proto / 28 core / 130 server / 26 storage / 46 transport
+  exports, copied Spine proto checksum verification, proto lint/generate, and
+  generated-clean all passed. TypeDoc emitted the existing invalid-`origin`
+  warning only.
 
 ## Skill Applicability
 
@@ -114,6 +129,25 @@ delivery, scheduling, and process supervision outside this slice.
 - `packages/server/src/runtime-routing.ts`
 - `pnpm-lock.yaml`
 - `scripts/check-api-docs.mjs`
+
+## Round 1 Fix Summary
+
+- Repaired `packages/server/src/runtime-routing.ts` so public command/event
+  routes no longer retain readiness metadata objects or handler/entity
+  internals. Routes now expose only planner-local route IDs, planner-local
+  worker IDs, receiver groups, and sanitized message full type names/type URLs
+  alongside the transport topic/subscription/worker contracts.
+- Narrowed `ServerRuntimeRoutingPlanInput` to concrete
+  `CommandRegistrationReadiness` / `EventRegistrationReadiness` instances and
+  added explicit validation for handler kind, message full type name, and
+  schema/type-name consistency before topic derivation. Malformed schemas now
+  fail with deterministic `TypeError` messages instead of raw JS exceptions.
+- Dropped the intermediate runtime route-flavor re-exports from the package
+  root and updated the API guard/docs to the reduced 130-export server
+  surface.
+- Added focused regression tests for public-route sanitization, custom-lookup
+  rejection, collision-resistant planner-local IDs, and malformed schema
+  handling.
 
 ## Open Items
 

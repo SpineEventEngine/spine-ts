@@ -8,7 +8,8 @@ registry and validation facade APIs, the first `@spine-ts/server`
 descriptor-derived entity metadata, metadata-only `Repository` identity,
 set-once transition validation, explicit handler metadata APIs, and the first
 server runtime lifecycle/async queue kernel with a bounded-context runtime
-handle, write-side signal intake result exports, the first
+handle, write-side signal intake result exports, the runtime-routing planner
+seam, the first
 `@spine-ts/transport` contracts, and the first `@spine-ts/storage` contracts.
 
 Proto exports include message types, generated schemas, enum values and enum
@@ -178,19 +179,21 @@ validator, repository runtime registration hook, storage writer, transport
 adapter, handler invoker, or Spine `Ack` producer.
 Runtime routing exports include `createServerRuntimeRoutingPlan()`,
 `ServerRuntimeRoutingPlan`, `ServerRuntimeRoutingPlanInput`,
-`CommandRuntimeRoutingPlan`, `CommandRuntimeRoutingRoute`,
-`EventRuntimeRoutingPlan`, `EventSubscriberRuntimeRoutingRoute`,
-`EventReactorRuntimeRoutingRoute`, `EventApplicationRuntimeRoutingRoute`, and
+`CommandRuntimeRoutingPlan`, `EventRuntimeRoutingPlan`, and
 `DeferredServerRuntimeRoutingSeam`. The planner requires a built
-`BoundedContext`, plus optional command/event readiness lookups, and derives
-only immutable `@spine-ts/transport` topics, subscriptions, and worker
-registrations. Command routing produces one logical command-worker
-competing-consumer registration over registered command topics. Event routing
-produces fan-out subscriptions and event-worker registrations for subscriber,
-reactor, and application receiver groups while keeping handler invocation,
-storage-before-dispatch, buses, IPC endpoint naming, and process supervision
-deferred. Query, subscription, and system routing remain explicit deferred
-seams until concrete server readiness metadata exists.
+`BoundedContext`, plus optional concrete `CommandRegistrationReadiness` /
+`EventRegistrationReadiness` instances, and derives immutable
+`@spine-ts/transport` topics, subscriptions, and worker registrations plus
+small sanitized route descriptors. Command routing produces one planner-local
+command-worker competing-consumer registration over registered command topics.
+Event routing produces fan-out subscriptions and event-worker registrations
+for subscriber, reactor, and application receiver groups while keeping handler
+invocation, storage-before-dispatch, buses, IPC endpoint naming, and process
+supervision deferred. Public route descriptors expose only planner-local route
+and worker IDs, message full type names/type URLs, and stable receiver groups;
+they do not retain raw readiness metadata, entity names, or handler method
+names. Query, subscription, and system routing remain explicit deferred seams
+until concrete server readiness metadata exists.
 Server runtime exports include `SingleProcessServerRuntime`,
 `ServerRuntimeLifecycle`, `ServerRuntimeState`, `ServerRuntimeWork`,
 `ServerRuntimeStateOperation`, `ServerRuntimeStateErrorCode`, and

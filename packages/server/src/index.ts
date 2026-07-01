@@ -114,12 +114,8 @@ export {
 export {
   createServerRuntimeRoutingPlan,
   type CommandRuntimeRoutingPlan,
-  type CommandRuntimeRoutingRoute,
   type DeferredServerRuntimeRoutingSeam,
-  type EventApplicationRuntimeRoutingRoute,
-  type EventReactorRuntimeRoutingRoute,
   type EventRuntimeRoutingPlan,
-  type EventSubscriberRuntimeRoutingRoute,
   type ServerRuntimeRoutingPlan,
   type ServerRuntimeRoutingPlanInput,
 } from "./runtime-routing.js";
