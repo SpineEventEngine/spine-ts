@@ -205,8 +205,8 @@ command or event plan is empty. It returns immutable `@spine-ts/transport`
 topics, subscriptions, planner-local worker IDs, and small server-owned route
 descriptors. Those public route descriptors contain planner-local route and
 worker IDs, sanitized message full type names/type URLs, stable receiver
-groups, and transport correlation keys for the top-level topic/subscription/
-arrays only; they do not expose handler methods, entity type names, raw
+groups, transport correlation keys for the topic/subscription arrays, and
+planner-local worker IDs; they do not expose handler methods, entity type names, raw
 readiness metadata, ZeroMQ endpoints, socket topology, or duplicate full
 transport contracts on each route.
 Query, subscription, and system routing remain explicit deferred seams because

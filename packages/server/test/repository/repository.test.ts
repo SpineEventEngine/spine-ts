@@ -184,10 +184,12 @@ describe("repository identity", () => {
     } catch (error) {
       expectRepositoryIdentityError(error, "ENTITY_SCHEMA_KIND_MISMATCH", [
         "RuntimeCheckedAggregate",
-        "aggregate",
-        ProjectionStateSchema.typeName,
-        "projection",
+        "supplied state schema",
       ]);
+      expect((error as RepositoryIdentityError).message).not.toContain(
+        ProjectionStateSchema.typeName,
+      );
+      expect((error as RepositoryIdentityError).message).not.toContain("projection");
     }
   });
 
@@ -209,8 +211,7 @@ describe("repository identity", () => {
     } catch (error) {
       expectRepositoryIdentityError(error, "ENTITY_SCHEMA_KIND_MISMATCH", [
         "RuntimeCheckedAggregate",
-        "aggregate",
-        "entity",
+        "supplied state schema",
       ]);
     }
 
@@ -362,7 +363,7 @@ describe("repository identity", () => {
       } catch (error) {
         expectRepositoryIdentityError(error, "ENTITY_SCHEMA_KIND_MISMATCH", [
           "RuntimeCheckedAggregate",
-          "aggregate",
+          "supplied state schema",
         ]);
       }
     }
@@ -376,7 +377,7 @@ describe("repository identity", () => {
     } catch (error) {
       expectRepositoryIdentityError(error, "ENTITY_SCHEMA_KIND_MISMATCH", [
         "RuntimeCheckedAggregate",
-        "aggregate",
+        "supplied state schema",
       ]);
       expect((error as RepositoryIdentityError).message).not.toContain("BrokenState");
     }
@@ -394,7 +395,7 @@ describe("repository identity", () => {
     } catch (error) {
       expectRepositoryIdentityError(error, "ENTITY_SCHEMA_KIND_MISMATCH", [
         "RuntimeCheckedAggregate",
-        "aggregate",
+        "supplied state schema",
       ]);
     }
   });
@@ -442,8 +443,7 @@ describe("repository identity", () => {
     } catch (error) {
       expectRepositoryIdentityError(error, "ENTITY_SCHEMA_KIND_MISMATCH", [
         "RuntimeCheckedAggregate",
-        "aggregate",
-        "could not be read",
+        "supplied state schema",
       ]);
     }
 

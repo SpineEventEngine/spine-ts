@@ -194,8 +194,8 @@ export class Repository<
     if (metadata.kind !== entityFamily) {
       throw new RepositoryIdentityError(
         "ENTITY_SCHEMA_KIND_MISMATCH",
-        `Repository entity type "${entityTypeDisplayName}" is a ${entityFamily}, but ` +
-          `state schema "${metadata.fullTypeName}" declares entity kind "${metadata.kind}".`,
+        `Repository entity type "${entityTypeDisplayName}" does not match ` +
+          "the supplied state schema.",
       );
     }
 

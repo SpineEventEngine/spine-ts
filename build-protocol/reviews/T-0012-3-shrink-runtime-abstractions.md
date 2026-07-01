@@ -6,7 +6,7 @@ Branch: `task/T-0012-3-shrink-runtime-abstractions`
 Baseline commit: `cb5ace3`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-3-shrink-runtime-abstractions`
-Status: Review fixes applied; verification passed
+Status: Second re-review fixes applied; verification passed
 
 ## Required Review Lanes
 
@@ -82,7 +82,7 @@ Independent review lanes remain pending.
   `packages/server/src/context/bounded-context.ts` exposed context, entity
   constructor, and state type names in conflict messages. Fixed by using the
   generic message `Bounded context already has conflicting repository
-  ownership.` with only `code` for branching.
+ownership.` with only `code` for branching.
 - Security low: `packages/server/src/repository/repository.ts` appended
   rejected schema `typeName` values to public schema mismatch messages. Fixed
   by removing that detail and deleting the unused helper.
@@ -99,3 +99,25 @@ Review-fix final verification passed:
 and `git diff --check` passed. Sandboxed `corepack pnpm test` failed only the
 known ZeroMQ `ipc://` permission path with 289 of 291 tests passing; native
 `corepack pnpm test` passed 28 files and 291 tests.
+
+## Second Re-review Findings And Fixes
+
+- Documentation low: `docs/USER_GUIDE.md` still said
+  `RepositoryIdentityError` had stable codes and structured details. Fixed to
+  stable code/message diagnostics.
+- Security low: `packages/server/src/repository/repository.ts` still included
+  the rejected schema full type name and entity kind in the valid-schema/
+  wrong-family mismatch message. Fixed with a generic supplied-schema mismatch
+  message and a focused test assertion that the rejected type name and kind are
+  absent.
+- Documentation low: `packages/server/README.md` still had stale routing-plan
+  wording about top-level topic/subscription arrays only. Fixed to describe
+  correlation keys for topic/subscription arrays and planner-local worker IDs.
+
+Second re-review verification passed:
+`corepack pnpm exec vitest run packages/server/test/repository/repository.test.ts`
+reported 1 file and 16 tests passed. `corepack pnpm exec prettier --write`
+passed for touched markdown, source, and test files. `corepack pnpm lint`,
+`corepack pnpm typecheck`, `corepack pnpm docs:check`, and
+`git diff --check` passed; docs check reported only the known TypeDoc
+invalid-origin warning.

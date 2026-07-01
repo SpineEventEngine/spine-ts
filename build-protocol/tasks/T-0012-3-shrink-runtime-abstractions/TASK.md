@@ -1,6 +1,6 @@
 # T-0012.3: Delete Or Shrink Abandoned Runtime Abstractions
 
-Status: Implemented; verification passed; review pending
+Status: Second re-review fixes applied; verification passed
 Start: `2026-07-01 19:11 WEST`
 Baseline commit: `cb5ace3`
 Branch: `task/T-0012-3-shrink-runtime-abstractions`
@@ -73,6 +73,22 @@ smaller safe slice. The expected first targets are:
 - Docs and durable logs record what was deleted and why.
 - `pnpm lint`, typecheck, tests, docs/API checks, proto checks, and full verify
   pass.
+
+## Second Re-review Findings
+
+Second focused re-review found three remaining wording and diagnostic leaks:
+
+- `docs/USER_GUIDE.md` still described `RepositoryIdentityError` as exposing
+  stable codes and structured details after detail payloads were removed.
+- `packages/server/src/repository/repository.ts` still included the rejected
+  schema full type name and entity kind in the valid-schema/wrong-family
+  mismatch message.
+- `packages/server/README.md` still had stale routing-plan wording for
+  top-level topic/subscription arrays instead of topic/subscription arrays plus
+  planner-local worker IDs.
+
+These fixes are applied in the second re-review follow-up commit. Verification
+passed before closure.
 
 ## Required Skills
 

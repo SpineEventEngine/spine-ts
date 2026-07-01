@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions
 
-Status: Review fixes applied; verification passed
+Status: Second re-review fixes applied; verification passed
 Branch: `task/T-0012-3-shrink-runtime-abstractions`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-3-shrink-runtime-abstractions`
@@ -98,6 +98,18 @@ recorded parent setup commit `cb5ace3`.
 - Updated cleanup-rule exception line numbers after deleting the helper shifted
   existing long-name exception locations.
 
+## Second Re-review Fix Notes
+
+- Updated the user guide to describe `RepositoryIdentityError` as stable
+  code/message diagnostics, with no structured details claim.
+- Replaced the repository valid-schema/wrong-family mismatch message with a
+  generic supplied-schema mismatch message and extended the focused repository
+  test to assert the rejected schema type name and kind are absent.
+- Reworded the server README routing-plan description to name
+  topic/subscription correlation keys and planner-local worker IDs.
+- Updated this implementation report plus the task and review logs to record
+  the second re-review findings and fixes.
+
 ## Intentionally Kept
 
 - Kept `BoundedContext`, `BoundedContextBuilder`, `ContextSpec`, and
@@ -126,6 +138,17 @@ recorded parent setup commit `cb5ace3`.
 
 ## Verification Results
 
+- Second re-review focused repository tests:
+  `corepack pnpm exec vitest run packages/server/test/repository/repository.test.ts`
+  passed: 1 file, 16 tests.
+- Second re-review formatting:
+  `corepack pnpm exec prettier --write build-protocol/reviews/T-0012-3-shrink-runtime-abstractions.md build-protocol/tasks/T-0012-3-shrink-runtime-abstractions/IMPLEMENTATION_REPORT.md build-protocol/tasks/T-0012-3-shrink-runtime-abstractions/TASK.md docs/USER_GUIDE.md packages/server/README.md packages/server/src/repository/repository.ts packages/server/test/repository/repository.test.ts`
+  passed.
+- Second re-review `corepack pnpm lint` passed.
+- Second re-review `corepack pnpm typecheck` passed.
+- Second re-review `corepack pnpm docs:check` passed with the known TypeDoc
+  invalid-origin warning and unchanged export counts.
+- Second re-review `git diff --check` passed.
 - Review-fix focused tests:
   `corepack pnpm exec vitest run packages/server/test/context/bounded-context.test.ts packages/server/test/repository/repository.test.ts`
   passed: 2 files, 52 tests.

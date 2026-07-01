@@ -384,8 +384,8 @@ expressions, and intermediate domain base classes are accepted. This is a
 same-realm metadata boundary: code that explicitly reparents an ES class onto an
 entity family is trusted as entity metadata, not rejected as an adversarial
 sandbox escape. Mismatches, such as an aggregate constructor paired with a
-projection state schema, throw `RepositoryIdentityError` with stable codes and
-structured details. `snapshot` returns a frozen fresh copy suitable for later
+projection state schema, throw `RepositoryIdentityError` with stable
+code/message diagnostics. `snapshot` returns a frozen fresh copy suitable for later
 bounded-context duplicate and conflict checks.
 
 This is explicitly metadata-only. It does not create, find, or store entities;
