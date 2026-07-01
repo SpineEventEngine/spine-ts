@@ -95,4 +95,17 @@ is committing the verified diff to keep the task resumable.
 
 ## Open Items
 
-- Required reviewer lanes are next.
+- Round-one review fixes were implemented by the review-fix sub-agent on
+  `2026-07-01 02:28 WEST`. The fix keeps failed outcomes in `failed` status
+  even when retry eligibility is `eligible`, preserves retry eligibility as
+  separate data, rejects unsafe attempt numbers, tightens delivery-result and
+  participant identity input typing with compile-time negative tests, and
+  replaces failure-detail denylisting with an allowlist of scalar `stage`,
+  `attempt`, `retryable`, `reason`, and `code` diagnostics.
+- A narrow lint fix on `2026-07-01 02:39 WEST` changed
+  `TransportDeliveryResultInputBase` from a `type` alias to an `interface` and
+  replaced deprecated `toMatchTypeOf()` usage with `toExtend()` in the
+  result-input type assertion.
+- Focused lint-fix verification passed before commit: `corepack pnpm lint`;
+  `corepack pnpm test packages/transport/src/index.test.ts` with 1 test file /
+  17 tests; `corepack pnpm typecheck`; and `git diff --check`.

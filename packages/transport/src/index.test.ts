@@ -11,6 +11,7 @@ import {
   type TransportDeliveryAttemptInput,
   type TransportDeliveryFailureClassification,
   type TransportDeliveryResult,
+  type TransportDeliveryResultInput,
   type TransportDeliveryStatus,
   type TransportLifecycleParticipant,
   type TransportLifecycleSnapshotInput,
@@ -412,9 +413,28 @@ describe("@spine-ts/transport", () => {
         },
       }),
     ).toThrow(/must match subscription subscriberId/);
+    expect(() =>
+      createTransportDeliveryAttempt({
+        deliveryId: "command-abc-123",
+        targetId: "task-42",
+        attemptNumber: Number.MAX_SAFE_INTEGER + 1,
+        subscription: {
+          subscriberId: "delivery-a",
+          topic: {
+            signalKind: "delivery",
+            messageTypeUrl: "type.spine.io/example.TaskDelivery",
+          },
+        },
+        worker: {
+          participantKind: "worker",
+          participantId: "delivery-a",
+          workerRole: "delivery-worker",
+        },
+      }),
+    ).toThrow(/safe positive integer/);
   });
 
-  it("classifies delivery failures with retry eligibility and redacted details", () => {
+  it("classifies delivery failures with retry eligibility and allowlisted details", () => {
     const failure = classifyTransportDeliveryFailure({
       failureKind: "transient",
       failureCode: "TEMPORARY_STORAGE_UNAVAILABLE",
@@ -422,7 +442,15 @@ describe("@spine-ts/transport", () => {
         stage: "pickup",
         attempt: 3,
         retryable: true,
+        reason: "temporary backpressure",
+        code: "BACKPRESSURE",
         endpoint: "ipc://leaked",
+        errorMessage: "database password leaked",
+        stackTrace: "process stack",
+        endpointUrl: "ipc://leaked",
+        socketPath: "/tmp/leaked.sock",
+        payloadPreview: "raw payload bytes",
+        host: "internal-host",
         message: "contains payload bytes",
         nested: { payload: "secret" },
         stack: "process stack",
@@ -441,6 +469,8 @@ describe("@spine-ts/transport", () => {
       failureCode: "TEMPORARY_STORAGE_UNAVAILABLE",
       details: {
         attempt: 3,
+        code: "BACKPRESSURE",
+        reason: "temporary backpressure",
         retryable: true,
         stage: "pickup",
       },
@@ -452,6 +482,12 @@ describe("@spine-ts/transport", () => {
       details: {},
     });
     expect(failure.details).not.toHaveProperty("endpoint");
+    expect(failure.details).not.toHaveProperty("errorMessage");
+    expect(failure.details).not.toHaveProperty("stackTrace");
+    expect(failure.details).not.toHaveProperty("endpointUrl");
+    expect(failure.details).not.toHaveProperty("socketPath");
+    expect(failure.details).not.toHaveProperty("payloadPreview");
+    expect(failure.details).not.toHaveProperty("host");
     expect(failure.details).not.toHaveProperty("message");
     expect(failure.details).not.toHaveProperty("stack");
     expect(failure).not.toHaveProperty("error");
@@ -499,7 +535,7 @@ describe("@spine-ts/transport", () => {
       outcome: "delivered",
     });
 
-    expect(retryableResult.status).toBe("scheduled");
+    expect(retryableResult.status).toBe("failed");
     expect(retryableResult.retryEligibility).toBe("eligible");
     expect(terminalResult.status).toBe("failed");
     expect(terminalResult.retryEligibility).toBe("ineligible");
@@ -514,7 +550,7 @@ describe("@spine-ts/transport", () => {
       createTransportDeliveryResult({
         attempt,
         outcome: "failed",
-        status: "delivered",
+        status: "delivered" as never,
         failure: {
           failureKind: "transient",
           failureCode: "TEMPORARY_STORAGE_UNAVAILABLE",
@@ -528,7 +564,7 @@ describe("@spine-ts/transport", () => {
         failure: {
           failureKind: "transient",
           failureCode: "TEMPORARY_STORAGE_UNAVAILABLE",
-        },
+        } as never,
       }),
     ).toThrow(/must not include failure/);
     expect(retryableResult).not.toHaveProperty("retryTimer");
@@ -688,7 +724,7 @@ describe("@spine-ts/transport", () => {
 
     expect(() =>
       createTransportParticipantIdentity({
-        participantKind: "sidecar" as TransportParticipantIdentityInput["participantKind"],
+        participantKind: "sidecar" as never,
         participantId: "broker-a",
       }),
     ).toThrow(/participantKind/);
@@ -910,7 +946,7 @@ describe("@spine-ts/transport", () => {
       TransportParticipantIdentityInput<"worker">
     >();
     expectTypeOf<TransportDeliveryStatus>().toEqualTypeOf<
-      "to-deliver" | "scheduled" | "delivered" | "failed"
+      "to-deliver" | "delivered" | "failed"
     >();
     expectTypeOf<TransportDeliveryAttemptInput["attemptNumber"]>().toEqualTypeOf<number>();
     expectTypeOf<TransportDeliveryAttempt>().toExtend<{
@@ -927,6 +963,18 @@ describe("@spine-ts/transport", () => {
       readonly status: TransportDeliveryStatus;
       readonly resultKey: string;
     }>();
+    expectTypeOf<TransportDeliveryResultInput>().toExtend<
+      | {
+          readonly outcome: "delivered";
+          readonly failure?: never;
+        }
+      | {
+          readonly outcome: "failed";
+          readonly failure:
+            | TransportDeliveryFailureClassification
+            | Parameters<typeof classifyTransportDeliveryFailure>[0];
+        }
+    >();
     expectTypeOf<TransportLifecycleSnapshotInput<"broker">["participant"]>().toEqualTypeOf<
       TransportParticipantIdentityInput<"broker">
     >();
@@ -940,3 +988,86 @@ describe("@spine-ts/transport", () => {
     >().toEqualTypeOf<TransportReadinessState>();
   });
 });
+
+const deliveryAttemptInputForTypeTests = {
+  deliveryId: "command-abc-123",
+  targetId: "task-42",
+  attemptNumber: 1,
+  subscription: {
+    subscriberId: "delivery-a",
+    topic: {
+      signalKind: "delivery",
+      messageTypeUrl: "type.spine.io/example.TaskDelivery",
+    },
+  },
+  worker: {
+    participantKind: "worker",
+    participantId: "delivery-a",
+    workerRole: "delivery-worker",
+  },
+} as const satisfies TransportDeliveryAttemptInput<"delivery">;
+
+const deliveredResultInputForTypeTest = {
+  attempt: deliveryAttemptInputForTypeTests,
+  outcome: "delivered",
+} as const satisfies TransportDeliveryResultInput<"delivery">;
+
+const failedResultInputForTypeTest = {
+  attempt: deliveryAttemptInputForTypeTests,
+  outcome: "failed",
+  failure: {
+    failureKind: "transient",
+    failureCode: "TEMPORARY_STORAGE_UNAVAILABLE",
+  },
+} as const satisfies TransportDeliveryResultInput<"delivery">;
+
+const brokerIdentityInputForTypeTest = {
+  participantKind: "broker",
+  participantId: "broker-a",
+} as const satisfies TransportParticipantIdentityInput<"broker">;
+
+const workerIdentityInputForTypeTest = {
+  participantKind: "worker",
+  participantId: "delivery-a",
+  workerRole: "delivery-worker",
+} as const satisfies TransportParticipantIdentityInput<"worker">;
+
+void deliveredResultInputForTypeTest;
+void failedResultInputForTypeTest;
+void brokerIdentityInputForTypeTest;
+void workerIdentityInputForTypeTest;
+
+const deliveredResultInputWithFailureForTypeTest: TransportDeliveryResultInput<"delivery"> = {
+  attempt: deliveryAttemptInputForTypeTests,
+  outcome: "delivered",
+  failure: {
+    // @ts-expect-error delivered results must not carry failure data.
+    failureKind: "transient",
+    failureCode: "TEMPORARY_STORAGE_UNAVAILABLE",
+  },
+};
+
+// @ts-expect-error failed results must carry failure data.
+const failedResultInputWithoutFailureForTypeTest: TransportDeliveryResultInput<"delivery"> = {
+  attempt: deliveryAttemptInputForTypeTests,
+  outcome: "failed",
+};
+
+const brokerIdentityInputWithWorkerRoleForTypeTest: TransportParticipantIdentityInput<"broker"> = {
+  participantKind: "broker",
+  participantId: "broker-a",
+  // @ts-expect-error broker identity inputs must not declare workerRole.
+  workerRole: "system-worker",
+};
+
+// @ts-expect-error worker identity inputs must declare workerRole.
+const workerIdentityInputWithoutWorkerRoleForTypeTest: TransportParticipantIdentityInput<"worker"> =
+  {
+    participantKind: "worker",
+    participantId: "delivery-a",
+  };
+
+void deliveredResultInputWithFailureForTypeTest;
+void failedResultInputWithoutFailureForTypeTest;
+void brokerIdentityInputWithWorkerRoleForTypeTest;
+void workerIdentityInputWithoutWorkerRoleForTypeTest;

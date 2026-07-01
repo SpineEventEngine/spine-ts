@@ -192,16 +192,27 @@ const transportReadinessStates = ["pending", "ready"] as const;
 const transportReadinessStateSet = new Set<string>(transportReadinessStates);
 
 /** Input for one stable transport participant identity. */
-export interface TransportParticipantIdentityInput<
+export type TransportParticipantIdentityInput<
   Kind extends TransportParticipantKind = TransportParticipantKind,
-> {
-  /** Stable logical participant kind. */
-  readonly participantKind: Kind;
-  /** Stable logical participant identity. */
-  readonly participantId: string;
-  /** Worker role when `participantKind` is `worker`. */
-  readonly workerRole?: Kind extends "worker" ? TransportWorkerRole : never;
-}
+> = Kind extends "broker"
+  ? {
+      /** Stable logical participant kind. */
+      readonly participantKind: "broker";
+      /** Stable logical participant identity. */
+      readonly participantId: string;
+      /** Brokers do not have worker roles. */
+      readonly workerRole?: never;
+    }
+  : Kind extends "worker"
+    ? {
+        /** Stable logical participant kind. */
+        readonly participantKind: "worker";
+        /** Stable logical participant identity. */
+        readonly participantId: string;
+        /** Stable logical worker role. */
+        readonly workerRole: TransportWorkerRole;
+      }
+    : never;
 
 /** Immutable transport participant identity. */
 export interface TransportParticipantIdentity<
@@ -280,9 +291,9 @@ export interface TransportLifecycleParticipant<
 }
 
 /** Transport-visible delivery state, not a durable inbox record state machine. */
-export type TransportDeliveryStatus = "to-deliver" | "scheduled" | "delivered" | "failed";
+export type TransportDeliveryStatus = "to-deliver" | "delivered" | "failed";
 
-const transportDeliveryStatuses = ["to-deliver", "scheduled", "delivered", "failed"] as const;
+const transportDeliveryStatuses = ["to-deliver", "delivered", "failed"] as const;
 const transportDeliveryStatusSet = new Set<string>(transportDeliveryStatuses);
 
 /** Terminal observation reported for one delivery attempt. */
@@ -314,6 +325,8 @@ export type TransportDeliveryFailureDetailValue = string | number | boolean | nu
 export type TransportDeliveryFailureDetails = Readonly<
   Record<string, TransportDeliveryFailureDetailValue>
 >;
+
+const safeFailureDetailKeys = new Set(["attempt", "code", "reason", "retryable", "stage"]);
 
 /** Input for classifying one delivery failure. */
 export interface TransportDeliveryFailureClassificationInput {
@@ -372,22 +385,42 @@ export interface TransportDeliveryAttempt<Kind extends TransportSignalKind = Tra
   readonly attemptKey: string;
 }
 
-/** Input for deriving one immutable delivery result. */
-export interface TransportDeliveryResultInput<
-  Kind extends TransportSignalKind = TransportSignalKind,
-> {
+interface TransportDeliveryResultInputBase<Kind extends TransportSignalKind> {
   /** Attempt evidence being classified. */
   readonly attempt: TransportDeliveryAttemptInput<Kind> | TransportDeliveryAttempt<Kind>;
-  /** Attempt outcome observed at the boundary. */
-  readonly outcome: TransportDeliveryOutcome;
-  /** Failure data required for failed outcomes and forbidden for delivered outcomes. */
-  readonly failure?:
-    TransportDeliveryFailureClassificationInput | TransportDeliveryFailureClassification;
-  /** Optional prebuilt status; rejected when it does not match outcome/failure data. */
-  readonly status?: TransportDeliveryStatus;
   /** Optional prebuilt key; rejected when it does not match semantic fields. */
   readonly resultKey?: string;
 }
+
+/** Input for deriving one immutable delivered result. */
+type TransportDeliveredResultInput<
+  Kind extends TransportSignalKind = TransportSignalKind,
+> = TransportDeliveryResultInputBase<Kind> & {
+  /** Attempt outcome observed at the boundary. */
+  readonly outcome: "delivered";
+  /** Failure data is forbidden for delivered outcomes. */
+  readonly failure?: never;
+  /** Optional prebuilt status; rejected when it does not match outcome data. */
+  readonly status?: Extract<TransportDeliveryStatus, "delivered">;
+};
+
+/** Input for deriving one immutable failed result. */
+type TransportFailedResultInput<
+  Kind extends TransportSignalKind = TransportSignalKind,
+> = TransportDeliveryResultInputBase<Kind> & {
+  /** Attempt outcome observed at the boundary. */
+  readonly outcome: "failed";
+  /** Failure data required for failed outcomes. */
+  readonly failure:
+    TransportDeliveryFailureClassificationInput | TransportDeliveryFailureClassification;
+  /** Optional prebuilt status; rejected when it does not match outcome data. */
+  readonly status?: Extract<TransportDeliveryStatus, "failed">;
+};
+
+/** Input for deriving one immutable delivery result. */
+export type TransportDeliveryResultInput<
+  Kind extends TransportSignalKind = TransportSignalKind,
+> = TransportDeliveredResultInput<Kind> | TransportFailedResultInput<Kind>;
 
 /** Immutable delivery result with derived retry eligibility. */
 export interface TransportDeliveryResult<Kind extends TransportSignalKind = TransportSignalKind> {
@@ -606,7 +639,7 @@ export function createTransportDeliveryResult<Kind extends TransportSignalKind>(
   const outcome = normalizeTransportDeliveryOutcome(input.outcome);
   const failure = normalizeDeliveryResultFailure(outcome, input.failure);
   const retryEligibility = failure?.retryEligibility ?? "ineligible";
-  const status = deriveDeliveryResultStatus(outcome, retryEligibility);
+  const status = deriveDeliveryResultStatus(outcome);
   const resultKey = `${attempt.attemptKey}#${status}`;
 
   if (input.status !== undefined && normalizeTransportDeliveryStatus(input.status) !== status) {
@@ -840,18 +873,18 @@ function normalizeWorkerRegistrations(
   }
 
   return Object.freeze(
-    registrations.map((registration) =>
-      createTransportWorkerRegistration({
+    registrations.map((registration) => {
+      const workerRole = normalizeTransportWorkerRole(registration.worker.workerRole);
+
+      return createTransportWorkerRegistration({
         worker: {
-          participantKind: registration.worker.participantKind,
+          participantKind: "worker",
           participantId: registration.worker.participantId,
-          ...(registration.worker.workerRole === undefined
-            ? {}
-            : { workerRole: registration.worker.workerRole }),
+          workerRole,
         },
         subscriptions: registration.subscriptions,
-      }),
-    ),
+      });
+    }),
   );
 }
 
@@ -889,8 +922,8 @@ function normalizeDeliveryWorker(
 }
 
 function normalizeAttemptNumber(value: number): number {
-  if (!Number.isInteger(value) || value < 1) {
-    throw new Error("Transport attemptNumber must be a positive integer.");
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error("Transport attemptNumber must be a safe positive integer.");
   }
 
   return value;
@@ -955,32 +988,7 @@ function sanitizeFailureDetails(details: unknown): TransportDeliveryFailureDetai
 }
 
 function isSafeFailureDetailKey(key: string): boolean {
-  if (!/^[A-Za-z][A-Za-z0-9_-]*$/u.test(key)) {
-    return false;
-  }
-
-  const blockedKeys = new Set([
-    "buffer",
-    "bytes",
-    "cause",
-    "childprocess",
-    "endpoint",
-    "envelope",
-    "error",
-    "frame",
-    "frames",
-    "inboxrecord",
-    "message",
-    "payload",
-    "pid",
-    "processid",
-    "socket",
-    "sockettype",
-    "stack",
-    "storagerecord",
-  ]);
-
-  return !blockedKeys.has(key.toLowerCase());
+  return safeFailureDetailKeys.has(key);
 }
 
 function isTransportDeliveryFailureDetailValue(
@@ -1013,13 +1021,12 @@ function normalizeDeliveryResultFailure(
 
 function deriveDeliveryResultStatus(
   outcome: TransportDeliveryOutcome,
-  retryEligibility: TransportRetryEligibility,
 ): TransportDeliveryStatus {
   if (outcome === "delivered") {
     return "delivered";
   }
 
-  return retryEligibility === "eligible" ? "scheduled" : "failed";
+  return "failed";
 }
 
 function createDeliveryAttemptKey(input: {

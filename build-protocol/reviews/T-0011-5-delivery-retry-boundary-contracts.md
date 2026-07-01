@@ -35,4 +35,49 @@ review lanes.
 
 ## Reviewer Rounds
 
-- Pending.
+- Round 1 reviewers spawned after commit `74160fb`:
+  code style/maintainability `019f1b10-bcd9-7ba2-8ebf-ce29b7d236ce`;
+  documentation `019f1b14-f7e3-73b2-a367-375c6f848a80`; TypeScript/API docs
+  `019f1b15-6084-73c3-8295-66055f81f168`; security
+  `019f1b16-0942-78f2-b992-53096b01bac9`; performance/reliability
+  `019f1b16-6ba3-75d1-8877-b92ce18741e9`.
+- Round 1 results:
+  - code style/maintainability: `STATUS: CLEAN`.
+  - documentation: `STATUS: CLEAN`.
+  - TypeScript/API docs: `STATUS: COMMENTS`. Findings: `scheduled` delivery
+    status overclaims retry scheduling; `TransportDeliveryResultInput` is not a
+    discriminated union; broad participant identity input type permits
+    broker-shaped values with `workerRole` at compile time.
+  - security: `STATUS: COMMENTS`. Finding: failure-detail sanitization uses a
+    denylist and can leak sensitive scalar diagnostics under alternate keys.
+  - performance/reliability: `STATUS: COMMENTS`. Findings: `scheduled`
+    delivery status overclaims actual scheduling; unsafe integer attempt
+    numbers can collide in deterministic keys.
+- Round 1 fix required before re-review.
+- Round 1 review-fix implementation on `2026-07-01 02:28 WEST`:
+  - removed public `scheduled` delivery status; failed outcomes now derive
+    `failed` status even when `retryEligibility` is `eligible`;
+  - changed attempt-number validation to
+    `Number.isSafeInteger(value) && value >= 1`;
+  - made `TransportDeliveryResultInput` a discriminated union so delivered
+    inputs reject failure data and failed inputs require failure data at
+    compile time;
+  - made `TransportParticipantIdentityInput` a broker/worker discriminated
+    union so broker inputs reject `workerRole` and worker inputs require it at
+    compile time; and
+  - replaced failure-detail denylisting with an allowlist for scalar `stage`,
+    `attempt`, `retryable`, `reason`, and `code` details.
+- Review-fix focused verification:
+  `corepack pnpm vitest run packages/transport/src/index.test.ts` passed with
+  1 test file / 17 tests; `corepack pnpm typecheck` passed.
+- Orchestrator full verification for the round-one fix failed on
+  `2026-07-01 02:36 WEST` during `eslint`: `TransportDeliveryResultInputBase`
+  used a `type` alias where the repo rule requires an `interface`, and
+  `toMatchTypeOf()` was deprecated in a type-level test. A narrow lint fix is
+  required before re-review.
+- Narrow lint fix on `2026-07-01 02:39 WEST`:
+  `TransportDeliveryResultInputBase` is now an `interface`, and the
+  `TransportDeliveryResultInput` expect-type assertion now uses non-deprecated
+  `toExtend()`. Focused verification passed: `corepack pnpm lint`;
+  `corepack pnpm test packages/transport/src/index.test.ts` with 1 test file /
+  17 tests; `corepack pnpm typecheck`; and `git diff --check`.
