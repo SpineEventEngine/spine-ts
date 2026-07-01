@@ -4,13 +4,13 @@ import {
   type RepositoryEntityType,
   type RepositoryIdentitySnapshot,
   resolveRepositoryEntityFamily,
-} from "./repository.js";
-import { describeEntityMetadata } from "./entity-metadata.js";
+} from "../repository/repository.js";
+import { describeEntityMetadata } from "../entity/entity-metadata.js";
 import {
   SingleProcessServerRuntime,
   type ServerRuntimeLifecycle,
   type ServerRuntimeState,
-} from "./runtime.js";
+} from "../runtime/runtime.js";
 
 /** Tenant isolation mode declared by a bounded context specification. */
 export type TenantMode = "single-tenant" | "multitenant";

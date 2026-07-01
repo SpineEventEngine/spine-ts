@@ -8,7 +8,7 @@ import {
   type HandlerMetadataRegistryLookup,
   type RegisteredHandlerMetadata,
 } from "./handler-metadata.js";
-import type { EntityMetadata } from "./entity-metadata.js";
+import type { EntityMetadata } from "../entity/entity-metadata.js";
 import {
   compareFullTypeNames,
   copyMetadataArrayMap,

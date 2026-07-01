@@ -1,8 +1,8 @@
 # T-0012.2: Source Folder Repack
 
-Status: Created; implementation pending
+Status: Implemented; awaiting review
 Start: `2026-07-01 18:47 WEST`
-Baseline commit: `32ac920`
+Baseline commit: `480feb02ebde00e03f13a30162d31b9f427e7d18`
 Branch: `task/T-0012-2-source-folder-repack`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-2-source-folder-repack`

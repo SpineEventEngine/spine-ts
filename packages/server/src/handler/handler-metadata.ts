@@ -1,5 +1,5 @@
-import type { EntityMetadata, DescriptorMessageSchema } from "./entity-metadata.js";
-import { describeEntityMetadata } from "./entity-metadata.js";
+import type { EntityMetadata, DescriptorMessageSchema } from "../entity/entity-metadata.js";
+import { describeEntityMetadata } from "../entity/entity-metadata.js";
 
 /** Entity class value accepted by explicit handler metadata registration. */
 export interface EntityClass<Instance extends object = object> {

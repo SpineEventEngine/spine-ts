@@ -7,16 +7,16 @@ import {
   type TransportTopic,
   type TransportWorkerRegistration,
 } from "@spine-ts/transport";
-import { type BuiltBoundedContextSnapshot, BoundedContext } from "./bounded-context.js";
+import { type BuiltBoundedContextSnapshot, BoundedContext } from "../context/bounded-context.js";
 import {
   CommandRegistrationReadiness,
   isAuthenticCommandRegistrationReadiness,
-} from "./command-registration-readiness.js";
+} from "../handler/command-registration-readiness.js";
 import {
   EventRegistrationReadiness,
   isAuthenticEventRegistrationReadiness,
-} from "./event-registration-readiness.js";
-import { compareFullTypeNames } from "./registration-readiness-metadata.js";
+} from "../handler/event-registration-readiness.js";
+import { compareFullTypeNames } from "../handler/registration-readiness-metadata.js";
 const deterministicValidationErrorTag = Symbol("runtimeRoutingDeterministicValidation");
 
 /** Input accepted by {@link createServerRuntimeRoutingPlan}. */

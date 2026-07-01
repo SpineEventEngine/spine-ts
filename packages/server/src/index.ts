@@ -17,7 +17,7 @@ export {
   type ContextSpecSnapshot,
   type RepositoryRegistrationConflictDetails,
   type TenantMode,
-} from "./bounded-context.js";
+} from "./context/bounded-context.js";
 
 export {
   Aggregate,
@@ -33,7 +33,7 @@ export {
   TransactionalEntityScopeError,
   type TransactionalEntityScopeErrorReason,
   type TransactionalEntityScopeOperation,
-} from "./entity.js";
+} from "./entity/entity.js";
 
 export {
   type DeclaredEntityVisibility,
@@ -47,7 +47,7 @@ export {
   type EntityVisibility,
   type FirstFieldRoutingHint,
   isEntitySchema,
-} from "./entity-metadata.js";
+} from "./entity/entity-metadata.js";
 
 export {
   createEntityTransaction,
@@ -66,13 +66,13 @@ export {
   type EntityTransactionStatus,
   type EntityTransactionUpdater,
   type EntityTransactionVersionMetadata,
-} from "./entity-transaction.js";
+} from "./entity/entity-transaction.js";
 
 export {
   type EntityStateTransitionValidationRequest,
   type EntityStateTransitionValidationResult,
   validateEntityStateTransition,
-} from "./entity-transition-validation.js";
+} from "./entity/entity-transition-validation.js";
 
 export {
   type ServerRuntimeLifecycle,
@@ -82,7 +82,7 @@ export {
   type ServerRuntimeStateOperation,
   type ServerRuntimeWork,
   SingleProcessServerRuntime,
-} from "./runtime.js";
+} from "./runtime/runtime.js";
 
 export {
   acceptSignalIntake,
@@ -95,13 +95,13 @@ export {
   type SignalIntakeFailureDiagnostics,
   type SignalIntakeResult,
   type SignalKind,
-} from "./signal-intake.js";
+} from "./runtime/signal-intake.js";
 
 export {
   CommandRegistrationReadiness,
   type CommandRegistrationAssigneeMetadata,
   type CommandRegistrationReadinessLookup,
-} from "./command-registration-readiness.js";
+} from "./handler/command-registration-readiness.js";
 
 export {
   EventRegistrationReadiness,
@@ -109,7 +109,7 @@ export {
   type EventRegistrationReadinessLookup,
   type EventRegistrationReactorMetadata,
   type EventRegistrationSubscriberMetadata,
-} from "./event-registration-readiness.js";
+} from "./handler/event-registration-readiness.js";
 
 export {
   createServerRuntimeRoutingPlan,
@@ -118,7 +118,7 @@ export {
   type EventRuntimeRoutingPlan,
   type ServerRuntimeRoutingPlan,
   type ServerRuntimeRoutingPlanInput,
-} from "./runtime-routing.js";
+} from "./runtime/runtime-routing.js";
 
 export {
   type ConcreteRepositoryEntityType,
@@ -130,7 +130,7 @@ export {
   type RepositoryIdentitySnapshot,
   type RepositoryOptions,
   type RepositoryStateSchema,
-} from "./repository.js";
+} from "./repository/repository.js";
 
 export {
   Apply,
@@ -141,7 +141,7 @@ export {
   React,
   Subscribe,
   materializeDecoratedEntityHandlers,
-} from "./handler-decorators.js";
+} from "./handler/handler-decorators.js";
 
 export {
   type BaseHandlerMetadata,
@@ -165,4 +165,4 @@ export {
   type HandlerRegistrationBuilder,
   type RegisteredHandlerMetadata,
   defineEntityHandlers,
-} from "./handler-metadata.js";
+} from "./handler/handler-metadata.js";

@@ -1,4 +1,10 @@
-import { Aggregate, type Entity, ProcessManager, Projection, type EntityFamily } from "./entity.js";
+import {
+  Aggregate,
+  type Entity,
+  ProcessManager,
+  Projection,
+  type EntityFamily,
+} from "../entity/entity.js";
 import {
   describeEntityMetadata,
   type DescriptorFieldMetadata,
@@ -6,7 +12,7 @@ import {
   type EntityKind,
   type EntityMetadata,
   type FirstFieldRoutingHint,
-} from "./entity-metadata.js";
+} from "../entity/entity-metadata.js";
 
 type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> =
   | Aggregate<unknown, Schema, unknown>

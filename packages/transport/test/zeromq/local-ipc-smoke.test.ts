@@ -5,7 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { Publisher, Reply, Request, Subscriber, type MessageLike, type Socket } from "zeromq";
 
-import { createZeroMqAdapterConfig } from "../src/zeromq-adapter-config.js";
+import { createZeroMqAdapterConfig } from "../../src/zeromq/adapter-config.js";
 
 const smokeTimeoutMs = 2_000;
 const publishCadenceMs = 10;

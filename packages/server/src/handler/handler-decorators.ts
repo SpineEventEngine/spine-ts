@@ -1,4 +1,4 @@
-import type { DescriptorMessageSchema } from "./entity-metadata.js";
+import type { DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import {
   defineEntityHandlers,
   type EntityClass,

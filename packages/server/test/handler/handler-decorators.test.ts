@@ -22,7 +22,7 @@ import {
   type Diagnostic,
 } from "typescript";
 import { describe, expect, it } from "vitest";
-import { serverEntityMetadataTestFixtures } from "../test-fixtures/entity-metadata-fixtures.js";
+import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 import {
   Apply,
@@ -34,7 +34,7 @@ import {
   Subscribe,
   defineEntityHandlers,
   materializeDecoratedEntityHandlers,
-} from "../src/index.js";
+} from "../../src/index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -300,8 +300,8 @@ function formatDiagnostic(diagnostic: Diagnostic): string {
 describe("handler decorators", () => {
   it("semantically compiles typed decorated handler methods under the repo compiler", () => {
     const diagnostics = compileSemanticTypeScriptFixture(`
-      import { Assign } from "../src/handler-decorators.js";
-      import type { DescriptorMessageSchema } from "../src/entity-metadata.js";
+      import { Assign } from "./handler/handler-decorators.js";
+      import type { DescriptorMessageSchema } from "./entity/entity-metadata.js";
 
       declare const CommandSchema: DescriptorMessageSchema;
 

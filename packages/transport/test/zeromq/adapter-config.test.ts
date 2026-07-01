@@ -6,7 +6,7 @@ import {
   type ZeroMqAdapterConfig,
   type ZeroMqNativeModule,
   createZeroMqAdapterConfig,
-} from "../src/zeromq-adapter-config.js";
+} from "../../src/zeromq/adapter-config.js";
 
 describe("ZeroMQ adapter-private configuration", () => {
   it("creates immutable local IPC configuration without socket details", () => {

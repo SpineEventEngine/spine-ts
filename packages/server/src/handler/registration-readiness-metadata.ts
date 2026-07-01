@@ -2,7 +2,7 @@ import type {
   DescriptorFieldMetadata,
   DescriptorMessageSchema,
   EntityMetadata,
-} from "./entity-metadata.js";
+} from "../entity/entity-metadata.js";
 import type {
   EntityClass,
   EntityHandlersMetadata,

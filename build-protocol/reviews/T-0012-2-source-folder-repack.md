@@ -3,10 +3,10 @@
 Task log:
 `build-protocol/tasks/T-0012-2-source-folder-repack/TASK.md`
 Branch: `task/T-0012-2-source-folder-repack`
-Baseline commit: `32ac920`
+Baseline commit: `480feb02ebde00e03f13a30162d31b9f427e7d18`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-2-source-folder-repack`
-Status: Created; implementation pending
+Status: Implemented; awaiting review
 
 ## Required Review Lanes
 
@@ -29,4 +29,6 @@ Reviewers must enforce `D-0047`, `CODE_QUALITY.md`, and the reset constraints:
 
 ## Current Notes
 
-Implementation pending.
+Implementation complete. Review should focus on the committed source/test path
+repack, import updates, cleanup-rule path updates, and verification evidence in
+the implementation report.
