@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.2 Source Folder Repack
 
-Status: All review lanes clean; final verification pending
+Status: Complete; ready to merge into parent corrective branch
 Branch: `task/T-0012-2-source-folder-repack`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-2-source-folder-repack`
@@ -90,3 +90,11 @@ Baseline commit: `480feb02ebde00e03f13a30162d31b9f427e7d18`
   `019f1ed8-fc29-7de3-9519-dfe64eb524b4` reported `CLEAN` for
   `.superpowers/sdd/review-docs-1cfe314..d37a020.diff` and is closed.
 - All required review lanes are clean.
+
+## Final Verification
+
+- Escalated `env CI=true corepack pnpm verify` passed.
+- Evidence: 28 test files, 307 tests, coverage statements 96.12%, branches
+  90.53%, functions 99.38%, lines 96.07%, docs/API checks with the existing
+  invalid-`origin` TypeDoc warning only, proto lint/generate, and
+  generated-clean comparison.
