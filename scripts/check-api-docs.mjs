@@ -400,6 +400,12 @@ const forbiddenPublicMembers = [
     reason: "removed factory",
     matches: (value) => value.flags?.isStatic === true && Array.isArray(value.signatures),
   },
+  {
+    owner: "Repository",
+    member: "registerWith",
+    reason: "registration is context-owned",
+    matches: (value) => Array.isArray(value.signatures),
+  },
 ];
 
 function collectForbiddenMembers(value, ownerName, matches) {
@@ -417,7 +423,7 @@ function collectForbiddenMembers(value, ownerName, matches) {
   const nextOwnerName =
     typeof value.kind === "number" &&
     typeof value.name === "string" &&
-    ["BoundedContext", "BoundedContextBuilder", "ContextSpec"].includes(value.name)
+    ["BoundedContext", "BoundedContextBuilder", "ContextSpec", "Repository"].includes(value.name)
       ? value.name
       : ownerName;
 

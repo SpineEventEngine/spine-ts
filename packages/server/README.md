@@ -422,8 +422,9 @@ await tasks.eventBus().post(eventEnvelope);
 repositories with the built context, opens repository `RecordStorage` through
 the context storage factory, and exposes `registeredRepositories()` as a
 copy-safe list for later routing slices. Repeated add/register of the same
-repository in the same context is idempotent. Registering the same repository
-instance with another built context is rejected.
+repository before build is idempotent, and framework same-context preparation
+does not reopen storage. Registering the same repository instance with another
+built context is rejected.
 
 This slice deliberately does not create default repositories from entity
 classes, invoke handlers, construct system contexts, start query/subscription

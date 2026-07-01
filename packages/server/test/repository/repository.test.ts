@@ -2,12 +2,20 @@ import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { InMemoryStorageFactory } from "@spine-ts/storage";
+import {
+  InMemoryStorageFactory,
+  type RecordSpec,
+  type RecordStorage,
+  type StorageContext,
+} from "@spine-ts/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { file_spine_options } from "@spine-ts/proto";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 import type { BoundedContextRegistration } from "../../src/context/bounded-context.js";
-import { prepareRepository } from "../../src/repository/repository.js";
+import {
+  prepareRepository,
+  type RepositoryPreparationToken,
+} from "../../src/repository/repository.js";
 
 import {
   Aggregate,
@@ -568,23 +576,33 @@ describe("repository identity", () => {
     const directRegistrationMember: Extract<keyof typeof repository, "registerWith"> =
       "registerWith";
     void directRegistrationMember;
+
+    const directPreparation = () => {
+      // @ts-expect-error repository preparation is context-owned and token-gated.
+      prepareRepository(repository, createInternalRegistration("Tasks"));
+    };
+    void directPreparation;
   });
 
-  it("keeps framework same-context registration idempotent without public registration", () => {
-    const registration = createInternalRegistration("Tasks");
+  it("keeps framework same-context preparation idempotent without reopening storage", () => {
+    const storageFactory = new CountingStorageFactory();
+    const registration = createInternalRegistration("Tasks", storageFactory);
+    const token = {} as RepositoryPreparationToken;
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: AggregateStateSchema,
     });
 
-    prepareRepository(repository, registration).commit();
-    prepareRepository(repository, registration).commit();
+    prepareRepository(repository, registration, token).commit();
+    prepareRepository(repository, registration, token).commit();
 
     expect(repository.isRegistered()).toBe(true);
     expect(repository.registeredContextName?.value).toBe("Tasks");
+    expect(storageFactory.creations).toBe(1);
   });
 
-  it("rejects structural repository lookalikes in the framework registration helper", () => {
+  it("rejects structural repository lookalikes in the token-gated framework helper", () => {
+    const token = {} as RepositoryPreparationToken;
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: AggregateStateSchema,
@@ -602,7 +620,7 @@ describe("repository identity", () => {
     } as unknown as RepositoryView;
 
     expect(() =>
-      prepareRepository(structuralRepository, createInternalRegistration("Tasks")),
+      prepareRepository(structuralRepository, createInternalRegistration("Tasks"), token),
     ).toThrow("Repository registration requires a Repository instance.");
   });
 
@@ -822,11 +840,26 @@ describe("repository identity", () => {
   });
 });
 
-function createInternalRegistration(name: string): BoundedContextRegistration {
+class CountingStorageFactory extends InMemoryStorageFactory {
+  creations = 0;
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    this.creations += 1;
+    return super.onCreateRecordStorage(context, recordSpec);
+  }
+}
+
+function createInternalRegistration(
+  name: string,
+  storageFactory = new InMemoryStorageFactory(),
+): BoundedContextRegistration {
   return {
     identity: {},
     name: Object.freeze({ value: name }),
     storageContext: Object.freeze({ name, multitenant: false }),
-    storageFactory: new InMemoryStorageFactory(),
+    storageFactory,
   };
 }

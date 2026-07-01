@@ -15,6 +15,8 @@ import {
   isRepositoryInstance,
   prepareRepository,
   type ConcreteRepositoryEntityType,
+  type PreparedRepository,
+  type RepositoryPreparationToken,
   type RepositoryView,
   type RepositoryEntityType,
 } from "../repository/repository.js";
@@ -93,6 +95,7 @@ interface FrameworkConstructionToken {
 const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
   frameworkConstructionToken: true,
 });
+const repositoryPreparationToken = Object.freeze({}) as RepositoryPreparationToken;
 let constructBoundedContext:
   | ((
       snapshot: BoundedContextSnapshot,
@@ -157,9 +160,17 @@ export class BoundedContext {
       storageContext: createStorageContext(this.#snapshot.spec),
       storageFactory: this.#storageFactory,
     };
-    const preparedRepositories = repositories.map((repository) =>
-      prepareRepository(repository, registration),
-    );
+    const preparedRepositories: PreparedRepository[] = [];
+    try {
+      for (const repository of repositories) {
+        preparedRepositories.push(
+          prepareRepository(repository, registration, repositoryPreparationToken),
+        );
+      }
+    } catch (error) {
+      closePreparedRepositories(preparedRepositories);
+      throw error;
+    }
 
     for (const preparedRepository of preparedRepositories) {
       preparedRepository.commit();
@@ -319,13 +330,18 @@ export class BoundedContextBuilder {
     const eventStore = this.createEventStore(storageFactory);
     const eventBus = new EventBus(eventStore, [...this.#eventDispatchers]);
 
-    return createBoundedContext(
-      this.#specSnapshot,
-      commandBus,
-      eventBus,
-      storageFactory,
-      repositories,
-    );
+    try {
+      return createBoundedContext(
+        this.#specSnapshot,
+        commandBus,
+        eventBus,
+        storageFactory,
+        repositories,
+      );
+    } catch (error) {
+      eventStore.close();
+      throw error;
+    }
   }
 
   private createEventStore(storageFactory: StorageFactory): EventStore {
@@ -499,5 +515,11 @@ function preflightRepositories(repositories: readonly RepositoryView[]): void {
       );
     }
     stateTypeNames.add(repository.stateFullTypeName);
+  }
+}
+
+function closePreparedRepositories(preparedRepositories: readonly PreparedRepository[]): void {
+  for (const preparedRepository of preparedRepositories) {
+    preparedRepository.close();
   }
 }

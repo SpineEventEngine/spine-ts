@@ -31,12 +31,7 @@ Reviewers must reject:
 - tests under `src`; and
 - stale docs/API expectations.
 
-## Rounds
-
-No independent reviewer sub-agent rounds were run because the implementation
-instruction explicitly said not to spawn agents.
-
-## Review-Fix Round
+## Review-Fix Round 1
 
 Reviewer comments received on `2026-07-02 WEST`:
 
@@ -89,3 +84,32 @@ Fixes applied:
   ZeroMQ local IPC permissions; the escalated full verify passed with 35 test
   files, 287 tests, coverage above thresholds, docs/API check, proto
   lint/generate, and generated-clean checks.
+
+## Review-Fix Round 2
+
+Reviewer comments received on `2026-07-02 WEST`:
+
+- `prepareRepository()` was exported from the repository module without a
+  context-owned capability, leaving storage opening and registration commit
+  available to deep imports.
+- Same-context preparation reopened repository storage instead of being a true
+  no-op.
+- A later repository storage open failure could leak already opened repository
+  storage, and event-store opening happened before repository preparation.
+- `RepositoryAccess.preflight` was unused.
+- API/docs wording still conflated registration failures with
+  `RepositoryIdentityError`, and durable logs/review wording were stale.
+- `docs:check` did not guard against a future public
+  `Repository.registerWith`.
+
+Fixes applied:
+
+- Added an opaque context-owned preparation token to the internal repository
+  preparation helper and kept it out of root exports.
+- Removed unused `RepositoryAccess.preflight` plumbing.
+- Made same-context preparation return a no-op prepared registration and added
+  a focused storage-open count test.
+- Added cleanup for prepared repository storages on preparation failure and
+  closed the context event store when context construction fails.
+- Added a `scripts/check-api-docs.mjs` guard for `Repository.registerWith`.
+- Updated API/server docs and this durable review log.

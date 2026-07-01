@@ -150,6 +150,13 @@ export interface RepositoryView {
 /** Machine-readable codes for repository identity failures. */
 export type RepositoryIdentityErrorCode = "ENTITY_SCHEMA_KIND_MISMATCH" | "UNSUPPORTED_ENTITY_TYPE";
 
+declare const repositoryPreparationTokenBrand: unique symbol;
+
+/** @internal Opaque token owned by BoundedContext repository preparation. */
+export interface RepositoryPreparationToken {
+  readonly [repositoryPreparationTokenBrand]: true;
+}
+
 /** Error thrown when repository identity metadata cannot be constructed. */
 export class RepositoryIdentityError extends Error {
   /** Stable code for callers/tests that need structured failure handling. */
@@ -236,9 +243,6 @@ export class Repository<
     this.#entityFamily = entityFamily;
     this.#metadata = metadata;
     repositoryAccess.set(this, {
-      preflight: (registration) => {
-        this.#preflightRegistration(registration);
-      },
       prepare: (registration) => this.#prepareRegistration(registration),
     });
   }
@@ -311,6 +315,14 @@ export class Repository<
 
   #prepareRegistration(registration: BoundedContextRegistration): PreparedRepository {
     this.#preflightRegistration(registration);
+    if (registration.identity === this.#contextIdentity) {
+      return {
+        repository: this,
+        commit: () => undefined,
+        close: () => undefined,
+      };
+    }
+
     const storage = createRepositoryStorage(
       registration,
       createRepositoryRecordSpec(this.#metadata),
@@ -320,6 +332,9 @@ export class Repository<
       repository: this,
       commit: () => {
         this.#commitRegistration(registration, storage);
+      },
+      close: () => {
+        storage.close();
       },
     };
   }
@@ -336,7 +351,6 @@ export class Repository<
 }
 
 interface RepositoryAccess {
-  preflight(registration: BoundedContextRegistration): void;
   prepare(registration: BoundedContextRegistration): PreparedRepository;
 }
 
@@ -346,6 +360,8 @@ export interface PreparedRepository {
   readonly repository: RepositoryView;
   /** Commits registration after every repository has opened storage successfully. */
   commit(): void;
+  /** Closes prepared storage when context construction fails before commit. */
+  close(): void;
 }
 
 const repositoryAccess = new WeakMap<RepositoryView, RepositoryAccess>();
@@ -359,7 +375,10 @@ export function isRepositoryInstance(repository: unknown): repository is Reposit
 export function prepareRepository(
   repository: RepositoryView,
   registration: BoundedContextRegistration,
+  token: RepositoryPreparationToken,
 ): PreparedRepository {
+  void token;
+
   const access = repositoryAccess.get(repository);
 
   if (access === undefined) {

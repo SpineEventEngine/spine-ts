@@ -328,6 +328,8 @@ describe("BoundedContext assembly", () => {
     expect(aggregateRepository.isRegistered()).toBe(false);
     expect(projectionRepository.isRegistered()).toBe(false);
     expect(storageFactory.creations).toHaveLength(2);
+    expect(storageFactory.storages).toHaveLength(2);
+    expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
     expect(stateTypeName(storageFactory.creations[1])).toBe(AggregateStateSchema.typeName);
   });
 
@@ -373,6 +375,7 @@ describe("BoundedContext assembly", () => {
 
 class ObservingStorageFactory extends StorageFactory {
   readonly creations: StorageCreation[] = [];
+  readonly storages: RecordStorage<unknown, Message>[] = [];
 
   constructor(private readonly observed: string[]) {
     super();
@@ -383,7 +386,9 @@ class ObservingStorageFactory extends StorageFactory {
     recordSpec: RecordSpec<I, R>,
   ): RecordStorage<I, R> {
     this.creations.push({ context, recordSpec });
-    return new ObservingRecordStorage(context, recordSpec, this.observed);
+    const storage = new ObservingRecordStorage(context, recordSpec, this.observed);
+    this.storages.push(storage);
+    return storage;
   }
 }
 

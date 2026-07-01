@@ -84,15 +84,16 @@ entity constructor, the inferred aggregate/projection/process-manager family,
 the matching descriptor-backed state schema, descriptor metadata, state full
 type name, and ID-field metadata. Snapshots are frozen fresh-copy values for
 bounded-context duplicate/conflict checks. The seam rejects unsupported
-constructors, entity-family/state-kind mismatches, duplicate repository
-identities in one context build, spoofed structural repository objects, and
-multi-context registration with simple
-`RepositoryIdentityError` code/message diagnostics. Family inference trusts same-realm class
-constructor and instance prototype metadata, so alias imports, member
-expressions, intermediate domain base classes, and explicitly reparented ES
-classes with matching same-realm prototype chains are treated as metadata. It
-opens state record storage only through `BoundedContextBuilder.build()`; direct
-repository registration is not public API. It does not create/find/store
+constructors and entity-family/state-kind mismatches with simple
+`RepositoryIdentityError` code/message diagnostics. Bounded-context assembly
+rejects duplicate repository identities in one context build, spoofed structural
+repository objects, and multi-context registration with ordinary registration
+errors. Family inference trusts same-realm class constructor and instance
+prototype metadata, so alias imports, member expressions, intermediate domain
+base classes, and explicitly reparented ES classes with matching same-realm
+prototype chains are treated as metadata. It opens state record storage only
+through `BoundedContextBuilder.build()`; direct repository registration is not
+public API. It does not create/find/store
 entities, route or dispatch messages, write inboxes, invoke handlers, manage
 caches, run catch-up, expose stands, or start buses/transports.
 Server metadata exports
