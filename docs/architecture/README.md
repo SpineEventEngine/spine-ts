@@ -1,6 +1,7 @@
 # Architecture Notes
 
-Current status: early implementation notes.
+Current status: early implementation notes through the first runtime routing and
+transport-foundation seams.
 
 Architecture documentation starts from the build protocol and specification documents under `build-protocol/`. This folder is reserved for implementation-era architecture notes that evolve with actual package boundaries and runtime behavior.
 
@@ -319,37 +320,40 @@ Current bounded-context scope is intentionally limited to immutable metadata:
 
 This keeps the TypeScript API JVM-familiar without pretending that later
 runtime collaborators already exist. Application code does not subclass
-`BoundedContext`, directly instantiate shell classes, or reach runtime parts
-such as command buses, event buses, stands, tenant indexes, storage, or
-transport from this slice. Runtime constructor guards also reject direct
-JavaScript escape hatches so callers cannot bypass name validation or the
-builder-only build path by passing ad hoc objects.
+`BoundedContext`, directly instantiate shell classes, or reach executable
+runtime parts such as command buses, event buses, stands, tenant indexes,
+storage, or transport endpoints from this shell. Runtime constructor guards also
+reject direct JavaScript escape hatches so callers cannot bypass name validation
+or the builder-only build path by passing ad hoc objects.
 
 The following runtime pieces are still deferred to later explicit tasks:
 
 - runtime repository registration, default repository construction from entity
   classes, storage opening, visibility/type-supplier registration, and
   lifecycle callbacks over the repository identity seam;
-- handler invocation and command/event routing;
+- handler invocation and executable command/event routing or dispatch;
 - inbox, delivery, storage, and tenant-index persistence;
 - stand/query/subscription execution;
 - system-context pairing and server/gRPC services; and
-- ZeroMQ and other transport integration.
+- ZeroMQ endpoint topology and transport-backed runtime execution.
 
 ## Server Runtime Closure
 
 T-0010 closes the first single-process runtime slice as an assembly seam rather
-than a server graph. The verified public composition is:
+than a server graph. Its verified public composition is:
 
 - build a metadata-only `BoundedContext` through the existing builder and
   explicit `Repository` identity registration;
 - bind that built context to `BoundedContextRuntime`, using either its private
   `SingleProcessServerRuntime` or a caller-owned `ServerRuntimeLifecycle`;
 - derive command and event registration-readiness metadata from existing
-  `HandlerMetadataRegistry` entries;
-- derive an immutable runtime-routing plan from the built context plus command
-  and event readiness using `createServerRuntimeRoutingPlan()`; and
+  `HandlerMetadataRegistry` entries; and
 - start/close the context runtime through deterministic lifecycle state.
+
+T-0011.6 and T-0011.7 then close the metadata-only runtime-routing/transport
+foundation layer. That later closure derives an immutable runtime-routing plan
+from the built context plus command and event readiness using
+`createServerRuntimeRoutingPlan()`.
 
 This is intentionally enough for later runtime tasks to share vocabulary and
 tests around "context metadata plus lifecycle plus readiness." It is not an
@@ -452,16 +456,17 @@ workers, or run monitor policy. Those decisions remain in later transport and
 runtime tasks.
 
 The transport package now pins the maintained official `zeromq@6.5.0` line for
-the later local IPC adapter. That native dependency is adapter-private: current
+the local IPC adapter foundation. That native dependency is adapter-private: current
 helper code validates a local IPC configuration shape and keeps native module
 typing out of the public entry point, while package-private smoke tests prove
 same-host publish/subscribe and request/reply IPC over temporary endpoints. The
-tests do not define production endpoint layout, frame protocols, delivery
-retries, process supervision, or server runtime wiring. The workspace explicitly
-approves the `zeromq` install script in pnpm configuration, so dependency
-restoration must run in an environment that permits native package
-build/install scripts. Managed sandboxes may reject ZeroMQ `ipc://` binds with
-`EPERM`, so live local IPC smoke tests can require native IPC filesystem/socket
-permissions outside the sandbox. Per D-0007, this adapter path is for same-host
-IPC only; scaling beyond one host remains the job of a different transport
-behind the same public contract.
+tests do not define production endpoint layout, frame protocols, broker
+topology, worker registration handshakes, delivery retries, process
+supervision, or server runtime wiring. The workspace explicitly approves the
+`zeromq` install script in pnpm configuration, so dependency restoration must
+run in an environment that permits native package build/install scripts.
+Managed sandboxes may reject ZeroMQ `ipc://` binds with `EPERM`, so live local
+IPC smoke tests can require native IPC filesystem/socket permissions outside
+the sandbox. Per D-0007, this adapter path is for same-host IPC only; scaling
+beyond one host remains the job of a different transport behind the same public
+contract.
