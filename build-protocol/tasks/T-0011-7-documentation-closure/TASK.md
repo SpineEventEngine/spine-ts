@@ -1,6 +1,6 @@
 # T-0011.7: Documentation And Closure
 
-Status: Round-One Review Fix Complete; Pending Integration
+Status: Complete
 Parent task: `T-0011 Transport Foundation`
 Start: `2026-07-01 04:44 WEST`
 Baseline commit: `bac132c`
@@ -11,7 +11,8 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0011-7-documentation-closure`
 Authoring sub-agent: `019f1bca-cf2d-7b22-819c-d6af149a4c60`;
 implementation completed on `2026-07-01 04:54 WEST`; closed.
-Reviewer sub-agents: round one complete; all five reviewers closed.
+Reviewer sub-agents: round one and targeted re-review complete; all reviewers
+closed.
 
 ## Objective
 
@@ -107,6 +108,14 @@ Selected implementer/reviewer advisory skills to pass by reference:
   verification, proto lint/generate, generated proto output clean, and
   generated files clean. TypeDoc emitted the existing invalid-`origin` warning
   only.
+- Final T-0011.7 branch verification after review-fix and targeted re-review
+  passed on `2026-07-01 05:14 WEST`: escalated `CI=true corepack pnpm verify`
+  passed with native IPC access, 24 test files / 293 tests, coverage 96.12%
+  statements / 90.53% branches / 99.38% functions / 96.07% lines, TypeDoc/API
+  counts 100 proto / 28 core / 130 server / 26 storage / 46 transport, copied
+  Spine proto checksum verification, proto lint/generate, generated proto
+  output clean, and generated files clean. TypeDoc emitted the existing
+  invalid-`origin` warning only.
 
 ## Implementation Notes
 
@@ -145,3 +154,9 @@ Selected implementer/reviewer advisory skills to pass by reference:
 - Performance/reliability reviewer
   `019f1bd9-0655-7231-bb87-0f1c2c57e61d` reported no findings; reviewer
   closed.
+- Targeted maintainability re-reviewer
+  `019f1bdf-0116-7382-8433-8da7b934e799` reported `STATUS: CLEAN` after the
+  review-fix commit; reviewer closed.
+- Targeted documentation re-reviewer
+  `019f1bdf-19c4-78a3-9c0d-6784faebe885` reported `STATUS: CLEAN` after the
+  review-fix commit; reviewer closed.
