@@ -126,6 +126,7 @@ export {
   type RepositoryIdentitySnapshot,
   type RepositoryOptions,
   type RepositoryStateSchema,
+  type RepositoryView,
 } from "./repository/repository.js";
 
 export {

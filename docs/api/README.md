@@ -5,7 +5,7 @@ TypeDoc is the canonical API documentation generator for this repository.
 Current status: the generated reference contains the curated `@spine-ts/proto`
 root API for copied Spine contracts, the `@spine-ts/core` metadata/type
 registry and validation facade APIs, the first `@spine-ts/server`
-descriptor-derived entity metadata, metadata-only `Repository` identity,
+descriptor-derived entity metadata, context-owned `Repository` registration,
 set-once transition validation, explicit handler metadata APIs, the first
 command/event bus exports, the first server runtime lifecycle/async queue
 kernel, write-side signal intake result exports, the runtime-routing planner
@@ -38,11 +38,13 @@ the context event store; and `build()` returns a `BoundedContext` that owns
 mutable `CommandBus` and `EventBus` instances internally while exposing
 post-only `CommandEndpoint` and `EventEndpoint` values through `commandBus()`
 and `eventBus()`. The shell validates non-empty/non-blank names and records
-tenant mode. `builder.add(repository)` / `builder.remove(repository)` are tiny
-chainable pending no-ops only. This slice does not create default repositories
-from entity classes, register repositories at runtime, invoke handlers, create
-system contexts, expose stands, write tenant indexes, expose gRPC services, or
-integrate transports.
+tenant mode. `builder.add(repository)` / `builder.remove(repository)` maintain
+the context-owned repository registration list, and `build()` registers those
+repositories with the built context after opening state record storage through
+the context `StorageFactory`. This slice does not create default repositories
+from entity classes, route messages through repositories, invoke handlers,
+create system contexts, expose stands, write tenant indexes, expose gRPC
+services, or integrate transports.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,
@@ -76,20 +78,23 @@ events.
 `Repository`, `RepositoryOptions`, `RepositoryEntityType`,
 `ConcreteRepositoryEntityType`, `RepositoryStateSchema`,
 `RepositoryIdentitySnapshot`, `RepositoryIdentityError`,
-and `RepositoryIdentityErrorCode` form the metadata-only repository identity
-seam. A repository identity records one
+`RepositoryIdentityErrorCode`, and `RepositoryView` form the repository
+identity and context-owned registration seam. A repository records one
 entity constructor, the inferred aggregate/projection/process-manager family,
 the matching descriptor-backed state schema, descriptor metadata, state full
 type name, and ID-field metadata. Snapshots are frozen fresh-copy values for
-later bounded-context duplicate/conflict checks. The seam rejects unsupported
-constructors and entity-family/state-kind mismatches with simple
+bounded-context duplicate/conflict checks. The seam rejects unsupported
+constructors, entity-family/state-kind mismatches, duplicate repository
+identities in one context build, spoofed structural repository objects, and
+multi-context registration with simple
 `RepositoryIdentityError` code/message diagnostics. Family inference trusts same-realm class
 constructor and instance prototype metadata, so alias imports, member
 expressions, intermediate domain base classes, and explicitly reparented ES
 classes with matching same-realm prototype chains are treated as metadata. It
-does not create/find/store entities, open storage, register contexts, route or
-dispatch messages, write inboxes, invoke handlers, manage caches, run catch-up,
-expose stands, or start buses/transports.
+opens state record storage only through `BoundedContextBuilder.build()`; direct
+repository registration is not public API. It does not create/find/store
+entities, route or dispatch messages, write inboxes, invoke handlers, manage
+caches, run catch-up, expose stands, or start buses/transports.
 Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field
@@ -161,8 +166,8 @@ wanted-event publication are deferred because the current TypeScript handler
 metadata has no external-event marker. It is not an event bus, integration
 broker, import bus, event store, delivery mechanism, stand, subscription
 service, command-result subscription, dispatcher, router, event posting API,
-validator, repository runtime registration hook, storage writer, transport
-adapter, handler invoker, or Spine `Ack` producer.
+validator, repository dispatcher, storage writer, transport adapter, handler
+invoker, or Spine `Ack` producer.
 Bus exports include `CommandBus`, `CommandDispatcher`, `EventBus`, and
 `EventDispatcher`. `CommandBus` accepts generated Spine `Command` envelopes,
 queues accepted work asynchronously, and routes by enclosed message type URL to
@@ -225,9 +230,9 @@ interfaces fit together without adding new public API. That composition
 produces context-scoped metadata, command/event readiness views, immutable
 runtime-routing plans, and deterministic lifecycle state only. It deliberately
 does not expose a `Server` export, service routing, command/event/import bus
-behavior, repository runtime registration, storage lifecycle, read-side
-execution, transport lifecycle, validation, delivery, integration-broker
-behavior, handler invocation, or Spine `Ack` mapping.
+behavior, repository dispatch, read-side execution, transport lifecycle,
+validation, delivery, integration-broker behavior, handler invocation, or Spine
+`Ack` mapping.
 Write-side signal intake exports include `SignalKind`, `SignalIntakeResult`,
 `SignalIntakeAccepted`, `SignalIntakeAcceptedFor`, `SignalIntakeFailure`,
 `SignalIntakeFailureCode`, `SignalIntakeFailureDetails`,

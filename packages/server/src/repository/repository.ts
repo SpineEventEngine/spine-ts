@@ -9,8 +9,6 @@ import {
   type EntityFamily,
 } from "../entity/entity.js";
 import {
-  boundedContextRegistrations,
-  type BoundedContext,
   type BoundedContextName,
   type BoundedContextRegistration,
 } from "../context/bounded-context.js";
@@ -88,7 +86,7 @@ export type RepositoryEntityType<
   };
 
 /**
- * Options for constructing metadata-only repository identity.
+ * Options for constructing repository identity and context-owned registration.
  *
  * @typeParam EntityType - A single concrete aggregate, projection, or process-manager constructor.
  * The constructor's prototype must carry one concrete generated state schema; broad constructor,
@@ -127,6 +125,28 @@ export interface RepositoryIdentitySnapshot<
   readonly idField: DescriptorFieldMetadata;
 }
 
+/** Public read view of a repository registered with a bounded context. */
+export interface RepositoryView {
+  /** Entity constructor owned by the repository. */
+  readonly entityType: RepositoryEntityType;
+  /** Entity family inferred from the constructor's built-in family marker base class. */
+  readonly entityFamily: EntityFamily;
+  /** Generated Protobuf-ES schema for the owned entity state. */
+  readonly stateSchema: DescriptorMessageSchema;
+  /** Descriptor-derived metadata for the owned entity state. */
+  readonly metadata: EntityMetadata;
+  /** Fully qualified Protobuf type name of the owned entity state. */
+  readonly stateFullTypeName: string;
+  /** Canonical entity ID field copied from descriptor-derived metadata. */
+  readonly idField: DescriptorFieldMetadata;
+  /** Copy-safe immutable identity snapshot for duplicate/conflict checks. */
+  readonly snapshot: RepositoryIdentitySnapshot;
+  /** Whether this repository has been registered with a built bounded context. */
+  isRegistered(): boolean;
+  /** Copy-safe name of the bounded context this repository is registered with, if any. */
+  readonly registeredContextName: BoundedContextName | undefined;
+}
+
 /** Machine-readable codes for repository identity failures. */
 export type RepositoryIdentityErrorCode = "ENTITY_SCHEMA_KIND_MISMATCH" | "UNSUPPORTED_ENTITY_TYPE";
 
@@ -144,7 +164,7 @@ export class RepositoryIdentityError extends Error {
 }
 
 /**
- * Metadata-only repository identity over one entity constructor and state schema.
+ * Repository identity and context-owned storage registration over one entity constructor and state schema.
  *
  * The class records the ownership facts bounded-context registration needs for
  * duplicate and conflict checks. Registration assigns one built context and
@@ -158,7 +178,7 @@ export class RepositoryIdentityError extends Error {
  */
 export class Repository<
   EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>,
-> {
+> implements RepositoryView {
   readonly #entityType: EntityType;
   readonly #entityFamily: EntityFamily;
   readonly #metadata: EntityMetadata<RepositoryStateSchema<EntityType>>;
@@ -166,7 +186,7 @@ export class Repository<
   #contextName: BoundedContextName | undefined;
   #storage: RecordStorage<unknown, Message> | undefined;
 
-  /** Create repository identity metadata for exactly one entity family/state schema pair. */
+  /** Create repository identity for exactly one entity family/state schema pair. */
   constructor(options: RepositoryOptions<EntityType>) {
     if (!isRepositoryOptionsObject(options)) {
       throw new RepositoryIdentityError(
@@ -215,6 +235,12 @@ export class Repository<
     this.#entityType = entityType as EntityType;
     this.#entityFamily = entityFamily;
     this.#metadata = metadata;
+    repositoryAccess.set(this, {
+      preflight: (registration) => {
+        this.#preflightRegistration(registration);
+      },
+      prepare: (registration) => this.#prepareRegistration(registration),
+    });
   }
 
   /** Entity constructor owned by this repository identity. */
@@ -271,14 +297,7 @@ export class Repository<
     return this.#contextName === undefined ? undefined : cloneBoundedContextName(this.#contextName);
   }
 
-  /** Registers this repository with one built bounded context and opens its state storage. */
-  registerWith(context: BoundedContext): void {
-    const registration = boundedContextRegistrations.get(context);
-
-    if (registration === undefined) {
-      throw new Error("Repository registration requires a built Bounded Context.");
-    }
-
+  #preflightRegistration(registration: BoundedContextRegistration): void {
     if (registration.identity === this.#contextIdentity) {
       return;
     }
@@ -288,15 +307,66 @@ export class Repository<
           `"${this.#contextName?.value ?? "(unknown)"}".`,
       );
     }
+  }
 
+  #prepareRegistration(registration: BoundedContextRegistration): PreparedRepository {
+    this.#preflightRegistration(registration);
     const storage = createRepositoryStorage(
       registration,
       createRepositoryRecordSpec(this.#metadata),
     );
+
+    return {
+      repository: this,
+      commit: () => {
+        this.#commitRegistration(registration, storage);
+      },
+    };
+  }
+
+  #commitRegistration(
+    registration: BoundedContextRegistration,
+    storage: RecordStorage<unknown, Message>,
+  ): void {
+    this.#preflightRegistration(registration);
     this.#contextIdentity = registration.identity;
     this.#contextName = cloneBoundedContextName(registration.name);
     this.#storage = storage;
   }
+}
+
+interface RepositoryAccess {
+  preflight(registration: BoundedContextRegistration): void;
+  prepare(registration: BoundedContextRegistration): PreparedRepository;
+}
+
+/** @internal Repository registration prepared by a context before state mutation. */
+export interface PreparedRepository {
+  /** Repository read view to expose after commit. */
+  readonly repository: RepositoryView;
+  /** Commits registration after every repository has opened storage successfully. */
+  commit(): void;
+}
+
+const repositoryAccess = new WeakMap<RepositoryView, RepositoryAccess>();
+
+/** @internal Whether a value is a real repository created by this module. */
+export function isRepositoryInstance(repository: unknown): repository is RepositoryView {
+  return repositoryAccess.has(repository as RepositoryView);
+}
+
+/** @internal Opens storage for a repository without committing registration state. */
+export function prepareRepository(
+  repository: RepositoryView,
+  registration: BoundedContextRegistration,
+): PreparedRepository {
+  const access = repositoryAccess.get(repository);
+
+  if (access === undefined) {
+    throw new TypeError("Repository registration requires a Repository instance.");
+  }
+
+  return access.prepare(registration);
 }
 
 function createRepositoryStorage(

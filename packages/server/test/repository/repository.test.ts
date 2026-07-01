@@ -1,21 +1,16 @@
-import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import {
-  InMemoryRecordStorage,
-  type RecordSpec,
-  type RecordStorage,
-  type StorageContext,
-  StorageFactory,
-} from "@spine-ts/storage";
+import { InMemoryStorageFactory } from "@spine-ts/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { file_spine_options } from "@spine-ts/proto";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+import type { BoundedContextRegistration } from "../../src/context/bounded-context.js";
+import { prepareRepository } from "../../src/repository/repository.js";
 
 import {
   Aggregate,
-  BoundedContext,
   describeEntityMetadata,
   ProcessManager,
   Projection,
@@ -28,6 +23,7 @@ import {
   type RepositoryEntityType,
   type RepositoryIdentitySnapshot,
   type RepositoryOptions,
+  type RepositoryView,
 } from "../../src/index.js";
 
 function expectRepositoryIdentityError(
@@ -559,9 +555,7 @@ describe("repository identity", () => {
     expect(new NamedProjectionRepository().label).toBe("task-projections");
   });
 
-  it("registers with one built context and exposes copy-safe registration metadata", () => {
-    const storageFactory = new CreationTrackingStorageFactory();
-    const context = BoundedContext.singleTenant("Tasks").withStorageFactory(storageFactory).build();
+  it("does not expose direct registration as public repository API", () => {
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: AggregateStateSchema,
@@ -569,46 +563,47 @@ describe("repository identity", () => {
 
     expect(repository.isRegistered()).toBe(false);
     expect(repository.registeredContextName).toBeUndefined();
-
-    repository.registerWith(context);
-
-    const firstName = repository.registeredContextName;
-    const secondName = repository.registeredContextName;
-    expect(repository.isRegistered()).toBe(true);
-    expect(firstName?.value).toBe("Tasks");
-    expect(secondName).toEqual(firstName);
-    expect(secondName).not.toBe(firstName);
-    expect(storageFactory.creations).toHaveLength(2);
-    expect(stateTypeName(storageFactory.creations[1])).toBe(AggregateStateSchema.typeName);
+    expect("registerWith" in repository).toBe(false);
+    // @ts-expect-error registration is context-owned; repositories do not expose a direct hook.
+    const directRegistrationMember: Extract<keyof typeof repository, "registerWith"> =
+      "registerWith";
+    void directRegistrationMember;
   });
 
-  it("keeps repeated registration with the same context idempotent", () => {
-    const storageFactory = new CreationTrackingStorageFactory();
-    const context = BoundedContext.singleTenant("Tasks").withStorageFactory(storageFactory).build();
+  it("keeps framework same-context registration idempotent without public registration", () => {
+    const registration = createInternalRegistration("Tasks");
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: AggregateStateSchema,
     });
 
-    repository.registerWith(context);
-    repository.registerWith(context);
+    prepareRepository(repository, registration).commit();
+    prepareRepository(repository, registration).commit();
 
     expect(repository.isRegistered()).toBe(true);
-    expect(storageFactory.creations).toHaveLength(2);
-  });
-
-  it("rejects registering the same repository with two built contexts", () => {
-    const repository = new Repository({
-      entityType: TaskAggregate,
-      schema: AggregateStateSchema,
-    });
-
-    repository.registerWith(BoundedContext.singleTenant("Tasks").build());
-
-    expect(() => {
-      repository.registerWith(BoundedContext.singleTenant("Customers").build());
-    }).toThrow("already registered with Bounded Context");
     expect(repository.registeredContextName?.value).toBe("Tasks");
+  });
+
+  it("rejects structural repository lookalikes in the framework registration helper", () => {
+    const repository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const structuralRepository = {
+      entityType: repository.entityType,
+      entityFamily: repository.entityFamily,
+      stateSchema: repository.stateSchema,
+      metadata: repository.metadata,
+      stateFullTypeName: repository.stateFullTypeName,
+      idField: repository.idField,
+      snapshot: repository.snapshot,
+      isRegistered: () => false,
+      registeredContextName: undefined,
+    } as unknown as RepositoryView;
+
+    expect(() =>
+      prepareRepository(structuralRepository, createInternalRegistration("Tasks")),
+    ).toThrow("Repository registration requires a Repository instance.");
   });
 
   it("does not expose repository query, routing, cache, delivery, or default factory APIs", () => {
@@ -636,6 +631,7 @@ describe("repository identity", () => {
       "storage",
       "recordStorage",
       "openStorage",
+      "registerWith",
     ];
 
     for (const member of forbiddenMembers) {
@@ -826,35 +822,11 @@ describe("repository identity", () => {
   });
 });
 
-interface StorageCreation {
-  readonly context: StorageContext;
-  readonly recordSpec: RecordSpec<unknown, Message>;
-}
-
-class CreationTrackingStorageFactory extends StorageFactory {
-  readonly creations: StorageCreation[] = [];
-
-  protected onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-  ): RecordStorage<I, R> {
-    this.creations.push({ context, recordSpec });
-    return new InMemoryRecordStorage(context, recordSpec);
-  }
-}
-
-function stateTypeName(creation: StorageCreation | undefined): string | undefined {
-  if (creation === undefined) {
-    return undefined;
-  }
-
-  const record = creation.recordSpec.materialize(
-    create(AggregateStateSchema, {
-      id: "task-1",
-      name: "Task",
-      archived: false,
-    }),
-  ).record;
-
-  return record.$typeName;
+function createInternalRegistration(name: string): BoundedContextRegistration {
+  return {
+    identity: {},
+    name: Object.freeze({ value: name }),
+    storageContext: Object.freeze({ name, multitenant: false }),
+    storageFactory: new InMemoryStorageFactory(),
+  };
 }

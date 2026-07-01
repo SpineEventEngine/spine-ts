@@ -10,10 +10,13 @@ import { CommandBus } from "../bus/command-bus.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import { EventBus } from "../bus/event-bus.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
-import type {
-  ConcreteRepositoryEntityType,
+import {
   Repository,
-  RepositoryEntityType,
+  isRepositoryInstance,
+  prepareRepository,
+  type ConcreteRepositoryEntityType,
+  type RepositoryView,
+  type RepositoryEntityType,
 } from "../repository/repository.js";
 
 /** Tenant isolation mode declared by a bounded context specification. */
@@ -57,10 +60,6 @@ export interface BoundedContextRegistration {
   readonly storageFactory: StorageFactory;
 }
 
-/** @internal Built-context registration data for repository lifecycle registration. */
-export const boundedContextRegistrations: WeakMap<BoundedContext, BoundedContextRegistration> =
-  new WeakMap<BoundedContext, BoundedContextRegistration>();
-
 /** Post-only command endpoint exposed by a built bounded context. */
 export interface CommandEndpoint {
   /** Posts a command into the context-owned command bus. */
@@ -100,7 +99,7 @@ let constructBoundedContext:
       commandBus: CommandBus,
       eventBus: EventBus,
       storageFactory: StorageFactory,
-      repositories: readonly RegisteredRepository[],
+      repositories: readonly RepositoryView[],
       token: FrameworkConstructionToken,
     ) => BoundedContext)
   | undefined;
@@ -117,7 +116,7 @@ export class BoundedContext {
   readonly #eventBus: EventBus;
   readonly #commandEndpoint: CommandEndpoint;
   readonly #eventEndpoint: EventEndpoint;
-  readonly #registeredRepositories = new Set<RegisteredRepository>();
+  readonly #registeredRepositories = new Set<RepositoryView>();
   readonly #storageFactory: StorageFactory;
 
   static {
@@ -138,7 +137,7 @@ export class BoundedContext {
     commandBus: CommandBus,
     eventBus: EventBus,
     storageFactory: StorageFactory,
-    repositories: readonly RegisteredRepository[],
+    repositories: readonly RepositoryView[],
     token: FrameworkConstructionToken,
   ) {
     requireFrameworkConstructionToken(token, "BoundedContext instances are framework-owned.");
@@ -152,14 +151,19 @@ export class BoundedContext {
     this.#eventEndpoint = Object.freeze({
       post: (event: Event) => this.#eventBus.post(event),
     });
-    boundedContextRegistrations.set(this, {
+    const registration: BoundedContextRegistration = {
       identity: this,
       name: cloneName(this.#snapshot.name),
       storageContext: createStorageContext(this.#snapshot.spec),
       storageFactory: this.#storageFactory,
-    });
-    for (const repository of repositories) {
-      this.#registerRepository(repository);
+    };
+    const preparedRepositories = repositories.map((repository) =>
+      prepareRepository(repository, registration),
+    );
+
+    for (const preparedRepository of preparedRepositories) {
+      preparedRepository.commit();
+      this.#registeredRepositories.add(preparedRepository.repository);
     }
     Object.freeze(this);
   }
@@ -210,13 +214,8 @@ export class BoundedContext {
   }
 
   /** Copy-safe list of repositories registered with this context. */
-  registeredRepositories(): readonly RegisteredRepository[] {
+  registeredRepositories(): readonly RepositoryView[] {
     return [...this.#registeredRepositories];
-  }
-
-  #registerRepository(repository: RegisteredRepository): void {
-    repository.registerWith(this);
-    this.#registeredRepositories.add(repository);
   }
 }
 
@@ -225,7 +224,7 @@ export class BoundedContextBuilder {
   readonly #specSnapshot: ContextSpecSnapshot;
   readonly #commandDispatchers = new Set<CommandDispatcher>();
   readonly #eventDispatchers = new Set<EventDispatcher>();
-  readonly #repositories = new Set<RegisteredRepository>();
+  readonly #repositories = new Set<RepositoryView>();
   #storageFactory: StorageFactory | undefined;
 
   static {
@@ -267,6 +266,7 @@ export class BoundedContextBuilder {
   add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
     repository: Repository<EntityType>,
   ): this {
+    requireRepositoryInstance(repository, "BoundedContextBuilder.add(repository)");
     this.#repositories.add(repository);
     return this;
   }
@@ -275,6 +275,7 @@ export class BoundedContextBuilder {
   remove<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
     repository: Repository<EntityType>,
   ): this {
+    requireRepositoryInstance(repository, "BoundedContextBuilder.remove(repository)");
     this.#repositories.delete(repository);
     return this;
   }
@@ -311,14 +312,20 @@ export class BoundedContextBuilder {
 
   /** Builds a bounded context that owns configured command and event buses. */
   build(): BoundedContext {
+    const repositories = [...this.#repositories];
+    preflightRepositories(repositories);
     const storageFactory = this.#storageFactory ?? new InMemoryStorageFactory();
     const commandBus = new CommandBus([...this.#commandDispatchers]);
     const eventStore = this.createEventStore(storageFactory);
     const eventBus = new EventBus(eventStore, [...this.#eventDispatchers]);
 
-    return createBoundedContext(this.#specSnapshot, commandBus, eventBus, storageFactory, [
-      ...this.#repositories,
-    ]);
+    return createBoundedContext(
+      this.#specSnapshot,
+      commandBus,
+      eventBus,
+      storageFactory,
+      repositories,
+    );
   }
 
   private createEventStore(storageFactory: StorageFactory): EventStore {
@@ -394,7 +401,7 @@ function createBoundedContext(
   commandBus: CommandBus,
   eventBus: EventBus,
   storageFactory: StorageFactory,
-  repositories: readonly RegisteredRepository[],
+  repositories: readonly RepositoryView[],
 ): BoundedContext {
   if (constructBoundedContext === undefined) {
     throw new TypeError("BoundedContext factory is unavailable.");
@@ -460,6 +467,37 @@ function toTenantMode(multitenant: boolean): TenantMode {
   return multitenant ? "multitenant" : "single-tenant";
 }
 
-interface RegisteredRepository {
-  registerWith(context: BoundedContext): void;
+function requireRepositoryInstance(repository: unknown, operation: string): void {
+  if (!isRepositoryInstance(repository)) {
+    throw new TypeError(`${operation} requires a Repository instance.`);
+  }
+}
+
+function preflightRepositories(repositories: readonly RepositoryView[]): void {
+  const entityTypes = new Set<RepositoryEntityType>();
+  const stateTypeNames = new Set<string>();
+
+  for (const repository of repositories) {
+    requireRepositoryInstance(repository, "BoundedContextBuilder.add(repository)");
+    if (repository.isRegistered()) {
+      throw new Error(
+        `Repository for "${repository.stateFullTypeName}" is already registered with Bounded Context ` +
+          `"${repository.registeredContextName?.value ?? "(unknown)"}".`,
+      );
+    }
+
+    if (entityTypes.has(repository.entityType)) {
+      throw new Error(
+        `Repository entity type "${repository.entityType.name}" is already registered.`,
+      );
+    }
+    entityTypes.add(repository.entityType);
+
+    if (stateTypeNames.has(repository.stateFullTypeName)) {
+      throw new Error(
+        `Repository state type "${repository.stateFullTypeName}" is already registered.`,
+      );
+    }
+    stateTypeNames.add(repository.stateFullTypeName);
+  }
 }

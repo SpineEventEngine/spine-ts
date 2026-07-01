@@ -111,8 +111,8 @@ the to-do application remain later slices.
 - A smoke-tested public assembly path that combines a built bounded context,
   handler metadata registry, command/event
   readiness views, and `createServerRuntimeRoutingPlan()` without exposing a
-  server facade, services, repository runtime registration, handler invocation,
-  worker lifecycle registration, or transport endpoint execution.
+  server facade, services, handler invocation, worker lifecycle registration,
+  or transport endpoint execution.
 - Adapter-agnostic transport contracts in `@spine-ts/transport` for immutable
   signal topics, logical subscriptions, publish/request operations, and async
   close behavior.
@@ -138,9 +138,9 @@ the to-do application remain later slices.
   registries. The server metadata APIs preserve entity tags and explicit
   handler declarations now, but no runtime registry consumes them yet.
 - gRPC service implementations.
-- Runtime repository registration, default repository construction from entity
-  classes, handler invocation, entity runtime dispatch, system context
-  construction, import buses, query/subscription stands, tenant index
+- Default repository construction from entity classes, handler invocation,
+  entity runtime dispatch, system context construction, import buses,
+  query/subscription stands, tenant index
   persistence, ZeroMQ endpoint topology, broker process supervision, retry
   workers, durable delivery storage, transport-backed service execution,
   durable production storage, and to-do domain runtime behavior.
@@ -368,8 +368,8 @@ buses, or lifecycle events.
 
 ## Repository Identity
 
-Use `Repository` when code needs to record entity ownership metadata and attach
-that repository to one built bounded context:
+Use `Repository` when code needs to record entity ownership metadata and let a
+bounded context attach that repository during build:
 
 ```ts
 import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
@@ -402,10 +402,12 @@ entity family is trusted as entity metadata, not rejected as an adversarial
 sandbox escape. Mismatches, such as an aggregate constructor paired with a
 projection state schema, throw `RepositoryIdentityError` with stable
 code/message diagnostics. `snapshot` returns a frozen fresh copy suitable for
-bounded-context duplicate and conflict checks. Registration with the same built
-context is idempotent. Registration with a different built context is rejected.
-Registration opens a `RecordStorage` for the repository state schema using the
-context `StorageFactory`.
+bounded-context duplicate and conflict checks. Repeated `add(repository)` calls
+for one builder are idempotent. Registering the same repository instance with
+another built context is rejected, as are duplicate entity or state identities
+in one context build. Registration opens a `RecordStorage` for the repository
+state schema using the context `StorageFactory`, and direct repository
+registration is not public API.
 
 This slice still does not create, find, or store entities; convert entity
 records; route or dispatch messages through repositories; write inboxes; invoke
@@ -441,8 +443,10 @@ through that event store before dispatcher fan-out.
 `add(repository)` and `remove(repository)` maintain the builder's repository
 registration list. `build()` registers the listed repositories with the built
 context and opens their state record storage through the context
-`StorageFactory`. Repeated add/register of the same repository in the same
-context is idempotent, and `registeredRepositories()` returns a copy-safe list.
+`StorageFactory`. Repeated `add(repository)` calls for the same instance are
+idempotent, duplicate entity or state identities are rejected before storage is
+opened for repositories, and `registeredRepositories()` returns a copy-safe
+`RepositoryView` list.
 This slice still does not create default repositories, register type suppliers
 with a stand, route repository messages, invoke handlers, write inboxes, emit
 lifecycle events, or start transport.

@@ -28,11 +28,13 @@ import {
   BoundedContext,
   BoundedContextBuilder,
   BoundedContextNameError,
+  Projection,
   Repository,
   type CommandEndpoint,
   type CommandDispatcher,
   type EventEndpoint,
   type EventDispatcher,
+  type RepositoryView,
 } from "../../src/index.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
@@ -78,6 +80,8 @@ const AggregateStateSchema = messageDesc(
 ) as GenMessage<AggregateState>;
 
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
+class DuplicateTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
+class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {}
 
 describe("BoundedContext assembly", () => {
   it("rejects empty or blank context names", () => {
@@ -194,6 +198,7 @@ describe("BoundedContext assembly", () => {
     const firstRepositories = context.registeredRepositories();
     const secondRepositories = context.registeredRepositories();
 
+    expectTypeOf(firstRepositories).toEqualTypeOf<readonly RepositoryView[]>();
     expect(repository.isRegistered()).toBe(true);
     expect(repository.registeredContextName?.value).toBe("Tasks");
     expect(firstRepositories).toEqual([repository]);
@@ -243,6 +248,87 @@ describe("BoundedContext assembly", () => {
       "already registered with Bounded Context",
     );
     expect(repository.registeredContextName?.value).toBe("Tasks");
+  });
+
+  it("rejects duplicate repository entity or state identities when building", () => {
+    const firstTaskRepository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const secondTaskRepository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const duplicateStateRepository = new Repository({
+      entityType: DuplicateTaskAggregate,
+      schema: AggregateStateSchema,
+    });
+
+    expect(() =>
+      BoundedContext.singleTenant("Tasks")
+        .add(firstTaskRepository)
+        .add(secondTaskRepository)
+        .build(),
+    ).toThrow(`Repository entity type "TaskAggregate" is already registered.`);
+    expect(firstTaskRepository.isRegistered()).toBe(false);
+    expect(secondTaskRepository.isRegistered()).toBe(false);
+
+    expect(() =>
+      BoundedContext.singleTenant("Tasks")
+        .add(firstTaskRepository)
+        .add(duplicateStateRepository)
+        .build(),
+    ).toThrow(`Repository state type "${AggregateStateSchema.typeName}" is already registered.`);
+    expect(firstTaskRepository.isRegistered()).toBe(false);
+    expect(duplicateStateRepository.isRegistered()).toBe(false);
+  });
+
+  it("rejects structural repository lookalikes before registration", () => {
+    const repository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const structuralRepository = {
+      entityType: repository.entityType,
+      entityFamily: repository.entityFamily,
+      stateSchema: repository.stateSchema,
+      metadata: repository.metadata,
+      stateFullTypeName: repository.stateFullTypeName,
+      idField: repository.idField,
+      snapshot: repository.snapshot,
+      isRegistered: () => false,
+      registeredContextName: undefined,
+    } as unknown as Repository<typeof TaskAggregate>;
+
+    expect(() => BoundedContext.singleTenant("Tasks").add(structuralRepository)).toThrow(
+      "BoundedContextBuilder.add(repository) requires a Repository instance.",
+    );
+    expect(repository.isRegistered()).toBe(false);
+  });
+
+  it("does not strand earlier repositories when later storage opening fails", () => {
+    const storageFactory = new FailingStorageFactory(3, ProjectionStateSchema.typeName);
+    const aggregateRepository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const projectionRepository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+
+    expect(() =>
+      BoundedContext.singleTenant("Tasks")
+        .withStorageFactory(storageFactory)
+        .add(aggregateRepository)
+        .add(projectionRepository)
+        .build(),
+    ).toThrow(`Cannot open storage for "${ProjectionStateSchema.typeName}".`);
+
+    expect(aggregateRepository.isRegistered()).toBe(false);
+    expect(projectionRepository.isRegistered()).toBe(false);
+    expect(storageFactory.creations).toHaveLength(2);
+    expect(stateTypeName(storageFactory.creations[1])).toBe(AggregateStateSchema.typeName);
   });
 
   it("keeps add and remove chainable while maintaining the registration list", () => {
@@ -298,6 +384,28 @@ class ObservingStorageFactory extends StorageFactory {
   ): RecordStorage<I, R> {
     this.creations.push({ context, recordSpec });
     return new ObservingRecordStorage(context, recordSpec, this.observed);
+  }
+}
+
+class FailingStorageFactory extends ObservingStorageFactory {
+  #attempts = 0;
+
+  constructor(
+    private readonly failedAttempt: number,
+    private readonly failedTypeName: string,
+  ) {
+    super([]);
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    this.#attempts += 1;
+    if (this.#attempts === this.failedAttempt) {
+      throw new Error(`Cannot open storage for "${this.failedTypeName}".`);
+    }
+    return super.onCreateRecordStorage(context, recordSpec);
   }
 }
 

@@ -221,6 +221,7 @@ const expectedServerExports = [
   "RepositoryIdentitySnapshot",
   "RepositoryOptions",
   "RepositoryStateSchema",
+  "RepositoryView",
   "ServerRuntimeLifecycle",
   "ServerRuntimeRoutingPlan",
   "ServerRuntimeRoutingPlanInput",

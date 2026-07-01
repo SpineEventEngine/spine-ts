@@ -242,8 +242,8 @@ repository hooks, dispatch APIs, command posting, query clients, aggregate event
 history, snapshots, process workflow execution, idempotency guards, lifecycle
 events, handler invocation, or async-local/global transaction state.
 
-`Repository` is now the metadata-only entity ownership seam for later
-bounded-context registration. It accepts one entity constructor and one
+`Repository` is now the entity ownership and context-owned registration seam.
+It accepts one entity constructor and one
 descriptor-backed state schema, infers the family from a declared ES class
 constructor whose constructor and instance prototype chains reach `Aggregate`,
 `Projection`, or `ProcessManager`, and verifies that the state schema's
@@ -254,13 +254,16 @@ names. This is a metadata boundary, not a sandbox boundary: same-realm code that
 explicitly reparents an ES class onto an entity family is trusted as an entity
 constructor. The snapshot surface records only immutable identity facts:
 constructor identity, family, state schema, descriptor metadata, state full type
-name, and ID-field metadata.
+name, and ID-field metadata. `BoundedContextBuilder.build()` owns repository
+registration, rejects duplicate entity or state identities, opens state record
+storage through the context `StorageFactory`, and exposes registered
+repositories as `RepositoryView` values. Direct repository registration is not
+public API.
 This follows the JVM `Repository` identity surface (`entityClass()`,
-`idClass()`, and `entityStateType()`) without implementing its lifecycle or
-runtime methods. The TypeScript seam deliberately omits `create`, `find`,
-`store`, storage adapters, record conversion, bounded-context registration,
-stand registration, routing, inboxes, caches, lifecycle monitors, catch-up,
-handler invocation, buses, and transport.
+`idClass()`, and `entityStateType()`) plus the first context-owned lifecycle
+step. The TypeScript seam deliberately omits `create`, `find`, `store`, record
+conversion, stand registration, routing, inboxes, caches, lifecycle monitors,
+catch-up, handler invocation, buses, and transport.
 
 `EntityTransaction` is the first server-owned draft/result commit boundary over
 one entity state. It buffers a draft state, explicit previous/draft version
@@ -310,13 +313,13 @@ surface:
   `removeEventDispatcher()` collect dispatchers for the context being built;
 - `BoundedContextBuilder.withStorageFactory(factory)` selects the
   `StorageFactory` used to create the context `EventStore`;
-- `BoundedContextBuilder.add(repository)` and `remove(repository)` are
-  chainable pending no-ops for a later runtime-registration task;
+- `BoundedContextBuilder.add(repository)` and `remove(repository)` maintain the
+  context-owned repository registration list;
 - `BoundedContextBuilder.build()` is the only supported path for constructing a
   built `BoundedContext`; and
 - built contexts expose name, tenant mode, spec, a copy-safe small snapshot,
-  and post-only `commandBus()` / `eventBus()` endpoints backed by internally
-  owned buses.
+  copy-safe registered repository views, and post-only `commandBus()` /
+  `eventBus()` endpoints backed by internally owned buses.
 
 This keeps the TypeScript API JVM-familiar without pretending that later
 runtime collaborators already exist. Application code does not subclass
@@ -326,9 +329,9 @@ name validation or the builder-only build path by passing ad hoc objects.
 
 The following runtime pieces are still deferred to later explicit tasks:
 
-- runtime repository registration, default repository construction from entity
-  classes, storage opening, visibility/type-supplier registration, and
-  lifecycle callbacks over the repository identity seam;
+- default repository construction from entity classes,
+  visibility/type-supplier registration, and lifecycle callbacks over the
+  repository identity seam;
 - handler invocation and integrated command/event routing;
 - inbox, delivery, storage, and tenant-index persistence;
 - stand/query/subscription execution;
