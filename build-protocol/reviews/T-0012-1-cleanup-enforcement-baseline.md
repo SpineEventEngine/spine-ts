@@ -6,7 +6,9 @@ Branch: `task/T-0012-1-cleanup-enforcement-baseline`
 Baseline commit: `a65ac4d`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-1-cleanup-enforcement-baseline`
-Status: Implementation verified; commit pending.
+Status: Implementation verified; review pending.
+Reviewed commit/diff basis: `147d496..8349abc`
+Review package: `.superpowers/sdd/review-147d496..8349abc.diff`
 
 ## Required Review Lanes
 
@@ -33,3 +35,13 @@ ignored `packages/proto/generated`; package tests moved under
 allows explicitly listed inherited pre-reset long semantic names so this
 enforcement task does not redesign runtime APIs outside scope, but it rejects
 new long semantic names.
+
+## Round 1 Review
+
+Reviewer lanes:
+
+- Code style/maintainability: pending.
+- Documentation: pending.
+- TypeScript/API docs: pending.
+- Security: pending.
+- Performance/reliability: pending.
