@@ -76,6 +76,9 @@ importers:
       '@spine-ts/proto':
         specifier: workspace:*
         version: link:../proto
+      '@spine-ts/storage':
+        specifier: workspace:*
+        version: link:../storage
       '@spine-ts/transport':
         specifier: workspace:*
         version: link:../transport

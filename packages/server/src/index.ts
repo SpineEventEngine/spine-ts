@@ -12,6 +12,11 @@ export {
   type TenantMode,
 } from "./context/bounded-context.js";
 
+export { CommandBus } from "./bus/command-bus.js";
+export type { CommandDispatcher } from "./bus/command-dispatcher.js";
+export { EventBus } from "./bus/event-bus.js";
+export type { EventDispatcher } from "./bus/event-dispatcher.js";
+
 export {
   Aggregate,
   Entity,

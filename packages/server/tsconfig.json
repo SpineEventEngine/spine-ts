@@ -8,5 +8,10 @@
   },
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts"],
-  "references": [{ "path": "../core" }, { "path": "../proto" }, { "path": "../transport" }]
+  "references": [
+    { "path": "../core" },
+    { "path": "../proto" },
+    { "path": "../storage" },
+    { "path": "../transport" }
+  ]
 }

@@ -3,8 +3,9 @@
 Current status: early framework guide for the descriptor registry,
 single-message validation facade, core envelope construction helpers, the first
 server entity, handler, repository identity, and bounded-context metadata
-layers, the first server runtime routing seam, adapter-agnostic transport
-contracts, and the first storage contracts with an in-memory adapter.
+layers, the first command/event bus seam, the first server runtime routing
+seam, adapter-agnostic transport contracts, and the first storage contracts
+with an in-memory adapter.
 
 This guide covers the behavior and contracts available now: Spine proto
 descriptors are exposed through curated packages, `@spine-ts/core` can derive
@@ -27,7 +28,9 @@ dependency rather than a public runtime API. `@spine-ts/server` can derive an
 immutable `createServerRuntimeRoutingPlan()` from built context metadata plus
 command/event readiness, yielding transport topics, subscriptions, worker
 registrations, and explicit deferred seams without opening sockets or invoking
-handlers.
+handlers. The same package now also exposes a small executable `CommandBus` and
+`EventBus` over registered dispatcher objects, with event storage delegated to
+`EventStore` before event fan-out.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
 deterministic in-memory adapter for tests/development. Entity runtime dispatch,
 service hosting, transport endpoint execution, durable production storage, and
@@ -99,6 +102,10 @@ the to-do application remain later slices.
 - A first single-process server runtime lifecycle/queue kernel, typed
   write-side signal intake result values, and command/event
   registration-readiness metadata derived from handler metadata.
+- A first executable `CommandBus`/`EventBus` layer that accepts generated Spine
+  command/event envelopes, dispatches through registered dispatcher objects,
+  rejects duplicate command dispatcher registration by message type, and
+  appends events to `EventStore` before event fan-out.
 - A smoke-tested public assembly path that combines a built bounded context,
   repository identity metadata, handler metadata registry, command/event
   readiness views, and `createServerRuntimeRoutingPlan()` without exposing a
@@ -500,6 +507,28 @@ retry worker, durable delivery store, or handler invocation path. Accepted
 signal intake values still mean only accepted for later asynchronous work; they
 are not `Ack` messages and do not claim validation, storage, dispatch,
 delivery, or successful handling.
+
+When a caller already owns executable dispatchers, the current server package
+also exposes the first small bus seam:
+
+```ts
+import { CommandBus, EventBus } from "@spine-ts/server";
+import { EventStore, InMemoryStorageFactory } from "@spine-ts/storage";
+
+const commandBus = new CommandBus([commandDispatcher]);
+await commandBus.post(commandEnvelope);
+
+const store = new EventStore({ name: "Tasks", multitenant: false }, new InMemoryStorageFactory());
+const eventBus = new EventBus(store, [eventDispatcher]);
+await eventBus.post(eventEnvelope);
+```
+
+`CommandBus` is unicast by enclosed message type URL: one registered
+dispatcher handles a posted command. Registering a second dispatcher for the
+same command type is rejected. `EventBus` is multicast by enclosed message type
+URL: every registered dispatcher for the event type runs in registration order.
+Before the first event dispatcher runs, `EventBus` appends the accepted event
+to the injected `EventStore`.
 
 ## Transport Foundation
 

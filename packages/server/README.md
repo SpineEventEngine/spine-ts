@@ -1,8 +1,9 @@
 # @spine-ts/server
 
 Descriptor-derived server metadata for Spine entity schemas, explicit handler
-metadata, standard decorator metadata adapters, and the first runtime routing
-plan seam over `@spine-ts/transport` contracts.
+metadata, standard decorator metadata adapters, the first command/event bus
+seam, and the first runtime routing plan seam over `@spine-ts/transport`
+contracts.
 
 Current slice exposes:
 
@@ -48,6 +49,12 @@ Current slice exposes:
   `EventRegistrationReadiness.fromEntityHandlers()` for deterministic,
   metadata-only event type readiness over subscriber fan-out, reactor fan-out,
   and event applications already validated by `HandlerMetadataRegistry`.
+- `CommandBus` for async command posting to exactly one registered
+  `CommandDispatcher`, with duplicate dispatcher rejection by command message
+  type URL.
+- `EventBus` for async event posting through an injected `EventStore` to all
+  matching registered `EventDispatcher`s in deterministic registration order,
+  with append-before-dispatch.
 - `createServerRuntimeRoutingPlan({ context, commands, events })` for the
   smallest immutable server/runtime wiring seam from built bounded-context
   metadata plus command/event readiness to transport topics, subscriptions,
@@ -193,6 +200,25 @@ This surface is not an event bus, integration broker, import bus, event store,
 delivery mechanism, stand, subscription service, command-result subscription,
 dispatcher, router, validator, repository runtime registration hook, storage
 writer, transport adapter, handler invoker, or Spine `Ack` producer.
+
+`CommandBus` is the first executable write-side bus seam in this package. It
+accepts generated Spine `Command` envelopes, snapshots them at post time,
+queues accepted work on an internal single-process async runtime, and routes by
+the enclosed message type URL to exactly one registered `CommandDispatcher`.
+Dispatcher registration rejects duplicates for the same command message type
+URL. The bus invokes dispatcher objects only; it does not instantiate
+entities, invoke entity methods directly, validate tenants, map `Ack`, write
+storage, or own repository routing.
+
+`EventBus` is the matching executable multicast seam for generated Spine
+`Event` envelopes. It snapshots accepted events at post time, appends them to
+an injected `EventStore`, and then dispatches them in deterministic dispatcher
+registration order to every registered `EventDispatcher` that declares the
+event message schema. The `EventStore` remains storage-only: `EventBus` owns
+append-before-dispatch by delegating to it, while `EventStore` continues to
+avoid fan-out, retries, inbox, or delivery behavior on its own. The current
+TypeScript event-dispatch contract is message-type-based only; domestic/external
+filtering remains deferred until handler metadata exposes that distinction.
 
 `createServerRuntimeRoutingPlan()` is the first server-owned runtime-wiring seam
 over that metadata. It requires a built `BoundedContext` and accepts optional

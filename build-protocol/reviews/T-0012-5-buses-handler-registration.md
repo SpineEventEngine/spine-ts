@@ -1,6 +1,6 @@
 # Review Log: T-0012.5 CommandBus, EventBus, And Handler Registration
 
-Status: implementation selected
+Status: implementation complete; reviewer lanes pending
 Branch: `task/T-0012-5-buses-handler-registration`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-5-buses-handler-registration`
@@ -32,4 +32,12 @@ Reviewers must reject:
 
 ## Rounds
 
-No implementation review has run yet.
+- Author self-check completed:
+  - bus scope stayed within command/event posting plus dispatcher registration;
+  - no bounded-context runtime wiring, repository dispatch, delivery/inbox,
+    stand/query/subscription, gRPC, scheduler, import bus, or transport
+    behavior was added;
+  - docs/export expectations were updated alongside the code; and
+  - fresh targeted and repository-wide verification passed.
+
+Reviewer sub-agent rounds are still pending.
