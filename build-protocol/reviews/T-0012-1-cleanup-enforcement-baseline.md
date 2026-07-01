@@ -40,8 +40,28 @@ new long semantic names.
 
 Reviewer lanes:
 
-- Code style/maintainability: pending.
-- Documentation: pending.
-- TypeScript/API docs: pending.
-- Security: pending.
-- Performance/reliability: pending.
+- Code style/maintainability: comments remain. Important findings: inherited
+  long-name exceptions are name-only and allow new debt; callback parameter
+  detection misses inline function callbacks such as `done: () => void`; the
+  checker does not enforce the flat `src` growth guardrail. Minor finding:
+  line-length enforcement excludes package tests.
+- Documentation: comments remain. Important findings: public docs do not
+  explain `packages/*/test` or cleanup checks through `pnpm lint`/`pnpm
+verify`; older decision history still says generated output lives under
+  `packages/proto/src/generated`. Minor findings: stale review-log pointer and
+  task/report/work-log statuses.
+- TypeScript/API docs: comments remain. Important finding:
+  `@spine-ts/proto/generated/*` supports extensionless generated imports but
+  not natural `.js` ESM subpath imports after build.
+- Security: comments remain. Important finding: generated cleanliness does not
+  prove ignored output is freshly regenerated and does not reject symlinked
+  generated directories.
+- Performance/reliability: comments remain. Critical finding: `pnpm verify`
+  typechecks before generating ignored Protobuf-ES output, so a fresh clone can
+  fail before generation. Important finding: generated cleanliness allows stale
+  or orphaned ignored files. Minor finding: line-length enforcement excludes
+  package tests.
+
+All Round 1 reviewer agents are closed. Author follow-up must address the
+Critical/Important findings before re-review; the line-length test coverage
+minor should be fixed in the same batch if it stays small.
