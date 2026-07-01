@@ -296,6 +296,7 @@ const expectedServerExports = [
   "validateEntityStateTransition",
 ];
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
+const storageIndexPath = join("packages", "storage", "src", "index.ts");
 const serverIndexPath = join("packages", "server", "src", "index.ts");
 
 const typedocExecutable = process.platform === "win32" ? "typedoc.cmd" : "typedoc";
@@ -470,8 +471,12 @@ const forbiddenTypeDocNamePatterns = [
   /\bspineTs\w*\b/u,
 ];
 const declaredServerExports = collectNamedExports(serverIndexPath);
+const declaredStorageExports = collectNamedExports(storageIndexPath);
 const unexpectedServerExports = declaredServerExports.filter(
   (name) => !expectedServerExports.includes(name),
+);
+const unexpectedStorageExports = declaredStorageExports.filter(
+  (name) => !expectedStorageExports.includes(name),
 );
 
 if (missingExports.length > 0) {
@@ -505,6 +510,13 @@ if (unexpectedServerExports.length > 0) {
 if (missingStorageExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-ts/storage exports: ${missingStorageExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (unexpectedStorageExports.length > 0) {
+  console.error(
+    `@spine-ts/storage root exports changed without updating docs expectations: ${unexpectedStorageExports.join(", ")}`,
   );
   process.exit(1);
 }

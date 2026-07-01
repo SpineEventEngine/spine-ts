@@ -63,6 +63,26 @@ describe("EventStore", () => {
     expect(store.isOpen()).toBe(false);
     await expect(store.read()).rejects.toThrow(/closed/);
   });
+
+  it("rejects events without IDs and persists none from the batch", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = factory.createEventStore({
+      name: "Tasks",
+      multitenant: false,
+    });
+
+    await expect(
+      store.appendAll([
+        create(EventSchema, {
+          message: create(AnySchema, { typeUrl: "type.spine.io/tasks.TaskCreated" }),
+        }),
+        create(EventSchema, {
+          message: create(AnySchema, { typeUrl: "type.spine.io/tasks.TaskClosed" }),
+        }),
+      ]),
+    ).rejects.toThrow(/event\.id/);
+    await expect(store.read()).resolves.toEqual([]);
+  });
 });
 
 function createEvent(id: string, typeUrl: string, seconds: bigint) {

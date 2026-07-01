@@ -1,21 +1,14 @@
 import type { Message } from "@bufbuild/protobuf";
 
 import type { RecordFilter, RecordOrder, RecordQuery } from "../record/record-query.js";
-import type { RecordSpec } from "../record/record-spec.js";
-import { readPath, valueCompare, valueKey } from "../record/record-value.js";
-
-interface StoredRecord<I, R extends Message> {
-  readonly columns: ReadonlyMap<string, unknown>;
-  readonly id: I;
-  readonly record: R;
-}
+import type { RecordEntry, RecordSpec } from "../record/record-spec.js";
 
 /** Record slice owned by one tenant of an in-memory record storage. */
 export class TenantRecords<I, R extends Message> {
-  readonly #records = new Map<string, StoredRecord<I, R>>();
+  readonly #records = new Map<string, RecordEntry<I, R>>();
 
   delete(id: I): boolean {
-    return this.#records.delete(valueKey(id));
+    return this.#records.delete(StoredValues.key(id));
   }
 
   query(spec: RecordSpec<I, R>, query: RecordQuery<I>): readonly R[] {
@@ -26,35 +19,34 @@ export class TenantRecords<I, R extends Message> {
   }
 
   read(id: I): R | undefined {
-    return this.#records.get(valueKey(id))?.record;
+    return this.#records.get(StoredValues.key(id))?.record;
   }
 
-  write(spec: RecordSpec<I, R>, record: R): void {
-    const id = spec.idValueIn(record);
-    const key = valueKey(id);
+  write(record: RecordEntry<I, R>): void {
+    this.#records.set(StoredValues.key(record.id), record);
+  }
 
-    this.#records.set(key, {
-      id: spec.cloneId(id),
-      record,
-      columns: spec.valuesIn(record),
-    });
+  writeAll(records: readonly RecordEntry<I, R>[]): void {
+    for (const record of records) {
+      this.write(record);
+    }
   }
 }
 
 function applyLimit<I, R extends Message>(
-  records: readonly StoredRecord<I, R>[],
+  records: readonly RecordEntry<I, R>[],
   limit: number | undefined,
-): readonly StoredRecord<I, R>[] {
+): readonly RecordEntry<I, R>[] {
   return limit === undefined ? records : records.slice(0, limit);
 }
 
 function compareEntries<I, R extends Message>(
-  left: StoredRecord<I, R>,
-  right: StoredRecord<I, R>,
+  left: RecordEntry<I, R>,
+  right: RecordEntry<I, R>,
   orders: readonly RecordOrder[],
 ): number {
   for (const order of orders) {
-    const comparison = valueCompare(
+    const comparison = StoredValues.compare(
       resolveValue(left, order.field),
       resolveValue(right, order.field),
     );
@@ -64,19 +56,19 @@ function compareEntries<I, R extends Message>(
     }
   }
 
-  return 0;
+  return StoredValues.compare(left.id, right.id);
 }
 
 function matches<I, R extends Message>(
   spec: RecordSpec<I, R>,
-  entry: StoredRecord<I, R>,
+  entry: RecordEntry<I, R>,
   query: RecordQuery<I>,
 ): boolean {
   return matchesIds(spec, entry, query.ids) && matchesFilters(entry, query.filters);
 }
 
 function matchesFilters<I, R extends Message>(
-  entry: StoredRecord<I, R>,
+  entry: RecordEntry<I, R>,
   filters: readonly RecordFilter[] | undefined,
 ): boolean {
   if (filters === undefined || filters.length === 0) {
@@ -87,23 +79,23 @@ function matchesFilters<I, R extends Message>(
     const actual = resolveValue(entry, filter.column);
     const expected = Array.isArray(filter.value) ? filter.value : [filter.value];
 
-    return expected.some((value) => valueKey(actual) === valueKey(value));
+    return expected.some((value) => StoredValues.key(actual) === StoredValues.key(value));
   });
 }
 
 function matchesIds<I, R extends Message>(
   spec: RecordSpec<I, R>,
-  entry: StoredRecord<I, R>,
+  entry: RecordEntry<I, R>,
   ids: readonly I[] | undefined,
 ): boolean {
   if (ids === undefined || ids.length === 0) {
     return true;
   }
 
-  return ids.some((id) => valueKey(spec.cloneId(id)) === valueKey(entry.id));
+  return ids.some((id) => StoredValues.key(spec.cloneId(id)) === StoredValues.key(entry.id));
 }
 
-function resolveValue<I, R extends Message>(entry: StoredRecord<I, R>, field: string): unknown {
+function resolveValue<I, R extends Message>(entry: RecordEntry<I, R>, field: string): unknown {
   if (field === "id") {
     return entry.id;
   }
@@ -112,5 +104,57 @@ function resolveValue<I, R extends Message>(entry: StoredRecord<I, R>, field: st
     return entry.columns.get(field);
   }
 
-  return readPath(entry.record, field);
+  return StoredValues.readPath(entry.record, field);
+}
+
+const StoredValues = Object.freeze({
+  key(value: unknown): string {
+    return JSON.stringify(normalizeValue(value));
+  },
+
+  compare(left: unknown, right: unknown): number {
+    const leftKey = this.key(left);
+    const rightKey = this.key(right);
+
+    return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0;
+  },
+
+  readPath(value: unknown, path: string): unknown {
+    let current = value;
+
+    for (const segment of path.split(".").filter((part) => part.length > 0)) {
+      if (typeof current !== "object" || current === null) {
+        return undefined;
+      }
+
+      current = Reflect.get(current, segment);
+    }
+
+    return current;
+  },
+});
+
+function normalizeValue(value: unknown): unknown {
+  if (typeof value === "bigint") {
+    return { bigint: value.toString() };
+  }
+
+  if (value instanceof Uint8Array) {
+    return { bytes: [...value] };
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeValue(entry));
+  }
+
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+
+  return Object.keys(value)
+    .sort()
+    .reduce<Record<string, unknown>>((result, key) => {
+      result[key] = normalizeValue(Reflect.get(value, key));
+      return result;
+    }, {});
 }

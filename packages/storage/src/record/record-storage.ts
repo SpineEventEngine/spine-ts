@@ -1,9 +1,9 @@
 import type { Message } from "@bufbuild/protobuf";
 
-import { applyMask } from "./record-mask.js";
-import type { RecordQuery, RecordReadOptions } from "./record-query.js";
-import { validateQuery } from "./record-query.js";
-import type { RecordSpec } from "./record-spec.js";
+import { RecordMask } from "./record-mask.js";
+import { RecordQuery } from "./record-query.js";
+import type { RecordReadOptions } from "./record-query.js";
+import type { RecordEntry, RecordSpec } from "./record-spec.js";
 import type { Storage, StorageContext } from "../storage/storage.js";
 import { StorageObject } from "../storage/storage-object.js";
 
@@ -41,7 +41,7 @@ export abstract class RecordStorage<I, R extends Message> extends StorageObject 
 
     return record === undefined
       ? undefined
-      : applyMask(this.#recordSpec.cloneRecord(record), options.mask);
+      : RecordMask.apply(this.#recordSpec.cloneRecord(record), options.mask);
   }
 
   /** Read matching record identifiers in deterministic query order. */
@@ -53,28 +53,30 @@ export abstract class RecordStorage<I, R extends Message> extends StorageObject 
   /** Query records by IDs, columns, sorting, limits, and optional masks. */
   async query(query: RecordQuery<I> = {}): Promise<readonly R[]> {
     this.requireOpen("RecordStorage");
-    validateQuery(query);
+    RecordQuery.validate(query);
     const records = await this.queryRecords(query);
 
-    return records.map((record) => applyMask(this.#recordSpec.cloneRecord(record), query.mask));
+    return records.map((record) =>
+      RecordMask.apply(this.#recordSpec.cloneRecord(record), query.mask),
+    );
   }
 
   /** Write one record, replacing any previous value with the same ID. */
   async write(record: R): Promise<void> {
     this.requireOpen("RecordStorage");
-    await this.writeRecord(this.#recordSpec.cloneRecord(record));
+    await this.writeRecord(this.#recordSpec.materialize(record));
   }
 
-  /** Write records in order, failing before persistence if any clone step fails. */
+  /** Write records in order, failing before persistence if any materialization step fails. */
   async writeAll(records: Iterable<R>): Promise<void> {
     this.requireOpen("RecordStorage");
-    const clonedRecords = [...records].map((record) => this.#recordSpec.cloneRecord(record));
-    await this.writeAllRecords(clonedRecords);
+    const materializedRecords = [...records].map((record) => this.#recordSpec.materialize(record));
+    await this.writeAllRecords(materializedRecords);
   }
 
   protected abstract deleteRecord(id: I): Promise<boolean>;
   protected abstract queryRecords(query: RecordQuery<I>): Promise<readonly R[]>;
   protected abstract readRecord(id: I): Promise<R | undefined>;
-  protected abstract writeAllRecords(records: readonly R[]): Promise<void>;
-  protected abstract writeRecord(record: R): Promise<void>;
+  protected abstract writeAllRecords(records: readonly RecordEntry<I, R>[]): Promise<void>;
+  protected abstract writeRecord(record: RecordEntry<I, R>): Promise<void>;
 }

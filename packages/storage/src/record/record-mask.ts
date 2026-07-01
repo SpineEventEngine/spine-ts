@@ -1,25 +1,31 @@
-import { readPath } from "./record-value.js";
+export type RecordMask = readonly string[];
 
 interface MaskNode {
   readonly children: Map<string, MaskNode>;
 }
 
-/** Apply a simple field mask to a cloned record. */
-export function applyMask<R>(record: R, mask: readonly string[] | undefined): R {
-  if (mask === undefined || mask.length === 0) {
-    return record;
-  }
+export const RecordMask: Readonly<RecordMaskApi> = Object.freeze({
+  /** Apply a simple field mask to a cloned record. */
+  apply<R>(record: R, mask: RecordMask | undefined): R {
+    if (mask === undefined || mask.length === 0) {
+      return record;
+    }
 
-  const root = createMaskTree(mask);
-  prune(record, root);
-  return record;
+    const root = createMaskTree(mask);
+    prune(record, root);
+    return record;
+  },
+});
+
+interface RecordMaskApi {
+  apply<R>(record: R, mask: RecordMask | undefined): R;
 }
 
-function createMaskTree(mask: readonly string[]): MaskNode {
+function createMaskTree(mask: RecordMask): MaskNode {
   const root = createNode();
 
   for (const path of mask) {
-    if (readPath({ value: path }, "value") === undefined) {
+    if (path.trim().length === 0) {
       continue;
     }
 

@@ -17,6 +17,12 @@ history, snapshot, and broad adapter concepts from `@spine-ts/storage`. Source
 and tests now live under semantic folders, and the package root `src/index.ts`
 only re-exports public API.
 
+Round 1 review follow-up tightened the slice further: record helper behavior is
+grouped under semantic owners instead of exported standalone helpers, batch
+writes materialize all records before mutation, query ties break by record ID,
+`EventStore` rejects missing `event.id` values, and storage docs now state
+explicitly that `EventStore` is storage-only for now.
+
 ## JVM Alignment
 
 The selected design follows the JVM storage seam:
@@ -54,6 +60,23 @@ Implementation:
   comparison. Existing warning only: local `origin` remote is invalid for
   source links.
 
+Round 1 fix follow-up:
+
+- Focused regressions:
+  `corepack pnpm vitest run packages/storage/test/index.test.ts packages/storage/test/storage/storage-factory.test.ts packages/storage/test/memory/in-memory-record-storage.test.ts packages/storage/test/event/event-store.test.ts`
+  passed with 4 files and 14 tests, covering missing `event.id`, atomic failed
+  batches, stable tied ordering, and the moved storage-factory seam test.
+- Build check:
+  `corepack pnpm exec tsc -b packages/proto packages/storage`
+  passed after the `RecordSpec.idSchema` generic tightening and helper
+  refactor.
+- Full verify:
+  escalated `env CI=true corepack pnpm verify` passed with 31 files / 290
+  tests, coverage statements 95.48%, branches 90.03%, functions 98.06%, lines
+  95.54%, TypeDoc/API checks, proto lint/generate, and generated-clean
+  comparison. Existing warning only: the local `origin` remote is invalid for
+  TypeDoc source links.
+
 ## Changed Files
 
 - `packages/storage/package.json`
@@ -63,24 +86,22 @@ Implementation:
 - `packages/storage/src/memory/in-memory-record-storage.ts`
 - `packages/storage/src/memory/in-memory-storage-factory.ts`
 - `packages/storage/src/memory/tenant-records.ts`
-- `packages/storage/src/record/record-clone.ts`
 - `packages/storage/src/record/record-column.ts`
 - `packages/storage/src/record/record-mask.ts`
 - `packages/storage/src/record/record-query.ts`
 - `packages/storage/src/record/record-spec.ts`
 - `packages/storage/src/record/record-storage.ts`
-- `packages/storage/src/record/record-value.ts`
 - `packages/storage/src/storage/storage-factory.ts`
 - `packages/storage/src/storage/storage-object.ts`
 - `packages/storage/src/storage/storage.ts`
 - `packages/storage/test/index.test.ts`
 - `packages/storage/test/event/event-store.test.ts`
-- `packages/storage/test/factory/storage-factory.test.ts`
 - `packages/storage/test/memory/in-memory-record-storage.test.ts`
+- `packages/storage/test/storage/storage-factory.test.ts`
 - `build-protocol/RUNTIME_ARCHITECTURE.md`
 - `build-protocol/DEVELOPER_API.md`
+- `build-protocol/tasks/T-0012-4-storage-factory-record-storage/TASK.md`
 - `build-protocol/reviews/T-0012-4-storage-factory-record-storage.md`
 - `build-protocol/tasks/T-0012-4-storage-factory-record-storage/IMPLEMENTATION_REPORT.md`
 - `build-protocol/work-logs/T-0012-4.md`
 - `scripts/check-api-docs.mjs`
-- `pnpm-lock.yaml`

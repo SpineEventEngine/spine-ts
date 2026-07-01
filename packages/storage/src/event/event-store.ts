@@ -1,4 +1,3 @@
-import { create } from "@bufbuild/protobuf";
 import type { Event, EventId } from "@spine-ts/proto";
 import { EventIdSchema, EventSchema } from "@spine-ts/proto";
 
@@ -50,7 +49,13 @@ export class EventStore {
 const eventSpec = new RecordSpec<EventId, Event>({
   schema: EventSchema,
   idSchema: EventIdSchema,
-  extractId: (event) => event.id ?? create(EventIdSchema),
+  extractId: (event) => {
+    if (event.id === undefined) {
+      throw new Error("EventStore requires event.id.");
+    }
+
+    return event.id;
+  },
   columns: [
     new RecordColumn("timestamp", (event) => event.context?.timestamp?.seconds ?? 0n),
     new RecordColumn("typeUrl", (event) => event.message?.typeUrl),

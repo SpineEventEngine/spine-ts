@@ -1,28 +1,3 @@
-/** Simple field-mask paths applied to cloned records on read/query. */
-export type RecordMask = readonly string[];
-
-/** Equality filter against one stored column or the `id` field. */
-export interface RecordFilter {
-  /** Stored column name or `id`. */
-  readonly column: string;
-  /** One accepted value or a small accepted set. */
-  readonly value: unknown;
-}
-
-/** Query sort order against one stored column, `id`, or a dotted record path. */
-export interface RecordOrder {
-  /** Stored column name, `id`, or a dotted record path. */
-  readonly field: string;
-  /** Sort direction, ascending by default. */
-  readonly direction?: "asc" | "desc";
-}
-
-/** Read-time options for one record fetch. */
-export interface RecordReadOptions {
-  /** Optional simple mask applied to the cloned result. */
-  readonly mask?: RecordMask;
-}
-
 /** Deterministic record query by IDs, columns, sorting, limits, and masks. */
 export interface RecordQuery<I> extends RecordReadOptions {
   /** Exact identifier filter. */
@@ -35,9 +10,37 @@ export interface RecordQuery<I> extends RecordReadOptions {
   readonly limit?: number;
 }
 
-/** Validate a record query before execution. */
-export function validateQuery<I>(query: RecordQuery<I>): void {
-  if (query.limit !== undefined && query.limit <= 0) {
-    throw new Error("Record query limit must be positive.");
-  }
+export const RecordQuery: Readonly<RecordQueryApi> = Object.freeze({
+  /** Validate a record query before execution. */
+  validate<I>(query: RecordQuery<I>): void {
+    if (query.limit !== undefined && query.limit <= 0) {
+      throw new Error("Record query limit must be positive.");
+    }
+  },
+});
+
+/** Read-time options for one record fetch. */
+export interface RecordReadOptions {
+  /** Optional simple mask applied to the cloned result. */
+  readonly mask?: import("./record-mask.js").RecordMask;
+}
+
+/** Query sort order against one stored column, `id`, or a dotted record path. */
+export interface RecordOrder {
+  /** Stored column name, `id`, or a dotted record path. */
+  readonly field: string;
+  /** Sort direction, ascending by default. */
+  readonly direction?: "asc" | "desc";
+}
+
+/** Equality filter against one stored column or the `id` field. */
+export interface RecordFilter {
+  /** Stored column name or `id`. */
+  readonly column: string;
+  /** One accepted value or a small accepted set. */
+  readonly value: unknown;
+}
+
+interface RecordQueryApi {
+  validate<I>(query: RecordQuery<I>): void;
 }

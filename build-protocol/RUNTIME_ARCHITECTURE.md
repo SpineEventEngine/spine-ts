@@ -157,6 +157,10 @@ The framework starts storage with one adapter seam:
 - `RecordStorage` for write/read/delete/query operations;
 - `EventStore` as a delegate over `RecordStorage<EventId, Event>`.
 
+For now `EventStore` is storage-only. It persists and queries `Event` records,
+but it does not dispatch those events to buses, subscribers, delivery workers,
+or retry infrastructure.
+
 Later repository, delivery, and read-side storage layers must delegate to this
 record-storage seam instead of widening the adapter interface prematurely.
 

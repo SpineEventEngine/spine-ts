@@ -12,6 +12,10 @@ The package owns the first corrected storage layer:
   adapter;
 - `EventStore` is a framework delegate over `RecordStorage<EventId, Event>`.
 
+`EventStore` is storage-only in this task. It persists and reads `Event`
+records, but it does not implement event-bus dispatch, delivery queues,
+subscriber fan-out, or retry behavior.
+
 The package stays independent of `@spine-ts/server`. Storage scoping uses a
 small structural `StorageContext` with `name`, `multitenant`, and optional
 `tenantId`.
@@ -41,7 +45,13 @@ const factory = new InMemoryStorageFactory();
 const spec = new RecordSpec({
   schema: EventSchema,
   idSchema: EventIdSchema,
-  extractId: (event) => event.id ?? create(EventIdSchema),
+  extractId: (event) => {
+    if (event.id === undefined) {
+      throw new Error("Expected event.id.");
+    }
+
+    return event.id;
+  },
   columns: [new RecordColumn("typeUrl", (event) => event.message?.typeUrl)],
 });
 const storage = factory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);

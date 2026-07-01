@@ -56,6 +56,30 @@ describe("InMemoryRecordStorage", () => {
     expect(records.map((record) => record.id?.value)).toEqual(["event-1", "event-2"]);
   });
 
+  it("keeps tied sort keys stable before applying the limit", async () => {
+    const first = createStorage();
+    const second = createStorage();
+    const records = [
+      createEvent("event-2", "type.spine.io/tasks.TaskClosed", 5n),
+      createEvent("event-1", "type.spine.io/tasks.TaskCreated", 5n),
+      createEvent("event-3", "type.spine.io/tasks.TaskClosed", 5n),
+    ];
+
+    await first.writeAll(records);
+    await second.writeAll([...records].reverse());
+
+    const query = {
+      sort: [{ field: "timestamp", direction: "desc" as const }],
+      limit: 2,
+    };
+
+    const firstIds = await first.index(query);
+    const secondIds = await second.index(query);
+
+    expect(firstIds.map((id) => id.value)).toEqual(["event-1", "event-2"]);
+    expect(secondIds.map((id) => id.value)).toEqual(["event-1", "event-2"]);
+  });
+
   it("keeps multitenant slices separate inside one storage", async () => {
     let currentTenantId = "tenant-a";
     const storage = createStorage({
@@ -90,6 +114,36 @@ describe("InMemoryRecordStorage", () => {
       /closed/,
     );
   });
+
+  it("does not persist earlier records when later materialization fails", async () => {
+    const storage = new InMemoryStorageFactory().createRecordStorage(
+      { name: "Tasks", multitenant: false },
+      new RecordSpec<EventId, Event>({
+        schema: EventSchema,
+        idSchema: EventIdSchema,
+        extractId: (event) => {
+          if (event.id?.value === "event-2") {
+            throw new Error("Second record rejected.");
+          }
+
+          if (event.id === undefined) {
+            throw new Error("Expected test event ID.");
+          }
+
+          return event.id;
+        },
+        columns: [new RecordColumn<Event>("typeUrl", (event) => event.message?.typeUrl)],
+      }),
+    );
+
+    await expect(
+      storage.writeAll([
+        createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n),
+        createEvent("event-2", "type.spine.io/tasks.TaskClosed", 2n),
+      ]),
+    ).rejects.toThrow(/Second record rejected/);
+    await expect(storage.query()).resolves.toEqual([]);
+  });
 });
 
 function createStorage(
@@ -105,7 +159,13 @@ function createSpec() {
   return new RecordSpec<EventId, Event>({
     schema: EventSchema,
     idSchema: EventIdSchema,
-    extractId: (event) => event.id ?? create(EventIdSchema),
+    extractId: (event) => {
+      if (event.id === undefined) {
+        throw new Error("Expected event.id.");
+      }
+
+      return event.id;
+    },
     columns: [
       new RecordColumn<Event>("typeUrl", (event) => event.message?.typeUrl),
       new RecordColumn<Event>("timestamp", (event) => event.context?.timestamp?.seconds ?? 0n),

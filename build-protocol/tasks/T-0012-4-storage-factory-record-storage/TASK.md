@@ -1,6 +1,6 @@
 # T-0012.4: Storage Factory And Record Storage Reset
 
-Status: implementation selected
+Status: implemented
 Start: `2026-07-01 20:20 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-4-storage-factory-record-storage`

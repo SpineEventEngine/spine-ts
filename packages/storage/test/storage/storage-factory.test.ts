@@ -42,7 +42,13 @@ function createEventSpec() {
   return new RecordSpec<EventId, Event>({
     schema: EventSchema,
     idSchema: EventIdSchema,
-    extractId: (event) => event.id ?? create(EventIdSchema),
+    extractId: (event) => {
+      if (event.id === undefined) {
+        throw new Error("Expected event.id.");
+      }
+
+      return event.id;
+    },
     columns: [new RecordColumn<Event>("typeUrl", (event) => event.message?.typeUrl)],
   });
 }
