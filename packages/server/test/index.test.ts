@@ -13,9 +13,13 @@ import {
 import * as serverRoot from "../src/index.js";
 import {
   BoundedContext,
+  CommandBus,
+  type CommandDispatcher,
   CommandRegistrationReadiness,
   type CommandRegistrationAssigneeMetadata,
   type CommandRegistrationReadinessLookup,
+  EventBus,
+  type EventDispatcher,
   EventRegistrationReadiness,
   type EventRegistrationApplicationMetadata,
   type EventRegistrationReadinessLookup,
@@ -180,6 +184,7 @@ describe("@spine-ts/server", () => {
         "BoundedContextBuilder",
         "BoundedContextNameError",
         "BoundedContextRepositoryRegistrationError",
+        "CommandBus",
         "CommandRegistrationReadiness",
         "EntityTransactionDraftStateError",
         "EntityTransaction",
@@ -187,6 +192,7 @@ describe("@spine-ts/server", () => {
         "ContextSpec",
         "DescriptorMetadataError",
         "Command",
+        "EventBus",
         "EventRegistrationReadiness",
         "HandlerMetadataError",
         "HandlerMetadataRegistry",
@@ -243,9 +249,23 @@ describe("@spine-ts/server", () => {
     expectTypeOf(failSignalIntake("event", "MALFORMED_ENVELOPE")).toExtend<SignalIntakeResult>();
     expect(acceptSignalIntake("command").acceptedFor).toBe("async-work");
     expect(failSignalIntake("event", "MALFORMED_ENVELOPE").failure.code).toBe("MALFORMED_ENVELOPE");
+    expect(new CommandBus()).toBeInstanceOf(CommandBus);
+    expect("dispatch" in new CommandBus()).toBe(false);
+    expectTypeOf<CommandBus>().not.toHaveProperty("dispatch");
+    expectTypeOf<CommandDispatcher>().toExtend<{
+      messageSchemas(): readonly object[];
+      dispatch(command: object): Promise<void>;
+    }>();
     expectTypeOf<CommandRegistrationReadiness>().toExtend<CommandRegistrationReadinessLookup>();
     expectTypeOf<CommandRegistrationAssigneeMetadata>().toExtend<{
       readonly commandFullTypeName: string;
+    }>();
+    expect(new EventBus({} as never)).toBeInstanceOf(EventBus);
+    expect("dispatch" in new EventBus({} as never)).toBe(false);
+    expectTypeOf<EventBus>().not.toHaveProperty("dispatch");
+    expectTypeOf<EventDispatcher>().toExtend<{
+      messageSchemas(): readonly object[];
+      dispatch(event: object): Promise<void>;
     }>();
     expectTypeOf<EventRegistrationReadiness>().toExtend<EventRegistrationReadinessLookup>();
     expectTypeOf<EventRegistrationSubscriberMetadata>().toExtend<{
@@ -332,14 +352,7 @@ describe("@spine-ts/server", () => {
       "system",
     ]);
 
-    for (const member of [
-      "Server",
-      "CommandBus",
-      "EventBus",
-      "ImportBus",
-      "GrpcServer",
-      "ZeroMqTransport",
-    ]) {
+    for (const member of ["Server", "ImportBus", "GrpcServer", "ZeroMqTransport"]) {
       expect(Object.hasOwn(serverRoot, member)).toBe(false);
     }
 

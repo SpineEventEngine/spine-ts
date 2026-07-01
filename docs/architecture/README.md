@@ -1,7 +1,7 @@
 # Architecture Notes
 
-Current status: early implementation notes through the first runtime routing and
-transport-foundation seams.
+Current status: early implementation notes through the first command/event bus,
+runtime-routing, and transport-foundation seams.
 
 Architecture documentation starts from the build protocol and specification documents under `build-protocol/`. This folder is reserved for implementation-era architecture notes that evolve with actual package boundaries and runtime behavior.
 
@@ -328,7 +328,7 @@ The following runtime pieces are still deferred to later explicit tasks:
 - runtime repository registration, default repository construction from entity
   classes, storage opening, visibility/type-supplier registration, and
   lifecycle callbacks over the repository identity seam;
-- handler invocation and executable command/event routing or dispatch;
+- handler invocation and integrated command/event routing;
 - inbox, delivery, storage, and tenant-index persistence;
 - stand/query/subscription execution;
 - system-context pairing and server/gRPC services; and
@@ -343,6 +343,8 @@ than a server graph. Its verified public composition is:
   explicit `Repository` identity registration;
 - derive command and event registration-readiness metadata from existing
   `HandlerMetadataRegistry` entries; and
+- post executable commands/events through the first small `CommandBus` and
+  `EventBus` seams when a caller already owns dispatchers and an `EventStore`;
 - optionally use `SingleProcessServerRuntime` directly where a caller needs the
   current lifecycle/queue kernel.
 
@@ -354,18 +356,19 @@ from the built context plus command and event readiness using
 This is intentionally enough for later runtime tasks to share vocabulary and
 tests around "context metadata plus lifecycle plus readiness." It is not an
 equivalent of Spine JVM `Server` or a running JVM-style `BoundedContext`.
-The readiness views do not dispatch or invoke handlers. The runtime-routing
-plan does not open transport endpoints, expose ZeroMQ details, or start
-workers; it only turns existing metadata into transport-owned topics,
-subscriptions, planner-local worker IDs, explicit deferred seams, and sanitized route
-descriptors. Those route descriptors expose message type names/type URLs plus
-stable receiver-group and local route/worker identities, along with transport
-correlation keys back to topic/subscription arrays and planner-local worker IDs;
-they do not retain entity names, handler names, raw readiness metadata, or
-duplicate full transport contracts on each route. The package root does not
-export service, transport, bus, storage, delivery, stand,
-integration-broker, repository runtime-registration, validation, or `Ack`
-abstractions as part of this closure.
+The readiness views remain metadata-only and do not dispatch or invoke
+handlers. The runtime-routing plan does not open transport endpoints, expose
+ZeroMQ details, or start workers; it only turns existing metadata into
+transport-owned topics, subscriptions, planner-local worker IDs, explicit
+deferred seams, and sanitized route descriptors. Those route descriptors expose
+message type names/type URLs plus stable receiver-group and local route/worker
+identities, along with transport correlation keys back to topic/subscription
+arrays and planner-local worker IDs; they do not retain entity names, handler
+names, raw readiness metadata, or duplicate full transport contracts on each
+route. The package root now exports a small executable bus layer, but still
+does not export service, transport, delivery, stand, integration-broker,
+repository runtime-registration, validation, or `Ack` abstractions as part of
+this closure.
 
 The architectural consequence is that later work must add those collaborators
 as explicit tasks at their own seams. Command and event intake can consume the
@@ -393,10 +396,11 @@ plus optional tenant scoping for multitenant storages.
 `EventStore` is a higher-level framework delegate over
 `RecordStorage<EventId, Event>`. It is intentionally created directly by
 framework code rather than by `StorageFactory`, so the foundational storage
-package stays independent of the event layer. In this slice `EventStore` is
-storage-only: it persists and reads generated Spine events, but it does not
-dispatch them, manage delivery attempts, fan out to subscribers, or implement
-retry/bus behavior.
+package stays independent of the event layer. In this slice `EventStore`
+remains storage-only: it persists and reads generated Spine events, while the
+new `EventBus` owns append-before-dispatch by delegating to it. `EventStore`
+still does not dispatch on its own, manage delivery attempts, fan out to
+subscribers, or implement retry/bus behavior.
 
 `InMemoryStorageFactory` and `InMemoryRecordStorage` are the first
 test/development adapter. They are process-local, keep deterministic tenant

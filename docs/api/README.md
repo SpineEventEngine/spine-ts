@@ -6,10 +6,11 @@ Current status: the generated reference contains the curated `@spine-ts/proto`
 root API for copied Spine contracts, the `@spine-ts/core` metadata/type
 registry and validation facade APIs, the first `@spine-ts/server`
 descriptor-derived entity metadata, metadata-only `Repository` identity,
-set-once transition validation, explicit handler metadata APIs, and the first
-server runtime lifecycle/async queue kernel, write-side signal intake result
-exports, the runtime-routing planner seam, the first
-`@spine-ts/transport` contracts, and the first `@spine-ts/storage` contracts.
+set-once transition validation, explicit handler metadata APIs, the first
+command/event bus exports, the first server runtime lifecycle/async queue
+kernel, write-side signal intake result exports, the runtime-routing planner
+seam, the first `@spine-ts/transport` contracts, and the first
+`@spine-ts/storage` contracts.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
@@ -164,6 +165,18 @@ broker, import bus, event store, delivery mechanism, stand, subscription
 service, command-result subscription, dispatcher, router, event posting API,
 validator, repository runtime registration hook, storage writer, transport
 adapter, handler invoker, or Spine `Ack` producer.
+Bus exports include `CommandBus`, `CommandDispatcher`, `EventBus`, and
+`EventDispatcher`. `CommandBus` accepts generated Spine `Command` envelopes,
+queues accepted work asynchronously, and routes by enclosed message type URL to
+exactly one registered dispatcher, rejecting duplicate dispatcher registration
+for a command message type. `EventBus` accepts generated Spine `Event`
+envelopes, appends them to an injected `EventStore`, and then dispatches to
+matching registered dispatchers in deterministic registration order. Events
+with no registered dispatcher are stored and resolve. If append fails, no
+dispatcher runs. If a dispatcher rejects, earlier dispatchers may already have
+run, later dispatchers are skipped, and the stored event remains. The bus layer
+does not instantiate entities, invoke entity methods directly, create
+repositories, map `Ack`, or introduce delivery/inbox behavior.
 Runtime routing exports include `createServerRuntimeRoutingPlan()`,
 `ServerRuntimeRoutingPlan`, `ServerRuntimeRoutingPlanInput`,
 `CommandRuntimeRoutingPlan`, `EventRuntimeRoutingPlan`, and
@@ -175,10 +188,11 @@ small sanitized route descriptors. Command routing produces one planner-local
 command-worker competing-consumer subscription over registered command topics.
 Event routing produces fan-out subscriptions and event-worker IDs
 for subscriber, reactor, and application receiver groups while keeping handler
-invocation, storage-before-dispatch, buses, IPC endpoint naming, and process
-supervision deferred. Public route descriptors expose only planner-local route
-and worker IDs, message full type names/type URLs, stable receiver groups, and
-transport correlation keys back to the top-level topics/subscriptions;
+invocation from runtime workers, integrated runtime wiring, service hosting,
+IPC endpoint naming, and process supervision deferred. Public route descriptors
+expose only planner-local route and worker IDs, message full type names/type
+URLs, stable receiver groups, and transport correlation keys back to the
+top-level topics/subscriptions;
 they do not retain raw readiness metadata, entity names, handler method names,
 ZeroMQ endpoint data, socket topology, or duplicate full transport contracts on
 each route. Query, subscription, and system routing remain explicit deferred

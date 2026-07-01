@@ -109,7 +109,9 @@ and framework-owned delegates such as `EventStore` build on `RecordStorage`
 plus `RecordSpec` instead of depending on a broad storage adapter surface.
 `EventStore` currently stops at persistence and query behavior; it does not
 implement bus dispatch, subscriber delivery, fan-out, retries, or inbox-style
-delivery records.
+delivery records on its own. The first `EventBus` appends to `EventStore`
+before dispatch. Events with no registered dispatcher still resolve after
+storage. The storage delegate remains a storage-only seam.
 
 ## Public Services
 
