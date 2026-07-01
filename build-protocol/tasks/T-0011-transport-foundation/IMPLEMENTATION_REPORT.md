@@ -1,6 +1,6 @@
 # Implementation Report: T-0011 Transport Foundation
 
-Status: T-0011.4 Integrated
+Status: T-0011.5 Integrated
 Task log: `build-protocol/tasks/T-0011-transport-foundation/TASK.md`
 Work log: `build-protocol/work-logs/T-0011.md`
 Review log: `build-protocol/reviews/T-0011-transport-foundation.md`
@@ -48,6 +48,14 @@ worker lifecycle snapshots, participant identities, worker registrations,
 readiness states, and validation helpers for local transport orchestration. It
 keeps process supervision, concrete broker topology, IPC readiness probes,
 delivery/retry behavior, handler dispatch, storage lifecycle, and server
+runtime wiring deferred to later subtasks.
+
+`T-0011.5` was integrated into this parent branch by merge commit `d3d6269` on
+`2026-07-01 03:00 WEST`. The integrated slice adds transport-only delivery
+attempt, failure-classification, retry-eligibility, and delivery-result
+boundary contracts. Failed outcomes remain `failed`; retry eligibility is
+separate policy data. It keeps durable inbox/outbox storage, retry scheduling,
+handler invocation, repository dispatch, process supervision, and server
 runtime wiring deferred to later subtasks.
 
 ## Scope Guardrails
@@ -111,6 +119,16 @@ runtime wiring deferred to later subtasks.
   warning only. The command ran with native IPC access because the merged
   ZeroMQ smoke test binds `ipc://` endpoints and the managed sandbox rejects
   those binds with `EPERM`.
+- Parent verification after integrating T-0011.5 passed on
+  `2026-07-01 03:00 WEST`: `CI=true corepack pnpm verify` passed with 23 test
+  files / 280 tests, coverage 96.16% statements / 90.48% branches / 99.33%
+  functions / 96.10% lines, TypeDoc/API checks with 100 proto / 28 core / 124
+  server / 26 storage / 46 transport expected exports, copied Spine proto
+  checksum verification, proto lint/generate, generated proto output clean,
+  and generated files clean. TypeDoc emitted the existing invalid-`origin`
+  warning only. The command ran with native IPC access because inherited
+  ZeroMQ smoke tests bind `ipc://` endpoints and the managed sandbox rejects
+  those binds with `EPERM`.
 
 ## Splitter Research And Recommendation
 
@@ -152,9 +170,14 @@ performs native smoke tests.
   docs, architecture/API docs, transport API export checks, and T-0011.4
   durable logs. See
   `build-protocol/tasks/T-0011-4-broker-worker-lifecycle-seam/IMPLEMENTATION_REPORT.md`.
+- T-0011.5 integration changed transport delivery/retry boundary
+  contracts/tests, package docs, architecture/API docs, transport API export
+  checks, and T-0011.5 durable logs. See
+  `build-protocol/tasks/T-0011-5-delivery-retry-boundary-contracts/IMPLEMENTATION_REPORT.md`.
 
 ## Open Items
 
-- `T-0011.5 Delivery And Retry Boundary Contracts` is next.
-- Delivery status/result contracts and failure classification boundaries remain
-  deferred to T-0011.5.
+- `T-0011.6 Server Runtime Wiring Integration` is next.
+- Server/runtime routing seams remain deferred to T-0011.6. Any server-module
+  changes must first inspect task-relevant Spine JVM `core-jvm/server` code per
+  D-0045 and the build protocol guardrail.

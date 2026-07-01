@@ -1,6 +1,6 @@
 # Review Log: T-0011 Transport Foundation
 
-Status: T-0011.4 Integrated
+Status: T-0011.5 Integrated
 
 ## Required Review Lanes
 
@@ -40,7 +40,12 @@ Parent native IPC verification passed after merge on `2026-06-30 22:48 WEST`.
 lanes after maintainability, security, and final lint follow-ups and was
 integrated into the parent branch by merge commit `78e3b0a`. Parent native IPC
 verification passed after merge on `2026-06-30 23:46 WEST`. Next review gate:
-`T-0011.5 Delivery And Retry Boundary Contracts`.
+`T-0011.5 Delivery And Retry Boundary Contracts`. `T-0011.5 Delivery And Retry
+Boundary Contracts` completed all five required review lanes after
+retry-status, TypeScript/API, security, and wording/log-order follow-ups and
+was integrated into the parent branch by merge commit `d3d6269`. Parent native
+IPC verification passed after merge on `2026-07-01 03:00 WEST`. Next review
+gate: `T-0011.6 Server Runtime Wiring Integration`.
 
 ## Reviewer Rounds
 
@@ -84,4 +89,15 @@ verification passed after merge on `2026-06-30 23:46 WEST`. Next review gate:
   proto lint/generate, and generated-clean checks. TypeDoc emitted the existing
   invalid-`origin` warning only. The command ran with native IPC access because
   the merged ZeroMQ smoke test binds `ipc://` endpoints and the managed sandbox
+  rejects those binds with `EPERM`.
+- T-0011.5 required-lane reviews completed in
+  `build-protocol/reviews/T-0011-5-delivery-retry-boundary-contracts.md`.
+- Parent integration verification passed after merge commit `d3d6269`:
+  `CI=true corepack pnpm verify` passed with 23 test files / 280 tests,
+  coverage 96.16% statements / 90.48% branches / 99.33% functions / 96.10%
+  lines, TypeDoc/API checks with 100 proto / 28 core / 124 server / 26 storage
+  / 46 transport expected exports, copied Spine proto checksum verification,
+  proto lint/generate, and generated-clean checks. TypeDoc emitted the existing
+  invalid-`origin` warning only. The command ran with native IPC access because
+  inherited ZeroMQ smoke tests bind `ipc://` endpoints and the managed sandbox
   rejects those binds with `EPERM`.
