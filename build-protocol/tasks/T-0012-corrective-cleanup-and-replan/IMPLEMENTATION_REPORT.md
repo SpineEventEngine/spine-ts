@@ -38,6 +38,12 @@ The integrated subtask:
   re-review;
 - passes escalated `env CI=true corepack pnpm verify`.
 
+Parent verification after integrating `T-0012.1` passed with escalated
+`env CI=true corepack pnpm verify`: 28 test files, 307 tests, coverage
+statements 96.12%, branches 90.53%, functions 99.38%, lines 96.07%, docs/API
+checks with the existing invalid-`origin` TypeDoc warning only, proto
+lint/generate, and generated-clean comparison.
+
 ## Skill Applicability Summary
 
 Selected skills:
