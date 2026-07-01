@@ -238,3 +238,83 @@ result is consumed.
   exports, copied Spine proto checksum verification, proto lint/generate, and
   generated-clean all passed. TypeDoc emitted the existing invalid-`origin`
   warning only.
+
+## Round 3 Reviewer Agents
+
+- Round 3 code style/maintainability reviewer:
+  `019f1bb1-4199-7622-b336-7af5528a4a69` (`Erdos the 8th`) spawned;
+  returned `STATUS: CLEAN`; closed.
+- Round 3 documentation reviewer:
+  `019f1bb1-4222-74e2-8370-b33d6f59614e` (`Averroes the 8th`) spawned;
+  returned comments; closed.
+- Round 3 TypeScript/API reviewer:
+  `019f1bb1-42a9-79a3-a87d-d540039f84d0` (`Mendel the 8th`) spawned;
+  returned `STATUS: CLEAN`; closed.
+- Round 3 security reviewer:
+  `019f1bb1-431e-77b0-8957-db45498ee065` (`Lagrange the 8th`) spawned;
+  returned comments; closed.
+- Round 3 performance/reliability reviewer:
+  `019f1bb1-43a0-7240-a6e1-b866b82e959b` (`McClintock the 8th`) spawned;
+  returned `STATUS: CLEAN`; closed.
+
+## Round 3 Results
+
+- Code style/maintainability: clean. The validation helper now uses the tagged
+  `DeterministicValidationError` path instead of matching message prefixes.
+- TypeScript/API: clean. Public route descriptors now carry planner-local IDs,
+  sanitized message metadata, and correlation keys instead of repeated full
+  topic/subscription/worker objects, and the API docs guard rejects unexpected
+  `@spine-ts/server` root exports.
+- Performance/reliability: clean. Proxy-wrapped readiness is rejected before
+  readiness method calls, ordinal planner-local IDs avoid lossy worker
+  collisions, deterministic ordering remains stable, and no
+  dispatch/storage/network/process/retry behavior was introduced.
+- Documentation: one medium wording issue remained. `packages/server/README.md`
+  said `createServerRuntimeRoutingPlan()` required concrete readiness instances
+  even though command/event readiness inputs are optional and omitted readiness
+  produces empty command/event plans.
+
+## Round 3 Documentation Fix
+
+- Updated `packages/server/README.md` to state that
+  `createServerRuntimeRoutingPlan()` requires a built `BoundedContext` and
+  accepts optional concrete command/event readiness instances. The docs now
+  state that omitted readiness produces an empty command or event plan.
+- Verification after the documentation fix: `corepack pnpm docs:check` passed
+  with the existing invalid-`origin` TypeDoc warning only, and
+  `git diff --check` passed.
+
+## Round 3 Security Finding
+
+- High: `validateCommandReadiness()` / `validateEventReadiness()` still use
+  `instanceof` as the concrete-readiness gate. A prototype-forged object can
+  pass that gate and override readiness methods, allowing attacker-supplied
+  methods to execute during planning before deterministic metadata validation.
+
+## Round 3 Security Fix Agent
+
+- Focused security fix sub-agent:
+  `019f1bb5-32f2-7903-9cca-b7233af4889b` (`Ramanujan the 8th`) spawned to add
+  an unforgeable readiness authenticity gate and update runtime-routing tests;
+  returned `STATUS: DONE` with commit `450c16f`; closed by orchestrator after
+  report was consumed.
+
+## Round 3 Security Fix Evidence
+
+- Added module-local authenticity tokens and `WeakSet` tracking to
+  `CommandRegistrationReadiness` and `EventRegistrationReadiness`. Only package
+  factory-created readiness instances are enrolled as authentic.
+- Added package-internal authenticity guards and changed `runtime-routing` to
+  reject unauthentic readiness values before readiness method calls. This
+  rejects both Proxy-wrapped real readiness instances and prototype-forged
+  readiness-like objects without running traps or overrides.
+- Updated `packages/server/src/runtime-routing.test.ts` to prove forged
+  readiness overrides and proxy traps do not run.
+- Focused RED/GREEN from the fix sub-agent: `corepack pnpm exec vitest run
+  packages/server/src/runtime-routing.test.ts` failed with 4 failing tests
+  before implementation, then passed with 11/11 tests after the authenticity
+  guard.
+- Focused verification from the fix sub-agent passed:
+  `corepack pnpm exec vitest run packages/server/src/runtime-routing.test.ts packages/server/src/index.test.ts`
+  passed with 21/21 tests, `corepack pnpm typecheck` passed,
+  `corepack pnpm docs:check` passed, and `git diff --check` passed.

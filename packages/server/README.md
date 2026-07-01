@@ -197,13 +197,15 @@ dispatcher, router, validator, repository runtime registration hook, storage
 writer, transport adapter, handler invoker, or Spine `Ack` producer.
 
 `createServerRuntimeRoutingPlan()` is the first server-owned runtime-wiring seam
-over that metadata. It requires a built `BoundedContext` plus concrete
-`CommandRegistrationReadiness` / `EventRegistrationReadiness` instances,
-derives command topics plus one competing-consumer command-worker registration
-from command readiness, derives event topics plus fan-out subscriptions and
-event-worker registrations from subscriber/reactor/application readiness, and
-returns immutable transport contracts plus small server-owned route
-descriptors. Those public route descriptors contain planner-local route and
+over that metadata. It requires a built `BoundedContext` and accepts optional
+concrete `CommandRegistrationReadiness` / `EventRegistrationReadiness`
+instances. When readiness is present, it derives command topics plus one
+competing-consumer command-worker registration from command readiness and event
+topics plus fan-out subscriptions and event-worker registrations from
+subscriber/reactor/application readiness. Without readiness, the corresponding
+command or event plan is empty. It returns immutable transport contracts plus
+small server-owned route descriptors. Those public route descriptors contain
+planner-local route and
 worker IDs, sanitized message full type names/type URLs, stable receiver
 groups, and transport correlation keys for the top-level topic/subscription/
 worker arrays only; they do not expose handler methods, entity type names, raw
