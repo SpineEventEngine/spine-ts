@@ -109,3 +109,9 @@ is committing the verified diff to keep the task resumable.
 - Focused lint-fix verification passed before commit: `corepack pnpm lint`;
   `corepack pnpm test packages/transport/src/index.test.ts` with 1 test file /
   17 tests; `corepack pnpm typecheck`; and `git diff --check`.
+- Full branch-tip verification passed on `2026-07-01 02:38 WEST` after
+  mechanical formatting: `CI=true corepack pnpm verify` passed with 23 test
+  files / 280 tests, coverage 96.16% statements / 90.48% branches / 99.33%
+  functions / 96.10% lines, TypeDoc/API counts 100 proto / 28 core / 124 server
+  / 26 storage / 46 transport exports, copied Spine proto checksum
+  verification, proto lint/generate, and generated-clean all passed.

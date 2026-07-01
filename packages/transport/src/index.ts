@@ -393,34 +393,31 @@ interface TransportDeliveryResultInputBase<Kind extends TransportSignalKind> {
 }
 
 /** Input for deriving one immutable delivered result. */
-type TransportDeliveredResultInput<
-  Kind extends TransportSignalKind = TransportSignalKind,
-> = TransportDeliveryResultInputBase<Kind> & {
-  /** Attempt outcome observed at the boundary. */
-  readonly outcome: "delivered";
-  /** Failure data is forbidden for delivered outcomes. */
-  readonly failure?: never;
-  /** Optional prebuilt status; rejected when it does not match outcome data. */
-  readonly status?: Extract<TransportDeliveryStatus, "delivered">;
-};
+type TransportDeliveredResultInput<Kind extends TransportSignalKind = TransportSignalKind> =
+  TransportDeliveryResultInputBase<Kind> & {
+    /** Attempt outcome observed at the boundary. */
+    readonly outcome: "delivered";
+    /** Failure data is forbidden for delivered outcomes. */
+    readonly failure?: never;
+    /** Optional prebuilt status; rejected when it does not match outcome data. */
+    readonly status?: Extract<TransportDeliveryStatus, "delivered">;
+  };
 
 /** Input for deriving one immutable failed result. */
-type TransportFailedResultInput<
-  Kind extends TransportSignalKind = TransportSignalKind,
-> = TransportDeliveryResultInputBase<Kind> & {
-  /** Attempt outcome observed at the boundary. */
-  readonly outcome: "failed";
-  /** Failure data required for failed outcomes. */
-  readonly failure:
-    TransportDeliveryFailureClassificationInput | TransportDeliveryFailureClassification;
-  /** Optional prebuilt status; rejected when it does not match outcome data. */
-  readonly status?: Extract<TransportDeliveryStatus, "failed">;
-};
+type TransportFailedResultInput<Kind extends TransportSignalKind = TransportSignalKind> =
+  TransportDeliveryResultInputBase<Kind> & {
+    /** Attempt outcome observed at the boundary. */
+    readonly outcome: "failed";
+    /** Failure data required for failed outcomes. */
+    readonly failure:
+      TransportDeliveryFailureClassificationInput | TransportDeliveryFailureClassification;
+    /** Optional prebuilt status; rejected when it does not match outcome data. */
+    readonly status?: Extract<TransportDeliveryStatus, "failed">;
+  };
 
 /** Input for deriving one immutable delivery result. */
-export type TransportDeliveryResultInput<
-  Kind extends TransportSignalKind = TransportSignalKind,
-> = TransportDeliveredResultInput<Kind> | TransportFailedResultInput<Kind>;
+export type TransportDeliveryResultInput<Kind extends TransportSignalKind = TransportSignalKind> =
+  TransportDeliveredResultInput<Kind> | TransportFailedResultInput<Kind>;
 
 /** Immutable delivery result with derived retry eligibility. */
 export interface TransportDeliveryResult<Kind extends TransportSignalKind = TransportSignalKind> {
@@ -1019,9 +1016,7 @@ function normalizeDeliveryResultFailure(
   return classifyTransportDeliveryFailure(failure);
 }
 
-function deriveDeliveryResultStatus(
-  outcome: TransportDeliveryOutcome,
-): TransportDeliveryStatus {
+function deriveDeliveryResultStatus(outcome: TransportDeliveryOutcome): TransportDeliveryStatus {
   if (outcome === "delivered") {
     return "delivered";
   }

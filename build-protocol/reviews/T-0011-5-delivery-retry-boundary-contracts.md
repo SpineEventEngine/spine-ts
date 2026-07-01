@@ -75,9 +75,20 @@ review lanes.
   used a `type` alias where the repo rule requires an `interface`, and
   `toMatchTypeOf()` was deprecated in a type-level test. A narrow lint fix is
   required before re-review.
+- Orchestrator full verification after commits `c48aa3d` and `d7d08ca` failed
+  on `2026-07-01 02:37 WEST` during `prettier --check` for
+  `packages/transport/src/index.ts`, `packages/transport/src/index.test.ts`,
+  and `build-protocol/work-logs/T-0011-5.md`. Mechanical formatting is required
+  before re-review.
 - Narrow lint fix on `2026-07-01 02:39 WEST`:
   `TransportDeliveryResultInputBase` is now an `interface`, and the
   `TransportDeliveryResultInput` expect-type assertion now uses non-deprecated
   `toExtend()`. Focused verification passed: `corepack pnpm lint`;
   `corepack pnpm test packages/transport/src/index.test.ts` with 1 test file /
   17 tests; `corepack pnpm typecheck`; and `git diff --check`.
+- Orchestrator full verification after the mechanical formatting follow-up
+  passed on `2026-07-01 02:38 WEST`: `CI=true corepack pnpm verify` passed with
+  23 test files / 280 tests, coverage 96.16% statements / 90.48% branches /
+  99.33% functions / 96.10% lines, TypeDoc/API counts 100 / 28 / 124 / 26 / 46,
+  copied Spine proto checksum verification, proto lint/generate, and
+  generated-clean checks.

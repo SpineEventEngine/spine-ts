@@ -945,9 +945,7 @@ describe("@spine-ts/transport", () => {
     expectTypeOf<TransportWorkerRegistrationInput["worker"]>().toEqualTypeOf<
       TransportParticipantIdentityInput<"worker">
     >();
-    expectTypeOf<TransportDeliveryStatus>().toEqualTypeOf<
-      "to-deliver" | "delivered" | "failed"
-    >();
+    expectTypeOf<TransportDeliveryStatus>().toEqualTypeOf<"to-deliver" | "delivered" | "failed">();
     expectTypeOf<TransportDeliveryAttemptInput["attemptNumber"]>().toEqualTypeOf<number>();
     expectTypeOf<TransportDeliveryAttempt>().toExtend<{
       readonly attemptKey: string;
