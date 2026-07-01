@@ -93,6 +93,11 @@ Round 2 fix follow-up:
   numeric/bigint sort ordering (`10` vs `2`, `10n` vs `2n`), deterministic
   mixed-kind ordering, NaN/null/undefined tie behavior, and the
   `StorageFactory.close()` guard.
+
+Round 3 documentation follow-up:
+
+- Corrected the replacement storage example in `docs/USER_GUIDE.md` so
+  `eventStore.append(create(...))` is syntactically valid.
 - Build check:
   `corepack pnpm exec tsc -b packages/proto packages/storage`
   passed after removing the public `StorageObject` hierarchy from storage types

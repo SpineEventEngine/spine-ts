@@ -805,7 +805,7 @@ const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory
 await eventStore.append(
   create(EventSchema, {
     id: create(EventIdSchema, { value: "event-2" }),
-  });
+  }),
 );
 ```
 

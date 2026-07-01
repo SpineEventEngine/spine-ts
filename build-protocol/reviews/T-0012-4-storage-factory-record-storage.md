@@ -138,3 +138,17 @@ All second-round findings are addressed in this worktree:
 
 Fresh evidence for the second-round follow-up is recorded in
 `build-protocol/tasks/T-0012-4-storage-factory-record-storage/IMPLEMENTATION_REPORT.md`.
+
+## Round 3 Review Results
+
+Third-round reviewers reported these results:
+
+- code style/maintainability: clean;
+- TypeScript/API docs: clean;
+- security: clean;
+- performance/reliability: clean;
+- documentation: one P2 finding. The replacement storage example in
+  `docs/USER_GUIDE.md` closed `eventStore.append(create(...))` with malformed
+  syntax.
+
+The documentation finding was fixed locally by correcting the sample call.
