@@ -6,8 +6,9 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-5-buses-handler-registration`
 Baseline commit: `746e862`
 Authoring worker: `T-0012.5 review-fix worker`
-Implementation commit: `aab96c715e5b86d8b73204703331383ca6117f7b`
-Final branch HEAD: `7a19e684fed14e77466e206e6182d436161a5119`
+Review-fix commit: `aab96c715e5b86d8b73204703331383ca6117f7b`
+Docs-cleanup commit: `7a19e684fed14e77466e206e6182d436161a5119`
+Focused re-review log commit: `d76b810a324bc58a7411e809752f81046d0b3410`
 
 ## Purpose
 
@@ -49,13 +50,16 @@ Record chronological branch activity for the round 1 review-fix pass.
   server, 14 storage, and 17 transport expected exports.
 - `2026-07-01 22:43 WEST`: Committed docs cleanup as
   `7a19e684fed14e77466e206e6182d436161a5119`.
+- `2026-07-01 22:45 WEST`: Focused docs re-review found the work-log HEAD
+  field was self-invalidating after each log commit; replaced it with stable
+  milestone commit fields and removed future-tense current-state wording.
 
 ## Current State
 
-- Last completed step: Round 2 docs cleanup, reviewer finding disposition, docs
-  verification, and focused docs re-review.
-- Next step: Record the focused re-review minor cleanup and commit the updated
-  work log.
+- Last completed step: Round 2 docs cleanup, focused docs re-review, and
+  follow-up work-log cleanup.
+- Next step: Run final T-0012.5 verification and integrate into the parent
+  corrective branch if verification passes.
 - Known risks: None for this fix; non-escalated verification still cannot bind
   ZeroMQ local IPC endpoints in the sandbox.
 - Open questions: None.
@@ -73,13 +77,12 @@ Record chronological branch activity for the round 1 review-fix pass.
   naming, and process supervision.
 - Contradictory implementation report evidence: fixed by keeping the 35-file,
   302-test review-fix evidence and removing the stale 301-test coverage line.
-- Pending commit placeholders: replaced first with
-  `aab96c715e5b86d8b73204703331383ca6117f7b`, then final branch HEAD was
-  updated to the committed docs-cleanup HEAD
-  `7a19e684fed14e77466e206e6182d436161a5119`.
+- Pending commit placeholders: replaced with milestone commit fields instead of
+  a self-invalidating `Final branch HEAD` field.
 - Focused docs re-review minor: final branch HEAD and future-tense cleanup note
   were stale after `7a19e684fed14e77466e206e6182d436161a5119`; this work-log
-  update corrects both.
+  update corrects both by naming stable milestones and routing the next step to
+  final verification.
 
 ## Open Risks And Follow-Up Routing
 
