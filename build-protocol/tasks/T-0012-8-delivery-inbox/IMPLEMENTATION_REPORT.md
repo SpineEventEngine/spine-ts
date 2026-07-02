@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-6 review prep
+Status: round-6 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -96,6 +96,8 @@ caller-side error. The exported `InboxMessageId` / `InboxMessage` comments and
 API overview now state that `InboxMessage.id.shard` must match
 `InboxMessage.shard`, and direct write mismatch now raises a plain invariant
 error before any durable record is decoded.
+
+Committed as `05f2ca7` after focused delivery and docs verification passed.
 
 ## Round 2 Review
 

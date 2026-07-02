@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 6 review prep
+Status: round 6 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -278,7 +278,7 @@ round-5 reviewer sub-agents were closed after their reports were collected.
 
 ### Round 5 Fix
 
-Result: implemented in this worktree and ready for round-6 review.
+Result: committed as `05f2ca7` and ready for round-6 review.
 
 Fix summary:
 
@@ -286,3 +286,12 @@ Fix summary:
   the exported interfaces and API overview; and
 - changed the direct-write shard mismatch from `DeliveryStorageCorruptionError`
   to a plain caller invariant error.
+
+### Round 6
+
+Diff package:
+`.superpowers/sdd/review-f924a17..05f2ca7.diff`.
+
+Reviewer sub-agents: pending.
+
+Result: pending.
