@@ -384,10 +384,11 @@ routingPlan.commands.topics;
 ```
 
 This assembly proves the current public seams fit together; it does not turn
-registered command/event metadata into routing, dispatch, validation, storage,
-delivery, handler invocation, service hosting, or `Ack` behavior. The routing
-plan deliberately does not create worker registrations, lifecycle handles,
-queues, buses, repositories, storage, services, or transport endpoints.
+registered command/event metadata into runtime dispatch, delivery, handler
+invocation, service hosting, or `Ack` behavior. Route calculation remains a
+metadata and transport-plan concern; the routing plan deliberately does not
+create worker registrations, lifecycle handles, queues, buses, repositories,
+storage, services, or transport endpoints.
 
 ## Bounded Context Assembly
 

@@ -1,6 +1,6 @@
 # T-0012.7b: Aggregate Storage And Signal Routing
 
-Status: final re-review fixes in progress
+Status: final docs-only review fix in progress
 Start: `2026-07-02 06:20 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7b-aggregate-storage-routing`
@@ -86,9 +86,9 @@ Required evidence for this task:
 ## Current State
 
 - Task branch/worktree created from parent commit `77492b9`.
-- Implementation and review loops have completed through round 4.
+- Implementation and review loops have completed through round 6.
 - Final verification passed after coverage-focused aggregate-storage tests were
-  added.
-- Round-5 documentation and reliability findings are being addressed before
-  integration.
+  added, and focused verification passed after the round-5 reliability fix.
+- Round-6 documentation/API status findings are being addressed before final
+  verification and integration.
 - No blocking human question is known.

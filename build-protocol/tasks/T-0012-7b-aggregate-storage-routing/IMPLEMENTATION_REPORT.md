@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round-5 fixes complete; verification passed
+Status: round-6 docs-only fixes in progress
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -166,6 +166,12 @@ Verification after the round-5 fix:
 - `corepack pnpm typecheck` passed.
 - `corepack pnpm lint` passed.
 - `corepack pnpm format:check` passed.
+
+Round 6 requested final documentation/API status fixes. The task/work-log
+current state now reflects the active final re-review phase, and the package
+README now states that routing calculation exists while runtime dispatch,
+delivery, handler invocation, service hosting, and `Ack` behavior remain
+deferred.
 
 ## Concerns
 

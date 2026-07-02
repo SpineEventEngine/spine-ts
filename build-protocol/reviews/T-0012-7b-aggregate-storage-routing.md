@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: review round 6 pending
+Status: review round 7 pending
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -159,4 +159,27 @@ All five round-5 reviewers were closed after their reports were collected.
 
 ### Round 6
 
-Pending final re-review after the round-5 fix commit.
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f20e0-ff9c-7900-87e3-a5022ddb48ef`;
+- documentation: `019f20e1-005a-7200-a575-312f9eea0634`;
+- TypeScript/API docs: `019f20e1-00fc-71a1-8a06-f0b09b0a68b2`;
+- security: `019f20e1-0181-74b1-850e-70a7dd32625e`;
+- performance/reliability:
+  `019f20e1-0227-71a0-b80c-1e235ae3e8c5`.
+
+Result: changes requested.
+
+Findings addressed in the round-6 fix pass:
+
+- task/work-log current state still described the previous review phase; and
+- `packages/server/README.md` still said registered command/event metadata does
+  not become routing, instead of saying runtime dispatch and handler invocation
+  remain deferred.
+
+All five round-6 reviewers were closed after their reports were collected.
+
+### Round 7
+
+Pending final re-review after the round-6 docs-only fix commit.
