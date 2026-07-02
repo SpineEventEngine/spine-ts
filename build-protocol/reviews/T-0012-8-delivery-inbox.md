@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 2 review pending
+Status: round 2 changes requested
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -92,6 +92,37 @@ Round-2 reviewers must verify this correction rather than assuming it.
 Diff package:
 `.superpowers/sdd/review-6d20fb1..c2553cf.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
 
-Result: pending.
+- code style/maintainability:
+  `019f21b4-2d14-7183-be49-a012e0a1cd40`;
+- documentation: `019f21b4-2db0-77d3-a01b-4840caff999f`;
+- TypeScript/API docs: `019f21b4-2e13-7553-b611-6e098af4d6ab`;
+- security: `019f21b4-2ea3-74c0-92ba-e31639390b25`;
+- performance/reliability:
+  `019f21b4-2f19-7170-9621-5e471985f548`.
+
+Result: changes requested.
+
+Findings to address:
+
+- module-private inbox record helpers are still exported without need;
+- missing inbox message for a dedup guard should use the delivery storage
+  corruption error type;
+- dedup guard writes can still outlive a failed inbox write or be observed
+  before the inbox message is visible;
+- a `DELIVERED` message without retention can make a new guard non-blocking
+  before the inbox row exists;
+- `RecordStorage.compareAndSet()` must document atomic behavior across storage
+  handles for the same backing store;
+- inbox reads need a hard default limit or required limit;
+- query limit validation must reject `NaN`, non-integer, and infinite values;
+- the work log must separately record that the local delivery proto directory
+  was present but empty;
+- the package README needs the explicit delivery-slice exclusions;
+- API docs should use public `whenReceived`/receive-time naming rather than the
+  internal `receivedAt` column name; and
+- storage API docs must document the public `compareAndSet()` contract.
+
+All five round-2 reviewer sub-agents were closed after their reports were
+collected.

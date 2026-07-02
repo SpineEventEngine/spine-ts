@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-2 review pending
+Status: round-2 fixes pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -38,6 +38,15 @@ types and storage-backed behavior:
 
 `pnpm docs:check` passed with the existing TypeDoc warning about an invalid
 `origin` remote for source links.
+
+## Round 2 Review
+
+Round 2 requested fixes across all lanes. The main correction is that
+deduplication still used a guard-before-message sequence without an explicit
+pending claim or atomic multi-record write. Reviewers also requested clearer
+`RecordStorage.compareAndSet()` atomicity documentation, bounded inbox reads,
+strict query limit validation, simpler internal exports, consistent delivery
+storage corruption errors, and documentation/log updates.
 
 ## Round 1 Review
 
