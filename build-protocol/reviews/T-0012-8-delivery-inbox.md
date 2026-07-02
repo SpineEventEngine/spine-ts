@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: coverage fix review fixes
+Status: round 17 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -659,6 +659,42 @@ Fix summary:
 
 Diff package:
 `.superpowers/sdd/review-round-16-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2233-5d05-7262-8027-e569e8a3f3ad`;
+- documentation: `019f2233-87bc-74b3-a04a-036f2d9163c1`;
+- TypeScript/API docs: `019f2233-ab98-7962-8f74-5a9d83e16c91`;
+- security: `019f2233-ddcb-75f3-8f44-72b64cd16d32`;
+- performance/reliability:
+  `019f2234-0320-7ec2-b41a-c2ab4a315907`.
+
+Result: changes requested.
+
+Findings to address:
+
+- task and implementation report statuses/package-prep notes must advance to
+  the round-16 review-prep state; and
+- work-log verification entries must preserve exact focused test file targets.
+
+Code style/maintainability, TypeScript/API docs, and security lanes were clean.
+All five round-16 reviewer sub-agents were closed after their reports were
+collected.
+
+### Round 16 Fix
+
+Result: implemented in this worktree and ready for round-17 review.
+
+Fix summary:
+
+- advanced task/report statuses and package-prep notes; and
+- restored exact focused verification file targets in the work log.
+
+### Round 17
+
+Diff package:
+`.superpowers/sdd/review-round-17-fce80b2-current.diff`.
 
 Reviewer sub-agents: pending.
 

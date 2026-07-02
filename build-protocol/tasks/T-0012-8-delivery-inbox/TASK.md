@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: coverage fix review fixes
+Status: round-17 review prep
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -203,4 +203,15 @@ entityStateType)` returns a zero-based shard index and that all messages for
   TypeScript/API docs, security, and performance/reliability lanes were clean.
 - All five round-15 reviewer sub-agents were closed after their reports were
   collected.
+- Round-15 fixes reflowed durable-log commands and recorded package-prep
+  breadcrumbs across task/report/work logs.
+- Round-16 review package is prepared at
+  `.superpowers/sdd/review-round-16-fce80b2-current.diff`.
+- Round-16 review completed with documentation and performance/reliability log
+  findings. Code style/maintainability, TypeScript/API docs, and security lanes
+  were clean.
+- All five round-16 reviewer sub-agents were closed after their reports were
+  collected.
+- Round-17 review package is being prepared at
+  `.superpowers/sdd/review-round-17-fce80b2-current.diff`.
 - No blocking human question is known.
