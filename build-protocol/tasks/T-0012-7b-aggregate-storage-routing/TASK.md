@@ -1,6 +1,6 @@
 # T-0012.7b: Aggregate Storage And Signal Routing
 
-Status: round-14 fixes applied
+Status: round-15 re-review pending
 Start: `2026-07-02 06:20 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7b-aggregate-storage-routing`
