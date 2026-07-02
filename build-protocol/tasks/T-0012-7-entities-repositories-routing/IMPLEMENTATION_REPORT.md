@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7 Repository Registration And Storage Opening
 
-Status: review complete; final verification passed
+Status: integrated into `task/T-0012-cleanup-replan`
 Branch: `task/T-0012-7-entities-repositories-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7-entities-repositories-routing`

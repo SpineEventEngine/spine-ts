@@ -1,6 +1,6 @@
 # T-0012.7: Repository Registration And Storage Opening
 
-Status: review complete; final verification passed
+Status: integrated into `task/T-0012-cleanup-replan`
 Start: `2026-07-01 23:41 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7-entities-repositories-routing`
