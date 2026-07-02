@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: implementation pending
+Status: review round 1 pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -28,5 +28,7 @@ Reviewers must reject:
 - stale task/report/work-log state.
 
 ## Review Rounds
+
+### Round 1
 
 Pending.

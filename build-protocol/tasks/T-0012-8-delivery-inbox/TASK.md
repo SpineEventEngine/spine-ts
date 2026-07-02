@@ -64,5 +64,7 @@ entityStateType)` returns a zero-based shard index and that all messages for
 
 ## Current State
 
-- Implementation and required verification completed in the task worktree.
+- Implementation sub-agent completed and was closed after committing
+  `0f7986a`.
+- Review round 1 is pending.
 - No blocking human question is known.
