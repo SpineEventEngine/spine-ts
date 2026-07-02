@@ -632,3 +632,14 @@ All five round-21 reviewers were closed after their reports were collected.
 
 Verification after the round-21 status fix passed: `format:check`,
 `git diff --check`, and stale-status phrase scan.
+
+Round-21 status-fix commit: `45842a6`.
+
+### Round 22
+
+Diff package:
+`.superpowers/sdd/review-e2ad18d..45842a6.diff`.
+
+Reviewer sub-agents: pending.
+
+Result: pending.
