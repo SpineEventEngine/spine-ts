@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 19 review prep
+Status: round 20 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -763,6 +763,40 @@ Fix summary:
 
 Diff package:
 `.superpowers/sdd/review-round-19-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f223f-9c4d-7d43-911c-f56342959dcd`;
+- documentation: `019f223f-d3ee-74b1-b7fe-46d70f344783`;
+- TypeScript/API docs: `019f223f-f9de-7432-b7d3-69a250b1a9ad`;
+- security: `019f2240-1d6c-74b1-8e99-b6f3c55b83ae`;
+- performance/reliability:
+  `019f2240-4176-78f1-9248-c8e14a78bba5`.
+
+Result: changes requested.
+
+Findings to address:
+
+- task/report/work logs must mark round-19 package prep and current state as
+  completed.
+
+TypeScript/API docs and security lanes were clean. All five round-19 reviewer
+sub-agents were closed after their reports were collected.
+
+### Round 19 Fix
+
+Result: implemented in this worktree and ready for round-20 review.
+
+Fix summary:
+
+- marked round-19 package prep and current-state breadcrumbs as completed in
+  task/report/work logs.
+
+### Round 20
+
+Diff package:
+`.superpowers/sdd/review-round-20-fce80b2-current.diff`.
 
 Reviewer sub-agents: pending.
 
