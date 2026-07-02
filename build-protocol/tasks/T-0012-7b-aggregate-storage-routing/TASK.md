@@ -1,6 +1,6 @@
 # T-0012.7b: Aggregate Storage And Signal Routing
 
-Status: round-22 fixes verified
+Status: round-23 re-review pending
 Start: `2026-07-02 06:20 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7b-aggregate-storage-routing`
@@ -214,4 +214,7 @@ Required evidence for this task:
   wording, and old completed re-review entries phrased as pending.
 - Required round-22 status-only verification passed: `format:check` and
   `git diff --check`.
+- Round-22 status-fix commit: `f613617`.
+- Round-23 reviewer sub-agents are pending against
+  `.superpowers/sdd/review-70f45d5..f613617.diff`.
 - No blocking human question is known.
