@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round 24 fixes verified
+Status: round 25 re-review pending
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -728,3 +728,14 @@ live-agent registry when cleanup was attempted.
 
 Verification after the round-24 status fix passed: `format:check`,
 `git diff --check`, and the targeted stale-status phrase scan.
+
+Round-24 status-fix commit: `99977ba`.
+
+### Round 25
+
+Diff package:
+`.superpowers/sdd/review-80afb8f..99977ba.diff`.
+
+Reviewer sub-agents: pending.
+
+Result: pending.
