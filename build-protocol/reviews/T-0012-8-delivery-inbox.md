@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round-4 review prep
+Status: round 4 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -189,7 +189,9 @@ were closed after their reports were collected.
 
 ### Round 3 Fix
 
-Result: completed in this worktree and ready for round-4 review.
+Fix sub-agent: `019f21d3-10da-7fb0-8e58-c088eb615ff3`.
+
+Result: completed and closed after commit `76e9132`.
 
 Fix summary:
 
@@ -204,3 +206,14 @@ Fix summary:
 - moved shard lease expiry to constructor-injected clocks instead of a public
   `pickUp()` time parameter; and
 - refreshed the durable task/report/work-log state for round-4 review prep.
+
+Round-4 reviewers must verify this correction rather than assuming it.
+
+### Round 4
+
+Diff package:
+`.superpowers/sdd/review-60c5412..76e9132.diff`.
+
+Reviewer sub-agents: pending.
+
+Result: pending.
