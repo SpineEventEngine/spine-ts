@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 9 review prep
+Status: round 9 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -395,10 +395,19 @@ were closed after their reports were collected.
 
 ### Round 8 Fix
 
-Result: implemented in this worktree and ready for round-9 review.
+Result: committed as `65e5c72` and ready for round-9 review.
 
 Fix summary:
 
 - moved inbox message shard-invariant validation before any dedup lookup in
   `InboxStorage.write()`; and
 - kept serialization on the same validation helper.
+
+### Round 9
+
+Diff package:
+`.superpowers/sdd/review-7ddf9f5..65e5c72.diff`.
+
+Reviewer sub-agents: pending.
+
+Result: pending.

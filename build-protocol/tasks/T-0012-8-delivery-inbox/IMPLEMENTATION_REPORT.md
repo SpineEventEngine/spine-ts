@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-9 review prep
+Status: round-9 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -122,6 +122,8 @@ Round 8 requested consistent early validation of the shard invariant. Direct
 `InboxStorage.write()` now validates `InboxMessage.id.shard` against
 `InboxMessage.shard` before opening storage or reading dedup state, and
 serialization reuses the same validation.
+
+Committed as `65e5c72` after focused delivery verification passed.
 
 ## Round 2 Review
 
