@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: coverage fix review prep
+Status: coverage fix review fixes
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -197,4 +197,10 @@ entityStateType)` returns a zero-based shard index and that all messages for
 - Coverage-fix verification passed with focused tests, typecheck, lint,
   formatting, diff hygiene, and escalated `pnpm test:coverage` (`41` files /
   `377` tests, branch coverage `90%`).
+- Round-15 review package is prepared at
+  `.superpowers/sdd/review-round-15-fce80b2-current.diff`.
+- Round-15 review completed with documentation and maintainability findings.
+  TypeScript/API docs, security, and performance/reliability lanes were clean.
+- All five round-15 reviewer sub-agents were closed after their reports were
+  collected.
 - No blocking human question is known.

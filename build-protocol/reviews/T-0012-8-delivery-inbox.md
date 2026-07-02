@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: coverage fix review prep
+Status: coverage fix review fixes
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -623,6 +623,42 @@ The coverage-fix worker was closed after its report was collected.
 
 Diff package:
 `.superpowers/sdd/review-round-15-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f222e-10a8-7683-8578-8456afa9d770`;
+- documentation: `019f222e-38a3-7f82-ac70-929158665054`;
+- TypeScript/API docs: `019f222e-5d9e-7a70-a26d-6f57ca3106c7`;
+- security: `019f222e-7dcf-7731-b678-c2d481c74a0f`;
+- performance/reliability:
+  `019f222e-a94a-77d3-a88c-381627e33b8e`.
+
+Result: changes requested.
+
+Findings to address:
+
+- task/report/work logs must consistently record the round-15 package prep and
+  current state; and
+- two long command lines in durable logs must be reflowed.
+
+TypeScript/API docs, security, and performance/reliability lanes were clean.
+All five round-15 reviewer sub-agents were closed after their reports were
+collected.
+
+### Round 15 Fix
+
+Result: implemented in this worktree and ready for round-16 review.
+
+Fix summary:
+
+- recorded round-15 package prep across task, report, and work logs; and
+- reflowed long command lines in durable logs.
+
+### Round 16
+
+Diff package:
+`.superpowers/sdd/review-round-16-fce80b2-current.diff`.
 
 Reviewer sub-agents: pending.
 

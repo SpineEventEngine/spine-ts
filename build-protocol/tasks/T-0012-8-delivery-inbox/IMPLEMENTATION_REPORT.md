@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: coverage fix review prep
+Status: coverage fix review fixes
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -49,8 +49,15 @@ Round-2 fixes completed the remaining correctness and documentation gaps:
 
 ## Verification
 
-- `pnpm test packages/storage/test/memory/in-memory-record-storage.test.ts packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts packages/server/test/index.test.ts`
-- `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts packages/server/test/index.test.ts`
+- focused delivery/storage tests with `pnpm test`:
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`,
+  `packages/server/test/delivery/inbox.test.ts`,
+  `packages/server/test/delivery/sharded-work-registry.test.ts`, and
+  `packages/server/test/index.test.ts`
+- focused delivery tests with `pnpm test`:
+  `packages/server/test/delivery/inbox.test.ts`,
+  `packages/server/test/delivery/sharded-work-registry.test.ts`, and
+  `packages/server/test/index.test.ts`
 - `pnpm typecheck`
 - `pnpm lint`
 - `pnpm format:check`
@@ -198,13 +205,26 @@ Added focused test-only coverage for the remaining delivery/storage branches:
 
 Verification for the coverage fix passed after main-agent cleanup with:
 
-- `pnpm test packages/server/test/delivery/shard-index.test.ts packages/server/test/delivery/sharded-work-registry.test.ts packages/storage/test/record/record-spec.test.ts`
+- focused coverage tests with `pnpm test`:
+  `packages/server/test/delivery/shard-index.test.ts`,
+  `packages/server/test/delivery/sharded-work-registry.test.ts`, and
+  `packages/storage/test/record/record-spec.test.ts`;
 - `pnpm typecheck`
 - `pnpm lint`
 - escalated `pnpm test:coverage` (`41` test files / `377` tests, branch
   coverage `90%`)
 - `pnpm format:check`
 - `git diff --check`
+
+Round-15 review package
+`.superpowers/sdd/review-round-15-fce80b2-current.diff` was prepared after
+the coverage-fix commit.
+
+## Round 15 Review
+
+Round 15 found no API, security, or reliability issue. Documentation requested
+that the task/report/work logs record round-15 package prep consistently, and
+maintainability requested reflowing two long command lines.
 
 ## Round 2 Review
 
@@ -261,7 +281,11 @@ The fix:
 
 Verification reported by the fix sub-agent:
 
-- `pnpm test packages/storage/test/memory/in-memory-record-storage.test.ts packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts packages/server/test/index.test.ts`
+- focused delivery/storage tests with `pnpm test`:
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`,
+  `packages/server/test/delivery/inbox.test.ts`,
+  `packages/server/test/delivery/sharded-work-registry.test.ts`, and
+  `packages/server/test/index.test.ts`
 - `pnpm typecheck`
 - `pnpm lint`
 - `pnpm format:check`
