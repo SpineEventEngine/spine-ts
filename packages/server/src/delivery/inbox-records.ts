@@ -122,10 +122,18 @@ function readStoredDedupRecord(record: Any): StoredDedupRecord {
     });
   }
 
+  const inbox = requireText(decoded.inbox, "Inbox dedup inbox");
+  const signalId = requireText(decoded.signalId, "Inbox dedup signal ID");
+  if (`${inbox}:${signalId}` !== key) {
+    throw new DeliveryStorageCorruptionError(
+      "Inbox dedup final record does not match the guard key.",
+    );
+  }
+
   return Object.freeze({
     key,
-    inbox: requireText(decoded.inbox, "Inbox dedup inbox"),
-    signalId: requireText(decoded.signalId, "Inbox dedup signal ID"),
+    inbox,
+    signalId,
     inboxMessageId: requireText(decoded.inboxMessageId, "Inbox dedup message ID"),
     shardIndex: requireNumber(decoded.shardIndex, "Inbox dedup shard index"),
     shardTotal: requireNumber(decoded.shardTotal, "Inbox dedup shard total"),

@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 20 review prep
+Status: round 21 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -797,6 +797,49 @@ Fix summary:
 
 Diff package:
 `.superpowers/sdd/review-round-20-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2244-86de-7b42-a7a9-df8d601b4bc3`;
+- documentation: `019f2244-a08f-7c51-a6a4-559109d663fb`;
+- TypeScript/API docs: `019f2244-c1ca-7c93-ba52-a5aef75247c9`;
+- security: `019f2244-daee-75b0-898b-5152023b6630`;
+- performance/reliability:
+  `019f2244-fdae-7ca0-88c5-3b48a6ad8a9d`.
+
+Result: changes requested.
+
+Findings to address:
+
+- task/report/work logs must record the round-19 fix and round-20 package prep
+  as completed;
+- final dedup guard target rows must match the active dedup key;
+- final dedup records must validate that their stored key matches their inbox
+  and signal identity.
+
+TypeScript/API docs lane was clean. All five round-20 reviewer sub-agents were
+closed after their reports were collected.
+
+### Round 20 Fix
+
+Result: implemented in this worktree and ready for round-21 review.
+
+Fix summary:
+
+- added final dedup record key validation;
+- added final dedup guard target validation;
+- added direct corruption tests for mismatched final guard keys and targets;
+- recorded the round-20 reviewer/fix trail across task/report/work logs.
+
+Verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts` passed with 16 tests.
+
+### Round 21
+
+Diff package:
+`.superpowers/sdd/review-round-21-fce80b2-current.diff`.
 
 Reviewer sub-agents: pending.
 

@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-20 review prep
+Status: round-21 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -274,6 +274,29 @@ Round 19 found no API or security issue. Documentation, code
 style/maintainability, and performance/reliability requested marking the
 round-19 package-prep and current-state trail as completed in task/report/work
 logs.
+
+Round-19 fixes marked round-19 package prep and current-state breadcrumbs as
+completed in task/report/work logs. Round-20 review package
+`.superpowers/sdd/review-round-20-fce80b2-current.diff` was prepared after
+those fixes.
+
+## Round 20 Review
+
+Round 20 found no TypeScript/API docs issue. Documentation and code
+style/maintainability requested explicit round-19 fix and round-20 package
+prep breadcrumbs. Security requested validating final guard target rows against
+the active dedup key. Performance/reliability requested validating final dedup
+records against their own guard key.
+
+Round-20 fixes added final dedup guard key/target validation and direct
+corruption tests for both cases. Focused inbox verification passed with 16
+tests:
+
+`pnpm test packages/server/test/delivery/inbox.test.ts`.
+
+Round-21 review package
+`.superpowers/sdd/review-round-21-fce80b2-current.diff` was prepared after
+those fixes.
 
 ## Round 2 Review
 

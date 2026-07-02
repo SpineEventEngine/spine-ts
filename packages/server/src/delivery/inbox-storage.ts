@@ -106,7 +106,7 @@ export class InboxStorage {
       return { kind: "CLAIM", expected: undefined, message };
     }
 
-    const storedMessage = await this.#readGuardMessage(inboxStorage, current);
+    const storedMessage = await this.#readGuardMessage(inboxStorage, dedupKey, current);
 
     if (storedMessage !== undefined) {
       return this.#handleStoredGuardMessage(
@@ -225,10 +225,22 @@ export class InboxStorage {
 
   async #readGuardMessage(
     inboxStorage: RecordStorage<string, Any>,
+    dedupKey: string,
     guard: Any,
   ): Promise<InboxMessage | undefined> {
-    const storedMessage = await inboxStorage.read(this.#messageKey(dedupMessageId(guard)));
-    return storedMessage === undefined ? undefined : readInboxMessage(storedMessage);
+    const storedRecord = await inboxStorage.read(this.#messageKey(dedupMessageId(guard)));
+    if (storedRecord === undefined) {
+      return undefined;
+    }
+
+    const message = readInboxMessage(storedRecord);
+    if (dedupGuardKey(message) !== dedupKey) {
+      throw new DeliveryStorageCorruptionError(
+        `Inbox dedup guard "${dedupKey}" points to another dedup key.`,
+      );
+    }
+
+    return message;
   }
 
   #messageBlocks(message: InboxMessage, now: Date): boolean {

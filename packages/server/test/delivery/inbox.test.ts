@@ -11,7 +11,11 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
-import { writeDedupClaim, writeDedupRecord } from "../../src/delivery/inbox-records.js";
+import {
+  writeDedupClaim,
+  writeDedupRecord,
+  writeInboxMessage,
+} from "../../src/delivery/inbox-records.js";
 import {
   Delivery,
   Inbox,
@@ -432,6 +436,28 @@ describe("Inbox", () => {
       DeliveryStorageCorruptionError,
     );
   });
+
+  it("rejects a final dedup guard whose key does not match its signal", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new WrongKeyGuardFactory(),
+    });
+
+    await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toThrow(
+      /does not match/i,
+    );
+  });
+
+  it("rejects a final dedup guard that points to another dedup key", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new WrongTargetGuardFactory(),
+    });
+
+    await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toThrow(
+      DeliveryStorageCorruptionError,
+    );
+  });
 });
 
 const liveStatuses: readonly DeliveryStatus[] = Object.freeze([
@@ -771,14 +797,62 @@ class MissingMessageGuardFactory extends StorageFactory {
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
   ): RecordStorage<I, R> {
-    return new MissingMessageGuardStorage(
-      context,
-      recordSpec as unknown as RecordSpec<string, Any>,
-    ) as unknown as RecordStorage<I, R>;
+    return new CorruptGuardStorage(context, recordSpec as unknown as RecordSpec<string, Any>, {
+      guard: finalDedupRecord({
+        key: testDedupKey("signal-1"),
+        inbox: testInboxKey,
+        signalId: "signal-1",
+        inboxMessageId: "message-1",
+      }),
+    }) as unknown as RecordStorage<I, R>;
   }
 }
 
-class MissingMessageGuardStorage extends RecordStorage<string, Any> {
+class WrongKeyGuardFactory extends StorageFactory {
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new CorruptGuardStorage(context, recordSpec as unknown as RecordSpec<string, Any>, {
+      guard: finalDedupRecord({
+        key: testDedupKey("signal-2"),
+        inbox: testInboxKey,
+        signalId: "signal-1",
+        inboxMessageId: "message-1",
+      }),
+    }) as unknown as RecordStorage<I, R>;
+  }
+}
+
+class WrongTargetGuardFactory extends StorageFactory {
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new CorruptGuardStorage(context, recordSpec as unknown as RecordSpec<string, Any>, {
+      guard: finalDedupRecord({
+        key: testDedupKey("signal-1"),
+        inbox: testInboxKey,
+        signalId: "signal-1",
+        inboxMessageId: "message-1",
+      }),
+      inbox: writeInboxMessage(createMessage("message-1", "signal-2", 1n)),
+    }) as unknown as RecordStorage<I, R>;
+  }
+}
+
+class CorruptGuardStorage extends RecordStorage<string, Any> {
+  readonly #records: CorruptGuardRecords;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<string, Any>,
+    records: CorruptGuardRecords,
+  ) {
+    super(context, recordSpec);
+    this.#records = records;
+  }
+
   protected compareAndSetRecord(): Promise<boolean> {
     return Promise.resolve(false);
   }
@@ -793,24 +867,11 @@ class MissingMessageGuardStorage extends RecordStorage<string, Any> {
 
   protected readRecord(): Promise<Any | undefined> {
     if (this.context.name.endsWith(".delivery.inbox-dedup")) {
-      return Promise.resolve(
-        create(AnySchema, {
-          typeUrl: "type.spine-ts.dev/internal/InboxDedupRecord",
-          value: Buffer.from(
-            JSON.stringify({
-              key: "inbox:signal-1",
-              inbox: "inbox",
-              signalId: "signal-1",
-              inboxMessageId: "message-1",
-              shardIndex: 0,
-              shardTotal: 1,
-              state: "FINAL",
-              status: "TO_DELIVER",
-            }),
-            "utf8",
-          ),
-        }),
-      );
+      return Promise.resolve(this.#records.guard);
+    }
+
+    if (this.context.name.endsWith(".delivery.inbox")) {
+      return Promise.resolve(this.#records.inbox);
     }
 
     return Promise.resolve(undefined);
@@ -824,3 +885,40 @@ class MissingMessageGuardStorage extends RecordStorage<string, Any> {
     return Promise.resolve();
   }
 }
+
+interface CorruptGuardRecords {
+  readonly guard: Any;
+  readonly inbox?: Any;
+}
+
+interface FinalGuardFields {
+  readonly key: string;
+  readonly inbox: string;
+  readonly signalId: string;
+  readonly inboxMessageId: string;
+}
+
+function finalDedupRecord(fields: FinalGuardFields): Any {
+  return create(AnySchema, {
+    typeUrl: "type.spine-ts.dev/internal/InboxDedupRecord",
+    value: Buffer.from(
+      JSON.stringify({
+        ...fields,
+        shardIndex: 0,
+        shardTotal: 1,
+        state: "FINAL",
+        status: "TO_DELIVER",
+      }),
+      "utf8",
+    ),
+  });
+}
+
+function testDedupKey(signalId: string): string {
+  return `${testInboxKey}:${signalId}`;
+}
+
+const testInboxKey = JSON.stringify({
+  targetId: "projection-1",
+  targetTypeUrl: "type.example.dev/tasks.Projection",
+});
