@@ -694,3 +694,14 @@ All five round-23 reviewers were closed after their reports were collected.
 
 Verification after the round-23 status fix passed: `format:check` and
 `git diff --check`.
+
+Round-23 status-fix commit: `6c514df`.
+
+### Round 24
+
+Diff package:
+`.superpowers/sdd/review-3bb3945..6c514df.diff`.
+
+Reviewer sub-agents: pending.
+
+Result: pending.
