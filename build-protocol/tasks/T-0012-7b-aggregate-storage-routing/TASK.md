@@ -1,6 +1,6 @@
 # T-0012.7b: Aggregate Storage And Signal Routing
 
-Status: round-20 re-review pending
+Status: round-20 fixes verified
 Start: `2026-07-02 06:20 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7b-aggregate-storage-routing`
@@ -171,12 +171,10 @@ Required evidence for this task:
   aggregate-storage tests, and repository-routing tests; `typecheck`, `lint`,
   `format:check`, `docs:check`, and `git diff --check`.
 - Round-18 fix commit: `86b287e`.
-- Round-19 reviewer sub-agents are pending against
-  `.superpowers/sdd/review-7dbec34..86b287e.diff`.
 - Round-19 reviewers completed. Code style/maintainability and TypeScript/API
   docs were clean; documentation, security, and reliability requested focused
   fixes.
-- Round-19 fixes are in progress for stale logs, storage-handle docs, EventBus
+- Round-19 fixes addressed stale logs, storage-handle docs, EventBus
   summary docs, the `bigint` aggregate ID mismatch, early read-history ID
   validation, whitespace event IDs in stored history, and EventBus tenant-context
   drift between precheck and append.
@@ -185,6 +183,16 @@ Required evidence for this task:
   aggregate-storage tests, and repository-routing tests; `typecheck`, `lint`,
   `format:check`, `docs:check`, and `git diff --check`.
 - Round-19 fix commit: `973a3f6`.
-- Round-20 reviewer sub-agents are pending against
+- Round-20 reviewer sub-agents completed against
   `.superpowers/sdd/review-fc6c31d..973a3f6.diff`.
+- Round-20 reviewers completed. Code style/maintainability and
+  performance/reliability were clean; documentation, TypeScript/API docs, and
+  security requested focused fixes.
+- Round-20 fixes are in progress for stale review/task status text,
+  `acceptThenAppend()` documentation wording, and duplicate event IDs in
+  corrupted stored aggregate history.
+- Required round-20 focused verification passed: storage event-store/factory
+  and index tests, server bus/API tests, handler metadata tests,
+  aggregate-storage tests, and repository-routing tests; `typecheck`, `lint`,
+  `format:check`, `docs:check`, and `git diff --check`.
 - No blocking human question is known.

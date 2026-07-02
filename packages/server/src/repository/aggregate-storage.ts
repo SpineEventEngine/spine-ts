@@ -213,6 +213,7 @@ export class AggregateStorage<
     }
 
     events.sort((left, right) => compareVersions(left.version, right.version));
+    rejectDuplicateEventIds(events);
     rejectConsecutiveVersions(events);
     return Object.freeze(events);
   }
@@ -514,6 +515,17 @@ function rejectConsecutiveVersions(events: readonly VersionedEvent[]): void {
       throw new Error("Aggregate event history contains version gaps.");
     }
     expectedVersion++;
+  }
+}
+
+function rejectDuplicateEventIds(events: readonly VersionedEvent[]): void {
+  const eventIds = new Set<string>();
+  for (const { event } of events) {
+    const eventId = requireEventId(event);
+    if (eventIds.has(eventId)) {
+      throw new Error("Aggregate event history contains duplicate event IDs.");
+    }
+    eventIds.add(eventId);
   }
 }
 

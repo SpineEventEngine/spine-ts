@@ -407,11 +407,11 @@ plus optional tenant scoping for multitenant storages.
 framework code rather than by `StorageFactory`, so the foundational storage
 package stays independent of the event layer. In this slice `EventStore`
 remains storage-only: it persists and reads generated Spine events, and
-`EventBus` calls `EventStore.accept()` before dispatcher `accept()` hooks so
-event identity fails closed before custom dispatcher code sees the event.
-`EventStore` rejects missing, blank, or duplicate event IDs on the local append
-path, but still does not dispatch on its own, manage delivery attempts, fan out
-to subscribers, or implement retry/bus behavior.
+`EventBus` calls `EventStore.acceptThenAppend()` so event identity fails closed
+before custom dispatcher code sees the event and append uses the same captured
+storage context. `EventStore` rejects missing, blank, or duplicate event IDs on
+the local append path, but still does not dispatch on its own, manage delivery
+attempts, fan out to subscribers, or implement retry/bus behavior.
 
 `InMemoryStorageFactory` and `InMemoryRecordStorage` are the first
 test/development adapter. They are process-local, share backing records by

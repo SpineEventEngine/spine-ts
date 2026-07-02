@@ -631,6 +631,27 @@ describe("AggregateStorage", () => {
     ).rejects.toThrow(/readable event ID/);
   });
 
+  it("rejects duplicate event IDs already present in stored aggregate history", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new CorruptEventFactory(
+        createAggregateEvent("event-corrupt-duplicate", "task-corrupt-duplicate-id", 1),
+        createAggregateEvent("event-corrupt-duplicate", "task-corrupt-duplicate-id", 2),
+      ),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(storage.readHistory("task-corrupt-duplicate-id")).rejects.toThrow(
+      /duplicate event IDs/,
+    );
+    await expect(
+      storage.appendEvents("task-corrupt-duplicate-id", [
+        createAggregateEvent("event-after-corrupt-duplicate", "task-corrupt-duplicate-id", 3),
+      ]),
+    ).rejects.toThrow(/duplicate event IDs/);
+  });
+
   it("rejects nonprimitive read-history IDs before storage access", async () => {
     const storage = new AggregateStorage({
       context: { name: "Tasks", multitenant: false },
@@ -1034,8 +1055,11 @@ class CorruptSnapshotFactory extends InMemoryStorageFactory {
 class CorruptEventFactory extends InMemoryStorageFactory {
   #openedSnapshotStorage = false;
 
-  constructor(readonly event: Event) {
+  readonly #events: readonly Event[];
+
+  constructor(...events: readonly Event[]) {
     super();
+    this.#events = events;
   }
 
   protected override onCreateRecordStorage<I, R extends Message>(
@@ -1047,7 +1071,7 @@ class CorruptEventFactory extends InMemoryStorageFactory {
       return new InMemoryRecordStorage(context, recordSpec);
     }
 
-    return new CorruptEventStorage(context, recordSpec, this.event as unknown as R);
+    return new CorruptEventStorage(context, recordSpec, this.#events as readonly R[]);
   }
 }
 
@@ -1085,7 +1109,7 @@ class CorruptEventStorage<I, R extends Message> extends RecordStorage<I, R> {
   constructor(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
-    readonly event: R,
+    readonly events: readonly R[],
   ) {
     super(context, recordSpec);
   }
@@ -1095,7 +1119,7 @@ class CorruptEventStorage<I, R extends Message> extends RecordStorage<I, R> {
   }
 
   protected queryRecords(): Promise<readonly R[]> {
-    return Promise.resolve([this.event]);
+    return Promise.resolve(this.events);
   }
 
   protected readRecord(): Promise<R | undefined> {

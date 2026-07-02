@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round 19 fixes in progress
+Status: round 20 fixes in progress
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -550,7 +550,7 @@ Reviewer sub-agents:
 Result: changes requested. Code style/maintainability and TypeScript/API docs
 were clean.
 
-Findings being addressed in the round-19 fix pass:
+Findings addressed in the round-19 fix pass:
 
 - review/task/report status text was stale after the round-18 commit;
 - architecture docs omitted independently closeable in-memory storage handles;
@@ -576,6 +576,30 @@ Round-19 fix commit: `973a3f6`.
 Diff package:
 `.superpowers/sdd/review-fc6c31d..973a3f6.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
 
-Result: pending.
+- code style/maintainability:
+  `019f2157-1f65-7753-9abd-54f167441068`;
+- documentation: `019f2157-4416-7841-b0f7-22ee84627c1a`;
+- TypeScript/API docs: `019f2157-5d9f-7d83-bb21-6ca2ce742ad4`;
+- security: `019f2157-7d9e-7702-882e-2802ce2adaa9`;
+- performance/reliability:
+  `019f2157-9467-7f70-b35b-0b6158cf15f3`.
+
+Result: changes requested. Code style/maintainability and
+performance/reliability were clean.
+
+Findings being addressed in the round-20 fix pass:
+
+- review/task status text was stale after the round-19 commit;
+- EventBus docs still named the older separate `EventStore.accept()` precheck
+  instead of `EventStore.acceptThenAppend()`; and
+- corrupted stored aggregate history with duplicate event IDs was accepted on
+  read and before append.
+
+All five round-20 reviewers were closed after their reports were collected.
+
+Verification after the round-20 fix pass passed: focused storage event-store,
+storage factory, storage index, server event-bus, server bus API, server root
+API, handler metadata, aggregate-storage, and repository-routing tests,
+`typecheck`, `lint`, `format:check`, `docs:check`, and `git diff --check`.

@@ -543,14 +543,14 @@ await eventBus.post(eventEnvelope);
 dispatcher handles a posted command. Registering a second dispatcher for the
 same command type is rejected. `EventBus` is multicast by enclosed message type
 URL: registered dispatchers for the event type run in registration order.
-Before storage, `EventStore.accept()` prechecks event identity, then matching
-dispatchers may reject an event through `accept()`. Accepted events are appended
-to the injected `EventStore` before `dispatch()` runs. If no dispatcher is
-registered, the event is still stored and `post()` resolves. If the identity
-precheck or dispatcher acceptance fails, the event is not stored by the bus. If
-append fails, no `dispatch()` method runs, but dispatcher `accept()` hooks may
-already have run. If dispatch rejects, earlier dispatchers may already have run,
-later dispatchers are not invoked, and the stored event remains.
+Before storage, `EventStore.acceptThenAppend()` prechecks event identity, lets
+matching dispatchers reject an event through `accept()`, and appends the event
+with one captured storage context. If no dispatcher is registered, the event is
+still stored and `post()` resolves. If the identity precheck or dispatcher
+acceptance fails, the event is not stored by the bus. If append fails, no
+`dispatch()` method runs, but dispatcher `accept()` hooks may already have run.
+If dispatch rejects, earlier dispatchers may already have run, later dispatchers
+are not invoked, and the stored event remains.
 
 ## Transport Foundation
 

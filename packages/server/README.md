@@ -223,18 +223,19 @@ storage, or own repository routing.
 
 `EventBus` is the matching executable multicast seam for generated Spine
 `Event` envelopes. It snapshots accepted events at post time, finds matching
-registered `EventDispatcher`s by event message schema, prechecks event identity
-through `EventStore.accept()`, calls dispatcher `accept()` hooks, appends the
-event to the store, and then calls `dispatch()` in deterministic dispatcher
-registration order. Repository dispatchers use `accept()` for fail-closed route
-validation before persistence. If no dispatcher is registered for the event
-type, the stored event remains and `post()` resolves. If the identity precheck
-or dispatcher acceptance fails, the event is not stored by this bus. If append
-fails, no `dispatch()` method runs, but dispatcher `accept()` hooks may already
-have run. If a dispatch call rejects, earlier dispatchers may already have run,
-later dispatchers are not invoked, and the stored event remains. The
-`EventStore` remains storage-only: `EventBus` owns validation-before-append and
-append-before-dispatch ordering by delegating to it, while `EventStore`
+registered `EventDispatcher`s by event message schema, and runs
+`EventStore.acceptThenAppend()` so event identity precheck, dispatcher
+`accept()` hooks, and append share one captured storage context. It then calls
+`dispatch()` in deterministic dispatcher registration order. Repository
+dispatchers use `accept()` for fail-closed route validation before persistence.
+If no dispatcher is registered for the event type, the stored event remains and
+`post()` resolves. If the identity precheck or dispatcher acceptance fails, the
+event is not stored by this bus. If append fails, no `dispatch()` method runs,
+but dispatcher `accept()` hooks may already have run. If a dispatch call
+rejects, earlier dispatchers may already have run, later dispatchers are not
+invoked, and the stored event remains. The `EventStore` remains storage-only:
+`EventBus` owns validation-before-append and append-before-dispatch ordering by
+delegating to it, while `EventStore`
 continues to avoid fan-out, retries, inbox, or delivery behavior on its own.
 The current TypeScript event-dispatch contract is message-type-based only;
 domestic/external filtering remains deferred until handler metadata exposes that

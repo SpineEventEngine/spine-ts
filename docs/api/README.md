@@ -192,16 +192,16 @@ Bus exports include `CommandBus`, `CommandDispatcher`, `EventBus`, and
 queues accepted work asynchronously, and routes by enclosed message type URL to
 exactly one registered dispatcher, rejecting duplicate dispatcher registration
 for a command message type. `EventBus` accepts generated Spine `Event`
-envelopes, asks the injected `EventStore` to precheck event identity, asks
-matching dispatchers to `accept()` the event when they expose that hook, appends
-accepted events to the store, and then calls `dispatch()` in deterministic
-registration order. Events with no registered dispatcher are stored and resolve.
-If the identity precheck or dispatcher acceptance fails, the event is not stored
-by the bus. If append fails, no `dispatch()` method runs, but dispatcher
-`accept()` hooks may already have run. If dispatch rejects, earlier dispatchers
-may already have run, later dispatchers are skipped, and the stored event
-remains. The bus layer does not instantiate entities, invoke entity methods
-directly, create repositories, map `Ack`, or introduce delivery/inbox behavior.
+envelopes and uses `EventStore.acceptThenAppend()` to precheck event identity,
+run matching dispatcher `accept()` hooks, and append with one captured storage
+context. It then calls `dispatch()` in deterministic registration order. Events
+with no registered dispatcher are stored and resolve. If the identity precheck
+or dispatcher acceptance fails, the event is not stored by the bus. If append
+fails, no `dispatch()` method runs, but dispatcher `accept()` hooks may already
+have run. If dispatch rejects, earlier dispatchers may already have run, later
+dispatchers are skipped, and the stored event remains. The bus layer does not
+instantiate entities, invoke entity methods directly, create repositories, map
+`Ack`, or introduce delivery/inbox behavior.
 Runtime routing exports include `createServerRuntimeRoutingPlan()`,
 `ServerRuntimeRoutingPlan`, `ServerRuntimeRoutingPlanInput`,
 `CommandRuntimeRoutingPlan`, `EventRuntimeRoutingPlan`, and

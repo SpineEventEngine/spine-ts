@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round-20 re-review pending
+Status: round-20 fixes in progress
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -221,8 +221,8 @@ aggregate ID type contract. The fix constrains `AggregateStorage` IDs with the
 exported primitive `AggregateId` type, keeps the runtime primitive-ID check for
 JavaScript callers, splits append validation into small class-private methods,
 guards the append event-store handle with `try/finally`, and updates public docs
-to state the actual order: `EventStore.accept()`, dispatcher `accept()`,
-`EventStore.append()`, then `dispatch()`.
+to state the order later refined to `EventStore.acceptThenAppend()` around
+dispatcher `accept()`, append, then `dispatch()`.
 
 Verification after the round-18 fix pass:
 
@@ -264,6 +264,25 @@ Verification after the round-19 fix pass:
 
 Round-19 fix commit: `973a3f6`. Round-20 re-review is pending against
 `.superpowers/sdd/review-fc6c31d..973a3f6.diff`.
+
+Round 20 requested fixes for stale review/task status text,
+`acceptThenAppend()` wording in EventBus docs, and duplicate event IDs already
+present in corrupted stored aggregate history. The fix updates source docs to
+name `EventStore.acceptThenAppend()` for the combined precheck/accept/append
+flow and rejects duplicate event IDs while reading aggregate history, before
+`readHistory()` returns or `appendEvents()` can validate a later event.
+
+Verification after the round-20 fix pass:
+
+- Focused storage event-store/factory/index, server bus/API, handler metadata,
+  aggregate-storage, and repository-routing tests passed with 9 files and
+  84 tests.
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm lint` passed.
+- `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
+  warning.
+- `git diff --check` passed.
 
 Round 10 requested a documentation/status cleanup and a reliability fix for
 duplicate aggregate event IDs. The reliability fix rejects missing or duplicate
