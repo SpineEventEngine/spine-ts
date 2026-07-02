@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-8 review pending
+Status: round-9 review prep
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -129,4 +129,10 @@ entityStateType)` returns a zero-based shard index and that all messages for
 - Round-7 fix committed as `e7f7b05`.
 - Round-8 review package is prepared at
   `.superpowers/sdd/review-8a468ff..e7f7b05.diff`.
+- Round-8 review completed with one security finding. The other four required
+  lanes were clean.
+- All five round-8 reviewer sub-agents were closed after their reports were
+  collected.
+- Round-8 fix implemented in this worktree: direct writes validate the inbox
+  message shard invariant before any dedup lookup or duplicate short-circuit.
 - No blocking human question is known.

@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 8 review pending
+Status: round 9 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -371,6 +371,34 @@ Fix summary:
 Diff package:
 `.superpowers/sdd/review-8a468ff..e7f7b05.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
 
-Result: pending.
+- code style/maintainability:
+  `019f21fe-4c71-75b1-8f79-7775753b4cab`;
+- documentation: `019f21fe-4d13-78f2-b600-ab2cd0c8ef37`;
+- TypeScript/API docs: `019f21fe-4d86-78a1-ac3e-af244691e925`;
+- security: `019f21fe-4e01-7da0-91eb-0fc5678649db`;
+- performance/reliability:
+  `019f21fe-5a9e-7d92-8655-9564301e23e2`.
+
+Result: changes requested.
+
+Findings to address:
+
+- direct writes must validate `InboxMessage.id.shard === InboxMessage.shard`
+  before any dedup lookup or duplicate short-circuit, so malformed direct-write
+  requests always fail consistently with `InboxMessageError`.
+
+Code style/maintainability, documentation, TypeScript/API docs, and
+performance/reliability lanes were clean. All five round-8 reviewer sub-agents
+were closed after their reports were collected.
+
+### Round 8 Fix
+
+Result: implemented in this worktree and ready for round-9 review.
+
+Fix summary:
+
+- moved inbox message shard-invariant validation before any dedup lookup in
+  `InboxStorage.write()`; and
+- kept serialization on the same validation helper.

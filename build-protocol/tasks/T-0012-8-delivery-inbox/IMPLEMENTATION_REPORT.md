@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-8 review pending
+Status: round-9 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -115,6 +115,13 @@ caller-supplied inbox messages. Direct write shard mismatch uses this error,
 and the regression test asserts the exported class.
 
 Committed as `e7f7b05` after focused delivery and API docs verification passed.
+
+## Round 8 Fix
+
+Round 8 requested consistent early validation of the shard invariant. Direct
+`InboxStorage.write()` now validates `InboxMessage.id.shard` against
+`InboxMessage.shard` before opening storage or reading dedup state, and
+serialization reuses the same validation.
 
 ## Round 2 Review
 

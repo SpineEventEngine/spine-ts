@@ -392,10 +392,12 @@ describe("Inbox", () => {
       storageFactory: new InMemoryStorageFactory(),
     });
 
+    await storage.write(createMessage("message-1", "signal-1", 1n));
+
     const write = storage.write({
       ...createMessage("message-1", "signal-1", 1n),
       id: {
-        value: "message-1",
+        value: "message-2",
         shard: new ShardIndex(1, 2),
       },
       shard: new ShardIndex(0, 2),

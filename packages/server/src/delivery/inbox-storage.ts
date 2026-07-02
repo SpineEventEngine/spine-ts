@@ -11,6 +11,7 @@ import {
   isPendingDedupRecord,
   readPendingMessage,
   readInboxMessage,
+  validateInboxMessage,
   writeDedupClaim,
   writeDedupRecord,
   writeInboxMessage,
@@ -52,6 +53,7 @@ export class InboxStorage {
 
   /** Write one inbox message unless a live dedup key already exists. */
   async write(message: InboxMessage): Promise<InboxWriteResult> {
+    validateInboxMessage(message);
     const inboxStorage = this.#inboxStorage();
     const dedupStorage = this.#dedupStorage();
 

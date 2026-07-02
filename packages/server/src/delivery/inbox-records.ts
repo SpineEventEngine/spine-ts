@@ -86,8 +86,15 @@ export function readInboxMessage(record: Any): InboxMessage {
 }
 
 export function writeInboxMessage(message: InboxMessage): Any {
+  validateInboxMessage(message);
   assertSignalPayloadSize(message.signal);
   return packRecord(inboxRecordTypeUrl, storedInboxMessage(message));
+}
+
+export function validateInboxMessage(message: InboxMessage): void {
+  if (message.id.shard.key() !== message.shard.key()) {
+    throw new InboxMessageError("Inbox message ID shard does not match message shard.");
+  }
 }
 
 export function dedupGuardKey(message: Pick<InboxMessage, "inboxId" | "signalId">): string {
@@ -212,10 +219,6 @@ function packRecord(typeUrl: string, value: StoredInboxMessage | StoredDedupReco
 }
 
 function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
-  if (message.id.shard.key() !== message.shard.key()) {
-    throw new InboxMessageError("Inbox message ID shard does not match message shard.");
-  }
-
   return Object.freeze({
     key: inboxMessageKey(message.id),
     id: requireText(message.id.value, "Inbox message ID"),
