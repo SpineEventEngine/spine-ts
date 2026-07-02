@@ -603,3 +603,14 @@ Verification after the round-20 fix pass passed: focused storage event-store,
 storage factory, storage index, server event-bus, server bus API, server root
 API, handler metadata, aggregate-storage, and repository-routing tests,
 `typecheck`, `lint`, `format:check`, `docs:check`, and `git diff --check`.
+
+Round-20 fix commit: `2c70c67`.
+
+### Round 21
+
+Diff package:
+`.superpowers/sdd/review-083feaa..2c70c67.diff`.
+
+Reviewer sub-agents: pending.
+
+Result: pending.

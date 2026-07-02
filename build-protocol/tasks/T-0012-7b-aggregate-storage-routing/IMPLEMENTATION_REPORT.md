@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round-20 fixes in progress
+Status: round-21 re-review pending
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -210,6 +210,9 @@ Verification after the round-9 fix pass:
 - `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
   warning.
 - `git diff --check` passed.
+
+Round-20 fix commit: `2c70c67`. Round-21 re-review is pending against
+`.superpowers/sdd/review-083feaa..2c70c67.diff`.
 
 Round-17 fix commit: `822d358`. Round-18 re-review completed against
 `.superpowers/sdd/review-d7b9245..822d358.diff`.
