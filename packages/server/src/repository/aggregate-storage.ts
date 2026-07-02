@@ -46,9 +46,17 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
   async appendEvents(aggregateId: Id, events: Iterable<Event>): Promise<void> {
     const batch = [...events];
     const expectedId = requirePrimitiveId(aggregateId);
-    let lastVersion = (await this.#readAggregateEvents(aggregateId)).at(-1)?.version ?? 0n;
+    const storedEvents = await this.#readAggregateEvents(aggregateId);
+    let lastVersion = storedEvents.at(-1)?.version ?? 0n;
+    const eventIds = new Set(storedEvents.map(({ event }) => requireEventId(event)));
 
     for (const event of batch) {
+      const eventId = requireEventId(event);
+      if (eventIds.has(eventId)) {
+        throw new Error("Aggregate event IDs must be unique before append.");
+      }
+      eventIds.add(eventId);
+
       const eventAggregateId = this.#eventAggregateId(event);
       if (eventAggregateId === undefined || !samePrimitiveId(eventAggregateId, expectedId)) {
         throw new Error("Aggregate events must all route to the same aggregate ID before append.");
@@ -348,6 +356,14 @@ function requireEventVersion(event: Event): bigint {
     throw new Error("Aggregate event routing requires a readable version.");
   }
   return BigInt(version);
+}
+
+function requireEventId(event: Event): string {
+  const value = event.id?.value;
+  if (value === undefined || value === "") {
+    throw new Error("Aggregate event routing requires a readable event ID.");
+  }
+  return value;
 }
 
 function rejectConsecutiveVersions(events: readonly VersionedEvent[]): void {

@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round-10 re-review pending
+Status: round-10 fixes verified
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -204,6 +204,22 @@ Verification after the round-9 fix pass:
 
 - `corepack pnpm test packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts`
   passed with 2 files and 20 tests.
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm lint` passed.
+- `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
+  warning.
+- `git diff --check` passed.
+
+Round 10 requested a documentation/status cleanup and a reliability fix for
+duplicate aggregate event IDs. The reliability fix rejects missing or duplicate
+event IDs before `EventStore.appendAll()`, preventing replace-by-ID storage from
+silently overwriting earlier aggregate history.
+
+Verification after the round-10 fix pass:
+
+- `corepack pnpm test packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts`
+  passed with 2 files and 21 tests.
 - `corepack pnpm typecheck` passed.
 - `corepack pnpm lint` passed.
 - `corepack pnpm format:check` passed.

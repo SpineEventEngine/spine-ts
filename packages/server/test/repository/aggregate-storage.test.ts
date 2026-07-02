@@ -546,6 +546,35 @@ describe("AggregateStorage", () => {
     ).rejects.toThrow(/version gaps/);
   });
 
+  it("rejects duplicate event IDs before appending", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(
+      storage.appendEvents("task-duplicate-id", [
+        createAggregateEvent("event-duplicate-id", "task-duplicate-id", 1),
+        createAggregateEvent("event-duplicate-id", "task-duplicate-id", 2),
+      ]),
+    ).rejects.toThrow(/unique/);
+    expect((await storage.readHistory("task-duplicate-id")).events).toEqual([]);
+
+    await storage.appendEvents("task-duplicate-id", [
+      createAggregateEvent("event-existing-id", "task-duplicate-id", 1),
+    ]);
+    await expect(
+      storage.appendEvents("task-duplicate-id", [
+        createAggregateEvent("event-existing-id", "task-duplicate-id", 2),
+      ]),
+    ).rejects.toThrow(/unique/);
+    expect(
+      (await storage.readHistory("task-duplicate-id")).events.map((event) => event.id?.value),
+    ).toEqual(["event-existing-id"]);
+  });
+
   it("fails closed for corrupted snapshot records", async () => {
     await expect(
       corruptStorage({

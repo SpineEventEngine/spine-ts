@@ -5,9 +5,12 @@ This repository is the TypeScript/Node.js implementation workspace for a Spine-i
 Current status: workspace/toolchain bootstrap, the first copied Spine Protobuf
 contract intake, core validation facades, descriptor-backed server metadata, a
 server-owned set-once state-transition validator, and a non-durable in-memory
-storage adapter. Entity transaction/runtime behavior, gRPC services, ZeroMQ
-transport, production storage adapters/repository runtime, and the to-do domain
-are intentionally deferred to later tasks.
+storage adapter. The server package now includes entity transactions, entity
+families, repository registration, aggregate snapshot/event storage, and
+repository command/event route calculation. Handler invocation, delivery/Inbox,
+Stand/read-side query behavior, gRPC services, ZeroMQ transport, production
+storage adapters, process supervision, and the to-do domain are intentionally
+deferred to later tasks.
 
 ## Workspace
 
