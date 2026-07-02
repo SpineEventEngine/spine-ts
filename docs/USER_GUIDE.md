@@ -859,6 +859,8 @@ await eventStore.append(
 ```
 
 `StorageFactory` owns one mandatory seam: `createRecordStorage(context, spec)`.
+Repeated calls for the same logical storage context and record specification
+must observe the same backing records.
 `RecordSpec` binds a generated record schema, optional generated ID schema, ID
 extraction, and query columns. `RecordStorage` then provides cloned writes,
 point reads, deletes, deterministic ID queries, exact column filters, sorting
@@ -866,13 +868,15 @@ by `id`/columns/dotted paths, positive limits, and simple masks on read/query
 results.
 
 `InMemoryStorageFactory` and `InMemoryRecordStorage` are the first concrete
-adapter. They keep multitenant slices separate by `StorageContext.tenantId`,
-clone records on write and read, and are not durable across process restarts.
+adapter. Storage objects opened by one factory share backing records by context
+name, tenant mode, tenant ID, and `RecordSpec` instance. They clone records on
+write and read, and are not durable across process restarts.
 
 `EventStore` is the first higher-level delegate over `RecordStorage<EventId,
 Event>`. In this slice it is storage-only: it persists and reads generated
-Spine `Event` messages, but it does not dispatch them to subscribers, manage
-delivery attempts, or implement retry/bus behavior.
+Spine `Event` messages and rejects duplicate event IDs on append, but it does
+not dispatch them to subscribers, manage delivery attempts, or implement
+retry/bus behavior.
 
 Aggregate snapshot/history storage is available through `AggregateStorage`.
 Delivery records, tenant indexes, diagnostics, repository storage policy, and

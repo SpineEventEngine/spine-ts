@@ -78,6 +78,21 @@ describe("EventStore", () => {
     await expect(store.read()).resolves.toEqual([]);
   });
 
+  it("rejects events with blank IDs", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      store.append(
+        create(EventSchema, {
+          id: create(EventIdSchema),
+          message: create(AnySchema, { typeUrl: "type.spine.io/tasks.TaskCreated" }),
+        }),
+      ),
+    ).rejects.toThrow(/non-empty event\.id\.value/);
+    await expect(store.read()).resolves.toEqual([]);
+  });
+
   it("rejects duplicate event IDs across stores sharing one factory and context", async () => {
     const factory = new InMemoryStorageFactory();
     const context = { name: "Tasks", multitenant: false };

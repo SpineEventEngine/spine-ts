@@ -654,6 +654,37 @@ describe("AggregateStorage", () => {
     ).toHaveLength(1);
   });
 
+  it("serializes concurrent appends across stores sharing one factory", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    const second = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    const results = await Promise.allSettled([
+      first.appendEvents("task-shared-concurrent", [
+        createAggregateEvent("event-shared-concurrent-a", "task-shared-concurrent", 1),
+      ]),
+      second.appendEvents("task-shared-concurrent", [
+        createAggregateEvent("event-shared-concurrent-b", "task-shared-concurrent", 1),
+      ]),
+    ]);
+
+    expect(results.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
+    expect(results.filter(({ status }) => status === "rejected")).toHaveLength(1);
+    expect(
+      (await first.readHistory("task-shared-concurrent")).events.map((event) => event.id?.value),
+    ).toHaveLength(1);
+  });
+
   it("materializes append input before queued validation", async () => {
     const storage = new AggregateStorage({
       context: { name: "Tasks", multitenant: false },

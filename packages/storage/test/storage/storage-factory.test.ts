@@ -51,6 +51,22 @@ describe("StorageFactory", () => {
     await expect(users.read(create(EventIdSchema, { value: "event-1" }))).resolves.toBeUndefined();
   });
 
+  it("keeps single-tenant records separate from multitenant slices", async () => {
+    const factory = new InMemoryStorageFactory();
+    const spec = createEventSpec();
+    const singleTenant = factory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);
+    const multitenant = factory.createRecordStorage(
+      { name: "Tasks", multitenant: true, tenantId: "__single__" },
+      spec,
+    );
+
+    await singleTenant.write(createEvent("event-1", "type.spine.io/tasks.TaskCreated"));
+
+    await expect(
+      multitenant.read(create(EventIdSchema, { value: "event-1" })),
+    ).resolves.toBeUndefined();
+  });
+
   it("rejects record storage creation after the factory closes", () => {
     const factory = new InMemoryStorageFactory();
     const spec = createEventSpec();

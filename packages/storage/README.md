@@ -9,8 +9,8 @@ The package owns the first corrected storage layer:
 - `RecordSpec` describes identified Protobuf records and query columns;
 - `RecordStorage` stores, reads, deletes, and queries those records;
 - `InMemoryStorageFactory` and `InMemoryRecordStorage` are the first concrete
-  adapter, with storage objects from the same factory and `RecordSpec` sharing
-  one process-local backing record set per context name and tenant;
+  adapter, with storage objects from the same factory and `RecordSpec` instance
+  sharing one process-local backing record set per context name and tenant;
 - `EventStore` is a framework delegate over `RecordStorage<EventId, Event>`.
 
 `EventStore` is storage-only in this task. It persists and reads `Event`

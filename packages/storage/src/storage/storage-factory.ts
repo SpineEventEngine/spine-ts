@@ -18,7 +18,12 @@ export abstract class StorageFactory implements Storage {
     return this.#open;
   }
 
-  /** Create a record storage for one context and one declarative record specification. */
+  /**
+   * Create a record storage for one context and one declarative record specification.
+   *
+   * Repeated calls for the same logical context and record specification must
+   * observe the same backing records.
+   */
   createRecordStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,

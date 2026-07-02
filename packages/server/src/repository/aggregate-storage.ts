@@ -24,8 +24,9 @@ import type { EntityLifecycleFlags } from "../entity/entity.js";
  * storing anything.
  */
 export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = string> {
-  #appendQueue: Promise<void> = Promise.resolve();
+  readonly #context: StorageContext;
   readonly #eventSchemas: readonly MessageSchema[];
+  readonly #storageFactory: StorageFactory;
   readonly #eventStore: EventStore;
   readonly #snapshotStorage: RecordStorage<Id, SnapshotRecord>;
   readonly #stateSchema: Schema;
@@ -33,22 +34,26 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
 
   /** Open aggregate storage from a context, storage factory, and state schema. */
   constructor(options: AggregateStorageOptions<Schema>) {
+    this.#context = snapshotStorageContext(options.context);
+    this.#storageFactory = options.storageFactory;
     this.#stateSchema = options.stateSchema;
     this.#stateTypeUrl = deriveTypeUrl(options.stateSchema);
     this.#eventSchemas = Object.freeze([...(options.eventSchemas ?? [])]);
     this.#snapshotStorage = options.storageFactory.createRecordStorage(
-      options.context,
+      this.#context,
       snapshotRecordSpec<Id>(),
     );
-    this.#eventStore = new EventStore(options.context, options.storageFactory);
+    this.#eventStore = new EventStore(this.#context, options.storageFactory);
   }
 
   /** Append aggregate events in strictly increasing aggregate-version order. */
   async appendEvents(aggregateId: Id, events: Iterable<Event>): Promise<void> {
     const batch = Object.freeze([...events].map((event) => clone(EventSchema, event)));
-    const operation = this.#appendQueue.then(() => this.#appendEventBatch(aggregateId, batch));
-    this.#appendQueue = operation.catch(() => undefined);
-    return operation;
+    const key = aggregateLockKey(this.#context, requirePrimitiveId(aggregateId));
+
+    await AggregateStorageLocks.withLock(this.#storageFactory, key, () =>
+      this.#appendEventBatch(aggregateId, batch),
+    );
   }
 
   async #appendEventBatch(aggregateId: Id, batch: readonly Event[]): Promise<void> {
@@ -300,6 +305,35 @@ type PrimitiveId = string | number | boolean | bigint;
 
 const snapshotRecordTypeUrl = "type.spine-ts.dev/internal/AggregateSnapshotRecord";
 
+const AggregateStorageLocks = Object.freeze({
+  queues: new WeakMap<StorageFactory, Map<string, Promise<void>>>(),
+
+  async withLock(factory: StorageFactory, key: string, work: () => Promise<void>): Promise<void> {
+    const queues = this.queueMap(factory);
+    const previous = queues.get(key) ?? Promise.resolve();
+    const next = previous.then(work, work);
+    const stored = next.catch(() => undefined);
+
+    queues.set(key, stored);
+    try {
+      await next;
+    } finally {
+      if (queues.get(key) === stored) {
+        queues.delete(key);
+      }
+    }
+  },
+
+  queueMap(factory: StorageFactory): Map<string, Promise<void>> {
+    let queues = this.queues.get(factory);
+    if (queues === undefined) {
+      queues = new Map();
+      this.queues.set(factory, queues);
+    }
+    return queues;
+  },
+});
+
 const snapshotRecordSpecValue = new RecordSpec<unknown, SnapshotRecord>({
   schema: AnySchema,
   extractId: (record) => readSnapshotRecord(record).aggregateId,
@@ -311,6 +345,33 @@ const snapshotRecordSpecValue = new RecordSpec<unknown, SnapshotRecord>({
 
 function snapshotRecordSpec<Id>(): RecordSpec<Id, SnapshotRecord> {
   return snapshotRecordSpecValue as RecordSpec<Id, SnapshotRecord>;
+}
+
+function snapshotStorageContext(context: StorageContext): StorageContext {
+  if (!context.multitenant) {
+    return Object.freeze({
+      name: context.name,
+      multitenant: false,
+    });
+  }
+  const { tenantId } = context;
+  if (tenantId === undefined || tenantId.trim().length === 0) {
+    throw new Error(`Multitenant storage "${context.name}" requires context.tenantId.`);
+  }
+  return Object.freeze({
+    name: context.name,
+    multitenant: true,
+    tenantId,
+  });
+}
+
+function aggregateLockKey(context: StorageContext, aggregateId: PrimitiveId): string {
+  return JSON.stringify({
+    name: context.name,
+    multitenant: context.multitenant,
+    tenantId: context.multitenant ? context.tenantId : "",
+    aggregateId: String(aggregateId),
+  });
 }
 
 function createSnapshotRecord(payload: SnapshotRecordPayload): SnapshotRecord {

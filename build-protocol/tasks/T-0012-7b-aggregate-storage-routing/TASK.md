@@ -142,4 +142,12 @@ Required evidence for this task:
   and index tests, server bus/API, handler metadata, aggregate-storage, and
   repository-routing tests; `typecheck`, `lint`, `format:check`, `docs:check`,
   and `git diff --check`.
+- Round 16 found cross-instance aggregate append races, temporary event-store
+  storage lifetime risk, an in-memory tenant-key collision, a blank event-ID
+  gap, storage adapter invariant docs gaps, and stale storage/work-log docs.
+  Fixes were applied and verified.
+- Required round-16 focused verification passed: storage event-store/factory
+  and index tests, server bus/API, handler metadata, aggregate-storage, and
+  repository-routing tests; `typecheck`, `lint`, `format:check`, `docs:check`,
+  and `git diff --check`.
 - No blocking human question is known.

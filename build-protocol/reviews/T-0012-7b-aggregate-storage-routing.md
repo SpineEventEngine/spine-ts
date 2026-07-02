@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round 16 re-review pending
+Status: round 16 fixes in progress
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -429,6 +429,35 @@ Findings addressed in the round-15 fix pass:
 - this work/review log was stale.
 
 Verification after the round-15 fix pass passed: focused storage event-store,
+storage factory, storage index, server event-bus, server bus API, server root
+API, handler metadata, aggregate-storage, and repository-routing tests,
+`typecheck`, `lint`, `format:check`, `docs:check`, and `git diff --check`.
+
+### Round 16
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2131-06f4-7011-97cf-1eadc614b11d`;
+- documentation: `019f2131-0784-7da2-a519-14f83c4b602b`;
+- TypeScript/API docs: `019f2131-0807-7890-a8d9-10a1c67ee448`;
+- security: `019f2131-089e-7641-90a1-b4d881e8e19d`;
+- performance/reliability:
+  `019f2131-092b-7241-8cbf-959f0ce9ebdb`.
+
+Result: changes requested.
+
+Findings addressed in the round-16 fix pass:
+
+- cross-instance aggregate appends were not serialized by aggregate ID;
+- `EventStore` opened temporary append storages without closing them;
+- in-memory tenant keys could collide between single-tenant storage and a
+  multitenant tenant named `__single__`;
+- `EventStore` allowed blank event IDs;
+- storage adapter backing-sharing invariants were underdocumented; and
+- storage guide and work-log current-state text were stale.
+
+Verification after the round-16 fix pass passed: focused storage event-store,
 storage factory, storage index, server event-bus, server bus API, server root
 API, handler metadata, aggregate-storage, and repository-routing tests,
 `typecheck`, `lint`, `format:check`, `docs:check`, and `git diff --check`.

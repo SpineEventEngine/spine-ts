@@ -57,7 +57,10 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
 
   private tenantKey(): string {
     if (!this.context.multitenant) {
-      return `${this.context.name}\u0000__single__`;
+      return JSON.stringify({
+        name: this.context.name,
+        multitenant: false,
+      });
     }
 
     const { tenantId } = this.context;
@@ -66,6 +69,10 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
       throw new Error(`Multitenant storage "${this.context.name}" requires context.tenantId.`);
     }
 
-    return `${this.context.name}\u0000${tenantId}`;
+    return JSON.stringify({
+      name: this.context.name,
+      multitenant: true,
+      tenantId,
+    });
   }
 }

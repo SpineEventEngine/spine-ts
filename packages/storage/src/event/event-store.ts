@@ -9,7 +9,13 @@ import type { RecordStorage } from "../record/record-storage.js";
 import type { StorageContext } from "../storage/storage.js";
 import type { StorageFactory } from "../storage/storage-factory.js";
 
-/** Framework event store backed by a record storage. */
+/**
+ * Framework event store backed by record storage.
+ *
+ * Appends snapshot input events before queued work, reject missing, blank, and
+ * duplicate IDs in one batch, and reject IDs already stored for the same
+ * captured storage context.
+ */
 export class EventStore {
   readonly #context: StorageContext;
   readonly #factory: StorageFactory;
@@ -31,12 +37,12 @@ export class EventStore {
     this.#storage.close();
   }
 
-  /** Append one generated Spine event. */
+  /** Append one generated Spine event, rejecting missing, blank, or duplicate IDs. */
   async append(event: Event): Promise<void> {
     await this.appendUnique([clone(EventSchema, event)], snapshotContext(this.#context));
   }
 
-  /** Append generated Spine events in order. */
+  /** Append generated Spine events in order, rejecting duplicate IDs before persistence. */
   async appendAll(events: Iterable<Event>): Promise<void> {
     const records = [...events].map((event) => clone(EventSchema, event));
     const context = snapshotContext(this.#context);
@@ -58,13 +64,17 @@ export class EventStore {
 
     await EventStoreLocks.withLock(this.#factory, context, async () => {
       const storage = this.#factory.createRecordStorage(context, eventSpec);
-      const appended = await storage.index({ ids });
+      try {
+        const appended = await storage.index({ ids });
 
-      if (appended.length > 0) {
-        throw new Error("EventStore requires unique event IDs.");
+        if (appended.length > 0) {
+          throw new Error("EventStore requires unique event IDs.");
+        }
+
+        await storage.writeAll(records);
+      } finally {
+        storage.close();
       }
-
-      await storage.writeAll(records);
     });
   }
 
@@ -108,6 +118,9 @@ const EventStoreLocks = Object.freeze({
 function eventId(event: Event): EventId {
   if (event.id === undefined) {
     throw new Error("EventStore requires event.id.");
+  }
+  if (event.id.value === "") {
+    throw new Error("EventStore requires a non-empty event.id.value.");
   }
   return event.id;
 }
