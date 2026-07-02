@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-5 review pending
+Status: round-6 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -88,6 +88,14 @@ stored inbox records validate that the persisted record key and inbox key match
 the parsed message identity and target identity.
 
 Committed as `d0d5e0d` after focused delivery/storage verification passed.
+
+## Round 5 Fix
+
+Round 5 requested public documentation for the shard invariant and a clearer
+caller-side error. The exported `InboxMessageId` / `InboxMessage` comments and
+API overview now state that `InboxMessage.id.shard` must match
+`InboxMessage.shard`, and direct write mismatch now raises a plain invariant
+error before any durable record is decoded.
 
 ## Round 2 Review
 

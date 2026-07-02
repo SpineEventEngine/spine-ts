@@ -17,7 +17,7 @@ export interface InboxId {
 export interface InboxMessageId {
   /** Message UUID within one shard. */
   readonly value: string;
-  /** Shard that owns the message. */
+  /** Shard that owns the message; must match `InboxMessage.shard`. */
   readonly shard: ShardIndex;
 }
 
@@ -42,7 +42,7 @@ export interface InboxMessage {
   readonly label: DeliveryLabel;
   /** Current delivery status. */
   readonly status: DeliveryStatus;
-  /** Shard responsible for delivery. */
+  /** Shard responsible for delivery; must match `id.shard`. */
   readonly shard: ShardIndex;
   /** Durable receive time. */
   readonly whenReceived: Date;

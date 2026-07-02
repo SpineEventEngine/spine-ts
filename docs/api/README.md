@@ -123,8 +123,10 @@ inbox messages and shard lease records through `StorageFactory` /
 `RecordStorage`, deduplicates live inbox writes durably by
 `(signalId, inboxId)` through small internal guard records, keeps shard
 ordering metadata on each message with receive time (`whenReceived`),
-`version`, and inbox message UUID ordering, and exposes a storage-backed shard
-pickup / release seam backed by atomic `RecordStorage.compareAndSet()`.
+`version`, and inbox message UUID ordering. Direct inbox writes require
+`InboxMessage.id.shard` to match `InboxMessage.shard`. Delivery also exposes a
+storage-backed shard pickup / release seam backed by atomic
+`RecordStorage.compareAndSet()`.
 `InboxReadOptions.limit` is the current positive page-size control with a
 bounded default when omitted. This slice does not run worker loops,
 retry monitors, conveyor/stations, repository invocation, `Stand`, gRPC

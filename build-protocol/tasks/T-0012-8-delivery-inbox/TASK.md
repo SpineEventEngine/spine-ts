@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-5 review pending
+Status: round-6 review prep
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -100,4 +100,12 @@ entityStateType)` returns a zero-based shard index and that all messages for
 - Round-4 fix committed as `d0d5e0d`.
 - Round-5 review package is prepared at
   `.superpowers/sdd/review-f74df5d..d0d5e0d.diff`.
+- Round-5 review completed with TypeScript/API docs and performance/reliability
+  findings. Maintainability and security were clean. Documentation findings
+  were stale against the already committed round-5 prep state.
+- All five round-5 reviewer sub-agents were closed after their reports were
+  collected.
+- Round-5 fix implemented in this worktree: exported delivery docs now state
+  the shard invariant, and caller-side shard mismatch uses a plain invariant
+  error rather than a storage corruption error.
 - No blocking human question is known.

@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 5 review pending
+Status: round 6 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -253,6 +253,36 @@ Fix summary:
 Diff package:
 `.superpowers/sdd/review-f74df5d..d0d5e0d.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
 
-Result: pending.
+- code style/maintainability:
+  `019f21ed-1fa2-76e1-89f6-6df73f2e4471`;
+- documentation: `019f21ed-2039-7113-8018-9fbab18ff665`;
+- TypeScript/API docs: `019f21ed-20ba-7060-aadb-79655013c842`;
+- security: `019f21ed-212f-7c31-9cd5-951bee66a5b8`;
+- performance/reliability:
+  `019f21ed-21c8-7e03-a036-ed0e40dc602c`.
+
+Result: changes requested.
+
+Findings to address:
+
+- exported delivery types and API docs must state that `InboxMessage.id.shard`
+  must equal `InboxMessage.shard`; and
+- direct write shard mismatch should be reported as a caller invariant error,
+  not `DeliveryStorageCorruptionError`.
+
+Code style/maintainability and security lanes were clean. Documentation
+findings were stale against the already committed round-5 prep state. All five
+round-5 reviewer sub-agents were closed after their reports were collected.
+
+### Round 5 Fix
+
+Result: implemented in this worktree and ready for round-6 review.
+
+Fix summary:
+
+- documented that `InboxMessage.id.shard` must match `InboxMessage.shard` on
+  the exported interfaces and API overview; and
+- changed the direct-write shard mismatch from `DeliveryStorageCorruptionError`
+  to a plain caller invariant error.
