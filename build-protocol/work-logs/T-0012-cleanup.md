@@ -1,6 +1,6 @@
 # Work Log: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.7 integrated; T-0012.7b selected
+Status: T-0012.7c integrated; T-0012.8 selected
 
 ## Entries
 
@@ -25,6 +25,8 @@ Status: T-0012.7 integrated; T-0012.7b selected
 | `2026-07-01 23:38 WEST` | Main orchestrator     | Integrated `T-0012.6` and selected next subtask.                                              | Merged `task/T-0012-6-bounded-context-assembly` into parent branch; updated parent task/report/review/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                              | `T-0012.6` is complete with all review lanes clean and escalated `env CI=true corepack pnpm verify` passing at task branch HEAD. Next selected subtask is `T-0012.7 Entities, Repositories, Routing, And Aggregate Storage`.                                                                                                                                                             |
 | `2026-07-01 23:39 WEST` | Main orchestrator     | Verified parent branch after `T-0012.6` integration.                                          | Escalated `env CI=true corepack pnpm verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Passed with 35 test files, 276 tests, coverage statements 95.45%, branches 90.37%, functions 96.81%, lines 95.44%, docs/API checks with existing invalid-`origin` TypeDoc warning only, proto lint/generate, and generated-clean comparison.                                                                                                                                             |
 | `2026-07-02 06:18 WEST` | Main orchestrator     | Integrated `T-0012.7` and selected next subtask.                                              | Merged `task/T-0012-7-entities-repositories-routing` into parent branch; updated task/report/review/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                                | `T-0012.7` is complete with all review lanes clean and escalated `env CI=true corepack pnpm verify` passing at task branch HEAD. The slice intentionally covered repository registration and storage opening only. Next selected subtask is `T-0012.7b Aggregate Storage And Signal Routing`.                                                                                            |
+| `2026-07-02 07:12 WEST` | Main orchestrator     | Integrated `T-0012.7b` and opened integration verification fix.                               | Merged `task/T-0012-7b-aggregate-storage-routing` into `main`; initial integrated verify found one real bounded-context test-fixture failure, one unrelated untracked `human-review-1-jul.md` formatting stop, and the known sandbox-only ZeroMQ IPC failure.                                                                                                                                                                                                                                                                                 | `T-0012.7b` is complete with all review lanes clean. Follow-up subtask `T-0012.7c Integration Verification Fix` was created for the real server test failure.                                                                                                                                                                                                                            |
+| `2026-07-02 07:44 WEST` | Main orchestrator     | Integrated `T-0012.7c` and selected next subtask.                                             | Merged `task/T-0012-7c-integration-verification-fix` into `main`; updated parent task/report/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                                       | `T-0012.7c` is complete with all review lanes clean and escalated `env CI=true corepack pnpm verify` passing. Next selected subtask is `T-0012.8 Delivery And Inbox`.                                                                                                                                                                                                                    |
 
 ## Current State
 
@@ -38,8 +40,9 @@ Status: T-0012.7 integrated; T-0012.7b selected
 - `T-0012.5 CommandBus, EventBus, And Handler Registration` is integrated.
 - `T-0012.6 BoundedContext Assembly` is integrated.
 - `T-0012.7 Repository Registration And Storage Opening` is integrated.
-- Next selected implementable cleanup subtask is
-  `T-0012.7b Aggregate Storage And Signal Routing`.
+- `T-0012.7b Aggregate Storage And Signal Routing` is integrated.
+- `T-0012.7c Integration Verification Fix` is integrated.
+- Next selected implementable cleanup subtask is `T-0012.8 Delivery And Inbox`.
 - Parent verification passed after `T-0012.1` integration.
 - Parent verification passed after `T-0012.2` integration.
 - Parent verification passed after `T-0012.3` integration.
@@ -47,4 +50,6 @@ Status: T-0012.7 integrated; T-0012.7b selected
 - Parent verification passed after `T-0012.5` integration.
 - Parent verification passed after `T-0012.6` integration.
 - Parent verification passed at `T-0012.7` task branch HEAD before integration.
+- Parent verification passed at `T-0012.7c` task branch HEAD before
+  integration.
 - No blocking human question is known.

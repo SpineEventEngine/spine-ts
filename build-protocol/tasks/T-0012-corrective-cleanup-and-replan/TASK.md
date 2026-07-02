@@ -1,6 +1,6 @@
 # T-0012: Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.7 integrated; T-0012.7b selected
+Status: T-0012.7c integrated; T-0012.8 selected
 Start: `2026-07-01 16:48 WEST`
 Baseline commit: `a9769d4`
 Branch: `task/T-0012-cleanup-replan`
@@ -89,7 +89,17 @@ escalated `env CI=true corepack pnpm verify`. Parent verification after
 integration also passed with 32 test files, 294 tests, coverage above 90%,
 docs/API checks, proto lint/generate, and generated-clean comparison.
 
-Next selected subtask: `T-0012.7b Aggregate Storage And Signal Routing`.
+`T-0012.7b Aggregate Storage And Signal Routing` is integrated on the parent
+branch. It added aggregate snapshot/event storage and repository signal routing,
+passed all review lanes, and passed focused final verification before
+integration.
+
+`T-0012.7c Integration Verification Fix` is integrated on the parent branch.
+It fixed the bounded-context observing fixture for EventStore batch writes,
+passed all review lanes, and passed escalated `env CI=true corepack pnpm
+verify`.
+
+Next selected subtask: `T-0012.8 Delivery And Inbox`.
 
 ## T-0012.2 Selection Rationale
 
