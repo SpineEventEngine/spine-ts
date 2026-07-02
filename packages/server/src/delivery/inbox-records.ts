@@ -206,6 +206,12 @@ function packRecord(typeUrl: string, value: StoredInboxMessage | StoredDedupReco
 }
 
 function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
+  if (message.id.shard.key() !== message.shard.key()) {
+    throw new DeliveryStorageCorruptionError(
+      "Inbox message ID shard does not match message shard.",
+    );
+  }
+
   return Object.freeze({
     key: inboxMessageKey(message.id),
     id: requireText(message.id.value, "Inbox message ID"),
@@ -290,15 +296,29 @@ function parseStoredInboxMessage(value: unknown, label: string): StoredInboxMess
     );
   }
 
+  const id = requireText(decoded.id, "Inbox message ID");
+  const key = requireText(decoded.key, "Inbox message key");
+  if (key !== inboxMessageKey({ value: id, shard })) {
+    throw new DeliveryStorageCorruptionError(
+      "Inbox message record key does not match message identity.",
+    );
+  }
+
   const inboxId = readStoredInboxId(decoded.inboxId);
+  const inbox = requireText(decoded.inbox, "Inbox key");
+  if (inbox !== inboxKey(inboxId)) {
+    throw new DeliveryStorageCorruptionError(
+      "Inbox message record inbox key does not match target identity.",
+    );
+  }
 
   return Object.freeze({
-    key: requireText(decoded.key, "Inbox message key"),
-    id: requireText(decoded.id, "Inbox message ID"),
+    key,
+    id,
     shard: shard.key(),
     shardIndex: shard.index,
     shardTotal: shard.ofTotal,
-    inbox: requireText(decoded.inbox, "Inbox key"),
+    inbox,
     inboxId: {
       targetId: inboxId.targetId,
       targetTypeUrl: inboxId.targetTypeUrl,

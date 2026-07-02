@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-4 review pending
+Status: round-5 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -79,6 +79,13 @@ Round 3 requested a smaller and more trustworthy dedup/storage core. This fix:
 - changed direct `InboxStorage.write()` inbox-row persistence to compare-and-set
   creation, rejecting reuse of an existing message key instead of overwriting
   another row.
+
+## Round 4 Fix
+
+Round 4 requested one security fix. Direct inbox writes now reject mismatched
+`InboxMessage.id.shard` and `InboxMessage.shard` values before storage, and
+stored inbox records validate that the persisted record key and inbox key match
+the parsed message identity and target identity.
 
 ## Round 2 Review
 

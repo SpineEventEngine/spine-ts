@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 4 review pending
+Status: round 5 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -214,6 +214,36 @@ Round-4 reviewers must verify this correction rather than assuming it.
 Diff package:
 `.superpowers/sdd/review-60c5412..76e9132.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
 
-Result: pending.
+- code style/maintainability:
+  `019f21e5-cc37-7b92-af08-8a7158b7f237`;
+- documentation: `019f21e5-cce5-7bd1-908d-8ae59e299bc4`;
+- TypeScript/API docs: `019f21e5-cd56-7003-ade0-d1514ad42f21`;
+- security: `019f21e5-cdd5-7f10-bbfe-240b3ed0da83`;
+- performance/reliability:
+  `019f21e5-ce6a-7df2-be80-75fc92cae581`.
+
+Result: changes requested.
+
+Findings to address:
+
+- `InboxMessage.id.shard` and `InboxMessage.shard` can diverge on direct
+  `InboxStorage.write()` calls. Stored inbox records must reject that mismatch,
+  and record parsing must verify the canonical record key and inbox key from the
+  parsed fields.
+
+Code style/maintainability, documentation, TypeScript/API docs, and
+performance/reliability lanes were clean. All five round-4 reviewer sub-agents
+were closed after their reports were collected.
+
+### Round 4 Fix
+
+Result: implemented in this worktree and ready for round-5 review.
+
+Fix summary:
+
+- direct inbox writes reject mismatched message ID shard/message shard
+  identities; and
+- stored inbox record parsing validates the canonical record key and inbox key
+  from parsed fields before accepting the row.

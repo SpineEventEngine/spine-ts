@@ -385,6 +385,24 @@ describe("Inbox", () => {
     );
   });
 
+  it("rejects direct inbox writes with mismatched shard identities", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+
+    await expect(
+      storage.write({
+        ...createMessage("message-1", "signal-1", 1n),
+        id: {
+          value: "message-1",
+          shard: new ShardIndex(1, 2),
+        },
+        shard: new ShardIndex(0, 2),
+      }),
+    ).rejects.toThrow(/shard/i);
+  });
+
   it("uses the delivery corruption error only for a final dedup guard that still points to no inbox row", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
