@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: implemented
+Status: round-1 fixes pending
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -66,5 +66,8 @@ entityStateType)` returns a zero-based shard index and that all messages for
 
 - Implementation sub-agent completed and was closed after committing
   `0f7986a`.
-- Review round 1 is pending.
+- Review round 1 completed with changes requested across all five required
+  lanes.
+- All five round-1 reviewer sub-agents were closed after their reports were
+  collected.
 - No blocking human question is known.
