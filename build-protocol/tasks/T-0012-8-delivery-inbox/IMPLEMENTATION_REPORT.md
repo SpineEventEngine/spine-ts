@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-1 fixes pending
+Status: round-2 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -53,3 +53,33 @@ logging.
 This round records both missing local source artifacts separately: the JVM Java
 delivery sources were absent from the checked local research tree, and the
 local delivery proto directory was present but empty.
+
+## Round 1 Fix
+
+Fix sub-agent `019f21a1-64ba-7c52-bcf2-507196104b9b` completed and was closed
+after commit `c2553cf`.
+
+The fix:
+
+- added `RecordStorage.compareAndSet()` with in-memory support;
+- moved shard pickup/release and inbox deduplication to storage-level
+  compare-and-set instead of process-local queues;
+- narrowed the delivery public surface by removing the early delivery strategy
+  seam;
+- added an explicit inbox ordering tie-breaker, positive read limits, storage
+  clock based dedup retention checks, internal record corruption checks, and a
+  signal payload cap;
+- updated the API docs and the task logs with separate Java/proto research
+  evidence.
+
+Verification reported by the fix sub-agent:
+
+- `pnpm test packages/storage/test/memory/in-memory-record-storage.test.ts packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts packages/server/test/index.test.ts`
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm format:check`
+- `pnpm docs:check`
+- `git diff --check`
+
+`pnpm docs:check` passed with the existing TypeDoc warning about an invalid
+`origin` remote for source links.

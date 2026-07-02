@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 1 changes requested
+Status: round 2 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -67,3 +67,31 @@ Findings to address:
 
 All five round-1 reviewer sub-agents were closed after their reports were
 collected.
+
+### Round 1 Fix
+
+Fix sub-agent: `019f21a1-64ba-7c52-bcf2-507196104b9b`.
+
+Result: completed and closed after commit `c2553cf`.
+
+Fix summary:
+
+- replaced process-local inbox deduplication and shard lease queues with
+  `RecordStorage.compareAndSet()`;
+- added in-memory compare-and-set coverage;
+- added storage clock based dedup retention, malformed record checks, signal
+  payload size checks, explicit message-ID order tie-breaker, and a positive
+  read limit;
+- narrowed the premature public delivery strategy seam;
+- updated API docs and separate JVM Java/proto evidence logs.
+
+Round-2 reviewers must verify this correction rather than assuming it.
+
+### Round 2
+
+Diff package:
+`.superpowers/sdd/review-6d20fb1..c2553cf.diff`.
+
+Reviewer sub-agents: pending.
+
+Result: pending.
