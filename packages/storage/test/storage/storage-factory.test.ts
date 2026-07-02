@@ -40,6 +40,17 @@ describe("StorageFactory", () => {
     });
   });
 
+  it("keeps records isolated by storage context name", async () => {
+    const factory = new InMemoryStorageFactory();
+    const spec = createEventSpec();
+    const tasks = factory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);
+    const users = factory.createRecordStorage({ name: "Users", multitenant: false }, spec);
+
+    await tasks.write(createEvent("event-1", "type.spine.io/tasks.TaskCreated"));
+
+    await expect(users.read(create(EventIdSchema, { value: "event-1" }))).resolves.toBeUndefined();
+  });
+
   it("rejects record storage creation after the factory closes", () => {
     const factory = new InMemoryStorageFactory();
     const spec = createEventSpec();

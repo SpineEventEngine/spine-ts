@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round 14 re-review pending
+Status: round 15 fixes applied
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -371,3 +371,64 @@ repository-routing tests, `typecheck`, `lint`, `format:check`, `docs:check`,
 and `git diff --check`.
 
 All five round-13 reviewers were closed after their reports were collected.
+
+### Round 14
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2118-9c2d-7023-89bd-8662ad194049`;
+- documentation: `019f2118-d0bd-7a51-97c1-1be382579a66`;
+- TypeScript/API docs: `019f2119-0dc1-7fb0-a625-7fc074004505`;
+- security: `019f2119-42f6-7701-a242-9a407caf65b5`;
+- performance/reliability:
+  `019f2119-7048-7a40-a2bc-f0fe4ba9dd0a`.
+
+Result: changes requested.
+
+Findings addressed in the round-14 fix pass:
+
+- stale task-status wording;
+- mutable append iterables queued by reference;
+- fabricated child handler records becoming authentic through parent metadata;
+- repository event-route validation happening after event storage;
+- duplicate event IDs across event-store instances sharing one backend; and
+- in-memory storages opened from one factory/spec not sharing backing records.
+
+Verification after the round-14 fix pass passed: focused storage event-store
+and factory tests, server event-bus/API tests, handler metadata tests,
+aggregate-storage tests, repository-routing tests, `typecheck`, `lint`,
+`format:check`, `docs:check`, and `git diff --check`.
+
+All five round-14 reviewers were closed after their reports were collected.
+
+### Round 15
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2124-7193-7061-abc0-77ab42cc787c`;
+- documentation: `019f2124-7232-70f3-9b64-37927b869abb`;
+- TypeScript/API docs: `019f2124-72b4-7c32-960e-6dd8ea6b2596`;
+- security: `019f2124-733b-7463-9b26-6e7e7758184c`;
+- performance/reliability:
+  `019f2124-73d3-7970-bb7d-71ff5344cc22`.
+
+Result: changes requested.
+
+Findings addressed in the round-15 fix pass:
+
+- same-batch duplicate event IDs were not rejected;
+- event-store and aggregate append queues captured mutable event objects;
+- shared in-memory backing ignored context names;
+- aggregate snapshot storage used a fresh `RecordSpec` per storage instance;
+- handler records from another registration builder could be reused;
+- custom dispatcher `accept()` ran before repository event validation;
+- storage TypeDoc export checks only inspected the root barrel;
+- public API, user-guide, and architecture docs were stale; and
+- this work/review log was stale.
+
+Verification after the round-15 fix pass passed: focused storage event-store,
+storage factory, storage index, server event-bus, server bus API, server root
+API, handler metadata, aggregate-storage, and repository-routing tests,
+`typecheck`, `lint`, `format:check`, `docs:check`, and `git diff --check`.

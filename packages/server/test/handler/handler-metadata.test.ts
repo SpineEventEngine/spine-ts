@@ -79,6 +79,12 @@ class OtherProjection {
   }
 }
 
+class ForeignProjection {
+  foreignOnly(command: Message<"spine.core.Command">): void {
+    void command;
+  }
+}
+
 class PassiveProjection {
   static constructorCount = 0;
   static invocationCount = 0;
@@ -238,6 +244,19 @@ describe("handler metadata", () => {
           ...builder.assign(CommandSchema, "assignCreate"),
         },
       ]),
+    ).toThrow(/registration builder/);
+  });
+
+  it("rejects handler records created by another registration builder", () => {
+    const foreignHandlers = defineEntityHandlers(
+      ForeignProjection,
+      ProjectionStateSchema,
+      (builder) => [builder.assign(CommandSchema, "foreignOnly")],
+    );
+    const foreignHandler = foreignHandlers.handlers[0];
+
+    expect(() =>
+      defineEntityHandlers(TaskProjection, ProjectionStateSchema, () => [foreignHandler as never]),
     ).toThrow(/registration builder/);
   });
 });

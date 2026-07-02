@@ -190,13 +190,15 @@ Bus exports include `CommandBus`, `CommandDispatcher`, `EventBus`, and
 queues accepted work asynchronously, and routes by enclosed message type URL to
 exactly one registered dispatcher, rejecting duplicate dispatcher registration
 for a command message type. `EventBus` accepts generated Spine `Event`
-envelopes, appends them to an injected `EventStore`, and then dispatches to
-matching registered dispatchers in deterministic registration order. Events
-with no registered dispatcher are stored and resolve. If append fails, no
-dispatcher runs. If a dispatcher rejects, earlier dispatchers may already have
-run, later dispatchers are skipped, and the stored event remains. The bus layer
-does not instantiate entities, invoke entity methods directly, create
-repositories, map `Ack`, or introduce delivery/inbox behavior.
+envelopes, asks matching dispatchers to `accept()` the event when they expose
+that hook, appends accepted events to an injected `EventStore`, and then calls
+`dispatch()` in deterministic registration order. Events with no registered
+dispatcher are stored and resolve. If acceptance or append fails, no dispatcher
+runs and the event is not stored by the bus. If dispatch rejects, earlier
+dispatchers may already have run, later dispatchers are skipped, and the stored
+event remains. The bus layer does not instantiate entities, invoke entity
+methods directly, create repositories, map `Ack`, or introduce delivery/inbox
+behavior.
 Runtime routing exports include `createServerRuntimeRoutingPlan()`,
 `ServerRuntimeRoutingPlan`, `ServerRuntimeRoutingPlanInput`,
 `CommandRuntimeRoutingPlan`, `EventRuntimeRoutingPlan`, and
@@ -273,10 +275,12 @@ Storage exports include `Storage`, `StorageContext`, `StorageFactory`,
 adapter seam, `createRecordStorage(context, spec)`. `RecordStorage` persists
 identified Protobuf records with deterministic ID/column/path queries, positive
 limits, and simple field masks over cloned results. The in-memory adapter is
-process-local, tenant-aware through `StorageContext`, and non-durable.
-`EventStore` is a framework delegate over `RecordStorage<EventId, Event>` and
-is storage-only in this slice: it persists and reads generated Spine events,
-but it does not dispatch them, manage delivery, or fan out to subscribers.
+process-local, tenant-aware through `StorageContext`, shared by factory,
+context name/tenant, and `RecordSpec` instance, and non-durable. `EventStore`
+is a framework delegate over `RecordStorage<EventId, Event>` and is
+storage-only in this slice: it persists and reads generated Spine events,
+rejects duplicate event IDs on the local append path, but does not dispatch
+them, manage delivery, or fan out to subscribers.
 
 Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
 `TransportTopicInput`, `TransportTopic`, `TransportRoutingDescriptor`,

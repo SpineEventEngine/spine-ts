@@ -272,6 +272,7 @@ describe("@spine-ts/server", () => {
     expectTypeOf<EventBus>().not.toHaveProperty("dispatch");
     expectTypeOf<EventDispatcher>().toExtend<{
       messageSchemas(): readonly object[];
+      accept?(event: object): Promise<void>;
       dispatch(event: object): Promise<void>;
     }>();
     expectTypeOf<EventRegistrationReadiness>().toExtend<EventRegistrationReadinessLookup>();

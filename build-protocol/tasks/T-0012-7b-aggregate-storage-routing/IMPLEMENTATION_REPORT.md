@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round-15 re-review pending
+Status: round-15 fixes applied
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -289,6 +289,25 @@ Verification after the round-14 fix pass:
 - `corepack pnpm test packages/storage/test/event/event-store.test.ts packages/storage/test/storage/storage-factory.test.ts packages/server/test/bus/event-bus.test.ts packages/server/test/bus/index.test.ts packages/server/test/handler/handler-metadata.test.ts packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts`
   passed with 7 files and 56 tests.
 - `corepack pnpm typecheck` passed.
+
+Round 15 requested fixes for same-batch duplicate event IDs, mutable event
+capture before queued append writes, cross-context in-memory storage
+collisions, aggregate snapshot spec sharing, handler records reusable across
+registration builders, custom dispatcher acceptance before repository
+validation, stale public docs, storage TypeDoc guard drift, and stale durable
+work/review logs. The fix keeps the behavior inside existing storage, bus,
+repository, and handler metadata seams.
+
+Verification after the round-15 fix pass:
+
+- `corepack pnpm test packages/storage/test/event/event-store.test.ts packages/storage/test/storage/storage-factory.test.ts packages/storage/test/index.test.ts packages/server/test/bus/event-bus.test.ts packages/server/test/bus/index.test.ts packages/server/test/index.test.ts packages/server/test/handler/handler-metadata.test.ts packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts`
+  passed with 9 files and 74 tests.
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm lint` passed.
+- `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
+  warning.
+- `git diff --check` passed.
 
 ## Concerns
 

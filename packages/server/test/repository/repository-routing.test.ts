@@ -23,6 +23,7 @@ import {
   RepositoryIdentityError,
   defineEntityHandlers,
   type EntityHandlersMetadata,
+  type EventDispatcher,
 } from "../../src/index.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
@@ -165,6 +166,33 @@ describe("repository signal routing", () => {
       ),
     ).rejects.toThrow(/same entity/);
     await expect(eventStore.read()).resolves.toEqual([]);
+  });
+
+  it("runs repository event acceptance before custom dispatcher acceptance", async () => {
+    const factory = new InMemoryStorageFactory();
+    const observed: string[] = [];
+    const customDispatcher: EventDispatcher = {
+      messageSchemas: () => [ProjectionStateSchema],
+      accept: () => {
+        observed.push("custom-accept");
+        return Promise.resolve();
+      },
+      dispatch: () => Promise.resolve(),
+    };
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createRoutingRepository())
+      .addEventDispatcher(customDispatcher)
+      .withStorageFactory(factory)
+      .build();
+
+    await expect(
+      context.eventBus().post(
+        createProjectionEvent("event-rejected-before-custom", "first-field-task", {
+          producerId: "producer-task",
+        }),
+      ),
+    ).rejects.toThrow(/same entity/);
+    expect(observed).toEqual([]);
   });
 
   it("rejects structurally fabricated handler metadata", () => {

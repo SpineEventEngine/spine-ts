@@ -1,7 +1,7 @@
-import { create, fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { deriveTypeUrl, unpackAny, type MessageSchema } from "@spine-ts/core";
-import { type Event, UserIdSchema } from "@spine-ts/proto";
+import { EventSchema, type Event, UserIdSchema } from "@spine-ts/proto";
 import {
   EventStore,
   RecordColumn,
@@ -45,7 +45,7 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
 
   /** Append aggregate events in strictly increasing aggregate-version order. */
   async appendEvents(aggregateId: Id, events: Iterable<Event>): Promise<void> {
-    const batch = Object.freeze([...events]);
+    const batch = Object.freeze([...events].map((event) => clone(EventSchema, event)));
     const operation = this.#appendQueue.then(() => this.#appendEventBatch(aggregateId, batch));
     this.#appendQueue = operation.catch(() => undefined);
     return operation;
@@ -300,15 +300,17 @@ type PrimitiveId = string | number | boolean | bigint;
 
 const snapshotRecordTypeUrl = "type.spine-ts.dev/internal/AggregateSnapshotRecord";
 
+const snapshotRecordSpecValue = new RecordSpec<unknown, SnapshotRecord>({
+  schema: AnySchema,
+  extractId: (record) => readSnapshotRecord(record).aggregateId,
+  columns: [
+    new RecordColumn("aggregateId", (record) => readSnapshotRecord(record).aggregateId),
+    new RecordColumn("version", (record) => readSnapshotRecord(record).version),
+  ],
+});
+
 function snapshotRecordSpec<Id>(): RecordSpec<Id, SnapshotRecord> {
-  return new RecordSpec<Id, SnapshotRecord>({
-    schema: AnySchema,
-    extractId: (record) => readSnapshotRecord(record).aggregateId as Id,
-    columns: [
-      new RecordColumn("aggregateId", (record) => readSnapshotRecord(record).aggregateId),
-      new RecordColumn("version", (record) => readSnapshotRecord(record).version),
-    ],
-  });
+  return snapshotRecordSpecValue as RecordSpec<Id, SnapshotRecord>;
 }
 
 function createSnapshotRecord(payload: SnapshotRecordPayload): SnapshotRecord {

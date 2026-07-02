@@ -379,8 +379,8 @@ export class BoundedContextBuilder {
 
     try {
       const eventBus = new EventBus(eventStore, [
-        ...this.#eventDispatchers,
         ...repositoryEventDispatchers(repositories),
+        ...this.#eventDispatchers,
       ]);
       return createBoundedContext(
         this.#specSnapshot,

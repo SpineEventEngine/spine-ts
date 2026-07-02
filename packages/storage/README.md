@@ -10,7 +10,7 @@ The package owns the first corrected storage layer:
 - `RecordStorage` stores, reads, deletes, and queries those records;
 - `InMemoryStorageFactory` and `InMemoryRecordStorage` are the first concrete
   adapter, with storage objects from the same factory and `RecordSpec` sharing
-  one process-local backing record set;
+  one process-local backing record set per context name and tenant;
 - `EventStore` is a framework delegate over `RecordStorage<EventId, Event>`.
 
 `EventStore` is storage-only in this task. It persists and reads `Event`
@@ -67,5 +67,5 @@ await storage.write(
 
 `InMemoryRecordStorage` keeps deterministic per-tenant slices when the context
 is multitenant. Storage objects opened by one `InMemoryStorageFactory` with the
-same `RecordSpec` share those process-local slices. The adapter is not durable
-across restarts.
+same `RecordSpec` instance, context name, and tenant share those process-local
+slices. The adapter is not durable across restarts.

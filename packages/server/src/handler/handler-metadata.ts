@@ -372,7 +372,6 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
 }
 
 const authenticEntityHandlers = new WeakSet<EntityHandlersMetadata>();
-const authenticHandlers = new WeakSet<HandlerMetadata>();
 
 /**
  * Explicitly bind schemas to entity class method names without invoking handlers.
@@ -391,9 +390,10 @@ export function defineEntityHandlers<
     builder: HandlerRegistrationBuilder<Instance>,
   ) => readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
 ): EntityHandlersMetadata<Instance, StateSchema> {
-  const builder = createHandlerRegistrationBuilder(entityType);
+  const builtHandlers = new WeakSet<HandlerMetadata>();
+  const builder = createHandlerRegistrationBuilder(entityType, builtHandlers);
   const handlers = Object.freeze([...define(builder)]);
-  validateBuiltHandlers(handlers);
+  validateBuiltHandlers(handlers, builtHandlers);
   const metadata: EntityHandlersMetadata<Instance, StateSchema> = {
     entityType,
     entity: describeEntityMetadata(stateSchema),
@@ -423,24 +423,25 @@ export const handlerMetadataAccess: HandlerMetadataAccess = Object.freeze({
 
 function createHandlerRegistrationBuilder<Instance extends object>(
   entityType: EntityClass<Instance>,
+  builtHandlers: WeakSet<HandlerMetadata>,
 ): HandlerRegistrationBuilder<Instance> {
   return Object.freeze({
     assign: <Schema extends DescriptorMessageSchema>(
       schema: Schema,
       methodName: HandlerMethodName<Instance>,
-    ) => createHandler(entityType, "command-assignment", schema, methodName),
+    ) => createHandler(entityType, "command-assignment", schema, methodName, builtHandlers),
     command: <Schema extends DescriptorMessageSchema>(
       schema: Schema,
       methodName: HandlerMethodName<Instance>,
-    ) => createHandler(entityType, "command-reaction", schema, methodName),
+    ) => createHandler(entityType, "command-reaction", schema, methodName, builtHandlers),
     subscribe: <Schema extends DescriptorMessageSchema>(
       schema: Schema,
       methodName: HandlerMethodName<Instance>,
-    ) => createHandler(entityType, "event-subscription", schema, methodName),
+    ) => createHandler(entityType, "event-subscription", schema, methodName, builtHandlers),
     react: <Schema extends DescriptorMessageSchema>(
       schema: Schema,
       methodName: HandlerMethodName<Instance>,
-    ) => createHandler(entityType, "event-reaction", schema, methodName),
+    ) => createHandler(entityType, "event-reaction", schema, methodName, builtHandlers),
     apply: <Schema extends DescriptorMessageSchema>(
       schema: Schema,
       methodName: HandlerMethodName<Instance>,
@@ -450,10 +451,10 @@ function createHandlerRegistrationBuilder<Instance extends object>(
         Schema,
         HandlerMethodName<Instance>
       > = Object.freeze({
-        ...createHandler(entityType, "event-application", schema, methodName),
+        ...createHandler(entityType, "event-application", schema, methodName, builtHandlers),
         allowImport: options.allowImport ?? false,
       });
-      authenticHandlers.add(handler);
+      builtHandlers.add(handler);
       return handler;
     },
   });
@@ -468,6 +469,7 @@ function createHandler<
   kind: Kind,
   schema: Schema,
   methodName: HandlerMethodName<Instance>,
+  builtHandlers: WeakSet<HandlerMetadata>,
 ): BaseHandlerMetadata<Kind, Schema, HandlerMethodName<Instance>> {
   validateHandlerMethod(entityType, methodName);
 
@@ -478,13 +480,16 @@ function createHandler<
     messageFullTypeName: schema.typeName,
     methodName,
   });
-  authenticHandlers.add(handler as HandlerMetadata);
+  builtHandlers.add(handler as HandlerMetadata);
   return handler;
 }
 
-function validateBuiltHandlers(handlers: readonly HandlerMetadata[]): void {
+function validateBuiltHandlers(
+  handlers: readonly HandlerMetadata[],
+  builtHandlers: WeakSet<HandlerMetadata>,
+): void {
   for (const handler of handlers) {
-    if (!authenticHandlers.has(handler)) {
+    if (!builtHandlers.has(handler)) {
       throw new HandlerMetadataError(
         "UNKNOWN_HANDLER_METHOD",
         "Handler metadata must be created by the registration builder.",

@@ -342,6 +342,7 @@ if (typedocResult.status !== 0) {
 const apiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
 const documentedNames = new Set();
 const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src");
+const storageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage/src");
 
 function collectNames(value) {
   if (Array.isArray(value)) {
@@ -620,6 +621,9 @@ const missingDeclaredServerExports = expectedServerExports.filter(
   (name) => !declaredServerExports.includes(name),
 );
 const missingStorageExports = expectedStorageExports.filter(
+  (name) => !storageModuleNames.has(name),
+);
+const missingDeclaredStorageExports = expectedStorageExports.filter(
   (name) => !declaredStorageExports.includes(name),
 );
 const unexpectedServerExports = declaredServerExports.filter(
@@ -667,6 +671,15 @@ if (unexpectedServerExports.length > 0) {
 if (missingStorageExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-ts/storage exports: ${missingStorageExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingDeclaredStorageExports.length > 0) {
+  console.error(
+    `@spine-ts/storage root is missing expected exports: ${missingDeclaredStorageExports.join(
+      ", ",
+    )}`,
   );
   process.exit(1);
 }

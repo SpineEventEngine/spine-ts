@@ -1589,17 +1589,20 @@ out of scope.
 Decision: Add an optional `EventDispatcher.accept(event)` hook used by
 repository dispatchers for pre-store route validation, keep `EventBus` append
 ordering as `accept()` then `EventStore.append()` then `dispatch()`, serialize
-`EventStore` uniqueness checks per storage factory and context, and make
+`EventStore` uniqueness checks per storage factory and captured storage
+context, reject same-batch duplicate event IDs, and make
 `InMemoryStorageFactory` share backing records for storages opened with the
-same `RecordSpec`. Do not introduce delivery queues, repository execution,
-handler invocation, or a broader storage transaction abstraction in this task.
+same `RecordSpec` instance, context name, and tenant. Do not introduce delivery
+queues, repository execution, handler invocation, or a broader storage
+transaction abstraction in this task.
 
 Consequences:
 
 - Repository event routing now fails before context event storage when producer
   and first-field IDs are unreadable or contradictory.
 - In-memory storage remains process-local and non-durable, but multiple stores
-  opened from one factory/spec now observe the same records.
+  opened from one factory/spec/context now observe the same records without
+  crossing bounded-context names or tenant slices.
 - Later durable storage adapters still need their own atomic insert or
   transaction guarantees; this task only strengthens the current in-process
   implementation without claiming distributed uniqueness.

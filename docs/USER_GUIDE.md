@@ -123,9 +123,10 @@ the to-do application remain later slices.
   `RecordStorage`, `RecordSpec`, deterministic record queries, and the first
   storage-only `EventStore` delegate.
 - `InMemoryStorageFactory` and `InMemoryRecordStorage` for deterministic tests
-  and local development. They are isolated per factory/storage instance, keep
-  tenant slices separate, clone stored values, and are not durable across
-  process restarts.
+  and local development. Storage objects opened by one factory share backing
+  records by context name, tenant, and `RecordSpec` instance, keep tenant
+  slices separate, clone stored values, and are not durable across process
+  restarts.
 - A placeholder to-do example workspace.
 
 ## What Is Deferred
@@ -542,11 +543,12 @@ await eventBus.post(eventEnvelope);
 dispatcher handles a posted command. Registering a second dispatcher for the
 same command type is rejected. `EventBus` is multicast by enclosed message type
 URL: registered dispatchers for the event type run in registration order.
-Before multicast, `EventBus` appends the accepted event to the injected
-`EventStore`. If no dispatcher is registered, the event is still stored and
-`post()` resolves. If append fails, no dispatcher is invoked. If a dispatcher
-rejects, earlier dispatchers may already have run, later dispatchers are not
-invoked, and the stored event remains.
+Before storage, matching dispatchers may reject an event through `accept()`.
+Accepted events are appended to the injected `EventStore` before `dispatch()`
+runs. If no dispatcher is registered, the event is still stored and `post()`
+resolves. If acceptance or append fails, no dispatcher is invoked and the event
+is not stored by the bus. If dispatch rejects, earlier dispatchers may already
+have run, later dispatchers are not invoked, and the stored event remains.
 
 ## Transport Foundation
 

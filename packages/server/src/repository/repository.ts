@@ -408,16 +408,20 @@ function createRepositoryDispatchers(
         ? undefined
         : Object.freeze({
             messageSchemas: () => routing.eventSchemas,
-            accept: (event: Event): Promise<void> => {
-              void repository.routeEvent(event);
-              return Promise.resolve();
-            },
-            dispatch: (event: Event): Promise<void> => {
-              void repository.routeEvent(event);
-              return Promise.resolve();
-            },
+            accept: (event: Event): Promise<void> => routeRepositoryEvent(repository, event),
+            dispatch: (event: Event): Promise<void> => routeRepositoryEvent(repository, event),
           }),
   });
+}
+
+function routeRepositoryEvent(
+  repository: RepositoryView & {
+    routeEvent(event: Event): RepositoryEventRoute;
+  },
+  event: Event,
+): Promise<void> {
+  void repository.routeEvent(event);
+  return Promise.resolve();
 }
 
 function createRepositoryRouting<EntityType extends RepositoryEntityType>(

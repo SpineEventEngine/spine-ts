@@ -1,3 +1,4 @@
+import { clone } from "@bufbuild/protobuf";
 import type { Event, EventId } from "@spine-ts/proto";
 import { EventIdSchema, EventSchema } from "@spine-ts/proto";
 
@@ -32,15 +33,16 @@ export class EventStore {
 
   /** Append one generated Spine event. */
   async append(event: Event): Promise<void> {
-    await this.appendUnique([event]);
+    await this.appendUnique([clone(EventSchema, event)], snapshotContext(this.#context));
   }
 
   /** Append generated Spine events in order. */
   async appendAll(events: Iterable<Event>): Promise<void> {
-    const records = [...events];
+    const records = [...events].map((event) => clone(EventSchema, event));
+    const context = snapshotContext(this.#context);
 
     if (records.length > 0) {
-      await this.appendUnique(records);
+      await this.appendUnique(records, context);
     }
   }
 
@@ -49,16 +51,27 @@ export class EventStore {
     return this.#storage.query(query);
   }
 
-  private async appendUnique(records: readonly Event[]): Promise<void> {
-    await EventStoreLocks.withLock(this.#factory, this.#context, async () => {
-      const appended = await this.#storage.index({ ids: records.map((record) => eventId(record)) });
+  private async appendUnique(records: readonly Event[], context: StorageContext): Promise<void> {
+    this.requireOpen();
+    const ids = records.map((record) => eventId(record));
+    rejectDuplicateIds(ids);
+
+    await EventStoreLocks.withLock(this.#factory, context, async () => {
+      const storage = this.#factory.createRecordStorage(context, eventSpec);
+      const appended = await storage.index({ ids });
 
       if (appended.length > 0) {
         throw new Error("EventStore requires unique event IDs.");
       }
 
-      await this.#storage.writeAll(records);
+      await storage.writeAll(records);
     });
+  }
+
+  private requireOpen(): void {
+    if (!this.#storage.isOpen()) {
+      throw new Error("RecordStorage is closed.");
+    }
   }
 }
 
@@ -70,12 +83,16 @@ const EventStoreLocks = Object.freeze({
     const key = contextKey(context);
     const previous = queues.get(key) ?? Promise.resolve();
     const next = previous.then(work, work);
+    const stored = next.catch(() => undefined);
 
-    queues.set(
-      key,
-      next.catch(() => undefined),
-    );
-    return next;
+    queues.set(key, stored);
+    try {
+      await next;
+    } finally {
+      if (queues.get(key) === stored) {
+        queues.delete(key);
+      }
+    }
   },
 
   queueMap(factory: StorageFactory): Map<string, Promise<void>> {
@@ -93,6 +110,38 @@ function eventId(event: Event): EventId {
     throw new Error("EventStore requires event.id.");
   }
   return event.id;
+}
+
+function rejectDuplicateIds(ids: readonly EventId[]): void {
+  const seen = new Set<string>();
+  for (const id of ids) {
+    const key = id.value;
+    if (seen.has(key)) {
+      throw new Error("EventStore requires unique event IDs.");
+    }
+    seen.add(key);
+  }
+}
+
+function snapshotContext(context: StorageContext): StorageContext {
+  if (!context.multitenant) {
+    return Object.freeze({
+      name: context.name,
+      multitenant: false,
+    });
+  }
+  return Object.freeze({
+    name: context.name,
+    multitenant: true,
+    tenantId: requireTenantId(context.name, context.tenantId),
+  });
+}
+
+function requireTenantId(name: string, tenantId: string | undefined): string {
+  if (tenantId === undefined || tenantId.trim().length === 0) {
+    throw new Error(`Multitenant storage "${name}" requires context.tenantId.`);
+  }
+  return tenantId;
 }
 
 function contextKey(context: StorageContext): string {

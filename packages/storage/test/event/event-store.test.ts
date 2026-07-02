@@ -91,6 +91,32 @@ describe("EventStore", () => {
     ).rejects.toThrow(/unique event IDs/);
     await expect(first.read()).resolves.toHaveLength(1);
   });
+
+  it("rejects duplicate event IDs within one append batch", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      store.appendAll([
+        createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n),
+        createEvent("event-1", "type.spine.io/tasks.TaskRenamed", 2n),
+      ]),
+    ).rejects.toThrow(/unique event IDs/);
+    await expect(store.read()).resolves.toEqual([]);
+  });
+
+  it("snapshots events before queued append work runs", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const event = createEvent("event-before-mutation", "type.spine.io/tasks.TaskCreated", 1n);
+
+    const append = store.append(event);
+    event.id = create(EventIdSchema, { value: "event-after-mutation" });
+
+    await append;
+
+    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-before-mutation" } }]);
+  });
 });
 
 function createEvent(id: string, typeUrl: string, seconds: bigint) {

@@ -197,6 +197,40 @@ describe("AggregateStorage", () => {
     expect(history.events.map((event) => event.id?.value)).toEqual(["event-5", "event-6"]);
   });
 
+  it("shares snapshots across aggregate stores opened from the same factory", async () => {
+    const factory = new InMemoryStorageFactory();
+    const first = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    const second = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await first.writeSnapshot({
+      aggregateId: "task-shared-snapshot",
+      state: create(AggregateStateSchema, {
+        id: "task-shared-snapshot",
+        name: "shared",
+        archived: false,
+      }),
+      version: 1n,
+      lifecycle: {
+        archived: false,
+        deleted: false,
+      },
+    });
+
+    await expect(second.readHistory("task-shared-snapshot")).resolves.toMatchObject({
+      snapshot: { aggregateId: "task-shared-snapshot", version: 1n },
+    });
+  });
+
   it("rejects mismatched or unreadable aggregate IDs before appending", async () => {
     const storage = new AggregateStorage({
       context: { name: "Tasks", multitenant: false },
@@ -637,6 +671,25 @@ describe("AggregateStorage", () => {
     expect(
       (await storage.readHistory("task-materialized")).events.map((event) => event.id?.value),
     ).toEqual(["event-materialized-a"]);
+  });
+
+  it("snapshots appended events before queued validation", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    const event = createAggregateEvent("event-before-mutation", "task-event-snapshot", 1);
+
+    const append = storage.appendEvents("task-event-snapshot", [event]);
+    event.id = create(EventIdSchema, { value: "event-after-mutation" });
+
+    await append;
+
+    expect(
+      (await storage.readHistory("task-event-snapshot")).events.map((stored) => stored.id?.value),
+    ).toEqual(["event-before-mutation"]);
   });
 
   it("rejects unreadable producer IDs", async () => {

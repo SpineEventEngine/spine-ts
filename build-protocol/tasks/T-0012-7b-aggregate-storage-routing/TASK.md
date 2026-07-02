@@ -1,6 +1,6 @@
 # T-0012.7b: Aggregate Storage And Signal Routing
 
-Status: round-15 re-review pending
+Status: round-15 fixes applied
 Start: `2026-07-02 06:20 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7b-aggregate-storage-routing`
@@ -132,4 +132,14 @@ Required evidence for this task:
 - Required round-14 focused verification passed: storage event-store/factory,
   server event-bus/API, handler metadata, aggregate-storage, and
   repository-routing tests; `typecheck` also passed before docs/log updates.
+- Round 15 found same-batch duplicate event IDs, mutable event capture before
+  queued append writes, cross-context in-memory storage collisions,
+  builder-authentic handlers reusable across registrations, custom event
+  acceptance before repository validation, stale API/user/architecture docs,
+  storage TypeDoc guard drift, and stale work/review logs. Fixes were applied
+  and verified.
+- Required round-15 focused verification passed: storage event-store/factory
+  and index tests, server bus/API, handler metadata, aggregate-storage, and
+  repository-routing tests; `typecheck`, `lint`, `format:check`, `docs:check`,
+  and `git diff --check`.
 - No blocking human question is known.
