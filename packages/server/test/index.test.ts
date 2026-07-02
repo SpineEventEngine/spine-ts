@@ -208,6 +208,7 @@ describe("@spine-ts/server", () => {
         "HandlerMetadataRegistryError",
         "Entity",
         "Inbox",
+        "InboxMessageError",
         "InboxStorage",
         "ProcessManager",
         "Projection",

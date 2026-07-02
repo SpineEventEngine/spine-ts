@@ -21,6 +21,14 @@ export interface InboxMessageId {
   readonly shard: ShardIndex;
 }
 
+/** Raised when a caller provides an invalid inbox message. */
+export class InboxMessageError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "InboxMessageError";
+  }
+}
+
 /** Delivery destination label. */
 export type DeliveryLabel =
   "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT" | "IMPORT_EVENT" | "CATCH_UP";

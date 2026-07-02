@@ -21,6 +21,7 @@ export {
   type DeliveryLabel,
   type DeliveryStatus,
   type InboxId,
+  InboxMessageError,
   type InboxMessage,
   type InboxMessageId,
   type InboxMessageInput,

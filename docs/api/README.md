@@ -115,8 +115,8 @@ storage. It does not implement handler invocation, delivery, catch-up,
 read-side indexing, subscriptions, system events, or aggregate repository
 caching.
 Delivery exports include `Delivery`, `DeliveryOptions`, `Inbox`, `InboxId`,
-`InboxMessage`, `InboxMessageId`, `InboxMessageInput`, `InboxReadOptions`,
-`InboxWriteResult`, `InboxStorage`, `InboxStorageOptions`,
+`InboxMessage`, `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
+`InboxReadOptions`, `InboxWriteResult`, `InboxStorage`, `InboxStorageOptions`,
 `DeliveryLabel`, `DeliveryStatus`, `ShardIndex`, `ShardSession`,
 `ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`. This slice persists
 inbox messages and shard lease records through `StorageFactory` /

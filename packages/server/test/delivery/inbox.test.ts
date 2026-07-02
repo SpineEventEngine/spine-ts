@@ -14,6 +14,7 @@ import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-stor
 import {
   Delivery,
   Inbox,
+  InboxMessageError,
   InboxStorage,
   ShardIndex,
   type DeliveryStatus,
@@ -391,16 +392,17 @@ describe("Inbox", () => {
       storageFactory: new InMemoryStorageFactory(),
     });
 
-    await expect(
-      storage.write({
-        ...createMessage("message-1", "signal-1", 1n),
-        id: {
-          value: "message-1",
-          shard: new ShardIndex(1, 2),
-        },
-        shard: new ShardIndex(0, 2),
-      }),
-    ).rejects.toThrow(/shard/i);
+    const write = storage.write({
+      ...createMessage("message-1", "signal-1", 1n),
+      id: {
+        value: "message-1",
+        shard: new ShardIndex(1, 2),
+      },
+      shard: new ShardIndex(0, 2),
+    });
+
+    await expect(write).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(write).rejects.toThrow(/shard/i);
   });
 
   it("uses the delivery corruption error only for a final dedup guard that still points to no inbox row", async () => {

@@ -223,6 +223,7 @@ const expectedServerExports = [
   "Inbox",
   "InboxId",
   "InboxMessage",
+  "InboxMessageError",
   "InboxMessageId",
   "InboxMessageInput",
   "InboxReadOptions",

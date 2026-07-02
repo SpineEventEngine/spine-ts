@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-7 review pending
+Status: round-8 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -106,6 +106,13 @@ Direct write shard mismatch now keeps using `DeliveryStorageCorruptionError`,
 while the exported API docs still state the shard invariant.
 
 Committed as `d8cfb5b` after focused delivery verification passed.
+
+## Round 7 Fix
+
+Round 7 requested a stable public error contract that does not classify caller
+input as storage corruption. `InboxMessageError` now represents invalid
+caller-supplied inbox messages. Direct write shard mismatch uses this error,
+and the regression test asserts the exported class.
 
 ## Round 2 Review
 

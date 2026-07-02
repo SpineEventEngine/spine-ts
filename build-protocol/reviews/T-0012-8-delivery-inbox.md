@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 7 review pending
+Status: round 8 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -329,6 +329,39 @@ Fix summary:
 Diff package:
 `.superpowers/sdd/review-1879916..d8cfb5b.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
 
-Result: pending.
+- code style/maintainability:
+  `019f21f7-780c-7010-bff2-88b59ae5194b`;
+- documentation: `019f21f7-78a5-7e31-8f46-95a28973ced2`;
+- TypeScript/API docs: `019f21f7-7926-7f81-b81b-b7e5bede7e62`;
+- security: `019f21f7-79a1-7341-8280-f19c420946b0`;
+- performance/reliability:
+  `019f21f7-7a1d-7e43-9581-95d0e8b7c540`.
+
+Result: changes requested.
+
+Findings to address:
+
+- the direct-write shard mismatch regression test must assert the exported
+  error contract, not only message text; and
+- caller-controlled shard mismatch must not be reported as durable storage
+  corruption.
+
+Decision: use a small exported caller-invariant error for invalid inbox message
+input. This avoids classifying caller input as storage corruption while giving
+the public API a stable error type.
+
+Maintainability, documentation, and performance/reliability lanes were clean.
+All five round-7 reviewer sub-agents were closed after their reports were
+collected.
+
+### Round 7 Fix
+
+Result: implemented in this worktree and ready for round-8 review.
+
+Fix summary:
+
+- added exported `InboxMessageError` for invalid caller-supplied inbox messages;
+- changed direct write shard mismatch to use `InboxMessageError`; and
+- tightened the regression test to assert the exported error class.

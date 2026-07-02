@@ -3,7 +3,13 @@ import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { RecordColumn, RecordSpec } from "@spine-ts/storage";
 
 import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
-import type { DeliveryLabel, DeliveryStatus, InboxMessage, InboxMessageId } from "./inbox.js";
+import {
+  InboxMessageError,
+  type DeliveryLabel,
+  type DeliveryStatus,
+  type InboxMessage,
+  type InboxMessageId,
+} from "./inbox.js";
 import { ShardIndex } from "./shard-index.js";
 
 interface StoredSignal {
@@ -207,9 +213,7 @@ function packRecord(typeUrl: string, value: StoredInboxMessage | StoredDedupReco
 
 function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
   if (message.id.shard.key() !== message.shard.key()) {
-    throw new DeliveryStorageCorruptionError(
-      "Inbox message ID shard does not match message shard.",
-    );
+    throw new InboxMessageError("Inbox message ID shard does not match message shard.");
   }
 
   return Object.freeze({
