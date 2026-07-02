@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 11 review pending
+Status: round 12 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -482,6 +482,42 @@ Fix summary:
 
 Diff package:
 `.superpowers/sdd/review-fce80b2..d419fd8.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2210-1490-76e0-aa09-ab06d7555884`;
+- documentation: `019f2210-392b-7e12-89e8-1eed6c415767`;
+- TypeScript/API docs: `019f2210-5643-7153-8664-696dfdda10ad`;
+- security: `019f2210-7bfd-75f3-8f3c-5116d8f1680f`;
+- performance/reliability:
+  `019f2210-a172-74e2-b4c3-40cf91b0e908`.
+
+Result: changes requested.
+
+Findings to address:
+
+- the round-11 review package stopped at `d419fd8`, so it did not include the
+  already committed review-prep log update `7076ac1`.
+
+Code style/maintainability, TypeScript/API docs, security, and
+performance/reliability lanes were clean. All five round-11 reviewer
+sub-agents were closed after their reports were collected.
+
+### Round 11 Fix
+
+Result: addressed by including the existing review-prep log commit in a new
+round-12 package.
+
+Fix summary:
+
+- no production code changed after `d419fd8`; and
+- round 12 uses a stable package path that can include the log prep state.
+
+### Round 12
+
+Diff package:
+`.superpowers/sdd/review-round-12-fce80b2-current.diff`.
 
 Reviewer sub-agents: pending.
 

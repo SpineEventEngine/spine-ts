@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-11 review pending
+Status: round-12 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -145,6 +145,14 @@ Implemented after focused delivery/index tests, typecheck, lint, docs check,
 format check, and diff hygiene passed.
 
 Committed as `d419fd8` and prepared for round-11 review.
+
+## Round 11 Review
+
+Round 11 found no code, API, security, or reliability issue. The documentation
+lane requested that the review package include the log update recording commit
+`d419fd8` and the round-11 package. That update was already committed as
+`7076ac1`, but the round-11 package stopped at `d419fd8`. Round 12 uses a
+stable package name and includes the review-prep log commit.
 
 ## Round 2 Review
 
