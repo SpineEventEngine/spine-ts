@@ -431,7 +431,8 @@ await tasks.eventBus().post(eventEnvelope);
 `remove(repository)` removes it before build. `build()` registers the listed
 repositories with the built context, opens repository `RecordStorage` through
 the context storage factory, and exposes `registeredRepositories()` as a
-copy-safe list of frozen snapshot-backed views for later routing slices.
+copy-safe list of frozen snapshot-backed views for runtime registration
+inspection.
 Repeated `add(repository)` calls before `build()` are idempotent.
 Registering the same repository instance with another built context is rejected.
 

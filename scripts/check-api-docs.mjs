@@ -585,7 +585,8 @@ const forbiddenStorageTypeDocNames = [
 ];
 const declaredServerExports = collectNamedExports(serverIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
-const missingServerExports = expectedServerExports.filter(
+const missingServerExports = expectedServerExports.filter((name) => !documentedNames.has(name));
+const missingDeclaredServerExports = expectedServerExports.filter(
   (name) => !declaredServerExports.includes(name),
 );
 const missingStorageExports = expectedStorageExports.filter(
@@ -615,6 +616,13 @@ if (missingCoreExports.length > 0) {
 if (missingServerExports.length > 0) {
   console.error(
     `TypeDoc JSON is missing expected @spine-ts/server exports: ${missingServerExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingDeclaredServerExports.length > 0) {
+  console.error(
+    `@spine-ts/server root is missing expected exports: ${missingDeclaredServerExports.join(", ")}`,
   );
   process.exit(1);
 }

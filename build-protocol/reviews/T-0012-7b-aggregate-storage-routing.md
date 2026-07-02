@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round 12 re-review pending
+Status: round 12 changes requested; fix pass verified
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -314,3 +314,31 @@ repository-routing tests, `typecheck`, `lint`, `format:check`, `docs:check`,
 and `git diff --check`.
 
 All five round-11 reviewers were closed after their reports were collected.
+
+### Round 12
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2107-a2ce-7161-ac17-00a3641e3643`;
+- documentation: `019f2107-d1c9-7390-a654-5d2a3b6758aa`;
+- TypeScript/API docs: `019f2107-fc6e-79c2-add1-ee1dde4cc59a`;
+- security: `019f2108-2c11-7651-884c-8bb0eea1dd78`;
+- performance/reliability:
+  `019f2108-54fa-78f1-a1cd-5a5a68392bd1`.
+
+Result: changes requested.
+
+Findings addressed in the round-12 fix pass:
+
+- server expected exports were checked against the root barrel but not against
+  TypeDoc JSON;
+- `registeredRepositories()` documentation still described the views as being
+  for later routing slices; and
+- the task brief still said the round-11 event-ID fix was in progress.
+
+Verification after the round-12 fix pass passed: focused aggregate-storage and
+repository-routing tests, `typecheck`, `lint`, `format:check`, `docs:check`,
+and `git diff --check`.
+
+All five round-12 reviewers were closed after their reports were collected.
