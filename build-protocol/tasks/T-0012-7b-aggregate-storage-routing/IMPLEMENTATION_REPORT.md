@@ -316,8 +316,6 @@ guide wording, and stale work-log current state. The fix keeps aggregate
 version serialization in `AggregateStorage`, keeps event-ID uniqueness in
 `EventStore`, and keeps storage sharing semantics in the storage package.
 
-Verification after the round-16 fix pass is pending.
-
 Verification after the round-16 fix pass:
 
 - `corepack pnpm test packages/storage/test/event/event-store.test.ts packages/storage/test/storage/storage-factory.test.ts packages/storage/test/index.test.ts packages/server/test/bus/event-bus.test.ts packages/server/test/bus/index.test.ts packages/server/test/index.test.ts packages/server/test/handler/handler-metadata.test.ts packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts`
@@ -325,6 +323,24 @@ Verification after the round-16 fix pass:
 - `corepack pnpm typecheck` passed.
 - `corepack pnpm lint` passed.
 - `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
+  warning.
+- `git diff --check` passed.
+
+Round 17 requested fixes for pre-validating event-store identity before
+dispatcher `accept()`, avoiding construction-time aggregate tenant binding,
+documenting close-independent storage handles, aligning storage sharing docs on
+tenant mode and tenant ID, removing stale report text, rejecting whitespace
+event IDs, and polishing EventStore TypeDoc.
+
+Verification after the round-17 fix pass:
+
+- `corepack pnpm test packages/storage/test/event/event-store.test.ts packages/storage/test/storage/storage-factory.test.ts packages/storage/test/index.test.ts packages/server/test/bus/event-bus.test.ts packages/server/test/bus/index.test.ts packages/server/test/index.test.ts packages/server/test/handler/handler-metadata.test.ts packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts`
+  passed with 9 files and 80 tests.
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm lint` passed.
+- `corepack pnpm format:check` passed after formatting
+  `packages/server/src/repository/aggregate-storage.ts`.
 - `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
   warning.
 - `git diff --check` passed.

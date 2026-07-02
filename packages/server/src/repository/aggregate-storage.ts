@@ -27,84 +27,95 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
   readonly #context: StorageContext;
   readonly #eventSchemas: readonly MessageSchema[];
   readonly #storageFactory: StorageFactory;
-  readonly #eventStore: EventStore;
-  readonly #snapshotStorage: RecordStorage<Id, SnapshotRecord>;
   readonly #stateSchema: Schema;
   readonly #stateTypeUrl: string;
 
   /** Open aggregate storage from a context, storage factory, and state schema. */
   constructor(options: AggregateStorageOptions<Schema>) {
-    this.#context = snapshotStorageContext(options.context);
+    this.#context = options.context;
     this.#storageFactory = options.storageFactory;
     this.#stateSchema = options.stateSchema;
     this.#stateTypeUrl = deriveTypeUrl(options.stateSchema);
     this.#eventSchemas = Object.freeze([...(options.eventSchemas ?? [])]);
-    this.#snapshotStorage = options.storageFactory.createRecordStorage(
-      this.#context,
-      snapshotRecordSpec<Id>(),
-    );
-    this.#eventStore = new EventStore(this.#context, options.storageFactory);
   }
 
   /** Append aggregate events in strictly increasing aggregate-version order. */
   async appendEvents(aggregateId: Id, events: Iterable<Event>): Promise<void> {
+    const context = snapshotStorageContext(this.#context);
     const batch = Object.freeze([...events].map((event) => clone(EventSchema, event)));
-    const key = aggregateLockKey(this.#context, requirePrimitiveId(aggregateId));
+    const key = aggregateLockKey(context, requirePrimitiveId(aggregateId));
 
     await AggregateStorageLocks.withLock(this.#storageFactory, key, () =>
-      this.#appendEventBatch(aggregateId, batch),
+      this.#appendEventBatch(context, aggregateId, batch),
     );
   }
 
-  async #appendEventBatch(aggregateId: Id, batch: readonly Event[]): Promise<void> {
+  async #appendEventBatch(
+    context: StorageContext,
+    aggregateId: Id,
+    batch: readonly Event[],
+  ): Promise<void> {
     const expectedId = requirePrimitiveId(aggregateId);
-    const storedEvents = await this.#readAggregateEvents(aggregateId);
+    const eventStore = this.#eventStore(context);
+    const storedEvents = await this.#readAggregateEvents(context, aggregateId);
     let lastVersion = storedEvents.at(-1)?.version ?? 0n;
-    const eventIds = new Set((await this.#eventStore.read()).map((event) => requireEventId(event)));
+    const eventIds = new Set((await eventStore.read()).map((event) => requireEventId(event)));
 
-    for (const event of batch) {
-      const eventId = requireEventId(event);
-      if (eventIds.has(eventId)) {
-        throw new Error("Aggregate event IDs must be unique before append.");
-      }
-      eventIds.add(eventId);
+    try {
+      for (const event of batch) {
+        const eventId = requireEventId(event);
+        if (eventIds.has(eventId)) {
+          throw new Error("Aggregate event IDs must be unique before append.");
+        }
+        eventIds.add(eventId);
 
-      const eventAggregateId = this.#eventAggregateId(event);
-      if (eventAggregateId === undefined || !samePrimitiveId(eventAggregateId, expectedId)) {
-        throw new Error("Aggregate events must all route to the same aggregate ID before append.");
+        const eventAggregateId = this.#eventAggregateId(event);
+        if (eventAggregateId === undefined || !samePrimitiveId(eventAggregateId, expectedId)) {
+          throw new Error(
+            "Aggregate events must all route to the same aggregate ID before append.",
+          );
+        }
+
+        const version = requireEventVersion(event);
+        if (version !== lastVersion + 1n) {
+          throw new Error("Aggregate event versions must be strictly increasing and consecutive.");
+        }
+        lastVersion = version;
       }
 
-      const version = requireEventVersion(event);
-      if (version !== lastVersion + 1n) {
-        throw new Error("Aggregate event versions must be strictly increasing and consecutive.");
-      }
-      lastVersion = version;
+      await eventStore.appendAll(batch);
+    } finally {
+      eventStore.close();
     }
-
-    await this.#eventStore.appendAll(batch);
   }
 
   /** Store or replace the latest snapshot for one aggregate. */
   async writeSnapshot(snapshot: AggregateSnapshot<Schema, Id>): Promise<void> {
     this.#validateSnapshot(snapshot.aggregateId, snapshot.state, snapshot.version);
+    const storage = this.#snapshotStorage(snapshotStorageContext(this.#context));
 
-    await this.#snapshotStorage.write(
-      createSnapshotRecord({
-        aggregateId: snapshot.aggregateId,
-        stateTypeUrl: this.#stateTypeUrl,
-        state: toBinary(this.#stateSchema, snapshot.state, { writeUnknownFields: false }),
-        version: snapshot.version,
-        archived: snapshot.lifecycle.archived,
-        deleted: snapshot.lifecycle.deleted,
-      }),
-    );
+    try {
+      await storage.write(
+        createSnapshotRecord({
+          aggregateId: snapshot.aggregateId,
+          stateTypeUrl: this.#stateTypeUrl,
+          state: toBinary(this.#stateSchema, snapshot.state, { writeUnknownFields: false }),
+          version: snapshot.version,
+          archived: snapshot.lifecycle.archived,
+          deleted: snapshot.lifecycle.deleted,
+        }),
+      );
+    } finally {
+      storage.close();
+    }
   }
 
   /** Read latest snapshot and the events after it for one aggregate. */
   async readHistory(aggregateId: Id): Promise<AggregateHistory<Schema, Id>> {
-    const snapshot = await this.#readSnapshot(aggregateId);
+    const context = snapshotStorageContext(this.#context);
+    const snapshot = await this.#readSnapshot(context, aggregateId);
     const snapshotVersion = snapshot?.version ?? -1n;
-    const events = (await this.#readAggregateEvents(aggregateId))
+    const events = (await this.#readAggregateEvents(context, aggregateId))
       .filter(({ version }) => version > snapshotVersion)
       .map(({ event }) => event);
 
@@ -114,8 +125,17 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
     });
   }
 
-  async #readSnapshot(aggregateId: Id): Promise<AggregateSnapshot<Schema, Id> | undefined> {
-    const record = await this.#snapshotStorage.read(aggregateId);
+  async #readSnapshot(
+    context: StorageContext,
+    aggregateId: Id,
+  ): Promise<AggregateSnapshot<Schema, Id> | undefined> {
+    const storage = this.#snapshotStorage(context);
+    let record: SnapshotRecord | undefined;
+    try {
+      record = await storage.read(aggregateId);
+    } finally {
+      storage.close();
+    }
 
     if (record === undefined) {
       return undefined;
@@ -150,23 +170,39 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
     });
   }
 
-  async #readAggregateEvents(aggregateId: Id): Promise<readonly VersionedEvent[]> {
+  async #readAggregateEvents(
+    context: StorageContext,
+    aggregateId: Id,
+  ): Promise<readonly VersionedEvent[]> {
     const expectedId = requirePrimitiveId(aggregateId);
     const events: VersionedEvent[] = [];
+    const eventStore = this.#eventStore(context);
 
-    for (const event of await this.#eventStore.read()) {
-      const eventAggregateId = this.#eventAggregateId(event);
-      if (eventAggregateId === undefined || !samePrimitiveId(eventAggregateId, expectedId)) {
-        continue;
+    try {
+      for (const event of await eventStore.read()) {
+        const eventAggregateId = this.#eventAggregateId(event);
+        if (eventAggregateId === undefined || !samePrimitiveId(eventAggregateId, expectedId)) {
+          continue;
+        }
+
+        const version = requireEventVersion(event);
+        events.push(Object.freeze({ event, version }));
       }
-
-      const version = requireEventVersion(event);
-      events.push(Object.freeze({ event, version }));
+    } finally {
+      eventStore.close();
     }
 
     events.sort((left, right) => compareVersions(left.version, right.version));
     rejectConsecutiveVersions(events);
     return Object.freeze(events);
+  }
+
+  #eventStore(context: StorageContext): EventStore {
+    return new EventStore(context, this.#storageFactory);
+  }
+
+  #snapshotStorage(context: StorageContext): RecordStorage<Id, SnapshotRecord> {
+    return this.#storageFactory.createRecordStorage(context, snapshotRecordSpec<Id>());
   }
 
   #eventAggregateId(event: Event): PrimitiveId | undefined {
@@ -370,7 +406,10 @@ function aggregateLockKey(context: StorageContext, aggregateId: PrimitiveId): st
     name: context.name,
     multitenant: context.multitenant,
     tenantId: context.multitenant ? context.tenantId : "",
-    aggregateId: String(aggregateId),
+    aggregateId: {
+      type: typeof aggregateId,
+      value: String(aggregateId),
+    },
   });
 }
 

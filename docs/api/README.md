@@ -276,10 +276,13 @@ adapter seam, `createRecordStorage(context, spec)`. `RecordStorage` persists
 identified Protobuf records with deterministic ID/column/path queries, positive
 limits, and simple field masks over cloned results. The in-memory adapter is
 process-local, tenant-aware through `StorageContext`, shared by factory,
-context name/tenant, and `RecordSpec` instance, and non-durable. `EventStore`
-is a framework delegate over `RecordStorage<EventId, Event>` and is
-storage-only in this slice: it persists and reads generated Spine events,
-rejects duplicate event IDs on the local append path, but does not dispatch
+context name, tenant mode, tenant ID, and `RecordSpec` instance, and
+non-durable. Storage adapters must make repeated
+`createRecordStorage(context, spec)` calls observe the same logical records
+while returning independently closeable storage handles. `EventStore` is a
+framework delegate over `RecordStorage<EventId, Event>` and is storage-only in
+this slice: it persists and reads generated Spine events, rejects missing,
+blank, or duplicate event IDs on the local append path, but does not dispatch
 them, manage delivery, or fan out to subscribers.
 
 Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
@@ -321,8 +324,9 @@ pnpm docs:check
 Generated output is written to `docs/api/reference`.
 
 `docs:check` also emits temporary TypeDoc JSON, verifies that expected
-`@spine-ts/proto`, `@spine-ts/core`, `@spine-ts/server`, and
-`@spine-ts/transport` entry-point exports are present in the API model, checks
+`@spine-ts/proto`, `@spine-ts/core`, `@spine-ts/server`,
+`@spine-ts/storage`, and `@spine-ts/transport` entry-point exports are present
+in the API model, checks
 `@spine-ts/server` and `@spine-ts/storage` root exports against source
 allowlists, and rejects broad generated wildcard re-exports from the proto
 package root.

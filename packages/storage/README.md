@@ -10,13 +10,14 @@ The package owns the first corrected storage layer:
 - `RecordStorage` stores, reads, deletes, and queries those records;
 - `InMemoryStorageFactory` and `InMemoryRecordStorage` are the first concrete
   adapter, with storage objects from the same factory and `RecordSpec` instance
-  sharing one process-local backing record set per context name and tenant;
+  sharing one process-local backing record set per context name, tenant mode,
+  and tenant ID;
 - `EventStore` is a framework delegate over `RecordStorage<EventId, Event>`.
 
 `EventStore` is storage-only in this task. It persists and reads `Event`
-records and rejects duplicate event IDs for one factory/context append path,
-but it does not implement event-bus dispatch, delivery queues, subscriber
-fan-out, or retry behavior.
+records and rejects missing, blank, or duplicate event IDs for one
+factory/context append path, but it does not implement event-bus dispatch,
+delivery queues, subscriber fan-out, or retry behavior.
 
 The package stays independent of `@spine-ts/server`. Storage scoping uses a
 small structural `StorageContext` with `name`, `multitenant`, and optional
@@ -67,5 +68,8 @@ await storage.write(
 
 `InMemoryRecordStorage` keeps deterministic per-tenant slices when the context
 is multitenant. Storage objects opened by one `InMemoryStorageFactory` with the
-same `RecordSpec` instance, context name, and tenant share those process-local
-slices. The adapter is not durable across restarts.
+same `RecordSpec` instance, context name, tenant mode, and tenant ID share
+those process-local slices. The adapter is not durable across restarts. Custom
+adapters must make repeated `createRecordStorage(context, spec)` calls observe
+the same logical records while returning independently closeable storage
+handles.

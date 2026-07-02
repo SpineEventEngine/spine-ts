@@ -48,6 +48,7 @@ export class EventBus {
     }
 
     const dispatchers = this.#registry.find(typeUrl);
+    await this.#eventStore.accept(event);
     await this.#accept(event, dispatchers);
 
     const stored = clone(EventSchema, event);

@@ -874,9 +874,9 @@ write and read, and are not durable across process restarts.
 
 `EventStore` is the first higher-level delegate over `RecordStorage<EventId,
 Event>`. In this slice it is storage-only: it persists and reads generated
-Spine `Event` messages and rejects duplicate event IDs on append, but it does
-not dispatch them to subscribers, manage delivery attempts, or implement
-retry/bus behavior.
+Spine `Event` messages and rejects missing, blank, or duplicate event IDs on
+append, but it does not dispatch them to subscribers, manage delivery attempts,
+or implement retry/bus behavior.
 
 Aggregate snapshot/history storage is available through `AggregateStorage`.
 Delivery records, tenant indexes, diagnostics, repository storage policy, and

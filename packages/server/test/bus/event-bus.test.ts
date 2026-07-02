@@ -121,6 +121,7 @@ describe("EventBus", () => {
   it("does not invoke dispatchers when EventStore append fails", async () => {
     const observed: string[] = [];
     const store = {
+      accept: () => Promise.resolve(),
       append: () => Promise.reject(new Error("append failed")),
     } as unknown as EventStore;
     const bus = new EventBus(store, [
@@ -150,6 +151,31 @@ describe("EventBus", () => {
     await expect(bus.post(createProjectionEvent("event-rejected"))).rejects.toThrow(
       "event rejected",
     );
+    await expect(store.read()).resolves.toEqual([]);
+  });
+
+  it("validates event-store identity before dispatcher acceptance", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const bus = new EventBus(store, [
+      {
+        messageSchemas: () => [ProjectionStateSchema],
+        accept: () => {
+          observed.push("accept");
+          return Promise.resolve();
+        },
+        dispatch: () => Promise.resolve(),
+      },
+    ]);
+    const event = createProjectionEvent("event-blank-id");
+    event.id = create(EventIdSchema);
+
+    await expect(bus.post(event)).rejects.toThrow(/non-empty event\.id\.value/);
+
+    expect(observed).toEqual([]);
     await expect(store.read()).resolves.toEqual([]);
   });
 

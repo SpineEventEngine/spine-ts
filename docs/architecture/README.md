@@ -408,17 +408,17 @@ framework code rather than by `StorageFactory`, so the foundational storage
 package stays independent of the event layer. In this slice `EventStore`
 remains storage-only: it persists and reads generated Spine events, while the
 new `EventBus` owns validation-before-append through dispatcher `accept()` and
-append-before-dispatch by delegating to it. `EventStore` rejects duplicate
-event IDs on the local append path, but still does not dispatch on its own,
-manage delivery attempts, fan out to subscribers, or implement retry/bus
-behavior.
+append-before-dispatch by delegating to it. `EventStore` rejects missing, blank,
+or duplicate event IDs on the local append path, but still does not dispatch on
+its own, manage delivery attempts, fan out to subscribers, or implement
+retry/bus behavior.
 
 `InMemoryStorageFactory` and `InMemoryRecordStorage` are the first
 test/development adapter. They are process-local, share backing records by
-factory, context name/tenant, and `RecordSpec` instance, and clone stored
-values so later caller mutation cannot affect stored records. Payloads must
-remain cloneable, which preserves byte arrays used by packed Protobuf `Any`
-payloads.
+factory, context name, tenant mode, tenant ID, and `RecordSpec` instance, and
+clone stored values so later caller mutation cannot affect stored records.
+Payloads must remain cloneable, which preserves byte arrays used by packed
+Protobuf `Any` payloads.
 
 Aggregate snapshot/history storage is available through the current
 `AggregateStorage` seam. Delivery records, tenant indexes, diagnostics,

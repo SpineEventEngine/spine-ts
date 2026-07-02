@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round 17 re-review pending
+Status: round 17 fixes in progress
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -458,6 +458,35 @@ Findings addressed in the round-16 fix pass:
 - storage guide and work-log current-state text were stale.
 
 Verification after the round-16 fix pass passed: focused storage event-store,
+storage factory, storage index, server event-bus, server bus API, server root
+API, handler metadata, aggregate-storage, and repository-routing tests,
+`typecheck`, `lint`, `format:check`, `docs:check`, and `git diff --check`.
+
+### Round 17
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2137-8337-7ca1-a8b9-8cf648207d7f`;
+- documentation: `019f2137-83e7-7393-a704-cac992afbbf5`;
+- TypeScript/API docs: `019f2137-846e-7313-93a6-aa6c323266db`;
+- security: `019f2137-84f7-7883-acdd-d254386ae188`;
+- performance/reliability:
+  `019f2137-8569-79e1-a828-2d30150a01e0`.
+
+Result: changes requested.
+
+Findings addressed in the round-17 fix pass:
+
+- dispatcher `accept()` ran before event-store identity validation;
+- aggregate storage captured multitenant context at construction;
+- storage adapter close-independent handle semantics were underdocumented;
+- in-memory sharing docs omitted tenant mode and tenant ID in several places;
+- the implementation report still had stale pending text;
+- whitespace-only event IDs were accepted; and
+- EventStore TypeDoc wording was awkward.
+
+Verification after the round-17 fix pass passed: focused storage event-store,
 storage factory, storage index, server event-bus, server bus API, server root
 API, handler metadata, aggregate-storage, and repository-routing tests,
 `typecheck`, `lint`, `format:check`, `docs:check`, and `git diff --check`.

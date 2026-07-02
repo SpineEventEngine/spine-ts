@@ -150,4 +150,12 @@ Required evidence for this task:
   and index tests, server bus/API, handler metadata, aggregate-storage, and
   repository-routing tests; `typecheck`, `lint`, `format:check`, `docs:check`,
   and `git diff --check`.
+- Round 17 found a dispatcher-accept trust-boundary gap, an aggregate
+  multitenant context binding risk, adapter handle independence documentation
+  gaps, storage sharing wording drift, stale report text, whitespace event IDs,
+  and minor TypeDoc wording. Fixes were applied and verified.
+- Required round-17 focused verification passed: storage event-store/factory
+  and index tests, server bus/API tests, handler metadata tests,
+  aggregate-storage tests, and repository-routing tests; `typecheck`, `lint`,
+  `format:check`, `docs:check`, and `git diff --check`.
 - No blocking human question is known.

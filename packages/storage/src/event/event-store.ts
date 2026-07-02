@@ -12,8 +12,8 @@ import type { StorageFactory } from "../storage/storage-factory.js";
 /**
  * Framework event store backed by record storage.
  *
- * Appends snapshot input events before queued work, reject missing, blank, and
- * duplicate IDs in one batch, and reject IDs already stored for the same
+ * Snapshots input events before queued work, rejects missing, blank, and
+ * duplicate IDs in one batch, and rejects IDs already stored for the same
  * captured storage context.
  */
 export class EventStore {
@@ -37,12 +37,20 @@ export class EventStore {
     this.#storage.close();
   }
 
+  /** Validate that one generated Spine event can be appended without storing it. */
+  async accept(event: Event): Promise<void> {
+    const record = clone(EventSchema, event);
+    const context = snapshotContext(this.#context);
+
+    await this.checkUnique([eventId(record)], context);
+  }
+
   /** Append one generated Spine event, rejecting missing, blank, or duplicate IDs. */
   async append(event: Event): Promise<void> {
     await this.appendUnique([clone(EventSchema, event)], snapshotContext(this.#context));
   }
 
-  /** Append generated Spine events in order, rejecting duplicate IDs before persistence. */
+  /** Append generated Spine events in order, rejecting missing, blank, or duplicate IDs. */
   async appendAll(events: Iterable<Event>): Promise<void> {
     const records = [...events].map((event) => clone(EventSchema, event));
     const context = snapshotContext(this.#context);
@@ -65,13 +73,22 @@ export class EventStore {
     await EventStoreLocks.withLock(this.#factory, context, async () => {
       const storage = this.#factory.createRecordStorage(context, eventSpec);
       try {
-        const appended = await storage.index({ ids });
-
-        if (appended.length > 0) {
-          throw new Error("EventStore requires unique event IDs.");
-        }
-
+        await rejectStoredIds(storage, ids);
         await storage.writeAll(records);
+      } finally {
+        storage.close();
+      }
+    });
+  }
+
+  private async checkUnique(ids: readonly EventId[], context: StorageContext): Promise<void> {
+    this.requireOpen();
+    rejectDuplicateIds(ids);
+
+    await EventStoreLocks.withLock(this.#factory, context, async () => {
+      const storage = this.#factory.createRecordStorage(context, eventSpec);
+      try {
+        await rejectStoredIds(storage, ids);
       } finally {
         storage.close();
       }
@@ -119,10 +136,21 @@ function eventId(event: Event): EventId {
   if (event.id === undefined) {
     throw new Error("EventStore requires event.id.");
   }
-  if (event.id.value === "") {
+  if (event.id.value.trim().length === 0) {
     throw new Error("EventStore requires a non-empty event.id.value.");
   }
   return event.id;
+}
+
+async function rejectStoredIds(
+  storage: RecordStorage<EventId, Event>,
+  ids: readonly EventId[],
+): Promise<void> {
+  const appended = await storage.index({ ids });
+
+  if (appended.length > 0) {
+    throw new Error("EventStore requires unique event IDs.");
+  }
 }
 
 function rejectDuplicateIds(ids: readonly EventId[]): void {
@@ -160,6 +188,7 @@ function requireTenantId(name: string, tenantId: string | undefined): string {
 function contextKey(context: StorageContext): string {
   return JSON.stringify({
     name: context.name,
+    multitenant: context.multitenant,
     tenantId: context.multitenant ? context.tenantId : "",
   });
 }

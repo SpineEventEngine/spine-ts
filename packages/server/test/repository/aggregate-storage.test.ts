@@ -231,6 +231,38 @@ describe("AggregateStorage", () => {
     });
   });
 
+  it("uses the current tenant slice for aggregate operations", async () => {
+    let tenantId = "tenant-a";
+    const storage = new AggregateStorage({
+      context: {
+        name: "Tasks",
+        multitenant: true,
+        get tenantId() {
+          return tenantId;
+        },
+      },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await storage.appendEvents("task-tenant", [
+      createAggregateEvent("event-tenant-a", "task-tenant", 1),
+    ]);
+    tenantId = "tenant-b";
+    await storage.appendEvents("task-tenant", [
+      createAggregateEvent("event-tenant-b", "task-tenant", 1),
+    ]);
+
+    await expect(storage.readHistory("task-tenant")).resolves.toMatchObject({
+      events: [{ id: { value: "event-tenant-b" } }],
+    });
+    tenantId = "tenant-a";
+    await expect(storage.readHistory("task-tenant")).resolves.toMatchObject({
+      events: [{ id: { value: "event-tenant-a" } }],
+    });
+  });
+
   it("rejects mismatched or unreadable aggregate IDs before appending", async () => {
     const storage = new AggregateStorage({
       context: { name: "Tasks", multitenant: false },
@@ -539,7 +571,7 @@ describe("AggregateStorage", () => {
 
   it("rejects duplicate versions already present in stored aggregate history", async () => {
     const context = { name: "Tasks", multitenant: false };
-    const storageFactory = new SharedEventStorageFactory();
+    const storageFactory = new InMemoryStorageFactory();
     const storage = new AggregateStorage({
       context,
       storageFactory,
@@ -558,7 +590,7 @@ describe("AggregateStorage", () => {
 
   it("rejects version gaps already present in stored aggregate history", async () => {
     const context = { name: "Tasks", multitenant: false };
-    const storageFactory = new SharedEventStorageFactory();
+    const storageFactory = new InMemoryStorageFactory();
     const storage = new AggregateStorage({
       context,
       storageFactory,
@@ -964,27 +996,6 @@ class CorruptSnapshotFactory extends InMemoryStorageFactory {
     }
 
     return new InMemoryRecordStorage(context, recordSpec);
-  }
-}
-
-class SharedEventStorageFactory extends InMemoryStorageFactory {
-  #eventStorage: RecordStorage<unknown, Message> | undefined;
-  #openedSnapshotStorage = false;
-
-  protected override onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-  ): RecordStorage<I, R> {
-    if (!this.#openedSnapshotStorage) {
-      this.#openedSnapshotStorage = true;
-      return new InMemoryRecordStorage(context, recordSpec);
-    }
-
-    if (this.#eventStorage === undefined) {
-      this.#eventStorage = new InMemoryRecordStorage(context, recordSpec);
-    }
-
-    return this.#eventStorage as RecordStorage<I, R>;
   }
 }
 

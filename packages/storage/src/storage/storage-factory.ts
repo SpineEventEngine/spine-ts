@@ -22,7 +22,8 @@ export abstract class StorageFactory implements Storage {
    * Create a record storage for one context and one declarative record specification.
    *
    * Repeated calls for the same logical context and record specification must
-   * observe the same backing records.
+   * observe the same backing records and return independently closeable storage
+   * handles.
    */
   createRecordStorage<I, R extends Message>(
     context: StorageContext,
