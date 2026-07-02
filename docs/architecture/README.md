@@ -261,9 +261,12 @@ repositories as frozen snapshot-backed `RepositoryView` values. Direct
 repository registration is not public API.
 This follows the JVM `Repository` identity surface (`entityClass()`,
 `idClass()`, and `entityStateType()`) plus the first context-owned lifecycle
-step. The TypeScript seam deliberately omits `create`, `find`, `store`, record
-conversion, stand registration, routing, inboxes, caches, lifecycle monitors,
-catch-up, handler invocation, buses, and transport.
+step. When authentic explicit handler metadata is supplied, repositories now
+calculate deferred command/event routes and bounded-context assembly registers
+internal dispatcher adapters for those routes. The TypeScript seam deliberately
+omits `create`, `find`, `store`, record conversion, handler invocation,
+entity storage/cache/catch-up, inbox/delivery, stand registration, lifecycle
+monitors, gRPC services, and transport.
 
 `EntityTransaction` is the first server-owned draft/result commit boundary over
 one entity state. It buffers a draft state, explicit previous/draft version
@@ -333,9 +336,9 @@ The following runtime pieces are still deferred to later explicit tasks:
 - default repository construction from entity classes,
   visibility/type-supplier registration, and lifecycle callbacks over the
   repository identity seam;
-- handler invocation and integrated command/event routing;
-- inbox/delivery storage, durable storage lifecycle, and tenant-index
-  persistence;
+- handler invocation over the deferred repository routes;
+- inbox/delivery storage, durable storage lifecycle, entity storage/cache
+  catch-up, and tenant-index persistence;
 - stand/query/subscription execution;
 - system-context pairing and server/gRPC services; and
 - ZeroMQ endpoint topology and transport-backed runtime execution.
@@ -373,7 +376,7 @@ arrays and planner-local worker IDs; they do not retain entity names, handler
 names, raw readiness metadata, or duplicate full transport contracts on each
 route. The package root now exports a small executable bus layer, but still
 does not export service, transport, delivery, stand, integration-broker,
-repository dispatch/runtime wiring, command/event intake validation, or `Ack`
+handler invocation/runtime wiring, command/event intake validation, or `Ack`
 mapping as part of this closure.
 
 The architectural consequence is that later work must add those collaborators

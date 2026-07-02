@@ -407,9 +407,12 @@ opens a `RecordStorage` for the repository state schema using the context
 are not public API.
 
 This slice still does not create, find, or store entities; convert entity
-records; route or dispatch messages through repositories; write inboxes; invoke
-handlers; manage caches; run catch-up; emit lifecycle events; expose query
-stands; start buses from repositories; or use gRPC/transport.
+records; invoke handlers; write inboxes; manage delivery; manage entity
+caches; run catch-up; emit lifecycle events; expose query stands; start buses
+from repositories; or use gRPC/transport. When a repository is constructed with
+authentic explicit handler metadata, it can calculate deferred command/event
+routes, and bounded contexts install internal dispatcher adapters for those
+routes.
 
 ## Bounded Context Assembly
 
@@ -446,8 +449,10 @@ idempotent, duplicate entity or state identities are rejected before storage is
 opened for repositories, and `registeredRepositories()` returns a copy-safe
 list of frozen snapshot-backed `RepositoryView` values.
 This slice still does not create default repositories, register type suppliers
-with a stand, route repository messages, invoke handlers, write inboxes, emit
-lifecycle events, or start transport.
+with a stand, invoke handlers, write inboxes, manage delivery, emit lifecycle
+events, or start transport. Repositories with authentic explicit handler
+metadata do contribute deferred route-calculating dispatcher adapters to the
+built context's buses.
 
 ## Runtime Assembly Closure
 

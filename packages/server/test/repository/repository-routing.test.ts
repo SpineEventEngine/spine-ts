@@ -13,9 +13,16 @@ import {
   VersionSchema,
   file_spine_options,
 } from "@spine-ts/proto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
-import { Aggregate, BoundedContext, Repository, defineEntityHandlers } from "../../src/index.js";
+import {
+  Aggregate,
+  BoundedContext,
+  Repository,
+  RepositoryIdentityError,
+  defineEntityHandlers,
+  type EntityHandlersMetadata,
+} from "../../src/index.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -80,6 +87,7 @@ describe("repository signal routing", () => {
       messageFullTypeName: AggregateStateSchema.typeName,
       invocation: "deferred",
     });
+    expectTypeOf(route.entityId).toEqualTypeOf<string>();
 
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();
 
@@ -101,6 +109,7 @@ describe("repository signal routing", () => {
       messageFullTypeName: ProjectionStateSchema.typeName,
       invocation: "deferred",
     });
+    expectTypeOf(producerRoute.entityIds).toEqualTypeOf<readonly string[]>();
     expect(firstFieldRoute.entityIds).toEqual(["field-task"]);
 
     const context = BoundedContext.singleTenant("Tasks").add(repository).build();
@@ -108,6 +117,22 @@ describe("repository signal routing", () => {
     await expect(
       context.eventBus().post(createProjectionEvent("event-3", "posted-task")),
     ).resolves.toBeUndefined();
+  });
+
+  it("rejects structurally fabricated handler metadata", () => {
+    const handlers = defineEntityHandlers(TaskAggregate, AggregateStateSchema, (builder) => [
+      builder.assign(AggregateStateSchema, "assignTask"),
+    ]);
+    const fabricated = { ...handlers } as EntityHandlersMetadata;
+
+    expect(
+      () =>
+        new Repository({
+          entityType: TaskAggregate,
+          schema: AggregateStateSchema,
+          handlers: fabricated,
+        }),
+    ).toThrow(RepositoryIdentityError);
   });
 });
 

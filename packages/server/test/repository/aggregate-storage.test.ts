@@ -117,14 +117,66 @@ describe("AggregateStorage", () => {
     expect(history.snapshot).toBeUndefined();
     expect(history.events.map((event) => event.id?.value)).toEqual(["event-5", "event-6"]);
   });
+
+  it("rejects mismatched or unreadable aggregate IDs before appending", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(
+      storage.appendEvents("task-3", [
+        createAggregateEvent("event-7", "task-3", 1, "created"),
+        createAggregateEvent("event-8", "other-task", 2, "wrong aggregate"),
+      ]),
+    ).rejects.toThrow(/same aggregate ID/);
+    await expect(
+      storage.appendEvents("task-3", [createAggregateEvent("event-9", "task-3", undefined)]),
+    ).rejects.toThrow(/version/);
+
+    const history = await storage.readHistory("task-3");
+    expect(history.events).toEqual([]);
+  });
+
+  it("rejects duplicate and non-increasing event versions for one aggregate", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(
+      storage.appendEvents("task-4", [
+        createAggregateEvent("event-10", "task-4", 1, "created"),
+        createAggregateEvent("event-11", "task-4", 1, "duplicate"),
+      ]),
+    ).rejects.toThrow(/increasing/);
+    expect((await storage.readHistory("task-4")).events).toEqual([]);
+
+    await storage.appendEvents("task-4", [createAggregateEvent("event-12", "task-4", 2)]);
+    await expect(
+      storage.appendEvents("task-4", [createAggregateEvent("event-13", "task-4", 2)]),
+    ).rejects.toThrow(/increasing/);
+    expect((await storage.readHistory("task-4")).events.map((event) => event.id?.value)).toEqual([
+      "event-12",
+    ]);
+  });
 });
 
-function createAggregateEvent(id: string, aggregateId: string, version: number, name: string) {
+function createAggregateEvent(
+  id: string,
+  aggregateId: string,
+  version: number | undefined,
+  name = "changed",
+) {
   return packEvent({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
       producerId: packAny(UserIdSchema, create(UserIdSchema, { value: aggregateId })),
-      version: create(VersionSchema, { number: version }),
+      version: version === undefined ? undefined : create(VersionSchema, { number: version }),
     }),
     schema: AggregateStateSchema,
     message: create(AggregateStateSchema, {

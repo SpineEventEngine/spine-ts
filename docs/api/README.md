@@ -42,10 +42,12 @@ non-empty/non-blank names and records tenant mode. `builder.add(repository)` /
 `builder.remove(repository)` maintain
 the context-owned repository registration list, and `build()` registers those
 repositories with the built context after opening state record storage through
-the context `StorageFactory`. This slice does not create default repositories
-from entity classes, route messages through repositories, invoke handlers,
-create system contexts, expose stands, write tenant indexes, expose gRPC
-services, or integrate transports.
+the context `StorageFactory`. Repositories with authentic explicit handler
+metadata now calculate deferred command/event routes, and built contexts install
+internal repository dispatcher adapters. This slice does not create default
+repositories from entity classes, invoke handlers, store entity records, manage
+inboxes/delivery, run cache catch-up, create system contexts, expose stands,
+write tenant indexes, expose gRPC services, or integrate transports.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,
@@ -79,7 +81,9 @@ events.
 `Repository`, `RepositoryOptions`, `RepositoryEntityType`,
 `ConcreteRepositoryEntityType`, `RepositoryStateSchema`,
 `RepositoryIdentitySnapshot`, `RepositoryIdentityError`,
-`RepositoryIdentityErrorCode`, and `RepositoryView` form the repository
+`RepositoryIdentityErrorCode`, `RepositoryCommandRoute`,
+`RepositoryEventRoute`, `RepositoryRouteInvocation`, and `RepositoryView` form
+the repository
 identity and context-owned registration seam. A repository records one
 entity constructor, the inferred aggregate/projection/process-manager family,
 the matching descriptor-backed state schema, descriptor metadata, state full

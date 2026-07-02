@@ -25,7 +25,10 @@ import {
   EventRegistrationReadiness,
   type EventRegistrationReadinessLookup,
 } from "../handler/event-registration-readiness.js";
-import type { EntityHandlersMetadata } from "../handler/handler-metadata.js";
+import {
+  isAuthenticHandlerMetadata,
+  type EntityHandlersMetadata,
+} from "../handler/handler-metadata.js";
 
 type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> =
   | Aggregate<unknown, Schema, unknown>
@@ -46,6 +49,15 @@ export type RepositoryStateSchema<EntityType extends RepositoryEntityType> =
         ? [Id, Version] extends [unknown, unknown]
           ? Schema
           : never
+        : never;
+
+type RepositoryEntityId<EntityType extends RepositoryEntityType> =
+  EntityType["prototype"] extends Aggregate<infer Id, DescriptorMessageSchema, unknown>
+    ? Id
+    : EntityType["prototype"] extends Projection<infer Id, DescriptorMessageSchema, unknown>
+      ? Id
+      : EntityType["prototype"] extends ProcessManager<infer Id, DescriptorMessageSchema, unknown>
+        ? Id
         : never;
 
 type IsUnion<Type, Union = Type> = Type extends unknown
@@ -197,9 +209,10 @@ export class RepositoryIdentityError extends Error {
  * The class records the ownership facts bounded-context registration needs for
  * duplicate and conflict checks. Context assembly uses this metadata to attach
  * a repository to one built context and open state record storage. The
- * repository itself does not create entities, find or store records, route
- * messages, invoke handlers, manage caches, emit lifecycle events, or start
- * buses/transports.
+ * repository itself calculates deferred command and event routes when explicit
+ * handler metadata is supplied. It does not create entities, find or store
+ * records, invoke handlers, manage caches, emit lifecycle events, write
+ * inboxes, or start buses/transports.
  *
  * @typeParam EntityType - A single concrete aggregate, projection, or process-manager constructor
  * with one concrete generated state schema. Broad constructor, constructor-union, broad-schema, and
@@ -211,7 +224,7 @@ export class Repository<
   readonly #entityType: EntityType;
   readonly #entityFamily: EntityFamily;
   readonly #metadata: EntityMetadata<RepositoryStateSchema<EntityType>>;
-  readonly #routing: RepositoryRouting;
+  readonly #routing: RepositoryRouting<RepositoryEntityId<EntityType>>;
 
   /** Create repository identity for exactly one entity family/state schema pair. */
   constructor(options: RepositoryOptions<EntityType>) {
@@ -308,12 +321,12 @@ export class Repository<
   }
 
   /** Route a command to exactly one entity ID. Handler invocation is deferred. */
-  routeCommand(command: Command): RepositoryCommandRoute {
+  routeCommand(command: Command): RepositoryCommandRoute<RepositoryEntityId<EntityType>> {
     return this.#routing.routeCommand(command);
   }
 
-  /** Route an event to one entity ID. Handler invocation is deferred. */
-  routeEvent(event: Event): RepositoryEventRoute {
+  /** Route an event to one or more entity IDs. Handler invocation is deferred. */
+  routeEvent(event: Event): RepositoryEventRoute<RepositoryEntityId<EntityType>> {
     return this.#routing.routeEvent(event);
   }
 }
@@ -360,11 +373,11 @@ interface RepositoryDispatchers {
   readonly event: EventDispatcher | undefined;
 }
 
-interface RepositoryRouting {
+interface RepositoryRouting<Id = unknown> {
   readonly commandSchemas: readonly MessageSchema[];
   readonly eventSchemas: readonly MessageSchema[];
-  routeCommand(command: Command): RepositoryCommandRoute;
-  routeEvent(event: Event): RepositoryEventRoute;
+  routeCommand(command: Command): RepositoryCommandRoute<Id>;
+  routeEvent(event: Event): RepositoryEventRoute<Id>;
 }
 
 type RepositoryHandlersOption =
@@ -401,11 +414,11 @@ function createRepositoryDispatchers(
   });
 }
 
-function createRepositoryRouting(
-  entityType: RepositoryEntityType,
+function createRepositoryRouting<EntityType extends RepositoryEntityType>(
+  entityType: EntityType,
   metadata: EntityMetadata,
   handlersOption: RepositoryHandlersOption,
-): RepositoryRouting {
+): RepositoryRouting<RepositoryEntityId<EntityType>> {
   const handlers = normalizeHandlers(handlersOption);
   validateHandlers(entityType, metadata, handlers);
   const commandReadiness =
@@ -428,8 +441,10 @@ function createRepositoryRouting(
   return Object.freeze({
     commandSchemas,
     eventSchemas,
-    routeCommand: (command: Command) => routeCommand(command, commandReadiness, commandSchemas),
-    routeEvent: (event: Event) => routeEvent(event, eventReadiness, eventSchemas),
+    routeCommand: (command: Command) =>
+      routeCommand<RepositoryEntityId<EntityType>>(command, commandReadiness, commandSchemas),
+    routeEvent: (event: Event) =>
+      routeEvent<RepositoryEntityId<EntityType>>(event, eventReadiness, eventSchemas),
   });
 }
 
@@ -458,6 +473,7 @@ function validateHandlers(
 ): void {
   for (const handlersMetadata of handlers) {
     if (
+      !isAuthenticHandlerMetadata(handlersMetadata) ||
       handlersMetadata.entityType !== entityType ||
       handlersMetadata.entity.fullTypeName !== metadata.fullTypeName
     ) {
@@ -477,11 +493,11 @@ function uniqueSchemas(schemas: readonly MessageSchema[]): readonly MessageSchem
   return Object.freeze([...byTypeUrl.values()]);
 }
 
-function routeCommand(
+function routeCommand<Id>(
   command: Command,
   readiness: CommandRegistrationReadinessLookup | undefined,
   schemas: readonly MessageSchema[],
-): RepositoryCommandRoute {
+): RepositoryCommandRoute<Id> {
   const message = command.message;
   if (message === undefined || message.typeUrl === "") {
     throw new Error("Repository command routing requires command.message.typeUrl.");
@@ -494,17 +510,17 @@ function routeCommand(
   }
 
   return Object.freeze({
-    entityId: readFirstFieldId(message, schema, "command"),
+    entityId: readFirstFieldId(message, schema, "command") as Id,
     messageFullTypeName: schema.typeName,
     invocation: "deferred",
   });
 }
 
-function routeEvent(
+function routeEvent<Id>(
   event: Event,
   readiness: EventRegistrationReadinessLookup | undefined,
   schemas: readonly MessageSchema[],
-): RepositoryEventRoute {
+): RepositoryEventRoute<Id> {
   const message = event.message;
   if (message === undefined || message.typeUrl === "") {
     throw new Error("Repository event routing requires event.message.typeUrl.");
@@ -520,7 +536,9 @@ function routeEvent(
   }
 
   return Object.freeze({
-    entityIds: Object.freeze([readProducerId(event) ?? readFirstFieldId(message, schema, "event")]),
+    entityIds: Object.freeze([
+      (readProducerId(event) ?? readFirstFieldId(message, schema, "event")) as Id,
+    ]),
     messageFullTypeName: schema.typeName,
     invocation: "deferred",
   });

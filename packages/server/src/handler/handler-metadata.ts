@@ -371,6 +371,8 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
   }
 }
 
+const authenticEntityHandlers = new WeakSet<EntityHandlersMetadata>();
+
 /**
  * Explicitly bind schemas to entity class method names without invoking handlers.
  *
@@ -401,7 +403,15 @@ export function defineEntityHandlers<
     eventApplications: filterHandlers(handlers, "event-application"),
   };
 
+  authenticEntityHandlers.add(metadata);
   return Object.freeze(metadata);
+}
+
+/** @internal Returns whether metadata was produced by `defineEntityHandlers()`. */
+export function isAuthenticHandlerMetadata(
+  metadata: EntityHandlersMetadata,
+): metadata is EntityHandlersMetadata {
+  return authenticEntityHandlers.has(metadata);
 }
 
 function createHandlerRegistrationBuilder<Instance extends object>(
@@ -531,8 +541,8 @@ function validateEventApplication(
   );
 }
 
-function eventApplicationKey(entityStateFullTypeName: string, eventFullTypeName: string): string {
-  return `${entityStateFullTypeName}\u0000${eventFullTypeName}`;
+function eventApplicationKey(entityStateName: string, eventFullTypeName: string): string {
+  return `${entityStateName}\u0000${eventFullTypeName}`;
 }
 
 function pushMapValue<Key, Value>(map: Map<Key, Value[]>, key: Key, value: Value): void {

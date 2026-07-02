@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: implementation complete; verification passed
+Status: review round 1 fixes complete; verification passed
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -35,7 +35,7 @@ function`, and `repository.routeEvent is not a function`.
 ## Verification
 
 - `corepack pnpm test packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts`
-  passed with 2 files and 4 tests.
+  passed with 2 files and 7 tests after the review-fix regressions were added.
 - `corepack pnpm typecheck` passed.
 - `corepack pnpm lint` passed.
 - `corepack pnpm format:check` passed.
@@ -44,8 +44,9 @@ function`, and `repository.routeEvent is not a function`.
   comment linked to a type outside the generated documentation set. After
   updating the API docs and guard expectations, `corepack pnpm docs:check`
   passed with the existing invalid-`origin` TypeDoc warning only.
-- After the docs/API repair, the focused repository tests, `typecheck`, `lint`,
-  `format:check`, and `docs:check` all passed.
+- After the review-fix pass, the focused repository tests, `typecheck`, `lint`,
+  `format:check`, and `docs:check` all passed. `docs:check` still reports the
+  existing invalid-`origin` TypeDoc warning and exits successfully.
 
 ## Baseline Verification
 
@@ -79,7 +80,27 @@ function`, and `repository.routeEvent is not a function`.
 
 ## Review Status
 
-Review round 1 pending.
+Review round 1 findings addressed in the fix pass:
+
+- Documentation now states that repository deferred route calculation and
+  internal bounded-context dispatcher adapters exist, while handler invocation,
+  inbox/delivery, entity storage/cache/catch-up, stand, gRPC, and transport
+  remain deferred.
+- `AggregateStorage` now appears before supporting declarations, preserves the
+  aggregate ID generic, validates every appended event routes to the supplied
+  aggregate ID, rejects missing versions, and rejects duplicate/non-increasing
+  versions before storing a batch. History reads also reject invalid stored
+  aggregate versions.
+- The runtime-synthesized `spine.server.AggregateSnapshotRecord` descriptor was
+  removed. Snapshot records now use an internal private `Any` payload shape
+  rather than an ad hoc Spine namespace proto contract.
+- Repository route methods preserve entity ID generics and TypeDoc now reflects
+  deferred route calculation without implying handler invocation.
+- Handler metadata produced by `defineEntityHandlers()` is now marked
+  internally, and repository validation rejects structurally fabricated handler
+  metadata before creating bus-visible dispatchers.
+
+Final verification for the fix pass passed.
 
 ## Concerns
 
