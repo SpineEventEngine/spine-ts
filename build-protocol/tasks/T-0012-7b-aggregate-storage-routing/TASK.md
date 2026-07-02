@@ -1,6 +1,6 @@
 # T-0012.7b: Aggregate Storage And Signal Routing
 
-Status: round-11 re-review pending
+Status: round-11 fixes verified
 Start: `2026-07-02 06:20 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7b-aggregate-storage-routing`
@@ -102,8 +102,14 @@ Required evidence for this task:
   repository-routing tests, `typecheck`, `lint`, `format:check`, `docs:check`,
   and `git diff --check`.
 - Round 10 found stale top-level/status docs and one remaining append
-  reliability gap for duplicate event IDs; those fixes are in progress.
+  reliability gap for duplicate event IDs; those fixes were applied and
+  verified.
 - Required round-10 fix verification passed: focused aggregate-storage and
+  repository-routing tests, `typecheck`, `lint`, `format:check`, `docs:check`,
+  and `git diff --check`.
+- Round 11 found that duplicate event-ID validation was aggregate-local instead
+  of event-store-wide; that fix is in progress.
+- Required round-11 fix verification passed: focused aggregate-storage and
   repository-routing tests, `typecheck`, `lint`, `format:check`, `docs:check`,
   and `git diff --check`.
 - No blocking human question is known.

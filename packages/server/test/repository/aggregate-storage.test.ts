@@ -575,6 +575,27 @@ describe("AggregateStorage", () => {
     ).toEqual(["event-existing-id"]);
   });
 
+  it("rejects duplicate event IDs already used by another aggregate", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await storage.appendEvents("task-one", [
+      createAggregateEvent("event-shared-id", "task-one", 1),
+    ]);
+    await expect(
+      storage.appendEvents("task-two", [createAggregateEvent("event-shared-id", "task-two", 1)]),
+    ).rejects.toThrow(/unique/);
+
+    expect((await storage.readHistory("task-one")).events.map((event) => event.id?.value)).toEqual([
+      "event-shared-id",
+    ]);
+    expect((await storage.readHistory("task-two")).events).toEqual([]);
+  });
+
   it("fails closed for corrupted snapshot records", async () => {
     await expect(
       corruptStorage({

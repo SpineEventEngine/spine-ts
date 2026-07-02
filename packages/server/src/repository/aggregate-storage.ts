@@ -48,7 +48,7 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
     const expectedId = requirePrimitiveId(aggregateId);
     const storedEvents = await this.#readAggregateEvents(aggregateId);
     let lastVersion = storedEvents.at(-1)?.version ?? 0n;
-    const eventIds = new Set(storedEvents.map(({ event }) => requireEventId(event)));
+    const eventIds = new Set((await this.#eventStore.read()).map((event) => requireEventId(event)));
 
     for (const event of batch) {
       const eventId = requireEventId(event);

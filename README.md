@@ -9,8 +9,8 @@ storage adapter. The server package now includes entity transactions, entity
 families, repository registration, aggregate snapshot/event storage, and
 repository command/event route calculation. Handler invocation, delivery/Inbox,
 Stand/read-side query behavior, gRPC services, ZeroMQ transport, production
-storage adapters, process supervision, and the to-do domain are intentionally
-deferred to later tasks.
+storage adapters, import bus, scheduler, process supervision, and the to-do
+domain are intentionally deferred to later tasks.
 
 ## Workspace
 

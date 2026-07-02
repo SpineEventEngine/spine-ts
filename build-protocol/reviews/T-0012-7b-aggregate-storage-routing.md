@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round 11 re-review pending
+Status: round 11 changes requested; fix pass verified
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -287,3 +287,30 @@ repository-routing tests, `typecheck`, `lint`, `format:check`, `docs:check`,
 and `git diff --check`.
 
 All five round-10 reviewers were closed after their reports were collected.
+
+### Round 11
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2101-9f96-73a1-b08c-06c1a1ae7500`;
+- documentation: `019f2101-cb85-7dd0-b7a3-814bd3bfa700`;
+- TypeScript/API docs: `019f2101-f473-7bd2-a716-76be09e7c1b4`;
+- security: `019f2102-1aab-7813-961e-31bd6b03ac82`;
+- performance/reliability:
+  `019f2102-4963-7d21-aa63-0f4303ae35cc`.
+
+Result: changes requested.
+
+Findings addressed in the round-11 fix pass:
+
+- duplicate event-ID validation was aggregate-local instead of event-store-wide;
+- the task brief still said round-10 fixes were in progress after verification;
+  and
+- the top-level README deferred list omitted import bus and scheduler.
+
+Verification after the round-11 fix pass passed: focused aggregate-storage and
+repository-routing tests, `typecheck`, `lint`, `format:check`, `docs:check`,
+and `git diff --check`.
+
+All five round-11 reviewers were closed after their reports were collected.
