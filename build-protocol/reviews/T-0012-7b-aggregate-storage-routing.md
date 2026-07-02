@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round 20 fixes in progress
+Status: round 21 fixes in progress
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -589,7 +589,7 @@ Reviewer sub-agents:
 Result: changes requested. Code style/maintainability and
 performance/reliability were clean.
 
-Findings being addressed in the round-20 fix pass:
+Findings addressed in the round-20 fix pass:
 
 - review/task status text was stale after the round-19 commit;
 - EventBus docs still named the older separate `EventStore.accept()` precheck
@@ -611,6 +611,24 @@ Round-20 fix commit: `2c70c67`.
 Diff package:
 `.superpowers/sdd/review-083feaa..2c70c67.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
 
-Result: pending.
+- code style/maintainability:
+  `019f215e-1603-7600-bc07-d7af4ce3fd23`;
+- documentation: `019f215e-348e-7d81-ae68-4bbbc9047864`;
+- TypeScript/API docs: `019f215e-497e-7dc3-8cfe-5527a3e19473`;
+- security: `019f215e-613a-7051-82f9-64cdae301c42`;
+- performance/reliability:
+  `019f215e-7a25-7971-a5e7-2ae5840391d0`.
+
+Result: changes requested. TypeScript/API docs, security, and
+performance/reliability were clean.
+
+Findings being addressed in the round-21 fix pass:
+
+- review/task/report status text was stale after the round-20 commit.
+
+All five round-21 reviewers were closed after their reports were collected.
+
+Verification after the round-21 status fix passed: `format:check`,
+`git diff --check`, and stale-status phrase scan.

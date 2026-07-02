@@ -1,6 +1,6 @@
 # T-0012.7b: Aggregate Storage And Signal Routing
 
-Status: round-21 re-review pending
+Status: round-21 fixes in progress
 Start: `2026-07-02 06:20 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7b-aggregate-storage-routing`
@@ -188,7 +188,7 @@ Required evidence for this task:
 - Round-20 reviewers completed. Code style/maintainability and
   performance/reliability were clean; documentation, TypeScript/API docs, and
   security requested focused fixes.
-- Round-20 fixes are in progress for stale review/task status text,
+- Round-20 fixes addressed stale review/task status text,
   `acceptThenAppend()` documentation wording, and duplicate event IDs in
   corrupted stored aggregate history.
 - Required round-20 focused verification passed: storage event-store/factory
@@ -196,6 +196,12 @@ Required evidence for this task:
   aggregate-storage tests, and repository-routing tests; `typecheck`, `lint`,
   `format:check`, `docs:check`, and `git diff --check`.
 - Round-20 fix commit: `2c70c67`.
-- Round-21 reviewer sub-agents are pending against
+- Round-21 reviewer sub-agents completed against
   `.superpowers/sdd/review-083feaa..2c70c67.diff`.
+- Round-21 reviewers completed. TypeScript/API docs, security, and
+  performance/reliability were clean; documentation and maintainability
+  requested stale status-text fixes.
+- Round-21 fixes addressed stale review/task/report status text.
+- Required round-21 status-only verification passed: `format:check`,
+  `git diff --check`, and stale-status phrase scan.
 - No blocking human question is known.
