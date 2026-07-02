@@ -100,6 +100,9 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
     }
 
     const payload = readSnapshotRecord(record);
+    if (String(payload.aggregateId) !== String(aggregateId)) {
+      throw new Error(`Aggregate snapshot for "${String(aggregateId)}" has an unexpected ID.`);
+    }
     if (payload.stateTypeUrl !== this.#stateTypeUrl) {
       throw new Error(
         `Aggregate snapshot for "${String(aggregateId)}" has an unexpected state type.`,
@@ -264,6 +267,8 @@ function readSnapshotRecord(record: SnapshotRecord): SnapshotRecordPayload {
     typeof decoded.stateTypeUrl !== "string" ||
     typeof decoded.stateBase64 !== "string" ||
     typeof decoded.version !== "string" ||
+    decoded.aggregateId === undefined ||
+    decoded.aggregateId === null ||
     typeof decoded.archived !== "boolean" ||
     typeof decoded.deleted !== "boolean"
   ) {

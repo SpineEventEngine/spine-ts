@@ -1,9 +1,9 @@
 # @spine-ts/server
 
 Descriptor-derived server metadata for Spine entity schemas, explicit handler
-metadata, standard decorator metadata adapters, the first command/event bus
-seam, and the first runtime routing plan seam over `@spine-ts/transport`
-contracts.
+metadata, standard decorator metadata adapters, aggregate snapshot/event storage,
+the first command/event bus seam, and the first runtime routing plan seam over
+`@spine-ts/transport` contracts.
 
 Current slice exposes:
 
@@ -27,6 +27,13 @@ Current slice exposes:
 - `new Repository({ entityType, schema })` for repository identity and bounded
   context registration over one entity constructor and matching entity state
   schema;
+  and
+- `new Repository({ entityType, schema, handlers })` route calculation through
+  `routeCommand()` and `routeEvent()` when explicit handler metadata is supplied.
+  Routes are deferred and do not invoke handlers;
+  and
+- `AggregateStorage` for the current aggregate snapshot/history seam, backed by
+  `StorageFactory`, `RecordStorage`, and `EventStore`;
   and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;

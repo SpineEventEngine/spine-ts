@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: final verification passed; final review pending
+Status: round-4 fixes complete; verification passed
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -137,6 +137,21 @@ Final escalated `env CI=true corepack pnpm verify` passed. Evidence: 37 test
 files, 312 tests, statements 95.45%, branches 90.04%, functions 96.73%, lines
 95.49%. `docs:check` passed with the existing invalid-`origin` TypeDoc warning;
 proto lint/generate and generated-clean checks passed.
+
+Round 4 requested documentation and reliability fixes. The task log and server
+package README now reflect the implemented aggregate-storage/repository-routing
+surface, and aggregate snapshot reads now fail closed when an internal snapshot
+record has a missing or mismatched aggregate ID.
+
+Verification after the round-4 fix:
+
+- `corepack pnpm test packages/server/test/repository/aggregate-storage.test.ts`
+  passed with 1 file and 10 tests.
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm lint` passed.
+- `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
+  warning.
 
 ## Concerns
 

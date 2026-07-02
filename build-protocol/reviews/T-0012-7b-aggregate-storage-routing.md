@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: review round 4 pending
+Status: review round 5 pending
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -111,3 +111,29 @@ Pending final review of the post-round-3 verification fix:
   events, corrupted internal snapshot records, and duplicate versions already
   present in stored history; and
 - final full verification passed after the coverage-focused test additions.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f20d8-55a4-7d61-8806-f13ae14fcf07`;
+- documentation: `019f20d8-5643-7ce0-83cc-1f08faaea1fd`;
+- TypeScript/API docs: `019f20d8-56c2-77d1-85ef-f078487242c4`;
+- security: `019f20d8-5767-7ae2-a0d3-60be0adb3c11`;
+- performance/reliability:
+  `019f20d8-57d3-71a1-bb6c-5ca4921ce37f`.
+
+Result: changes requested.
+
+Findings addressed in the round-4 fix pass:
+
+- task/work-log current state was stale after the final verification commit;
+- `packages/server/README.md` omitted aggregate storage and repository route
+  calculation from the current server surface; and
+- corrupted snapshot records did not fail closed for missing or mismatched
+  aggregate IDs.
+
+All five round-4 reviewers were closed after their reports were collected.
+
+### Round 5
+
+Pending final re-review after the round-4 fix commit.

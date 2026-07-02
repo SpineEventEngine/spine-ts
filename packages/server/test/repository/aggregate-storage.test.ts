@@ -399,6 +399,39 @@ describe("AggregateStorage", () => {
         typeUrl: snapshotRecordTypeUrl,
         value: Buffer.from(
           JSON.stringify({
+            stateTypeUrl: AggregateStateSchema.typeName,
+            stateBase64: "",
+            version: "1",
+            archived: false,
+            deleted: false,
+          }),
+          "utf8",
+        ),
+      }).readHistory("task-9"),
+    ).rejects.toThrow(/malformed/);
+
+    await expect(
+      corruptStorage({
+        typeUrl: snapshotRecordTypeUrl,
+        value: Buffer.from(
+          JSON.stringify({
+            aggregateId: "other-task",
+            stateTypeUrl: AggregateStateSchema.typeName,
+            stateBase64: "",
+            version: "1",
+            archived: false,
+            deleted: false,
+          }),
+          "utf8",
+        ),
+      }).readHistory("task-9"),
+    ).rejects.toThrow(/unexpected ID/);
+
+    await expect(
+      corruptStorage({
+        typeUrl: snapshotRecordTypeUrl,
+        value: Buffer.from(
+          JSON.stringify({
             aggregateId: "task-9",
             stateTypeUrl: "type.spine.io/example.OtherState",
             stateBase64: "",
