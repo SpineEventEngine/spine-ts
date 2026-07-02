@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round 13 re-review pending
+Status: round 13 changes requested; fix pass verified
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -342,3 +342,32 @@ repository-routing tests, `typecheck`, `lint`, `format:check`, `docs:check`,
 and `git diff --check`.
 
 All five round-12 reviewers were closed after their reports were collected.
+
+### Round 13
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f210d-b732-7480-9b27-b17b14e1b59c`;
+- documentation: `019f210d-e92c-7e81-ab8f-aa816fe72e73`;
+- TypeScript/API docs: `019f210e-123d-7a52-9bae-3257304b2f19`;
+- security: `019f210e-4731-7392-83f7-8dc563e2426e`;
+- performance/reliability:
+  `019f210e-6f79-7420-a64b-bd9165431e22`.
+
+Result: changes requested.
+
+Findings addressed in the round-13 fix pass:
+
+- server TypeDoc JSON export checks were based on the global TypeDoc name set
+  instead of the direct server module children;
+- the task brief still said the round-12 fix was in progress;
+- API docs did not describe server TypeDoc JSON coverage;
+- aggregate appends were not serialized; and
+- unreadable producer IDs were treated as absent.
+
+Verification after the round-13 fix pass passed: focused aggregate-storage and
+repository-routing tests, `typecheck`, `lint`, `format:check`, `docs:check`,
+and `git diff --check`.
+
+All five round-13 reviewers were closed after their reports were collected.

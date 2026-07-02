@@ -585,7 +585,10 @@ function readProducerId(event: Event): string | undefined {
   }
 
   const userId = unpackAny(producerId, UserIdSchema);
-  return userId?.value === "" ? undefined : userId?.value;
+  if (userId?.value !== undefined && userId.value !== "") {
+    return userId.value;
+  }
+  throw new Error("Repository event routing requires a readable producer ID.");
 }
 
 function readEventEntityId(

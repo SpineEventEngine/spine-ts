@@ -341,6 +341,7 @@ if (typedocResult.status !== 0) {
 
 const apiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
 const documentedNames = new Set();
+const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src");
 
 function collectNames(value) {
   if (Array.isArray(value)) {
@@ -364,6 +365,35 @@ function collectNames(value) {
 }
 
 collectNames(apiDocs);
+
+function collectDirectModuleNames(value, moduleName) {
+  const module = findNamedChild(value, moduleName);
+  if (module === undefined || !Array.isArray(module.children)) {
+    return new Set();
+  }
+  return new Set(
+    module.children.map((child) => child.name).filter((name) => typeof name === "string"),
+  );
+}
+
+function findNamedChild(value, name) {
+  if (value === null || typeof value !== "object") {
+    return undefined;
+  }
+  if (value.name === name) {
+    return value;
+  }
+  if (!Array.isArray(value.children)) {
+    return undefined;
+  }
+  for (const child of value.children) {
+    const match = findNamedChild(child, name);
+    if (match !== undefined) {
+      return match;
+    }
+  }
+  return undefined;
+}
 
 const forbiddenPublicMembers = [
   {
@@ -585,7 +615,7 @@ const forbiddenStorageTypeDocNames = [
 ];
 const declaredServerExports = collectNamedExports(serverIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
-const missingServerExports = expectedServerExports.filter((name) => !documentedNames.has(name));
+const missingServerExports = expectedServerExports.filter((name) => !serverModuleNames.has(name));
 const missingDeclaredServerExports = expectedServerExports.filter(
   (name) => !declaredServerExports.includes(name),
 );

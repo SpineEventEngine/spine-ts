@@ -24,6 +24,7 @@ import type { EntityLifecycleFlags } from "../entity/entity.js";
  * storing anything.
  */
 export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = string> {
+  #appendQueue: Promise<void> = Promise.resolve();
   readonly #eventSchemas: readonly MessageSchema[];
   readonly #eventStore: EventStore;
   readonly #snapshotStorage: RecordStorage<Id, SnapshotRecord>;
@@ -44,6 +45,12 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
 
   /** Append aggregate events in strictly increasing aggregate-version order. */
   async appendEvents(aggregateId: Id, events: Iterable<Event>): Promise<void> {
+    const operation = this.#appendQueue.then(() => this.#appendEventBatch(aggregateId, events));
+    this.#appendQueue = operation.catch(() => undefined);
+    return operation;
+  }
+
+  async #appendEventBatch(aggregateId: Id, events: Iterable<Event>): Promise<void> {
     const batch = [...events];
     const expectedId = requirePrimitiveId(aggregateId);
     const storedEvents = await this.#readAggregateEvents(aggregateId);
@@ -181,6 +188,7 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
       if (userId?.value !== undefined && userId.value !== "") {
         return userId.value;
       }
+      throw new Error("Aggregate event routing requires a readable producer ID.");
     }
 
     return undefined;

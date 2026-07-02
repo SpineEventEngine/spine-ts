@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round-13 re-review pending
+Status: round-13 fixes verified
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -250,6 +250,22 @@ Verification after the round-12 fix pass:
 
 - `corepack pnpm test packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts`
   passed with 2 files and 22 tests.
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm lint` passed.
+- `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
+  warning.
+- `git diff --check` passed.
+
+Round 13 requested a more precise server TypeDoc module guard, serialized
+aggregate append validation/write, and fail-closed handling for unreadable
+producer IDs. The fix keeps these checks private to the existing storage,
+repository, and docs guard seams.
+
+Verification after the round-13 fix pass:
+
+- `corepack pnpm test packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts`
+  passed with 2 files and 25 tests.
 - `corepack pnpm typecheck` passed.
 - `corepack pnpm lint` passed.
 - `corepack pnpm format:check` passed.

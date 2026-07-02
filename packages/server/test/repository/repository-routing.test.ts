@@ -131,6 +131,22 @@ describe("repository signal routing", () => {
     ).toThrow(/same entity/);
   });
 
+  it("rejects unreadable producer IDs", () => {
+    const repository = createRoutingRepository();
+
+    expect(() =>
+      repository.routeEvent(
+        createProjectionEvent("event-unreadable-producer", "first-field-task", {
+          producerMessage: create(AggregateStateSchema, {
+            id: "producer-task",
+            name: "producer",
+            archived: false,
+          }),
+        }),
+      ),
+    ).toThrow(/readable producer ID/);
+  });
+
   it("rejects structurally fabricated handler metadata", () => {
     const handlers = defineEntityHandlers(TaskAggregate, AggregateStateSchema, (builder) => [
       builder.assign(AggregateStateSchema, "assignTask"),
@@ -184,15 +200,15 @@ function createAggregateCommand(id: string, aggregateId: string) {
 function createProjectionEvent(
   id: string,
   entityId: string,
-  options: { readonly producerId?: string } = {},
+  options: {
+    readonly producerId?: string;
+    readonly producerMessage?: AggregateState;
+  } = {},
 ) {
   return packEvent({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
-      producerId:
-        options.producerId === undefined
-          ? undefined
-          : packAny(UserIdSchema, create(UserIdSchema, { value: options.producerId })),
+      producerId: projectionProducerId(options),
       version: create(VersionSchema, { number: 1 }),
     }),
     schema: ProjectionStateSchema,
@@ -202,4 +218,17 @@ function createProjectionEvent(
       priority: 1,
     }),
   });
+}
+
+function projectionProducerId(options: {
+  readonly producerId?: string;
+  readonly producerMessage?: AggregateState;
+}) {
+  if (options.producerMessage !== undefined) {
+    return packAny(AggregateStateSchema, options.producerMessage);
+  }
+  if (options.producerId !== undefined) {
+    return packAny(UserIdSchema, create(UserIdSchema, { value: options.producerId }));
+  }
+  return undefined;
 }

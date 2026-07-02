@@ -596,6 +596,64 @@ describe("AggregateStorage", () => {
     expect((await storage.readHistory("task-two")).events).toEqual([]);
   });
 
+  it("serializes concurrent appends before validating versions", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    const results = await Promise.allSettled([
+      storage.appendEvents("task-concurrent", [
+        createAggregateEvent("event-concurrent-a", "task-concurrent", 1),
+      ]),
+      storage.appendEvents("task-concurrent", [
+        createAggregateEvent("event-concurrent-b", "task-concurrent", 1),
+      ]),
+    ]);
+
+    expect(results.filter(({ status }) => status === "fulfilled")).toHaveLength(1);
+    expect(results.filter(({ status }) => status === "rejected")).toHaveLength(1);
+    expect(
+      (await storage.readHistory("task-concurrent")).events.map((event) => event.id?.value),
+    ).toHaveLength(1);
+  });
+
+  it("rejects unreadable producer IDs", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(
+      storage.appendEvents("task-unreadable-producer", [
+        packEvent({
+          id: create(EventIdSchema, { value: "event-unreadable-producer" }),
+          context: create(EventContextSchema, {
+            producerId: packAny(
+              ProjectionStateSchema,
+              create(ProjectionStateSchema, {
+                id: "other-task",
+                name: "projection",
+                priority: 1,
+              }),
+            ),
+            version: create(VersionSchema, { number: 1 }),
+          }),
+          schema: AggregateStateSchema,
+          message: create(AggregateStateSchema, {
+            id: "task-unreadable-producer",
+            name: "changed",
+            archived: false,
+          }),
+        }),
+      ]),
+    ).rejects.toThrow(/readable producer ID/);
+  });
+
   it("fails closed for corrupted snapshot records", async () => {
     await expect(
       corruptStorage({
