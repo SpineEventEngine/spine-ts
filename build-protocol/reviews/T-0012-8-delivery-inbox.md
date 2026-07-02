@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 8 review prep
+Status: round 8 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -358,10 +358,19 @@ collected.
 
 ### Round 7 Fix
 
-Result: implemented in this worktree and ready for round-8 review.
+Result: committed as `e7f7b05` and ready for round-8 review.
 
 Fix summary:
 
 - added exported `InboxMessageError` for invalid caller-supplied inbox messages;
 - changed direct write shard mismatch to use `InboxMessageError`; and
 - tightened the regression test to assert the exported error class.
+
+### Round 8
+
+Diff package:
+`.superpowers/sdd/review-8a468ff..e7f7b05.diff`.
+
+Reviewer sub-agents: pending.
+
+Result: pending.

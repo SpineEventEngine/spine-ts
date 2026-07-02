@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-8 review prep
+Status: round-8 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -113,6 +113,8 @@ Round 7 requested a stable public error contract that does not classify caller
 input as storage corruption. `InboxMessageError` now represents invalid
 caller-supplied inbox messages. Direct write shard mismatch uses this error,
 and the regression test asserts the exported class.
+
+Committed as `e7f7b05` after focused delivery and API docs verification passed.
 
 ## Round 2 Review
 

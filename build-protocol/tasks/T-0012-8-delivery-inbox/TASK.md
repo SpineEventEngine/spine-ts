@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-8 review prep
+Status: round-8 review pending
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -126,4 +126,7 @@ entityStateType)` returns a zero-based shard index and that all messages for
   collected.
 - Round-7 fix implemented in this worktree: `InboxMessageError` now represents
   invalid caller-supplied inbox messages, including shard mismatch.
+- Round-7 fix committed as `e7f7b05`.
+- Round-8 review package is prepared at
+  `.superpowers/sdd/review-8a468ff..e7f7b05.diff`.
 - No blocking human question is known.
