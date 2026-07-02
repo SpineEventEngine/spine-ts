@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-7 review prep
+Status: round-7 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -104,6 +104,8 @@ Committed as `05f2ca7` after focused delivery and docs verification passed.
 Round 6 requested preserving the public `InboxStorage.write()` error contract.
 Direct write shard mismatch now keeps using `DeliveryStorageCorruptionError`,
 while the exported API docs still state the shard invariant.
+
+Committed as `d8cfb5b` after focused delivery verification passed.
 
 ## Round 2 Review
 

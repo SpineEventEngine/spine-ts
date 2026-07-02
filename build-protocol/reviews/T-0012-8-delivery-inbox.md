@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 7 review prep
+Status: round 7 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -317,9 +317,18 @@ were closed after their reports were collected.
 
 ### Round 6 Fix
 
-Result: implemented in this worktree and ready for round-7 review.
+Result: committed as `d8cfb5b` and ready for round-7 review.
 
 Fix summary:
 
 - restored `DeliveryStorageCorruptionError` for direct write shard mismatches
   to preserve the public `InboxStorage.write()` error contract.
+
+### Round 7
+
+Diff package:
+`.superpowers/sdd/review-1879916..d8cfb5b.diff`.
+
+Reviewer sub-agents: pending.
+
+Result: pending.
