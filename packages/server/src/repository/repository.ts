@@ -1,6 +1,3 @@
-import type { Message } from "@bufbuild/protobuf";
-import { RecordColumn, RecordSpec, type RecordStorage } from "@spine-ts/storage";
-
 import {
   Aggregate,
   type Entity,
@@ -8,10 +5,6 @@ import {
   Projection,
   type EntityFamily,
 } from "../entity/entity.js";
-import {
-  type BoundedContextName,
-  type BoundedContextRegistration,
-} from "../context/bounded-context.js";
 import {
   describeEntityMetadata,
   type DescriptorFieldMetadata,
@@ -141,21 +134,10 @@ export interface RepositoryView {
   readonly idField: DescriptorFieldMetadata;
   /** Copy-safe immutable identity snapshot for duplicate/conflict checks. */
   readonly snapshot: RepositoryIdentitySnapshot;
-  /** Whether this repository has been registered with a built bounded context. */
-  isRegistered(): boolean;
-  /** Copy-safe name of the bounded context this repository is registered with, if any. */
-  readonly registeredContextName: BoundedContextName | undefined;
 }
 
 /** Machine-readable codes for repository identity failures. */
 export type RepositoryIdentityErrorCode = "ENTITY_SCHEMA_KIND_MISMATCH" | "UNSUPPORTED_ENTITY_TYPE";
-
-declare const repositoryPreparationTokenBrand: unique symbol;
-
-/** @internal Opaque token owned by BoundedContext repository preparation. */
-export interface RepositoryPreparationToken {
-  readonly [repositoryPreparationTokenBrand]: true;
-}
 
 /** Error thrown when repository identity metadata cannot be constructed. */
 export class RepositoryIdentityError extends Error {
@@ -174,10 +156,11 @@ export class RepositoryIdentityError extends Error {
  * Repository identity and context-owned storage registration over one entity constructor and state schema.
  *
  * The class records the ownership facts bounded-context registration needs for
- * duplicate and conflict checks. Registration assigns one built context and
- * opens state record storage through that context's storage factory. It does
- * not create entities, find or store records, route messages, invoke handlers,
- * manage caches, emit lifecycle events, or start buses/transports.
+ * duplicate and conflict checks. Context assembly uses this metadata to attach
+ * a repository to one built context and open state record storage. The
+ * repository itself does not create entities, find or store records, route
+ * messages, invoke handlers, manage caches, emit lifecycle events, or start
+ * buses/transports.
  *
  * @typeParam EntityType - A single concrete aggregate, projection, or process-manager constructor
  * with one concrete generated state schema. Broad constructor, constructor-union, broad-schema, and
@@ -189,9 +172,6 @@ export class Repository<
   readonly #entityType: EntityType;
   readonly #entityFamily: EntityFamily;
   readonly #metadata: EntityMetadata<RepositoryStateSchema<EntityType>>;
-  #contextIdentity: object | undefined;
-  #contextName: BoundedContextName | undefined;
-  #storage: RecordStorage<unknown, Message> | undefined;
 
   /** Create repository identity for exactly one entity family/state schema pair. */
   constructor(options: RepositoryOptions<EntityType>) {
@@ -242,9 +222,10 @@ export class Repository<
     this.#entityType = entityType as EntityType;
     this.#entityFamily = entityFamily;
     this.#metadata = metadata;
-    repositoryAccess.set(this, {
-      prepare: (registration) => this.#prepareRegistration(registration),
-    });
+    repositorySnapshots.set(
+      this,
+      createRepositorySnapshot(this.#entityType, this.#entityFamily, this.#metadata),
+    );
   }
 
   /** Entity constructor owned by this repository identity. */
@@ -279,155 +260,68 @@ export class Repository<
 
   /** Copy-safe immutable identity snapshot for later builder duplicate/conflict checks. */
   get snapshot(): RepositoryIdentitySnapshot<EntityType> {
-    const metadata = cloneEntityMetadata(this.#metadata);
-
-    return Object.freeze({
-      entityType: this.#entityType,
-      entityFamily: this.#entityFamily,
-      stateSchema: metadata.schema,
-      metadata,
-      stateFullTypeName: metadata.fullTypeName,
-      idField: cloneFieldMetadata(metadata.idField),
-    });
-  }
-
-  /** Whether this repository has been registered with a built bounded context. */
-  isRegistered(): boolean {
-    return this.#contextIdentity !== undefined && this.#storage !== undefined;
-  }
-
-  /** Copy-safe name of the bounded context this repository is registered with, if any. */
-  get registeredContextName(): BoundedContextName | undefined {
-    return this.#contextName === undefined ? undefined : cloneBoundedContextName(this.#contextName);
-  }
-
-  #preflightRegistration(registration: BoundedContextRegistration): void {
-    if (registration.identity === this.#contextIdentity) {
-      return;
-    }
-    if (this.#contextIdentity !== undefined) {
-      throw new Error(
-        `Repository for "${this.stateFullTypeName}" is already registered with Bounded Context ` +
-          `"${this.#contextName?.value ?? "(unknown)"}".`,
-      );
-    }
-  }
-
-  #prepareRegistration(registration: BoundedContextRegistration): PreparedRepository {
-    this.#preflightRegistration(registration);
-    if (registration.identity === this.#contextIdentity) {
-      return {
-        repository: this,
-        commit: () => undefined,
-        close: () => undefined,
-      };
-    }
-
-    const storage = createRepositoryStorage(
-      registration,
-      createRepositoryRecordSpec(this.#metadata),
+    return cloneRepositorySnapshot(
+      createRepositorySnapshot(this.#entityType, this.#entityFamily, this.#metadata),
     );
-
-    return {
-      repository: this,
-      commit: () => {
-        this.#commitRegistration(registration, storage);
-      },
-      close: () => {
-        storage.close();
-      },
-    };
-  }
-
-  #commitRegistration(
-    registration: BoundedContextRegistration,
-    storage: RecordStorage<unknown, Message>,
-  ): void {
-    this.#preflightRegistration(registration);
-    this.#contextIdentity = registration.identity;
-    this.#contextName = cloneBoundedContextName(registration.name);
-    this.#storage = storage;
   }
 }
 
-interface RepositoryAccess {
-  prepare(registration: BoundedContextRegistration): PreparedRepository;
+const repositorySnapshots = new WeakMap<RepositoryView, RepositoryIdentitySnapshot>();
+Object.freeze(Repository);
+
+/** @internal Framework-only repository authority contract. */
+export interface RepositoryAccess {
+  hasInstance(repository: unknown): repository is RepositoryView;
+  snapshot(repository: RepositoryView): RepositoryIdentitySnapshot;
 }
 
-/** @internal Repository registration prepared by a context before state mutation. */
-export interface PreparedRepository {
-  /** Repository read view to expose after commit. */
-  readonly repository: RepositoryView;
-  /** Commits registration after every repository has opened storage successfully. */
-  commit(): void;
-  /** Closes prepared storage when context construction fails before commit. */
-  close(): void;
-}
+/** @internal Framework-only repository authority used by bounded-context assembly. */
+export const repositoryAccess: RepositoryAccess = Object.freeze({
+  hasInstance(repository: unknown): repository is RepositoryView {
+    return repositorySnapshots.has(repository as RepositoryView);
+  },
 
-const repositoryAccess = new WeakMap<RepositoryView, RepositoryAccess>();
+  snapshot(repository: RepositoryView): RepositoryIdentitySnapshot {
+    const snapshot = repositorySnapshots.get(repository);
 
-/** @internal Whether a value is a real repository created by this module. */
-export function isRepositoryInstance(repository: unknown): repository is RepositoryView {
-  return repositoryAccess.has(repository as RepositoryView);
-}
+    if (snapshot === undefined) {
+      throw new TypeError("Repository snapshot requires a Repository instance.");
+    }
 
-/** @internal Opens storage for a repository without committing registration state. */
-export function prepareRepository(
-  repository: RepositoryView,
-  registration: BoundedContextRegistration,
-  token: RepositoryPreparationToken,
-): PreparedRepository {
-  void token;
+    return cloneRepositorySnapshot(snapshot);
+  },
+});
 
-  const access = repositoryAccess.get(repository);
+function createRepositorySnapshot<EntityType extends RepositoryEntityType>(
+  entityType: EntityType,
+  entityFamily: EntityFamily,
+  metadata: EntityMetadata<RepositoryStateSchema<EntityType>>,
+): RepositoryIdentitySnapshot<EntityType> {
+  const metadataCopy = cloneEntityMetadata(metadata);
 
-  if (access === undefined) {
-    throw new TypeError("Repository registration requires a Repository instance.");
-  }
-
-  return access.prepare(registration);
-}
-
-function createRepositoryStorage(
-  registration: BoundedContextRegistration,
-  recordSpec: RecordSpec<unknown, Message>,
-): RecordStorage<unknown, Message> {
-  return registration.storageFactory.createRecordStorage(registration.storageContext, recordSpec);
-}
-
-function createRepositoryRecordSpec<Schema extends DescriptorMessageSchema>(
-  metadata: EntityMetadata<Schema>,
-): RecordSpec<unknown, Message> {
-  return new RecordSpec<unknown, Message>({
-    schema: metadata.schema,
-    extractId: (record) => readRecordId(record, metadata),
-    columns: metadata.columns.map(
-      (field) => new RecordColumn(field.name, (record) => readRecordField(record, field.localName)),
-    ),
+  return Object.freeze({
+    entityType,
+    entityFamily,
+    stateSchema: metadataCopy.schema,
+    metadata: metadataCopy,
+    stateFullTypeName: metadataCopy.fullTypeName,
+    idField: cloneFieldMetadata(metadataCopy.idField),
   });
 }
 
-function readRecordId<Schema extends DescriptorMessageSchema>(
-  record: Message,
-  metadata: EntityMetadata<Schema>,
-): unknown {
-  const value = readRecordField(record, metadata.idField.localName);
+function cloneRepositorySnapshot<EntityType extends RepositoryEntityType>(
+  snapshot: RepositoryIdentitySnapshot<EntityType>,
+): RepositoryIdentitySnapshot<EntityType> {
+  const metadata = cloneEntityMetadata(snapshot.metadata);
 
-  if (value === undefined || value === null) {
-    throw new Error(
-      `Repository state "${metadata.fullTypeName}" requires ID field "${metadata.idField.name}".`,
-    );
-  }
-
-  return value;
-}
-
-function readRecordField(record: Message, localName: string): unknown {
-  return (record as Record<string, unknown>)[localName];
-}
-
-function cloneBoundedContextName(name: BoundedContextName): BoundedContextName {
-  return Object.freeze({ value: name.value });
+  return Object.freeze({
+    entityType: snapshot.entityType,
+    entityFamily: snapshot.entityFamily,
+    stateSchema: metadata.schema,
+    metadata,
+    stateFullTypeName: metadata.fullTypeName,
+    idField: cloneFieldMetadata(metadata.idField),
+  });
 }
 
 function isRepositoryOptionsObject(options: unknown): options is object {

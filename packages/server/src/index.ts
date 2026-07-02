@@ -73,11 +73,12 @@ export {
 
 export {
   type ServerRuntimeLifecycle,
+  type ServerRuntimeRejectedState,
   type ServerRuntimeState,
   ServerRuntimeStateError,
-  type ServerRuntimeStateErrorCode,
   type ServerRuntimeStateOperation,
   type ServerRuntimeWork,
+  type RuntimeStateErrorCode,
   SingleProcessServerRuntime,
 } from "./runtime/runtime.js";
 

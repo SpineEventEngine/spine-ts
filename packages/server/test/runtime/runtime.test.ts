@@ -3,9 +3,9 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 import {
   ServerRuntimeStateError,
   SingleProcessServerRuntime,
+  type RuntimeStateErrorCode,
   type ServerRuntimeLifecycle,
   type ServerRuntimeState,
-  type ServerRuntimeStateErrorCode,
   type ServerRuntimeWork,
 } from "../../src/runtime/runtime.js";
 
@@ -17,7 +17,7 @@ describe("SingleProcessServerRuntime", () => {
     expectTypeOf<ServerRuntimeState>().toEqualTypeOf<
       "created" | "running" | "closing" | "closed"
     >();
-    expectTypeOf<ServerRuntimeStateErrorCode>().toEqualTypeOf<"INVALID_RUNTIME_STATE">();
+    expectTypeOf<RuntimeStateErrorCode>().toEqualTypeOf<"INVALID_RUNTIME_STATE">();
     expectTypeOf<ServerRuntimeWork>().toEqualTypeOf<() => void | Promise<void>>();
     expect(runtime.state).toBe("created");
 
@@ -119,6 +119,110 @@ describe("SingleProcessServerRuntime", () => {
     await Promise.all([first, second]);
 
     expect(observed).toEqual(["after-intake", "first-start", "first-end", "second"]);
+  });
+
+  it("rejects reentrant work intake while a work item is active", async () => {
+    const runtime = new SingleProcessServerRuntime();
+    const observed: string[] = [];
+
+    await runtime.start();
+
+    const completion = runtime.enqueue(() => {
+      observed.push("outer");
+
+      expect(() => runtime.enqueue(() => undefined)).toThrow(ServerRuntimeStateError);
+      expect(captureStateError(() => runtime.enqueue(() => undefined))).toMatchObject({
+        code: "INVALID_RUNTIME_STATE",
+        operation: "enqueue",
+        state: "running-work",
+      });
+      expect(() => runtime.enqueue(() => undefined)).toThrow(
+        "Cannot enqueue runtime work from an active runtime work item.",
+      );
+    });
+
+    await completion;
+    await runtime.enqueue(() => {
+      observed.push("later");
+    });
+
+    expect(observed).toEqual(["outer", "later"]);
+  });
+
+  it("queues external work while another work item is active", async () => {
+    const runtime = new SingleProcessServerRuntime();
+    const observed: string[] = [];
+    let releaseWork!: () => void;
+    const workCanFinish = new Promise<void>((resolve) => {
+      releaseWork = resolve;
+    });
+
+    await runtime.start();
+
+    const first = runtime.enqueue(async () => {
+      observed.push("first-start");
+      await workCanFinish;
+      observed.push("first-end");
+    });
+
+    await Promise.resolve();
+
+    const second = runtime.enqueue(() => {
+      observed.push("second");
+    });
+
+    expect(observed).toEqual(["first-start"]);
+
+    releaseWork();
+    await Promise.all([first, second]);
+
+    expect(observed).toEqual(["first-start", "first-end", "second"]);
+  });
+
+  it("accepts follow-up work after active work has settled", async () => {
+    const runtime = new SingleProcessServerRuntime();
+    const observed: string[] = [];
+    let enqueueFollowUp!: () => Promise<void>;
+
+    await runtime.start();
+
+    await runtime.enqueue(() => {
+      enqueueFollowUp = () =>
+        runtime.enqueue(() => {
+          observed.push("follow-up");
+        });
+      observed.push("outer");
+    });
+    await enqueueFollowUp();
+
+    expect(observed).toEqual(["outer", "follow-up"]);
+  });
+
+  it("rejects close from active work", async () => {
+    const runtime = new SingleProcessServerRuntime();
+    const observed: string[] = [];
+
+    await runtime.start();
+
+    const completion = runtime.enqueue(async () => {
+      observed.push("outer");
+
+      await expect(runtime.close()).rejects.toMatchObject({
+        code: "INVALID_RUNTIME_STATE",
+        operation: "close",
+        state: "running-work",
+      });
+      await expect(runtime.close()).rejects.toThrow(
+        "Cannot close server runtime from an active runtime work item.",
+      );
+      observed.push("after-rejection");
+    });
+
+    await completion;
+    await runtime.close();
+
+    expect(runtime.state).toBe("closed");
+    expect(observed).toEqual(["outer", "after-rejection"]);
   });
 
   it("prevents new work while closing and drains already accepted work", async () => {

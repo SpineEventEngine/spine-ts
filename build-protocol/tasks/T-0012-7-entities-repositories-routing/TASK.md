@@ -1,6 +1,6 @@
 # T-0012.7: Repository Registration And Storage Opening
 
-Status: review fixes implemented; verification passed
+Status: review complete; final verification passed
 Start: `2026-07-01 23:41 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7-entities-repositories-routing`
@@ -47,12 +47,12 @@ Required evidence for this task:
 
 ## Required Changes
 
-- Replace metadata-only repository identity with a small repository lifecycle
-  owner:
+- Keep `Repository` as a small identity/metadata owner:
   - retains entity/state metadata;
-  - can be registered with one built `BoundedContext`;
-  - opens a record storage through the context storage factory;
-  - exposes simple `isRegistered()` / context metadata as needed;
+  - can be attached by one built `BoundedContext`;
+  - lets `BoundedContext` open record storage through the context storage
+    factory;
+  - keeps registration state owned by `BoundedContext`;
   - rejects registering the same repository with two contexts.
 - Make `BoundedContextBuilder.add(repository)` and `remove(repository)` real
   registration-list operations.
@@ -69,11 +69,10 @@ Required evidence for this task:
 
 - A repository added to a builder is registered with the built context.
 - Removing a repository before `build()` prevents registration.
-- Repeated registration of the same repository is idempotent for the same
-  context.
+- Repeated `add(repository)` calls before `build()` are idempotent.
 - Registering one repository instance with two different contexts is rejected.
-- A built context can expose its registered repositories as a copy-safe list or
-  count, only if needed for verification and later routing.
+- A built context exposes registered repositories as a copy-safe
+  `readonly RepositoryView[]` of frozen snapshot-backed views.
 - Repository registration opens `RecordStorage` via the context `StorageFactory`
   using the repository state schema.
 - No delivery, Stand, gRPC, transport execution, scheduler, import bus, system

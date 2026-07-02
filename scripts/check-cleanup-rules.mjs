@@ -30,22 +30,6 @@ const inheritedSemanticNameExceptionOccurrences = new Set(
       "packages/server/src/handler/command-registration-readiness.ts",
       85,
     ],
-    [
-      "BoundedContextRepositoryRegistrationError",
-      "packages/server/src/context/bounded-context.ts",
-      49,
-    ],
-    [
-      "BoundedContextRepositoryRegistrationErrorCode",
-      "packages/server/src/context/bounded-context.ts",
-      42,
-    ],
-    [
-      "BoundedContextRepositoryRegistrationOperation",
-      "packages/server/src/context/bounded-context.ts",
-      46,
-    ],
-    ["cloneRepositoryFieldMetadataList", "packages/server/src/context/bounded-context.ts", 435],
     ["createCommandRuntimeRoutingPlan", "packages/server/src/runtime/runtime-routing.ts", 170],
     ["createEventRuntimeRoutingPlan", "packages/server/src/runtime/runtime-routing.ts", 248],
     ["createInMemoryStorageAdapter", "packages/storage/src/index.ts", 237],
@@ -126,7 +110,6 @@ const inheritedSemanticNameExceptionOccurrences = new Set(
       "packages/server/src/handler/event-registration-readiness.ts",
       146,
     ],
-    ["readCanonicalRepositorySemanticTags", "packages/server/src/context/bounded-context.ts", 756],
     ["readRepositoryEntityTypeOption", "packages/server/src/repository/repository.ts", 256],
     ["readSafeUint8ArrayBytes", "packages/server/src/entity/entity-transition-validation.ts", 361],
     [
@@ -142,7 +125,6 @@ const inheritedSemanticNameExceptionOccurrences = new Set(
     ["ServerRuntimeRouteMessageDescriptor", "packages/server/src/runtime/runtime-routing.ts", 41],
     ["ServerRuntimeRouteTransportReference", "packages/server/src/runtime/runtime-routing.ts", 48],
     ["ServerRuntimeRoutingPlanInput", "packages/server/src/runtime/runtime-routing.ts", 21],
-    ["ServerRuntimeStateErrorCode", "packages/server/src/runtime/runtime.ts", 62],
     [
       "subscribersByEventFullTypeName",
       "packages/server/src/handler/event-registration-readiness.ts",
@@ -155,12 +137,6 @@ const inheritedSemanticNameExceptionOccurrences = new Set(
     ],
     ["topicByEventFullTypeName", "packages/server/src/runtime/runtime-routing.ts", 265],
     ["TransactionalEntityScopeErrorReason", "packages/server/src/entity/entity.ts", 26],
-    [
-      "validateCanonicalRepositorySemanticTagList",
-      "packages/server/src/context/bounded-context.ts",
-      792,
-    ],
-    ["validateRepositoryFieldMetadataList", "packages/server/src/context/bounded-context.ts", 742],
     ["ZeroMqAdapterConfigInput", "packages/transport/src/zeromq/adapter-config.ts", 9],
   ].map(([name, file, line]) => `${name}|${file}|${line}`),
 );

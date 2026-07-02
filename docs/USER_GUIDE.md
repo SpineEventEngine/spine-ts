@@ -21,14 +21,13 @@ boundary, thin aggregate/projection/process-manager family base classes, a
 caller-owned handler metadata registry for duplicate validation and lookup-only
 views, a repository identity and registration seam, and a first
 bounded-context builder shell.
-`@spine-ts/transport` now exposes adapter-agnostic topics, subscriptions,
-broker/worker lifecycle contracts, delivery/retry boundary data, and
+`@spine-ts/transport` now exposes adapter-agnostic topics, subscriptions, and
 publish/request handler interfaces; ZeroMQ remains an adapter-private local IPC
 dependency rather than a public runtime API. `@spine-ts/server` can derive an
 immutable `createServerRuntimeRoutingPlan()` from built context metadata plus
-command/event readiness, yielding transport topics, subscriptions, worker
-registrations, and explicit deferred seams without opening sockets or invoking
-handlers. The same package now also exposes a small executable `CommandBus` and
+command/event readiness, yielding transport topics, subscriptions, and
+planner-local route descriptors without opening sockets or invoking handlers.
+The same package now also exposes a small executable `CommandBus` and
 `EventBus` over registered dispatcher objects, with event storage delegated to
 `EventStore` before event fan-out.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
@@ -72,11 +71,11 @@ the to-do application remain later slices.
   the entity shell.
 - Thin abstract `Aggregate`, `Projection`, and `ProcessManager` family marker
   classes over `TransactionalEntity`, each with stable `entityFamily` identity.
-- A `Repository` identity and registration API that binds one aggregate,
-  projection, or process-manager constructor to one matching entity state
-  schema, returns immutable fresh-copy snapshots for later checks, registers
-  with one built bounded context, and opens state record storage through that
-  context's storage factory.
+- A `Repository` identity API that binds one aggregate, projection, or
+  process-manager constructor to one matching entity state schema and returns
+  immutable fresh-copy snapshots for later checks. `BoundedContext` owns
+  repository registration and opens state record storage through its storage
+  factory.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.
@@ -98,9 +97,9 @@ the to-do application remain later slices.
   `BoundedContext.singleTenant(name)`, `BoundedContext.multitenant(name)`,
   immutable context names, framework-owned `ContextSpec` values from
   `builder.spec` and `context.spec`, tenant mode metadata, dispatcher
-  collection, storage-factory injection for event storage, internally owned
-  built-context command/event buses, post-only context bus endpoints, and
-  copy-safe small context snapshots.
+  collection, storage-factory injection for event and repository state storage,
+  internally owned built-context command/event buses, post-only context bus
+  endpoints, and copy-safe small context snapshots.
 - A first single-process server runtime lifecycle/queue kernel, typed
   write-side signal intake result values, and command/event
   registration-readiness metadata derived from handler metadata.
@@ -385,12 +384,9 @@ const repository = new Repository({
 repository.entityFamily; // "aggregate"
 repository.metadata.fullTypeName; // TaskStateSchema.typeName
 repository.snapshot.idField.name; // "id"
-repository.isRegistered(); // false
 
 const context = BoundedContext.singleTenant("Tasks").add(repository).build();
-repository.isRegistered(); // true
-repository.registeredContextName?.value; // "Tasks"
-context.registeredRepositories(); // [repository]
+context.registeredRepositories()[0]?.stateFullTypeName; // TaskStateSchema.typeName
 ```
 
 `Repository` infers the family from the constructor and instance prototype
@@ -405,9 +401,10 @@ code/message diagnostics. `snapshot` returns a frozen fresh copy suitable for
 bounded-context duplicate and conflict checks. Repeated `add(repository)` calls
 for one builder are idempotent. Registering the same repository instance with
 another built context is rejected, as are duplicate entity or state identities
-in one context build. Registration opens a `RecordStorage` for the repository
-state schema using the context `StorageFactory`, and direct repository
-registration is not public API.
+in one context build. Registration state belongs to `BoundedContext`, which
+opens a `RecordStorage` for the repository state schema using the context
+`StorageFactory`. Direct repository registration and registration status APIs
+are not public API.
 
 This slice still does not create, find, or store entities; convert entity
 records; route or dispatch messages through repositories; write inboxes; invoke
@@ -435,10 +432,11 @@ await context.eventBus().post(eventEnvelope);
 `addCommandDispatcher()` / `removeCommandDispatcher()` and
 `addEventDispatcher()` / `removeEventDispatcher()` affect only contexts built
 after the call. `withStorageFactory()` supplies the `StorageFactory` used to
-create the context `EventStore`; if omitted, the current builder uses in-memory
-storage. `commandBus()` and `eventBus()` expose only `post()`; late dispatcher
-registration stays on the builder and concrete bus classes. Event posting stores
-through that event store before dispatcher fan-out.
+create the context `EventStore` and repository state storage; if omitted, the
+current builder uses in-memory storage. `commandBus()` and `eventBus()` expose
+only `post()`; late dispatcher registration stays on the builder and concrete
+bus classes. Event posting stores through that event store before dispatcher
+fan-out.
 
 `add(repository)` and `remove(repository)` maintain the builder's repository
 registration list. `build()` registers the listed repositories with the built
@@ -446,7 +444,7 @@ context and opens their state record storage through the context
 `StorageFactory`. Repeated `add(repository)` calls for the same instance are
 idempotent, duplicate entity or state identities are rejected before storage is
 opened for repositories, and `registeredRepositories()` returns a copy-safe
-`RepositoryView` list.
+list of frozen snapshot-backed `RepositoryView` values.
 This slice still does not create default repositories, register type suppliers
 with a stand, route repository messages, invoke handlers, write inboxes, emit
 lifecycle events, or start transport.

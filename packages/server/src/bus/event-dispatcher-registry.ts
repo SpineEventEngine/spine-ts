@@ -12,9 +12,15 @@ export class EventDispatcherRegistry {
       return;
     }
 
+    const typeUrls = collectTypeUrls(dispatcher);
+
+    if (this.#dispatchers.has(dispatcher)) {
+      return;
+    }
+
     this.#dispatchers.add(dispatcher);
 
-    for (const typeUrl of collectTypeUrls(dispatcher)) {
+    for (const typeUrl of typeUrls) {
       const registered = this.#byTypeUrl.get(typeUrl);
 
       if (registered === undefined) {

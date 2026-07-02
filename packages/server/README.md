@@ -285,7 +285,9 @@ accepted work to settle before the runtime becomes `closed`.
 
 Enqueued callbacks are trusted server-owned work only. The queue has no
 timeout, cancellation, fairness, queue bound, or hostile-callback protection,
-so non-settling or reentrant work can keep `close()` pending.
+so non-settling work can keep `close()` pending. Same-runtime reentrant
+`enqueue()` and `close()` calls from active work are rejected to avoid queue
+self-deadlocks; nested bus `post()` calls on the same bus surface that rejection.
 
 This kernel is deliberately server-runtime-specific and single-process only. It
 is not a global singleton, process supervisor, generic job framework, command
@@ -421,10 +423,9 @@ await tasks.eventBus().post(eventEnvelope);
 `remove(repository)` removes it before build. `build()` registers the listed
 repositories with the built context, opens repository `RecordStorage` through
 the context storage factory, and exposes `registeredRepositories()` as a
-copy-safe list for later routing slices. Repeated add/register of the same
-repository before build is idempotent, and framework same-context preparation
-does not reopen storage. Registering the same repository instance with another
-built context is rejected.
+copy-safe list of frozen snapshot-backed views for later routing slices.
+Repeated `add(repository)` calls before `build()` are idempotent.
+Registering the same repository instance with another built context is rejected.
 
 This slice deliberately does not create default repositories from entity
 classes, invoke handlers, construct system contexts, start query/subscription
@@ -522,12 +523,9 @@ const repository = new Repository({
 repository.entityFamily; // "aggregate"
 repository.stateFullTypeName; // TaskStateSchema.typeName
 repository.snapshot.stateFullTypeName; // immutable fresh-copy snapshot
-repository.isRegistered(); // false
 
 const tasks = BoundedContext.singleTenant("Tasks").add(repository).build();
-repository.isRegistered(); // true
-repository.registeredContextName?.value; // "Tasks"
-tasks.registeredRepositories(); // [repository]
+tasks.registeredRepositories()[0]?.stateFullTypeName; // TaskStateSchema.typeName
 ```
 
 The constructor derives descriptor metadata with `describeEntityMetadata()` and
@@ -540,14 +538,16 @@ those families and rejects mismatched family/schema pairs, such as an aggregate
 class with a projection state schema, with simple `RepositoryIdentityError`
 code/message diagnostics. `BoundedContextBuilder.add(repository)` and
 `remove(repository)` maintain the builder registration list, and `build()`
-registers each listed repository with the built context. Registration opens a
-state `RecordStorage` using the repository state schema and the context
-`StorageFactory`. The same repository can be registered with the same context
-again without reopening storage, but cannot be registered with a different
-context. This seam follows Spine `core-jvm` `Repository` identity and
-registration concepts closely. This API does not create, find, or store
-entities; route messages; invoke handlers; write inboxes; manage caches; emit
-lifecycle events; or touch transport.
+attaches each listed repository to the built context. Registration state belongs
+to `BoundedContext`, which exposes `registeredRepositories()` as frozen
+snapshot-backed `RepositoryView` values. The context opens state `RecordStorage`
+using the repository state schema and the context `StorageFactory`. Repeated
+`add(repository)` calls before
+`build()` are idempotent. Registering the same repository instance with another
+built context is rejected. This seam follows Spine `core-jvm` `Repository`
+identity and registration concepts closely. This API does not create, find, or
+store entities; route messages; invoke handlers; write inboxes; manage caches;
+emit lifecycle events; or touch transport.
 
 ## Entity State Transition Validation
 

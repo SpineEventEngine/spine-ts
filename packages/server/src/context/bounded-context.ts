@@ -1,7 +1,11 @@
 import type { Command, Event } from "@spine-ts/proto";
+import type { Message } from "@bufbuild/protobuf";
 import {
   EventStore,
   InMemoryStorageFactory,
+  RecordColumn,
+  RecordSpec,
+  type RecordStorage,
   type StorageContext,
   type StorageFactory,
 } from "@spine-ts/storage";
@@ -12,14 +16,17 @@ import { EventBus } from "../bus/event-bus.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import {
   Repository,
-  isRepositoryInstance,
-  prepareRepository,
+  repositoryAccess,
   type ConcreteRepositoryEntityType,
-  type PreparedRepository,
-  type RepositoryPreparationToken,
-  type RepositoryView,
   type RepositoryEntityType,
+  type RepositoryIdentitySnapshot,
+  type RepositoryView,
 } from "../repository/repository.js";
+import type {
+  DescriptorMessageSchema,
+  DescriptorFieldMetadata,
+  EntityMetadata,
+} from "../entity/entity-metadata.js";
 
 /** Tenant isolation mode declared by a bounded context specification. */
 export type TenantMode = "single-tenant" | "multitenant";
@@ -50,16 +57,30 @@ export interface BoundedContextSnapshot {
   readonly spec: ContextSpecSnapshot;
 }
 
-/** @internal Context-owned storage data needed when repositories register. */
-export interface BoundedContextRegistration {
-  /** Built context identity used for idempotence checks. */
-  readonly identity: object;
+/** Minimal repository owner marker retained after registration. */
+interface RepositoryOwner {
+  /** Bounded context name. */
+  readonly name: BoundedContextName;
+}
+
+/** Context-owned storage data needed while repositories register. */
+interface RepositoryRegistration {
   /** Bounded context name. */
   readonly name: BoundedContextName;
   /** Storage context derived from the bounded context spec. */
   readonly storageContext: StorageContext;
   /** Context storage factory. */
   readonly storageFactory: StorageFactory;
+}
+
+interface RegistrationSnapshot {
+  readonly entityType: RepositoryEntityType;
+  readonly entityFamily: RepositoryView["entityFamily"];
+  readonly stateSchema: DescriptorMessageSchema;
+  readonly metadata: EntityMetadata;
+  readonly stateFullTypeName: string;
+  readonly idField: DescriptorFieldMetadata;
+  readonly snapshot: RepositoryIdentitySnapshot;
 }
 
 /** Post-only command endpoint exposed by a built bounded context. */
@@ -95,7 +116,6 @@ interface FrameworkConstructionToken {
 const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
   frameworkConstructionToken: true,
 });
-const repositoryPreparationToken = Object.freeze({}) as RepositoryPreparationToken;
 let constructBoundedContext:
   | ((
       snapshot: BoundedContextSnapshot,
@@ -119,7 +139,8 @@ export class BoundedContext {
   readonly #eventBus: EventBus;
   readonly #commandEndpoint: CommandEndpoint;
   readonly #eventEndpoint: EventEndpoint;
-  readonly #registeredRepositories = new Set<RepositoryView>();
+  readonly #registeredRepositories: RegistrationSnapshot[] = [];
+  readonly #repositoryStorages = new Set<RecordStorage<unknown, Message>>();
   readonly #storageFactory: StorageFactory;
 
   static {
@@ -154,8 +175,29 @@ export class BoundedContext {
     this.#eventEndpoint = Object.freeze({
       post: (event: Event) => this.#eventBus.post(event),
     });
-    const registration: BoundedContextRegistration = {
-      identity: this,
+    this.#registerRepositories(repositories);
+    Object.freeze(this);
+  }
+
+  #registerRepositories(repositories: readonly RepositoryView[]): void {
+    const preparedRepositories = this.#prepareRepositories(repositories);
+
+    try {
+      for (const preparedRepository of preparedRepositories) {
+        rejectRegisteredRepository(preparedRepository.repository);
+      }
+      for (const preparedRepository of preparedRepositories) {
+        preparedRepository.commit();
+        this.#registeredRepositories.push(preparedRepository.snapshot);
+        this.#repositoryStorages.add(preparedRepository.storage);
+      }
+    } catch (error) {
+      this.#failRegistration(error, preparedRepositories);
+    }
+  }
+
+  #prepareRepositories(repositories: readonly RepositoryView[]): PreparedRepository[] {
+    const registration: RepositoryRegistration = {
       name: cloneName(this.#snapshot.name),
       storageContext: createStorageContext(this.#snapshot.spec),
       storageFactory: this.#storageFactory,
@@ -163,20 +205,23 @@ export class BoundedContext {
     const preparedRepositories: PreparedRepository[] = [];
     try {
       for (const repository of repositories) {
-        preparedRepositories.push(
-          prepareRepository(repository, registration, repositoryPreparationToken),
-        );
+        preparedRepositories.push(prepareRepositoryForContext(repository, registration));
       }
     } catch (error) {
-      closePreparedRepositories(preparedRepositories);
-      throw error;
+      this.#failRegistration(error, preparedRepositories);
     }
+    return preparedRepositories;
+  }
 
-    for (const preparedRepository of preparedRepositories) {
-      preparedRepository.commit();
-      this.#registeredRepositories.add(preparedRepository.repository);
+  #failRegistration(error: unknown, preparedRepositories: readonly PreparedRepository[]): never {
+    const closeErrors = closePreparedRepositories(preparedRepositories);
+    if (closeErrors.length > 0) {
+      throw new AggregateError(
+        [error, ...closeErrors],
+        "Repository registration failed, and prepared repository storage cleanup also failed.",
+      );
     }
-    Object.freeze(this);
+    throw error;
   }
 
   /** Creates a builder for a single-tenant bounded context. */
@@ -224,9 +269,9 @@ export class BoundedContext {
     return this.#eventEndpoint;
   }
 
-  /** Copy-safe list of repositories registered with this context. */
+  /** Copy-safe list of frozen snapshot-backed repository views registered with this context. */
   registeredRepositories(): readonly RepositoryView[] {
-    return [...this.#registeredRepositories];
+    return this.#registeredRepositories.map((snapshot) => createRepositoryView(snapshot));
   }
 }
 
@@ -315,7 +360,7 @@ export class BoundedContextBuilder {
     return this;
   }
 
-  /** Uses the passed storage factory for the context's event store. */
+  /** Uses the passed storage factory for context event and repository state storage. */
   withStorageFactory(storageFactory: StorageFactory): this {
     this.#storageFactory = storageFactory;
     return this;
@@ -328,9 +373,9 @@ export class BoundedContextBuilder {
     const storageFactory = this.#storageFactory ?? new InMemoryStorageFactory();
     const commandBus = new CommandBus([...this.#commandDispatchers]);
     const eventStore = this.createEventStore(storageFactory);
-    const eventBus = new EventBus(eventStore, [...this.#eventDispatchers]);
 
     try {
+      const eventBus = new EventBus(eventStore, [...this.#eventDispatchers]);
       return createBoundedContext(
         this.#specSnapshot,
         commandBus,
@@ -339,7 +384,7 @@ export class BoundedContextBuilder {
         repositories,
       );
     } catch (error) {
-      eventStore.close();
+      closeEventStore(eventStore, error);
       throw error;
     }
   }
@@ -484,7 +529,7 @@ function toTenantMode(multitenant: boolean): TenantMode {
 }
 
 function requireRepositoryInstance(repository: unknown, operation: string): void {
-  if (!isRepositoryInstance(repository)) {
+  if (!repositoryAccess.hasInstance(repository)) {
     throw new TypeError(`${operation} requires a Repository instance.`);
   }
 }
@@ -495,31 +540,154 @@ function preflightRepositories(repositories: readonly RepositoryView[]): void {
 
   for (const repository of repositories) {
     requireRepositoryInstance(repository, "BoundedContextBuilder.add(repository)");
-    if (repository.isRegistered()) {
+    const snapshot = repositorySnapshot(repository);
+    const registration = registeredRepositories.get(repository);
+    if (registration !== undefined) {
       throw new Error(
-        `Repository for "${repository.stateFullTypeName}" is already registered with Bounded Context ` +
-          `"${repository.registeredContextName?.value ?? "(unknown)"}".`,
+        `Repository for "${snapshot.stateFullTypeName}" is already registered with Bounded Context ` +
+          `"${registration.name.value}".`,
       );
     }
 
-    if (entityTypes.has(repository.entityType)) {
+    if (entityTypes.has(snapshot.entityType)) {
       throw new Error(
-        `Repository entity type "${repository.entityType.name}" is already registered.`,
+        `Repository entity type "${snapshot.entityType.name}" is already registered.`,
       );
     }
-    entityTypes.add(repository.entityType);
+    entityTypes.add(snapshot.entityType);
 
-    if (stateTypeNames.has(repository.stateFullTypeName)) {
+    if (stateTypeNames.has(snapshot.stateFullTypeName)) {
       throw new Error(
-        `Repository state type "${repository.stateFullTypeName}" is already registered.`,
+        `Repository state type "${snapshot.stateFullTypeName}" is already registered.`,
       );
     }
-    stateTypeNames.add(repository.stateFullTypeName);
+    stateTypeNames.add(snapshot.stateFullTypeName);
   }
 }
 
-function closePreparedRepositories(preparedRepositories: readonly PreparedRepository[]): void {
-  for (const preparedRepository of preparedRepositories) {
-    preparedRepository.close();
+function closeEventStore(eventStore: EventStore, buildError: unknown): void {
+  try {
+    eventStore.close();
+  } catch (closeError) {
+    throw new AggregateError(
+      [buildError, closeError],
+      "Bounded Context build failed, and event store cleanup also failed.",
+    );
   }
+}
+
+function closePreparedRepositories(
+  preparedRepositories: readonly PreparedRepository[],
+): readonly unknown[] {
+  const errors: unknown[] = [];
+  for (const preparedRepository of preparedRepositories) {
+    try {
+      preparedRepository.close();
+    } catch (error) {
+      errors.push(error);
+    }
+  }
+
+  return errors;
+}
+
+function prepareRepositoryForContext(
+  repository: RepositoryView,
+  registration: RepositoryRegistration,
+): PreparedRepository {
+  requireRepositoryInstance(repository, "BoundedContext repository registration");
+  const snapshot = repositorySnapshot(repository);
+  const storage = registration.storageFactory.createRecordStorage(
+    registration.storageContext,
+    createRepositoryRecordSpec(snapshot),
+  );
+
+  return {
+    repository,
+    snapshot,
+    storage,
+    commit: () => {
+      registeredRepositories.set(repository, { name: registration.name });
+    },
+    close: () => {
+      storage.close();
+    },
+  };
+}
+
+interface PreparedRepository {
+  readonly repository: RepositoryView;
+  readonly snapshot: RegistrationSnapshot;
+  readonly storage: RecordStorage<unknown, Message>;
+  commit(): void;
+  close(): void;
+}
+
+const registeredRepositories = new WeakMap<RepositoryView, RepositoryOwner>();
+
+function repositorySnapshot(repository: RepositoryView): RegistrationSnapshot {
+  const snapshot = repositoryAccess.snapshot(repository);
+
+  return Object.freeze({
+    entityType: snapshot.entityType,
+    entityFamily: snapshot.entityFamily,
+    stateSchema: snapshot.stateSchema,
+    metadata: snapshot.metadata,
+    stateFullTypeName: snapshot.stateFullTypeName,
+    idField: snapshot.idField,
+    snapshot,
+  });
+}
+
+function rejectRegisteredRepository(repository: RepositoryView): void {
+  const snapshot = repositorySnapshot(repository);
+  const registration = registeredRepositories.get(repository);
+
+  if (registration !== undefined) {
+    throw new Error(
+      `Repository for "${snapshot.stateFullTypeName}" is already registered with Bounded Context ` +
+        `"${registration.name.value}".`,
+    );
+  }
+}
+
+function createRepositoryRecordSpec(snapshot: RegistrationSnapshot): RecordSpec<unknown, Message> {
+  return new RecordSpec<unknown, Message>({
+    schema: snapshot.stateSchema,
+    extractId: (record) => readRecordId(record, snapshot),
+    columns: snapshot.metadata.columns.map(
+      (field) => new RecordColumn(field.name, (record) => readRecordField(record, field.localName)),
+    ),
+  });
+}
+
+function createRepositoryView(snapshot: RegistrationSnapshot): RepositoryView {
+  return Object.freeze({
+    entityType: snapshot.entityType,
+    entityFamily: snapshot.entityFamily,
+    stateSchema: snapshot.stateSchema,
+    metadata: snapshot.metadata,
+    stateFullTypeName: snapshot.stateFullTypeName,
+    idField: snapshot.idField,
+    snapshot: snapshot.snapshot,
+  });
+}
+
+function readRecordId(record: Message, snapshot: RegistrationSnapshot): unknown {
+  const value = readRecordField(record, snapshot.idField.localName);
+
+  if (value === undefined || value === null) {
+    throw new Error(
+      `Repository state "${snapshot.stateFullTypeName}" requires ID field "${snapshot.idField.name}".`,
+    );
+  }
+
+  return value;
+}
+
+function readRecordField(
+  record: Message,
+  localName: DescriptorFieldMetadata["localName"],
+): unknown {
+  return (record as Record<string, unknown>)[localName];
 }

@@ -97,6 +97,24 @@ describe("CommandBus", () => {
       `No command dispatcher registered for "${deriveTypeUrl(ProjectionStateSchema)}".`,
     );
   });
+
+  it("rejects nested posts from active command dispatch", async () => {
+    const observed: string[] = [];
+    const context: { bus?: CommandBus } = {};
+    const dispatcher = createCommandDispatcher([ProjectionStateSchema], async (command) => {
+      observed.push(`outer:${command.id?.uuid ?? "missing"}`);
+      await expect(context.bus?.post(createProjectionCommand("command-nested"))).rejects.toThrow(
+        "Cannot enqueue runtime work from an active runtime work item.",
+      );
+      observed.push("after-rejection");
+    });
+    const bus = new CommandBus([dispatcher]);
+    context.bus = bus;
+
+    await bus.post(createProjectionCommand("command-3"));
+
+    expect(observed).toEqual(["outer:command-3", "after-rejection"]);
+  });
 });
 
 function createCommandDispatcher(

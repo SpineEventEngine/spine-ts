@@ -257,8 +257,8 @@ constructor identity, family, state schema, descriptor metadata, state full type
 name, and ID-field metadata. `BoundedContextBuilder.build()` owns repository
 registration, rejects duplicate entity or state identities, opens state record
 storage through the context `StorageFactory`, and exposes registered
-repositories as `RepositoryView` values. Direct repository registration is not
-public API.
+repositories as frozen snapshot-backed `RepositoryView` values. Direct
+repository registration is not public API.
 This follows the JVM `Repository` identity surface (`entityClass()`,
 `idClass()`, and `entityStateType()`) plus the first context-owned lifecycle
 step. The TypeScript seam deliberately omits `create`, `find`, `store`, record
@@ -312,13 +312,14 @@ surface:
   `removeCommandDispatcher()` and `addEventDispatcher()` /
   `removeEventDispatcher()` collect dispatchers for the context being built;
 - `BoundedContextBuilder.withStorageFactory(factory)` selects the
-  `StorageFactory` used to create the context `EventStore`;
+  `StorageFactory` used to create the context `EventStore` and repository state
+  storage;
 - `BoundedContextBuilder.add(repository)` and `remove(repository)` maintain the
   context-owned repository registration list;
 - `BoundedContextBuilder.build()` is the only supported path for constructing a
   built `BoundedContext`; and
 - built contexts expose name, tenant mode, spec, a copy-safe small snapshot,
-  copy-safe registered repository views, and post-only `commandBus()` /
+  frozen snapshot-backed `RepositoryView` values, and post-only `commandBus()` /
   `eventBus()` endpoints backed by internally owned buses.
 
 This keeps the TypeScript API JVM-familiar without pretending that later
@@ -333,7 +334,8 @@ The following runtime pieces are still deferred to later explicit tasks:
   visibility/type-supplier registration, and lifecycle callbacks over the
   repository identity seam;
 - handler invocation and integrated command/event routing;
-- inbox, delivery, storage, and tenant-index persistence;
+- inbox/delivery storage, durable storage lifecycle, and tenant-index
+  persistence;
 - stand/query/subscription execution;
 - system-context pairing and server/gRPC services; and
 - ZeroMQ endpoint topology and transport-backed runtime execution.
@@ -371,8 +373,8 @@ arrays and planner-local worker IDs; they do not retain entity names, handler
 names, raw readiness metadata, or duplicate full transport contracts on each
 route. The package root now exports a small executable bus layer, but still
 does not export service, transport, delivery, stand, integration-broker,
-repository runtime-registration, validation, or `Ack` abstractions as part of
-this closure.
+repository dispatch/runtime wiring, command/event intake validation, or `Ack`
+mapping as part of this closure.
 
 The architectural consequence is that later work must add those collaborators
 as explicit tasks at their own seams. Command and event intake can consume the

@@ -223,11 +223,12 @@ const expectedServerExports = [
   "RepositoryStateSchema",
   "RepositoryView",
   "ServerRuntimeLifecycle",
+  "ServerRuntimeRejectedState",
   "ServerRuntimeRoutingPlan",
   "ServerRuntimeRoutingPlanInput",
   "ServerRuntimeState",
   "ServerRuntimeStateError",
-  "ServerRuntimeStateErrorCode",
+  "RuntimeStateErrorCode",
   "ServerRuntimeStateOperation",
   "ServerRuntimeWork",
   "SingleProcessServerRuntime",
@@ -402,9 +403,93 @@ const forbiddenPublicMembers = [
   },
   {
     owner: "Repository",
+    member: "hasInstance",
+    reason: "repository brand authority is framework-internal",
+    matches: (value) => value.flags?.isStatic === true && Array.isArray(value.signatures),
+  },
+  {
+    owner: "Repository",
+    member: "snapshotOf",
+    reason: "repository snapshot authority is framework-internal",
+    matches: (value) => value.flags?.isStatic === true && Array.isArray(value.signatures),
+  },
+  {
+    owner: "Repository",
+    member: "isRegistered",
+    reason: "registration state is context-owned",
+    matches: (value) => Array.isArray(value.signatures),
+  },
+  {
+    owner: "Repository",
+    member: "registeredContextName",
+    reason: "registration state is context-owned",
+    matches: () => true,
+  },
+  {
+    owner: "Repository",
     member: "registerWith",
     reason: "registration is context-owned",
     matches: (value) => Array.isArray(value.signatures),
+  },
+  {
+    owner: "Repository",
+    member: "prepareRegistration",
+    reason: "repository preparation is context-owned",
+    matches: (value) => Array.isArray(value.signatures),
+  },
+  {
+    owner: undefined,
+    member: "isRepositoryInstance",
+    reason: "repository brand helper is not public API",
+    matches: (value) => Array.isArray(value.signatures),
+  },
+  {
+    owner: undefined,
+    member: "BoundedContextRegistration",
+    reason: "bounded-context registration details are not public API",
+    matches: (value) => typeof value.kind === "number",
+  },
+  {
+    owner: undefined,
+    member: "RepositoryAccess",
+    reason: "repository authority is framework-internal",
+    matches: (value) => typeof value.kind === "number",
+  },
+  {
+    owner: undefined,
+    member: "repositoryAccess",
+    reason: "repository authority is framework-internal",
+    matches: (value) => typeof value.kind === "number" || Array.isArray(value.signatures),
+  },
+  {
+    owner: undefined,
+    member: "prepareRepository",
+    reason: "repository preparation helper is not public API",
+    matches: (value) => Array.isArray(value.signatures),
+  },
+  {
+    owner: undefined,
+    member: "RepositoryPreparationToken",
+    reason: "repository preparation token is not public API",
+    matches: (value) => typeof value.kind === "number",
+  },
+  {
+    owner: undefined,
+    member: "repositoryRegistrationAccess",
+    reason: "repository registration access is not public API",
+    matches: (value) => typeof value.kind === "number" || Array.isArray(value.signatures),
+  },
+  {
+    owner: undefined,
+    member: "RepositoryRegistrationAccess",
+    reason: "repository registration access is not public API",
+    matches: (value) => typeof value.kind === "number",
+  },
+  {
+    owner: undefined,
+    member: "PreparedRepository",
+    reason: "repository preparation details are not public API",
+    matches: (value) => typeof value.kind === "number",
   },
 ];
 
@@ -427,14 +512,18 @@ function collectForbiddenMembers(value, ownerName, matches) {
       ? value.name
       : ownerName;
 
-  if (typeof value.name === "string" && nextOwnerName !== undefined) {
+  if (typeof value.name === "string") {
     for (const forbidden of forbiddenPublicMembers) {
       if (
-        forbidden.owner === nextOwnerName &&
+        (forbidden.owner === undefined || forbidden.owner === nextOwnerName) &&
         forbidden.member === value.name &&
         forbidden.matches(value)
       ) {
-        matches.push(`${forbidden.owner}.${forbidden.member} (${forbidden.reason})`);
+        const label =
+          forbidden.owner === undefined
+            ? forbidden.member
+            : `${forbidden.owner}.${forbidden.member}`;
+        matches.push(`${label} (${forbidden.reason})`);
       }
     }
   }
@@ -449,8 +538,6 @@ collectForbiddenMembers(apiDocs, undefined, forbiddenMatches);
 
 const missingExports = expectedProtoExports.filter((name) => !documentedNames.has(name));
 const missingCoreExports = expectedCoreExports.filter((name) => !documentedNames.has(name));
-const missingServerExports = expectedServerExports.filter((name) => !documentedNames.has(name));
-const missingStorageExports = expectedStorageExports.filter((name) => !documentedNames.has(name));
 const missingTransportExports = expectedTransportExports.filter(
   (name) => !documentedNames.has(name),
 );
@@ -491,6 +578,12 @@ const forbiddenStorageTypeDocNames = [
 ];
 const declaredServerExports = collectNamedExports(serverIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
+const missingServerExports = expectedServerExports.filter(
+  (name) => !declaredServerExports.includes(name),
+);
+const missingStorageExports = expectedStorageExports.filter(
+  (name) => !declaredStorageExports.includes(name),
+);
 const unexpectedServerExports = declaredServerExports.filter(
   (name) => !expectedServerExports.includes(name),
 );

@@ -133,6 +133,86 @@ describe("EventBus", () => {
 
     expect(observed).toEqual([]);
   });
+
+  it("can retry registering a dispatcher after message schema collection fails", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    let attempts = 0;
+    const dispatcher: EventDispatcher = {
+      messageSchemas: () => {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new Error("schema read failed");
+        }
+        return [ProjectionStateSchema];
+      },
+      dispatch: (event) => {
+        observed.push(`dispatch:${event.id?.value ?? "missing"}`);
+        return Promise.resolve();
+      },
+    };
+    const bus = new EventBus(store);
+
+    expect(() => bus.register(dispatcher)).toThrow("schema read failed");
+    expect(bus.register(dispatcher)).toBe(dispatcher);
+
+    await bus.post(createProjectionEvent("event-5"));
+
+    expect(observed).toEqual(["dispatch:event-5"]);
+  });
+
+  it("does not register the same event dispatcher twice during reentrant schema collection", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const bus = new EventBus(store);
+    let reentered = false;
+    const dispatcher: EventDispatcher = {
+      messageSchemas: () => {
+        if (!reentered) {
+          reentered = true;
+          bus.register(dispatcher);
+        }
+        return [ProjectionStateSchema];
+      },
+      dispatch: (event) => {
+        observed.push(`dispatch:${event.id?.value ?? "missing"}`);
+        return Promise.resolve();
+      },
+    };
+
+    bus.register(dispatcher);
+    await bus.post(createProjectionEvent("event-6"));
+
+    expect(observed).toEqual(["dispatch:event-6"]);
+  });
+
+  it("rejects nested posts from active event dispatch", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const context: { bus?: EventBus } = {};
+    const dispatcher = createEventDispatcher([ProjectionStateSchema], async (event) => {
+      observed.push(`outer:${event.id?.value ?? "missing"}`);
+      await expect(context.bus?.post(createProjectionEvent("event-nested"))).rejects.toThrow(
+        "Cannot enqueue runtime work from an active runtime work item.",
+      );
+      observed.push("after-rejection");
+    });
+    const bus = new EventBus(store, [dispatcher]);
+    context.bus = bus;
+
+    await bus.post(createProjectionEvent("event-7"));
+
+    expect(observed).toEqual(["outer:event-7", "after-rejection"]);
+  });
 });
 
 function createEventDispatcher(

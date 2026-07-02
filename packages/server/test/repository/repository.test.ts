@@ -2,20 +2,9 @@ import { fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import {
-  InMemoryStorageFactory,
-  type RecordSpec,
-  type RecordStorage,
-  type StorageContext,
-} from "@spine-ts/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { file_spine_options } from "@spine-ts/proto";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
-import type { BoundedContextRegistration } from "../../src/context/bounded-context.js";
-import {
-  prepareRepository,
-  type RepositoryPreparationToken,
-} from "../../src/repository/repository.js";
 
 import {
   Aggregate,
@@ -31,7 +20,6 @@ import {
   type RepositoryEntityType,
   type RepositoryIdentitySnapshot,
   type RepositoryOptions,
-  type RepositoryView,
 } from "../../src/index.js";
 
 function expectRepositoryIdentityError(
@@ -569,59 +557,31 @@ describe("repository identity", () => {
       schema: AggregateStateSchema,
     });
 
-    expect(repository.isRegistered()).toBe(false);
-    expect(repository.registeredContextName).toBeUndefined();
+    expect("isRegistered" in repository).toBe(false);
+    expect("registeredContextName" in repository).toBe(false);
     expect("registerWith" in repository).toBe(false);
+    expect("prepareRegistration" in repository).toBe(false);
+    // @ts-expect-error registration state belongs to the built context.
+    const statusMember: Extract<keyof typeof repository, "isRegistered"> = "isRegistered";
+    // @ts-expect-error context names are not exposed by repositories.
+    const contextNameMember: Extract<keyof typeof repository, "registeredContextName"> =
+      "registeredContextName";
     // @ts-expect-error registration is context-owned; repositories do not expose a direct hook.
     const directRegistrationMember: Extract<keyof typeof repository, "registerWith"> =
       "registerWith";
+    // @ts-expect-error preparation is framework-owned and not a repository API.
+    const directPreparationMember: Extract<keyof typeof repository, "prepareRegistration"> =
+      "prepareRegistration";
+    void statusMember;
+    void contextNameMember;
     void directRegistrationMember;
-
-    const directPreparation = () => {
-      // @ts-expect-error repository preparation is context-owned and token-gated.
-      prepareRepository(repository, createInternalRegistration("Tasks"));
-    };
-    void directPreparation;
+    void directPreparationMember;
   });
 
-  it("keeps framework same-context preparation idempotent without reopening storage", () => {
-    const storageFactory = new CountingStorageFactory();
-    const registration = createInternalRegistration("Tasks", storageFactory);
-    const token = {} as RepositoryPreparationToken;
-    const repository = new Repository({
-      entityType: TaskAggregate,
-      schema: AggregateStateSchema,
-    });
-
-    prepareRepository(repository, registration, token).commit();
-    prepareRepository(repository, registration, token).commit();
-
-    expect(repository.isRegistered()).toBe(true);
-    expect(repository.registeredContextName?.value).toBe("Tasks");
-    expect(storageFactory.creations).toBe(1);
-  });
-
-  it("rejects structural repository lookalikes in the token-gated framework helper", () => {
-    const token = {} as RepositoryPreparationToken;
-    const repository = new Repository({
-      entityType: TaskAggregate,
-      schema: AggregateStateSchema,
-    });
-    const structuralRepository = {
-      entityType: repository.entityType,
-      entityFamily: repository.entityFamily,
-      stateSchema: repository.stateSchema,
-      metadata: repository.metadata,
-      stateFullTypeName: repository.stateFullTypeName,
-      idField: repository.idField,
-      snapshot: repository.snapshot,
-      isRegistered: () => false,
-      registeredContextName: undefined,
-    } as unknown as RepositoryView;
-
-    expect(() =>
-      prepareRepository(structuralRepository, createInternalRegistration("Tasks"), token),
-    ).toThrow("Repository registration requires a Repository instance.");
+  it("keeps the repository brand check immutable", () => {
+    expect(Object.isFrozen(Repository)).toBe(true);
+    expect("hasInstance" in Repository).toBe(false);
+    expect("snapshotOf" in Repository).toBe(false);
   });
 
   it("does not expose repository query, routing, cache, delivery, or default factory APIs", () => {
@@ -839,27 +799,3 @@ describe("repository identity", () => {
     expectTypeOf(assertRepositoryOptionTypes).not.toBeAny();
   });
 });
-
-class CountingStorageFactory extends InMemoryStorageFactory {
-  creations = 0;
-
-  protected override onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-  ): RecordStorage<I, R> {
-    this.creations += 1;
-    return super.onCreateRecordStorage(context, recordSpec);
-  }
-}
-
-function createInternalRegistration(
-  name: string,
-  storageFactory = new InMemoryStorageFactory(),
-): BoundedContextRegistration {
-  return {
-    identity: {},
-    name: Object.freeze({ value: name }),
-    storageContext: Object.freeze({ name, multitenant: false }),
-    storageFactory,
-  };
-}

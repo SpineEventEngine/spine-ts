@@ -39,8 +39,9 @@ import {
   Repository,
   HandlerMetadataRegistry,
   defineEntityHandlers,
+  type RuntimeStateErrorCode,
   type ServerRuntimeLifecycle,
-  type ServerRuntimeStateErrorCode,
+  type ServerRuntimeRejectedState,
   ServerRuntimeStateError,
   acceptSignalIntake,
   failSignalIntake,
@@ -309,7 +310,10 @@ describe("@spine-ts/server", () => {
       ServerRuntimeStateError,
     );
     expectTypeOf<SingleProcessServerRuntime>().toExtend<ServerRuntimeLifecycle>();
-    expectTypeOf<ServerRuntimeStateErrorCode>().toEqualTypeOf<"INVALID_RUNTIME_STATE">();
+    expectTypeOf<RuntimeStateErrorCode>().toEqualTypeOf<"INVALID_RUNTIME_STATE">();
+    expectTypeOf<ServerRuntimeRejectedState>().toEqualTypeOf<
+      "created" | "running" | "closing" | "closed" | "running-work"
+    >();
   });
 
   it("assembles a bounded-context metadata and routing smoke slice from public APIs", () => {

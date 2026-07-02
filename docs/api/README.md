@@ -34,11 +34,12 @@ The public entry points mirror Spine JVM's
 `ContextSpec` remains a framework-owned immutable value surfaced through
 `builder.spec` and `context.spec`; the builder collects command and event
 dispatchers; `withStorageFactory(factory)` selects the storage factory used for
-the context event store; and `build()` returns a `BoundedContext` that owns
-mutable `CommandBus` and `EventBus` instances internally while exposing
-post-only `CommandEndpoint` and `EventEndpoint` values through `commandBus()`
-and `eventBus()`. The shell validates non-empty/non-blank names and records
-tenant mode. `builder.add(repository)` / `builder.remove(repository)` maintain
+the context event store and repository state storage; and `build()` returns a
+`BoundedContext` that owns mutable `CommandBus` and `EventBus` instances
+internally while exposing post-only `CommandEndpoint` and `EventEndpoint` values
+through `commandBus()` and `eventBus()`. The shell validates
+non-empty/non-blank names and records tenant mode. `builder.add(repository)` /
+`builder.remove(repository)` maintain
 the context-owned repository registration list, and `build()` registers those
 repositories with the built context after opening state record storage through
 the context `StorageFactory`. This slice does not create default repositories
@@ -203,26 +204,26 @@ each route. Query, subscription, and system routing remain explicit deferred
 seams until concrete server readiness metadata exists.
 Server runtime exports include `SingleProcessServerRuntime`,
 `ServerRuntimeLifecycle`, `ServerRuntimeState`, `ServerRuntimeWork`,
-`ServerRuntimeStateOperation`, `ServerRuntimeStateErrorCode`, and
-`ServerRuntimeStateError` for the first single-process lifecycle and async queue
-kernel. The lifecycle state machine is
+`ServerRuntimeStateOperation`, `ServerRuntimeRejectedState`,
+`RuntimeStateErrorCode`, and `ServerRuntimeStateError` for the first
+single-process lifecycle and async queue kernel. The lifecycle state machine is
 deterministic: `created -> running` on
 `start()`, `created -> closed` when closed before start, and
 `running -> closing -> closed` when close drains already accepted work.
 `ServerRuntimeStateError.code` is stable taxonomy
-`"INVALID_RUNTIME_STATE"`; the rejected lifecycle state is exposed separately as
-`state`. `close()` is idempotent, prevents new intake, and waits for previously
-accepted work to settle. `enqueue()` accepts work only while the runtime is
-running, returns that item's completion promise, and runs accepted work in a
-later microtask in FIFO order. Enqueued callbacks are trusted server-owned work
-only. The queue has no timeout, cancellation, fairness, queue bound, or
-hostile-callback protection, so non-settling or reentrant work can keep
-`close()` pending. This surface is a
-server-runtime kernel only; it is not a
-process-wide singleton, process supervisor, generic job framework,
-command/event/import bus, durable storage or inbox, read-side stand, repository
-dispatcher, integration broker, gRPC server, ZeroMQ transport, or worker-process
-runtime.
+`"INVALID_RUNTIME_STATE"`; the rejected runtime condition is exposed separately
+as `state`. `close()` is idempotent, prevents new intake, and waits for
+previously accepted work to settle. `enqueue()` accepts work only while the
+runtime is running, returns that item's completion promise, and runs accepted
+work in a later microtask in FIFO order. Enqueued callbacks are trusted
+server-owned work only. The queue has no timeout, cancellation, fairness, queue
+bound, or hostile-callback protection, so non-settling work can keep `close()`
+pending. Same-runtime reentrant `enqueue()` and `close()` calls from active work
+are rejected with `state: "running-work"` to avoid queue self-deadlocks. This
+surface is a server-runtime kernel only; it is not a process-wide singleton,
+process supervisor, generic job framework, command/event/import bus, durable
+storage or inbox, read-side stand, repository dispatcher, integration broker,
+gRPC server, ZeroMQ transport, or worker-process runtime.
 The public runtime closure smoke path composes these exports with
 `BoundedContext`, `Repository`, `HandlerMetadataRegistry`,
 `CommandRegistrationReadiness`, `EventRegistrationReadiness`, and
@@ -302,8 +303,7 @@ pnpm docs:check
 Generated output is written to `docs/api/reference`.
 
 `docs:check` also emits temporary TypeDoc JSON, verifies that expected
-`@spine-ts/proto`, `@spine-ts/core`, `@spine-ts/server`,
-`@spine-ts/transport`, and `@spine-ts/storage` entry-point exports are present
-in the API model, rejects unexpected `@spine-ts/server` root exports that are
-not in the curated allowlist, and rejects broad generated wildcard re-exports
-from the proto package root.
+`@spine-ts/proto`, `@spine-ts/core`, and `@spine-ts/transport` entry-point
+exports are present in the API model, checks `@spine-ts/server` and
+`@spine-ts/storage` root exports against source allowlists, and rejects broad
+generated wildcard re-exports from the proto package root.
