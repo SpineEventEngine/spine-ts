@@ -114,17 +114,20 @@ primitive aggregate IDs, route consistency, and aggregate version order before
 storage. It does not implement handler invocation, delivery, catch-up,
 read-side indexing, subscriptions, system events, or aggregate repository
 caching.
-Delivery exports include `Delivery`, `DeliveryOptions`, `DeliveryStrategy`,
-`LocalDeliveryStrategy`, `Inbox`, `InboxId`, `InboxMessage`,
-`InboxMessageId`, `InboxMessageInput`, `InboxReadOptions`,
+Delivery exports include `Delivery`, `DeliveryOptions`, `Inbox`, `InboxId`,
+`InboxMessage`, `InboxMessageId`, `InboxMessageInput`, `InboxReadOptions`,
 `InboxWriteResult`, `InboxStorage`, `InboxStorageOptions`,
 `DeliveryLabel`, `DeliveryStatus`, `ShardIndex`, `ShardSession`,
-and `ShardedWorkRegistry`. This slice persists inbox messages and shard lease
-records through `StorageFactory` / `RecordStorage`, deduplicates live inbox
-writes by `(signalId, inboxId)` instead of record ID, keeps shard ordering
-metadata on each message, and exposes a small storage-backed shard pickup /
-release seam. It does not run conveyor stations, invoke repositories, manage
-retry monitors, host gRPC services, or implement read-side catch-up loops.
+`ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`. This slice persists
+inbox messages and shard lease records through `StorageFactory` /
+`RecordStorage`, deduplicates live inbox writes durably by
+`(signalId, inboxId)` through small internal guard records, keeps shard
+ordering metadata on each message with `receivedAt`, `version`, and inbox
+message UUID ordering, and exposes a storage-backed shard pickup / release
+seam backed by `RecordStorage.compareAndSet()`. `InboxReadOptions.limit` is the
+current positive page-size control. This slice does not run conveyor stations,
+invoke repositories, manage retry monitors, host gRPC services, or implement
+read-side catch-up loops.
 Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field

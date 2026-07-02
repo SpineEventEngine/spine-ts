@@ -15,12 +15,7 @@ export { CommandBus } from "./bus/command-bus.js";
 export type { CommandDispatcher } from "./bus/command-dispatcher.js";
 export { EventBus } from "./bus/event-bus.js";
 export type { EventDispatcher } from "./bus/event-dispatcher.js";
-export {
-  Delivery,
-  LocalDeliveryStrategy,
-  type DeliveryOptions,
-  type DeliveryStrategy,
-} from "./delivery/delivery.js";
+export { Delivery, type DeliveryOptions } from "./delivery/delivery.js";
 export {
   Inbox,
   type DeliveryLabel,

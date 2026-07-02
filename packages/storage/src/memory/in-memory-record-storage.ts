@@ -23,6 +23,14 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     return Promise.resolve(this.records().delete(id));
   }
 
+  protected compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    return Promise.resolve(this.records().compareAndSet(id, expected, next));
+  }
+
   protected queryRecords(query: RecordQuery<I>): Promise<readonly R[]> {
     return Promise.resolve(this.records().query(this.recordSpec, query));
   }

@@ -38,8 +38,10 @@ Current slice exposes:
   and
 - `Delivery`, `Inbox`, `InboxStorage`, `ShardIndex`, `ShardSession`, and
   `ShardedWorkRegistry` for the first durable delivery slice: inbox writes with
-  `(signalId, inboxId)` live deduplication, shard ordering metadata, a local
-  shard strategy, and storage-backed shard pickup/release over `RecordStorage`;
+  durable `(signalId, inboxId)` live deduplication through internal guard
+  records, shard ordering metadata with an explicit inbox-message UUID
+  tie-breaker, positive read paging via `InboxReadOptions.limit`, and
+  storage-backed shard pickup/release over `RecordStorage.compareAndSet()`;
 - and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;

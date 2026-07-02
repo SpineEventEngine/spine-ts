@@ -9,6 +9,7 @@ import {
   type StorageFactory,
 } from "@spine-ts/storage";
 
+import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
 import { ShardIndex } from "./shard-index.js";
 
 /** One active shard pickup session. */
@@ -43,63 +44,63 @@ export class ShardedWorkRegistry {
   }
 
   /** Pick up one shard if it is free or expired. */
-  pickUp(
+  async pickUp(
     shard: ShardIndex,
     node: string,
     now: Date = new Date(),
   ): Promise<ShardSession | undefined> {
-    const key = shard.key();
+    const storage = this.#storage();
 
-    return ShardRegistryLocks.withLock(this.#storageFactory, key, async () => {
-      const storage = this.#storage();
-
-      try {
-        const current = await this.#read(storage, shard);
+    try {
+      for (;;) {
+        const currentRecord = await storage.read(shard.key());
+        const current = currentRecord === undefined ? undefined : readSession(currentRecord);
         if (current !== undefined && current.expiresAt.getTime() > now.getTime()) {
           return undefined;
         }
 
-        const session = new ShardSession(
+        const next = new ShardSession(
           randomUUID(),
           new ShardIndex(shard.index, shard.ofTotal),
-          node,
+          requireText(node, "Shard node"),
           new Date(now.getTime()),
           new Date(now.getTime() + this.#leaseMs),
         );
-        await storage.write(writeSession(session));
-        return session;
-      } finally {
-        storage.close();
+        const nextRecord = writeSession(next);
+        const claimed = await storage.compareAndSet(shard.key(), currentRecord, nextRecord);
+
+        if (claimed) {
+          return next;
+        }
       }
-    });
+    } finally {
+      storage.close();
+    }
   }
 
   /** Release one shard session if it is still current. */
-  release(session: ShardSession): Promise<boolean> {
-    const key = session.shard.key();
+  async release(session: ShardSession): Promise<boolean> {
+    const storage = this.#storage();
 
-    return ShardRegistryLocks.withLock(this.#storageFactory, key, async () => {
-      const storage = this.#storage();
-
-      try {
-        const current = await this.#read(storage, session.shard);
-        if (current?.id !== session.id || current.node !== session.node) {
+    try {
+      for (;;) {
+        const currentRecord = await storage.read(session.shard.key());
+        if (currentRecord === undefined) {
           return false;
         }
 
-        return await storage.delete(key);
-      } finally {
-        storage.close();
-      }
-    });
-  }
+        const current = readSession(currentRecord);
+        if (current.id !== session.id || current.node !== session.node) {
+          return false;
+        }
 
-  async #read(
-    storage: RecordStorage<string, Any>,
-    shard: ShardIndex,
-  ): Promise<ShardSession | undefined> {
-    const record = await storage.read(shard.key());
-    return record ? readSession(record) : undefined;
+        if (await storage.compareAndSet(session.shard.key(), currentRecord, undefined)) {
+          return true;
+        }
+      }
+    } finally {
+      storage.close();
+    }
   }
 
   #storage(): RecordStorage<string, Any> {
@@ -135,46 +136,9 @@ const shardSessionRecordSpec = new RecordSpec<string, Any>({
   extractId: (record) => readStoredSession(record).key,
 });
 
-const ShardRegistryLocks = Object.freeze({
-  queues: new WeakMap<StorageFactory, Map<string, Promise<void>>>(),
-
-  async withLock<T>(factory: StorageFactory, key: string, work: () => Promise<T>): Promise<T> {
-    const queues = this.queueMap(factory);
-    const previous = queues.get(key) ?? Promise.resolve();
-    let release: (() => void) | undefined;
-    const current = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    queues.set(
-      key,
-      previous.then(() => current),
-    );
-
-    try {
-      await previous;
-      return await work();
-    } finally {
-      release?.();
-      if (queues.get(key) === current) {
-        queues.delete(key);
-      }
-    }
-  },
-
-  queueMap(factory: StorageFactory): Map<string, Promise<void>> {
-    let queues = this.queues.get(factory);
-
-    if (queues === undefined) {
-      queues = new Map<string, Promise<void>>();
-      this.queues.set(factory, queues);
-    }
-
-    return queues;
-  },
-});
-
 function readSession(record: Any): ShardSession {
   const stored = readStoredSession(record);
+
   return new ShardSession(
     stored.id,
     new ShardIndex(stored.shardIndex, stored.shardTotal),
@@ -185,15 +149,45 @@ function readSession(record: Any): ShardSession {
 }
 
 function readStoredSession(record: Any): StoredShardSession {
-  if (record.typeUrl !== shardSessionRecordTypeUrl) {
-    throw new Error("Shard session record type URL is invalid.");
+  if (record.typeUrl !== shardSessionTypeUrl) {
+    throw new DeliveryStorageCorruptionError(
+      `Shard session record type URL "${record.typeUrl}" is invalid.`,
+    );
   }
 
-  const decoded = JSON.parse(Buffer.from(record.value).toString("utf8")) as StoredShardSession;
-  if (typeof decoded.key !== "string" || typeof decoded.id !== "string") {
-    throw new Error("Shard session record is invalid.");
+  try {
+    const decoded = JSON.parse(Buffer.from(record.value).toString("utf8")) as unknown;
+    if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
+      throw new DeliveryStorageCorruptionError("Shard session record is not a JSON object.");
+    }
+
+    const shard = new ShardIndex(
+      requireNumber(Reflect.get(decoded, "shardIndex"), "Shard session index"),
+      requireNumber(Reflect.get(decoded, "shardTotal"), "Shard session total"),
+    );
+    const key = requireText(Reflect.get(decoded, "key"), "Shard session key");
+    if (key !== shard.key()) {
+      throw new DeliveryStorageCorruptionError("Shard session key does not match shard.");
+    }
+
+    return Object.freeze({
+      key,
+      id: requireText(Reflect.get(decoded, "id"), "Shard session ID"),
+      node: requireText(Reflect.get(decoded, "node"), "Shard session node"),
+      shardIndex: shard.index,
+      shardTotal: shard.ofTotal,
+      pickedUpAtMs: requireNumber(Reflect.get(decoded, "pickedUpAtMs"), "Shard pickup time"),
+      expiresAtMs: requireNumber(Reflect.get(decoded, "expiresAtMs"), "Shard expiry time"),
+    });
+  } catch (error) {
+    if (error instanceof DeliveryStorageCorruptionError) {
+      throw error;
+    }
+
+    throw new DeliveryStorageCorruptionError("Shard session record contains malformed JSON.", {
+      cause: error,
+    });
   }
-  return decoded;
 }
 
 function shardRegistryContext(context: StorageContext): StorageContext {
@@ -212,18 +206,43 @@ function shardRegistryContext(context: StorageContext): StorageContext {
 function writeSession(session: ShardSession): Any {
   const stored: StoredShardSession = {
     key: session.shard.key(),
-    id: session.id,
-    node: session.node,
+    id: requireText(session.id, "Shard session ID"),
+    node: requireText(session.node, "Shard session node"),
     shardIndex: session.shard.index,
     shardTotal: session.shard.ofTotal,
-    pickedUpAtMs: session.pickedUpAt.getTime(),
-    expiresAtMs: session.expiresAt.getTime(),
+    pickedUpAtMs: requireTime(session.pickedUpAt, "Shard pickup time"),
+    expiresAtMs: requireTime(session.expiresAt, "Shard expiry time"),
   };
 
   return create(AnySchema, {
-    typeUrl: shardSessionRecordTypeUrl,
+    typeUrl: shardSessionTypeUrl,
     value: Buffer.from(JSON.stringify(stored), "utf8"),
   });
 }
 
-const shardSessionRecordTypeUrl = "type.spine-ts.dev/internal/ShardSessionRecord";
+function requireNumber(value: unknown, label: string): number {
+  if (!Number.isInteger(value) || !Number.isFinite(value)) {
+    throw new DeliveryStorageCorruptionError(`${label} must be a finite integer.`);
+  }
+
+  return value as number;
+}
+
+function requireText(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new DeliveryStorageCorruptionError(`${label} must be a non-empty string.`);
+  }
+
+  return value;
+}
+
+function requireTime(value: Date, label: string): number {
+  const time = value.getTime();
+  if (!Number.isFinite(time)) {
+    throw new DeliveryStorageCorruptionError(`${label} is invalid.`);
+  }
+
+  return time;
+}
+
+const shardSessionTypeUrl = "type.spine-ts.dev/internal/ShardSessionRecord";

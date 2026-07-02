@@ -1088,6 +1088,10 @@ class CorruptSnapshotStorage<I, R extends Message> extends RecordStorage<I, R> {
     return Promise.resolve(false);
   }
 
+  protected compareAndSetRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
   protected queryRecords(): Promise<readonly R[]> {
     return Promise.resolve([this.record]);
   }
@@ -1115,6 +1119,10 @@ class CorruptEventStorage<I, R extends Message> extends RecordStorage<I, R> {
   }
 
   protected deleteRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected compareAndSetRecord(): Promise<boolean> {
     return Promise.resolve(false);
   }
 

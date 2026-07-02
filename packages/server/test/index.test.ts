@@ -39,7 +39,6 @@ import {
   type EntityVersionMetadata,
   Inbox,
   InboxStorage,
-  LocalDeliveryStrategy,
   type PlainEntityVersionMetadata,
   Repository,
   ShardIndex,
@@ -210,7 +209,6 @@ describe("@spine-ts/server", () => {
         "Entity",
         "Inbox",
         "InboxStorage",
-        "LocalDeliveryStrategy",
         "ProcessManager",
         "Projection",
         "Repository",
@@ -291,12 +289,6 @@ describe("@spine-ts/server", () => {
         }),
       ),
     ).toBeInstanceOf(Inbox);
-    expect(
-      new LocalDeliveryStrategy().determineIndex({
-        targetId: "task-1",
-        targetTypeUrl: "type.example.dev/tasks.Task",
-      }),
-    ).toEqual(ShardIndex.single());
     expect(
       new ShardSession("session-1", ShardIndex.single(), "node-1", new Date(0), new Date(1)),
     ).toBeInstanceOf(ShardSession);

@@ -286,6 +286,37 @@ describe("InMemoryRecordStorage", () => {
     ).rejects.toThrow(/Second record rejected/);
     await expect(storage.query()).resolves.toEqual([]);
   });
+
+  it("supports compare-and-set for create, replace, and delete by record id", async () => {
+    const storage = createStorage();
+    const created = createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n);
+    const replaced = createEvent("event-1", "type.spine.io/tasks.TaskUpdated", 2n);
+    const createdId = created.id;
+    const replacedId = replaced.id;
+
+    if (createdId === undefined || replacedId === undefined) {
+      throw new Error("Expected compare-and-set test event IDs.");
+    }
+
+    await expect(storage.compareAndSet(createdId, undefined, created)).resolves.toBe(true);
+    await expect(
+      storage.compareAndSet(
+        createdId,
+        undefined,
+        createEvent("event-1", "type.spine.io/tasks.TaskClosed", 3n),
+      ),
+    ).resolves.toBe(false);
+    await expect(storage.compareAndSet(createdId, created, replaced)).resolves.toBe(true);
+    await expect(
+      storage.compareAndSet(
+        createdId,
+        created,
+        createEvent("event-1", "type.spine.io/tasks.TaskClosed", 4n),
+      ),
+    ).resolves.toBe(false);
+    await expect(storage.compareAndSet(replacedId, replaced, undefined)).resolves.toBe(true);
+    await expect(storage.read(createdId)).resolves.toBeUndefined();
+  });
 });
 
 function createStorage(

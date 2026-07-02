@@ -9,6 +9,27 @@ type StoredRecord<I, R extends Message> = ReturnType<RecordSpec<I, R>["materiali
 export class TenantRecords<I, R extends Message> {
   readonly #records = new Map<string, StoredRecord<I, R>>();
 
+  compareAndSet(
+    id: I,
+    expected: StoredRecord<I, R> | undefined,
+    next: StoredRecord<I, R> | undefined,
+  ): boolean {
+    const key = StoredValues.key(id);
+    const current = this.#records.get(key);
+
+    if (!recordsEqual(current, expected)) {
+      return false;
+    }
+
+    if (next === undefined) {
+      this.#records.delete(key);
+      return true;
+    }
+
+    this.#records.set(key, next);
+    return true;
+  }
+
   delete(id: I): boolean {
     return this.#records.delete(StoredValues.key(id));
   }
@@ -33,6 +54,17 @@ export class TenantRecords<I, R extends Message> {
       this.write(record);
     }
   }
+}
+
+function recordsEqual<I, R extends Message>(
+  left: StoredRecord<I, R> | undefined,
+  right: StoredRecord<I, R> | undefined,
+): boolean {
+  if (left === undefined || right === undefined) {
+    return left === right;
+  }
+
+  return StoredValues.key(left.record) === StoredValues.key(right.record);
 }
 
 function applyLimit<I, R extends Message>(

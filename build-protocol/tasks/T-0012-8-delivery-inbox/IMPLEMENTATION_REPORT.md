@@ -11,14 +11,19 @@ Baseline commit: `de3ccc7`
 Implemented the first durable delivery slice with small JVM-familiar delivery
 types and storage-backed behavior:
 
-- `Delivery`, `Inbox`, `InboxStorage`, `ShardIndex`, `ShardSession`,
-  `ShardedWorkRegistry`, and `LocalDeliveryStrategy`;
+- `Delivery`, `Inbox`, `InboxStorage`, `ShardIndex`, `ShardSession`, and
+  `ShardedWorkRegistry`;
 - durable inbox writes with target inbox identity, original signal identity,
   label, status, shard, received time, ordering version, and optional
   deduplication retention;
-- live deduplication by `(signalId, inboxId)` over durable storage rather than
-  record ID;
-- storage-backed shard pickup/release with lease expiry replacement semantics;
+- live deduplication by `(signalId, inboxId)` over durable storage through
+  small internal guard records rather than record ID;
+- storage-backed shard pickup/release with lease expiry replacement semantics
+  backed by `RecordStorage.compareAndSet()`;
+- explicit inbox ordering by receive time, version, and inbox message UUID, plus
+  positive paging via `InboxReadOptions.limit`;
+- corruption checks for malformed internal JSON records plus a bounded signal
+  payload size before JSON serialization;
 - public export, README, and API-doc expectation updates for the new delivery
   surface.
 
@@ -44,3 +49,7 @@ public delivery contracts until real Spine delivery protos are available, an
 explicit UUID ordering tie-breaker, clearer paging deferral, safer internal
 record parsing and payload limits, and more precise JVM source/proto evidence
 logging.
+
+This round records both missing local source artifacts separately: the JVM Java
+delivery sources were absent from the checked local research tree, and the
+local delivery proto directory was present but empty.

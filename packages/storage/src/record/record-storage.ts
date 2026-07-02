@@ -76,6 +76,19 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     await this.writeRecord(this.#recordSpec.materialize(record));
   }
 
+  /**
+   * Compare the current stored record for one ID with an expected value and
+   * write or delete only when they still match.
+   */
+  async compareAndSet(id: I, expected: R | undefined, next: R | undefined): Promise<boolean> {
+    this.requireOpen();
+    return this.compareAndSetRecord(
+      this.#recordSpec.cloneId(id),
+      expected === undefined ? undefined : this.#recordSpec.materialize(expected),
+      next === undefined ? undefined : this.#recordSpec.materialize(next),
+    );
+  }
+
   /** Write records in order, failing before persistence if any materialization step fails. */
   async writeAll(records: Iterable<R>): Promise<void> {
     this.requireOpen();
@@ -86,6 +99,11 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   protected abstract deleteRecord(id: I): Promise<boolean>;
   protected abstract queryRecords(query: RecordQuery<I>): Promise<readonly R[]>;
   protected abstract readRecord(id: I): Promise<R | undefined>;
+  protected abstract compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean>;
   protected abstract writeAllRecords(
     records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
   ): Promise<void>;

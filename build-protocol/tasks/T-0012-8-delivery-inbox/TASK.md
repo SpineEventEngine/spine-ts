@@ -28,12 +28,15 @@ entityStateType)` returns a zero-based shard index and that all messages for
   `/private/tmp/spine-research/core-jvm/server/src/main/java/io/spine/server/delivery`
   did not contain the concrete delivery Java sources in this session, so the
   checked-in research docs are the source baseline.
+- The local delivery proto directory under
+  `/private/tmp/spine-research/core-jvm/server/src/main/proto/spine/server/delivery`
+  was present in this session but contained no proto files.
 
 ## Scope
 
 - Add `packages/server/src/delivery` with small `Inbox`, `Delivery`,
-  `InboxStorage`, shard index/session, delivery status/label, and local
-  delivery strategy concepts as needed for this first slice.
+  `InboxStorage`, shard index/session, and delivery status/label concepts as
+  needed for this first slice.
 - Build durable inbox storage over the existing `StorageFactory` /
   `RecordStorage` seam.
 - Support writing inbox messages with target inbox identity, original signal
