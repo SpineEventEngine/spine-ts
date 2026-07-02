@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 13 review pending
+Status: round 14 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -552,6 +552,41 @@ Fix summary:
 
 Diff package:
 `.superpowers/sdd/review-round-13-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2215-fc1e-7cb2-bd1c-ef0ea361960b`;
+- documentation: `019f2216-211d-7e83-a9af-00402ac8e8c6`;
+- TypeScript/API docs: `019f2216-3e2f-7e21-956f-ea35c1800bf6`;
+- security: `019f2216-5d76-7801-b10a-2bbbb5f12b2e`;
+- performance/reliability:
+  `019f2216-7bb5-7383-b8e5-38cc8f1268f1`.
+
+Result: changes requested.
+
+Findings to address:
+
+- `IMPLEMENTATION_REPORT.md` should explicitly name the round-13 package path
+  in the Round 12 Review note.
+
+Code style/maintainability, TypeScript/API docs, security, and
+performance/reliability lanes were clean. All five round-13 reviewer
+sub-agents were closed after their reports were collected.
+
+### Round 13 Fix
+
+Result: implemented in this worktree and ready for round-14 review.
+
+Fix summary:
+
+- named `.superpowers/sdd/review-round-13-fce80b2-current.diff` in the
+  implementation report.
+
+### Round 14
+
+Diff package:
+`.superpowers/sdd/review-round-14-fce80b2-current.diff`.
 
 Reviewer sub-agents: pending.
 

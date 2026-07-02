@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-13 review pending
+Status: round-14 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -159,7 +159,15 @@ stable package name and includes the review-prep log commit.
 Round 12 found no code, API, security, or reliability issue. The documentation
 lane requested one durable-log correction: the Round 10 Fix entry in the review
 log must explicitly say the fix was committed as `d419fd8`. The Round 13
-package includes that correction.
+package `.superpowers/sdd/review-round-13-fce80b2-current.diff` includes that
+correction.
+
+## Round 13 Review
+
+Round 13 found no code, API, security, or reliability issue. The documentation
+lane requested one durable-report correction: the Round 12 Review note in this
+report should explicitly name the round-13 package path. The Round 14 package
+includes that correction.
 
 ## Round 2 Review
 
