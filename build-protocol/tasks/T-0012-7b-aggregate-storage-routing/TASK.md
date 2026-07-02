@@ -1,6 +1,6 @@
 # T-0012.7b: Aggregate Storage And Signal Routing
 
-Status: round-18 fixes verified
+Status: round-19 re-review pending
 Start: `2026-07-02 06:20 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7b-aggregate-storage-routing`
@@ -170,4 +170,7 @@ Required evidence for this task:
   and index tests, server bus/API tests, handler metadata tests,
   aggregate-storage tests, and repository-routing tests; `typecheck`, `lint`,
   `format:check`, `docs:check`, and `git diff --check`.
+- Round-18 fix commit: `86b287e`.
+- Round-19 reviewer sub-agents are pending against
+  `.superpowers/sdd/review-7dbec34..86b287e.diff`.
 - No blocking human question is known.
