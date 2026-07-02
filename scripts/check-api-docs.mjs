@@ -173,6 +173,10 @@ const expectedTransportExports = [
 ];
 const expectedServerExports = [
   "Aggregate",
+  "AggregateHistory",
+  "AggregateSnapshot",
+  "AggregateStorage",
+  "AggregateStorageOptions",
   "Apply",
   "Assign",
   "BaseHandlerMetadata",
@@ -220,6 +224,9 @@ const expectedServerExports = [
   "RepositoryIdentityErrorCode",
   "RepositoryIdentitySnapshot",
   "RepositoryOptions",
+  "RepositoryCommandRoute",
+  "RepositoryEventRoute",
+  "RepositoryRouteInvocation",
   "RepositoryStateSchema",
   "RepositoryView",
   "ServerRuntimeLifecycle",

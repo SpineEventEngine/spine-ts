@@ -371,11 +371,17 @@ export class BoundedContextBuilder {
     const repositories = [...this.#repositories];
     preflightRepositories(repositories);
     const storageFactory = this.#storageFactory ?? new InMemoryStorageFactory();
-    const commandBus = new CommandBus([...this.#commandDispatchers]);
+    const commandBus = new CommandBus([
+      ...this.#commandDispatchers,
+      ...repositoryCommandDispatchers(repositories),
+    ]);
     const eventStore = this.createEventStore(storageFactory);
 
     try {
-      const eventBus = new EventBus(eventStore, [...this.#eventDispatchers]);
+      const eventBus = new EventBus(eventStore, [
+        ...this.#eventDispatchers,
+        ...repositoryEventDispatchers(repositories),
+      ]);
       return createBoundedContext(
         this.#specSnapshot,
         commandBus,
@@ -563,6 +569,24 @@ function preflightRepositories(repositories: readonly RepositoryView[]): void {
     }
     stateTypeNames.add(snapshot.stateFullTypeName);
   }
+}
+
+function repositoryCommandDispatchers(
+  repositories: readonly RepositoryView[],
+): readonly CommandDispatcher[] {
+  return repositories.flatMap((repository) => {
+    const dispatcher = repositoryAccess.commandDispatcher(repository);
+    return dispatcher === undefined ? [] : [dispatcher];
+  });
+}
+
+function repositoryEventDispatchers(
+  repositories: readonly RepositoryView[],
+): readonly EventDispatcher[] {
+  return repositories.flatMap((repository) => {
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    return dispatcher === undefined ? [] : [dispatcher];
+  });
 }
 
 function closeEventStore(eventStore: EventStore, buildError: unknown): void {

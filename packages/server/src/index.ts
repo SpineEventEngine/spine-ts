@@ -119,13 +119,23 @@ export {
 } from "./runtime/runtime-routing.js";
 
 export {
+  AggregateStorage,
+  type AggregateHistory,
+  type AggregateSnapshot,
+  type AggregateStorageOptions,
+} from "./repository/aggregate-storage.js";
+
+export {
   type ConcreteRepositoryEntityType,
   Repository,
+  type RepositoryCommandRoute,
   type RepositoryEntityType,
+  type RepositoryEventRoute,
   RepositoryIdentityError,
   type RepositoryIdentityErrorCode,
   type RepositoryIdentitySnapshot,
   type RepositoryOptions,
+  type RepositoryRouteInvocation,
   type RepositoryStateSchema,
   type RepositoryView,
 } from "./repository/repository.js";

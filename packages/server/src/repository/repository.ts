@@ -1,3 +1,8 @@
+import { deriveTypeUrl, unpackAny, type MessageSchema } from "@spine-ts/core";
+import { type Command, type Event, UserIdSchema } from "@spine-ts/proto";
+
+import type { CommandDispatcher } from "../bus/command-dispatcher.js";
+import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import {
   Aggregate,
   type Entity,
@@ -12,6 +17,15 @@ import {
   type EntityMetadata,
   type FirstFieldRoutingHint,
 } from "../entity/entity-metadata.js";
+import {
+  CommandRegistrationReadiness,
+  type CommandRegistrationReadinessLookup,
+} from "../handler/command-registration-readiness.js";
+import {
+  EventRegistrationReadiness,
+  type EventRegistrationReadinessLookup,
+} from "../handler/event-registration-readiness.js";
+import type { EntityHandlersMetadata } from "../handler/handler-metadata.js";
 
 type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> =
   | Aggregate<unknown, Schema, unknown>
@@ -92,6 +106,8 @@ export interface RepositoryOptions<
   readonly entityType: EntityType;
   /** Generated Protobuf-ES schema for the entity state owned by this repository identity. */
   readonly schema: RepositoryStateSchema<EntityType>;
+  /** Explicit handler metadata used to register repository command and event routing. */
+  readonly handlers?: EntityHandlersMetadata | readonly EntityHandlersMetadata[];
 }
 
 /**
@@ -136,6 +152,29 @@ export interface RepositoryView {
   readonly snapshot: RepositoryIdentitySnapshot;
 }
 
+/** Repository handler invocation state for this storage/routing slice. */
+export type RepositoryRouteInvocation = "deferred";
+
+/** Command route calculated by a repository. */
+export interface RepositoryCommandRoute<Id = unknown> {
+  /** Target entity identifier. */
+  readonly entityId: Id;
+  /** Fully qualified command message type name. */
+  readonly messageFullTypeName: string;
+  /** Handler invocation is intentionally deferred to a later runtime slice. */
+  readonly invocation: RepositoryRouteInvocation;
+}
+
+/** Event route calculated by a repository. */
+export interface RepositoryEventRoute<Id = unknown> {
+  /** Target entity identifiers. */
+  readonly entityIds: readonly Id[];
+  /** Fully qualified event message type name. */
+  readonly messageFullTypeName: string;
+  /** Handler invocation is intentionally deferred to a later runtime slice. */
+  readonly invocation: RepositoryRouteInvocation;
+}
+
 /** Machine-readable codes for repository identity failures. */
 export type RepositoryIdentityErrorCode = "ENTITY_SCHEMA_KIND_MISMATCH" | "UNSUPPORTED_ENTITY_TYPE";
 
@@ -172,6 +211,7 @@ export class Repository<
   readonly #entityType: EntityType;
   readonly #entityFamily: EntityFamily;
   readonly #metadata: EntityMetadata<RepositoryStateSchema<EntityType>>;
+  readonly #routing: RepositoryRouting;
 
   /** Create repository identity for exactly one entity family/state schema pair. */
   constructor(options: RepositoryOptions<EntityType>) {
@@ -222,10 +262,12 @@ export class Repository<
     this.#entityType = entityType as EntityType;
     this.#entityFamily = entityFamily;
     this.#metadata = metadata;
+    this.#routing = createRepositoryRouting(this.#entityType, this.#metadata, options.handlers);
     repositorySnapshots.set(
       this,
       createRepositorySnapshot(this.#entityType, this.#entityFamily, this.#metadata),
     );
+    repositoryDispatchers.set(this, createRepositoryDispatchers(this, this.#routing));
   }
 
   /** Entity constructor owned by this repository identity. */
@@ -264,15 +306,28 @@ export class Repository<
       createRepositorySnapshot(this.#entityType, this.#entityFamily, this.#metadata),
     );
   }
+
+  /** Route a command to exactly one entity ID. Handler invocation is deferred. */
+  routeCommand(command: Command): RepositoryCommandRoute {
+    return this.#routing.routeCommand(command);
+  }
+
+  /** Route an event to one entity ID. Handler invocation is deferred. */
+  routeEvent(event: Event): RepositoryEventRoute {
+    return this.#routing.routeEvent(event);
+  }
 }
 
 const repositorySnapshots = new WeakMap<RepositoryView, RepositoryIdentitySnapshot>();
+const repositoryDispatchers = new WeakMap<RepositoryView, RepositoryDispatchers>();
 Object.freeze(Repository);
 
 /** @internal Framework-only repository authority contract. */
 export interface RepositoryAccess {
   hasInstance(repository: unknown): repository is RepositoryView;
   snapshot(repository: RepositoryView): RepositoryIdentitySnapshot;
+  commandDispatcher(repository: RepositoryView): CommandDispatcher | undefined;
+  eventDispatcher(repository: RepositoryView): EventDispatcher | undefined;
 }
 
 /** @internal Framework-only repository authority used by bounded-context assembly. */
@@ -290,7 +345,230 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
 
     return cloneRepositorySnapshot(snapshot);
   },
+
+  commandDispatcher(repository: RepositoryView): CommandDispatcher | undefined {
+    return repositoryDispatchers.get(repository)?.command;
+  },
+
+  eventDispatcher(repository: RepositoryView): EventDispatcher | undefined {
+    return repositoryDispatchers.get(repository)?.event;
+  },
 });
+
+interface RepositoryDispatchers {
+  readonly command: CommandDispatcher | undefined;
+  readonly event: EventDispatcher | undefined;
+}
+
+interface RepositoryRouting {
+  readonly commandSchemas: readonly MessageSchema[];
+  readonly eventSchemas: readonly MessageSchema[];
+  routeCommand(command: Command): RepositoryCommandRoute;
+  routeEvent(event: Event): RepositoryEventRoute;
+}
+
+type RepositoryHandlersOption =
+  EntityHandlersMetadata | readonly EntityHandlersMetadata[] | undefined;
+
+function createRepositoryDispatchers(
+  repository: RepositoryView & {
+    routeCommand(command: Command): RepositoryCommandRoute;
+    routeEvent(event: Event): RepositoryEventRoute;
+  },
+  routing: RepositoryRouting,
+): RepositoryDispatchers {
+  return Object.freeze({
+    command:
+      routing.commandSchemas.length === 0
+        ? undefined
+        : Object.freeze({
+            messageSchemas: () => routing.commandSchemas,
+            dispatch: (command: Command): Promise<void> => {
+              void repository.routeCommand(command);
+              return Promise.resolve();
+            },
+          }),
+    event:
+      routing.eventSchemas.length === 0
+        ? undefined
+        : Object.freeze({
+            messageSchemas: () => routing.eventSchemas,
+            dispatch: (event: Event): Promise<void> => {
+              void repository.routeEvent(event);
+              return Promise.resolve();
+            },
+          }),
+  });
+}
+
+function createRepositoryRouting(
+  entityType: RepositoryEntityType,
+  metadata: EntityMetadata,
+  handlersOption: RepositoryHandlersOption,
+): RepositoryRouting {
+  const handlers = normalizeHandlers(handlersOption);
+  validateHandlers(entityType, metadata, handlers);
+  const commandReadiness =
+    handlers.length === 0 ? undefined : CommandRegistrationReadiness.fromEntityHandlers(handlers);
+  const eventReadiness =
+    handlers.length === 0 ? undefined : EventRegistrationReadiness.fromEntityHandlers(handlers);
+  const commandSchemas = uniqueSchemas(
+    handlers.flatMap((handler) =>
+      handler.commandAssignments.map((assignment) => assignment.schema),
+    ),
+  );
+  const eventSchemas = uniqueSchemas(
+    handlers.flatMap((handler) => [
+      ...handler.eventSubscriptions.map((subscription) => subscription.schema),
+      ...handler.eventReactions.map((reaction) => reaction.schema),
+      ...handler.eventApplications.map((application) => application.schema),
+    ]),
+  );
+
+  return Object.freeze({
+    commandSchemas,
+    eventSchemas,
+    routeCommand: (command: Command) => routeCommand(command, commandReadiness, commandSchemas),
+    routeEvent: (event: Event) => routeEvent(event, eventReadiness, eventSchemas),
+  });
+}
+
+function normalizeHandlers(
+  handlersOption: RepositoryHandlersOption,
+): readonly EntityHandlersMetadata[] {
+  if (handlersOption === undefined) {
+    return Object.freeze([]);
+  }
+  if (isHandlersArray(handlersOption)) {
+    return Object.freeze([...handlersOption]);
+  }
+  return Object.freeze([handlersOption]);
+}
+
+function isHandlersArray(
+  value: RepositoryHandlersOption,
+): value is readonly EntityHandlersMetadata[] {
+  return Array.isArray(value);
+}
+
+function validateHandlers(
+  entityType: RepositoryEntityType,
+  metadata: EntityMetadata,
+  handlers: readonly EntityHandlersMetadata[],
+): void {
+  for (const handlersMetadata of handlers) {
+    if (
+      handlersMetadata.entityType !== entityType ||
+      handlersMetadata.entity.fullTypeName !== metadata.fullTypeName
+    ) {
+      throw new RepositoryIdentityError(
+        "ENTITY_SCHEMA_KIND_MISMATCH",
+        `Repository entity type "${entityType.name}" does not match the supplied handler metadata.`,
+      );
+    }
+  }
+}
+
+function uniqueSchemas(schemas: readonly MessageSchema[]): readonly MessageSchema[] {
+  const byTypeUrl = new Map<string, MessageSchema>();
+  for (const schema of schemas) {
+    byTypeUrl.set(deriveTypeUrl(schema), schema);
+  }
+  return Object.freeze([...byTypeUrl.values()]);
+}
+
+function routeCommand(
+  command: Command,
+  readiness: CommandRegistrationReadinessLookup | undefined,
+  schemas: readonly MessageSchema[],
+): RepositoryCommandRoute {
+  const message = command.message;
+  if (message === undefined || message.typeUrl === "") {
+    throw new Error("Repository command routing requires command.message.typeUrl.");
+  }
+
+  const schema = schemaForTypeUrl(schemas, message.typeUrl, "command");
+  const assignee = readiness?.findCommandAssignee(schema.typeName);
+  if (assignee === undefined) {
+    throw new Error(`Repository command routing has no assignee for "${schema.typeName}".`);
+  }
+
+  return Object.freeze({
+    entityId: readFirstFieldId(message, schema, "command"),
+    messageFullTypeName: schema.typeName,
+    invocation: "deferred",
+  });
+}
+
+function routeEvent(
+  event: Event,
+  readiness: EventRegistrationReadinessLookup | undefined,
+  schemas: readonly MessageSchema[],
+): RepositoryEventRoute {
+  const message = event.message;
+  if (message === undefined || message.typeUrl === "") {
+    throw new Error("Repository event routing requires event.message.typeUrl.");
+  }
+
+  const schema = schemaForTypeUrl(schemas, message.typeUrl, "event");
+  const hasReceiver =
+    (readiness?.findEventSubscribers(schema.typeName).length ?? 0) > 0 ||
+    (readiness?.findEventReactors(schema.typeName).length ?? 0) > 0 ||
+    (readiness?.findEventApplications(schema.typeName).length ?? 0) > 0;
+  if (!hasReceiver) {
+    throw new Error(`Repository event routing has no receiver for "${schema.typeName}".`);
+  }
+
+  return Object.freeze({
+    entityIds: Object.freeze([readProducerId(event) ?? readFirstFieldId(message, schema, "event")]),
+    messageFullTypeName: schema.typeName,
+    invocation: "deferred",
+  });
+}
+
+function schemaForTypeUrl(
+  schemas: readonly MessageSchema[],
+  typeUrl: string,
+  signalKind: "command" | "event",
+): MessageSchema {
+  const schema = schemas.find((candidate) => deriveTypeUrl(candidate) === typeUrl);
+
+  if (schema === undefined) {
+    throw new Error(`Repository ${signalKind} routing has no schema for "${typeUrl}".`);
+  }
+
+  return schema;
+}
+
+function readFirstFieldId(
+  message: NonNullable<Command["message"]>,
+  schema: MessageSchema,
+  signalKind: "command" | "event",
+): unknown {
+  const unpacked = unpackAny(message, schema);
+  const firstField = schema.fields[0];
+
+  if (unpacked === undefined || firstField === undefined) {
+    throw new Error(`Repository ${signalKind} routing requires a readable first field.`);
+  }
+
+  const value = (unpacked as Record<string, unknown>)[firstField.localName];
+  if (value === undefined || value === null) {
+    throw new Error(`Repository ${signalKind} routing requires a non-empty first field.`);
+  }
+
+  return value;
+}
+
+function readProducerId(event: Event): string | undefined {
+  const producerId = event.context?.producerId;
+  if (producerId === undefined) {
+    return undefined;
+  }
+
+  const userId = unpackAny(producerId, UserIdSchema);
+  return userId?.value === "" ? undefined : userId?.value;
+}
 
 function createRepositorySnapshot<EntityType extends RepositoryEntityType>(
   entityType: EntityType,

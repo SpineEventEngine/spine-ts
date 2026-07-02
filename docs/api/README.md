@@ -94,9 +94,20 @@ prototype metadata, so alias imports, member expressions, intermediate domain
 base classes, and explicitly reparented ES classes with matching same-realm
 prototype chains are treated as metadata. It opens state record storage only
 through `BoundedContextBuilder.build()`; direct repository registration is not
-public API. It does not create/find/store
-entities, route or dispatch messages, write inboxes, invoke handlers, manage
-caches, run catch-up, expose stands, or start buses/transports.
+public API. When explicit handler metadata is supplied, repository routing
+calculates deferred command and event routes by generated message full type name,
+readiness metadata, producer ID, or first-field ID. Bounded-context assembly
+registers repository dispatcher adapters internally so buses can enqueue against
+repository-owned routes without exposing registration internals. The repository
+surface does not create/find/store entities, invoke handlers, write inboxes,
+manage caches, run catch-up, expose stands, or start buses/transports.
+`AggregateStorage`, `AggregateStorageOptions`, `AggregateSnapshot`, and
+`AggregateHistory` form the minimal aggregate persistence seam. It writes latest
+snapshots through `StorageFactory`/`RecordStorage`, appends events through the
+storage event store, and reads aggregate history as an optional snapshot plus
+events after the snapshot version. It does not implement handler invocation,
+delivery, catch-up, read-side indexing, subscriptions, system events, or
+aggregate repository caching.
 Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field
@@ -232,9 +243,8 @@ interfaces fit together without adding new public API. That composition
 produces context-scoped metadata, command/event readiness views, immutable
 runtime-routing plans, and deterministic lifecycle state only. It deliberately
 does not expose a `Server` export, service routing, command/event/import bus
-behavior, repository dispatch, read-side execution, transport lifecycle,
-validation, delivery, integration-broker behavior, handler invocation, or Spine
-`Ack` mapping.
+behavior, handler invocation, read-side execution, transport lifecycle,
+validation, delivery, integration-broker behavior, or Spine `Ack` mapping.
 Write-side signal intake exports include `SignalKind`, `SignalIntakeResult`,
 `SignalIntakeAccepted`, `SignalIntakeAcceptedFor`, `SignalIntakeFailure`,
 `SignalIntakeFailureCode`, `SignalIntakeFailureDetails`,
