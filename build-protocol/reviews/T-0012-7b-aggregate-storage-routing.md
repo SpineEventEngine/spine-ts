@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round 25 re-review pending
+Status: complete
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -736,6 +736,22 @@ Round-24 status-fix commit: `99977ba`.
 Diff package:
 `.superpowers/sdd/review-80afb8f..99977ba.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
 
-Result: pending.
+- code style/maintainability:
+  `019f2173-414f-75e2-b54b-0c528d56a0c5`;
+- documentation: `019f2173-423f-7fc3-8cfb-3077e6021f48`;
+- TypeScript/API docs: `019f2173-42b6-7140-bf4e-60582b056120`;
+- security: `019f2173-434b-7f73-adf5-1b7911f6b507`;
+- performance/reliability:
+  `019f2173-43ff-7771-892c-53925837a14b`.
+
+Result: clean.
+
+All five round-25 reviewer sub-agents were closed after their reports were
+collected.
+
+Final task verification passed after the clean round-25 review: focused tests
+for aggregate storage, repository routing, event store, and event bus;
+`typecheck`; `lint`; `format:check`; `docs:check`; `git diff --check`; and the
+targeted stale round-25 status scan.

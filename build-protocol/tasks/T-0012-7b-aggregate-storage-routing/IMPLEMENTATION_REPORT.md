@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round-25 re-review pending
+Status: complete
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -265,8 +265,23 @@ Verification after the round-24 status fix:
 - `git diff --check` passed.
 - The targeted stale-status phrase scan returned no matches.
 
-Round-24 status-fix commit: `99977ba`. Round-25 re-review is pending against
+Round-24 status-fix commit: `99977ba`. Round-25 re-review completed cleanly against
 `.superpowers/sdd/review-80afb8f..99977ba.diff`.
+
+All five round-25 reviewer sub-agents were closed after their reports were
+collected.
+
+Final task verification:
+
+- `corepack pnpm test packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts packages/storage/test/event-store.test.ts packages/server/test/bus/event-bus.test.ts`
+  passed with 3 files and 46 tests.
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm lint` passed.
+- `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
+  warning and expected export counts.
+- `git diff --check` passed.
+- The targeted stale round-25 status scan returned no matches.
 
 Round-17 fix commit: `822d358`. Round-18 re-review completed against
 `.superpowers/sdd/review-d7b9245..822d358.diff`.

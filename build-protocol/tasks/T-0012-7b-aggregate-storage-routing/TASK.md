@@ -1,6 +1,6 @@
 # T-0012.7b: Aggregate Storage And Signal Routing
 
-Status: round-25 re-review pending
+Status: complete
 Start: `2026-07-02 06:20 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7b-aggregate-storage-routing`
@@ -235,6 +235,15 @@ Required evidence for this task:
 - Required round-24 status-only verification passed: `format:check`,
   `git diff --check`, and the targeted stale-status phrase scan.
 - Round-24 status-fix commit: `99977ba`.
-- Round-25 reviewer sub-agents are pending against
+- Round-25 reviewer sub-agents completed cleanly against
   `.superpowers/sdd/review-80afb8f..99977ba.diff`.
+- All five round-25 reviewer sub-agents were closed after their reports were
+  collected.
+- Final task verification passed:
+  `corepack pnpm test packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts packages/storage/test/event-store.test.ts packages/server/test/bus/event-bus.test.ts`
+  passed with 3 files and 46 tests; `corepack pnpm typecheck` passed;
+  `corepack pnpm lint` passed; `corepack pnpm format:check` passed;
+  `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
+  warning and expected export counts; `git diff --check` passed; and the
+  targeted stale round-25 status scan returned no matches.
 - No blocking human question is known.
