@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round 18 fixes in progress
+Status: round 19 fixes in progress
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -510,7 +510,7 @@ Reviewer sub-agents:
 
 Result: changes requested. Security and performance/reliability were clean.
 
-Findings being addressed in the round-18 fix pass:
+Findings addressed in the round-18 fix pass:
 
 - aggregate append opened an event-store handle before all throwable work was
   inside the `try/finally`;
@@ -537,6 +537,34 @@ Round-18 fix commit: `86b287e`.
 Diff package:
 `.superpowers/sdd/review-7dbec34..86b287e.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
 
-Result: pending.
+- code style/maintainability:
+  `019f214e-abe7-74f3-81d8-3583e4edaa1b`;
+- documentation: `019f214e-ca77-7533-8172-3e550404cd40`;
+- TypeScript/API docs: `019f214e-e712-70f0-bf42-8fc466806ba8`;
+- security: `019f214f-019d-7b23-85ee-60bf98b9cfe3`;
+- performance/reliability:
+  `019f214f-1d71-7ad1-8c25-7fd445fd32b1`.
+
+Result: changes requested. Code style/maintainability and TypeScript/API docs
+were clean.
+
+Findings being addressed in the round-19 fix pass:
+
+- review/task/report status text was stale after the round-18 commit;
+- architecture docs omitted independently closeable in-memory storage handles;
+- the server README summary did not state the exact EventBus order;
+- `AggregateId` included `bigint`, but snapshot JSON encoding cannot store
+  bigint values;
+- `readHistory()` did not reject nonprimitive IDs before storage access;
+- aggregate stored-history reads accepted whitespace-only event IDs; and
+- `EventBus` prechecked event identity and appended through separate
+  `EventStore` calls that could snapshot different tenant contexts.
+
+All five round-19 reviewers were closed after their reports were collected.
+
+Verification after the round-19 fix pass passed: focused storage event-store,
+storage factory, storage index, server event-bus, server bus API, server root
+API, handler metadata, aggregate-storage, and repository-routing tests,
+`typecheck`, `lint`, `format:check`, `docs:check`, and `git diff --check`.

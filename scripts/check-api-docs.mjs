@@ -140,6 +140,7 @@ const expectedStorageExports = [
   "EventStore",
   "InMemoryRecordStorage",
   "InMemoryStorageFactory",
+  "OnEventAccepted",
   "RecordColumn",
   "RecordFilter",
   "RecordMask",

@@ -415,10 +415,10 @@ to subscribers, or implement retry/bus behavior.
 
 `InMemoryStorageFactory` and `InMemoryRecordStorage` are the first
 test/development adapter. They are process-local, share backing records by
-factory, context name, tenant mode, tenant ID, and `RecordSpec` instance, and
-clone stored values so later caller mutation cannot affect stored records.
-Payloads must remain cloneable, which preserves byte arrays used by packed
-Protobuf `Any` payloads.
+factory, context name, tenant mode, tenant ID, and `RecordSpec` instance,
+return independently closeable handles, and clone stored values so later caller
+mutation cannot affect stored records. Payloads must remain cloneable, which
+preserves byte arrays used by packed Protobuf `Any` payloads.
 
 Aggregate snapshot/history storage is available through the current
 `AggregateStorage` seam. Delivery records, tenant indexes, diagnostics,

@@ -7,11 +7,12 @@ import { packAny, packEvent } from "@spine-ts/core";
 import {
   EventContextSchema,
   EventIdSchema,
+  type Event,
   UserIdSchema,
   VersionSchema,
   file_spine_options,
 } from "@spine-ts/proto";
-import { EventStore, InMemoryStorageFactory } from "@spine-ts/storage";
+import { EventStore, InMemoryStorageFactory, type OnEventAccepted } from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
 import { EventBus, type EventDispatcher } from "../../src/index.js";
@@ -121,8 +122,10 @@ describe("EventBus", () => {
   it("does not invoke dispatchers when EventStore append fails", async () => {
     const observed: string[] = [];
     const store = {
-      accept: () => Promise.resolve(),
-      append: () => Promise.reject(new Error("append failed")),
+      acceptThenAppend: async (event: Event, onAccepted: OnEventAccepted) => {
+        await onAccepted(event);
+        throw new Error("append failed");
+      },
     } as unknown as EventStore;
     const bus = new EventBus(store, [
       createEventDispatcher([ProjectionStateSchema], (event) => {
@@ -133,6 +136,37 @@ describe("EventBus", () => {
     await expect(bus.post(createProjectionEvent("event-4"))).rejects.toThrow("append failed");
 
     expect(observed).toEqual([]);
+  });
+
+  it("uses one tenant context snapshot for acceptance and append", async () => {
+    let currentTenantId = "tenant-a";
+    const store = new EventStore(
+      {
+        name: "Tasks",
+        multitenant: true,
+        get tenantId() {
+          return currentTenantId;
+        },
+      },
+      new InMemoryStorageFactory(),
+    );
+    const bus = new EventBus(store, [
+      {
+        messageSchemas: () => [ProjectionStateSchema],
+        accept: () => {
+          currentTenantId = "tenant-b";
+          return Promise.resolve();
+        },
+        dispatch: () => Promise.resolve(),
+      },
+    ]);
+
+    await bus.post(createProjectionEvent("event-tenant-captured"));
+
+    currentTenantId = "tenant-a";
+    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-tenant-captured" } }]);
+    currentTenantId = "tenant-b";
+    await expect(store.read()).resolves.toEqual([]);
   });
 
   it("validates matching dispatchers before storing events", async () => {

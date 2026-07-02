@@ -11,13 +11,16 @@ The package owns the first corrected storage layer:
 - `InMemoryStorageFactory` and `InMemoryRecordStorage` are the first concrete
   adapter, with storage objects from the same factory and `RecordSpec` instance
   sharing one process-local backing record set per context name, tenant mode,
-  and tenant ID;
+  and tenant ID while returning independently closeable handles;
 - `EventStore` is a framework delegate over `RecordStorage<EventId, Event>`.
 
 `EventStore` is storage-only in this task. It persists and reads `Event`
 records and rejects missing, blank, or duplicate event IDs for one
 factory/context append path, but it does not implement event-bus dispatch,
 delivery queues, subscriber fan-out, or retry behavior.
+`acceptThenAppend(event, onAccepted)` lets bus code keep the event precheck,
+caller acceptance, and append on one captured storage context without making the
+store own dispatch.
 
 The package stays independent of `@spine-ts/server`. Storage scoping uses a
 small structural `StorageContext` with `name`, `multitenant`, and optional

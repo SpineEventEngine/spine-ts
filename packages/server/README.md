@@ -64,9 +64,8 @@ Current slice exposes:
   type URL.
 - `EventBus` for async event posting through an injected `EventStore` to
   matching registered `EventDispatcher`s in deterministic registration order.
-  Matching dispatchers may reject an event through `accept()` before storage;
-  accepted events are appended before `dispatch()` is called, and events with
-  no dispatcher are still stored.
+  The bus runs `EventStore.acceptThenAppend()`, dispatcher `accept()` hooks,
+  append, and then `dispatch()`; events with no dispatcher are still stored.
 - `createServerRuntimeRoutingPlan({ context, commands, events })` for the
   smallest immutable server/runtime wiring seam from built bounded-context
   metadata plus command/event readiness to transport topics, subscriptions,

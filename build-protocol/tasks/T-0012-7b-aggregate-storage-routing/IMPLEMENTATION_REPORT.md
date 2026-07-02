@@ -211,7 +211,7 @@ Verification after the round-9 fix pass:
   warning.
 - `git diff --check` passed.
 
-Round-17 fix commit: `822d358`. Round-18 re-review is pending against
+Round-17 fix commit: `822d358`. Round-18 re-review completed against
 `.superpowers/sdd/review-d7b9245..822d358.diff`.
 
 Round 18 requested fixes for aggregate append handle lifetime, aggregate append
@@ -238,6 +238,29 @@ Verification after the round-18 fix pass:
 
 Round-18 fix commit: `86b287e`. Round-19 re-review is pending against
 `.superpowers/sdd/review-7dbec34..86b287e.diff`.
+
+Round 19 requested fixes for stale round-18/round-19 log text, missing
+close-independent handle wording in architecture docs, the short EventBus README
+summary, `bigint` in the public `AggregateId` type despite JSON snapshot
+encoding, delayed `readHistory()` primitive-ID validation, whitespace event IDs
+in stored aggregate history, and separate EventStore context snapshots between
+EventBus precheck and append. The fix keeps `AggregateId` to
+`string | number | boolean`, validates `readHistory()` IDs before storage
+access, rejects whitespace event IDs when reading aggregate history, and adds
+`EventStore.acceptThenAppend()` so EventBus precheck, dispatcher acceptance, and
+append share one captured storage context.
+
+Verification after the round-19 fix pass:
+
+- Focused storage event-store/factory/index, server bus/API, handler metadata,
+  aggregate-storage, and repository-routing tests passed with 9 files and
+  83 tests.
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm lint` passed.
+- `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
+  warning and verified 15 expected `@spine-ts/storage` exports.
+- `git diff --check` passed.
 
 Round 10 requested a documentation/status cleanup and a reliability fix for
 duplicate aggregate event IDs. The reliability fix rejects missing or duplicate

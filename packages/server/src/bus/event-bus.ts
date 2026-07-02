@@ -48,11 +48,9 @@ export class EventBus {
     }
 
     const dispatchers = this.#registry.find(typeUrl);
-    await this.#eventStore.accept(event);
-    await this.#accept(event, dispatchers);
-
-    const stored = clone(EventSchema, event);
-    await this.#eventStore.append(stored);
+    const stored = await this.#eventStore.acceptThenAppend(event, (accepted) =>
+      this.#accept(accepted, dispatchers),
+    );
 
     for (const dispatcher of dispatchers) {
       await dispatcher.dispatch(clone(EventSchema, stored));

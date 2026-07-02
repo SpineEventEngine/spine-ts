@@ -130,6 +130,7 @@ export class AggregateStorage<
 
   /** Read latest snapshot and the events after it for one aggregate. */
   async readHistory(aggregateId: Id): Promise<AggregateHistory<Schema, Id>> {
+    requirePrimitiveId(aggregateId);
     const context = snapshotStorageContext(this.#context);
     const snapshot = await this.#readSnapshot(context, aggregateId);
     const snapshotVersion = snapshot?.version ?? -1n;
@@ -204,6 +205,7 @@ export class AggregateStorage<
         }
 
         const version = requireEventVersion(event);
+        requireEventId(event);
         events.push(Object.freeze({ event, version }));
       }
     } finally {
@@ -362,7 +364,7 @@ interface VersionedEvent {
 }
 
 /** Primitive aggregate identifier supported by the current aggregate storage seam. */
-export type AggregateId = string | number | boolean | bigint;
+export type AggregateId = string | number | boolean;
 
 const snapshotRecordTypeUrl = "type.spine-ts.dev/internal/AggregateSnapshotRecord";
 
@@ -495,7 +497,7 @@ function requireEventVersion(event: Event): bigint {
 
 function requireEventId(event: Event): string {
   const value = event.id?.value;
-  if (value === undefined || value === "") {
+  if (value === undefined || value.trim().length === 0) {
     throw new Error("Aggregate event routing requires a readable event ID.");
   }
   return value;
@@ -532,12 +534,7 @@ function sameSnapshotId(left: unknown, right: unknown): boolean {
 }
 
 function primitiveId(value: unknown): AggregateId | undefined {
-  if (
-    typeof value === "string" ||
-    typeof value === "number" ||
-    typeof value === "boolean" ||
-    typeof value === "bigint"
-  ) {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
     return value;
   }
   return undefined;

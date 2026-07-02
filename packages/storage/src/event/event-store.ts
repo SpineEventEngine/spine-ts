@@ -45,6 +45,20 @@ export class EventStore {
     await this.checkUnique([eventId(record)], context);
   }
 
+  /**
+   * Validate one event, run caller acceptance, and append using one captured
+   * storage context.
+   */
+  async acceptThenAppend(event: Event, onAccepted: OnEventAccepted): Promise<Event> {
+    const record = clone(EventSchema, event);
+    const context = snapshotContext(this.#context);
+
+    await this.checkUnique([eventId(record)], context);
+    await onAccepted(clone(EventSchema, record));
+    await this.appendUnique([record], context);
+    return clone(EventSchema, record);
+  }
+
   /** Append one generated Spine event, rejecting missing, blank, or duplicate IDs. */
   async append(event: Event): Promise<void> {
     await this.appendUnique([clone(EventSchema, event)], snapshotContext(this.#context));
@@ -101,6 +115,9 @@ export class EventStore {
     }
   }
 }
+
+/** Callback invoked after `EventStore` prechecks an event and before append. */
+export type OnEventAccepted = (event: Event) => Promise<void> | void;
 
 const EventStoreLocks = Object.freeze({
   queues: new WeakMap<StorageFactory, Map<string, Promise<void>>>(),

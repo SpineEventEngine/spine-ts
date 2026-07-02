@@ -14,6 +14,7 @@ import {
   EventContextSchema,
   EventIdSchema,
   EventSchema,
+  type Event,
   UserIdSchema,
   VersionSchema,
   file_spine_options,
@@ -612,6 +613,37 @@ describe("AggregateStorage", () => {
     ).rejects.toThrow(/version gaps/);
   });
 
+  it("rejects whitespace event IDs already present in stored aggregate history", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new CorruptEventFactory(
+        createAggregateEvent("   ", "task-corrupt-event-id", 1),
+      ),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(storage.readHistory("task-corrupt-event-id")).rejects.toThrow(/readable event ID/);
+    await expect(
+      storage.appendEvents("task-corrupt-event-id", [
+        createAggregateEvent("event-after-corrupt-id", "task-corrupt-event-id", 2),
+      ]),
+    ).rejects.toThrow(/readable event ID/);
+  });
+
+  it("rejects nonprimitive read-history IDs before storage access", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(storage.readHistory({ value: "task-object" } as never)).rejects.toThrow(
+      /primitive values/,
+    );
+  });
+
   it("rejects duplicate event IDs before appending", async () => {
     const storage = new AggregateStorage({
       context: { name: "Tasks", multitenant: false },
@@ -999,6 +1031,26 @@ class CorruptSnapshotFactory extends InMemoryStorageFactory {
   }
 }
 
+class CorruptEventFactory extends InMemoryStorageFactory {
+  #openedSnapshotStorage = false;
+
+  constructor(readonly event: Event) {
+    super();
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    if (!this.#openedSnapshotStorage) {
+      this.#openedSnapshotStorage = true;
+      return new InMemoryRecordStorage(context, recordSpec);
+    }
+
+    return new CorruptEventStorage(context, recordSpec, this.event as unknown as R);
+  }
+}
+
 class CorruptSnapshotStorage<I, R extends Message> extends RecordStorage<I, R> {
   constructor(
     context: StorageContext,
@@ -1018,6 +1070,36 @@ class CorruptSnapshotStorage<I, R extends Message> extends RecordStorage<I, R> {
 
   protected readRecord(): Promise<R | undefined> {
     return Promise.resolve(this.record);
+  }
+
+  protected writeAllRecords(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  protected writeRecord(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+class CorruptEventStorage<I, R extends Message> extends RecordStorage<I, R> {
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    readonly event: R,
+  ) {
+    super(context, recordSpec);
+  }
+
+  protected deleteRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected queryRecords(): Promise<readonly R[]> {
+    return Promise.resolve([this.event]);
+  }
+
+  protected readRecord(): Promise<R | undefined> {
+    return Promise.resolve(undefined);
   }
 
   protected writeAllRecords(): Promise<void> {
