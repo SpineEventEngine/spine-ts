@@ -1,6 +1,6 @@
 # T-0012: Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.6 integrated; T-0012.7 selected
+Status: T-0012.7 integrated; T-0012.7b selected
 Start: `2026-07-01 16:48 WEST`
 Baseline commit: `a9769d4`
 Branch: `task/T-0012-cleanup-replan`
@@ -89,7 +89,7 @@ escalated `env CI=true corepack pnpm verify`. Parent verification after
 integration also passed with 32 test files, 294 tests, coverage above 90%,
 docs/API checks, proto lint/generate, and generated-clean comparison.
 
-Next selected subtask: `T-0012.5 CommandBus, EventBus, And Handler Registration`.
+Next selected subtask: `T-0012.7b Aggregate Storage And Signal Routing`.
 
 ## T-0012.2 Selection Rationale
 
@@ -390,6 +390,15 @@ Acceptance:
 - Repositories own storage, routing, lifecycle, and dispatch entry points.
 - Aggregate loading uses snapshot plus events.
 - Query visibility follows entity kind and Spine options.
+
+Subtask split:
+
+- `T-0012.7 Repository Registration And Storage Opening` is integrated. It made
+  `BoundedContext` own repository registration and open repository
+  `RecordStorage`.
+- `T-0012.7b Aggregate Storage And Signal Routing` remains before delivery. It
+  must add aggregate snapshot-plus-events storage and route command/event
+  signals to repositories without adding `Inbox`, `Stand`, or gRPC behavior.
 
 ### T-0012.8 Delivery And Inbox
 

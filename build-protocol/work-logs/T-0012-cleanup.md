@@ -1,6 +1,6 @@
 # Work Log: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.6 integrated; T-0012.7 selected
+Status: T-0012.7 integrated; T-0012.7b selected
 
 ## Entries
 
@@ -24,6 +24,7 @@ Status: T-0012.6 integrated; T-0012.7 selected
 | `2026-07-01 22:56 WEST` | Main orchestrator     | Verified parent branch after `T-0012.5` integration.                                          | Escalated `env CI=true corepack pnpm verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Passed with 35 test files, 302 tests, coverage statements 95.61%, branches 90.08%, functions 98.37%, lines 95.60%, docs/API checks with existing invalid-`origin` TypeDoc warning only, proto lint/generate, and generated-clean comparison.                                                                                                                                             |
 | `2026-07-01 23:38 WEST` | Main orchestrator     | Integrated `T-0012.6` and selected next subtask.                                              | Merged `task/T-0012-6-bounded-context-assembly` into parent branch; updated parent task/report/review/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                              | `T-0012.6` is complete with all review lanes clean and escalated `env CI=true corepack pnpm verify` passing at task branch HEAD. Next selected subtask is `T-0012.7 Entities, Repositories, Routing, And Aggregate Storage`.                                                                                                                                                             |
 | `2026-07-01 23:39 WEST` | Main orchestrator     | Verified parent branch after `T-0012.6` integration.                                          | Escalated `env CI=true corepack pnpm verify`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Passed with 35 test files, 276 tests, coverage statements 95.45%, branches 90.37%, functions 96.81%, lines 95.44%, docs/API checks with existing invalid-`origin` TypeDoc warning only, proto lint/generate, and generated-clean comparison.                                                                                                                                             |
+| `2026-07-02 06:18 WEST` | Main orchestrator     | Integrated `T-0012.7` and selected next subtask.                                              | Merged `task/T-0012-7-entities-repositories-routing` into parent branch; updated task/report/review/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                                | `T-0012.7` is complete with all review lanes clean and escalated `env CI=true corepack pnpm verify` passing at task branch HEAD. The slice intentionally covered repository registration and storage opening only. Next selected subtask is `T-0012.7b Aggregate Storage And Signal Routing`.                                                                                            |
 
 ## Current State
 
@@ -36,12 +37,14 @@ Status: T-0012.6 integrated; T-0012.7 selected
 - `T-0012.4 Storage Factory And Record Storage Reset` is integrated.
 - `T-0012.5 CommandBus, EventBus, And Handler Registration` is integrated.
 - `T-0012.6 BoundedContext Assembly` is integrated.
+- `T-0012.7 Repository Registration And Storage Opening` is integrated.
 - Next selected implementable cleanup subtask is
-  `T-0012.7 Entities, Repositories, Routing, And Aggregate Storage`.
+  `T-0012.7b Aggregate Storage And Signal Routing`.
 - Parent verification passed after `T-0012.1` integration.
 - Parent verification passed after `T-0012.2` integration.
 - Parent verification passed after `T-0012.3` integration.
 - Parent verification passed after `T-0012.4` integration.
 - Parent verification passed after `T-0012.5` integration.
 - Parent verification passed after `T-0012.6` integration.
+- Parent verification passed at `T-0012.7` task branch HEAD before integration.
 - No blocking human question is known.

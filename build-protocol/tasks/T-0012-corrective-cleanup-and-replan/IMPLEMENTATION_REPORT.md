@@ -1,6 +1,6 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.6 integrated; T-0012.7 selected
+Status: T-0012.7 integrated; T-0012.7b selected
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
@@ -176,12 +176,13 @@ Inspected notes and source confirm:
    JVM-like mandatory seam and add event store.
 5. `T-0012.5 CommandBus, EventBus, And Handler Registration`.
 6. `T-0012.6 BoundedContext Assembly`.
-7. `T-0012.7 Entities, Repositories, Routing, And Aggregate Storage`.
-8. `T-0012.8 Delivery And Inbox`.
-9. `T-0012.9 Stand And Entity Updates`.
-10. `T-0012.10 Real gRPC Services`.
-11. `T-0012.11 Missing Details And Example Readiness`.
-12. `T-0012.12 To-Do Example`.
+7. `T-0012.7 Repository Registration And Storage Opening`.
+8. `T-0012.7b Aggregate Storage And Signal Routing`.
+9. `T-0012.8 Delivery And Inbox`.
+10. `T-0012.9 Stand And Entity Updates`.
+11. `T-0012.10 Real gRPC Services`.
+12. `T-0012.11 Missing Details And Example Readiness`.
+13. `T-0012.12 To-Do Example`.
 
 ## First Selected Subtask
 
