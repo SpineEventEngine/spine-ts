@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round 21 fixes in progress
+Status: round 22 fixes verified
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -624,7 +624,7 @@ Reviewer sub-agents:
 Result: changes requested. TypeScript/API docs, security, and
 performance/reliability were clean.
 
-Findings being addressed in the round-21 fix pass:
+Findings addressed in the round-21 fix pass:
 
 - review/task/report status text was stale after the round-20 commit.
 
@@ -640,6 +640,27 @@ Round-21 status-fix commit: `45842a6`.
 Diff package:
 `.superpowers/sdd/review-e2ad18d..45842a6.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
 
-Result: pending.
+- code style/maintainability:
+  `019f2163-bf7c-7a10-ae5e-d1d8c71b3e69`;
+- documentation: `019f2163-d722-7753-abe1-85bbe8b46dbb`;
+- TypeScript/API docs: `019f2163-f2f1-7c92-9309-99ab44594591`;
+- security: `019f2164-082f-72a0-92dd-96a6910b431f`;
+- performance/reliability:
+  `019f2164-1ebd-7b60-9e4e-873835c77519`.
+
+Result: changes requested. TypeScript/API docs and security were clean.
+
+Findings addressed in the round-22 fix pass:
+
+- review-log status was stale after the round-21 commit;
+- the round-21 section still used in-progress wording after verification and
+  commit; and
+- the implementation report had old completed re-review entries phrased as
+  pending.
+
+All five round-22 reviewers were closed after their reports were collected.
+
+Verification after the round-22 status fix passed: `format:check` and
+`git diff --check`.

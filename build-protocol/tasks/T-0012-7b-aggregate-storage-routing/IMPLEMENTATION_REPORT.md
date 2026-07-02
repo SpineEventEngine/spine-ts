@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round-22 re-review pending
+Status: round-22 fixes verified
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -211,7 +211,7 @@ Verification after the round-9 fix pass:
   warning.
 - `git diff --check` passed.
 
-Round-20 fix commit: `2c70c67`. Round-21 re-review is pending against
+Round-20 fix commit: `2c70c67`. Round-21 re-review completed against
 `.superpowers/sdd/review-083feaa..2c70c67.diff`.
 
 Round 21 requested only status-log fixes. TypeScript/API docs, security, and
@@ -224,8 +224,19 @@ Verification after the round-21 status fix:
 - `git diff --check` passed.
 - Stale-status phrase scan over the task/review/report/work logs passed.
 
-Round-21 status-fix commit: `45842a6`. Round-22 re-review is pending against
+Round-21 status-fix commit: `45842a6`. Round-22 re-review completed against
 `.superpowers/sdd/review-e2ad18d..45842a6.diff`.
+
+Round 22 requested only status-log wording fixes. TypeScript/API docs and
+security were clean; documentation, maintainability, and
+performance/reliability found stale review-log status, stale in-progress
+wording after round-21 verification, and completed re-review entries still
+phrased as pending.
+
+Verification after the round-22 status fix:
+
+- `corepack pnpm format:check` passed.
+- `git diff --check` passed.
 
 Round-17 fix commit: `822d358`. Round-18 re-review completed against
 `.superpowers/sdd/review-d7b9245..822d358.diff`.
@@ -252,7 +263,7 @@ Verification after the round-18 fix pass:
   warning and verified 135 expected `@spine-ts/server` exports.
 - `git diff --check` passed.
 
-Round-18 fix commit: `86b287e`. Round-19 re-review is pending against
+Round-18 fix commit: `86b287e`. Round-19 re-review completed against
 `.superpowers/sdd/review-7dbec34..86b287e.diff`.
 
 Round 19 requested fixes for stale round-18/round-19 log text, missing
@@ -278,7 +289,7 @@ Verification after the round-19 fix pass:
   warning and verified 15 expected `@spine-ts/storage` exports.
 - `git diff --check` passed.
 
-Round-19 fix commit: `973a3f6`. Round-20 re-review is pending against
+Round-19 fix commit: `973a3f6`. Round-20 re-review completed against
 `.superpowers/sdd/review-fc6c31d..973a3f6.diff`.
 
 Round 20 requested fixes for stale review/task status text,
