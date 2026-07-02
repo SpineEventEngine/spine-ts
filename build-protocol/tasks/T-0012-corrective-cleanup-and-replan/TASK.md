@@ -99,6 +99,12 @@ It fixed the bounded-context observing fixture for EventStore batch writes,
 passed all review lanes, and passed escalated `env CI=true corepack pnpm
 verify`.
 
+Parent tracked-state verification passed after `T-0012.7c` integration:
+check-node, typecheck, lint, tracked-file formatting, tests, coverage,
+docs/API, proto lint/generate/clean, and `git diff --check`. The unrelated
+untracked root file `human-review-1-jul.md` remains outside the autonomous task
+scope.
+
 Next selected subtask: `T-0012.8 Delivery And Inbox`.
 
 ## T-0012.2 Selection Rationale

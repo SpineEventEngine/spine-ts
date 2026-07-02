@@ -184,6 +184,11 @@ Inspected notes and source confirm:
 12. `T-0012.11 Missing Details And Example Readiness`.
 13. `T-0012.12 To-Do Example`.
 
+`T-0012.7b` and `T-0012.7c` are integrated. Parent tracked-state verification
+after `T-0012.7c` passed with 37 test files and 347 tests, coverage statements
+94.92%, branches 90.50%, functions 96.33%, and lines 94.93%. The next selected
+subtask is `T-0012.8 Delivery And Inbox`.
+
 ## First Selected Subtask
 
 Selected: `T-0012.1 Cleanup Enforcement Baseline`.
