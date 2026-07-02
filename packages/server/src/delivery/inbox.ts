@@ -78,7 +78,7 @@ export interface InboxMessageInput {
 export interface InboxReadOptions {
   /** Optional delivery statuses to keep. */
   readonly statuses?: readonly DeliveryStatus[];
-  /** Optional positive limit for one ordered page. */
+  /** Optional positive limit for one ordered page; defaults to a bounded page size. */
   readonly limit?: number;
 }
 

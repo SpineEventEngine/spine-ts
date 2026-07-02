@@ -15,7 +15,10 @@ export const RecordQuery: Readonly<{
 }> = Object.freeze({
   /** Validate a record query before execution. */
   validate<I>(query: RecordQuery<I>): void {
-    if (query.limit !== undefined && query.limit <= 0) {
+    if (
+      query.limit !== undefined &&
+      (!Number.isInteger(query.limit) || !Number.isFinite(query.limit) || query.limit <= 0)
+    ) {
       throw new Error("Record query limit must be positive.");
     }
   },

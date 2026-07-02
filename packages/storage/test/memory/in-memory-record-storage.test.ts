@@ -246,6 +246,9 @@ describe("InMemoryRecordStorage", () => {
     const storage = createStorage();
 
     await expect(storage.query({ limit: 0 })).rejects.toThrow(/positive/);
+    await expect(storage.query({ limit: Number.NaN })).rejects.toThrow(/positive/);
+    await expect(storage.query({ limit: Number.POSITIVE_INFINITY })).rejects.toThrow(/positive/);
+    await expect(storage.query({ limit: 1.5 })).rejects.toThrow(/positive/);
 
     const multitenant = createStorage({ name: "Tasks", multitenant: true });
     await expect(multitenant.query()).rejects.toThrow(/tenantId/);

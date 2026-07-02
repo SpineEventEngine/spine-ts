@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-2 fixes pending
+Status: round-2 fixes complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -26,6 +26,26 @@ types and storage-backed behavior:
   payload size before JSON serialization;
 - public export, README, and API-doc expectation updates for the new delivery
   surface.
+
+Round-2 fixes completed the remaining correctness and documentation gaps:
+
+- dedup guards now persist through explicit pending/final states so a fresh
+  claim is never treated as final before the inbox row is visible;
+- retrying writers can safely reclaim orphan pending guards by reusing the
+  claimed inbox message identity instead of creating a second live row for the
+  same `(signalId, inboxId)`;
+- missing-message dedup guards now raise
+  `DeliveryStorageCorruptionError` only after the pending/recovery path is
+  exhausted and the guard is truly final-but-broken;
+- inbox reads now enforce a bounded default page size when no explicit limit is
+  supplied;
+- `RecordQuery` limit validation now rejects non-integer, non-finite, and
+  non-positive values, with regression coverage;
+- `RecordStorage.compareAndSet()` is now documented as an atomic
+  cross-handle contract for one logical backing store, including conditional
+  delete semantics; and
+- the server/docs/work-log text now explicitly records the empty local delivery
+  proto directory and the delivery-slice exclusions.
 
 ## Verification
 

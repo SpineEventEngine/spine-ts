@@ -79,6 +79,13 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   /**
    * Compare the current stored record for one ID with an expected value and
    * write or delete only when they still match.
+   *
+   * Implementations must apply this atomically across independently opened
+   * storage handles that share the same logical backing store. Passing
+   * `undefined` as `next` performs a conditional delete. A `false` result means
+   * the current stored value did not match `expected`, so no mutation was
+   * applied. Adapters that cannot guarantee this behavior are not valid for
+   * delivery leasing or deduplication.
    */
   async compareAndSet(id: I, expected: R | undefined, next: R | undefined): Promise<boolean> {
     this.requireOpen();
