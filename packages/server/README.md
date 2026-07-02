@@ -36,6 +36,11 @@ Current slice exposes:
   snapshot/history seam, backed by `StorageFactory`, `RecordStorage`, and
   `EventStore`;
   and
+- `Delivery`, `Inbox`, `InboxStorage`, `ShardIndex`, `ShardSession`, and
+  `ShardedWorkRegistry` for the first durable delivery slice: inbox writes with
+  `(signalId, inboxId)` live deduplication, shard ordering metadata, a local
+  shard strategy, and storage-backed shard pickup/release over `RecordStorage`;
+- and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
 - first-field routing hints from descriptor order;

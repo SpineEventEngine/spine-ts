@@ -15,6 +15,30 @@ export { CommandBus } from "./bus/command-bus.js";
 export type { CommandDispatcher } from "./bus/command-dispatcher.js";
 export { EventBus } from "./bus/event-bus.js";
 export type { EventDispatcher } from "./bus/event-dispatcher.js";
+export {
+  Delivery,
+  LocalDeliveryStrategy,
+  type DeliveryOptions,
+  type DeliveryStrategy,
+} from "./delivery/delivery.js";
+export {
+  Inbox,
+  type DeliveryLabel,
+  type DeliveryStatus,
+  type InboxId,
+  type InboxMessage,
+  type InboxMessageId,
+  type InboxMessageInput,
+  type InboxReadOptions,
+  type InboxWriteResult,
+} from "./delivery/inbox.js";
+export { InboxStorage, type InboxStorageOptions } from "./delivery/inbox-storage.js";
+export { ShardIndex } from "./delivery/shard-index.js";
+export {
+  ShardedWorkRegistry,
+  ShardSession,
+  type ShardedWorkRegistryOptions,
+} from "./delivery/sharded-work-registry.js";
 
 export {
   Aggregate,

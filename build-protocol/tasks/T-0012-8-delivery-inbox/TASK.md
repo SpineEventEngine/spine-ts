@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: implementation pending
+Status: implemented
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -64,5 +64,5 @@ entityStateType)` returns a zero-based shard index and that all messages for
 
 ## Current State
 
-- Implementation sub-agent is pending.
+- Implementation and required verification completed in the task worktree.
 - No blocking human question is known.
