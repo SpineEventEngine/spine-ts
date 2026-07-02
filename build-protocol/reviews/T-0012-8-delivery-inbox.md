@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 21 review prep
+Status: round 22 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -840,6 +840,50 @@ Verification:
 
 Diff package:
 `.superpowers/sdd/review-round-21-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f224a-8894-75c0-890e-bc88dfa20b77`;
+- documentation: `019f224a-a294-7172-a836-0bb50c2f6967`;
+- TypeScript/API docs: `019f224a-c29f-7343-b94d-25d2748eae29`;
+- security: `019f224a-de01-7962-bc8c-cb10741e39e3`;
+- performance/reliability:
+  `019f224a-f9de-78e3-8044-2f82c6d8bd99`.
+
+Result: changes requested.
+
+Findings to address:
+
+- pending dedup claim serialization must enforce the signal payload cap;
+- inbox storage must reject a guard record whose decoded dedup key does not
+  match the storage key being read.
+
+Code style/maintainability, documentation, and TypeScript/API docs lanes were
+clean. All five round-21 reviewer sub-agents were closed after their reports
+were collected.
+
+### Round 21 Fix
+
+Result: implemented in this worktree and ready for round-22 review.
+
+Fix summary:
+
+- enforced the signal payload cap in shared inbox-message serialization used by
+  inbox rows and pending dedup claims;
+- added decoded guard-key/storage-key validation before reading a final guard
+  target row;
+- added regression tests for oversized pending dedup claims and wrong storage
+  key final guards.
+
+Verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts` passed with 18 tests.
+
+### Round 22
+
+Diff package:
+`.superpowers/sdd/review-round-22-fce80b2-current.diff`.
 
 Reviewer sub-agents: pending.
 

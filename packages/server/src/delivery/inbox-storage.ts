@@ -15,6 +15,7 @@ import {
   dedupRecordSpec,
   inboxRecordSpec,
   isPendingDedupRecord,
+  readDedupKey,
   readPendingMessage,
   readInboxMessage,
   writeDedupClaim,
@@ -228,6 +229,12 @@ export class InboxStorage {
     dedupKey: string,
     guard: Any,
   ): Promise<InboxMessage | undefined> {
+    if (readDedupKey(guard) !== dedupKey) {
+      throw new DeliveryStorageCorruptionError(
+        `Inbox dedup guard "${dedupKey}" does not match its storage key.`,
+      );
+    }
+
     const storedRecord = await inboxStorage.read(this.#messageKey(dedupMessageId(guard)));
     if (storedRecord === undefined) {
       return undefined;

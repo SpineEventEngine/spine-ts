@@ -242,6 +242,18 @@ describe("Inbox", () => {
     ).rejects.toThrow(/payload/i);
   });
 
+  it("rejects oversized signal payloads before serializing dedup claims", () => {
+    expect(() =>
+      writeDedupClaim({
+        ...createMessage("message-large", "signal-large", 1n),
+        signal: create(AnySchema, {
+          typeUrl: "type.example.dev/tasks.LargeSignal",
+          value: new Uint8Array(256 * 1024 + 1),
+        }),
+      }),
+    ).toThrow(/payload/i);
+  });
+
   it("fails closed when stored inbox records are malformed or invalid", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -456,6 +468,17 @@ describe("Inbox", () => {
 
     await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toThrow(
       DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("rejects a final dedup guard stored under another key", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new WrongStorageKeyGuardFactory(),
+    });
+
+    await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toThrow(
+      /storage key/i,
     );
   });
 });
@@ -837,6 +860,23 @@ class WrongTargetGuardFactory extends StorageFactory {
         inboxMessageId: "message-1",
       }),
       inbox: writeInboxMessage(createMessage("message-1", "signal-2", 1n)),
+    }) as unknown as RecordStorage<I, R>;
+  }
+}
+
+class WrongStorageKeyGuardFactory extends StorageFactory {
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new CorruptGuardStorage(context, recordSpec as unknown as RecordSpec<string, Any>, {
+      guard: finalDedupRecord({
+        key: testDedupKey("signal-2"),
+        inbox: testInboxKey,
+        signalId: "signal-2",
+        inboxMessageId: "message-1",
+      }),
+      inbox: writeInboxMessage(createMessage("message-1", "signal-1", 1n)),
     }) as unknown as RecordStorage<I, R>;
   }
 }

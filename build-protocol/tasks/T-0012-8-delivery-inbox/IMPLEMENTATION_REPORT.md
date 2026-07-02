@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-21 review prep
+Status: round-22 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -296,6 +296,23 @@ tests:
 
 Round-21 review package
 `.superpowers/sdd/review-round-21-fce80b2-current.diff` was prepared after
+those fixes.
+
+## Round 21 Review
+
+Round 21 found no code style/maintainability, documentation, or TypeScript/API
+docs issue. Performance/reliability requested enforcing the signal payload cap
+before pending dedup claim serialization. Security requested validating that the
+decoded dedup guard key matches the storage key being read.
+
+Round-21 fixes moved payload-size enforcement into shared inbox-message
+serialization and added dedup storage-key validation before guard target
+lookup. Focused inbox verification passed with 18 tests:
+
+`pnpm test packages/server/test/delivery/inbox.test.ts`.
+
+Round-22 review package
+`.superpowers/sdd/review-round-22-fce80b2-current.diff` was prepared after
 those fixes.
 
 ## Round 2 Review

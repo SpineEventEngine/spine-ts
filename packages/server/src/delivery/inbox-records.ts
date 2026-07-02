@@ -87,7 +87,6 @@ export function readInboxMessage(record: Any): InboxMessage {
 
 export function writeInboxMessage(message: InboxMessage): Any {
   validateInboxMessage(message);
-  assertSignalPayloadSize(message.signal);
   return packRecord(inboxRecordTypeUrl, storedInboxMessage(message));
 }
 
@@ -97,6 +96,10 @@ export function dedupGuardKey(message: Pick<InboxMessage, "inboxId" | "signalId"
 
 export function isPendingDedupRecord(record: Any): boolean {
   return readStoredDedupRecord(record).state === "PENDING";
+}
+
+export function readDedupKey(record: Any): string {
+  return readStoredDedupRecord(record).key;
 }
 
 function readStoredDedupRecord(record: Any): StoredDedupRecord {
@@ -224,6 +227,7 @@ function packRecord(typeUrl: string, value: StoredInboxMessage | StoredDedupReco
 
 function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
   validateInboxMessage(message);
+  assertSignalPayloadSize(message.signal);
 
   return Object.freeze({
     key: inboxMessageKey(message.id),

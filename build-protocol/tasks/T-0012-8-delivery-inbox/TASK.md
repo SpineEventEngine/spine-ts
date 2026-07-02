@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-21 review prep
+Status: round-22 review prep
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -248,4 +248,15 @@ entityStateType)` returns a zero-based shard index and that all messages for
   `pnpm test packages/server/test/delivery/inbox.test.ts`.
 - Round-21 review package is prepared at
   `.superpowers/sdd/review-round-21-fce80b2-current.diff`.
+- Round-21 review completed with security and performance/reliability
+  findings. Code style/maintainability, documentation, and TypeScript/API docs
+  lanes were clean.
+- All five round-21 reviewer sub-agents were closed after their reports were
+  collected.
+- Round-21 fixes enforce pending dedup payload limits and validate that the
+  decoded dedup guard key matches the storage key being read.
+- Focused inbox verification passed with 18 tests after the round-21 fix:
+  `pnpm test packages/server/test/delivery/inbox.test.ts`.
+- Round-22 review package is prepared at
+  `.superpowers/sdd/review-round-22-fce80b2-current.diff`.
 - No blocking human question is known.
