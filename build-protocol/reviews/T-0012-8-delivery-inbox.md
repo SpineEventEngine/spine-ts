@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 14 review pending
+Status: coverage fix review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -587,6 +587,42 @@ Fix summary:
 
 Diff package:
 `.superpowers/sdd/review-round-14-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2219-1220-7d91-a31a-b019724cb264`;
+- documentation: `019f2219-3692-7be3-a61f-fd1389d5d0fa`;
+- TypeScript/API docs: `019f2219-602f-7f01-a55d-30363a2b7025`;
+- security: `019f2219-7fb6-7800-84de-55cffc2309f7`;
+- performance/reliability:
+  `019f2219-9e44-72a1-ba83-62d9ce7b7ef3`.
+
+Result: clean.
+
+All five round-14 reviewer sub-agents were closed after their reports were
+collected. No reviewer requested changes.
+
+### Coverage Fix
+
+Implementation sub-agent:
+`019f221e-d165-7cf1-9d01-3182d3829ef2`.
+
+Result: implemented in this worktree and ready for round-15 review.
+
+Fix summary:
+
+- added focused test-only branch coverage for `ShardIndex`,
+  `ShardedWorkRegistry`, and `RecordSpec`;
+- no production code changed; and
+- escalated coverage now passes at the global branch threshold.
+
+The coverage-fix worker was closed after its report was collected.
+
+### Round 15
+
+Diff package:
+`.superpowers/sdd/review-round-15-fce80b2-current.diff`.
 
 Reviewer sub-agents: pending.
 

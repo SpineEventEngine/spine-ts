@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-14 review pending
+Status: coverage fix review prep
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -185,4 +185,16 @@ entityStateType)` returns a zero-based shard index and that all messages for
   collected.
 - Round-14 review package is prepared at
   `.superpowers/sdd/review-round-14-fce80b2-current.diff`.
+- Round-14 review completed cleanly across all five required lanes.
+- All five round-14 reviewer sub-agents were closed after their reports were
+  collected.
+- Final verification found a branch coverage gap: escalated `pnpm verify`
+  passed the full test suite but stopped at global branch coverage `88.04%`
+  against the `90%` threshold.
+- Coverage fix added focused test-only branch coverage for shard index, shard
+  registry, and record spec validation/clone behavior. The coverage-fix worker
+  was closed after reporting.
+- Coverage-fix verification passed with focused tests, typecheck, lint,
+  formatting, diff hygiene, and escalated `pnpm test:coverage` (`41` files /
+  `377` tests, branch coverage `90%`).
 - No blocking human question is known.

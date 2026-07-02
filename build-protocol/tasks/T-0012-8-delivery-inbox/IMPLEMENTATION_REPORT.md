@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-14 review pending
+Status: coverage fix review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -168,6 +168,43 @@ Round 13 found no code, API, security, or reliability issue. The documentation
 lane requested one durable-report correction: the Round 12 Review note in this
 report should explicitly name the round-13 package path. The Round 14 package
 includes that correction.
+
+## Round 14 Review
+
+Round 14 completed cleanly across code style/maintainability, documentation,
+TypeScript/API docs, security, and performance/reliability. No reviewer
+requested changes.
+
+## Final Verification Attempt
+
+Escalated `pnpm verify` passed all `39` test files and `364` tests, then
+stopped at the coverage gate because global branch coverage was `88.04%`
+against the required `90%`. The follow-up is focused test coverage for real
+delivery/storage validation branches, not a threshold change.
+
+## Coverage Fix
+
+Added focused test-only coverage for the remaining delivery/storage branches:
+
+- `packages/server/test/delivery/shard-index.test.ts` now covers invalid shard
+  index/count validation plus `single()` and `key()`;
+- `packages/server/test/delivery/sharded-work-registry.test.ts` now covers
+  invalid `leaseMs`, release false paths, corrupt stored shard-session records,
+  multitenant shard context behavior, default clock usage, and compare-and-set
+  retry paths for pickup and release; and
+- `packages/storage/test/record/record-spec.test.ts` now covers clone-method
+  use plus stable fallback errors for unclonable values and invalid record
+  clone fallback.
+
+Verification for the coverage fix passed after main-agent cleanup with:
+
+- `pnpm test packages/server/test/delivery/shard-index.test.ts packages/server/test/delivery/sharded-work-registry.test.ts packages/storage/test/record/record-spec.test.ts`
+- `pnpm typecheck`
+- `pnpm lint`
+- escalated `pnpm test:coverage` (`41` test files / `377` tests, branch
+  coverage `90%`)
+- `pnpm format:check`
+- `git diff --check`
 
 ## Round 2 Review
 
