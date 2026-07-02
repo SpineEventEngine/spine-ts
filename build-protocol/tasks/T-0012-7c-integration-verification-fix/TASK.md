@@ -1,6 +1,6 @@
 # T-0012.7c: Integration Verification Fix
 
-Status: implementation pending
+Status: implementation complete
 Start: `2026-07-02 07:32 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7c-integration-verification-fix`
@@ -46,5 +46,7 @@ Fix the integrated verification failure found after merging `T-0012.7b` to
 
 ## Current State
 
-- Implementation sub-agent is pending.
+- Implementation sub-agent completed and was closed after committing
+  `55f6460`.
+- Review round 1 is pending.
 - No blocking human question is known.

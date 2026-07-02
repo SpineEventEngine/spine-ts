@@ -1,6 +1,6 @@
 # Review Log: T-0012.7c Integration Verification Fix
 
-Status: implementation pending
+Status: review round 1 pending
 Branch: `task/T-0012-7c-integration-verification-fix`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7c-integration-verification-fix`
@@ -25,5 +25,7 @@ Reviewers must reject:
 - stale task/report/work-log state.
 
 ## Review Rounds
+
+### Round 1
 
 Pending.
