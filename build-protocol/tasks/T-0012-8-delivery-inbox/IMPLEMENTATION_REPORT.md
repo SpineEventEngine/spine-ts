@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-10 review prep
+Status: round-10 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -131,6 +131,8 @@ Round 9 requested keeping the shard-invariant helper private while preserving
 serializer-local protection. The invariant is now checked directly at the start
 of `InboxStorage.write()` and privately inside the shared inbox message
 serializer used by inbox and dedup records.
+
+Committed as `1d4db77` after focused verification passed.
 
 ## Round 2 Review
 

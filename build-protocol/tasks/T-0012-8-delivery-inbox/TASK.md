@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-10 review prep
+Status: round-10 review pending
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -147,4 +147,7 @@ entityStateType)` returns a zero-based shard index and that all messages for
 - Round-9 fix implemented in this worktree: the shard invariant check is local
   to `InboxStorage.write()` and the shared serializer path, without exporting a
   helper.
+- Round-9 fix committed as `1d4db77`.
+- Round-10 review package is prepared at
+  `.superpowers/sdd/review-b5fa82a..1d4db77.diff`.
 - No blocking human question is known.
