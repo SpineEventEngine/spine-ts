@@ -180,6 +180,7 @@ describe("@spine-ts/server", () => {
     expect(Object.keys(serverRoot).sort()).toEqual(
       [
         "Aggregate",
+        "AggregateStorage",
         "Apply",
         "Assign",
         "BoundedContext",

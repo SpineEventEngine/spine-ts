@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: review round 3 pending
+Status: review round 4 pending
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -89,4 +89,25 @@ All five round-2 reviewers were closed after their reports were collected.
 
 ### Round 3
 
-Pending re-review of `dcddec7..HEAD` after the round-2 fix commit.
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f20cc-161e-7af3-9864-d06791974164`;
+- documentation: `019f20cc-16c8-76c0-8a17-e5e14b777318`;
+- TypeScript/API docs: `019f20cc-1747-7f91-ae7a-d20481b4e75f`;
+- security: `019f20cc-17c6-7b52-852e-4bb13d7f9550`;
+- performance/reliability:
+  `019f20cc-1860-7e41-a857-4861b5a45f5a`.
+
+Result: clean. No Critical, Important, or Minor findings remained. All five
+round-3 reviewers were closed after their reports were collected.
+
+### Round 4
+
+Pending final review of the post-round-3 verification fix:
+
+- package-root export smoke test now includes `AggregateStorage`;
+- aggregate-storage tests cover first-field primitive routing, unroutable
+  events, corrupted internal snapshot records, and duplicate versions already
+  present in stored history; and
+- final full verification passed after the coverage-focused test additions.

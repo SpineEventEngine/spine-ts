@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: review round 2 fixes complete; verification passed
+Status: final verification passed; final review pending
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -121,6 +121,22 @@ Verification after the round-2 fix pass:
 - `corepack pnpm format:check` passed.
 - `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
   warning.
+
+Review round 3 passed in all five required lanes with no remaining findings.
+All round-3 reviewer sub-agents were closed.
+
+Final verification initially exposed two post-review issues: the package-root
+export smoke test did not include the new runtime `AggregateStorage` export, and
+branch coverage fell below the 90% threshold after adding aggregate storage. The
+fix updated the export smoke test and added focused aggregate-storage tests for
+first-field primitive routing, unroutable events, corrupted internal snapshot
+records, duplicate versions already stored in history, and event IDs that sort
+differently from aggregate versions.
+
+Final escalated `env CI=true corepack pnpm verify` passed. Evidence: 37 test
+files, 312 tests, statements 95.45%, branches 90.04%, functions 96.73%, lines
+95.49%. `docs:check` passed with the existing invalid-`origin` TypeDoc warning;
+proto lint/generate and generated-clean checks passed.
 
 ## Concerns
 
