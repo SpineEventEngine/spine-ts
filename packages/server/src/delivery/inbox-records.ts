@@ -150,6 +150,8 @@ export function writeDedupClaim(message: InboxMessage): Any {
 }
 
 export function writeDedupRecord(message: InboxMessage): Any {
+  validateInboxMessage(message);
+
   const stored: StoredFinalDedupRecord = {
     key: dedupGuardKey(message),
     inbox: inboxKey(message.inboxId),

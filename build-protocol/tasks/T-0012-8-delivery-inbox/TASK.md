@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-10 review pending
+Status: round-11 review prep
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -150,4 +150,12 @@ entityStateType)` returns a zero-based shard index and that all messages for
 - Round-9 fix committed as `1d4db77`.
 - Round-10 review package is prepared at
   `.superpowers/sdd/review-b5fa82a..1d4db77.diff`.
+- Round-10 review completed with maintainability, security, and
+  performance/reliability findings. Documentation and TypeScript/API docs were
+  clean.
+- All five round-10 reviewer sub-agents were closed after their reports were
+  collected.
+- Round-10 fix implemented in this worktree: final dedup serializer validates
+  the inbox message shard invariant, and direct dedup serializer tests cover
+  caller bypass attempts.
 - No blocking human question is known.

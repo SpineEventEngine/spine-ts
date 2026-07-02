@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 10 review pending
+Status: round 11 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -446,6 +446,34 @@ Fix summary:
 Diff package:
 `.superpowers/sdd/review-b5fa82a..1d4db77.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
 
-Result: pending.
+- code style/maintainability:
+  `019f2208-fb51-7e50-8459-49c13223a139`;
+- documentation: `019f2208-fbe4-7d70-95f4-01a28784ced1`;
+- TypeScript/API docs: `019f2208-fc78-7b30-9209-24d2181c68a5`;
+- security: `019f2208-fceb-7372-8981-8c9a39cdcf35`;
+- performance/reliability:
+  `019f2208-fd83-72a1-8bd6-387abaaa8281`.
+
+Result: changes requested.
+
+Findings to address:
+
+- `writeDedupRecord()` must also enforce the private shard-invariant check; and
+- tests should exercise direct dedup serializer bypasses for malformed
+  messages.
+
+Documentation and TypeScript/API docs lanes were clean. All five round-10
+reviewer sub-agents were closed after their reports were collected.
+
+### Round 10 Fix
+
+Result: implemented in this worktree and ready for round-11 review.
+
+Fix summary:
+
+- added the private shard-invariant validation to final dedup record
+  serialization; and
+- added direct serializer bypass coverage for both dedup claim and final dedup
+  records.

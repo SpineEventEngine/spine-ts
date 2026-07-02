@@ -11,6 +11,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
+import { writeDedupClaim, writeDedupRecord } from "../../src/delivery/inbox-records.js";
 import {
   Delivery,
   Inbox,
@@ -405,6 +406,20 @@ describe("Inbox", () => {
 
     await expect(write).rejects.toBeInstanceOf(InboxMessageError);
     await expect(write).rejects.toThrow(/shard/i);
+  });
+
+  it("rejects dedup serializers with mismatched shard identities", () => {
+    const message = {
+      ...createMessage("message-1", "signal-1", 1n),
+      id: {
+        value: "message-1",
+        shard: new ShardIndex(1, 2),
+      },
+      shard: new ShardIndex(0, 2),
+    };
+
+    expect(() => writeDedupClaim(message)).toThrow(InboxMessageError);
+    expect(() => writeDedupRecord(message)).toThrow(InboxMessageError);
   });
 
   it("uses the delivery corruption error only for a final dedup guard that still points to no inbox row", async () => {

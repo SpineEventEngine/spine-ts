@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-10 review pending
+Status: round-11 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -133,6 +133,16 @@ of `InboxStorage.write()` and privately inside the shared inbox message
 serializer used by inbox and dedup records.
 
 Committed as `1d4db77` after focused verification passed.
+
+## Round 10 Fix
+
+Round 10 found that final dedup record serialization could still bypass the
+private shard-invariant check. `writeDedupRecord()` now validates the same
+message invariant before encoding final dedup rows, and tests directly cover
+both dedup claim and final dedup serializers with mismatched shard identities.
+
+Implemented after focused delivery/index tests, typecheck, lint, docs check,
+format check, and diff hygiene passed.
 
 ## Round 2 Review
 
