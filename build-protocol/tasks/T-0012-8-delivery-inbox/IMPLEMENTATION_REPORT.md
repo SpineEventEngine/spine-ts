@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-11 review prep
+Status: round-11 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -143,6 +143,8 @@ both dedup claim and final dedup serializers with mismatched shard identities.
 
 Implemented after focused delivery/index tests, typecheck, lint, docs check,
 format check, and diff hygiene passed.
+
+Committed as `d419fd8` and prepared for round-11 review.
 
 ## Round 2 Review
 
