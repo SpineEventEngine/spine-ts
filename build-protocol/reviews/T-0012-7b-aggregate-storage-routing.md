@@ -568,3 +568,14 @@ Verification after the round-19 fix pass passed: focused storage event-store,
 storage factory, storage index, server event-bus, server bus API, server root
 API, handler metadata, aggregate-storage, and repository-routing tests,
 `typecheck`, `lint`, `format:check`, `docs:check`, and `git diff --check`.
+
+Round-19 fix commit: `973a3f6`.
+
+### Round 20
+
+Diff package:
+`.superpowers/sdd/review-fc6c31d..973a3f6.diff`.
+
+Reviewer sub-agents: pending.
+
+Result: pending.
