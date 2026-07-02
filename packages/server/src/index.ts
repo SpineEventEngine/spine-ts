@@ -120,6 +120,7 @@ export {
 
 export {
   AggregateStorage,
+  type AggregateId,
   type AggregateHistory,
   type AggregateSnapshot,
   type AggregateStorageOptions,

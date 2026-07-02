@@ -23,7 +23,10 @@ import type { EntityLifecycleFlags } from "../entity/entity.js";
  * aggregate ID and reject missing, duplicate, or non-increasing versions before
  * storing anything.
  */
-export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = string> {
+export class AggregateStorage<
+  Schema extends DescriptorMessageSchema,
+  Id extends AggregateId = string,
+> {
   readonly #context: StorageContext;
   readonly #eventSchemas: readonly MessageSchema[];
   readonly #storageFactory: StorageFactory;
@@ -55,38 +58,53 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
     aggregateId: Id,
     batch: readonly Event[],
   ): Promise<void> {
-    const expectedId = requirePrimitiveId(aggregateId);
-    const eventStore = this.#eventStore(context);
     const storedEvents = await this.#readAggregateEvents(context, aggregateId);
-    let lastVersion = storedEvents.at(-1)?.version ?? 0n;
-    const eventIds = new Set((await eventStore.read()).map((event) => requireEventId(event)));
+    const eventStore = this.#eventStore(context);
 
     try {
-      for (const event of batch) {
-        const eventId = requireEventId(event);
-        if (eventIds.has(eventId)) {
-          throw new Error("Aggregate event IDs must be unique before append.");
-        }
-        eventIds.add(eventId);
-
-        const eventAggregateId = this.#eventAggregateId(event);
-        if (eventAggregateId === undefined || !samePrimitiveId(eventAggregateId, expectedId)) {
-          throw new Error(
-            "Aggregate events must all route to the same aggregate ID before append.",
-          );
-        }
-
-        const version = requireEventVersion(event);
-        if (version !== lastVersion + 1n) {
-          throw new Error("Aggregate event versions must be strictly increasing and consecutive.");
-        }
-        lastVersion = version;
-      }
-
+      const eventIds = new Set((await eventStore.read()).map((event) => requireEventId(event)));
+      this.#validateBatch(aggregateId, batch, storedEvents.at(-1)?.version ?? 0n, eventIds);
       await eventStore.appendAll(batch);
     } finally {
       eventStore.close();
     }
+  }
+
+  #validateBatch(
+    aggregateId: Id,
+    batch: readonly Event[],
+    lastStoredVersion: bigint,
+    eventIds: Set<string>,
+  ): void {
+    let lastVersion = lastStoredVersion;
+    for (const event of batch) {
+      this.#acceptEventId(event, eventIds);
+      this.#acceptEventRoute(event, aggregateId);
+      lastVersion = this.#acceptEventVersion(event, lastVersion);
+    }
+  }
+
+  #acceptEventId(event: Event, eventIds: Set<string>): void {
+    const eventId = requireEventId(event);
+    if (eventIds.has(eventId)) {
+      throw new Error("Aggregate event IDs must be unique before append.");
+    }
+    eventIds.add(eventId);
+  }
+
+  #acceptEventRoute(event: Event, aggregateId: Id): void {
+    const eventAggregateId = this.#eventAggregateId(event);
+    if (eventAggregateId === undefined || !samePrimitiveId(eventAggregateId, aggregateId)) {
+      throw new Error("Aggregate events must all route to the same aggregate ID before append.");
+    }
+  }
+
+  #acceptEventVersion(event: Event, lastVersion: bigint): bigint {
+    const version = requireEventVersion(event);
+    if (version !== lastVersion + 1n) {
+      throw new Error("Aggregate event versions must be strictly increasing and consecutive.");
+    }
+    return version;
   }
 
   /** Store or replace the latest snapshot for one aggregate. */
@@ -205,7 +223,7 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
     return this.#storageFactory.createRecordStorage(context, snapshotRecordSpec<Id>());
   }
 
-  #eventAggregateId(event: Event): PrimitiveId | undefined {
+  #eventAggregateId(event: Event): AggregateId | undefined {
     const producerId = this.#producerId(event);
     const payloadId = this.#payloadId(event);
 
@@ -222,7 +240,7 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
     return producerId ?? payloadId;
   }
 
-  #producerId(event: Event): PrimitiveId | undefined {
+  #producerId(event: Event): AggregateId | undefined {
     const producerId = event.context?.producerId;
     if (producerId !== undefined) {
       const userId = unpackAny(producerId, UserIdSchema);
@@ -235,7 +253,7 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
     return undefined;
   }
 
-  #payloadId(event: Event): PrimitiveId | undefined {
+  #payloadId(event: Event): AggregateId | undefined {
     const message = event.message;
     if (message === undefined) {
       return undefined;
@@ -256,7 +274,7 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
     return undefined;
   }
 
-  #stateId(state: MessageShape<Schema>): PrimitiveId | undefined {
+  #stateId(state: MessageShape<Schema>): AggregateId | undefined {
     const firstField = this.#stateSchema.fields[0];
     if (firstField === undefined) {
       return undefined;
@@ -295,7 +313,10 @@ export interface AggregateStorageOptions<Schema extends DescriptorMessageSchema>
 }
 
 /** Snapshot persisted for one aggregate. */
-export interface AggregateSnapshot<Schema extends DescriptorMessageSchema, Id = string> {
+export interface AggregateSnapshot<
+  Schema extends DescriptorMessageSchema,
+  Id extends AggregateId = string,
+> {
   /** Aggregate identifier. */
   readonly aggregateId: Id;
   /** Aggregate state restored from the snapshot. */
@@ -307,7 +328,10 @@ export interface AggregateSnapshot<Schema extends DescriptorMessageSchema, Id = 
 }
 
 /** Aggregate history loaded from storage. */
-export interface AggregateHistory<Schema extends DescriptorMessageSchema, Id = string> {
+export interface AggregateHistory<
+  Schema extends DescriptorMessageSchema,
+  Id extends AggregateId = string,
+> {
   /** Latest snapshot, when one has been stored. */
   readonly snapshot: AggregateSnapshot<Schema, Id> | undefined;
   /** Events after the snapshot version, or all events when no snapshot exists. */
@@ -337,7 +361,8 @@ interface VersionedEvent {
   readonly version: bigint;
 }
 
-type PrimitiveId = string | number | boolean | bigint;
+/** Primitive aggregate identifier supported by the current aggregate storage seam. */
+export type AggregateId = string | number | boolean | bigint;
 
 const snapshotRecordTypeUrl = "type.spine-ts.dev/internal/AggregateSnapshotRecord";
 
@@ -401,7 +426,7 @@ function snapshotStorageContext(context: StorageContext): StorageContext {
   });
 }
 
-function aggregateLockKey(context: StorageContext, aggregateId: PrimitiveId): string {
+function aggregateLockKey(context: StorageContext, aggregateId: AggregateId): string {
   return JSON.stringify({
     name: context.name,
     multitenant: context.multitenant,
@@ -490,7 +515,7 @@ function rejectConsecutiveVersions(events: readonly VersionedEvent[]): void {
   }
 }
 
-function requirePrimitiveId(value: unknown): PrimitiveId {
+function requirePrimitiveId(value: unknown): AggregateId {
   const id = primitiveId(value);
   if (id === undefined) {
     throw new Error("Aggregate IDs must be primitive values.");
@@ -506,7 +531,7 @@ function sameSnapshotId(left: unknown, right: unknown): boolean {
   return samePrimitiveId(left, right);
 }
 
-function primitiveId(value: unknown): PrimitiveId | undefined {
+function primitiveId(value: unknown): AggregateId | undefined {
   if (
     typeof value === "string" ||
     typeof value === "number" ||

@@ -173,6 +173,7 @@ const expectedTransportExports = [
 ];
 const expectedServerExports = [
   "Aggregate",
+  "AggregateId",
   "AggregateHistory",
   "AggregateSnapshot",
   "AggregateStorage",

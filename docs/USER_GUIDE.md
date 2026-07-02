@@ -124,9 +124,9 @@ the to-do application remain later slices.
   storage-only `EventStore` delegate.
 - `InMemoryStorageFactory` and `InMemoryRecordStorage` for deterministic tests
   and local development. Storage objects opened by one factory share backing
-  records by context name, tenant, and `RecordSpec` instance, keep tenant
-  slices separate, clone stored values, and are not durable across process
-  restarts.
+  records by context name, tenant mode, tenant ID, and `RecordSpec` instance,
+  keep tenant slices separate, clone stored values, return independently
+  closeable handles, and are not durable across process restarts.
 - A placeholder to-do example workspace.
 
 ## What Is Deferred
@@ -543,12 +543,14 @@ await eventBus.post(eventEnvelope);
 dispatcher handles a posted command. Registering a second dispatcher for the
 same command type is rejected. `EventBus` is multicast by enclosed message type
 URL: registered dispatchers for the event type run in registration order.
-Before storage, matching dispatchers may reject an event through `accept()`.
-Accepted events are appended to the injected `EventStore` before `dispatch()`
-runs. If no dispatcher is registered, the event is still stored and `post()`
-resolves. If acceptance or append fails, no dispatcher is invoked and the event
-is not stored by the bus. If dispatch rejects, earlier dispatchers may already
-have run, later dispatchers are not invoked, and the stored event remains.
+Before storage, `EventStore.accept()` prechecks event identity, then matching
+dispatchers may reject an event through `accept()`. Accepted events are appended
+to the injected `EventStore` before `dispatch()` runs. If no dispatcher is
+registered, the event is still stored and `post()` resolves. If the identity
+precheck or dispatcher acceptance fails, the event is not stored by the bus. If
+append fails, no `dispatch()` method runs, but dispatcher `accept()` hooks may
+already have run. If dispatch rejects, earlier dispatchers may already have run,
+later dispatchers are not invoked, and the stored event remains.
 
 ## Transport Foundation
 
@@ -860,7 +862,8 @@ await eventStore.append(
 
 `StorageFactory` owns one mandatory seam: `createRecordStorage(context, spec)`.
 Repeated calls for the same logical storage context and record specification
-must observe the same backing records.
+must observe the same backing records and return independently closeable
+handles.
 `RecordSpec` binds a generated record schema, optional generated ID schema, ID
 extraction, and query columns. `RecordStorage` then provides cloned writes,
 point reads, deletes, deterministic ID queries, exact column filters, sorting
@@ -878,9 +881,10 @@ Spine `Event` messages and rejects missing, blank, or duplicate event IDs on
 append, but it does not dispatch them to subscribers, manage delivery attempts,
 or implement retry/bus behavior.
 
-Aggregate snapshot/history storage is available through `AggregateStorage`.
-Delivery records, tenant indexes, diagnostics, repository storage policy, and
-read-side projection stores are deferred.
+Aggregate snapshot/history storage is available through `AggregateStorage`,
+using primitive `AggregateId` values for this slice. Delivery records, tenant
+indexes, diagnostics, repository storage policy, and read-side projection stores
+are deferred.
 
 ## First Commands
 

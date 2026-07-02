@@ -1,6 +1,6 @@
 # T-0012.7b: Aggregate Storage And Signal Routing
 
-Status: round-17 re-review pending
+Status: round-18 fixes verified
 Start: `2026-07-02 06:20 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7b-aggregate-storage-routing`
@@ -159,6 +159,15 @@ Required evidence for this task:
   aggregate-storage tests, and repository-routing tests; `typecheck`, `lint`,
   `format:check`, `docs:check`, and `git diff --check`.
 - Round-17 fix commit: `822d358`.
-- Round-18 reviewer sub-agents are pending against
-  `.superpowers/sdd/review-d7b9245..822d358.diff`.
+- Round-18 reviewer sub-agents completed against
+  `.superpowers/sdd/review-d7b9245..822d358.diff`. Security and
+  performance/reliability were clean; maintainability, documentation, and
+  TypeScript/API docs requested focused fixes.
+- Round-18 fixes are in progress for aggregate append handle lifetime,
+  aggregate append method size, primitive aggregate ID API constraints,
+  EventBus ordering docs, storage-sharing docs, and stale log/status text.
+- Required round-18 focused verification passed: storage event-store/factory
+  and index tests, server bus/API tests, handler metadata tests,
+  aggregate-storage tests, and repository-routing tests; `typecheck`, `lint`,
+  `format:check`, `docs:check`, and `git diff --check`.
 - No blocking human question is known.

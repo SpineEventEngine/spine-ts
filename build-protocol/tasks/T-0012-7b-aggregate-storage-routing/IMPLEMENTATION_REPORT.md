@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round-17 re-review pending
+Status: round-18 fixes verified
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -214,6 +214,28 @@ Verification after the round-9 fix pass:
 Round-17 fix commit: `822d358`. Round-18 re-review is pending against
 `.superpowers/sdd/review-d7b9245..822d358.diff`.
 
+Round 18 requested fixes for aggregate append handle lifetime, aggregate append
+method size, an overlong verification command line, stale task/review/report
+headers, EventBus ordering docs, storage-sharing wording, and the public
+aggregate ID type contract. The fix constrains `AggregateStorage` IDs with the
+exported primitive `AggregateId` type, keeps the runtime primitive-ID check for
+JavaScript callers, splits append validation into small class-private methods,
+guards the append event-store handle with `try/finally`, and updates public docs
+to state the actual order: `EventStore.accept()`, dispatcher `accept()`,
+`EventStore.append()`, then `dispatch()`.
+
+Verification after the round-18 fix pass:
+
+- Focused storage event-store/factory/index, server bus/API, handler metadata,
+  aggregate-storage, and repository-routing tests passed with 9 files and
+  80 tests.
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm lint` passed.
+- `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
+  warning and verified 135 expected `@spine-ts/server` exports.
+- `git diff --check` passed.
+
 Round 10 requested a documentation/status cleanup and a reliability fix for
 duplicate aggregate event IDs. The reliability fix rejects missing or duplicate
 event IDs before `EventStore.appendAll()`, preventing replace-by-ID storage from
@@ -284,8 +306,9 @@ inside existing seams: `AggregateStorage` materializes append input at call
 time, handler metadata now accepts only builder-created handler records,
 `EventDispatcher.accept()` lets repository dispatchers validate before
 `EventBus` appends, `EventStore` serializes uniqueness checks per
-factory/context, and `InMemoryStorageFactory` gives storages opened with the
-same `RecordSpec` a shared process-local backing set.
+factory, context name, tenant mode, tenant ID, and `RecordSpec` instance, and
+`InMemoryStorageFactory` gives each logical slice shared process-local records
+through independently closeable storage handles.
 
 Verification after the round-14 fix pass:
 
@@ -338,8 +361,9 @@ event IDs, and polishing EventStore TypeDoc.
 
 Verification after the round-17 fix pass:
 
-- `corepack pnpm test packages/storage/test/event/event-store.test.ts packages/storage/test/storage/storage-factory.test.ts packages/storage/test/index.test.ts packages/server/test/bus/event-bus.test.ts packages/server/test/bus/index.test.ts packages/server/test/index.test.ts packages/server/test/handler/handler-metadata.test.ts packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts`
-  passed with 9 files and 80 tests.
+- Focused storage event-store/factory/index, server bus/API, handler metadata,
+  aggregate-storage, and repository-routing tests passed with 9 files and
+  80 tests.
 - `corepack pnpm typecheck` passed.
 - `corepack pnpm lint` passed.
 - `corepack pnpm format:check` passed after formatting

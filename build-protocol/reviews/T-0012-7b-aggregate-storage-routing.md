@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round 17 fixes in progress
+Status: round 18 fixes in progress
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -498,6 +498,34 @@ Round-17 fix commit: `822d358`.
 Diff package:
 `.superpowers/sdd/review-d7b9245..822d358.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
 
-Result: pending.
+- code style/maintainability:
+  `019f2144-7337-7d92-818d-5fd718cec6c0`;
+- documentation: `019f2144-92d5-7eb0-8a4c-c9ced55b45e3`;
+- TypeScript/API docs: `019f2144-a707-70e3-a5ec-c574be2f0561`;
+- security: `019f2144-c842-73f2-aa47-6608ba0dfe0a`;
+- performance/reliability:
+  `019f2144-dc77-71f2-8d7d-4cf7a1e488a1`.
+
+Result: changes requested. Security and performance/reliability were clean.
+
+Findings being addressed in the round-18 fix pass:
+
+- aggregate append opened an event-store handle before all throwable work was
+  inside the `try/finally`;
+- aggregate append validation was too dense for the cleanup method-size target;
+- the implementation report had an overlong verification command line;
+- top-level task/review/report status headers were stale;
+- EventBus docs described dispatcher `accept()` as the first pre-store
+  validation step and overpromised that append failure means no accept hooks ran;
+- user and implementation docs had stale storage-sharing wording; and
+- `AggregateStorage` accepted any compile-time ID type even though runtime
+  storage currently supports only primitive aggregate IDs.
+
+All five round-18 reviewers were closed after their reports were collected.
+
+Verification after the round-18 fix pass passed: focused storage event-store,
+storage factory, storage index, server event-bus, server bus API, server root
+API, handler metadata, aggregate-storage, and repository-routing tests,
+`typecheck`, `lint`, `format:check`, `docs:check`, and `git diff --check`.

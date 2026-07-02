@@ -9,10 +9,10 @@ import type { EventDispatcher } from "./event-dispatcher.js";
 /**
  * Small single-process multicast event bus.
  *
- * Events are accepted asynchronously through `post()`, validated by matching
- * dispatchers, appended to the injected `EventStore`, and then dispatched in
- * deterministic registration order. Events with no matching dispatcher remain
- * stored and resolve without dispatch.
+ * Events are accepted asynchronously through `post()`, prechecked by the
+ * injected `EventStore`, validated by matching dispatchers, appended, and then
+ * dispatched in deterministic registration order. Events with no matching
+ * dispatcher remain stored and resolve without dispatch.
  */
 export class EventBus {
   readonly #eventStore: EventStore;
