@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-3 fixes pending
+Status: round-4 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -49,6 +49,7 @@ Round-2 fixes completed the remaining correctness and documentation gaps:
 
 ## Verification
 
+- `pnpm test packages/storage/test/memory/in-memory-record-storage.test.ts packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts packages/server/test/index.test.ts`
 - `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts packages/server/test/index.test.ts`
 - `pnpm typecheck`
 - `pnpm lint`
@@ -58,6 +59,26 @@ Round-2 fixes completed the remaining correctness and documentation gaps:
 
 `pnpm docs:check` passed with the existing TypeDoc warning about an invalid
 `origin` remote for source links.
+
+## Round 3 Fix
+
+Round 3 requested a smaller and more trustworthy dedup/storage core. This fix:
+
+- split `InboxStorage.#writeWithDedup()` into smaller private read/claim/recover
+  steps while keeping the public storage API unchanged;
+- removed the white-box `dedupRecordBlocks()` test dependency and made the
+  internal dedup record type non-exported;
+- changed pending dedup guards to persist the exact canonical inbox message so
+  later writers can finish the same claim idempotently without wall-clock claim
+  expiry or timeout-based stealing;
+- added a slow-writer race regression that proves a contender cannot replace
+  the canonical first claim's metadata, status, version, payload, or message
+  identity under one dedup key;
+- moved shard lease expiry time sourcing behind constructor-injected clocks
+  instead of trusting caller-supplied `pickUp()` timestamps; and
+- changed direct `InboxStorage.write()` inbox-row persistence to compare-and-set
+  creation, rejecting reuse of an existing message key instead of overwriting
+  another row.
 
 ## Round 2 Review
 

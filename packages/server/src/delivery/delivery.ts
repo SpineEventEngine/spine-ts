@@ -23,6 +23,7 @@ export class Delivery {
       context: options.context,
       storageFactory: options.storageFactory,
       ...(options.leaseMs === undefined ? {} : { leaseMs: options.leaseMs }),
+      ...(options.now === undefined ? {} : { now: options.now }),
     });
     Object.freeze(this);
   }
@@ -36,4 +37,6 @@ export interface DeliveryOptions {
   readonly storageFactory: StorageFactory;
   /** Optional shard lease duration in milliseconds. */
   readonly leaseMs?: number;
+  /** Optional clock used for shard lease expiry decisions. */
+  readonly now?: () => Date;
 }

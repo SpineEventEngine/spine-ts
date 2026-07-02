@@ -8,7 +8,8 @@ import {
   dedupGuardKey,
   dedupRecordSpec,
   inboxRecordSpec,
-  readDedupRecord,
+  isPendingDedupRecord,
+  readPendingMessage,
   readInboxMessage,
   writeDedupClaim,
   writeDedupRecord,
@@ -17,8 +18,6 @@ import {
 import { ShardIndex } from "./shard-index.js";
 
 const defaultReadLimit = 100;
-const dedupClaimMs = 250;
-const pendingRetryMs = 10;
 
 /** Durable inbox storage over record storage. */
 export class InboxStorage {
@@ -72,67 +71,153 @@ export class InboxStorage {
     const dedupKey = dedupGuardKey(message);
 
     for (;;) {
-      const now = this.#now();
-      const currentDedup = await dedupStorage.read(dedupKey);
-      const guard = currentDedup === undefined ? undefined : readDedupRecord(currentDedup);
+      const step = await this.#readWriteStep(inboxStorage, dedupStorage, dedupKey, message);
+      if (step.kind === "RETURN") {
+        return step.result;
+      }
+      if (step.kind === "RETRY") {
+        continue;
+      }
+      const result = await this.#claimAndWrite(inboxStorage, dedupStorage, dedupKey, step);
+      if (result !== undefined) {
+        return result;
+      }
+    }
+  }
 
-      if (guard !== undefined) {
-        const storedMessage = await this.#readGuardMessage(inboxStorage, guard);
+  async #readWriteStep(
+    inboxStorage: RecordStorage<string, Any>,
+    dedupStorage: RecordStorage<string, Any>,
+    dedupKey: string,
+    message: InboxMessage,
+  ): Promise<WriteStep> {
+    const current = await dedupStorage.read(dedupKey);
+    if (current === undefined) {
+      return { kind: "CLAIM", expected: undefined, message };
+    }
 
-        if (storedMessage !== undefined) {
-          if (guard.state === "PENDING") {
-            await dedupStorage.compareAndSet(
-              dedupKey,
-              currentDedup,
-              writeDedupRecord(storedMessage),
-            );
-          }
+    const storedMessage = await this.#readGuardMessage(inboxStorage, current);
 
-          if (this.#messageBlocks(storedMessage, now)) {
-            return Object.freeze({
-              outcome: "DUPLICATE" as const,
-              message: storedMessage,
-            });
-          }
-        } else if (guard.state === "FINAL") {
-          throw new DeliveryStorageCorruptionError(
-            `Inbox dedup guard "${dedupKey}" points to a missing inbox message.`,
-          );
-        } else if (!this.#claimExpired(guard, now)) {
-          await this.#waitPending();
-          continue;
-        }
+    if (storedMessage !== undefined) {
+      return this.#handleStoredGuardMessage(
+        dedupStorage,
+        dedupKey,
+        current,
+        storedMessage,
+        message,
+      );
+    }
+
+    if (!isPendingDedupRecord(current)) {
+      throw new DeliveryStorageCorruptionError(
+        `Inbox dedup guard "${dedupKey}" points to a missing inbox message.`,
+      );
+    }
+
+    return this.#recoverPendingClaim(inboxStorage, dedupStorage, dedupKey, current, message);
+  }
+
+  async #handleStoredGuardMessage(
+    dedupStorage: RecordStorage<string, Any>,
+    dedupKey: string,
+    current: Any,
+    storedMessage: InboxMessage,
+    message: InboxMessage,
+  ): Promise<WriteStep> {
+    let expected = current;
+    if (isPendingDedupRecord(current)) {
+      expected = writeDedupRecord(storedMessage);
+      const finalized = await dedupStorage.compareAndSet(dedupKey, current, expected);
+      if (!finalized) {
+        return { kind: "RETRY" };
+      }
+    }
+
+    return this.#messageBlocks(storedMessage, this.#now())
+      ? this.#duplicate(storedMessage)
+      : { kind: "CLAIM", expected, message };
+  }
+
+  async #recoverPendingClaim(
+    inboxStorage: RecordStorage<string, Any>,
+    dedupStorage: RecordStorage<string, Any>,
+    dedupKey: string,
+    current: Any,
+    message: InboxMessage,
+  ): Promise<WriteStep> {
+    const pendingMessage = readPendingMessage(current);
+    if (pendingMessage === undefined) {
+      return { kind: "RETRY" };
+    }
+
+    const storedMessage = await this.#ensureInboxRow(inboxStorage, pendingMessage);
+    const finalRecord = writeDedupRecord(storedMessage);
+    const finalized = await dedupStorage.compareAndSet(dedupKey, current, finalRecord);
+    if (!finalized) {
+      return { kind: "RETRY" };
+    }
+
+    return this.#messageBlocks(storedMessage, this.#now())
+      ? this.#written(storedMessage)
+      : { kind: "CLAIM", expected: finalRecord, message };
+  }
+
+  async #claimAndWrite(
+    inboxStorage: RecordStorage<string, Any>,
+    dedupStorage: RecordStorage<string, Any>,
+    dedupKey: string,
+    step: WriteClaim,
+  ): Promise<InboxWriteResult | undefined> {
+    const pending = writeDedupClaim(step.message);
+    const claimed = await dedupStorage.compareAndSet(dedupKey, step.expected, pending);
+    if (!claimed) {
+      return undefined;
+    }
+
+    try {
+      const storedMessage = await this.#ensureInboxRow(inboxStorage, step.message);
+      const finalized = await dedupStorage.compareAndSet(
+        dedupKey,
+        pending,
+        writeDedupRecord(storedMessage),
+      );
+      return finalized ? this.#written(storedMessage).result : undefined;
+    } catch (error) {
+      await dedupStorage.compareAndSet(dedupKey, pending, step.expected);
+      throw error;
+    }
+  }
+
+  async #ensureInboxRow(
+    inboxStorage: RecordStorage<string, Any>,
+    message: InboxMessage,
+  ): Promise<InboxMessage> {
+    const key = this.#messageKey(message.id);
+    const record = writeInboxMessage(message);
+
+    for (;;) {
+      if (await inboxStorage.compareAndSet(key, undefined, record)) {
+        return readInboxMessage(record);
       }
 
-      const claimedMessage =
-        guard?.state === "PENDING" ? this.#restoreMessage(message, guard) : message;
-      const pendingDedup = writeDedupClaim(claimedMessage, now);
-      const claimed = await dedupStorage.compareAndSet(dedupKey, currentDedup, pendingDedup);
-      if (!claimed) {
+      const current = await inboxStorage.read(key);
+      if (current === undefined) {
         continue;
       }
 
-      try {
-        await inboxStorage.write(writeInboxMessage(claimedMessage));
-      } catch (error) {
-        await dedupStorage.compareAndSet(dedupKey, pendingDedup, currentDedup);
-        throw error;
+      if (this.#sameRecord(current, record)) {
+        return readInboxMessage(current);
       }
 
-      await dedupStorage.compareAndSet(dedupKey, pendingDedup, writeDedupRecord(claimedMessage));
-
-      return Object.freeze({
-        outcome: "WRITTEN" as const,
-        message: readInboxMessage(writeInboxMessage(claimedMessage)),
-      });
+      throw new Error(`Inbox message "${key}" already exists.`);
     }
   }
 
   async #readGuardMessage(
     inboxStorage: RecordStorage<string, Any>,
-    guard: ReturnType<typeof readDedupRecord>,
+    guard: Any,
   ): Promise<InboxMessage | undefined> {
-    const storedMessage = await inboxStorage.read(this.#messageKey(guard));
+    const storedMessage = await inboxStorage.read(this.#messageKey(dedupMessageId(guard)));
     return storedMessage === undefined ? undefined : readInboxMessage(storedMessage);
   }
 
@@ -144,29 +229,34 @@ export class InboxStorage {
     return message.keepUntil !== undefined && message.keepUntil.getTime() >= now.getTime();
   }
 
-  #restoreMessage(message: InboxMessage, guard: ReturnType<typeof readDedupRecord>): InboxMessage {
-    const id = dedupMessageId(guard);
-
-    return Object.freeze({
-      ...message,
-      id,
-      shard: id.shard,
-    });
+  #sameRecord(left: Any, right: Any): boolean {
+    return (
+      left.typeUrl === right.typeUrl && Buffer.from(left.value).equals(Buffer.from(right.value))
+    );
   }
 
-  #claimExpired(guard: ReturnType<typeof readDedupRecord>, now: Date): boolean {
-    return guard.state === "PENDING" && guard.claimedAtMs + dedupClaimMs <= now.getTime();
+  #written(message: InboxMessage): WriteReturn {
+    return {
+      kind: "RETURN",
+      result: Object.freeze({
+        outcome: "WRITTEN" as const,
+        message,
+      }),
+    };
   }
 
-  #messageKey(guard: ReturnType<typeof readDedupRecord>): string {
-    const id = dedupMessageId(guard);
+  #duplicate(message: InboxMessage): WriteReturn {
+    return {
+      kind: "RETURN",
+      result: Object.freeze({
+        outcome: "DUPLICATE" as const,
+        message,
+      }),
+    };
+  }
+
+  #messageKey(id: Pick<InboxMessage["id"], "value" | "shard">): string {
     return `${id.shard.key()}:${id.value}`;
-  }
-
-  #waitPending(): Promise<void> {
-    return new Promise((resolve) => {
-      setTimeout(resolve, pendingRetryMs);
-    });
   }
 
   #inboxStorage(): RecordStorage<string, Any> {
@@ -199,6 +289,19 @@ function statusFilters(statuses: readonly DeliveryStatus[] | undefined) {
     ? []
     : [{ column: "status", value: [...statuses] as readonly DeliveryStatus[] }];
 }
+
+interface WriteClaim {
+  readonly kind: "CLAIM";
+  readonly expected: Any | undefined;
+  readonly message: InboxMessage;
+}
+
+interface WriteReturn {
+  readonly kind: "RETURN";
+  readonly result: InboxWriteResult;
+}
+
+type WriteStep = WriteClaim | WriteReturn | { readonly kind: "RETRY" };
 
 function dedupStorageContext(context: StorageContext): StorageContext {
   return deliveryStorageContext(context, "inbox-dedup");

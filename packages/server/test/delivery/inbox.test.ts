@@ -11,7 +11,6 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
-import { dedupRecordBlocks, readDedupRecord } from "../../src/delivery/inbox-records.js";
 import {
   Delivery,
   Inbox,
@@ -252,21 +251,18 @@ describe("Inbox", () => {
   });
 
   it("retries safely after an orphaned pending dedup claim", async () => {
-    const now = { value: new Date("2026-07-02T08:10:00.000Z") };
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new FaultyStorageFactory({
         failInboxWriteOnce: true,
         skipDedupDeleteOnce: true,
       }),
-      now: () => now.value,
     });
 
     await expect(storage.write(createMessage("message-1", "signal-1", 1n))).rejects.toThrow(
       /inbox write failed/i,
     );
 
-    now.value = new Date("2026-07-02T08:10:01.000Z");
     await expect(storage.write(createMessage("message-2", "signal-1", 2n))).resolves.toMatchObject({
       outcome: "WRITTEN",
       message: { id: { value: "message-1" }, signalId: "signal-1" },
@@ -305,27 +301,88 @@ describe("Inbox", () => {
     ]);
   });
 
-  it("treats a pending delivered guard as blocking until the inbox row exists", () => {
-    const pending = readDedupRecord(
-      create(AnySchema, {
-        typeUrl: "type.spine-ts.dev/internal/InboxDedupRecord",
-        value: Buffer.from(
-          JSON.stringify({
-            key: "inbox:signal-1",
-            inbox: "inbox",
-            signalId: "signal-1",
-            inboxMessageId: "message-1",
-            shardIndex: 0,
-            shardTotal: 1,
-            state: "PENDING",
-            claimedAtMs: Date.parse("2026-07-02T08:10:00.000Z"),
-          }),
-          "utf8",
-        ),
+  it("keeps the first pending claim canonical when a slow writer races a contender", async () => {
+    const storageFactory = new SlowInboxCreateFactory();
+    const first = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const second = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const firstMessage = {
+      ...createMessage("message-1", "signal-1", 1n),
+      signal: create(AnySchema, {
+        typeUrl: "type.example.dev/tasks.FirstSignal",
+        value: Buffer.from("first", "utf8"),
       }),
-    );
+      whenReceived: new Date("2026-07-02T08:00:00.000Z"),
+      status: "TO_DELIVER" as const,
+    };
+    const secondMessage = {
+      ...createMessage("message-2", "signal-1", 9n),
+      signal: create(AnySchema, {
+        typeUrl: "type.example.dev/tasks.SecondSignal",
+        value: Buffer.from("second", "utf8"),
+      }),
+      whenReceived: new Date("2026-07-02T08:00:09.000Z"),
+      status: "DELIVERED" as const,
+    };
 
-    expect(dedupRecordBlocks(pending, new Date("2026-07-02T08:10:00.000Z"))).toBe(true);
+    const firstWrite = first.write(firstMessage);
+    await storageFactory.waitForBlockedCreate();
+
+    const secondWrite = second.write(secondMessage);
+    await storageFactory.waitForContender();
+    storageFactory.releaseFirstCreate();
+
+    const [firstResult, secondResult] = await Promise.all([firstWrite, secondWrite]);
+    const stored = await second.read(ShardIndex.single(), { limit: 10 });
+
+    expect(["WRITTEN", "DUPLICATE"]).toContain(firstResult.outcome);
+    expect(firstResult).toMatchObject({
+      message: {
+        id: { value: "message-1" },
+        signalId: "signal-1",
+        status: "TO_DELIVER",
+        version: 1n,
+      },
+    });
+    expect(secondResult).toMatchObject({
+      message: {
+        id: { value: "message-1" },
+        signalId: "signal-1",
+        status: "TO_DELIVER",
+        version: 1n,
+      },
+    });
+    expect(stored).toMatchObject([
+      {
+        id: { value: "message-1" },
+        signalId: "signal-1",
+        status: "TO_DELIVER",
+        version: 1n,
+        whenReceived: new Date("2026-07-02T08:00:00.000Z"),
+        signal: create(AnySchema, {
+          typeUrl: "type.example.dev/tasks.FirstSignal",
+          value: Buffer.from("first", "utf8"),
+        }),
+      },
+    ]);
+  });
+
+  it("rejects direct inbox writes that reuse an existing message key", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+
+    await storage.write(createMessage("message-1", "signal-1", 1n));
+
+    await expect(storage.write(createMessage("message-1", "signal-2", 2n))).rejects.toThrow(
+      /already exists/i,
+    );
   });
 
   it("uses the delivery corruption error only for a final dedup guard that still points to no inbox row", async () => {
@@ -452,6 +509,141 @@ interface FaultPlan {
   skipDedupFinalizeOnce?: boolean;
 }
 
+class SlowInboxCreateFactory extends StorageFactory {
+  readonly #delegate = new InMemoryStorageFactory();
+  readonly #firstCreate = new Deferred<void>();
+  readonly #contender = new Deferred<void>();
+  readonly #release = new Deferred<void>();
+  #phase: "READY" | "BLOCKED" | "RELEASED" = "READY";
+
+  waitForBlockedCreate(): Promise<void> {
+    return this.#firstCreate.promise;
+  }
+
+  waitForContender(): Promise<void> {
+    return this.#contender.promise;
+  }
+
+  releaseFirstCreate(): void {
+    this.#release.resolve(undefined);
+  }
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    const storage = this.#delegate.createRecordStorage(context, recordSpec);
+
+    return new SlowInboxCreateStorage(context, recordSpec, storage, this);
+  }
+
+  notifyBlockedCreate(): void {
+    this.#phase = "BLOCKED";
+    this.#firstCreate.resolve(undefined);
+  }
+
+  notifyContender(): void {
+    if (this.#phase === "BLOCKED") {
+      this.#contender.resolve(undefined);
+    }
+  }
+
+  async waitForRelease(): Promise<void> {
+    await this.#release.promise;
+    this.#phase = "RELEASED";
+  }
+
+  nextInboxCreateAction(): "BLOCK" | "CONTENDER" | "PASS" {
+    if (this.#phase === "READY") {
+      return "BLOCK";
+    }
+    if (this.#phase === "BLOCKED") {
+      return "CONTENDER";
+    }
+    return "PASS";
+  }
+}
+
+class SlowInboxCreateStorage<I, R extends Message> extends RecordStorage<I, R> {
+  readonly #delegate: RecordStorage<I, R>;
+  readonly #factory: SlowInboxCreateFactory;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    delegate: RecordStorage<I, R>,
+    factory: SlowInboxCreateFactory,
+  ) {
+    super(context, recordSpec);
+    this.#delegate = delegate;
+    this.#factory = factory;
+  }
+
+  override close(): void {
+    this.#delegate.close();
+    super.close();
+  }
+
+  protected async compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    if (this.#isInboxStorage() && expected === undefined && next !== undefined) {
+      const action = this.#factory.nextInboxCreateAction();
+      if (action === "BLOCK") {
+        this.#factory.notifyBlockedCreate();
+        await this.#factory.waitForRelease();
+      } else if (action === "CONTENDER") {
+        this.#factory.notifyContender();
+      }
+    }
+
+    return this.#delegate.compareAndSet(id, expected?.record, next?.record);
+  }
+
+  protected deleteRecord(id: I): Promise<boolean> {
+    return this.#delegate.delete(id);
+  }
+
+  protected queryRecords(query: RecordQuery<I>): Promise<readonly R[]> {
+    return this.#delegate.query(query);
+  }
+
+  protected readRecord(id: I): Promise<R | undefined> {
+    return this.#delegate.read(id);
+  }
+
+  protected writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    return this.#delegate.writeAll(records.map((record) => record.record));
+  }
+
+  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    return this.#delegate.write(record.record);
+  }
+
+  #isInboxStorage(): boolean {
+    return this.context.name.endsWith(".delivery.inbox");
+  }
+}
+
+class Deferred<T> {
+  readonly promise: Promise<T>;
+  #resolve!: (value: T) => void;
+
+  constructor() {
+    this.promise = new Promise<T>((resolve) => {
+      this.#resolve = resolve;
+    });
+  }
+
+  resolve(value: T): void {
+    this.#resolve(value);
+  }
+}
+
 class FaultyRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   readonly #delegate: RecordStorage<I, R>;
   readonly #plan: FaultPlan;
@@ -477,6 +669,16 @@ class FaultyRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
+    if (
+      this.#isInboxStorage() &&
+      expected === undefined &&
+      next !== undefined &&
+      this.#plan.failInboxWriteOnce === true
+    ) {
+      this.#plan.failInboxWriteOnce = false;
+      return Promise.reject(new Error("Inbox write failed."));
+    }
+
     if (this.#isDedupStorage()) {
       if (next === undefined && this.#plan.skipDedupDeleteOnce === true) {
         this.#plan.skipDedupDeleteOnce = false;
@@ -515,11 +717,6 @@ class FaultyRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   }
 
   protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
-    if (this.#isInboxStorage() && this.#plan.failInboxWriteOnce === true) {
-      this.#plan.failInboxWriteOnce = false;
-      return Promise.reject(new Error("Inbox write failed."));
-    }
-
     return this.#delegate.write(record.record);
   }
 

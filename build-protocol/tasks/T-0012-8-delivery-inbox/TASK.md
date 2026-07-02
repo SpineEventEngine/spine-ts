@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-3 fixes pending
+Status: round-4 review prep
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -86,4 +86,11 @@ entityStateType)` returns a zero-based shard index and that all messages for
   lane was clean.
 - All five round-3 reviewer sub-agents were closed after their reports were
   collected.
+- Consolidated round-3 fix pass completed in this worktree. The fix removed
+  wall-clock pending-claim stealing, persisted the canonical pending inbox
+  message for idempotent recovery, split the main dedup write path into smaller
+  private methods, tightened direct inbox writes to reject existing message-key
+  reuse, moved shard lease time sourcing behind an injected clock, removed the
+  white-box dedup helper test import, and refreshed the durable logs for
+  round-4 review prep.
 - No blocking human question is known.

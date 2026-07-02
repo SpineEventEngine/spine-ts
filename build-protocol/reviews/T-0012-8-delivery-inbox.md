@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 3 changes requested
+Status: round-4 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -186,3 +186,21 @@ Findings to address:
 
 The TypeScript/API docs lane was clean. All five round-3 reviewer sub-agents
 were closed after their reports were collected.
+
+### Round 3 Fix
+
+Result: completed in this worktree and ready for round-4 review.
+
+Fix summary:
+
+- split the main inbox dedup write path into smaller read/claim/recover/finalize
+  methods;
+- removed the white-box dedup helper test import and kept the internal dedup
+  record type private to the module;
+- replaced wall-clock pending-claim stealing with canonical pending-message
+  persistence and idempotent completion of the same claimed inbox row;
+- added a slow-writer race regression plus direct inbox message-key reuse
+  protection coverage;
+- moved shard lease expiry to constructor-injected clocks instead of a public
+  `pickUp()` time parameter; and
+- refreshed the durable task/report/work-log state for round-4 review prep.

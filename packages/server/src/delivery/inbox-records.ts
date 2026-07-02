@@ -33,13 +33,8 @@ interface StoredInboxMessage {
 
 interface StoredPendingDedupRecord {
   readonly key: string;
-  readonly inbox: string;
-  readonly signalId: string;
-  readonly inboxMessageId: string;
-  readonly shardIndex: number;
-  readonly shardTotal: number;
   readonly state: "PENDING";
-  readonly claimedAtMs: number;
+  readonly message: StoredInboxMessage;
 }
 
 interface StoredFinalDedupRecord {
@@ -54,7 +49,7 @@ interface StoredFinalDedupRecord {
   readonly keepUntilMs?: number;
 }
 
-export type StoredDedupRecord = StoredPendingDedupRecord | StoredFinalDedupRecord;
+type StoredDedupRecord = StoredPendingDedupRecord | StoredFinalDedupRecord;
 
 const maxSignalPayloadBytes: number = 256 * 1024;
 
@@ -77,87 +72,56 @@ export const inboxRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, A
 
 export const dedupRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, Any>({
   schema: AnySchema,
-  extractId: (record) => readDedupRecord(record).key,
+  extractId: (record) => readStoredDedupRecord(record).key,
 });
 
 export function readInboxMessage(record: Any): InboxMessage {
-  const stored = readStoredInboxMessage(record);
-  const shard = new ShardIndex(stored.shardIndex, stored.shardTotal);
-
-  return Object.freeze({
-    id: Object.freeze({
-      value: stored.id,
-      shard,
-    }),
-    inboxId: Object.freeze({
-      targetId: stored.inboxId.targetId,
-      targetTypeUrl: stored.inboxId.targetTypeUrl,
-    }),
-    signalId: stored.signalId,
-    label: stored.label,
-    status: stored.status,
-    shard,
-    whenReceived: new Date(stored.whenReceivedMs),
-    version: parseStoredVersion(stored.version),
-    ...(stored.signal === undefined ? {} : { signal: unpackSignal(stored.signal) }),
-    ...(stored.keepUntilMs === undefined ? {} : { keepUntil: new Date(stored.keepUntilMs) }),
-  });
+  return inboxMessageFromStored(readStoredInboxMessage(record));
 }
 
 export function writeInboxMessage(message: InboxMessage): Any {
   assertSignalPayloadSize(message.signal);
-
-  const stored: StoredInboxMessage = {
-    key: inboxMessageKey(message.id),
-    id: requireText(message.id.value, "Inbox message ID"),
-    shard: message.shard.key(),
-    shardIndex: message.shard.index,
-    shardTotal: message.shard.ofTotal,
-    inbox: inboxKey(message.inboxId),
-    inboxId: {
-      targetId: requireText(message.inboxId.targetId, "Inbox target ID"),
-      targetTypeUrl: requireText(message.inboxId.targetTypeUrl, "Inbox target type URL"),
-    },
-    signalId: requireText(message.signalId, "Inbox signal ID"),
-    label: requireDeliveryLabel(message.label),
-    status: requireDeliveryStatus(message.status),
-    whenReceivedMs: requireTimestamp(message.whenReceived, "Inbox receive time"),
-    version: message.version.toString(),
-    ...(message.signal === undefined ? {} : { signal: packSignal(message.signal) }),
-    ...(message.keepUntil === undefined
-      ? {}
-      : { keepUntilMs: requireTimestamp(message.keepUntil, "Inbox keep-until time") }),
-  };
-
-  return packRecord(inboxRecordTypeUrl, stored);
+  return packRecord(inboxRecordTypeUrl, storedInboxMessage(message));
 }
 
 export function dedupGuardKey(message: Pick<InboxMessage, "inboxId" | "signalId">): string {
   return `${inboxKey(message.inboxId)}:${requireText(message.signalId, "Inbox signal ID")}`;
 }
 
-export function readDedupRecord(record: Any): StoredDedupRecord {
+export function isPendingDedupRecord(record: Any): boolean {
+  return readStoredDedupRecord(record).state === "PENDING";
+}
+
+function readStoredDedupRecord(record: Any): StoredDedupRecord {
   const decoded = readStoredRecord(record, dedupRecordTypeUrl, "Inbox dedup record");
   const state = requireDedupState(decoded.state);
-  const common = {
-    key: requireText(decoded.key, "Inbox dedup key"),
+  const key = requireText(decoded.key, "Inbox dedup key");
+
+  if (state === "PENDING") {
+    const message = parseStoredInboxMessage(
+      Reflect.get(decoded, "message"),
+      "Inbox dedup pending message",
+    );
+    if (dedupGuardKey(inboxMessageFromStored(message)) !== key) {
+      throw new DeliveryStorageCorruptionError(
+        "Inbox dedup pending message does not match the guard key.",
+      );
+    }
+
+    return Object.freeze({
+      key,
+      state,
+      message,
+    });
+  }
+
+  return Object.freeze({
+    key,
     inbox: requireText(decoded.inbox, "Inbox dedup inbox"),
     signalId: requireText(decoded.signalId, "Inbox dedup signal ID"),
     inboxMessageId: requireText(decoded.inboxMessageId, "Inbox dedup message ID"),
     shardIndex: requireNumber(decoded.shardIndex, "Inbox dedup shard index"),
     shardTotal: requireNumber(decoded.shardTotal, "Inbox dedup shard total"),
-  } as const;
-
-  if (state === "PENDING") {
-    return Object.freeze({
-      ...common,
-      state,
-      claimedAtMs: requireNumber(decoded.claimedAtMs, "Inbox dedup claim time"),
-    });
-  }
-
-  return Object.freeze({
-    ...common,
     state,
     status: requireDeliveryStatus(decoded.status),
     ...(decoded.keepUntilMs === undefined
@@ -168,16 +132,11 @@ export function readDedupRecord(record: Any): StoredDedupRecord {
   });
 }
 
-export function writeDedupClaim(message: InboxMessage, now: Date): Any {
+export function writeDedupClaim(message: InboxMessage): Any {
   const stored: StoredPendingDedupRecord = {
     key: dedupGuardKey(message),
-    inbox: inboxKey(message.inboxId),
-    signalId: requireText(message.signalId, "Inbox signal ID"),
-    inboxMessageId: requireText(message.id.value, "Inbox message ID"),
-    shardIndex: message.id.shard.index,
-    shardTotal: message.id.shard.ofTotal,
     state: "PENDING",
-    claimedAtMs: requireTimestamp(now, "Inbox dedup claim time"),
+    message: storedInboxMessage(message),
   };
 
   return packRecord(dedupRecordTypeUrl, stored);
@@ -201,22 +160,31 @@ export function writeDedupRecord(message: InboxMessage): Any {
   return packRecord(dedupRecordTypeUrl, stored);
 }
 
-export function dedupRecordBlocks(record: StoredDedupRecord, now: Date): boolean {
-  return (
-    record.state === "PENDING" ||
-    record.status !== "DELIVERED" ||
-    keepUntilActive(record.keepUntilMs, now.getTime())
-  );
-}
+export function dedupMessageId(record: Any): InboxMessageId {
+  const dedup = readStoredDedupRecord(record);
 
-export function dedupMessageId(record: StoredDedupRecord): InboxMessageId {
+  if (dedup.state === "PENDING") {
+    return Object.freeze({
+      value: requireText(dedup.message.id, "Inbox dedup message ID"),
+      shard: new ShardIndex(
+        requireNumber(dedup.message.shardIndex, "Inbox dedup shard index"),
+        requireNumber(dedup.message.shardTotal, "Inbox dedup shard total"),
+      ),
+    });
+  }
+
   return Object.freeze({
-    value: requireText(record.inboxMessageId, "Inbox dedup message ID"),
+    value: requireText(dedup.inboxMessageId, "Inbox dedup message ID"),
     shard: new ShardIndex(
-      requireNumber(record.shardIndex, "Inbox dedup shard index"),
-      requireNumber(record.shardTotal, "Inbox dedup shard total"),
+      requireNumber(dedup.shardIndex, "Inbox dedup shard index"),
+      requireNumber(dedup.shardTotal, "Inbox dedup shard total"),
     ),
   });
+}
+
+export function readPendingMessage(record: Any): InboxMessage | undefined {
+  const dedup = readStoredDedupRecord(record);
+  return dedup.state === "PENDING" ? inboxMessageFromStored(dedup.message) : undefined;
 }
 
 function inboxKey(inboxId: InboxMessage["inboxId"]): string {
@@ -237,6 +205,53 @@ function packRecord(typeUrl: string, value: StoredInboxMessage | StoredDedupReco
   });
 }
 
+function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
+  return Object.freeze({
+    key: inboxMessageKey(message.id),
+    id: requireText(message.id.value, "Inbox message ID"),
+    shard: message.shard.key(),
+    shardIndex: message.shard.index,
+    shardTotal: message.shard.ofTotal,
+    inbox: inboxKey(message.inboxId),
+    inboxId: {
+      targetId: requireText(message.inboxId.targetId, "Inbox target ID"),
+      targetTypeUrl: requireText(message.inboxId.targetTypeUrl, "Inbox target type URL"),
+    },
+    signalId: requireText(message.signalId, "Inbox signal ID"),
+    label: requireDeliveryLabel(message.label),
+    status: requireDeliveryStatus(message.status),
+    whenReceivedMs: requireTimestamp(message.whenReceived, "Inbox receive time"),
+    version: message.version.toString(),
+    ...(message.signal === undefined ? {} : { signal: packSignal(message.signal) }),
+    ...(message.keepUntil === undefined
+      ? {}
+      : { keepUntilMs: requireTimestamp(message.keepUntil, "Inbox keep-until time") }),
+  });
+}
+
+function inboxMessageFromStored(stored: StoredInboxMessage): InboxMessage {
+  const shard = new ShardIndex(stored.shardIndex, stored.shardTotal);
+
+  return Object.freeze({
+    id: Object.freeze({
+      value: stored.id,
+      shard,
+    }),
+    inboxId: Object.freeze({
+      targetId: stored.inboxId.targetId,
+      targetTypeUrl: stored.inboxId.targetTypeUrl,
+    }),
+    signalId: stored.signalId,
+    label: stored.label,
+    status: stored.status,
+    shard,
+    whenReceived: new Date(stored.whenReceivedMs),
+    version: parseStoredVersion(stored.version),
+    ...(stored.signal === undefined ? {} : { signal: unpackSignal(stored.signal) }),
+    ...(stored.keepUntilMs === undefined ? {} : { keepUntil: new Date(stored.keepUntilMs) }),
+  });
+}
+
 function packSignal(signal: Any): StoredSignal {
   return Object.freeze({
     typeUrl: requireText(signal.typeUrl, "Inbox signal type URL"),
@@ -252,7 +267,18 @@ function unpackSignal(signal: StoredSignal): Any {
 }
 
 function readStoredInboxMessage(record: Any): StoredInboxMessage {
-  const decoded = readStoredRecord(record, inboxRecordTypeUrl, "Inbox message record");
+  return parseStoredInboxMessage(
+    readStoredRecord(record, inboxRecordTypeUrl, "Inbox message record"),
+    "Inbox message record",
+  );
+}
+
+function parseStoredInboxMessage(value: unknown, label: string): StoredInboxMessage {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    throw new DeliveryStorageCorruptionError(`${label} is invalid.`);
+  }
+
+  const decoded = value as Record<string, unknown>;
   const shard = new ShardIndex(
     requireNumber(decoded.shardIndex, "Inbox shard index"),
     requireNumber(decoded.shardTotal, "Inbox shard total"),
@@ -339,10 +365,6 @@ function readStoredRecord(
   }
 }
 
-function keepUntilActive(keepUntilMs: number | undefined, nowMs: number): boolean {
-  return keepUntilMs !== undefined && keepUntilMs >= nowMs;
-}
-
 function requireDeliveryLabel(value: unknown): DeliveryLabel {
   if (
     value === "HANDLE_COMMAND" ||
@@ -370,7 +392,7 @@ function requireDeliveryStatus(value: unknown): DeliveryStatus {
   throw new DeliveryStorageCorruptionError(`Inbox delivery status "${String(value)}" is invalid.`);
 }
 
-function requireDedupState(value: unknown): StoredDedupRecord["state"] {
+function requireDedupState(value: unknown): "PENDING" | "FINAL" {
   if (value === "PENDING" || value === "FINAL") {
     return value;
   }

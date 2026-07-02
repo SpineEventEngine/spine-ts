@@ -30,6 +30,7 @@ export class ShardSession {
 export class ShardedWorkRegistry {
   readonly #context: StorageContext;
   readonly #leaseMs: number;
+  readonly #now: () => Date;
   readonly #storageFactory: StorageFactory;
 
   /** Open a shard registry over one storage context. */
@@ -40,19 +41,17 @@ export class ShardedWorkRegistry {
     this.#context = options.context;
     this.#storageFactory = options.storageFactory;
     this.#leaseMs = options.leaseMs ?? 30_000;
+    this.#now = options.now ?? (() => new Date());
     Object.freeze(this);
   }
 
   /** Pick up one shard if it is free or expired. */
-  async pickUp(
-    shard: ShardIndex,
-    node: string,
-    now: Date = new Date(),
-  ): Promise<ShardSession | undefined> {
+  async pickUp(shard: ShardIndex, node: string): Promise<ShardSession | undefined> {
     const storage = this.#storage();
 
     try {
       for (;;) {
+        const now = this.#now();
         const currentRecord = await storage.read(shard.key());
         const current = currentRecord === undefined ? undefined : readSession(currentRecord);
         if (current !== undefined && current.expiresAt.getTime() > now.getTime()) {
@@ -119,6 +118,8 @@ export interface ShardedWorkRegistryOptions {
   readonly storageFactory: StorageFactory;
   /** Session lease duration in milliseconds. */
   readonly leaseMs?: number;
+  /** Optional clock used for lease expiry decisions. */
+  readonly now?: () => Date;
 }
 
 interface StoredShardSession {
