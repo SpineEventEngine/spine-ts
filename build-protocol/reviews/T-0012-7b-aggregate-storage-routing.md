@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: review round 7 pending
+Status: round 7 changes requested; fix pass verified
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -182,4 +182,23 @@ All five round-6 reviewers were closed after their reports were collected.
 
 ### Round 7
 
-Pending final re-review after the round-6 docs-only fix commit.
+Reviewer sub-agent IDs were not included in the round-7 fix handoff.
+
+Result: changes requested.
+
+Findings addressed in the round-7 fix pass:
+
+- durable task status, implementation report, work log, and review log were
+  stale after the round-6 docs-only fix;
+- snapshot state bytes were accepted even when the decoded state's first-field
+  ID differed from the internal snapshot aggregate ID;
+- aggregate events with contradictory producer IDs and payload first-field IDs
+  were accepted instead of rejected;
+- non-positive snapshot versions were accepted on write and read;
+- `appendEvents()` accepted aggregate-version gaps instead of requiring the next
+  version to equal the previous version plus one; and
+- aggregate event identity checks still coerced distinct primitive IDs such as
+  `9` and `"9"` through strings.
+
+Verification after the round-7 fix pass passed: focused aggregate-storage
+tests, `typecheck`, `lint`, `format:check`, and `docs:check`.

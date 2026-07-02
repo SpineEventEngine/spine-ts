@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round-6 docs-only fixes in progress
+Status: round-7 validation fixes verified
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -172,6 +172,24 @@ current state now reflects the active final re-review phase, and the package
 README now states that routing calculation exists while runtime dispatch,
 delivery, handler invocation, service hosting, and `Ack` behavior remain
 deferred.
+
+The round-6 docs-only fix was applied before round-7 re-review. Round 7
+requested a fresh durable-status update plus aggregate-storage security and
+reliability fixes. This fix pass addresses the new findings by rejecting
+contradictory producer/payload event IDs, preserving exact primitive aggregate
+identity without string coercion, requiring consecutive aggregate event
+versions, validating snapshot state IDs against internal snapshot aggregate IDs,
+and rejecting non-positive snapshot versions on write and read.
+
+Verification after the round-7 fix pass:
+
+- `corepack pnpm test packages/server/test/repository/aggregate-storage.test.ts`
+  passed with 1 file and 15 tests.
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm lint` passed.
+- `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
+  warning.
 
 ## Concerns
 

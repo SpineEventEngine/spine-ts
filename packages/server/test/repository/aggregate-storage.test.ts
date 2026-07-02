@@ -9,7 +9,7 @@ import {
   FileDescriptorSetSchema,
   type Any,
 } from "@bufbuild/protobuf/wkt";
-import { packAny, packEvent } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packEvent } from "@spine-ts/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -157,7 +157,7 @@ describe("AggregateStorage", () => {
       createAggregateEvent("event-4", "task-1", 4, "closed"),
     ]);
     await storage.appendEvents("other-task", [
-      createAggregateEvent("event-other", "other-task", 5, "outside"),
+      createAggregateEvent("event-other", "other-task", 1, "outside"),
     ]);
 
     const history = await storage.readHistory("task-1");
@@ -235,12 +235,36 @@ describe("AggregateStorage", () => {
     ).rejects.toThrow(/increasing/);
     expect((await storage.readHistory("task-4")).events).toEqual([]);
 
-    await storage.appendEvents("task-4", [createAggregateEvent("event-12", "task-4", 2)]);
+    await storage.appendEvents("task-4", [createAggregateEvent("event-12", "task-4", 1)]);
     await expect(
-      storage.appendEvents("task-4", [createAggregateEvent("event-13", "task-4", 2)]),
+      storage.appendEvents("task-4", [createAggregateEvent("event-13", "task-4", 1)]),
     ).rejects.toThrow(/increasing/);
     expect((await storage.readHistory("task-4")).events.map((event) => event.id?.value)).toEqual([
       "event-12",
+    ]);
+  });
+
+  it("rejects aggregate event version gaps before appending", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(
+      storage.appendEvents("task-gap", [createAggregateEvent("event-gap-first", "task-gap", 2)]),
+    ).rejects.toThrow(/consecutive/);
+    expect((await storage.readHistory("task-gap")).events).toEqual([]);
+
+    await storage.appendEvents("task-gap", [
+      createAggregateEvent("event-gap-created", "task-gap", 1),
+    ]);
+    await expect(
+      storage.appendEvents("task-gap", [createAggregateEvent("event-gap-skipped", "task-gap", 3)]),
+    ).rejects.toThrow(/consecutive/);
+    expect((await storage.readHistory("task-gap")).events.map((event) => event.id?.value)).toEqual([
+      "event-gap-created",
     ]);
   });
 
@@ -360,6 +384,125 @@ describe("AggregateStorage", () => {
     ).rejects.toThrow(/same aggregate ID/);
   });
 
+  it("rejects contradictory producer and payload aggregate IDs", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(
+      storage.appendEvents("task-contradictory", [
+        packEvent({
+          id: create(EventIdSchema, { value: "event-contradictory-id" }),
+          context: create(EventContextSchema, {
+            producerId: packAny(
+              UserIdSchema,
+              create(UserIdSchema, { value: "task-contradictory" }),
+            ),
+            version: create(VersionSchema, { number: 1 }),
+          }),
+          schema: AggregateStateSchema,
+          message: create(AggregateStateSchema, {
+            id: "other-task",
+            name: "changed",
+            archived: false,
+          }),
+        }),
+      ]),
+    ).rejects.toThrow(/same aggregate ID/);
+    expect((await storage.readHistory("task-contradictory")).events).toEqual([]);
+  });
+
+  it("keeps distinct primitive aggregate IDs separate for event routing", async () => {
+    const storage = new AggregateStorage<typeof AggregateStateSchema, string | number>({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [NumberIdEventSchema],
+    });
+
+    await expect(
+      storage.appendEvents("9", [
+        packEvent({
+          id: create(EventIdSchema, { value: "event-number-string-mismatch" }),
+          context: create(EventContextSchema, {
+            version: create(VersionSchema, { number: 1 }),
+          }),
+          schema: NumberIdEventSchema,
+          message: create(NumberIdEventSchema, { id: 9 }),
+        }),
+      ]),
+    ).rejects.toThrow(/same aggregate ID/);
+
+    await storage.appendEvents(9, [
+      packEvent({
+        id: create(EventIdSchema, { value: "event-number-id-9" }),
+        context: create(EventContextSchema, {
+          version: create(VersionSchema, { number: 1 }),
+        }),
+        schema: NumberIdEventSchema,
+        message: create(NumberIdEventSchema, { id: 9 }),
+      }),
+    ]);
+
+    expect((await storage.readHistory(9)).events.map((event) => event.id?.value)).toEqual([
+      "event-number-id-9",
+    ]);
+    expect((await storage.readHistory("9")).events).toEqual([]);
+  });
+
+  it("rejects non-positive snapshot versions before writing", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(
+      storage.writeSnapshot({
+        aggregateId: "task-snapshot-version",
+        state: create(AggregateStateSchema, {
+          id: "task-snapshot-version",
+          name: "changed",
+          archived: false,
+        }),
+        version: 0n,
+        lifecycle: {
+          archived: false,
+          deleted: false,
+        },
+      }),
+    ).rejects.toThrow(/positive/);
+  });
+
+  it("rejects mismatched snapshot state IDs before writing", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(
+      storage.writeSnapshot({
+        aggregateId: "task-snapshot-id",
+        state: create(AggregateStateSchema, {
+          id: "other-task",
+          name: "changed",
+          archived: false,
+        }),
+        version: 1n,
+        lifecycle: {
+          archived: false,
+          deleted: false,
+        },
+      }),
+    ).rejects.toThrow(/unexpected state ID/);
+  });
+
   it("rejects duplicate versions already present in stored aggregate history", async () => {
     const context = { name: "Tasks", multitenant: false };
     const storageFactory = new SharedEventStorageFactory();
@@ -460,6 +603,26 @@ describe("AggregateStorage", () => {
         ),
       }).readHistory("task-9"),
     ).rejects.toThrow(/unexpected state type/);
+
+    await expect(
+      corruptStorage(
+        snapshotRecord({
+          aggregateId: "task-9",
+          stateId: "other-task",
+          version: "1",
+        }),
+      ).readHistory("task-9"),
+    ).rejects.toThrow(/unexpected state ID/);
+
+    await expect(
+      corruptStorage(
+        snapshotRecord({
+          aggregateId: "task-9",
+          stateId: "task-9",
+          version: "0",
+        }),
+      ).readHistory("task-9"),
+    ).rejects.toThrow(/positive/);
   });
 });
 
@@ -506,6 +669,37 @@ function field(
 }
 
 const snapshotRecordTypeUrl = "type.spine-ts.dev/internal/AggregateSnapshotRecord";
+
+function snapshotRecord(options: {
+  readonly aggregateId: string;
+  readonly stateId: string;
+  readonly version: string;
+}): Pick<Any, "typeUrl" | "value"> {
+  return {
+    typeUrl: snapshotRecordTypeUrl,
+    value: Buffer.from(
+      JSON.stringify({
+        aggregateId: options.aggregateId,
+        stateTypeUrl: deriveTypeUrl(AggregateStateSchema),
+        stateBase64: Buffer.from(
+          toBinary(
+            AggregateStateSchema,
+            create(AggregateStateSchema, {
+              id: options.stateId,
+              name: "changed",
+              archived: false,
+            }),
+            { writeUnknownFields: false },
+          ),
+        ).toString("base64"),
+        version: options.version,
+        archived: false,
+        deleted: false,
+      }),
+      "utf8",
+    ),
+  };
+}
 
 function corruptStorage(
   record: Pick<Any, "typeUrl" | "value">,

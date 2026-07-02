@@ -45,18 +45,18 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
   /** Append aggregate events in strictly increasing aggregate-version order. */
   async appendEvents(aggregateId: Id, events: Iterable<Event>): Promise<void> {
     const batch = [...events];
-    const expectedId = String(aggregateId);
+    const expectedId = requirePrimitiveId(aggregateId);
     let lastVersion = (await this.#readAggregateEvents(aggregateId)).at(-1)?.version ?? 0n;
 
     for (const event of batch) {
       const eventAggregateId = this.#eventAggregateId(event);
-      if (eventAggregateId === undefined || eventAggregateId !== expectedId) {
+      if (eventAggregateId === undefined || !samePrimitiveId(eventAggregateId, expectedId)) {
         throw new Error("Aggregate events must all route to the same aggregate ID before append.");
       }
 
       const version = requireEventVersion(event);
-      if (version <= lastVersion) {
-        throw new Error("Aggregate event versions must be strictly increasing.");
+      if (version !== lastVersion + 1n) {
+        throw new Error("Aggregate event versions must be strictly increasing and consecutive.");
       }
       lastVersion = version;
     }
@@ -66,6 +66,8 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
 
   /** Store or replace the latest snapshot for one aggregate. */
   async writeSnapshot(snapshot: AggregateSnapshot<Schema, Id>): Promise<void> {
+    this.#validateSnapshot(snapshot.aggregateId, snapshot.state, snapshot.version);
+
     await this.#snapshotStorage.write(
       createSnapshotRecord({
         aggregateId: snapshot.aggregateId,
@@ -108,10 +110,18 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
         `Aggregate snapshot for "${String(aggregateId)}" has an unexpected state type.`,
       );
     }
+    if (payload.version <= 0n) {
+      throw new Error(
+        `Aggregate snapshot for "${String(aggregateId)}" must have a positive version.`,
+      );
+    }
+
+    const state = fromBinary(this.#stateSchema, payload.state);
+    this.#validateSnapshot(payload.aggregateId as Id, state, payload.version);
 
     return Object.freeze({
       aggregateId: payload.aggregateId as Id,
-      state: fromBinary(this.#stateSchema, payload.state),
+      state,
       version: payload.version,
       lifecycle: Object.freeze({
         archived: payload.archived,
@@ -121,11 +131,12 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
   }
 
   async #readAggregateEvents(aggregateId: Id): Promise<readonly VersionedEvent[]> {
-    const expectedId = String(aggregateId);
+    const expectedId = requirePrimitiveId(aggregateId);
     const events: VersionedEvent[] = [];
 
     for (const event of await this.#eventStore.read()) {
-      if (this.#eventAggregateId(event) !== expectedId) {
+      const eventAggregateId = this.#eventAggregateId(event);
+      if (eventAggregateId === undefined || !samePrimitiveId(eventAggregateId, expectedId)) {
         continue;
       }
 
@@ -138,7 +149,24 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
     return Object.freeze(events);
   }
 
-  #eventAggregateId(event: Event): string | undefined {
+  #eventAggregateId(event: Event): PrimitiveId | undefined {
+    const producerId = this.#producerId(event);
+    const payloadId = this.#payloadId(event);
+
+    if (
+      producerId !== undefined &&
+      payloadId !== undefined &&
+      !samePrimitiveId(producerId, payloadId)
+    ) {
+      throw new Error(
+        "Aggregate event producer ID and payload ID must identify the same aggregate ID.",
+      );
+    }
+
+    return producerId ?? payloadId;
+  }
+
+  #producerId(event: Event): PrimitiveId | undefined {
     const producerId = event.context?.producerId;
     if (producerId !== undefined) {
       const userId = unpackAny(producerId, UserIdSchema);
@@ -147,6 +175,10 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
       }
     }
 
+    return undefined;
+  }
+
+  #payloadId(event: Event): PrimitiveId | undefined {
     const message = event.message;
     if (message === undefined) {
       return undefined;
@@ -165,6 +197,29 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
     }
 
     return undefined;
+  }
+
+  #stateId(state: MessageShape<Schema>): PrimitiveId | undefined {
+    const firstField = this.#stateSchema.fields[0];
+    if (firstField === undefined) {
+      return undefined;
+    }
+    return primitiveId((state as Record<string, unknown>)[firstField.localName]);
+  }
+
+  #validateSnapshot(aggregateId: Id, state: MessageShape<Schema>, version: bigint): void {
+    if (version <= 0n) {
+      throw new Error(
+        `Aggregate snapshot for "${String(aggregateId)}" must have a positive version.`,
+      );
+    }
+
+    const stateId = this.#stateId(state);
+    if (!samePrimitiveId(stateId, aggregateId)) {
+      throw new Error(
+        `Aggregate snapshot for "${String(aggregateId)}" has an unexpected state ID.`,
+      );
+    }
   }
 }
 
@@ -224,6 +279,8 @@ interface VersionedEvent {
   readonly event: Event;
   readonly version: bigint;
 }
+
+type PrimitiveId = string | number | boolean | bigint;
 
 const snapshotRecordTypeUrl = "type.spine-ts.dev/internal/AggregateSnapshotRecord";
 
@@ -304,18 +361,30 @@ function rejectDuplicateVersions(events: readonly VersionedEvent[]): void {
   }
 }
 
-function sameSnapshotId(left: unknown, right: unknown): boolean {
+function requirePrimitiveId(value: unknown): PrimitiveId {
+  const id = primitiveId(value);
+  if (id === undefined) {
+    throw new Error("Aggregate IDs must be primitive values.");
+  }
+  return id;
+}
+
+function samePrimitiveId(left: unknown, right: unknown): boolean {
   return primitiveId(left) !== undefined && left === right;
 }
 
-function primitiveId(value: unknown): string | undefined {
+function sameSnapshotId(left: unknown, right: unknown): boolean {
+  return samePrimitiveId(left, right);
+}
+
+function primitiveId(value: unknown): PrimitiveId | undefined {
   if (
     typeof value === "string" ||
     typeof value === "number" ||
     typeof value === "boolean" ||
     typeof value === "bigint"
   ) {
-    return String(value);
+    return value;
   }
   return undefined;
 }
