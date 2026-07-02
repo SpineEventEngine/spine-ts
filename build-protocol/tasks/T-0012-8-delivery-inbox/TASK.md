@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-12 review pending
+Status: round-13 review pending
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -169,4 +169,12 @@ entityStateType)` returns a zero-based shard index and that all messages for
   collected.
 - Round-12 review package is prepared at
   `.superpowers/sdd/review-round-12-fce80b2-current.diff`.
+- Round-12 review completed with one documentation finding: the Round 10 Fix
+  entry in the review log needed to explicitly record commit `d419fd8`. Code
+  style/maintainability, TypeScript/API docs, security, and
+  performance/reliability were clean.
+- All five round-12 reviewer sub-agents were closed after their reports were
+  collected.
+- Round-13 review package is prepared at
+  `.superpowers/sdd/review-round-13-fce80b2-current.diff`.
 - No blocking human question is known.

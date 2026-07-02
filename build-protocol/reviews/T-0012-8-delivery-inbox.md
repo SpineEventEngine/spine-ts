@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 12 review pending
+Status: round 13 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -469,7 +469,7 @@ reviewer sub-agents were closed after their reports were collected.
 
 ### Round 10 Fix
 
-Result: implemented in this worktree and ready for round-11 review.
+Result: committed as `d419fd8` and ready for round-11 review.
 
 Fix summary:
 
@@ -518,6 +518,40 @@ Fix summary:
 
 Diff package:
 `.superpowers/sdd/review-round-12-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2213-738d-7d20-adf4-85cf676910eb`;
+- documentation: `019f2213-9777-7871-b198-90e70abf17b1`;
+- TypeScript/API docs: `019f2213-b68b-72f2-abfa-b9e54733d293`;
+- security: `019f2213-d57d-7ba0-927d-dad89a63f6bc`;
+- performance/reliability:
+  `019f2213-f392-7fe2-8e49-336072d35588`.
+
+Result: changes requested.
+
+Findings to address:
+
+- the Round 10 Fix entry in this review log must explicitly record that the
+  fix was committed as `d419fd8`.
+
+Code style/maintainability, TypeScript/API docs, security, and
+performance/reliability lanes were clean. All five round-12 reviewer
+sub-agents were closed after their reports were collected.
+
+### Round 12 Fix
+
+Result: implemented in this worktree and ready for round-13 review.
+
+Fix summary:
+
+- updated the Round 10 Fix entry to record commit `d419fd8`.
+
+### Round 13
+
+Diff package:
+`.superpowers/sdd/review-round-13-fce80b2-current.diff`.
 
 Reviewer sub-agents: pending.
 
