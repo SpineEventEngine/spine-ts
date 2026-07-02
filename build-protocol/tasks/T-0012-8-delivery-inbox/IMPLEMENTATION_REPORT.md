@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-17 review prep
+Status: round-18 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -238,6 +238,19 @@ that this report and `TASK.md` advance from the round-15 fix state to the
 round-16 review-prep state. Performance/reliability requested preserving exact
 focused verification file targets in the work log while keeping line lengths
 readable.
+
+Round-16 fixes advanced task/report statuses and package-prep notes, and
+restored exact focused verification file targets in the work log. Round-17
+review package `.superpowers/sdd/review-round-17-fce80b2-current.diff` was
+prepared after those fixes.
+
+## Round 17 Review
+
+Round 17 found no API or security issue. Documentation requested marking
+round-17 package prep as completed in task/report logs. Performance/reliability
+requested exact focused coverage test paths in the work log. Code
+style/maintainability found the same stale work-log/package-prep wording as
+documentation.
 
 ## Round 2 Review
 
