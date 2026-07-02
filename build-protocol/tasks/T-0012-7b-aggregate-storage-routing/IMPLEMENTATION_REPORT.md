@@ -211,6 +211,9 @@ Verification after the round-9 fix pass:
   warning.
 - `git diff --check` passed.
 
+Round-17 fix commit: `822d358`. Round-18 re-review is pending against
+`.superpowers/sdd/review-d7b9245..822d358.diff`.
+
 Round 10 requested a documentation/status cleanup and a reliability fix for
 duplicate aggregate event IDs. The reliability fix rejects missing or duplicate
 event IDs before `EventStore.appendAll()`, preventing replace-by-ID storage from

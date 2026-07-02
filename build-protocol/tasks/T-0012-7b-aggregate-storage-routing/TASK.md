@@ -158,4 +158,7 @@ Required evidence for this task:
   and index tests, server bus/API tests, handler metadata tests,
   aggregate-storage tests, and repository-routing tests; `typecheck`, `lint`,
   `format:check`, `docs:check`, and `git diff --check`.
+- Round-17 fix commit: `822d358`.
+- Round-18 reviewer sub-agents are pending against
+  `.superpowers/sdd/review-d7b9245..822d358.diff`.
 - No blocking human question is known.

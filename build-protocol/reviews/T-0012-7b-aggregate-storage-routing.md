@@ -490,3 +490,14 @@ Verification after the round-17 fix pass passed: focused storage event-store,
 storage factory, storage index, server event-bus, server bus API, server root
 API, handler metadata, aggregate-storage, and repository-routing tests,
 `typecheck`, `lint`, `format:check`, `docs:check`, and `git diff --check`.
+
+Round-17 fix commit: `822d358`.
+
+### Round 18
+
+Diff package:
+`.superpowers/sdd/review-d7b9245..822d358.diff`.
+
+Reviewer sub-agents: pending.
+
+Result: pending.
