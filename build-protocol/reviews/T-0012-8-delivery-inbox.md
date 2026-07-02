@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 2 changes requested
+Status: round 3 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -126,3 +126,34 @@ Findings to address:
 
 All five round-2 reviewer sub-agents were closed after their reports were
 collected.
+
+### Round 2 Fix
+
+Fix sub-agent: `019f21b9-2997-7a90-b8d5-527656d7354a`.
+
+Result: completed and closed after commit `59a6530`.
+
+Fix summary:
+
+- split inbox dedup guards into pending and final internal states;
+- reuses the claimed inbox message identity when reclaiming expired pending
+  guards;
+- finalizes guards only after the inbox row is visible;
+- bounds inbox reads with a default page size;
+- tightens `RecordQuery` limit validation;
+- documents `RecordStorage.compareAndSet()` as an atomic cross-handle storage
+  contract;
+- narrows unneeded inbox-record helper exports; and
+- updates delivery/storage docs and durable logs for the scope exclusions and
+  empty local delivery proto directory.
+
+Round-3 reviewers must verify this correction rather than assuming it.
+
+### Round 3
+
+Diff package:
+`.superpowers/sdd/review-d33b311..59a6530.diff`.
+
+Reviewer sub-agents: pending.
+
+Result: pending.
