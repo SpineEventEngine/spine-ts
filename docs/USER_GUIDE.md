@@ -872,8 +872,9 @@ Event>`. In this slice it is storage-only: it persists and reads generated
 Spine `Event` messages, but it does not dispatch them to subscribers, manage
 delivery attempts, or implement retry/bus behavior.
 
-Aggregate histories/snapshots, delivery records, tenant indexes, diagnostics,
-repository storage policy, and read-side projection stores are deferred.
+Aggregate snapshot/history storage is available through `AggregateStorage`.
+Delivery records, tenant indexes, diagnostics, repository storage policy, and
+read-side projection stores are deferred.
 
 ## First Commands
 

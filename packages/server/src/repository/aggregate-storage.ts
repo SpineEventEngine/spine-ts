@@ -120,7 +120,6 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
   async #readAggregateEvents(aggregateId: Id): Promise<readonly VersionedEvent[]> {
     const expectedId = String(aggregateId);
     const events: VersionedEvent[] = [];
-    let lastVersion = 0n;
 
     for (const event of await this.#eventStore.read()) {
       if (this.#eventAggregateId(event) !== expectedId) {
@@ -128,13 +127,11 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
       }
 
       const version = requireEventVersion(event);
-      if (version <= lastVersion) {
-        throw new Error("Aggregate event history contains duplicate or non-increasing versions.");
-      }
-      lastVersion = version;
       events.push(Object.freeze({ event, version }));
     }
 
+    events.sort((left, right) => compareVersions(left.version, right.version));
+    rejectDuplicateVersions(events);
     return Object.freeze(events);
   }
 
@@ -291,6 +288,17 @@ function requireEventVersion(event: Event): bigint {
   return BigInt(version);
 }
 
+function rejectDuplicateVersions(events: readonly VersionedEvent[]): void {
+  let lastVersion: bigint | undefined;
+
+  for (const { version } of events) {
+    if (lastVersion !== undefined && version === lastVersion) {
+      throw new Error("Aggregate event history contains duplicate versions.");
+    }
+    lastVersion = version;
+  }
+}
+
 function primitiveId(value: unknown): string | undefined {
   if (
     typeof value === "string" ||
@@ -301,4 +309,14 @@ function primitiveId(value: unknown): string | undefined {
     return String(value);
   }
   return undefined;
+}
+
+function compareVersions(left: bigint, right: bigint): number {
+  if (left < right) {
+    return -1;
+  }
+  if (left > right) {
+    return 1;
+  }
+  return 0;
 }

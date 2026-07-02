@@ -25,10 +25,7 @@ import {
   EventRegistrationReadiness,
   type EventRegistrationReadinessLookup,
 } from "../handler/event-registration-readiness.js";
-import {
-  isAuthenticHandlerMetadata,
-  type EntityHandlersMetadata,
-} from "../handler/handler-metadata.js";
+import { handlerMetadataAccess, type EntityHandlersMetadata } from "../handler/handler-metadata.js";
 
 type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> =
   | Aggregate<unknown, Schema, unknown>
@@ -59,6 +56,11 @@ type RepositoryEntityId<EntityType extends RepositoryEntityType> =
       : EntityType["prototype"] extends ProcessManager<infer Id, DescriptorMessageSchema, unknown>
         ? Id
         : never;
+
+type RepositoryHandlers<EntityType extends RepositoryEntityType> =
+  EntityType["prototype"] extends infer Instance extends object
+    ? EntityHandlersMetadata<Instance, RepositoryStateSchema<EntityType>>
+    : never;
 
 type IsUnion<Type, Union = Type> = Type extends unknown
   ? [Union] extends [Type]
@@ -119,7 +121,7 @@ export interface RepositoryOptions<
   /** Generated Protobuf-ES schema for the entity state owned by this repository identity. */
   readonly schema: RepositoryStateSchema<EntityType>;
   /** Explicit handler metadata used to register repository command and event routing. */
-  readonly handlers?: EntityHandlersMetadata | readonly EntityHandlersMetadata[];
+  readonly handlers?: RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[];
 }
 
 /**
@@ -162,29 +164,6 @@ export interface RepositoryView {
   readonly idField: DescriptorFieldMetadata;
   /** Copy-safe immutable identity snapshot for duplicate/conflict checks. */
   readonly snapshot: RepositoryIdentitySnapshot;
-}
-
-/** Repository handler invocation state for this storage/routing slice. */
-export type RepositoryRouteInvocation = "deferred";
-
-/** Command route calculated by a repository. */
-export interface RepositoryCommandRoute<Id = unknown> {
-  /** Target entity identifier. */
-  readonly entityId: Id;
-  /** Fully qualified command message type name. */
-  readonly messageFullTypeName: string;
-  /** Handler invocation is intentionally deferred to a later runtime slice. */
-  readonly invocation: RepositoryRouteInvocation;
-}
-
-/** Event route calculated by a repository. */
-export interface RepositoryEventRoute<Id = unknown> {
-  /** Target entity identifiers. */
-  readonly entityIds: readonly Id[];
-  /** Fully qualified event message type name. */
-  readonly messageFullTypeName: string;
-  /** Handler invocation is intentionally deferred to a later runtime slice. */
-  readonly invocation: RepositoryRouteInvocation;
 }
 
 /** Machine-readable codes for repository identity failures. */
@@ -331,6 +310,29 @@ export class Repository<
   }
 }
 
+/** Repository handler invocation state for this storage/routing slice. */
+export type RepositoryRouteInvocation = "deferred";
+
+/** Command route calculated by a repository. */
+export interface RepositoryCommandRoute<Id = unknown> {
+  /** Target entity identifier. */
+  readonly entityId: Id;
+  /** Fully qualified command message type name. */
+  readonly messageFullTypeName: string;
+  /** Handler invocation is intentionally deferred to a later runtime slice. */
+  readonly invocation: RepositoryRouteInvocation;
+}
+
+/** Event route calculated by a repository. */
+export interface RepositoryEventRoute<Id = unknown> {
+  /** Target entity identifiers. */
+  readonly entityIds: readonly Id[];
+  /** Fully qualified event message type name. */
+  readonly messageFullTypeName: string;
+  /** Handler invocation is intentionally deferred to a later runtime slice. */
+  readonly invocation: RepositoryRouteInvocation;
+}
+
 const repositorySnapshots = new WeakMap<RepositoryView, RepositoryIdentitySnapshot>();
 const repositoryDispatchers = new WeakMap<RepositoryView, RepositoryDispatchers>();
 Object.freeze(Repository);
@@ -473,7 +475,7 @@ function validateHandlers(
 ): void {
   for (const handlersMetadata of handlers) {
     if (
-      !isAuthenticHandlerMetadata(handlersMetadata) ||
+      !handlerMetadataAccess.isAuthentic(handlersMetadata) ||
       handlersMetadata.entityType !== entityType ||
       handlersMetadata.entity.fullTypeName !== metadata.fullTypeName
     ) {

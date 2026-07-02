@@ -407,12 +407,17 @@ export function defineEntityHandlers<
   return Object.freeze(metadata);
 }
 
-/** @internal Returns whether metadata was produced by `defineEntityHandlers()`. */
-export function isAuthenticHandlerMetadata(
-  metadata: EntityHandlersMetadata,
-): metadata is EntityHandlersMetadata {
-  return authenticEntityHandlers.has(metadata);
+/** @internal Framework-only handler metadata authority contract. */
+export interface HandlerMetadataAccess {
+  isAuthentic(metadata: EntityHandlersMetadata): metadata is EntityHandlersMetadata;
 }
+
+/** @internal Framework-only handler metadata authority. */
+export const handlerMetadataAccess: HandlerMetadataAccess = Object.freeze({
+  isAuthentic(metadata: EntityHandlersMetadata): metadata is EntityHandlersMetadata {
+    return authenticEntityHandlers.has(metadata);
+  },
+});
 
 function createHandlerRegistrationBuilder<Instance extends object>(
   entityType: EntityClass<Instance>,

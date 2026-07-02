@@ -123,7 +123,10 @@ describe("repository signal routing", () => {
     const handlers = defineEntityHandlers(TaskAggregate, AggregateStateSchema, (builder) => [
       builder.assign(AggregateStateSchema, "assignTask"),
     ]);
-    const fabricated = { ...handlers } as EntityHandlersMetadata;
+    const fabricated = { ...handlers } as unknown as EntityHandlersMetadata<
+      TaskAggregate,
+      typeof AggregateStateSchema
+    >;
 
     expect(
       () =>

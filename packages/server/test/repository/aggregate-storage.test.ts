@@ -164,6 +164,25 @@ describe("AggregateStorage", () => {
       "event-12",
     ]);
   });
+
+  it("loads aggregate history by version when event IDs sort differently", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await storage.appendEvents("task-5", [
+      createAggregateEvent("event-z", "task-5", 1, "created"),
+      createAggregateEvent("event-a", "task-5", 2, "renamed"),
+    ]);
+
+    expect((await storage.readHistory("task-5")).events.map((event) => event.id?.value)).toEqual([
+      "event-z",
+      "event-a",
+    ]);
+  });
 });
 
 function createAggregateEvent(

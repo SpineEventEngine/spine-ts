@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: review round 2 pending
+Status: review round 3 pending
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -62,4 +62,31 @@ All five round-1 reviewers were closed after their reports were collected.
 
 ### Round 2
 
-Pending re-review of `dcddec7..69c6716`.
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f20c5-44f5-7421-a5cb-b510bf19416c`;
+- documentation: `019f20c5-456c-7192-8106-d431040334cb`;
+- TypeScript/API docs: `019f20c5-45ff-7352-90fa-c30ea695fdb6`;
+- security: `019f20c5-4671-74c1-947f-262cd763fe80`;
+- performance/reliability:
+  `019f20c5-470a-7190-943f-f7d6662f3aca`.
+
+Result: changes requested.
+
+Findings addressed in the round-2 fix pass:
+
+- storage/user/architecture docs no longer say aggregate snapshots/history are
+  deferred;
+- review log re-review range now points at the package actually reviewed;
+- aggregate event reads sort by aggregate version before duplicate-version
+  validation, so event-store ID ordering cannot reject valid history;
+- `RepositoryOptions.handlers` now preserves entity/state generics; and
+- handler metadata authenticity is exposed through an internal access object
+  rather than a standalone helper export.
+
+All five round-2 reviewers were closed after their reports were collected.
+
+### Round 3
+
+Pending re-review of `dcddec7..HEAD` after the round-2 fix commit.

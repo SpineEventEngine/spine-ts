@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: review round 1 fixes complete; verification passed
+Status: review round 2 fixes complete; verification passed
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -101,6 +101,26 @@ Review round 1 findings addressed in the fix pass:
   metadata before creating bus-visible dispatchers.
 
 Final verification for the fix pass passed.
+
+Review round 2 findings addressed in the follow-up fix pass:
+
+- public docs now state that aggregate snapshot/history storage exists through
+  `AggregateStorage`;
+- aggregate event history reads sort aggregate events by version before
+  duplicate-version validation, avoiding dependence on event-store ID order;
+- `RepositoryOptions.handlers` now preserves the repository entity/state
+  generic contract; and
+- handler metadata authenticity is checked through an internal access object.
+
+Verification after the round-2 fix pass:
+
+- `corepack pnpm test packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts`
+  passed with 2 files and 8 tests.
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm lint` passed.
+- `corepack pnpm format:check` passed.
+- `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
+  warning.
 
 ## Concerns
 
