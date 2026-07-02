@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: review round 5 pending
+Status: review round 6 pending
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -136,4 +136,27 @@ All five round-4 reviewers were closed after their reports were collected.
 
 ### Round 5
 
-Pending final re-review after the round-4 fix commit.
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f20dc-9003-7971-9571-dcb524e1f512`;
+- documentation: `019f20dc-908c-7773-afdf-a59e99df91b8`;
+- TypeScript/API docs: `019f20dc-9100-73d1-879f-8aac38318c09`;
+- security: `019f20dc-91bd-74d3-b534-4054337a55bf`;
+- performance/reliability:
+  `019f20dc-9232-7800-8b3a-0f693457b4a7`.
+
+Result: changes requested.
+
+Findings addressed in the round-5 fix pass:
+
+- task/work-log current state was still stale for the active review phase;
+- `packages/server/README.md` still said repository did not route messages; and
+- snapshot identity comparison used string coercion instead of exact primitive
+  identity.
+
+All five round-5 reviewers were closed after their reports were collected.
+
+### Round 6
+
+Pending final re-review after the round-5 fix commit.

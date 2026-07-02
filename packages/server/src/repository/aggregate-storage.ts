@@ -100,7 +100,7 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
     }
 
     const payload = readSnapshotRecord(record);
-    if (String(payload.aggregateId) !== String(aggregateId)) {
+    if (!sameSnapshotId(payload.aggregateId, aggregateId)) {
       throw new Error(`Aggregate snapshot for "${String(aggregateId)}" has an unexpected ID.`);
     }
     if (payload.stateTypeUrl !== this.#stateTypeUrl) {
@@ -302,6 +302,10 @@ function rejectDuplicateVersions(events: readonly VersionedEvent[]): void {
     }
     lastVersion = version;
   }
+}
+
+function sameSnapshotId(left: unknown, right: unknown): boolean {
+  return primitiveId(left) !== undefined && left === right;
 }
 
 function primitiveId(value: unknown): string | undefined {

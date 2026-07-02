@@ -551,10 +551,12 @@ snapshot-backed `RepositoryView` values. The context opens state `RecordStorage`
 using the repository state schema and the context `StorageFactory`. Repeated
 `add(repository)` calls before
 `build()` are idempotent. Registering the same repository instance with another
-built context is rejected. This seam follows Spine `core-jvm` `Repository`
+built context is rejected. When explicit handler metadata is supplied,
+`routeCommand()` and `routeEvent()` calculate deferred repository routes for the
+current storage/routing slice. This seam follows Spine `core-jvm` `Repository`
 identity and registration concepts closely. This API does not create, find, or
-store entities; route messages; invoke handlers; write inboxes; manage caches;
-emit lifecycle events; or touch transport.
+store entities; invoke handlers; write inboxes; manage caches; emit lifecycle
+events; or touch transport.
 
 ## Entity State Transition Validation
 

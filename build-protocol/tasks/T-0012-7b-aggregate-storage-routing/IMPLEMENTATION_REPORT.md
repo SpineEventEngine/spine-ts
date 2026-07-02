@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round-4 fixes complete; verification passed
+Status: round-5 fixes complete; verification passed
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -152,6 +152,20 @@ Verification after the round-4 fix:
 - `corepack pnpm format:check` passed.
 - `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
   warning.
+
+Round 5 requested final documentation/API/reliability fixes. The package README
+no longer contradicts repository route calculation, task/work-log current state
+now reflects the active final re-review phase, and snapshot identity validation
+uses exact primitive equality so values such as `9` and `"9"` do not compare as
+the same ID.
+
+Verification after the round-5 fix:
+
+- `corepack pnpm test packages/server/test/repository/aggregate-storage.test.ts`
+  passed with 1 file and 10 tests.
+- `corepack pnpm typecheck` passed.
+- `corepack pnpm lint` passed.
+- `corepack pnpm format:check` passed.
 
 ## Concerns
 

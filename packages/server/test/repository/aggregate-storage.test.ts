@@ -415,7 +415,7 @@ describe("AggregateStorage", () => {
         typeUrl: snapshotRecordTypeUrl,
         value: Buffer.from(
           JSON.stringify({
-            aggregateId: "other-task",
+            aggregateId: 9,
             stateTypeUrl: AggregateStateSchema.typeName,
             stateBase64: "",
             version: "1",
@@ -425,6 +425,23 @@ describe("AggregateStorage", () => {
           "utf8",
         ),
       }).readHistory("task-9"),
+    ).rejects.toThrow(/unexpected ID/);
+
+    await expect(
+      corruptStorage({
+        typeUrl: snapshotRecordTypeUrl,
+        value: Buffer.from(
+          JSON.stringify({
+            aggregateId: "9",
+            stateTypeUrl: AggregateStateSchema.typeName,
+            stateBase64: "",
+            version: "1",
+            archived: false,
+            deleted: false,
+          }),
+          "utf8",
+        ),
+      }).readHistory(9),
     ).rejects.toThrow(/unexpected ID/);
 
     await expect(
@@ -492,7 +509,7 @@ const snapshotRecordTypeUrl = "type.spine-ts.dev/internal/AggregateSnapshotRecor
 
 function corruptStorage(
   record: Pick<Any, "typeUrl" | "value">,
-): AggregateStorage<typeof AggregateStateSchema> {
+): AggregateStorage<typeof AggregateStateSchema, string | number> {
   return new AggregateStorage({
     context: { name: "Tasks", multitenant: false },
     storageFactory: new CorruptSnapshotFactory(create(AnySchema, record)),
