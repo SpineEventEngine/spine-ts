@@ -1,0 +1,50 @@
+# T-0012.7c: Integration Verification Fix
+
+Status: implementation pending
+Start: `2026-07-02 07:32 WEST`
+Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
+Branch: `task/T-0012-7c-integration-verification-fix`
+Worktree:
+`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7c-integration-verification-fix`
+Baseline commit: `e7a7c82`
+
+## Goal
+
+Fix the integrated verification failure found after merging `T-0012.7b` to
+`main`.
+
+## Failure Evidence
+
+- Sandboxed `env CI=true corepack pnpm verify` stopped at `format:check`
+  because unrelated untracked root file `human-review-1-jul.md` is not
+  formatted. This file is outside the task and must not be modified.
+- Tracked-file formatting passed when checked through `git ls-files`.
+- `corepack pnpm test` found one real server failure:
+  `packages/server/test/context/bounded-context.test.ts` expected the
+  observing storage fixture to record a stored event before dispatch, but only
+  dispatch was observed.
+- The same sandboxed test run also hit the known ZeroMQ local IPC sandbox
+  limitation in `packages/transport/test/zeromq/local-ipc-smoke.test.ts`.
+
+## Scope
+
+- Repair only the integrated server verification failure.
+- Keep the fix minimal; prefer test fixture correction if production storage is
+  already writing correctly through batch append.
+- Do not modify `human-review-1-jul.md`.
+- Do not change ZeroMQ transport behavior for the sandbox-only IPC failure.
+- Preserve the simplified, JVM-aligned API and the source/test folder layout.
+- Update this task's logs before and after implementation.
+
+## Required Review Lanes
+
+- code style/maintainability;
+- documentation;
+- TypeScript/API docs;
+- security;
+- performance/reliability.
+
+## Current State
+
+- Implementation sub-agent is pending.
+- No blocking human question is known.
