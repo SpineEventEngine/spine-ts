@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round 8 changes requested; fix pass in progress
+Status: round 9 changes requested; fix pass verified
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -233,3 +233,30 @@ Findings addressed in the round-8 fix pass:
   payload first-field ID when both were present and contradictory.
 
 All five round-8 reviewers were closed after their reports were collected.
+
+### Round 9
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f20f5-9e85-7e03-bfea-4e282087bf0a`;
+- documentation: `019f20f5-c529-7081-bd9a-a1e5275b309d`;
+- TypeScript/API docs: `019f20f5-ebae-74d0-894f-d8c151a714f5`;
+- security: `019f20f6-102d-7ed3-9b8b-9fe1d892ae75`;
+- performance/reliability:
+  `019f20f6-3666-7d61-86d4-0bbb73e06910`.
+
+Result: changes requested.
+
+Findings addressed in the round-9 fix pass:
+
+- durable logs still described the round-8 repository route fix as in progress
+  after commit `f684ad1`; and
+- stored aggregate event history rejected duplicate versions but still accepted
+  gaps such as versions `1` and `3`.
+
+Verification after the round-9 fix pass passed: focused aggregate-storage and
+repository-routing tests, `typecheck`, `lint`, `format:check`, `docs:check`,
+and `git diff --check`.
+
+All five round-9 reviewers were closed after their reports were collected.

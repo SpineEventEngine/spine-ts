@@ -145,7 +145,7 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
     }
 
     events.sort((left, right) => compareVersions(left.version, right.version));
-    rejectDuplicateVersions(events);
+    rejectConsecutiveVersions(events);
     return Object.freeze(events);
   }
 
@@ -350,14 +350,17 @@ function requireEventVersion(event: Event): bigint {
   return BigInt(version);
 }
 
-function rejectDuplicateVersions(events: readonly VersionedEvent[]): void {
-  let lastVersion: bigint | undefined;
+function rejectConsecutiveVersions(events: readonly VersionedEvent[]): void {
+  let expectedVersion = 1n;
 
   for (const { version } of events) {
-    if (lastVersion !== undefined && version === lastVersion) {
+    if (version === expectedVersion - 1n) {
       throw new Error("Aggregate event history contains duplicate versions.");
     }
-    lastVersion = version;
+    if (version !== expectedVersion) {
+      throw new Error("Aggregate event history contains version gaps.");
+    }
+    expectedVersion++;
   }
 }
 

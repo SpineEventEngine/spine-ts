@@ -522,6 +522,30 @@ describe("AggregateStorage", () => {
     await expect(storage.readHistory("task-8")).rejects.toThrow(/duplicate versions/);
   });
 
+  it("rejects version gaps already present in stored aggregate history", async () => {
+    const context = { name: "Tasks", multitenant: false };
+    const storageFactory = new SharedEventStorageFactory();
+    const storage = new AggregateStorage({
+      context,
+      storageFactory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    const eventStore = new EventStore(context, storageFactory);
+
+    await eventStore.appendAll([
+      createAggregateEvent("event-history-gap-1", "task-gap", 1),
+      createAggregateEvent("event-history-gap-3", "task-gap", 3),
+    ]);
+
+    await expect(storage.readHistory("task-gap")).rejects.toThrow(/version gaps/);
+    await expect(
+      storage.appendEvents("task-gap", [
+        createAggregateEvent("event-history-gap-4", "task-gap", 4),
+      ]),
+    ).rejects.toThrow(/version gaps/);
+  });
+
   it("fails closed for corrupted snapshot records", async () => {
     await expect(
       corruptStorage({
