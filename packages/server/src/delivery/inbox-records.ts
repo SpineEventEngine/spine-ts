@@ -207,7 +207,9 @@ function packRecord(typeUrl: string, value: StoredInboxMessage | StoredDedupReco
 
 function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
   if (message.id.shard.key() !== message.shard.key()) {
-    throw new Error("Inbox message ID shard does not match message shard.");
+    throw new DeliveryStorageCorruptionError(
+      "Inbox message ID shard does not match message shard.",
+    );
   }
 
   return Object.freeze({

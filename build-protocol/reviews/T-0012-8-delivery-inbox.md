@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 6 review pending
+Status: round 7 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -292,6 +292,34 @@ Fix summary:
 Diff package:
 `.superpowers/sdd/review-f924a17..05f2ca7.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
 
-Result: pending.
+- code style/maintainability:
+  `019f21f2-cfe0-77a0-8bf4-4c50ee604c77`;
+- documentation: `019f21f2-d090-7a40-904a-5781be99470e`;
+- TypeScript/API docs: `019f21f2-d10f-71f3-8065-d8dca58d3a85`;
+- security: `019f21f2-d18b-76f0-830d-c828ac1191d6`;
+- performance/reliability:
+  `019f21f2-d217-7701-a3f7-38dc66e6acc6`.
+
+Result: changes requested.
+
+Findings to address:
+
+- changing the public direct-write shard mismatch failure from
+  `DeliveryStorageCorruptionError` to plain `Error` changes the observable
+  `InboxStorage.write()` error contract. Preserve the exported error contract
+  or introduce and document a new one.
+
+Code style/maintainability, documentation, security, and
+performance/reliability lanes were clean. All five round-6 reviewer sub-agents
+were closed after their reports were collected.
+
+### Round 6 Fix
+
+Result: implemented in this worktree and ready for round-7 review.
+
+Fix summary:
+
+- restored `DeliveryStorageCorruptionError` for direct write shard mismatches
+  to preserve the public `InboxStorage.write()` error contract.

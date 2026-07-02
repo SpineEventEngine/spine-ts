@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-6 review pending
+Status: round-7 review prep
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -111,4 +111,10 @@ entityStateType)` returns a zero-based shard index and that all messages for
 - Round-5 fix committed as `05f2ca7`.
 - Round-6 review package is prepared at
   `.superpowers/sdd/review-f924a17..05f2ca7.diff`.
+- Round-6 review completed with one TypeScript/API docs finding. The other
+  four required lanes were clean.
+- All five round-6 reviewer sub-agents were closed after their reports were
+  collected.
+- Round-6 fix implemented in this worktree by preserving the
+  `DeliveryStorageCorruptionError` contract for direct write shard mismatches.
 - No blocking human question is known.
