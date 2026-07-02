@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-5 review prep
+Status: round-5 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -86,6 +86,8 @@ Round 4 requested one security fix. Direct inbox writes now reject mismatched
 `InboxMessage.id.shard` and `InboxMessage.shard` values before storage, and
 stored inbox records validate that the persisted record key and inbox key match
 the parsed message identity and target identity.
+
+Committed as `d0d5e0d` after focused delivery/storage verification passed.
 
 ## Round 2 Review
 

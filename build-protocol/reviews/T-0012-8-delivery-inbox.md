@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 5 review prep
+Status: round 5 review pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -239,7 +239,7 @@ were closed after their reports were collected.
 
 ### Round 4 Fix
 
-Result: implemented in this worktree and ready for round-5 review.
+Result: committed as `d0d5e0d` and ready for round-5 review.
 
 Fix summary:
 
@@ -247,3 +247,12 @@ Fix summary:
   identities; and
 - stored inbox record parsing validates the canonical record key and inbox key
   from parsed fields before accepting the row.
+
+### Round 5
+
+Diff package:
+`.superpowers/sdd/review-f74df5d..d0d5e0d.diff`.
+
+Reviewer sub-agents: pending.
+
+Result: pending.

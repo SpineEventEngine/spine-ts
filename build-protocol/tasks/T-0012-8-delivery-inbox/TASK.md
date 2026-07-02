@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-5 review prep
+Status: round-5 review pending
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -97,4 +97,7 @@ entityStateType)` returns a zero-based shard index and that all messages for
 - Round-4 fix implemented in this worktree: direct inbox writes now reject
   mismatched message ID shard/message shard identities, and stored inbox record
   parsing validates canonical record and inbox keys.
+- Round-4 fix committed as `d0d5e0d`.
+- Round-5 review package is prepared at
+  `.superpowers/sdd/review-f74df5d..d0d5e0d.diff`.
 - No blocking human question is known.
