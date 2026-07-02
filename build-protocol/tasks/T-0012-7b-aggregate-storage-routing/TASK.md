@@ -1,6 +1,6 @@
 # T-0012.7b: Aggregate Storage And Signal Routing
 
-Status: round-24 re-review pending
+Status: round-24 fixes verified
 Start: `2026-07-02 06:20 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7b-aggregate-storage-routing`
@@ -225,6 +225,13 @@ Required evidence for this task:
 - Required round-23 status-only verification passed: `format:check` and
   `git diff --check`.
 - Round-23 status-fix commit: `6c514df`.
-- Round-24 reviewer sub-agents are pending against
+- Round-24 reviewer sub-agents completed against
   `.superpowers/sdd/review-3bb3945..6c514df.diff`.
+- Round-24 reviewers completed. TypeScript/API docs and security were clean;
+  documentation, maintainability, and performance/reliability requested focused
+  status-log fixes.
+- Round-24 fixes addressed stale review-log current state, stale round-23
+  in-progress wording, and implementation-report chronology.
+- Required round-24 status-only verification passed: `format:check`,
+  `git diff --check`, and the targeted stale-status phrase scan.
 - No blocking human question is known.

@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round 23 fixes verified
+Status: round 24 fixes verified
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -684,7 +684,7 @@ Reviewer sub-agents:
 
 Result: changes requested. Security was clean.
 
-Findings being addressed in the round-23 fix pass:
+Findings addressed in the round-23 fix pass:
 
 - the task file still said round-22 reviewers were pending after round-22
   completion; and
@@ -702,6 +702,29 @@ Round-23 status-fix commit: `6c514df`.
 Diff package:
 `.superpowers/sdd/review-3bb3945..6c514df.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
 
-Result: pending.
+- code style/maintainability:
+  `019f216e-03c2-7de1-9f68-ea3bc68111fa`;
+- documentation: `019f216e-20d6-7eb3-b8ad-740800f76134`;
+- TypeScript/API docs: `019f216e-3fc0-75e1-b0ff-a58f65825cf7`;
+- security: `019f216e-5891-7900-83f9-d76cfd949449`;
+- performance/reliability:
+  `019f216e-6f12-7912-8107-1225c4bf16e6`.
+
+Result: changes requested. TypeScript/API docs and security were clean.
+
+Findings being addressed in the round-24 fix pass:
+
+- the review-log top-level status still named round 23 as the current state;
+- the round-23 review section still used in-progress wording after the
+  round-23 verification and commit; and
+- the implementation report placed the round-23 commit and round-24 pending
+  setup before the round-21/22 chronology.
+
+All discoverable round-24 reviewer sub-agents were closed after their reports
+were collected. The maintainability reviewer handle was already absent from the
+live-agent registry when cleanup was attempted.
+
+Verification after the round-24 status fix passed: `format:check`,
+`git diff --check`, and the targeted stale-status phrase scan.

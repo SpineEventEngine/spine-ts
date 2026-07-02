@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round-24 re-review pending
+Status: round-24 fixes verified
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -223,11 +223,6 @@ Verification after the round-21 status fix:
 - `corepack pnpm format:check` passed.
 - `git diff --check` passed.
 
-Round-23 status-fix commit: `6c514df`. Round-24 re-review is pending against
-`.superpowers/sdd/review-3bb3945..6c514df.diff`.
-
-- Stale-status phrase scan over the task/review/report/work logs passed.
-
 Round-21 status-fix commit: `45842a6`. Round-22 re-review completed against
 `.superpowers/sdd/review-e2ad18d..45842a6.diff`.
 
@@ -254,6 +249,21 @@ Verification after the round-23 status fix:
 
 - `corepack pnpm format:check` passed.
 - `git diff --check` passed.
+
+Round-23 status-fix commit: `6c514df`. Round-24 re-review completed against
+`.superpowers/sdd/review-3bb3945..6c514df.diff`.
+
+Round 24 requested only status-log fixes. TypeScript/API docs and security were
+clean; documentation, maintainability, and performance/reliability found stale
+review-log current state, stale round-23 in-progress wording, and
+implementation-report chronology that placed the round-23/24 setup before
+round-21/22 entries.
+
+Verification after the round-24 status fix:
+
+- `corepack pnpm format:check` passed.
+- `git diff --check` passed.
+- The targeted stale-status phrase scan returned no matches.
 
 Round-17 fix commit: `822d358`. Round-18 re-review completed against
 `.superpowers/sdd/review-d7b9245..822d358.diff`.
