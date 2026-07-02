@@ -627,9 +627,22 @@ class ObservingRecordStorage<I, R extends Message> extends InMemoryRecordStorage
   protected override async writeRecord(
     record: ReturnType<RecordSpec<I, R>["materialize"]>,
   ): Promise<void> {
+    this.#observe(record);
+    await super.writeRecord(record);
+  }
+
+  protected override async writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    for (const record of records) {
+      this.#observe(record);
+    }
+    await super.writeAllRecords(records);
+  }
+
+  #observe(record: ReturnType<RecordSpec<I, R>["materialize"]>): void {
     const candidate = record.record as { id?: { value?: string } };
     this.observed.push(`store:${candidate.id?.value ?? "missing"}`);
-    await super.writeRecord(record);
   }
 }
 
