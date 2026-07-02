@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round-7 validation fixes verified
+Status: round-8 repository route fix in progress
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -190,6 +190,11 @@ Verification after the round-7 fix pass:
 - `corepack pnpm format:check` passed.
 - `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
   warning.
+
+Round 8 requested one repository event-routing fix: the route path still
+preferred producer ID over the event payload first-field ID when both were
+present and contradictory. The fix keeps first-field fallback, accepts matching
+producer/payload IDs, and rejects contradictory IDs before returning a route.
 
 ## Concerns
 

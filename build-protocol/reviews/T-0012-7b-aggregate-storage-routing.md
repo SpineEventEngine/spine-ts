@@ -1,6 +1,6 @@
 # Review Log: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round 7 changes requested; fix pass verified
+Status: round 8 changes requested; fix pass in progress
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -212,3 +212,24 @@ Verification after the round-7 fix pass passed: focused aggregate-storage
 tests, `typecheck`, `lint`, `format:check`, and `docs:check`.
 
 All five round-7 reviewers were closed after their reports were collected.
+
+### Round 8
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f20f1-13b7-7270-90a9-a8f386db4ef5`;
+- documentation: `019f20f1-3dbd-7c52-8d0d-dfaa31e26c99`;
+- TypeScript/API docs: `019f20f1-630d-7231-8f10-dfd0bbd691d9`;
+- security: `019f20f1-87d9-7732-906d-daec79b8c298`;
+- performance/reliability:
+  `019f20f1-afec-72f1-9316-032dc92f1f6c`.
+
+Result: changes requested.
+
+Findings addressed in the round-8 fix pass:
+
+- repository event route calculation still preferred producer ID over the
+  payload first-field ID when both were present and contradictory.
+
+All five round-8 reviewers were closed after their reports were collected.

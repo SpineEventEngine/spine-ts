@@ -1,6 +1,6 @@
 # T-0012.7b: Aggregate Storage And Signal Routing
 
-Status: round-7 validation fix verified
+Status: round-8 repository route fix in progress
 Start: `2026-07-02 06:20 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7b-aggregate-storage-routing`
@@ -94,4 +94,6 @@ Required evidence for this task:
   addressed those aggregate-storage validation gaps and stale durable logs.
 - Required round-7 fix verification passed: focused aggregate-storage tests,
   `typecheck`, `lint`, `format:check`, and `docs:check`.
+- Round 8 found one remaining repository event-route identity gap, now being
+  addressed with a focused route/test fix.
 - No blocking human question is known.

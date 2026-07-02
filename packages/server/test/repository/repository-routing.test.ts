@@ -94,18 +94,18 @@ describe("repository signal routing", () => {
     await expect(context.commandBus().post(command)).resolves.toBeUndefined();
   });
 
-  it("routes events by producer ID before falling back to the first event field", async () => {
+  it("routes events by matching producer ID or by the first event field", async () => {
     const repository = createRoutingRepository();
 
     const producerRoute = repository.routeEvent(
-      createProjectionEvent("event-1", "first-field-task", {
-        producerId: "producer-task",
+      createProjectionEvent("event-1", "task-1", {
+        producerId: "task-1",
       }),
     );
     const firstFieldRoute = repository.routeEvent(createProjectionEvent("event-2", "field-task"));
 
     expect(producerRoute).toMatchObject({
-      entityIds: ["producer-task"],
+      entityIds: ["task-1"],
       messageFullTypeName: ProjectionStateSchema.typeName,
       invocation: "deferred",
     });
@@ -117,6 +117,18 @@ describe("repository signal routing", () => {
     await expect(
       context.eventBus().post(createProjectionEvent("event-3", "posted-task")),
     ).resolves.toBeUndefined();
+  });
+
+  it("rejects contradictory producer and first-field event IDs", () => {
+    const repository = createRoutingRepository();
+
+    expect(() =>
+      repository.routeEvent(
+        createProjectionEvent("event-contradictory", "first-field-task", {
+          producerId: "producer-task",
+        }),
+      ),
+    ).toThrow(/same entity/);
   });
 
   it("rejects structurally fabricated handler metadata", () => {

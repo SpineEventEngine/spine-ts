@@ -538,9 +538,7 @@ function routeEvent<Id>(
   }
 
   return Object.freeze({
-    entityIds: Object.freeze([
-      (readProducerId(event) ?? readFirstFieldId(message, schema, "event")) as Id,
-    ]),
+    entityIds: Object.freeze([readEventEntityId(event, message, schema) as Id]),
     messageFullTypeName: schema.typeName,
     invocation: "deferred",
   });
@@ -588,6 +586,23 @@ function readProducerId(event: Event): string | undefined {
 
   const userId = unpackAny(producerId, UserIdSchema);
   return userId?.value === "" ? undefined : userId?.value;
+}
+
+function readEventEntityId(
+  event: Event,
+  message: NonNullable<Event["message"]>,
+  schema: MessageSchema,
+): unknown {
+  const producerId = readProducerId(event);
+  const fieldId = readFirstFieldId(message, schema, "event");
+
+  if (producerId !== undefined && producerId !== fieldId) {
+    throw new Error(
+      "Repository event routing requires producer ID and first field to identify the same entity.",
+    );
+  }
+
+  return producerId ?? fieldId;
 }
 
 function createRepositorySnapshot<EntityType extends RepositoryEntityType>(
