@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-3 review pending
+Status: round-3 fixes pending
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -81,5 +81,9 @@ entityStateType)` returns a zero-based shard index and that all messages for
   collected.
 - Consolidated round-2 fix sub-agent completed and was closed after committing
   `59a6530`.
-- Round-3 review package is pending for the fix diff after the second review.
+- Round-3 review completed with changes requested in maintainability,
+  documentation, security, and performance/reliability. The TypeScript/API docs
+  lane was clean.
+- All five round-3 reviewer sub-agents were closed after their reports were
+  collected.
 - No blocking human question is known.

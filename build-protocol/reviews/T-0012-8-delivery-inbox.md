@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 3 review pending
+Status: round 3 changes requested
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -154,6 +154,35 @@ Round-3 reviewers must verify this correction rather than assuming it.
 Diff package:
 `.superpowers/sdd/review-d33b311..59a6530.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
 
-Result: pending.
+- code style/maintainability:
+  `019f21cd-879f-7e61-89d4-28d924dcee7d`;
+- documentation: `019f21cd-8844-7321-a9f6-1a5d1636c002`;
+- TypeScript/API docs: `019f21cd-88bf-7861-8b1c-b581bc593774`;
+- security: `019f21cd-8929-7030-a73e-2969595b3a95`;
+- performance/reliability:
+  `019f21cd-89c0-7672-a6cd-e79577de1c9a`.
+
+Result: changes requested.
+
+Findings to address:
+
+- `InboxStorage.#writeWithDedup()` is too large for the core correctness path
+  and should be split into small private steps;
+- `StoredDedupRecord` and `dedupRecordBlocks()` still expose internal storage
+  details without a production need;
+- task/work logs still described round-3 package preparation as pending after
+  the package was already created;
+- the implementation report's verification list omitted the storage regression
+  test for shared storage changes;
+- pending-guard recovery must not use a hard-coded local wall-clock timeout to
+  steal another writer's claim;
+- tests must cover slow writer or skewed contender behavior;
+- `ShardedWorkRegistry.pickUp()` must not trust a public caller-supplied time
+  to decide lease expiry; and
+- direct `InboxStorage.write()` must not allow caller-controlled message IDs to
+  overwrite unrelated inbox rows.
+
+The TypeScript/API docs lane was clean. All five round-3 reviewer sub-agents
+were closed after their reports were collected.

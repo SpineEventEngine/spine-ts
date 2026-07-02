@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-2 fixes complete
+Status: round-3 fixes pending
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -67,6 +67,17 @@ pending claim or atomic multi-record write. Reviewers also requested clearer
 `RecordStorage.compareAndSet()` atomicity documentation, bounded inbox reads,
 strict query limit validation, simpler internal exports, consistent delivery
 storage corruption errors, and documentation/log updates.
+
+## Round 3 Review
+
+Round 3 found that the second fix still needed simplification and stronger
+trust boundaries. The main correctness issue is that pending dedup claims used
+local wall-clock age to decide that another writer's claim was abandoned. That
+can preempt a slow but healthy writer. Reviewers also requested removing
+white-box helper exports, splitting the core dedup write method into smaller
+steps, removing caller-controlled shard lease time, protecting direct
+`InboxStorage.write()` calls from caller-controlled message ID overwrites, and
+refreshing stale task/work-log state.
 
 ## Round 1 Review
 
