@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 9 review pending
+Status: round 10 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -408,6 +408,35 @@ Fix summary:
 Diff package:
 `.superpowers/sdd/review-7ddf9f5..65e5c72.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
 
-Result: pending.
+- code style/maintainability:
+  `019f2203-b465-7b71-8c5a-42ed84b71451`;
+- documentation: `019f2203-b506-7542-870c-5186e4454d74`;
+- TypeScript/API docs: `019f2203-b55e-7322-aaac-de7b7d679983`;
+- security: `019f2203-b5df-70c1-b7c3-75e8f7ae7b2f`;
+- performance/reliability:
+  `019f2203-b67b-7a80-b504-ed96aa92d37b`.
+
+Result: changes requested.
+
+Findings to address:
+
+- `validateInboxMessage()` should not be exported from `inbox-records` for one
+  simple invariant check; and
+- dedup serializers must still enforce the shard invariant, so malformed
+  messages cannot be serialized into pending/final dedup records.
+
+TypeScript/API docs was clean. Documentation findings were stale against the
+already committed round-9 prep state. All five round-9 reviewer sub-agents were
+closed after their reports were collected.
+
+### Round 9 Fix
+
+Result: implemented in this worktree and ready for round-10 review.
+
+Fix summary:
+
+- removed the exported shard-invariant helper;
+- kept the early `InboxStorage.write()` validation local to inbox storage; and
+- restored private serializer-local validation for inbox and dedup records.

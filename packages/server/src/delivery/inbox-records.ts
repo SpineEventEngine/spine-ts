@@ -91,12 +91,6 @@ export function writeInboxMessage(message: InboxMessage): Any {
   return packRecord(inboxRecordTypeUrl, storedInboxMessage(message));
 }
 
-export function validateInboxMessage(message: InboxMessage): void {
-  if (message.id.shard.key() !== message.shard.key()) {
-    throw new InboxMessageError("Inbox message ID shard does not match message shard.");
-  }
-}
-
 export function dedupGuardKey(message: Pick<InboxMessage, "inboxId" | "signalId">): string {
   return `${inboxKey(message.inboxId)}:${requireText(message.signalId, "Inbox signal ID")}`;
 }
@@ -219,6 +213,8 @@ function packRecord(typeUrl: string, value: StoredInboxMessage | StoredDedupReco
 }
 
 function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
+  validateInboxMessage(message);
+
   return Object.freeze({
     key: inboxMessageKey(message.id),
     id: requireText(message.id.value, "Inbox message ID"),
@@ -240,6 +236,12 @@ function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
       ? {}
       : { keepUntilMs: requireTimestamp(message.keepUntil, "Inbox keep-until time") }),
   });
+}
+
+function validateInboxMessage(message: InboxMessage): void {
+  if (message.id.shard.key() !== message.shard.key()) {
+    throw new InboxMessageError("Inbox message ID shard does not match message shard.");
+  }
 }
 
 function inboxMessageFromStored(stored: StoredInboxMessage): InboxMessage {

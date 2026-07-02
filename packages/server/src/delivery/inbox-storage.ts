@@ -2,7 +2,13 @@ import type { Any } from "@bufbuild/protobuf/wkt";
 import type { RecordStorage, StorageContext, StorageFactory } from "@spine-ts/storage";
 
 import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
-import type { DeliveryStatus, InboxMessage, InboxReadOptions, InboxWriteResult } from "./inbox.js";
+import {
+  InboxMessageError,
+  type DeliveryStatus,
+  type InboxMessage,
+  type InboxReadOptions,
+  type InboxWriteResult,
+} from "./inbox.js";
 import {
   dedupMessageId,
   dedupGuardKey,
@@ -11,7 +17,6 @@ import {
   isPendingDedupRecord,
   readPendingMessage,
   readInboxMessage,
-  validateInboxMessage,
   writeDedupClaim,
   writeDedupRecord,
   writeInboxMessage,
@@ -53,7 +58,10 @@ export class InboxStorage {
 
   /** Write one inbox message unless a live dedup key already exists. */
   async write(message: InboxMessage): Promise<InboxWriteResult> {
-    validateInboxMessage(message);
+    if (message.id.shard.key() !== message.shard.key()) {
+      throw new InboxMessageError("Inbox message ID shard does not match message shard.");
+    }
+
     const inboxStorage = this.#inboxStorage();
     const dedupStorage = this.#dedupStorage();
 
