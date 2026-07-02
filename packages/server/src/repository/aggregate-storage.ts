@@ -45,13 +45,13 @@ export class AggregateStorage<Schema extends DescriptorMessageSchema, Id = strin
 
   /** Append aggregate events in strictly increasing aggregate-version order. */
   async appendEvents(aggregateId: Id, events: Iterable<Event>): Promise<void> {
-    const operation = this.#appendQueue.then(() => this.#appendEventBatch(aggregateId, events));
+    const batch = Object.freeze([...events]);
+    const operation = this.#appendQueue.then(() => this.#appendEventBatch(aggregateId, batch));
     this.#appendQueue = operation.catch(() => undefined);
     return operation;
   }
 
-  async #appendEventBatch(aggregateId: Id, events: Iterable<Event>): Promise<void> {
-    const batch = [...events];
+  async #appendEventBatch(aggregateId: Id, batch: readonly Event[]): Promise<void> {
     const expectedId = requirePrimitiveId(aggregateId);
     const storedEvents = await this.#readAggregateEvents(aggregateId);
     let lastVersion = storedEvents.at(-1)?.version ?? 0n;

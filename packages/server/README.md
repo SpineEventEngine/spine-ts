@@ -62,9 +62,10 @@ Current slice exposes:
   `CommandDispatcher`, with duplicate dispatcher rejection by command message
   type URL.
 - `EventBus` for async event posting through an injected `EventStore` to
-  matching registered `EventDispatcher`s in deterministic registration order,
-  with append-before-dispatch and successful storage when no dispatcher is
-  registered.
+  matching registered `EventDispatcher`s in deterministic registration order.
+  Matching dispatchers may reject an event through `accept()` before storage;
+  accepted events are appended before `dispatch()` is called, and events with
+  no dispatcher are still stored.
 - `createServerRuntimeRoutingPlan({ context, commands, events })` for the
   smallest immutable server/runtime wiring seam from built bounded-context
   metadata plus command/event readiness to transport topics, subscriptions,
@@ -221,14 +222,17 @@ entities, invoke entity methods directly, validate tenants, map `Ack`, write
 storage, or own repository routing.
 
 `EventBus` is the matching executable multicast seam for generated Spine
-`Event` envelopes. It snapshots accepted events at post time, appends them to
-an injected `EventStore`, and then dispatches them in deterministic dispatcher
-registration order to every registered `EventDispatcher` that declares the
-event message schema. If no dispatcher is registered for the event type, the
-stored event remains and `post()` resolves. If append fails, no dispatcher is
-invoked. If a dispatcher rejects, earlier dispatchers may already have run,
-later dispatchers are not invoked, and the stored event remains. The
-`EventStore` remains storage-only: `EventBus` owns append-before-dispatch by
+`Event` envelopes. It snapshots accepted events at post time, finds matching
+registered `EventDispatcher`s by event message schema, calls their optional
+`accept()` hooks, appends the event to an injected `EventStore`, and then calls
+`dispatch()` in deterministic dispatcher registration order. Repository
+dispatchers use `accept()` for fail-closed route validation before persistence.
+If no dispatcher is registered for the event type, the stored event remains and
+`post()` resolves. If pre-store acceptance or append fails, no dispatcher is
+invoked and the event is not stored by this bus. If a dispatch call rejects,
+earlier dispatchers may already have run, later dispatchers are not invoked,
+and the stored event remains. The `EventStore` remains storage-only: `EventBus`
+owns validation-before-append and append-before-dispatch ordering by
 delegating to it, while `EventStore` continues to avoid fan-out, retries,
 inbox, or delivery behavior on its own. The current TypeScript event-dispatch
 contract is message-type-based only; domestic/external filtering remains

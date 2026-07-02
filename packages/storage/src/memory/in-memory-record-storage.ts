@@ -3,11 +3,21 @@ import type { Message } from "@bufbuild/protobuf";
 import type { RecordQuery } from "../record/record-query.js";
 import type { RecordSpec } from "../record/record-spec.js";
 import { RecordStorage } from "../record/record-storage.js";
+import type { StorageContext } from "../storage/storage.js";
 import { TenantRecords } from "./tenant-records.js";
 
 /** In-memory record storage with per-tenant slices when the context is multitenant. */
 export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
-  readonly #tenantRecords = new Map<string, TenantRecords<I, R>>();
+  readonly #tenantRecords: Map<string, TenantRecords<I, R>>;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    tenantRecords: Map<string, TenantRecords<I, R>> = new Map<string, TenantRecords<I, R>>(),
+  ) {
+    super(context, recordSpec);
+    this.#tenantRecords = tenantRecords;
+  }
 
   protected deleteRecord(id: I): Promise<boolean> {
     return Promise.resolve(this.records().delete(id));

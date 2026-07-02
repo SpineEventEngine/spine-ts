@@ -9,8 +9,8 @@ import type { EventDispatcher } from "./event-dispatcher.js";
 /**
  * Small single-process multicast event bus.
  *
- * Events are accepted asynchronously through `post()`, appended to the
- * injected `EventStore`, and then dispatched to matching dispatchers in
+ * Events are accepted asynchronously through `post()`, validated by matching
+ * dispatchers, appended to the injected `EventStore`, and then dispatched in
  * deterministic registration order. Events with no matching dispatcher remain
  * stored and resolve without dispatch.
  */
@@ -47,13 +47,20 @@ export class EventBus {
       throw new Error("EventBus requires event.message.typeUrl.");
     }
 
+    const dispatchers = this.#registry.find(typeUrl);
+    await this.#accept(event, dispatchers);
+
     const stored = clone(EventSchema, event);
     await this.#eventStore.append(stored);
 
-    const dispatchers = this.#registry.find(typeUrl);
-
     for (const dispatcher of dispatchers) {
       await dispatcher.dispatch(clone(EventSchema, stored));
+    }
+  }
+
+  async #accept(event: Event, dispatchers: readonly EventDispatcher[]): Promise<void> {
+    for (const dispatcher of dispatchers) {
+      await dispatcher.accept?.(clone(EventSchema, event));
     }
   }
 }

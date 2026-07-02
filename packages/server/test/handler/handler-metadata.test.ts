@@ -230,6 +230,16 @@ describe("handler metadata", () => {
       ]),
     ).toThrow(HandlerMetadataError);
   });
+
+  it("rejects handler records not created by the registration builder", () => {
+    expect(() =>
+      defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+        {
+          ...builder.assign(CommandSchema, "assignCreate"),
+        },
+      ]),
+    ).toThrow(/registration builder/);
+  });
 });
 
 describe("handler metadata registry", () => {

@@ -620,6 +620,25 @@ describe("AggregateStorage", () => {
     ).toHaveLength(1);
   });
 
+  it("materializes append input before queued validation", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    const submitted = [createAggregateEvent("event-materialized-a", "task-materialized", 1)];
+
+    const append = storage.appendEvents("task-materialized", submitted);
+    submitted.push(createAggregateEvent("event-materialized-b", "task-materialized", 2));
+
+    await append;
+
+    expect(
+      (await storage.readHistory("task-materialized")).events.map((event) => event.id?.value),
+    ).toEqual(["event-materialized-a"]);
+  });
+
   it("rejects unreadable producer IDs", async () => {
     const storage = new AggregateStorage({
       context: { name: "Tasks", multitenant: false },

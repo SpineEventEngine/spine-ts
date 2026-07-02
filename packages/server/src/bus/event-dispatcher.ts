@@ -12,6 +12,9 @@ export interface EventDispatcher {
   /** Generated event message schemas accepted by this dispatcher. */
   messageSchemas(): readonly MessageSchema[];
 
+  /** Validate one generated Spine event before the bus stores it. */
+  accept?(event: Event): Promise<void>;
+
   /** Dispatch one generated Spine event envelope. */
   dispatch(event: Event): Promise<void>;
 }

@@ -1,6 +1,6 @@
 # T-0012.7b: Aggregate Storage And Signal Routing
 
-Status: round-14 re-review pending
+Status: round-14 fixes applied
 Start: `2026-07-02 06:20 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-7b-aggregate-storage-routing`
@@ -118,8 +118,18 @@ Required evidence for this task:
   repository-routing tests, `typecheck`, `lint`, `format:check`, `docs:check`,
   and `git diff --check`.
 - Round 13 found server API-doc guard precision, append serialization, producer
-  ID fail-closed, and final docs issues; those fixes are in progress.
+  ID fail-closed, and final docs issues; those fixes were applied and verified.
 - Required round-13 fix verification passed: focused aggregate-storage and
   repository-routing tests, `typecheck`, `lint`, `format:check`, `docs:check`,
   and `git diff --check`.
+- Round 14 found one stale task-status note, mutable queued append input,
+  unbranded child handler records, post-store repository event validation, and
+  duplicate event IDs across shared event-store instances.
+- Round-14 fixes were applied through immediate append materialization,
+  builder-created handler record checks, `EventDispatcher.accept()` pre-store
+  validation, shared in-memory factory backing records, and event-store
+  uniqueness checks.
+- Required round-14 focused verification passed: storage event-store/factory,
+  server event-bus/API, handler metadata, aggregate-storage, and
+  repository-routing tests; `typecheck` also passed before docs/log updates.
 - No blocking human question is known.

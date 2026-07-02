@@ -134,6 +134,51 @@ describe("EventBus", () => {
     expect(observed).toEqual([]);
   });
 
+  it("validates matching dispatchers before storing events", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const bus = new EventBus(store, [
+      {
+        messageSchemas: () => [ProjectionStateSchema],
+        accept: () => Promise.reject(new Error("event rejected")),
+        dispatch: () => Promise.resolve(),
+      },
+    ]);
+
+    await expect(bus.post(createProjectionEvent("event-rejected"))).rejects.toThrow(
+      "event rejected",
+    );
+    await expect(store.read()).resolves.toEqual([]);
+  });
+
+  it("stores events after pre-store validation succeeds", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const bus = new EventBus(store, [
+      {
+        messageSchemas: () => [ProjectionStateSchema],
+        accept: (event) => {
+          observed.push(`accept:${event.id?.value ?? "missing"}`);
+          return Promise.resolve();
+        },
+        dispatch: (event) => {
+          observed.push(`dispatch:${event.id?.value ?? "missing"}`);
+          return Promise.resolve();
+        },
+      },
+    ]);
+
+    await bus.post(createProjectionEvent("event-accepted"));
+
+    expect(observed).toEqual(["accept:event-accepted", "dispatch:event-accepted"]);
+    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-accepted" } }]);
+  });
+
   it("can retry registering a dispatcher after message schema collection fails", async () => {
     const store = new EventStore(
       { name: "Tasks", multitenant: false },

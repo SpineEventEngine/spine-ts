@@ -13,6 +13,7 @@ import {
   VersionSchema,
   file_spine_options,
 } from "@spine-ts/proto";
+import { EventStore, InMemoryStorageFactory } from "@spine-ts/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
@@ -145,6 +146,25 @@ describe("repository signal routing", () => {
         }),
       ),
     ).toThrow(/readable producer ID/);
+  });
+
+  it("rejects invalid repository events before context event storage", async () => {
+    const factory = new InMemoryStorageFactory();
+    const repository = createRoutingRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context.eventBus().post(
+        createProjectionEvent("event-not-stored", "first-field-task", {
+          producerId: "producer-task",
+        }),
+      ),
+    ).rejects.toThrow(/same entity/);
+    await expect(eventStore.read()).resolves.toEqual([]);
   });
 
   it("rejects structurally fabricated handler metadata", () => {

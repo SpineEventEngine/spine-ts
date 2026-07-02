@@ -22,6 +22,7 @@ describe("server bus exports", () => {
     }>();
     expectTypeOf<EventDispatcher>().toExtend<{
       messageSchemas(): readonly object[];
+      accept?(event: object): Promise<void>;
       dispatch(event: object): Promise<void>;
     }>();
   });

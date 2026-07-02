@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.7b Aggregate Storage And Signal Routing
 
-Status: round-14 re-review pending
+Status: round-14 fixes applied
 Branch: `task/T-0012-7b-aggregate-storage-routing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-7b-aggregate-storage-routing`
@@ -272,6 +272,23 @@ Verification after the round-13 fix pass:
 - `corepack pnpm docs:check` passed with the existing invalid-`origin` TypeDoc
   warning.
 - `git diff --check` passed.
+
+Round 14 requested fixes for stale task-status wording, mutable append input
+queued by reference, fabricated child handler records, repository event-route
+validation happening after event storage, and duplicate event IDs across
+multiple event-store instances sharing one backend. The fix keeps the changes
+inside existing seams: `AggregateStorage` materializes append input at call
+time, handler metadata now accepts only builder-created handler records,
+`EventDispatcher.accept()` lets repository dispatchers validate before
+`EventBus` appends, `EventStore` serializes uniqueness checks per
+factory/context, and `InMemoryStorageFactory` gives storages opened with the
+same `RecordSpec` a shared process-local backing set.
+
+Verification after the round-14 fix pass:
+
+- `corepack pnpm test packages/storage/test/event/event-store.test.ts packages/storage/test/storage/storage-factory.test.ts packages/server/test/bus/event-bus.test.ts packages/server/test/bus/index.test.ts packages/server/test/handler/handler-metadata.test.ts packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts`
+  passed with 7 files and 56 tests.
+- `corepack pnpm typecheck` passed.
 
 ## Concerns
 

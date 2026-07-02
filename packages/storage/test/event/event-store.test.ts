@@ -77,6 +77,20 @@ describe("EventStore", () => {
     ).rejects.toThrow(/event\.id/);
     await expect(store.read()).resolves.toEqual([]);
   });
+
+  it("rejects duplicate event IDs across stores sharing one factory and context", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = { name: "Tasks", multitenant: false };
+    const first = new EventStore(context, factory);
+    const second = new EventStore(context, factory);
+
+    await first.append(createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n));
+
+    await expect(
+      second.append(createEvent("event-1", "type.spine.io/tasks.TaskRenamed", 2n)),
+    ).rejects.toThrow(/unique event IDs/);
+    await expect(first.read()).resolves.toHaveLength(1);
+  });
 });
 
 function createEvent(id: string, typeUrl: string, seconds: bigint) {

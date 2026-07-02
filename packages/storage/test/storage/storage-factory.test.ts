@@ -26,7 +26,7 @@ describe("StorageFactory", () => {
     expect(storage.recordSpec).toBe(spec);
   });
 
-  it("creates isolated record storage instances", async () => {
+  it("creates separate storage objects over one factory backing store", async () => {
     const factory = new InMemoryStorageFactory();
     const spec = createEventSpec();
     const first = factory.createRecordStorage({ name: "Tasks", multitenant: false }, spec);
@@ -34,7 +34,10 @@ describe("StorageFactory", () => {
 
     await first.write(createEvent("event-1", "type.spine.io/tasks.TaskCreated"));
 
-    await expect(second.read(create(EventIdSchema, { value: "event-1" }))).resolves.toBeUndefined();
+    expect(first).not.toBe(second);
+    await expect(second.read(create(EventIdSchema, { value: "event-1" }))).resolves.toMatchObject({
+      id: { value: "event-1" },
+    });
   });
 
   it("rejects record storage creation after the factory closes", () => {

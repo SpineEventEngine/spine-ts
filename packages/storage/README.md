@@ -9,12 +9,14 @@ The package owns the first corrected storage layer:
 - `RecordSpec` describes identified Protobuf records and query columns;
 - `RecordStorage` stores, reads, deletes, and queries those records;
 - `InMemoryStorageFactory` and `InMemoryRecordStorage` are the first concrete
-  adapter;
+  adapter, with storage objects from the same factory and `RecordSpec` sharing
+  one process-local backing record set;
 - `EventStore` is a framework delegate over `RecordStorage<EventId, Event>`.
 
 `EventStore` is storage-only in this task. It persists and reads `Event`
-records, but it does not implement event-bus dispatch, delivery queues,
-subscriber fan-out, or retry behavior.
+records and rejects duplicate event IDs for one factory/context append path,
+but it does not implement event-bus dispatch, delivery queues, subscriber
+fan-out, or retry behavior.
 
 The package stays independent of `@spine-ts/server`. Storage scoping uses a
 small structural `StorageContext` with `name`, `multitenant`, and optional
@@ -64,4 +66,6 @@ await storage.write(
 ```
 
 `InMemoryRecordStorage` keeps deterministic per-tenant slices when the context
-is multitenant. It is process-local and not durable across restarts.
+is multitenant. Storage objects opened by one `InMemoryStorageFactory` with the
+same `RecordSpec` share those process-local slices. The adapter is not durable
+across restarts.

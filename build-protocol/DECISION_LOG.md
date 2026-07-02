@@ -1571,3 +1571,35 @@ Consequences:
 - Reviewers should reject any early transport slice that creates sockets,
   installs native dependencies, or grows into broker/process/delivery behavior
   before the roadmap reaches those explicit subtasks.
+
+## D-0055: T-0012.7b Keeps Event Validation And In-Memory Sharing Inside Existing Storage And Bus Seams
+
+Status: Accepted
+
+Date: 2026-07-01
+
+Context: Round-14 review for aggregate storage and signal routing found that
+repository event-route validation could happen after `EventBus` persisted an
+event, duplicate event-ID checks were not shared across multiple event-store
+instances, and in-memory record storages opened from one factory did not share
+backing records. The task remains constrained to aggregate storage and signal
+routing; delivery, inboxes, Stand, gRPC, retries, and new server facades are
+out of scope.
+
+Decision: Add an optional `EventDispatcher.accept(event)` hook used by
+repository dispatchers for pre-store route validation, keep `EventBus` append
+ordering as `accept()` then `EventStore.append()` then `dispatch()`, serialize
+`EventStore` uniqueness checks per storage factory and context, and make
+`InMemoryStorageFactory` share backing records for storages opened with the
+same `RecordSpec`. Do not introduce delivery queues, repository execution,
+handler invocation, or a broader storage transaction abstraction in this task.
+
+Consequences:
+
+- Repository event routing now fails before context event storage when producer
+  and first-field IDs are unreadable or contradictory.
+- In-memory storage remains process-local and non-durable, but multiple stores
+  opened from one factory/spec now observe the same records.
+- Later durable storage adapters still need their own atomic insert or
+  transaction guarantees; this task only strengthens the current in-process
+  implementation without claiming distributed uniqueness.

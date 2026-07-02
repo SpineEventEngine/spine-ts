@@ -372,6 +372,7 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
 }
 
 const authenticEntityHandlers = new WeakSet<EntityHandlersMetadata>();
+const authenticHandlers = new WeakSet<HandlerMetadata>();
 
 /**
  * Explicitly bind schemas to entity class method names without invoking handlers.
@@ -392,6 +393,7 @@ export function defineEntityHandlers<
 ): EntityHandlersMetadata<Instance, StateSchema> {
   const builder = createHandlerRegistrationBuilder(entityType);
   const handlers = Object.freeze([...define(builder)]);
+  validateBuiltHandlers(handlers);
   const metadata: EntityHandlersMetadata<Instance, StateSchema> = {
     entityType,
     entity: describeEntityMetadata(stateSchema),
@@ -443,11 +445,17 @@ function createHandlerRegistrationBuilder<Instance extends object>(
       schema: Schema,
       methodName: HandlerMethodName<Instance>,
       options: EventApplicationOptions = {},
-    ) =>
-      Object.freeze({
+    ) => {
+      const handler: EventApplicationHandlerMetadata<
+        Schema,
+        HandlerMethodName<Instance>
+      > = Object.freeze({
         ...createHandler(entityType, "event-application", schema, methodName),
         allowImport: options.allowImport ?? false,
-      }),
+      });
+      authenticHandlers.add(handler);
+      return handler;
+    },
   });
 }
 
@@ -463,13 +471,26 @@ function createHandler<
 ): BaseHandlerMetadata<Kind, Schema, HandlerMethodName<Instance>> {
   validateHandlerMethod(entityType, methodName);
 
-  return Object.freeze({
+  const handler = Object.freeze({
     kind,
     schema,
     descriptor: schema,
     messageFullTypeName: schema.typeName,
     methodName,
   });
+  authenticHandlers.add(handler as HandlerMetadata);
+  return handler;
+}
+
+function validateBuiltHandlers(handlers: readonly HandlerMetadata[]): void {
+  for (const handler of handlers) {
+    if (!authenticHandlers.has(handler)) {
+      throw new HandlerMetadataError(
+        "UNKNOWN_HANDLER_METHOD",
+        "Handler metadata must be created by the registration builder.",
+      );
+    }
+  }
 }
 
 function validateHandlerMethod<Instance extends object>(

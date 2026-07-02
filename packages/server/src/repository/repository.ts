@@ -408,6 +408,10 @@ function createRepositoryDispatchers(
         ? undefined
         : Object.freeze({
             messageSchemas: () => routing.eventSchemas,
+            accept: (event: Event): Promise<void> => {
+              void repository.routeEvent(event);
+              return Promise.resolve();
+            },
             dispatch: (event: Event): Promise<void> => {
               void repository.routeEvent(event);
               return Promise.resolve();
