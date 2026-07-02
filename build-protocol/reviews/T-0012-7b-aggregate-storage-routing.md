@@ -182,7 +182,15 @@ All five round-6 reviewers were closed after their reports were collected.
 
 ### Round 7
 
-Reviewer sub-agent IDs were not included in the round-7 fix handoff.
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f20e5-ab67-7cb2-88e3-9a9a0a6474df`;
+- documentation: `019f20e5-d569-7882-9b8d-eafe7f1c82cc`;
+- TypeScript/API docs: `019f20e5-fe0f-7e51-b380-38178f5b1408`;
+- security: `019f20e6-22ce-7511-bcd3-cc37b4007e8c`;
+- performance/reliability:
+  `019f20e6-4ea8-7fc1-907a-37b3870d9bf1`.
 
 Result: changes requested.
 
@@ -202,3 +210,5 @@ Findings addressed in the round-7 fix pass:
 
 Verification after the round-7 fix pass passed: focused aggregate-storage
 tests, `typecheck`, `lint`, `format:check`, and `docs:check`.
+
+All five round-7 reviewers were closed after their reports were collected.
