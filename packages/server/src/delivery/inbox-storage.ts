@@ -217,8 +217,9 @@ export class InboxStorage {
         continue;
       }
 
-      if (this.#sameRecord(current, record)) {
-        return readInboxMessage(current);
+      const storedMessage = readInboxMessage(current);
+      if (this.#sameRecord(writeInboxMessage(storedMessage), record)) {
+        return storedMessage;
       }
 
       throw new Error(`Inbox message "${key}" already exists.`);

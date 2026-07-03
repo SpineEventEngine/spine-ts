@@ -87,7 +87,7 @@ export function readInboxMessage(record: Any): InboxMessage {
 
 export function writeInboxMessage(message: InboxMessage): Any {
   validateInboxMessage(message);
-  return packRecord(inboxRecordTypeUrl, storedInboxMessage(message));
+  return packRecord(inboxRecordTypeUrl, "Inbox message record", storedInboxMessage(message));
 }
 
 export function dedupGuardKey(message: Pick<InboxMessage, "inboxId" | "signalId">): string {
@@ -153,7 +153,7 @@ export function writeDedupClaim(message: InboxMessage): Any {
     message: storedInboxMessage(message),
   };
 
-  return packRecord(dedupRecordTypeUrl, stored);
+  return packRecord(dedupRecordTypeUrl, "Inbox dedup record", stored);
 }
 
 export function writeDedupRecord(message: InboxMessage): Any {
@@ -173,7 +173,7 @@ export function writeDedupRecord(message: InboxMessage): Any {
       : { keepUntilMs: requireTimestamp(message.keepUntil, "Inbox keep-until time") }),
   };
 
-  return packRecord(dedupRecordTypeUrl, stored);
+  return packRecord(dedupRecordTypeUrl, "Inbox dedup record", stored);
 }
 
 export function dedupMessageId(record: Any, expectedKey?: string): InboxMessageId {
@@ -219,10 +219,17 @@ function inboxMessageKey(id: InboxMessageId): string {
   return `${id.shard.key()}:${requireText(id.value, "Inbox message ID")}`;
 }
 
-function packRecord(typeUrl: string, value: StoredInboxMessage | StoredDedupRecord): Any {
+function packRecord(
+  typeUrl: string,
+  label: string,
+  value: StoredInboxMessage | StoredDedupRecord,
+): Any {
+  const encoded = Buffer.from(JSON.stringify(value), "utf8");
+  assertStoredRecordSize(encoded, label);
+
   return create(AnySchema, {
     typeUrl,
-    value: Buffer.from(JSON.stringify(value), "utf8"),
+    value: encoded,
   });
 }
 
@@ -493,6 +500,12 @@ function assertSignalPayloadSize(signal: Any | undefined): void {
     throw new Error(
       `Inbox signal payload exceeds ${String(maxSignalPayloadBytes)} bytes and cannot be stored.`,
     );
+  }
+}
+
+function assertStoredRecordSize(value: Buffer, label: string): void {
+  if (value.byteLength > maxStoredRecordBytes) {
+    throw new Error(`${label} exceeds ${String(maxStoredRecordBytes)} bytes and cannot be stored.`);
   }
 }
 

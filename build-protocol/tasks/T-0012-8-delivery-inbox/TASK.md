@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-25 review prep
+Status: round-25 fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -295,4 +295,16 @@ entityStateType)` returns a zero-based shard index and that all messages for
   `packages/server/test/delivery/sharded-work-registry.test.ts`.
 - Round-25 review package is prepared at
   `.superpowers/sdd/review-round-25-fce80b2-current.diff`.
+- Round-25 review completed with documentation, security, and
+  performance/reliability findings. Code style/maintainability and
+  TypeScript/API docs were clean. All five round-25 reviewer sub-agents were
+  closed after their reports were collected.
+- Round-25 fixes narrow the runtime/API docs to the durable inbox slice,
+  enforce serialized-size caps on inbox/dedup/shard-session writes, and route
+  existing inbox-row collisions through bounded inbox-record decoding.
+- Red-first focused regressions captured the missing write-side size checks and
+  the corrupt-row collision behavior before implementation.
+- Focused delivery verification passed with 42 tests after the round-25 fix:
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`.
 - No blocking human question is known.

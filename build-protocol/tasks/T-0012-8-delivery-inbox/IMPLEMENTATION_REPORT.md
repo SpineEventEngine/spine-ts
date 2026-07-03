@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-25 review prep
+Status: round-25 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -366,6 +366,80 @@ durable. Focused delivery verification passed with 38 tests:
 Round-25 review package
 `.superpowers/sdd/review-round-25-fce80b2-current.diff` was prepared after the
 fixes.
+
+## Round 25 Review
+
+Round 25 found no code style/maintainability or TypeScript/API docs issue.
+Documentation requested narrowing the runtime description to the durable inbox
+slice and documenting the exported delivery/inbox API surface. Security and
+performance/reliability requested write-side 512 KB caps for serialized
+inbox/dedup/shard-session records and bounded decoding when a direct inbox
+write collides with a preexisting durable row.
+
+Red-first regressions failed before implementation:
+
+- oversized inbox rows:
+
+  ```sh
+  npx vitest run packages/server/test/delivery/inbox.test.ts \
+    -t 'rejects oversized inbox rows before serializing storage records'
+  ```
+
+  failed because no error was thrown;
+
+- oversized dedup rows:
+
+  ```sh
+  npx vitest run packages/server/test/delivery/inbox.test.ts \
+    -t 'rejects oversized dedup rows before serializing storage records'
+  ```
+
+  failed because no error was thrown;
+
+- corrupt preexisting inbox row:
+
+  ```sh
+  npx vitest run packages/server/test/delivery/inbox.test.ts \
+    -t 'treats an oversized existing inbox row as storage corruption during direct write recovery'
+  ```
+
+  failed with `Inbox message "0/1:message-1" already exists.` instead of a
+  corruption error; and
+
+- oversized shard-session writes:
+
+  ```sh
+  npx vitest run packages/server/test/delivery/sharded-work-registry.test.ts \
+    -t 'rejects oversized shard sessions before storing them'
+  ```
+
+  failed because the write was accepted.
+
+Round-25 fixes:
+
+- updated `RUNTIME_ARCHITECTURE.md` to describe the current durable inbox
+  slice and explicitly defer retry workers, attempt counters, and retained
+  delivery error details;
+- added a public delivery/inbox API section to `DEVELOPER_API.md` for
+  `Delivery`, `Inbox`, `InboxStorage`, `ShardIndex`, `ShardSession`,
+  `ShardedWorkRegistry`, and the related options/result types;
+- enforced serialized-size caps before returning/storing inbox, dedup, and
+  shard-session `Any` records; and
+- changed `InboxStorage.#ensureInboxRow()` to decode an existing row through
+  bounded `readInboxMessage()` before treating it as a matching collision.
+
+Focused delivery verification passed with 42 tests:
+
+`pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`.
+
+Final round-25 verification also passed with:
+
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm format:check`
+- `git diff --check`
+- `git diff --unified=0 -- ... | awk '/^\\+[^+]/ { ... }'` for touched-file
+  added-line length checks (no lines over 120 columns)
 
 ## Round 2 Review
 

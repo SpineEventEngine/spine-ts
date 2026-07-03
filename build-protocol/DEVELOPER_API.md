@@ -113,6 +113,56 @@ delivery records on its own. The first `EventBus` appends to `EventStore`
 before dispatch. Events with no registered dispatcher still resolve after
 storage. The storage delegate remains a storage-only seam.
 
+## Delivery and Inbox API
+
+The current public delivery surface is the durable inbox handoff point for one
+bounded context. It is intentionally smaller than the later worker/retry stack:
+
+- `Delivery` groups `Inbox` and `ShardedWorkRegistry` for one storage context;
+- `Inbox` accepts `InboxMessageInput` with `receive()` and reads durable inbox
+  rows by `ShardIndex`;
+- `InboxStorage` is the lower-level durable storage seam behind `Inbox`,
+  useful for framework tests or storage-focused integrations;
+- `ShardIndex` identifies one delivery shard, `ShardSession` is the durable
+  lease snapshot for that shard, and `ShardedWorkRegistry` persists shard
+  pickup/release across processes; and
+- `DeliveryLabel`, `DeliveryStatus`, `InboxId`, `InboxMessage`,
+  `InboxMessageId`, `InboxReadOptions`, `InboxWriteResult`,
+  `InboxStorageOptions`, `DeliveryOptions`, and
+  `ShardedWorkRegistryOptions` describe the stable inputs/outputs of this
+  slice.
+
+Current usage is deliberately narrow:
+
+```typescript
+const delivery = new Delivery({
+  context,
+  storageFactory,
+  leaseMs: 30_000,
+});
+
+await delivery.inbox.receive({
+  inboxId,
+  signalId,
+  label: "UPDATE_SUBSCRIBER",
+  status: "TO_DELIVER",
+  shard: ShardIndex.single(),
+  whenReceived: new Date(),
+  version: 1n,
+});
+
+const session = await delivery.shards.pickUp(ShardIndex.single(), "node-a");
+const pending = await delivery.inbox.read(ShardIndex.single(), {
+  statuses: ["TO_DELIVER"],
+  limit: 100,
+});
+```
+
+Keep the write/read split intact. Write-side code records inbox messages; a
+separate asynchronous delivery step reads them by shard. The current API does
+not invoke repositories from inbox rows, mutate read-side projections, run
+retry workers, or retain attempt/error history.
+
 ## Public Services
 
 The TS framework must keep the Spine gRPC services:

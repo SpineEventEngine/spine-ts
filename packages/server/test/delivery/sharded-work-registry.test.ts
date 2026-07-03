@@ -278,6 +278,18 @@ describe("ShardedWorkRegistry", () => {
     await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/record exceeds/i);
   });
 
+  it("rejects oversized shard sessions before storing them", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => new Date("2026-07-02T09:36:00.000Z"),
+    });
+
+    await expect(
+      delivery.shards.pickUp(new ShardIndex(0, 1), oversizedText(520 * 1024)),
+    ).rejects.toThrow(/exceeds/i);
+  });
+
   it("keeps multitenant shard sessions isolated by tenant", async () => {
     const storageFactory = new InMemoryStorageFactory();
     let tenantId = "tenant-a";
@@ -541,4 +553,8 @@ class RetryingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
     return this.#delegate.write(record.record);
   }
+}
+
+function oversizedText(length: number): string {
+  return "x".repeat(length);
 }

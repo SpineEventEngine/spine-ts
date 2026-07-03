@@ -254,6 +254,34 @@ describe("Inbox", () => {
     ).toThrow(/payload/i);
   });
 
+  it("rejects oversized inbox rows before serializing storage records", () => {
+    expect(() =>
+      writeInboxMessage({
+        ...createMessage("message-large", "signal-large", 1n),
+        signalId: oversizedText(520 * 1024),
+      }),
+    ).toThrow(/exceeds/i);
+  });
+
+  it("rejects oversized dedup rows before serializing storage records", () => {
+    const claim = () =>
+      writeDedupClaim({
+        ...createMessage("message-large", "signal-large", 1n),
+        inboxId: {
+          targetId: oversizedText(520 * 1024),
+          targetTypeUrl: "type.example.dev/tasks.Projection",
+        },
+      });
+    const final = () =>
+      writeDedupRecord({
+        ...createMessage("message-large", "signal-large", 1n),
+        signalId: oversizedText(520 * 1024),
+      });
+
+    expect(claim).toThrow(/exceeds/i);
+    expect(final).toThrow(/exceeds/i);
+  });
+
   it("fails closed when stored inbox records are malformed or invalid", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -391,6 +419,22 @@ describe("Inbox", () => {
 
     await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toThrow(
       /record exceeds/i,
+    );
+  });
+
+  it("treats an oversized existing inbox row as storage corruption during direct write recovery", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new ExistingInboxRowFactory({
+        inbox: create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/internal/InboxMessageRecord",
+          value: oversizedStoredRecord(),
+        }),
+      }),
+    });
+
+    await expect(storage.write(createMessage("message-1", "signal-1", 1n))).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
     );
   });
 
@@ -1108,6 +1152,81 @@ interface CorruptGuardRecords {
   readonly inbox?: Any;
 }
 
+class ExistingInboxRowFactory extends StorageFactory {
+  readonly #inbox: Any;
+
+  constructor(records: { inbox: Any }) {
+    super();
+    this.#inbox = records.inbox;
+  }
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new ExistingInboxRowStorage(
+      context,
+      recordSpec as unknown as RecordSpec<string, Any>,
+      this.#inbox,
+    ) as unknown as RecordStorage<I, R>;
+  }
+}
+
+class ExistingInboxRowStorage extends RecordStorage<string, Any> {
+  readonly #inbox: Any;
+  readonly #dedup = new Map<string, Any>();
+
+  constructor(context: StorageContext, recordSpec: RecordSpec<string, Any>, inbox: Any) {
+    super(context, recordSpec);
+    this.#inbox = inbox;
+  }
+
+  protected compareAndSetRecord(
+    id: string,
+    expected: ReturnType<RecordSpec<string, Any>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<string, Any>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    if (this.context.name.endsWith(".delivery.inbox")) {
+      return Promise.resolve(false);
+    }
+
+    const current = this.#dedup.get(id);
+    if (current !== expected?.record && !(current === undefined && expected === undefined)) {
+      return Promise.resolve(false);
+    }
+
+    if (next === undefined) {
+      this.#dedup.delete(id);
+      return Promise.resolve(true);
+    }
+
+    this.#dedup.set(id, next.record);
+    return Promise.resolve(true);
+  }
+
+  protected deleteRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected queryRecords(): Promise<readonly Any[]> {
+    return Promise.resolve([]);
+  }
+
+  protected readRecord(id: string): Promise<Any | undefined> {
+    return this.context.name.endsWith(".delivery.inbox")
+      ? Promise.resolve(this.#inbox)
+      : Promise.resolve(this.#dedup.get(id));
+  }
+
+  protected writeAllRecords(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  protected writeRecord(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
 interface FinalGuardFields {
   readonly key: string;
   readonly inbox: string;
@@ -1187,6 +1306,10 @@ function oversizedPayload(): string {
 
 function oversizedStoredRecord(): Buffer {
   return Buffer.concat([Buffer.from("{", "utf8"), Buffer.alloc(512 * 1024)]);
+}
+
+function oversizedText(length: number): string {
+  return "x".repeat(length);
 }
 
 function testDedupKey(signalId: string): string {

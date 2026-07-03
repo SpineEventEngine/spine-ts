@@ -174,10 +174,19 @@ adapter behind the same contract.
 
 ## Delivery and Reliability
 
-The framework should preserve Spine-like reliability semantics:
+The current TS runtime preserves only the first durable inbox slice:
 
-- accepted commands/events are recorded before asynchronous delivery where durability is configured;
-- delivery records include signal ID, target, shard, status, attempts, timestamps, and error details;
-- workers can retry failed delivery;
-- duplicate delivery is tolerated by idempotent repository/entity handling;
-- broker restart must not lose durable signals already accepted into storage.
+- accepted commands/events can be recorded before the asynchronous delivery handoff point where
+  durability is configured;
+- durable inbox rows store the inbox target identity, signal identity, shard, status, label,
+  receive time, version, optional signal payload, and optional dedup retention;
+- pending and final dedup guards block duplicate `(signalId, inboxId)` writes while allowing
+  crash recovery from a durable inbox row;
+- shard pickup persists lease-backed shard sessions through storage compare-and-set rather than
+  process-local locks; and
+- malformed, oversized, or key-mismatched inbox, dedup, and shard-session records fail closed as
+  storage corruption.
+
+This slice stops at durable storage and readback. It does not yet implement worker loops,
+repository invocation from the inbox, retry monitors, attempt counters, or retained delivery error
+details. Those concerns are deferred to a later delivery task.

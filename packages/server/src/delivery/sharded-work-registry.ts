@@ -220,10 +220,17 @@ function writeSession(session: ShardSession): Any {
     pickedUpAtMs: requireTime(session.pickedUpAt, "Shard pickup time"),
     expiresAtMs: requireTime(session.expiresAt, "Shard expiry time"),
   };
+  const value = Buffer.from(JSON.stringify(stored), "utf8");
+
+  if (value.byteLength > maxSessionRecordBytes) {
+    throw new DeliveryStorageCorruptionError(
+      `Shard session record exceeds ${String(maxSessionRecordBytes)} bytes and cannot be stored.`,
+    );
+  }
 
   return create(AnySchema, {
     typeUrl: shardSessionTypeUrl,
-    value: Buffer.from(JSON.stringify(stored), "utf8"),
+    value,
   });
 }
 
