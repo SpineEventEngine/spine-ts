@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-22 review prep
+Status: round-23 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -314,6 +314,19 @@ lookup. Focused inbox verification passed with 18 tests:
 Round-22 review package
 `.superpowers/sdd/review-round-22-fce80b2-current.diff` was prepared after
 those fixes.
+
+## Round 22 Partial Review
+
+Round 22 was interrupted after the code style/maintainability reviewer ran.
+The reviewer requested renaming the test-only
+`WrongStorageKeyGuardFactory` because it exceeded the four-component name
+limit. Documentation, TypeScript/API docs, security, and
+performance/reliability lanes were not started in that partial round.
+
+Round-22 fix renamed the test-only factory to `StorageKeyMismatchFactory`.
+Round-23 review package
+`.superpowers/sdd/review-round-23-fce80b2-current.diff` was prepared after the
+rename.
 
 ## Round 2 Review
 

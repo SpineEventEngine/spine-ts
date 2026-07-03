@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-22 review prep
+Status: round-23 review prep
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -259,4 +259,14 @@ entityStateType)` returns a zero-based shard index and that all messages for
   `pnpm test packages/server/test/delivery/inbox.test.ts`.
 - Round-22 review package is prepared at
   `.superpowers/sdd/review-round-22-fce80b2-current.diff`.
+- Round-22 was interrupted after only the code style/maintainability reviewer
+  ran. That reviewer requested renaming the test-only
+  `WrongStorageKeyGuardFactory` because it exceeded the four-component name
+  limit. Documentation, TypeScript/API docs, security, and
+  performance/reliability lanes were not started in that partial round.
+- The round-22 maintainability reviewer sub-agent was closed after its report
+  was collected.
+- Round-22 fix renamed the test-only factory to `StorageKeyMismatchFactory`.
+- Round-23 review package is prepared at
+  `.superpowers/sdd/review-round-23-fce80b2-current.diff`.
 - No blocking human question is known.

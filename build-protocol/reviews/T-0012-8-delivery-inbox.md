@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 22 review prep
+Status: round 23 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -884,6 +884,38 @@ Verification:
 
 Diff package:
 `.superpowers/sdd/review-round-22-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f224f-d012-7121-87f0-2b32415613d0`;
+- documentation: not started;
+- TypeScript/API docs: not started;
+- security: not started;
+- performance/reliability: not started.
+
+Result: partial review, changes requested.
+
+Findings to address:
+
+- test-only `WrongStorageKeyGuardFactory` exceeds the four-component name
+  limit.
+
+The code style/maintainability reviewer sub-agent was closed after its report
+was collected.
+
+### Round 22 Fix
+
+Result: implemented in this worktree and ready for round-23 review.
+
+Fix summary:
+
+- renamed the test-only factory to `StorageKeyMismatchFactory`.
+
+### Round 23
+
+Diff package:
+`.superpowers/sdd/review-round-23-fce80b2-current.diff`.
 
 Reviewer sub-agents: pending.
 

@@ -474,7 +474,7 @@ describe("Inbox", () => {
   it("rejects a final dedup guard stored under another key", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new WrongStorageKeyGuardFactory(),
+      storageFactory: new StorageKeyMismatchFactory(),
     });
 
     await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toThrow(
@@ -864,7 +864,7 @@ class WrongTargetGuardFactory extends StorageFactory {
   }
 }
 
-class WrongStorageKeyGuardFactory extends StorageFactory {
+class StorageKeyMismatchFactory extends StorageFactory {
   protected onCreateRecordStorage<I, R extends Message>(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
