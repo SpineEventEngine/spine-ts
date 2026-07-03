@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-41 documentation fix complete
+Status: round-42 fix implemented in worktree
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -692,3 +692,14 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   security, and performance/reliability lanes were clean.
 - Round-41 documentation-only fixes name `3a05e4b` in the current round-40
   state and record this docs-only fix trail.
+- Round-41 documentation-only fixes were committed as `e55c26f`.
+- Round-42 review completed from reviewer results supplied to this fix worker.
+  Documentation requested current durable state for committed round 41 and the
+  current round-42 pass. Performance/reliability requested failing closed when
+  final dedup guard status/retention metadata disagrees with the visible inbox
+  row. Code style/maintainability, TypeScript/API docs, and security lanes were
+  clean.
+- Round-42 fixes add a red-first regression for corrupt final dedup metadata,
+  require final dedup guard status/retention metadata to match the visible row,
+  and refresh durable logs through committed round 41 and the current round-42
+  fix.

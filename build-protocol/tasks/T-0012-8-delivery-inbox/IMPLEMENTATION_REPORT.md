@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-41 documentation fix complete
+Status: round-42 fix implemented in worktree
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1398,6 +1398,24 @@ Final verification:
   `packages/server/test/delivery/sharded-work-registry.test.ts`
   `packages/storage/test/memory/in-memory-record-storage.test.ts`
   `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `121` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
   `120` tests;
 - `pnpm typecheck`;
 - `pnpm lint`;
@@ -1426,3 +1444,40 @@ Round-41 fixes are documentation-only:
 - name `3a05e4b` as the committed round-40 fix commit in task, report, review,
   and work logs; and
 - record this round-41 docs-only review/fix trail in the durable logs.
+
+Committed as `e55c26f`.
+
+## Round 42 Review
+
+Round 42 found one documentation state issue and one performance/reliability
+dedup hardening issue. Documentation requested durable logs record committed
+round-41 state at `e55c26f` and the current round-42 pass. Reliability found
+that corrupt final dedup guards could unblock a retry when their
+status/retention metadata disagreed with the visible inbox row.
+
+Code style/maintainability, TypeScript/API docs, and security lanes were
+clean.
+
+## Round 42 Fix
+
+Round-42 fixes stay local to inbox storage, focused inbox tests, and durable
+logs:
+
+- added a red-first regression for a final guard that says `DELIVERED` with no
+  retention while the visible inbox row remains `TO_DELIVER`;
+- changed final dedup guard reads to fail closed with
+  `DeliveryStorageCorruptionError` unless guard status/retention metadata
+  matches the visible inbox row; and
+- refreshed task/report/review/work logs through committed round 41 and the
+  current round-42 fix.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
+  `'fails closed when final dedup guard metadata differs from the visible`
+  `inbox row'` failed before production changes because the retry resolved
+  `WRITTEN` for a second inbox row.
+
+Focused verification:
+
+- the same focused red-first command passed after production changes.

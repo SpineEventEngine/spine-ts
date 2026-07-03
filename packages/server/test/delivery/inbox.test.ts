@@ -1313,7 +1313,7 @@ describe("Inbox", () => {
     await expect(write).rejects.toThrow(/keep-until time/i);
   });
 
-  it("blocks on a live final dedup guard even when the inbox row is expired", async () => {
+  it("fails closed when a live final dedup guard points to an expired inbox row", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const inboxRecords = storageFactory.createRecordStorage(
       { name: "Tasks.delivery.inbox", multitenant: false },
@@ -1348,12 +1348,61 @@ describe("Inbox", () => {
       now: () => new Date("2026-07-02T09:00:00.000Z"),
     });
 
-    const result = await storage.write(createMessage("message-2", "signal-1", 2n));
+    const write = storage.write(createMessage("message-2", "signal-1", 2n));
 
-    expect(result).toMatchObject({
-      outcome: "DUPLICATE",
-      message: { id: { value: "message-1" }, signalId: "signal-1" },
+    await expect(write).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+
+    inboxRecords.close();
+    dedupRecords.close();
+  });
+
+  it("fails closed when final dedup guard metadata differs from the visible inbox row", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const inboxRecords = storageFactory.createRecordStorage(
+      { name: "Tasks.delivery.inbox", multitenant: false },
+      inboxRecordSpec,
+    );
+    const dedupRecords = storageFactory.createRecordStorage(
+      { name: "Tasks.delivery.inbox-dedup", multitenant: false },
+      dedupRecordSpec,
+    );
+    await inboxRecords.compareAndSet(
+      "0/1:message-1",
+      undefined,
+      writeInboxMessage(createMessage("message-1", "signal-1", 1n)),
+    );
+    await dedupRecords.compareAndSet(
+      testDedupKey("signal-1"),
+      undefined,
+      create(AnySchema, {
+        typeUrl: "type.spine-ts.dev/internal/InboxDedupRecord",
+        value: Buffer.from(
+          JSON.stringify({
+            key: testDedupKey("signal-1"),
+            inbox: testInboxKey,
+            signalId: "signal-1",
+            inboxMessageId: "message-1",
+            shardIndex: 0,
+            shardTotal: 1,
+            state: "FINAL",
+            status: "DELIVERED",
+          }),
+          "utf8",
+        ),
+      }),
+    );
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:00:00.000Z"),
     });
+
+    const write = storage.write(createMessage("message-2", "signal-1", 2n));
+
+    await expect(write).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(storage.read(ShardIndex.single(), { limit: 10 })).resolves.toMatchObject([
+      { id: { value: "message-1" }, signalId: "signal-1" },
+    ]);
 
     inboxRecords.close();
     dedupRecords.close();

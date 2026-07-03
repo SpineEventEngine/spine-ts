@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 41 documentation fix complete
+Status: round 42 fix implemented in worktree
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2319,9 +2319,57 @@ Findings to address:
 
 ### Round 41 Fix
 
-Result: implemented in this worktree.
+Result: committed as `e55c26f`.
 
 Fix summary:
 
 - named `3a05e4b` explicitly in the current committed round-40 state; and
 - recorded the round-41 documentation-only fix trail.
+
+### Round 42
+
+Reviewer input: round-42 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- documentation:
+  `019f28e9-9453-7653-8fed-10e021dbe699` (`CHANGES REQUESTED`, closed);
+- performance/reliability:
+  `019f28ea-2ec9-7b91-9994-94ceeb0d4064` (`CHANGES REQUESTED`, closed);
+- code style/maintainability:
+  `019f28e9-5da3-7c32-a1ba-e75ac4a8a9e7` (`CLEAN`, closed);
+- TypeScript/API docs:
+  `019f28e9-d018-7243-854c-b6dd735c5b86` (`CLEAN`, closed); and
+- security:
+  `019f28e9-ff05-71b0-bb10-7d0a36e326a1` (`CLEAN`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable logs still described the round-41 documentation fix as ready to
+  commit even though it was already committed as `e55c26f`; and
+- corrupt final dedup guards could allow duplicate writes when their
+  status/retention metadata disagreed with the visible inbox row.
+
+### Round 42 Fix
+
+Result: implemented in this worktree.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
+  `'fails closed when final dedup guard metadata differs from the visible`
+  `inbox row'` failed before production changes because the retry resolved
+  `WRITTEN` for `message-2`.
+
+Fix summary:
+
+- final dedup guard reads now require guard status/retention metadata to match
+  the visible inbox row before dedup blocking or replacement decisions; and
+- durable task/report/review/work logs now record committed round-41 state and
+  the current round-42 fix trail.
+
+Focused verification:
+
+- the same focused red-first command passed after production changes.

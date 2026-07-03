@@ -266,6 +266,12 @@ export class InboxStorage {
       );
     }
 
+    if (pendingMessage === undefined && !this.#sameGuardMetadata(guardState, message)) {
+      throw new DeliveryStorageCorruptionError(
+        `Inbox final dedup guard "${dedupKey}" does not match the visible inbox row.`,
+      );
+    }
+
     return Object.freeze({ guard: guardState, message });
   }
 
@@ -295,6 +301,17 @@ export class InboxStorage {
     return (
       left.typeUrl === right.typeUrl && Buffer.from(left.value).equals(Buffer.from(right.value))
     );
+  }
+
+  #sameGuardMetadata(
+    guard: Pick<DedupGuardState, "status" | "keepUntil">,
+    message: Pick<InboxMessage, "status" | "keepUntil">,
+  ): boolean {
+    return guard.status === message.status && this.#sameTime(guard.keepUntil, message.keepUntil);
+  }
+
+  #sameTime(left: Date | undefined, right: Date | undefined): boolean {
+    return left?.getTime() === right?.getTime();
   }
 
   #written(message: InboxMessage): WriteReturn {
