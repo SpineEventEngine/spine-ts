@@ -457,16 +457,21 @@ function requireInputShard(value: unknown, label: string): ShardIndex {
     throw new Error(`${label} is invalid.`);
   }
 
+  let indexValue: unknown;
+  let totalValue: unknown;
   try {
-    return new ShardIndex(
-      requireInputInteger(Reflect.get(value, "index"), `${label} index`),
-      requireInputInteger(Reflect.get(value, "ofTotal"), `${label} total`),
-    );
+    indexValue = Reflect.get(value, "index");
+    totalValue = Reflect.get(value, "ofTotal");
   } catch (error) {
-    if (error instanceof Error && error.message.includes(label)) {
-      throw error;
-    }
+    throw new Error(`${label} is invalid.`, { cause: error });
+  }
 
+  const index = requireInputInteger(indexValue, `${label} index`);
+  const total = requireInputInteger(totalValue, `${label} total`);
+
+  try {
+    return new ShardIndex(index, total);
+  } catch (error) {
     throw new Error(`${label} is invalid.`, { cause: error });
   }
 }

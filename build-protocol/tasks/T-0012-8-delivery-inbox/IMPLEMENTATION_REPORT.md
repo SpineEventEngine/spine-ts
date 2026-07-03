@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-60 boundary-hardening fix committed at current HEAD
-Previous completed commit: `4b40a95`
+Status: round-61 pickup-shard/docs fix committed at current HEAD
+Previous completed commit: `dd36ae7`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2512,6 +2512,8 @@ Verification:
 - `git diff --check fce80b2..HEAD`; and
 - touched-file line scan with no lines over 120 columns.
 
+Round-59 fixes were committed as `9c9baf7`.
+
 ## Round 60 Review
 
 Round 60 found no TypeScript/API docs, security, or performance/reliability
@@ -2567,5 +2569,61 @@ Verification:
 - `pnpm lint`;
 - `pnpm format:check`;
 - `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+Round-60 fixes were committed as `dd36ae7`.
+
+## Round 61 Review
+
+Round 61 found a remaining security issue in pickup shard input normalization:
+crafted `index` or `ofTotal` getters could throw raw errors whose messages
+included the validation label and leak through `requireInputShard()`.
+TypeScript/API docs requested explicit wording that storage slot IDs are used
+by `delete(id)`, `read(id)`, `compareAndSet(id, ...)`, `query()`,
+`RecordQuery.ids`, and `queryEntries()`, while `index()` returns logical record
+IDs from record bodies. Documentation requested concrete round-59/60 commit
+hashes and chronological work-log maintenance.
+
+## Round 61 Fix
+
+Round-61 fixes stay local to shard pickup validation, storage docs, focused
+tests, and durable logs:
+
+- added a red-first shard-registry regression proving throwing pickup shard
+  `index` and `ofTotal` getters reject with stable `Shard index is invalid.`
+  wording before storage opens;
+- updated `requireInputShard()` so caller property access is wrapped behind
+  stable invalid-shard wording, while plain invalid numeric values still use
+  deterministic finite-integer validation;
+- clarified `RecordStorage` TSDoc and `docs/api/README.md` so slot IDs and
+  logical record IDs are distinguished at each named API; and
+- refreshed durable logs so round 59 is `9c9baf7`, round 60 is `dd36ae7`, and
+  the work-log tail is chronological before the round-61 trail.
+
+Verification:
+
+- red-first:
+  `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  failed with the new regression because pickup leaked raw
+  `Shard index confidential getter failed`;
+- green:
+  `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`;
+- `pnpm test`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`;
+- `pnpm test`
+  `packages/server/test/index.test.ts`
+  `packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs` passed with the pre-existing invalid
+  `origin` TypeDoc source-link warning;
 - `git diff --check fce80b2..HEAD`; and
 - touched-file line scan with no lines over 120 columns.

@@ -37,13 +37,13 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     return this.#open;
   }
 
-  /** Delete one stored record by ID. */
+  /** Delete one stored record by actual storage slot ID. */
   async delete(id: I): Promise<boolean> {
     this.requireOpen();
     return this.deleteRecord(this.#recordSpec.cloneId(id));
   }
 
-  /** Read one record by ID, optionally applying a simple field mask. */
+  /** Read one record by actual storage slot ID, optionally applying a simple field mask. */
   async read(id: I, options: RecordReadOptions = {}): Promise<R | undefined> {
     this.requireOpen();
     const record = await this.readRecord(this.#recordSpec.cloneId(id));
@@ -67,7 +67,13 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     );
   }
 
-  /** Query records by IDs, columns, sorting, limits, and optional masks. */
+  /**
+   * Query records by actual storage slot IDs, columns, sorting, limits, and
+   * optional masks.
+   *
+   * `RecordQuery.ids`, when present, filters storage slot IDs rather than
+   * logical IDs derived from record bodies.
+   */
   async query(query: RecordQuery<I> = {}): Promise<readonly R[]> {
     this.requireOpen();
     RecordQuery.validate(query);
@@ -81,6 +87,9 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   /**
    * Query stored records together with the actual storage slot IDs they
    * currently occupy.
+   *
+   * `RecordQuery.ids`, when present, filters those storage slot IDs rather
+   * than logical IDs derived from record bodies.
    */
   async queryEntries(query: RecordQuery<I> = {}): Promise<readonly RecordEntry<I, R>[]> {
     this.requireOpen();
@@ -109,8 +118,9 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
    * storage handles that share the same logical backing store. Passing
    * `undefined` as `next` performs a conditional delete. A `false` result means
    * the current stored value did not match `expected`, so no mutation was
-   * applied. Adapters that cannot guarantee this behavior are not valid for
-   * delivery leasing or deduplication.
+   * applied. The `id` argument names an actual storage slot, not a logical ID
+   * derived from a record body. Adapters that cannot guarantee this behavior
+   * are not valid for delivery leasing or deduplication.
    */
   async compareAndSet(id: I, expected: R | undefined, next: R | undefined): Promise<boolean> {
     this.requireOpen();

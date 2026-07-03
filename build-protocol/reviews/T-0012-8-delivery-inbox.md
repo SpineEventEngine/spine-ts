@@ -1,7 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 60 boundary-hardening fix committed at current HEAD
-Previous completed commit: `4b40a95`
+Status: round 61 pickup-shard/docs fix committed at current HEAD
+Previous completed commit: `dd36ae7`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -3477,8 +3477,7 @@ Findings:
 
 ## Round 59 Fix
 
-Result: committed in the current package HEAD. The commit cannot record its
-own hash; identify the committed round-59 fix with package HEAD or `git log`.
+Result: committed as `9c9baf7`.
 
 Fix summary:
 
@@ -3521,8 +3520,7 @@ Findings:
 
 ## Round 60 Fix
 
-Result: committed in the current package HEAD. The commit cannot record its
-own hash; identify the committed round-60 fix with package HEAD or `git log`.
+Result: committed as `dd36ae7`.
 
 Fix summary:
 
@@ -3554,5 +3552,70 @@ Verification:
 - `pnpm lint`;
 - `pnpm format:check`;
 - `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+## Round 61 Review
+
+Reviewer input: round-61 reviewer results supplied to this fix worker.
+
+Result:
+
+- security: `round-61-security` (`CHANGES REQUESTED`, supplied);
+- TypeScript/API docs: `round-61-api-docs` (`CHANGES REQUESTED`, supplied);
+- documentation: `round-61-documentation` (`CHANGES REQUESTED`, supplied).
+
+Findings:
+
+- `packages/server/src/delivery/sharded-work-registry.ts` still let
+  `requireInputShard()` rethrow caller getter errors when the raw message
+  included the validation label, so `pickUp()` could leak attacker-chosen text
+  from `index` or `ofTotal` getters;
+- `packages/storage/src/record/record-storage.ts` and `docs/api/README.md`
+  needed to explicitly distinguish actual storage slot IDs from logical record
+  IDs for `delete(id)`, `read(id)`, `compareAndSet(id, ...)`, `query()`,
+  `RecordQuery.ids`, `queryEntries()`, and `index()`; and
+- durable logs still used current-HEAD wording for older round-59/60 commits
+  and had a non-chronological work-log tail.
+
+## Round 61 Fix
+
+Result: committed in the current package HEAD. The final response records the
+commit hash after this log is committed.
+
+Fix summary:
+
+- added the pickup-shard accessor regression and verified it failed red-first
+  by leaking `Shard index confidential getter failed`;
+- wrapped caller shard property access behind stable invalid-shard wording
+  before storage opens;
+- clarified storage slot ID versus logical record ID docs without adding API
+  facades; and
+- promoted round 59 to `9c9baf7`, round 60 to `dd36ae7`, restored work-log
+  chronology, and recorded this round-61 trail.
+
+Verification:
+
+- red-first:
+  `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  failed with the new pickup-shard getter regression;
+- green:
+  `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`;
+- `pnpm test`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`;
+- `pnpm test`
+  `packages/server/test/index.test.ts`
+  `packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs` passed with the pre-existing invalid
+  `origin` TypeDoc source-link warning;
 - `git diff --check fce80b2..HEAD`; and
 - touched-file line scan with no lines over 120 columns.

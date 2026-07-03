@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-60 boundary-hardening fix committed at current HEAD
-Previous completed commit: `4b40a95`
+Status: round-61 pickup-shard/docs fix committed at current HEAD
+Previous completed commit: `dd36ae7`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -1043,7 +1043,7 @@ concurrent changes`, add shard pickup/release regressions proving thrown
 - Round-59 fixes are docs-only and stay local to durable task/report/review/
   work-log state. They refresh current state through committed round 58 at
   `4b40a95`, remove stale pending-commit wording, and record the round-59 fix
-  as committed in the current package HEAD.
+  as committed at `9c9baf7`.
 - Final round-59 verification passed with `pnpm format:check`,
   `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
   touched-file line scan.
@@ -1073,3 +1073,29 @@ concurrent changes`, add shard pickup/release regressions proving thrown
   cycle, the required focused delivery/storage suite, `pnpm typecheck`,
   `pnpm lint`, `pnpm format:check`, `node scripts/check-api-docs.mjs`,
   `git diff --check fce80b2..HEAD`, and a touched-file line scan.
+- Round-60 fixes were committed as `dd36ae7`.
+- Round-61 review completed from supplied reviewer results. Security requested
+  stable pickup-shard input errors when caller `index` or `ofTotal` getters
+  throw crafted messages containing the validation label. TypeScript/API docs
+  requested explicitly distinguishing storage slot IDs from logical record IDs
+  for `RecordStorage` methods and `RecordQuery.ids`. Documentation requested
+  promoting older current-HEAD wording to concrete round-59/60 commits and
+  restoring chronological work-log order.
+- Red-first round-61 focused verification failed before production changes:
+  `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  exposed raw `Shard index confidential getter failed` from a throwing shard
+  `index` getter instead of stable `Shard index is invalid.`.
+- Round-61 fixes stay local to pickup shard validation, focused shard-registry
+  regression coverage, storage API docs, and durable logs. Pickup shard
+  normalization now wraps caller accessor failures before storage opens while
+  preserving deterministic finite-integer validation for plain invalid values.
+  Storage docs now state that `delete(id)`, `read(id)`,
+  `compareAndSet(id, ...)`, `query()`, `RecordQuery.ids`, and
+  `queryEntries()` use actual storage slot IDs, while `index()` returns
+  logical IDs derived from record bodies.
+- Final round-61 verification passed with the focused shard red-green cycle,
+  the required focused delivery/storage suite, `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `node scripts/check-api-docs.mjs`,
+  `git diff --check fce80b2..HEAD`, and a touched-file line scan. The API docs
+  check still emitted the pre-existing invalid `origin` TypeDoc source-link
+  warning while exiting successfully.

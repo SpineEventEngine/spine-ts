@@ -302,10 +302,14 @@ results. The in-memory adapter is process-local, tenant-aware through
 `RecordSpec` instance, and non-durable. Storage adapters must make repeated
 `createRecordStorage(context, spec)` calls observe the same logical records
 while returning independently closeable storage handles.
-`RecordStorage.index()` returns logical record IDs derived from each record
-body through the `RecordSpec`, while `RecordStorage.queryEntries()` returns the
-actual storage slot IDs for callers that need slot-addressed validation or
-repair.
+`RecordStorage.delete(id)`, `read(id)`, and
+`compareAndSet(id, expected, next)` address actual storage slot IDs.
+`RecordStorage.query()` and `RecordStorage.queryEntries()` also filter
+`RecordQuery.ids` against actual storage slot IDs; `queryEntries()` returns
+those slot IDs beside each record for callers that need slot-addressed
+validation or repair. `RecordStorage.index()` is the deliberate exception: it
+returns logical record IDs derived from each record body through the
+`RecordSpec`.
 `RecordStorage.compareAndSet(id, expected, next)` must be atomic across those
 handles for one logical backing store; `next: undefined` is a conditional
 delete, and `false` means the expected value did not match so no mutation was

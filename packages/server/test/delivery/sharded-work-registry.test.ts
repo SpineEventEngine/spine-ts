@@ -590,6 +590,41 @@ describe("ShardedWorkRegistry", () => {
     expect(storageFactory.closes).toBe(0);
   });
 
+  it("rejects pickup shard accessor failures with a stable error before opening storage", async () => {
+    const storageFactory = new CountingStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:45:00.000Z"),
+    });
+
+    await expect(
+      delivery.shards.pickUp(
+        {
+          get index() {
+            throw new Error("Shard index confidential getter failed");
+          },
+          ofTotal: 2,
+        } as unknown as ShardIndex,
+        "node-a",
+      ),
+    ).rejects.toThrow("Shard index is invalid.");
+    await expect(
+      delivery.shards.pickUp(
+        {
+          index: 0,
+          get ofTotal() {
+            throw new Error("Shard index total confidential getter failed");
+          },
+        } as unknown as ShardIndex,
+        "node-a",
+      ),
+    ).rejects.toThrow("Shard index is invalid.");
+
+    expect(storageFactory.opens).toBe(0);
+    expect(storageFactory.closes).toBe(0);
+  });
+
   it("sanitizes shard pickup input once when caller key disagrees with shard coordinates", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
