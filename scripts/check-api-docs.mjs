@@ -202,6 +202,7 @@ const expectedServerExports = [
   "Delivery",
   "DeliveryLabel",
   "DeliveryOptions",
+  "DeliveryStorageCorruptionError",
   "DeliveryStatus",
   "createServerRuntimeRoutingPlan",
   "DeferredServerRuntimeRoutingSeam",

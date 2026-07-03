@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
 import {
+  dedupRecordSpec,
   inboxRecordSpec,
   writeDedupClaim,
   writeDedupRecord,
@@ -287,6 +288,23 @@ describe("Inbox", () => {
     await expect(write).rejects.toThrow(/receive time/i);
   });
 
+  it("rejects structural caller timestamps as inbox message errors", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+
+    const write = storage.write({
+      ...createMessage("message-structural-time", "signal-structural-time", 1n),
+      whenReceived: {
+        getTime: () => Date.parse("2026-07-02T08:00:00.000Z"),
+      } as unknown as Date,
+    });
+
+    await expect(write).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(write).rejects.toThrow(/receive time/i);
+  });
+
   it("writes one immutable snapshot when caller getters drift after validation", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -343,6 +361,46 @@ describe("Inbox", () => {
       },
     ]);
     await expect(storage.read(driftedShard, { limit: 10 })).resolves.toEqual([]);
+  });
+
+  it("uses caller getter drift as one inbox input snapshot", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inboxIds: readonly InboxId[] = [
+      {
+        targetId: "projection-1",
+        targetTypeUrl: "type.example.dev/tasks.Projection",
+      },
+      {
+        targetId: "projection-2",
+        targetTypeUrl: "type.example.dev/tasks.Projection",
+      },
+    ];
+    let inboxReads = 0;
+    const message = {
+      ...createMessage("message-1", "signal-1", 1n),
+      get inboxId() {
+        const index = Math.min(inboxReads, inboxIds.length - 1);
+        inboxReads += 1;
+        const inboxId = inboxIds[index];
+        if (inboxId === undefined) {
+          throw new Error("Missing test inbox ID.");
+        }
+        return inboxId;
+      },
+    };
+
+    const result = await storage.write(message);
+
+    expect(result).toMatchObject({
+      outcome: "WRITTEN",
+      message: { inboxId: { targetId: "projection-1" } },
+    });
+    await expect(storage.read(ShardIndex.single(), { limit: 10 })).resolves.toMatchObject([
+      { inboxId: { targetId: "projection-1" } },
+    ]);
   });
 
   it("writes and reads back an empty signal payload", async () => {
@@ -1015,6 +1073,18 @@ describe("Inbox", () => {
     expect(() => writeDedupClaim(message)).toThrow(/version/i);
   });
 
+  it("rejects structural caller versions before building inbox or dedup records", () => {
+    const message = {
+      ...createMessage("message-1", "signal-1", 1n),
+      version: {
+        toString: () => "1",
+      } as unknown as bigint,
+    };
+
+    expect(() => writeInboxMessage(message)).toThrow(InboxMessageError);
+    expect(() => writeDedupClaim(message)).toThrow(InboxMessageError);
+  });
+
   it("rejects dedup serializers with mismatched shard identities", () => {
     const message = {
       ...createMessage("message-1", "signal-1", 1n),
@@ -1178,6 +1248,52 @@ describe("Inbox", () => {
 
     await expect(write).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
     await expect(write).rejects.toThrow(/keep-until time/i);
+  });
+
+  it("blocks on a live final dedup guard even when the inbox row is expired", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const inboxRecords = storageFactory.createRecordStorage(
+      { name: "Tasks.delivery.inbox", multitenant: false },
+      inboxRecordSpec,
+    );
+    const dedupRecords = storageFactory.createRecordStorage(
+      { name: "Tasks.delivery.inbox-dedup", multitenant: false },
+      dedupRecordSpec,
+    );
+    await inboxRecords.compareAndSet(
+      "0/1:message-1",
+      undefined,
+      writeInboxMessage({
+        ...createMessage("message-1", "signal-1", 1n),
+        status: "DELIVERED",
+        keepUntil: new Date("2026-07-02T08:00:00.000Z"),
+      }),
+    );
+    await dedupRecords.compareAndSet(
+      testDedupKey("signal-1"),
+      undefined,
+      finalDedupRecord({
+        key: testDedupKey("signal-1"),
+        inbox: testInboxKey,
+        signalId: "signal-1",
+        inboxMessageId: "message-1",
+      }),
+    );
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:00:00.000Z"),
+    });
+
+    const result = await storage.write(createMessage("message-2", "signal-1", 2n));
+
+    expect(result).toMatchObject({
+      outcome: "DUPLICATE",
+      message: { id: { value: "message-1" }, signalId: "signal-1" },
+    });
+
+    inboxRecords.close();
+    dedupRecords.close();
   });
 
   it("rejects a final dedup guard whose key does not match its signal", async () => {

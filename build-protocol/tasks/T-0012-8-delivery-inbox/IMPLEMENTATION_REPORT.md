@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-37 fix complete
+Status: round-38 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1227,6 +1227,64 @@ Verification for the round-37 fix passed with:
   - `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
     `-- --runInBand -t 'rejects invalid pickup inputs before opening shard`
     `storage'`;
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `packages/storage/test/memory/in-memory-record-storage.test.ts`
+    `packages/server/test/repository/aggregate-storage.test.ts`;
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check fce80b2..HEAD`; and
+  - `awk 'length($0) > 120 { ... }'` across the touched files (no lines over
+    120 columns).
+
+## Round 38 Review
+
+Round 38 found one API-doc export-list drift, stale durable round-37 state,
+two public input validation gaps, one mutable caller-field snapshot gap, and
+one final dedup guard blocking gap. The review requested adding
+`DeliveryStorageCorruptionError` to the generated API-doc expectation and
+public delivery export list, recording committed round-37 state across durable
+logs, validating public `version` and `Date` inputs before using
+`toString()` / `getTime()`, keeping mutable/getter caller inbox fields from
+creating internally inconsistent rows, and honoring live final dedup guard
+status/retention even if the referenced inbox row is expired.
+
+Red-first regressions failed before implementation:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
+  `'uses caller getter drift as one inbox input snapshot|rejects structural`
+  `caller timestamps as inbox message errors|rejects structural caller`
+  `versions before building inbox or dedup records|blocks on a live final`
+  `dedup guard even when the inbox row is expired'`
+
+The pre-fix failures matched the review findings: structural caller timestamps
+and versions were accepted, caller `inboxId` getter drift changed the stored
+target identity, and a final dedup guard with live status was ignored because
+the referenced inbox row was expired.
+
+## Round 38 Fix
+
+Round-38 fixes stayed scoped to API docs, inbox record/input validation, final
+dedup blocking semantics, focused tests, and durable logs:
+
+- added `DeliveryStorageCorruptionError` to the API-doc export expectation and
+  concise public delivery export list;
+- recorded committed round-37 state and current round-38 state across durable
+  task/report/review/work logs;
+- changed inbox-record writes to build one caller input snapshot for message
+  identity, inbox identity, status, timestamps, version, and optional signal
+  before deriving stored inbox/dedup rows;
+- changed public inbox date validation to require real `Date` instances and
+  public version validation to require `bigint`; and
+- changed final dedup guard handling to use the guard's own status/retention
+  fields for blocking while still returning the referenced inbox row.
+
+Verification for the round-38 fix passed with:
+
+- green:
+  - the same focused red-first regression command;
   - `pnpm test packages/server/test/delivery/inbox.test.ts`
     `packages/server/test/delivery/inbox-records.test.ts`
     `packages/server/test/delivery/sharded-work-registry.test.ts`

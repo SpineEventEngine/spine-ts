@@ -10,16 +10,17 @@ import {
   type InboxWriteResult,
 } from "./inbox.js";
 import {
-  dedupMessageId,
   dedupGuardKey,
   dedupRecordSpec,
   inboxRecordSpec,
   isPendingDedupRecord,
+  readDedupGuard,
   readPendingMessage,
   readInboxMessage,
   writeDedupClaim,
   writeDedupRecord,
   writeInboxMessage,
+  type DedupGuardState,
 } from "./inbox-records.js";
 import { ShardIndex } from "./shard-index.js";
 
@@ -107,16 +108,10 @@ export class InboxStorage {
       return { kind: "CLAIM", expected: undefined, message };
     }
 
-    const storedMessage = await this.#readGuardMessage(inboxStorage, dedupKey, current);
+    const storedGuard = await this.#readGuardMessage(inboxStorage, dedupKey, current);
 
-    if (storedMessage !== undefined) {
-      return this.#handleStoredGuardMessage(
-        dedupStorage,
-        dedupKey,
-        current,
-        storedMessage,
-        message,
-      );
+    if (storedGuard !== undefined) {
+      return this.#handleStoredGuardMessage(dedupStorage, dedupKey, current, storedGuard, message);
     }
 
     if (!isPendingDedupRecord(current)) {
@@ -132,9 +127,10 @@ export class InboxStorage {
     dedupStorage: RecordStorage<string, Any>,
     dedupKey: string,
     current: Any,
-    storedMessage: InboxMessage,
+    storedGuard: GuardMessage,
     message: InboxMessage,
   ): Promise<WriteStep> {
+    const { guard, message: storedMessage } = storedGuard;
     let expected = current;
     if (isPendingDedupRecord(current)) {
       expected = writeDedupRecord(storedMessage);
@@ -144,7 +140,7 @@ export class InboxStorage {
       }
     }
 
-    return this.#messageBlocks(storedMessage, this.#now())
+    return this.#messageBlocks(guard, this.#now())
       ? this.#duplicate(storedMessage)
       : { kind: "CLAIM", expected, message };
   }
@@ -243,8 +239,9 @@ export class InboxStorage {
     inboxStorage: RecordStorage<string, Any>,
     dedupKey: string,
     guard: Any,
-  ): Promise<InboxMessage | undefined> {
-    const expectedKey = this.#messageKey(dedupMessageId(guard, dedupKey));
+  ): Promise<GuardMessage | undefined> {
+    const guardState = readDedupGuard(guard, dedupKey);
+    const expectedKey = this.#messageKey(guardState.messageId);
     const storedRecord = await inboxStorage.read(expectedKey);
     if (storedRecord === undefined) {
       return undefined;
@@ -257,10 +254,10 @@ export class InboxStorage {
       );
     }
 
-    return message;
+    return Object.freeze({ guard: guardState, message });
   }
 
-  #messageBlocks(message: InboxMessage, now: Date): boolean {
+  #messageBlocks(message: Pick<InboxMessage, "status" | "keepUntil">, now: Date): boolean {
     if (message.status !== "DELIVERED") {
       return true;
     }
@@ -338,6 +335,11 @@ interface WriteClaim {
 interface WriteReturn {
   readonly kind: "RETURN";
   readonly result: InboxWriteResult;
+}
+
+interface GuardMessage {
+  readonly guard: DedupGuardState;
+  readonly message: InboxMessage;
 }
 
 type InboxConflict = "CALLER_INPUT" | "STORAGE_CORRUPTION";

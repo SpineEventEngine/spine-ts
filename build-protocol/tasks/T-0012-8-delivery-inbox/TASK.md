@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-37 fix complete
+Status: round-38 fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -590,6 +590,36 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   `packages/storage/test/memory/in-memory-record-storage.test.ts`
   `packages/server/test/repository/aggregate-storage.test.ts` (`113` tests).
 - Final round-37 hygiene verification passed with `pnpm typecheck`,
+  `pnpm lint`, `pnpm format:check`, `git diff --check fce80b2..HEAD`, and a
+  touched-file line scan.
+- Round-37 fixes were committed as `4a97dd9`.
+- Round-38 review completed from reviewer results supplied to this fix worker.
+  TypeScript/API docs, documentation, security, and performance/reliability
+  requested changes. Code style/maintainability was clean. All five round-38
+  reviewer lanes are closed.
+- Round-38 fixes add the missing public `DeliveryStorageCorruptionError`
+  API-doc expectation, refresh durable round-37 breadcrumbs, snapshot mutable
+  caller inbox fields before durable parsing, explicitly validate public
+  `version` and `Date` inputs, and make live final dedup guard
+  status/retention block consistently.
+- Red-first round-38 verification failed for the intended regressions:
+  `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
+  `'uses caller getter drift as one inbox input snapshot|rejects structural`
+  `caller timestamps as inbox message errors|rejects structural caller`
+  `versions before building inbox or dedup records|blocks on a live final`
+  `dedup guard even when the inbox row is expired'`.
+  The pre-fix outcomes were accepted structural date/version values, drifted
+  caller inbox target values reaching storage, and a live final dedup guard
+  being replaced with a new written message.
+- Focused round-38 verification passed with the same red-first regression
+  command after the production fix.
+- Final round-38 focused-suite verification passed with
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` (`117` tests).
+- Final round-38 hygiene verification passed with `pnpm typecheck`,
   `pnpm lint`, `pnpm format:check`, `git diff --check fce80b2..HEAD`, and a
   touched-file line scan.
 - No blocking human question is known.

@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 36 fix complete
+Status: round 38 fix in progress
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2032,3 +2032,117 @@ Verification:
   - `git diff --check fce80b2..HEAD`; and
   - `awk 'length($0) > 120 { ... }'` across the touched files (no lines over
     120 columns).
+
+### Round 37
+
+Reviewer input: round-37 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  reviewer lane closed with changes requested;
+- documentation:
+  reviewer lane closed with changes requested;
+- TypeScript/API docs:
+  reviewer lane closed with changes requested;
+- security:
+  reviewer lane closed with changes requested; and
+- performance/reliability:
+  reviewer lane closed with changes requested.
+
+Result: changes requested.
+
+Findings addressed by commit `4a97dd9`:
+
+- work-log state was stale after commit `c0c319b`;
+- the implementation report tail had non-chronological material;
+- exported `ShardIndex` and `ShardSession` constructor-parameter properties
+  needed public TSDoc;
+- getter-backed signal payloads could pass validation with a small payload and
+  persist a later larger payload; and
+- invalid shard pickup input opened storage before validation.
+
+### Round 37 Fix
+
+Result: committed as `4a97dd9`.
+
+Fix summary:
+
+- captured optional inbox signals once before validation/serialization and
+  enforced the signal payload cap inside `packSignal()`;
+- validated shard pickup input before opening storage;
+- added TSDoc for exported shard constructor properties;
+- restored implementation-report chronology; and
+- advanced durable task/report/work-log state through round 37.
+
+### Round 38
+
+Reviewer input: round-38 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- TypeScript/API docs:
+  `019f28b8-47bf-7c43-954e-9f3fbcd9e2ee` (`CHANGES REQUESTED`, closed);
+- documentation:
+  `019f28b8-1b73-7312-bdd6-5cad1862b9bd` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f28b8-7550-7a22-85b9-0d9a47698d30` (`CHANGES REQUESTED`, closed);
+- performance/reliability:
+  `019f28b8-a328-77f0-b90d-9324b3f4c7ee` (`CHANGES REQUESTED`, closed); and
+- code style/maintainability:
+  `019f28b7-e29e-7b82-b5d8-5d7fae29d7bf` (`CLEAN`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- `DeliveryStorageCorruptionError` was exported and documented in
+  `DEVELOPER_API.md` but missing from `scripts/check-api-docs.mjs` and
+  `docs/api/README.md`;
+- durable task/report/review/work logs were not current through committed
+  round 37;
+- inbox-record serialization still re-read mutable caller fields after
+  validation, and public `version` / `Date` inputs were used before explicit
+  type checks; and
+- final dedup guard status/retention validation did not participate in
+  blocking, so a live final guard paired with an expired inbox row could be
+  replaced.
+
+### Round 38 Fix
+
+Result: implemented in this worktree.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
+  `'uses caller getter drift as one inbox input snapshot|rejects structural`
+  `caller timestamps as inbox message errors|rejects structural caller`
+  `versions before building inbox or dedup records|blocks on a live final`
+  `dedup guard even when the inbox row is expired'` failed before production
+  changes because structural date/version values were accepted, caller
+  `inboxId` drift reached storage, and a live final dedup guard was replaced
+  with a new written message.
+
+Fix summary:
+
+- added `DeliveryStorageCorruptionError` to API docs and export expectations;
+- refreshed durable state through committed round 37 and current round 38;
+- snapshot caller inbox record input once before stored row construction;
+- validate public `Date` and `bigint` inputs explicitly as
+  `InboxMessageError`; and
+- use final dedup guard status/retention fields consistently for blocking.
+
+Verification:
+
+- green:
+  - the same focused red-first command passed after production changes;
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `packages/storage/test/memory/in-memory-record-storage.test.ts`
+    `packages/server/test/repository/aggregate-storage.test.ts`;
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check fce80b2..HEAD`; and
+  - touched-file line scan with no lines over 120 columns.

@@ -114,8 +114,9 @@ primitive aggregate IDs, route consistency, and aggregate version order before
 storage. It does not implement handler invocation, delivery, catch-up,
 read-side indexing, subscriptions, system events, or aggregate repository
 caching.
-Delivery exports include `Delivery`, `DeliveryOptions`, `Inbox`, `InboxId`,
-`InboxMessage`, `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
+Delivery exports include `Delivery`, `DeliveryOptions`,
+`DeliveryStorageCorruptionError`, `Inbox`, `InboxId`, `InboxMessage`,
+`InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
 `InboxReadOptions`, `InboxWriteResult`, `InboxStorage`, `InboxStorageOptions`,
 `DeliveryLabel`, `DeliveryStatus`, `ShardIndex`, `ShardSession`,
 `ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`. This slice persists
