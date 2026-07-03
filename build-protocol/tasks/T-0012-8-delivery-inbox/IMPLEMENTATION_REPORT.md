@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-25 fix complete
+Status: round-26 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -444,6 +444,69 @@ Final round-25 verification also passed with:
 - `git diff --check`
 - `git diff --unified=0 -- ... | awk '/^\\+[^+]/ { ... }'` for touched-file
   added-line length checks (no lines over 120 columns)
+
+## Round 26 Review
+
+Round 26 found no code style/maintainability issue. Documentation requested
+adding `InboxMessageError` to the public delivery/inbox API docs, and
+TypeScript/API docs requested adding `InboxMessageInput`. Security and
+performance/reliability requested two trust-boundary fixes and earlier text
+bounds: inbox-row and shard-session reads must reject self-consistent records
+stored under the wrong slot, dedup guard recovery must reject a wrong-slot
+inbox row even when its dedup pair is self-consistent, and oversized
+signal/inbox/shard text must fail before building large keys or serialized
+JSON.
+
+Red-first regressions failed before implementation:
+
+- focused round-26 delivery regressions:
+
+  ```sh
+  pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts
+  ```
+
+  failed with seven targeted regressions:
+  `rejects oversized signal IDs before building inbox and dedup keys`,
+  `rejects oversized inbox target identity before building inbox and dedup keys`,
+  `rejects an existing inbox row stored under another message slot during direct write recovery`,
+  `rejects a dedup guard whose inbox row matches the dedup key but not the guarded message slot`,
+  `rejects oversized shard nodes before building a session record`,
+  `rejects a shard session record stored under another shard slot during pickup`,
+  and `rejects a shard session record stored under another shard slot during release`.
+  The failures were the expected pre-fix outcomes: no error was thrown for the
+  oversized signal/target inputs, direct inbox recovery raised
+  `Inbox message "0/1:message-1" already exists.`, dedup guard recovery
+  returned a duplicate result, shard pickup accepted the oversized node, shard
+  pickup returned `undefined` for a wrong-slot session, and shard release
+  returned `false` for a wrong-slot session.
+
+## Round 26 Fix
+
+Round-26 fixes kept the delivery slice small while closing the review gaps:
+
+- extended the public delivery/inbox API section in `DEVELOPER_API.md` to
+  include `InboxMessageError` and `InboxMessageInput`;
+- extended inbox-row and shard-session decoders with optional expected storage
+  keys so `InboxStorage.#ensureInboxRow()`, `InboxStorage.#readGuardMessage()`,
+  `ShardedWorkRegistry.pickUp()`, and `ShardedWorkRegistry.release()` fail
+  closed when a self-consistent record is stored under the wrong slot; and
+- added simple early text bounds for inbox message IDs, signal IDs, inbox
+  target identity fields, signal type URLs, and shard nodes before building
+  large combined keys or serialized JSON, while keeping stored-record reads
+  bounded with the same limits.
+
+Focused delivery verification passed with 46 tests:
+
+`pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`.
+
+Final round-26 verification also passed with:
+
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm format:check`
+- `git diff --check`
+- `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+  over 120 columns)
 
 ## Round 2 Review
 

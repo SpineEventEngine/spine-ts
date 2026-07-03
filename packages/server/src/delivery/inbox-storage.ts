@@ -217,7 +217,7 @@ export class InboxStorage {
         continue;
       }
 
-      const storedMessage = readInboxMessage(current);
+      const storedMessage = readInboxMessage(current, key);
       if (this.#sameRecord(writeInboxMessage(storedMessage), record)) {
         return storedMessage;
       }
@@ -231,12 +231,13 @@ export class InboxStorage {
     dedupKey: string,
     guard: Any,
   ): Promise<InboxMessage | undefined> {
-    const storedRecord = await inboxStorage.read(this.#messageKey(dedupMessageId(guard, dedupKey)));
+    const expectedKey = this.#messageKey(dedupMessageId(guard, dedupKey));
+    const storedRecord = await inboxStorage.read(expectedKey);
     if (storedRecord === undefined) {
       return undefined;
     }
 
-    const message = readInboxMessage(storedRecord);
+    const message = readInboxMessage(storedRecord, expectedKey);
     if (dedupGuardKey(message) !== dedupKey) {
       throw new DeliveryStorageCorruptionError(
         `Inbox dedup guard "${dedupKey}" points to another dedup key.`,
@@ -281,7 +282,20 @@ export class InboxStorage {
   }
 
   #messageKey(id: Pick<InboxMessage["id"], "value" | "shard">): string {
-    return `${id.shard.key()}:${id.value}`;
+    return `${id.shard.key()}:${this.#requireMessageId(id.value)}`;
+  }
+
+  #requireMessageId(value: string): string {
+    if (value.trim().length === 0) {
+      throw new InboxMessageError("Inbox message ID must be a non-empty string.");
+    }
+    if (Buffer.byteLength(value, "utf8") > maxInboxTextBytes) {
+      throw new InboxMessageError(
+        `Inbox message ID exceeds ${String(maxInboxTextBytes)} bytes and cannot be stored.`,
+      );
+    }
+
+    return value;
   }
 
   #inboxStorage(): RecordStorage<string, Any> {
@@ -348,3 +362,5 @@ function deliveryStorageContext(context: StorageContext, name: string): StorageC
         multitenant: false,
       };
 }
+
+const maxInboxTextBytes = 16 * 1024;

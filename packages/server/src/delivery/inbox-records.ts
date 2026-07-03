@@ -81,8 +81,8 @@ export const dedupRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, A
   extractId: (record) => readStoredDedupRecord(record).key,
 });
 
-export function readInboxMessage(record: Any): InboxMessage {
-  return inboxMessageFromStored(readStoredInboxMessage(record));
+export function readInboxMessage(record: Any, expectedKey?: string): InboxMessage {
+  return inboxMessageFromStored(readStoredInboxMessage(record, expectedKey));
 }
 
 export function writeInboxMessage(message: InboxMessage): Any {
@@ -91,7 +91,7 @@ export function writeInboxMessage(message: InboxMessage): Any {
 }
 
 export function dedupGuardKey(message: Pick<InboxMessage, "inboxId" | "signalId">): string {
-  return `${inboxKey(message.inboxId)}:${requireText(message.signalId, "Inbox signal ID")}`;
+  return `${inboxKey(message.inboxId)}:${requireInputText(message.signalId, "Inbox signal ID")}`;
 }
 
 export function isPendingDedupRecord(record: Any): boolean {
@@ -101,7 +101,7 @@ export function isPendingDedupRecord(record: Any): boolean {
 function readStoredDedupRecord(record: Any): StoredDedupRecord {
   const decoded = readStoredRecord(record, dedupRecordTypeUrl, "Inbox dedup record");
   const state = requireDedupState(decoded.state);
-  const key = requireText(decoded.key, "Inbox dedup key");
+  const key = requireStoredText(decoded.key, "Inbox dedup key", maxCompositeTextBytes);
 
   if (state === "PENDING") {
     const message = parseStoredInboxMessage(
@@ -121,8 +121,8 @@ function readStoredDedupRecord(record: Any): StoredDedupRecord {
     });
   }
 
-  const inbox = requireText(decoded.inbox, "Inbox dedup inbox");
-  const signalId = requireText(decoded.signalId, "Inbox dedup signal ID");
+  const inbox = requireStoredText(decoded.inbox, "Inbox dedup inbox", maxCompositeTextBytes);
+  const signalId = requireStoredText(decoded.signalId, "Inbox dedup signal ID");
   if (`${inbox}:${signalId}` !== key) {
     throw new DeliveryStorageCorruptionError(
       "Inbox dedup final record does not match the guard key.",
@@ -133,7 +133,7 @@ function readStoredDedupRecord(record: Any): StoredDedupRecord {
     key,
     inbox,
     signalId,
-    inboxMessageId: requireText(decoded.inboxMessageId, "Inbox dedup message ID"),
+    inboxMessageId: requireStoredText(decoded.inboxMessageId, "Inbox dedup message ID"),
     shardIndex: requireNumber(decoded.shardIndex, "Inbox dedup shard index"),
     shardTotal: requireNumber(decoded.shardTotal, "Inbox dedup shard total"),
     state,
@@ -162,8 +162,8 @@ export function writeDedupRecord(message: InboxMessage): Any {
   const stored: StoredFinalDedupRecord = {
     key: dedupGuardKey(message),
     inbox: inboxKey(message.inboxId),
-    signalId: requireText(message.signalId, "Inbox signal ID"),
-    inboxMessageId: requireText(message.id.value, "Inbox message ID"),
+    signalId: requireInputText(message.signalId, "Inbox signal ID"),
+    inboxMessageId: requireInputText(message.id.value, "Inbox message ID"),
     shardIndex: message.id.shard.index,
     shardTotal: message.id.shard.ofTotal,
     state: "FINAL",
@@ -186,7 +186,7 @@ export function dedupMessageId(record: Any, expectedKey?: string): InboxMessageI
 
   if (dedup.state === "PENDING") {
     return Object.freeze({
-      value: requireText(dedup.message.id, "Inbox dedup message ID"),
+      value: requireStoredText(dedup.message.id, "Inbox dedup message ID"),
       shard: new ShardIndex(
         requireNumber(dedup.message.shardIndex, "Inbox dedup shard index"),
         requireNumber(dedup.message.shardTotal, "Inbox dedup shard total"),
@@ -195,7 +195,7 @@ export function dedupMessageId(record: Any, expectedKey?: string): InboxMessageI
   }
 
   return Object.freeze({
-    value: requireText(dedup.inboxMessageId, "Inbox dedup message ID"),
+    value: requireStoredText(dedup.inboxMessageId, "Inbox dedup message ID"),
     shard: new ShardIndex(
       requireNumber(dedup.shardIndex, "Inbox dedup shard index"),
       requireNumber(dedup.shardTotal, "Inbox dedup shard total"),
@@ -210,13 +210,13 @@ export function readPendingMessage(record: Any): InboxMessage | undefined {
 
 function inboxKey(inboxId: InboxMessage["inboxId"]): string {
   return JSON.stringify({
-    targetId: requireText(inboxId.targetId, "Inbox target ID"),
-    targetTypeUrl: requireText(inboxId.targetTypeUrl, "Inbox target type URL"),
+    targetId: requireInputText(inboxId.targetId, "Inbox target ID"),
+    targetTypeUrl: requireInputText(inboxId.targetTypeUrl, "Inbox target type URL"),
   });
 }
 
 function inboxMessageKey(id: InboxMessageId): string {
-  return `${id.shard.key()}:${requireText(id.value, "Inbox message ID")}`;
+  return `${id.shard.key()}:${requireInputText(id.value, "Inbox message ID")}`;
 }
 
 function packRecord(
@@ -239,16 +239,16 @@ function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
 
   return Object.freeze({
     key: inboxMessageKey(message.id),
-    id: requireText(message.id.value, "Inbox message ID"),
+    id: requireInputText(message.id.value, "Inbox message ID"),
     shard: message.shard.key(),
     shardIndex: message.shard.index,
     shardTotal: message.shard.ofTotal,
     inbox: inboxKey(message.inboxId),
     inboxId: {
-      targetId: requireText(message.inboxId.targetId, "Inbox target ID"),
-      targetTypeUrl: requireText(message.inboxId.targetTypeUrl, "Inbox target type URL"),
+      targetId: requireInputText(message.inboxId.targetId, "Inbox target ID"),
+      targetTypeUrl: requireInputText(message.inboxId.targetTypeUrl, "Inbox target type URL"),
     },
-    signalId: requireText(message.signalId, "Inbox signal ID"),
+    signalId: requireInputText(message.signalId, "Inbox signal ID"),
     label: requireDeliveryLabel(message.label),
     status: requireDeliveryStatus(message.status),
     whenReceivedMs: requireTimestamp(message.whenReceived, "Inbox receive time"),
@@ -263,6 +263,14 @@ function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
 function validateInboxMessage(message: InboxMessage): void {
   if (message.id.shard.key() !== message.shard.key()) {
     throw new InboxMessageError("Inbox message ID shard does not match message shard.");
+  }
+
+  requireInputText(message.id.value, "Inbox message ID");
+  requireInputText(message.signalId, "Inbox signal ID");
+  requireInputText(message.inboxId.targetId, "Inbox target ID");
+  requireInputText(message.inboxId.targetTypeUrl, "Inbox target type URL");
+  if (message.signal !== undefined) {
+    requireInputText(message.signal.typeUrl, "Inbox signal type URL");
   }
 }
 
@@ -291,28 +299,33 @@ function inboxMessageFromStored(stored: StoredInboxMessage): InboxMessage {
 
 function packSignal(signal: Any): StoredSignal {
   return Object.freeze({
-    typeUrl: requireText(signal.typeUrl, "Inbox signal type URL"),
+    typeUrl: requireInputText(signal.typeUrl, "Inbox signal type URL"),
     valueBase64: Buffer.from(signal.value).toString("base64"),
   });
 }
 
 function unpackSignal(signal: StoredSignal): Any {
-  const valueBase64 = requireText(signal.valueBase64, "Inbox signal payload");
+  const valueBase64 = requireStoredText(signal.valueBase64, "Inbox signal payload");
 
   return create(AnySchema, {
-    typeUrl: requireText(signal.typeUrl, "Inbox signal type URL"),
+    typeUrl: requireStoredText(signal.typeUrl, "Inbox signal type URL"),
     value: decodeSignalPayload(valueBase64),
   });
 }
 
-function readStoredInboxMessage(record: Any): StoredInboxMessage {
+function readStoredInboxMessage(record: Any, expectedKey?: string): StoredInboxMessage {
   return parseStoredInboxMessage(
     readStoredRecord(record, inboxRecordTypeUrl, "Inbox message record"),
     "Inbox message record",
+    expectedKey,
   );
 }
 
-function parseStoredInboxMessage(value: unknown, label: string): StoredInboxMessage {
+function parseStoredInboxMessage(
+  value: unknown,
+  label: string,
+  expectedKey?: string,
+): StoredInboxMessage {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     throw new DeliveryStorageCorruptionError(`${label} is invalid.`);
   }
@@ -323,22 +336,27 @@ function parseStoredInboxMessage(value: unknown, label: string): StoredInboxMess
     requireNumber(decoded.shardTotal, "Inbox shard total"),
   );
 
-  if (requireText(decoded.shard, "Inbox shard key") !== shard.key()) {
+  if (requireStoredText(decoded.shard, "Inbox shard key", maxCompositeTextBytes) !== shard.key()) {
     throw new DeliveryStorageCorruptionError(
       "Inbox message record shard key does not match shard.",
     );
   }
 
-  const id = requireText(decoded.id, "Inbox message ID");
-  const key = requireText(decoded.key, "Inbox message key");
+  const id = requireStoredText(decoded.id, "Inbox message ID");
+  const key = requireStoredText(decoded.key, "Inbox message key", maxCompositeTextBytes);
   if (key !== inboxMessageKey({ value: id, shard })) {
     throw new DeliveryStorageCorruptionError(
       "Inbox message record key does not match message identity.",
     );
   }
+  if (expectedKey !== undefined && key !== expectedKey) {
+    throw new DeliveryStorageCorruptionError(
+      `Inbox message record "${key}" does not match storage key "${expectedKey}".`,
+    );
+  }
 
   const inboxId = readStoredInboxId(decoded.inboxId);
-  const inbox = requireText(decoded.inbox, "Inbox key");
+  const inbox = requireStoredText(decoded.inbox, "Inbox key", maxCompositeTextBytes);
   if (inbox !== inboxKey(inboxId)) {
     throw new DeliveryStorageCorruptionError(
       "Inbox message record inbox key does not match target identity.",
@@ -356,12 +374,12 @@ function parseStoredInboxMessage(value: unknown, label: string): StoredInboxMess
       targetId: inboxId.targetId,
       targetTypeUrl: inboxId.targetTypeUrl,
     },
-    signalId: requireText(decoded.signalId, "Inbox signal ID"),
+    signalId: requireStoredText(decoded.signalId, "Inbox signal ID"),
     ...(decoded.signal === undefined ? {} : { signal: readStoredSignal(decoded.signal) }),
     label: requireDeliveryLabel(decoded.label),
     status: requireDeliveryStatus(decoded.status),
     whenReceivedMs: requireNumber(decoded.whenReceivedMs, "Inbox receive time"),
-    version: requireText(decoded.version, "Inbox version"),
+    version: requireStoredText(decoded.version, "Inbox version"),
     ...(decoded.keepUntilMs === undefined
       ? {}
       : { keepUntilMs: requireNumber(decoded.keepUntilMs, "Inbox keep-until time") }),
@@ -374,8 +392,8 @@ function readStoredSignal(value: unknown): StoredSignal {
   }
 
   return Object.freeze({
-    typeUrl: requireText(Reflect.get(value, "typeUrl"), "Inbox signal type URL"),
-    valueBase64: requireText(Reflect.get(value, "valueBase64"), "Inbox signal payload"),
+    typeUrl: requireStoredText(Reflect.get(value, "typeUrl"), "Inbox signal type URL"),
+    valueBase64: requireStoredText(Reflect.get(value, "valueBase64"), "Inbox signal payload"),
   });
 }
 
@@ -385,8 +403,8 @@ function readStoredInboxId(value: unknown): Readonly<{ targetId: string; targetT
   }
 
   return Object.freeze({
-    targetId: requireText(Reflect.get(value, "targetId"), "Inbox target ID"),
-    targetTypeUrl: requireText(Reflect.get(value, "targetTypeUrl"), "Inbox target type URL"),
+    targetId: requireStoredText(Reflect.get(value, "targetId"), "Inbox target ID"),
+    targetTypeUrl: requireStoredText(Reflect.get(value, "targetTypeUrl"), "Inbox target type URL"),
   });
 }
 
@@ -467,9 +485,25 @@ function requireNumber(value: unknown, label: string): number {
   return value as number;
 }
 
-function requireText(value: unknown, label: string): string {
+function requireStoredText(value: unknown, label: string, maxBytes = maxTextBytes): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new DeliveryStorageCorruptionError(`${label} must be a non-empty string.`);
+  }
+  if (Buffer.byteLength(value, "utf8") > maxBytes) {
+    throw new DeliveryStorageCorruptionError(
+      `${label} exceeds ${String(maxBytes)} bytes and cannot be stored.`,
+    );
+  }
+
+  return value;
+}
+
+function requireInputText(value: unknown, label: string, maxBytes = maxTextBytes): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new InboxMessageError(`${label} must be a non-empty string.`);
+  }
+  if (Buffer.byteLength(value, "utf8") > maxBytes) {
+    throw new InboxMessageError(`${label} exceeds ${String(maxBytes)} bytes and cannot be stored.`);
   }
 
   return value;
@@ -487,7 +521,7 @@ function requireTimestamp(value: Date, label: string): number {
 
 function parseStoredVersion(value: string): bigint {
   try {
-    return BigInt(requireText(value, "Inbox version"));
+    return BigInt(requireStoredText(value, "Inbox version"));
   } catch (error) {
     throw error instanceof DeliveryStorageCorruptionError
       ? error
@@ -538,4 +572,6 @@ const inboxRecordTypeUrl = "type.spine-ts.dev/internal/InboxMessageRecord";
 const dedupRecordTypeUrl = "type.spine-ts.dev/internal/InboxDedupRecord";
 const maxSignalPayloadChars = Math.ceil(maxSignalPayloadBytes / 3) * 4;
 const maxStoredRecordBytes = 512 * 1024;
+const maxTextBytes = 16 * 1024;
+const maxCompositeTextBytes = 64 * 1024;
 const canonicalBase64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;

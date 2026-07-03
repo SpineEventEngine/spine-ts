@@ -278,7 +278,7 @@ describe("ShardedWorkRegistry", () => {
     await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/record exceeds/i);
   });
 
-  it("rejects oversized shard sessions before storing them", async () => {
+  it("rejects oversized shard nodes before building a session record", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -286,8 +286,54 @@ describe("ShardedWorkRegistry", () => {
     });
 
     await expect(
-      delivery.shards.pickUp(new ShardIndex(0, 1), oversizedText(520 * 1024)),
-    ).rejects.toThrow(/exceeds/i);
+      delivery.shards.pickUp(new ShardIndex(0, 1), oversizedText(20 * 1024)),
+    ).rejects.toThrow(/node/i);
+  });
+
+  it("rejects a shard session record stored under another shard slot during pickup", async () => {
+    const storageFactory = new CorruptibleStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:37:00.000Z"),
+    });
+    const shard = new ShardIndex(0, 1);
+
+    await delivery.shards.pickUp(shard, "seed-node");
+    storageFactory.writeStoredSession(
+      storedSessionRecord("1/2", "session-1", "node-a", {
+        pickedUpAtMs: Date.parse("2026-07-02T09:36:30.000Z"),
+        expiresAtMs: Date.parse("2026-07-02T09:37:30.000Z"),
+      }),
+    );
+
+    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("rejects a shard session record stored under another shard slot during release", async () => {
+    const storageFactory = new CorruptibleStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:38:00.000Z"),
+    });
+    const shard = new ShardIndex(0, 1);
+
+    await delivery.shards.pickUp(shard, "seed-node");
+    storageFactory.writeStoredSession(
+      storedSessionRecord("1/2", "other-session", "node-b", {
+        pickedUpAtMs: Date.parse("2026-07-02T09:37:30.000Z"),
+        expiresAtMs: Date.parse("2026-07-02T09:38:30.000Z"),
+      }),
+    );
+
+    await expect(
+      delivery.shards.release(
+        new ShardSession("session-1", shard, "node-a", new Date(1), new Date(2)),
+      ),
+    ).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
   });
 
   it("keeps multitenant shard sessions isolated by tenant", async () => {
@@ -557,4 +603,31 @@ class RetryingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
 
 function oversizedText(length: number): string {
   return "x".repeat(length);
+}
+
+function storedSessionRecord(
+  key: string,
+  id: string,
+  node: string,
+  times: { pickedUpAtMs: number; expiresAtMs: number } = {
+    pickedUpAtMs: 1,
+    expiresAtMs: 2,
+  },
+) {
+  const [shardIndex, shardTotal] = key.split("/").map((value) => Number.parseInt(value, 10));
+  return create(AnySchema, {
+    typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
+    value: Buffer.from(
+      JSON.stringify({
+        key,
+        id,
+        node,
+        shardIndex,
+        shardTotal,
+        pickedUpAtMs: times.pickedUpAtMs,
+        expiresAtMs: times.expiresAtMs,
+      }),
+      "utf8",
+    ),
+  });
 }

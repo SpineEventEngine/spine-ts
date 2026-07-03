@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 25 fix complete
+Status: round 26 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1125,3 +1125,79 @@ Verification:
   - `git diff --check`; and
   - `git diff --unified=0 -- ... | awk '/^\\+[^+]/ { ... }'` for touched-file
     added-line length checks (no lines over 120 columns).
+
+### Round 26
+
+Reviewer input: round-26 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f27d8-809b-7b13-af8d-1004e4b10cdd` (`CLEAN`, closed);
+- documentation:
+  `019f27d8-810e-7fc2-96d9-12872165f065` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f27d8-81a4-7782-8353-ffced4ea1ebe` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f27d8-8212-7fd1-8e0c-b08482dd6f56` (`CHANGES REQUESTED`, closed); and
+- performance/reliability:
+  `019f27d8-8293-7e41-8330-9ca10404ae48` (`CHANGES REQUESTED`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- `build-protocol/DEVELOPER_API.md` omits public delivery/inbox types
+  `InboxMessageError` and `InboxMessageInput`;
+- inbox-row reads by storage slot still trust a self-consistent embedded record
+  key instead of the requested storage key in direct existing-row collision and
+  dedup guard recovery paths;
+- shard-session reads by storage slot still trust a self-consistent embedded
+  shard key instead of the requested shard slot in `pickUp()` and `release()`;
+- inbox dedup recovery accepts an inbox row whose internal key/dedup pair is
+  self-consistent but whose message identity does not match the guard target;
+  and
+- oversized signal/inbox/shard text is bounded only after large combined keys
+  or serialized JSON are built.
+
+Code style/maintainability was clean. Documentation, TypeScript/API docs,
+security, and performance/reliability requested changes.
+
+### Round 26 Fix
+
+Result: implemented in this worktree.
+
+Fix summary:
+
+- added `InboxMessageError` and `InboxMessageInput` to the concise public
+  delivery/inbox API section in `DEVELOPER_API.md`;
+- extended inbox-row decoding with an optional expected storage key and used it
+  in `InboxStorage.#ensureInboxRow()` and `InboxStorage.#readGuardMessage()` so
+  wrong-slot inbox rows fail closed as `DeliveryStorageCorruptionError`;
+- extended shard-session decoding with an optional expected storage key and
+  used it in `ShardedWorkRegistry.pickUp()` and `ShardedWorkRegistry.release()`
+  so wrong-slot session rows fail closed as corruption; and
+- added simple early text bounds for inbox message IDs, signal IDs, inbox
+  target identity fields, signal type URLs, and shard nodes before building
+  large storage keys or serialized JSON, while preserving bounded stored-record
+  reads.
+
+Verification:
+
+- red:
+  - focused round-26 delivery regressions:
+
+    ```sh
+    pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts
+    ```
+
+    failed with the expected seven regressions before implementation:
+    oversized signal IDs were accepted, oversized inbox target identity was
+    accepted, wrong-slot direct inbox recovery raised
+    `Inbox message "0/1:message-1" already exists.`, wrong-slot dedup recovery
+    returned a duplicate result, oversized shard nodes were accepted, wrong-slot
+    shard pickup returned `undefined`, and wrong-slot shard release returned
+    `false`;
+- green:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
+    passed with 46 tests.

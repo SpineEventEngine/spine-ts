@@ -53,15 +53,17 @@ export class ShardedWorkRegistry {
       for (;;) {
         const now = this.#now();
         const currentRecord = await storage.read(shard.key());
-        const current = currentRecord === undefined ? undefined : readSession(currentRecord);
+        const current =
+          currentRecord === undefined ? undefined : readSession(currentRecord, shard.key());
         if (current !== undefined && current.expiresAt.getTime() > now.getTime()) {
           return undefined;
         }
+        const nextNode = requireText(node, "Shard node", maxSessionTextBytes);
 
         const next = new ShardSession(
           randomUUID(),
           new ShardIndex(shard.index, shard.ofTotal),
-          requireText(node, "Shard node"),
+          nextNode,
           new Date(now.getTime()),
           new Date(now.getTime() + this.#leaseMs),
         );
@@ -88,7 +90,7 @@ export class ShardedWorkRegistry {
           return false;
         }
 
-        const current = readSession(currentRecord);
+        const current = readSession(currentRecord, session.shard.key());
         if (current.id !== session.id || current.node !== session.node) {
           return false;
         }
@@ -137,8 +139,8 @@ const shardSessionRecordSpec = new RecordSpec<string, Any>({
   extractId: (record) => readStoredSession(record).key,
 });
 
-function readSession(record: Any): ShardSession {
-  const stored = readStoredSession(record);
+function readSession(record: Any, expectedKey?: string): ShardSession {
+  const stored = readStoredSession(record, expectedKey);
 
   return new ShardSession(
     stored.id,
@@ -149,7 +151,7 @@ function readSession(record: Any): ShardSession {
   );
 }
 
-function readStoredSession(record: Any): StoredShardSession {
+function readStoredSession(record: Any, expectedKey?: string): StoredShardSession {
   if (record.typeUrl !== shardSessionTypeUrl) {
     throw new DeliveryStorageCorruptionError(
       `Shard session record type URL "${record.typeUrl}" is invalid.`,
@@ -172,15 +174,20 @@ function readStoredSession(record: Any): StoredShardSession {
       requireNumber(Reflect.get(decoded, "shardIndex"), "Shard session index"),
       requireNumber(Reflect.get(decoded, "shardTotal"), "Shard session total"),
     );
-    const key = requireText(Reflect.get(decoded, "key"), "Shard session key");
+    const key = requireText(Reflect.get(decoded, "key"), "Shard session key", maxSessionKeyBytes);
     if (key !== shard.key()) {
       throw new DeliveryStorageCorruptionError("Shard session key does not match shard.");
+    }
+    if (expectedKey !== undefined && key !== expectedKey) {
+      throw new DeliveryStorageCorruptionError(
+        `Shard session "${key}" does not match storage key "${expectedKey}".`,
+      );
     }
 
     return Object.freeze({
       key,
-      id: requireText(Reflect.get(decoded, "id"), "Shard session ID"),
-      node: requireText(Reflect.get(decoded, "node"), "Shard session node"),
+      id: requireText(Reflect.get(decoded, "id"), "Shard session ID", maxSessionTextBytes),
+      node: requireText(Reflect.get(decoded, "node"), "Shard session node", maxSessionTextBytes),
       shardIndex: shard.index,
       shardTotal: shard.ofTotal,
       pickedUpAtMs: requireNumber(Reflect.get(decoded, "pickedUpAtMs"), "Shard pickup time"),
@@ -213,8 +220,8 @@ function shardRegistryContext(context: StorageContext): StorageContext {
 function writeSession(session: ShardSession): Any {
   const stored: StoredShardSession = {
     key: session.shard.key(),
-    id: requireText(session.id, "Shard session ID"),
-    node: requireText(session.node, "Shard session node"),
+    id: requireText(session.id, "Shard session ID", maxSessionTextBytes),
+    node: requireText(session.node, "Shard session node", maxSessionTextBytes),
     shardIndex: session.shard.index,
     shardTotal: session.shard.ofTotal,
     pickedUpAtMs: requireTime(session.pickedUpAt, "Shard pickup time"),
@@ -242,9 +249,14 @@ function requireNumber(value: unknown, label: string): number {
   return value as number;
 }
 
-function requireText(value: unknown, label: string): string {
+function requireText(value: unknown, label: string, maxBytes = maxSessionTextBytes): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new DeliveryStorageCorruptionError(`${label} must be a non-empty string.`);
+  }
+  if (Buffer.byteLength(value, "utf8") > maxBytes) {
+    throw new DeliveryStorageCorruptionError(
+      `${label} exceeds ${String(maxBytes)} bytes and cannot be stored.`,
+    );
   }
 
   return value;
@@ -261,3 +273,5 @@ function requireTime(value: Date, label: string): number {
 
 const shardSessionTypeUrl = "type.spine-ts.dev/internal/ShardSessionRecord";
 const maxSessionRecordBytes = 512 * 1024;
+const maxSessionTextBytes = 16 * 1024;
+const maxSessionKeyBytes = 64 * 1024;

@@ -254,32 +254,47 @@ describe("Inbox", () => {
     ).toThrow(/payload/i);
   });
 
-  it("rejects oversized inbox rows before serializing storage records", () => {
+  it("rejects oversized signal IDs before building inbox and dedup keys", () => {
     expect(() =>
       writeInboxMessage({
         ...createMessage("message-large", "signal-large", 1n),
-        signalId: oversizedText(520 * 1024),
+        signalId: oversizedText(20 * 1024),
       }),
-    ).toThrow(/exceeds/i);
+    ).toThrow(/signal id/i);
+    expect(() =>
+      writeDedupClaim({
+        ...createMessage("message-large", "signal-large", 1n),
+        signalId: oversizedText(20 * 1024),
+      }),
+    ).toThrow(/signal id/i);
+    expect(() =>
+      writeDedupRecord({
+        ...createMessage("message-large", "signal-large", 1n),
+        signalId: oversizedText(20 * 1024),
+      }),
+    ).toThrow(/signal id/i);
   });
 
-  it("rejects oversized dedup rows before serializing storage records", () => {
-    const claim = () =>
+  it("rejects oversized inbox target identity before building inbox and dedup keys", () => {
+    const oversizedTargetId = () =>
       writeDedupClaim({
         ...createMessage("message-large", "signal-large", 1n),
         inboxId: {
-          targetId: oversizedText(520 * 1024),
+          targetId: oversizedText(20 * 1024),
           targetTypeUrl: "type.example.dev/tasks.Projection",
         },
       });
-    const final = () =>
-      writeDedupRecord({
+    const oversizedTargetTypeUrl = () =>
+      writeInboxMessage({
         ...createMessage("message-large", "signal-large", 1n),
-        signalId: oversizedText(520 * 1024),
+        inboxId: {
+          targetId: "projection-1",
+          targetTypeUrl: oversizedText(20 * 1024),
+        },
       });
 
-    expect(claim).toThrow(/exceeds/i);
-    expect(final).toThrow(/exceeds/i);
+    expect(oversizedTargetId).toThrow(/target id/i);
+    expect(oversizedTargetTypeUrl).toThrow(/target type url/i);
   });
 
   it("fails closed when stored inbox records are malformed or invalid", async () => {
@@ -430,6 +445,19 @@ describe("Inbox", () => {
           typeUrl: "type.spine-ts.dev/internal/InboxMessageRecord",
           value: oversizedStoredRecord(),
         }),
+      }),
+    });
+
+    await expect(storage.write(createMessage("message-1", "signal-1", 1n))).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("rejects an existing inbox row stored under another message slot during direct write recovery", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new ExistingInboxRowFactory({
+        inbox: writeInboxMessage(createMessage("message-2", "signal-1", 1n)),
       }),
     });
 
@@ -655,6 +683,17 @@ describe("Inbox", () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new WrongTargetGuardFactory(),
+    });
+
+    await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toThrow(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("rejects a dedup guard whose inbox row matches the dedup key but not the guarded message slot", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new WrongMessageSlotGuardFactory(),
     });
 
     await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toThrow(
@@ -1081,6 +1120,23 @@ class WrongTargetGuardFactory extends StorageFactory {
         inboxMessageId: "message-1",
       }),
       inbox: writeInboxMessage(createMessage("message-1", "signal-2", 1n)),
+    }) as unknown as RecordStorage<I, R>;
+  }
+}
+
+class WrongMessageSlotGuardFactory extends StorageFactory {
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new CorruptGuardStorage(context, recordSpec as unknown as RecordSpec<string, Any>, {
+      guard: finalDedupRecord({
+        key: testDedupKey("signal-1"),
+        inbox: testInboxKey,
+        signalId: "signal-1",
+        inboxMessageId: "message-1",
+      }),
+      inbox: writeInboxMessage(createMessage("message-2", "signal-1", 1n)),
     }) as unknown as RecordStorage<I, R>;
   }
 }

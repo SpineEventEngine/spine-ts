@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-25 fix complete
+Status: round-26 fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -307,6 +307,20 @@ entityStateType)` returns a zero-based shard index and that all messages for
 - Focused delivery verification passed with 42 tests after the round-25 fix:
   `pnpm test packages/server/test/delivery/inbox.test.ts`
   `packages/server/test/delivery/sharded-work-registry.test.ts`.
+- Round-26 review completed from reviewer results supplied to this fix worker.
+  Code style/maintainability was clean. Documentation, TypeScript/API docs,
+  security, and performance/reliability requested changes and are now closed.
+- Round-26 fixes add the missing public `InboxMessageError` and
+  `InboxMessageInput` API docs, validate expected storage keys when inbox/shard
+  rows are read by slot, and reject oversized signal/inbox/shard text before
+  building large storage keys or serialized JSON.
+- Red-first focused regressions captured the missing early text bounds and the
+  wrong-slot inbox/shard corruption holes before implementation.
+- Focused delivery verification passed with 46 tests after the round-26 fix:
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`.
+- Final round-26 verification also passed with `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `git diff --check`, and a full touched-file line scan.
 - Controller verification then applied the stricter full touched-file line scan
   and reflowed long touched API/architecture documentation lines before
   preparing the next review package.

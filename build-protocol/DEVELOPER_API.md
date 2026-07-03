@@ -139,10 +139,10 @@ bounded context. It is intentionally smaller than the later worker/retry stack:
   lease snapshot for that shard, and `ShardedWorkRegistry` persists shard
   pickup/release across processes; and
 - `DeliveryLabel`, `DeliveryStatus`, `InboxId`, `InboxMessage`,
-  `InboxMessageId`, `InboxReadOptions`, `InboxWriteResult`,
-  `InboxStorageOptions`, `DeliveryOptions`, and
-  `ShardedWorkRegistryOptions` describe the stable inputs/outputs of this
-  slice.
+  `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
+  `InboxReadOptions`, `InboxWriteResult`, `InboxStorageOptions`,
+  `DeliveryOptions`, and `ShardedWorkRegistryOptions` describe the stable
+  inputs/outputs of this slice.
 
 Current usage is deliberately narrow:
 
