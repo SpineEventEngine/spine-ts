@@ -1,6 +1,6 @@
 # Review Log: T-0012.8b Integration Coverage Fix
 
-Status: round 1 follow-up committed; ready for round 2 review
+Status: final documentation cleanup addressed
 Task log:
 `build-protocol/tasks/T-0012-8b-integration-coverage-fix/TASK.md`
 Branch: `task/T-0012-8b-integration-coverage-fix`
@@ -41,3 +41,5 @@ Reviewers must verify:
 - Review round 1 follow-up was committed at `a76b72e`; this log is ready for
   round 2 review.
 - Round 2 change is documentation-only; no tests are required.
+- Final review cleanup updates stale follow-up wording in `TASK.md` and the work
+  log; tests are skipped because the changes are markdown-only.

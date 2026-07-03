@@ -1,6 +1,6 @@
 # T-0012.8b: Integration Coverage Fix
 
-Status: implemented and verified; review round 1 fixes addressed for follow-up commit
+Status: implemented and verified; review round 1 follow-up committed; final review in progress
 Start: `2026-07-03 23:15 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8b-integration-coverage-fix`
