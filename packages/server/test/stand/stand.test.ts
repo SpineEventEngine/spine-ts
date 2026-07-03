@@ -4,7 +4,12 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { deriveTypeUrl } from "@spine-ts/core";
 import { VersionSchema, file_spine_options } from "@spine-ts/proto";
-import { InMemoryStorageFactory } from "@spine-ts/storage";
+import {
+  InMemoryStorageFactory,
+  type RecordSpec,
+  type RecordStorage,
+  type StorageContext,
+} from "@spine-ts/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
@@ -152,6 +157,54 @@ describe("Stand", () => {
 
     expect(subscription.closed).toBe(true);
     expect(deliveries).toBe(1);
+  });
+
+  it("delivers to a snapshot when subscribers mutate subscriptions during delivery", async () => {
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const deliveries: string[] = [];
+    const subscriptions: StandSubscription[] = [];
+    let lateSubscribed = false;
+    stand.register(ProjectionStateSchema);
+    stand.subscribe(ProjectionStateSchema, () => {
+      deliveries.push("first");
+      subscriptions[0]?.unsubscribe();
+      if (!lateSubscribed) {
+        lateSubscribed = true;
+        stand.subscribe(ProjectionStateSchema, () => {
+          deliveries.push("late");
+        });
+      }
+    });
+    subscriptions.push(
+      stand.subscribe(ProjectionStateSchema, () => {
+        deliveries.push("second");
+      }),
+    );
+
+    await stand.update(ProjectionStateSchema, createState("task-1", "First"));
+    expect(deliveries).toEqual(["first", "second"]);
+
+    deliveries.length = 0;
+    await stand.update(ProjectionStateSchema, createState("task-1", "Second"));
+    expect(deliveries).toEqual(["first", "late"]);
+  });
+
+  it("closes storage handles opened for reads and updates", async () => {
+    const storageFactory = new ClosingStorageFactory();
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    stand.register(ProjectionStateSchema);
+
+    await stand.update(ProjectionStateSchema, createState("task-1", "First"));
+    await stand.read(ProjectionStateSchema, "task-1");
+
+    expect(storageFactory.storages).toHaveLength(2);
+    expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
   });
 
   it("keeps multitenant state and subscribers isolated by tenant", async () => {
@@ -310,4 +363,17 @@ function createState(id: string, name: string): ProjectionState {
     name,
     priority: 1,
   });
+}
+
+class ClosingStorageFactory extends InMemoryStorageFactory {
+  readonly storages: RecordStorage<unknown, Message>[] = [];
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    const storage = super.onCreateRecordStorage(context, recordSpec);
+    this.storages.push(storage);
+    return storage;
+  }
 }

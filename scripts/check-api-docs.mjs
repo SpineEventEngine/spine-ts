@@ -270,7 +270,6 @@ const expectedServerExports = [
   "ShardedWorkRegistry",
   "ShardedWorkRegistryOptions",
   "Stand",
-  "StandColumn",
   "StandOptions",
   "StandReadOptions",
   "StandRegisterOptions",

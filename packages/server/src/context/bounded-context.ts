@@ -203,10 +203,6 @@ export class BoundedContext {
       for (const preparedRepository of preparedRepositories) {
         this.#stand.register(preparedRepository.snapshot.stateSchema, {
           idField: preparedRepository.snapshot.idField.localName,
-          columns: preparedRepository.snapshot.metadata.columns.map((field) => ({
-            name: field.name,
-            field: field.localName,
-          })),
         });
         preparedRepository.commit();
         this.#registeredRepositories.push(preparedRepository.snapshot);
@@ -386,7 +382,7 @@ export class BoundedContextBuilder {
     return this;
   }
 
-  /** Uses the passed storage factory for context event and repository state storage. */
+  /** Uses the passed storage factory for context event, repository state, and Stand storage. */
   withStorageFactory(storageFactory: StorageFactory): this {
     this.#storageFactory = storageFactory;
     return this;

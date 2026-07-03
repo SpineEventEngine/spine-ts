@@ -385,10 +385,10 @@ message type names/type URLs plus stable receiver-group and local route/worker
 identities, along with transport correlation keys back to topic/subscription
 arrays and planner-local worker IDs; they do not retain entity names, handler
 names, raw readiness metadata, or duplicate full transport contracts on each
-route. The package root now exports a small executable bus layer, but still
-does not export service, transport, delivery, stand, integration-broker,
-handler invocation/runtime wiring, command/event intake validation, or `Ack`
-mapping as part of this closure.
+route. The package root now exports a small executable bus layer and direct
+Stand, but still does not export service, transport, delivery,
+integration-broker, handler invocation/runtime wiring, command/event intake
+validation, or `Ack` mapping as part of this closure.
 
 The architectural consequence is that later work must add those collaborators
 as explicit tasks at their own seams. Command and event intake can consume the

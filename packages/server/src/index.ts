@@ -13,7 +13,6 @@ export {
 
 export {
   Stand,
-  type StandColumn,
   type StandOptions,
   type StandReadOptions,
   type StandRegisterOptions,

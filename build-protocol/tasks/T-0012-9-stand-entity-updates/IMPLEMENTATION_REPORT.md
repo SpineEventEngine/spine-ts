@@ -68,6 +68,8 @@ read-side execution was added.
 
 ## Verification Evidence
 
+### Initial Implementation Commit
+
 - Red focused tests first:
   `pnpm vitest run packages/server/test/stand/stand.test.ts packages/server/test/context/bounded-context.test.ts packages/server/test/index.test.ts`
   initially failed because `Stand` was not exported, `context.stand()` did not
@@ -91,6 +93,43 @@ read-side execution was added.
   - `pnpm proto:lint`, `pnpm proto:generate`, and
     `pnpm proto:check-generated` passed.
   - `git diff --check` passed.
+
+### Review Round 1 Follow-Up
+
+Round 1 review fixes:
+
+- `Stand` now opens a `RecordStorage` handle per `read()` / `update()` and
+  closes it in a `finally` block instead of caching per state type/tenant.
+- `Stand` snapshots matching subscribers before invoking callbacks so
+  subscribe/unsubscribe mutations during delivery cannot affect the current
+  update loop.
+- The public column/index registration surface was removed because this slice
+  has no public query/filter API.
+- Docs now describe deferred work as gRPC QueryService/SubscriptionService or
+  richer service execution rather than deferred direct stands.
+- `BoundedContextBuilder.withStorageFactory()` TypeDoc mentions context-owned
+  Stand storage.
+
+Review-fix red tests:
+
+- Focused Stand tests first failed because live subscriber iteration delivered
+  to a late subscriber during the current update and cached storage reused one
+  unclosed handle.
+
+Review-fix verification:
+
+- focused stand/context/export tests passed: 3 files, 46 tests.
+- `pnpm typecheck` passed.
+- `pnpm lint` passed.
+- changed-file Prettier check passed.
+- `pnpm docs:check` passed with the existing TypeDoc invalid-origin warning
+  and 163 expected `@spine-ts/server` exports.
+- `pnpm test` initially hit the known ZeroMQ local IPC sandbox
+  `Operation not permitted`; escalated retry passed with 43 files and 503
+  tests.
+- `pnpm test:coverage` initially hit the same sandbox issue; escalated retry
+  passed with 43 files, 503 tests, and global branch coverage 90.07%.
+- `git diff --check` passed.
 
 ## Tooling Notes
 

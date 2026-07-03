@@ -145,10 +145,10 @@ the to-do application remain later slices.
 - gRPC service implementations.
 - Default repository construction from entity classes, handler invocation,
   entity runtime dispatch, system context construction, import buses,
-  query/subscription stands, tenant index
-  persistence, ZeroMQ endpoint topology, broker process supervision, retry
-  workers, durable delivery storage, transport-backed service execution,
-  durable production storage, and to-do domain runtime behavior.
+  gRPC QueryService/SubscriptionService execution, tenant index persistence,
+  ZeroMQ endpoint topology, broker process supervision, retry workers, durable
+  delivery storage, transport-backed service execution, durable production
+  storage, and to-do domain runtime behavior.
 
 ## Type Registry
 
@@ -555,11 +555,11 @@ metadata, or ZeroMQ details.
 
 It does not create a TypeScript `Server`, context runtime handle,
 command/event/import bus, service router, storage lifecycle, delivery engine,
-integration broker, read-side stand, transport endpoint, broker supervisor,
-retry worker, durable delivery store, or handler invocation path. Accepted
-signal intake values still mean only accepted for later asynchronous work; they
-are not `Ack` messages and do not claim validation, storage, dispatch,
-delivery, or successful handling.
+integration broker, gRPC query/subscription service execution, transport
+endpoint, broker supervisor, retry worker, durable delivery store, or handler
+invocation path. Accepted signal intake values still mean only accepted for
+later asynchronous work; they are not `Ack` messages and do not claim
+validation, storage, dispatch, delivery, or successful handling.
 
 When a caller already owns executable dispatchers, the current server package
 also exposes the first small bus seam:

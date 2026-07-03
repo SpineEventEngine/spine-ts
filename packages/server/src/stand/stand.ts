@@ -1,12 +1,7 @@
 import { clone, type Message, type MessageShape } from "@bufbuild/protobuf";
 import { deriveTypeUrl, type MessageSchema } from "@spine-ts/core";
 import { VersionSchema, type Version } from "@spine-ts/proto";
-import {
-  RecordColumn,
-  RecordSpec,
-  type RecordStorage,
-  type StorageContext,
-} from "@spine-ts/storage";
+import { RecordSpec, type RecordStorage, type StorageContext } from "@spine-ts/storage";
 import type { StorageFactory } from "@spine-ts/storage";
 
 /** Options for constructing a direct read-side Stand. */
@@ -21,16 +16,6 @@ export interface StandOptions {
 export interface StandRegisterOptions {
   /** Generated local property name for the entity ID field. Defaults to the schema's first field. */
   readonly idField?: string;
-  /** Queryable state columns to expose through the backing record storage. */
-  readonly columns?: readonly StandColumn[];
-}
-
-/** One queryable Stand state column. */
-export interface StandColumn {
-  /** Storage column name. */
-  readonly name: string;
-  /** Generated local property name read from the state message. */
-  readonly field: string;
 }
 
 /** Tenant and version metadata accepted when recording an entity state update. */
@@ -101,7 +86,6 @@ interface Registration<Schema extends MessageSchema = MessageSchema> {
   readonly typeUrl: string;
   readonly idField: string;
   readonly recordSpec: RecordSpec<unknown, Message>;
-  readonly storages: Map<string, RecordStorage<unknown, Message>>;
   readonly subscribers: Set<Subscriber<Schema>>;
 }
 
@@ -134,8 +118,7 @@ export class Stand {
         schema,
         typeUrl,
         idField,
-        recordSpec: createStandRecordSpec(schema, idField, options.columns ?? []),
-        storages: new Map<string, RecordStorage<unknown, Message>>(),
+        recordSpec: createStandRecordSpec(schema, idField),
         subscribers: new Set<Subscriber>(),
       }),
     );
@@ -153,9 +136,15 @@ export class Stand {
     options: StandReadOptions = {},
   ): Promise<MessageShape<Schema> | undefined> {
     const registration = this.#registration(schema, "read");
-    const stored = await this.#storage(registration, options.tenantId).read(id);
+    const tenantId = this.#tenantId(options.tenantId);
+    const storage = this.#openStorage(registration, tenantId);
 
-    return stored === undefined ? undefined : clone(schema, stored as MessageShape<Schema>);
+    try {
+      const stored = await storage.read(id);
+      return stored === undefined ? undefined : clone(schema, stored as MessageShape<Schema>);
+    } finally {
+      storage.close();
+    }
   }
 
   /** Record one latest entity state and deliver an in-process update to matching subscribers. */
@@ -168,8 +157,13 @@ export class Stand {
     const tenantId = this.#tenantId(options.tenantId);
     const stateCopy = clone(schema, state);
     const id = readStateId(stateCopy, registration);
+    const storage = this.#openStorage(registration, tenantId);
 
-    await this.#storage(registration, tenantId).write(stateCopy);
+    try {
+      await storage.write(stateCopy);
+    } finally {
+      storage.close();
+    }
     this.#notify(registration, {
       id,
       state: stateCopy,
@@ -216,22 +210,14 @@ export class Stand {
     return registration as Registration<Schema>;
   }
 
-  #storage(
+  #openStorage(
     registration: Registration,
     tenantId: string | undefined,
   ): RecordStorage<unknown, Message> {
-    const key = this.#tenantKey(tenantId);
-    let storage = registration.storages.get(key);
-
-    if (storage === undefined) {
-      storage = this.#storageFactory.createRecordStorage(
-        this.#storageContext(tenantId),
-        registration.recordSpec,
-      );
-      registration.storages.set(key, storage);
-    }
-
-    return storage;
+    return this.#storageFactory.createRecordStorage(
+      this.#storageContext(tenantId),
+      registration.recordSpec,
+    );
   }
 
   #notify<Schema extends MessageSchema>(
@@ -245,12 +231,11 @@ export class Stand {
   ): void {
     const errors: unknown[] = [];
     const tenantKey = this.#tenantKey(input.tenantId);
+    const subscribers = [...registration.subscribers].filter(
+      (subscriber) => subscriber.tenantKey === tenantKey,
+    );
 
-    for (const subscriber of registration.subscribers) {
-      if (subscriber.tenantKey !== tenantKey) {
-        continue;
-      }
-
+    for (const subscriber of subscribers) {
       try {
         subscriber.callback(createUpdate(registration, input));
       } catch (error) {
@@ -296,7 +281,6 @@ export class Stand {
 function createStandRecordSpec(
   schema: MessageSchema,
   idField: string,
-  columns: readonly StandColumn[],
 ): RecordSpec<unknown, Message> {
   return new RecordSpec<unknown, Message>({
     schema,
@@ -306,9 +290,6 @@ function createStandRecordSpec(
         schema,
         typeUrl: deriveTypeUrl(schema),
       }),
-    columns: columns.map(
-      (column) => new RecordColumn(column.name, (record) => readRecordField(record, column.field)),
-    ),
   });
 }
 

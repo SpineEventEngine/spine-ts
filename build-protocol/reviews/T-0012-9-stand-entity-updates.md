@@ -54,3 +54,20 @@ Pre-review self-check:
   QueryService/SubscriptionService to later work.
 
 Full verification passed. External review lanes have not run yet.
+
+## Round 1 Follow-Up
+
+Concrete review comments are being addressed in a follow-up commit:
+
+- Reliability: snapshot matching subscribers before callback delivery.
+- Reliability: avoid cached `RecordStorage` handles by opening and closing per
+  read/update operation.
+- API surface: remove the public Stand column/index registration surface.
+- Documentation: clarify direct Stand versus deferred gRPC
+  QueryService/SubscriptionService execution and update `withStorageFactory()`
+  TypeDoc.
+
+Focused red tests reproduced the subscriber-mutation and storage-handle issues.
+Follow-up verification passed, including focused tests, typecheck, lint,
+changed-file Prettier, docs check, full tests, coverage with branch coverage
+90.07%, and `git diff --check`.
