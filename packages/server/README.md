@@ -3,7 +3,8 @@
 Descriptor-derived server metadata for Spine entity schemas, explicit handler
 metadata, standard decorator metadata adapters, aggregate snapshot/event storage,
 the first command/event bus seam, and the first runtime routing plan seam over
-`@spine-ts/transport` contracts.
+`@spine-ts/transport` contracts, plus the first direct storage-backed `Stand`
+slice for latest entity state reads and in-process update subscriptions.
 
 Current slice exposes:
 
@@ -12,7 +13,7 @@ Current slice exposes:
   `ContextSpec` values exposed through `builder.spec` and `context.spec`, tenant
   mode metadata, command/event dispatcher collection, storage-factory injection
   for event and repository record storage, repository registration lists, and
-  built contexts that own `CommandBus` and `EventBus`;
+  built contexts that own `CommandBus`, `EventBus`, and a direct `Stand`;
   and
 - `Entity<Id, Schema, Version>` for a common abstract OOP state shell with
   identity, descriptor-derived metadata, cloned Protobuf-ES state snapshots,
@@ -32,6 +33,11 @@ Current slice exposes:
   `routeCommand()` and `routeEvent()` when explicit handler metadata is supplied.
   Routes are deferred and do not invoke handlers;
   and
+- `context.stand()` / `new Stand({ context, storageFactory })` for direct
+  read-side entity state registration, latest-state updates, latest-state reads,
+  and explicit in-process subscription cleanup. This is not gRPC
+  QueryService/SubscriptionService;
+  and
 - `AggregateStorage` for the current primitive-`AggregateId`
   snapshot/history seam, backed by `StorageFactory`, `RecordStorage`, and
   `EventStore`;
@@ -44,8 +50,7 @@ Current slice exposes:
   storage-backed shard pickup/release over atomic
   `RecordStorage.compareAndSet()` handles for one backing store. This slice
   explicitly excludes worker loops, retry monitors, conveyor/stations,
-  repository invocation, `Stand`, gRPC services, transport retries, and example
-  app work;
+  repository invocation, gRPC services, transport retries, and example app work;
 - and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
@@ -429,7 +434,7 @@ immutable value exposed from the builder and built context. `build()` returns a
 post-only `commandBus()` and `eventBus()` endpoints. The endpoints do not expose
 late dispatcher registration. Builders collect dispatchers and can inject the
 `StorageFactory` used to create the context `EventStore` and repository record
-storages:
+storages, plus the direct stand state storage:
 
 ```ts
 import { BoundedContext } from "@spine-ts/server";
@@ -450,13 +455,39 @@ await tasks.eventBus().post(eventEnvelope);
 repositories with the built context, opens repository `RecordStorage` through
 the context storage factory, and exposes `registeredRepositories()` as a
 copy-safe list of frozen snapshot-backed views for runtime registration
-inspection.
+inspection. Repository state schemas are also registered with the context-owned
+`stand()` as known state types.
 Repeated `add(repository)` calls before `build()` are idempotent.
 Registering the same repository instance with another built context is rejected.
 
 This slice deliberately does not create default repositories from entity
 classes, invoke handlers, construct system contexts, start query/subscription
 buses, write tenant indexes, expose gRPC services, or integrate transports.
+
+## Direct Stand
+
+Use the context-owned `Stand` for direct latest-state reads and in-process
+entity update notifications:
+
+```ts
+const stand = tasks.stand();
+
+await stand.update(TaskStateSchema, taskState, { version });
+const latest = await stand.read(TaskStateSchema, taskId);
+
+const subscription = stand.subscribe(TaskStateSchema, (update) => {
+  update.state;
+});
+subscription.unsubscribe();
+```
+
+Repositories registered with a built context make their state schemas known to
+that context's stand. Stand reads, updates, and subscriptions reject unknown
+state schemas with `StandStateTypeError`. Multitenant stands require
+`{ tenantId }` on read/update/subscribe; single-tenant stands reject tenant
+options. Direct subscriptions are deterministic in-process callbacks and must
+be cleaned up explicitly. QueryService, SubscriptionService, cross-context
+fallback, client query DSLs, and projection catch-up remain outside this slice.
 
 ## Entity State Shell
 

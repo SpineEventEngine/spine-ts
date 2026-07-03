@@ -76,6 +76,11 @@ the to-do application remain later slices.
   immutable fresh-copy snapshots for later checks. `BoundedContext` owns
   repository registration and opens state record storage through its storage
   factory.
+- A direct storage-backed `Stand` owned by each built `BoundedContext`.
+  Registered repositories make their entity state schemas known to the stand,
+  which can record latest states, read them by schema and ID, and notify
+  in-process subscribers. This is direct framework API, not gRPC
+  QueryService/SubscriptionService.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.
@@ -409,8 +414,9 @@ are not public API.
 
 This slice still does not create, find, or store entities; convert entity
 records; invoke handlers; write inboxes; manage delivery; manage entity
-caches; run catch-up; emit lifecycle events; expose query stands; start buses
-from repositories; or use gRPC/transport. When a repository is constructed with
+caches; run catch-up; emit lifecycle events; start buses from repositories; or
+use gRPC/transport. Direct stands can store and read latest entity states, but
+they do not invoke projections or run catch-up. When a repository is constructed with
 authentic explicit handler metadata, it can calculate deferred command/event
 routes, and bounded contexts install internal dispatcher adapters for those
 routes.
@@ -448,12 +454,43 @@ context and opens their state record storage through the context
 `StorageFactory`. Repeated `add(repository)` calls for the same instance are
 idempotent, duplicate entity or state identities are rejected before storage is
 opened for repositories, and `registeredRepositories()` returns a copy-safe
-list of frozen snapshot-backed `RepositoryView` values.
-This slice still does not create default repositories, register type suppliers
-with a stand, invoke handlers, write inboxes, manage delivery, emit lifecycle
-events, or start transport. Repositories with authentic explicit handler
+list of frozen snapshot-backed `RepositoryView` values. The built context also
+owns `stand()`, and repository state schemas are registered with that stand as
+known state types.
+This slice still does not create default repositories, invoke handlers, write
+inboxes, manage delivery, emit lifecycle events, or start transport.
+Repositories with authentic explicit handler
 metadata do contribute deferred route-calculating dispatcher adapters to the
 built context's buses.
+
+## Direct Stand
+
+Use `context.stand()` for the first direct read-side entity state slice. The
+stand is storage-backed by the same `StorageFactory` selected for the bounded
+context.
+
+```ts
+const stand = tasks.stand();
+
+await stand.update(TaskStateSchema, taskState, {
+  version,
+});
+
+const latest = await stand.read(TaskStateSchema, taskId);
+const subscription = stand.subscribe(TaskStateSchema, (update) => {
+  update.state;
+});
+
+subscription.unsubscribe();
+```
+
+`Stand.register(schema)` is available for direct stand instances; built bounded
+contexts call it from registered repository metadata. Reads, updates, and
+subscriptions reject unknown state schemas with `StandStateTypeError`.
+Multitenant stands require `{ tenantId }`; single-tenant stands reject tenant
+options. Direct subscriptions are in-process only and must be cleaned up by
+calling `unsubscribe()`. This API is not a gRPC QueryService or
+SubscriptionService, and it does not provide a client query DSL.
 
 ## Runtime Assembly Closure
 

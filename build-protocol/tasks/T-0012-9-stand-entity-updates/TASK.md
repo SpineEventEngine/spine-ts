@@ -1,6 +1,6 @@
 # T-0012.9: Stand And Entity Updates
 
-Status: selected; durable setup in progress
+Status: implemented; verification passed
 Branch: `task/T-0012-9-stand-entity-updates`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-9-stand-entity-updates`
@@ -117,5 +117,7 @@ The slice must stay small and JVM-familiar:
 
 ## Current State
 
-Task selected after `T-0012.8b` restored branch coverage and parent
+Implementation adds the first direct storage-backed `Stand` slice, exposes it
+from built bounded contexts, registers repository state schemas with the
+context stand, and documents the public direct API boundary. Full required
 verification passed. No blocking human question is known.

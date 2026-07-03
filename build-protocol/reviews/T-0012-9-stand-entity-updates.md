@@ -1,6 +1,6 @@
 # Review Log: T-0012.9 Stand And Entity Updates
 
-Status: selected; implementation pending
+Status: implemented; verification passed
 Task log: `build-protocol/tasks/T-0012-9-stand-entity-updates/TASK.md`
 Branch: `task/T-0012-9-stand-entity-updates`
 Worktree:
@@ -34,4 +34,23 @@ Reviewers must verify:
 
 ## Current State
 
-No implementation review has run yet.
+Implementation added a direct `Stand` class, built-context `stand()` exposure,
+repository state-schema registration into the context stand, focused stand and
+context tests, public exports, and public docs.
+
+Pre-review self-check:
+
+- Direct read-side framework API only; no gRPC service adapters or service
+  simulations were added.
+- `BoundedContext` exposes only the owned `stand()` object and does not expose
+  storage factories, repository internals, or transport/service internals.
+- Registered repository state schemas become known stand types.
+- Stand updates are direct caller actions and do not invoke write-side handlers,
+  repositories, projections, event catch-up, or buses.
+- Subscriber cleanup is explicit through idempotent `unsubscribe()`.
+- Single-tenant and multitenant storage context behavior is covered by focused
+  tests.
+- Public docs describe direct Stand behavior and defer
+  QueryService/SubscriptionService to later work.
+
+Full verification passed. External review lanes have not run yet.

@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.9 Stand And Entity Updates
 
-Status: selected; implementation pending
+Status: implemented; verification passed
 Branch: `task/T-0012-9-stand-entity-updates`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-9-stand-entity-updates`
@@ -41,21 +41,64 @@ needed:
   shape or generic state typing needs review.
 - `verification-before-completion` before claiming task completion.
 
-## Planned Shape
+## Implemented Shape
 
-The expected first slice is:
+The first slice is:
 
 - a `Stand` class in `packages/server/src/stand`;
-- direct state-type registration from repository metadata;
-- storage-backed state update/read behavior using `RecordStorage`;
-- direct in-process subscribers with explicit unsubscribe;
-- bounded-context exposure of its owned `Stand`;
+- direct state-type registration from generated schemas, with repository
+  metadata registering built-context state types;
+- storage-backed latest-state `update()` / `read()` behavior using
+  `StorageFactory` and per-state-type `RecordStorage`;
+- direct in-process subscribers with explicit idempotent `unsubscribe()` and
+  cloned update payloads per subscriber;
+- bounded-context exposure of its owned `Stand` via `stand()`;
 - public exports and docs for the direct stand API.
 
-If implementation discovers that a different but simpler shape better matches
-the existing code, record the reason here before committing.
+The API stays direct and short: `register`, `stateTypes`, `update`, `read`, and
+`subscribe`. Multitenant stands require a tenant ID on reads, updates, and
+subscriptions; single-tenant stands reject tenant options. Unknown state types
+throw `StandStateTypeError`.
+
+No standalone exported helper functions were added. Generated Protobuf-ES
+messages are cloned with Buf `clone()`. State updates are recorded directly
+through the stand; no repository handler invocation, projection catch-up loop,
+cache framework, gRPC service simulation, client DSL, worker thread, or ZeroMQ
+read-side execution was added.
+
+## Verification Evidence
+
+- Red focused tests first:
+  `pnpm vitest run packages/server/test/stand/stand.test.ts packages/server/test/context/bounded-context.test.ts packages/server/test/index.test.ts`
+  initially failed because `Stand` was not exported, `context.stand()` did not
+  exist, and `Stand` was not constructible.
+- Green focused tests:
+  same focused Vitest command passed with 3 files and 44 tests.
+- `pnpm typecheck` passed after fixing exact optional tenant context shaping.
+- Final verification:
+  - focused stand/context/export tests passed: 3 files, 44 tests.
+  - `pnpm typecheck` passed.
+  - `pnpm lint` passed.
+  - changed-file Prettier check passed.
+  - `pnpm test` initially hit the known ZeroMQ local IPC sandbox
+    `Operation not permitted`; escalated retry passed with 43 files and 501
+    tests.
+  - `pnpm test:coverage` initially hit the same sandbox issue; escalated retry
+    passed with 43 files, 501 tests, and global branch coverage 90.11%.
+  - `pnpm docs:check` passed after updating the API export expectation list for
+    the new Stand exports. It emitted the existing invalid-origin TypeDoc
+    warning and reported 164 expected `@spine-ts/server` exports.
+  - `pnpm proto:lint`, `pnpm proto:generate`, and
+    `pnpm proto:check-generated` passed.
+  - `git diff --check` passed.
+
+## Tooling Notes
+
+This fresh worktree refused `pnpm vitest` with `VERIFY_DEPS`; sandboxed
+`pnpm install` then failed with registry `ENOTFOUND`. The escalated
+`pnpm install` retry completed successfully and reused the package store.
 
 ## Current State
 
-No implementation commit has been made yet. No blocking human question is
-known.
+Implementation files, tests, docs, and durable logs are ready to commit. No
+blocking human question is known.
