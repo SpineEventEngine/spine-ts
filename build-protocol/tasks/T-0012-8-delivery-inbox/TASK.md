@@ -489,4 +489,9 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   `packages/storage/test/memory/in-memory-record-storage.test.ts`.
 - Final round-34 verification passed with `pnpm typecheck`, `pnpm lint`,
   `pnpm format:check`, `git diff --check`, and a full touched-file line scan.
+- Controller verification that also covered
+  `packages/server/test/repository/aggregate-storage.test.ts` found that the
+  storage-level `EventStore` event-ID guard now rejects corrupt whitespace
+  stored event IDs before the aggregate-routing guard. The aggregate storage
+  regression was aligned to the new first failing guard.
 - No blocking human question is known.

@@ -623,12 +623,14 @@ describe("AggregateStorage", () => {
       eventSchemas: [AggregateStateSchema],
     });
 
-    await expect(storage.readHistory("task-corrupt-event-id")).rejects.toThrow(/readable event ID/);
+    await expect(storage.readHistory("task-corrupt-event-id")).rejects.toThrow(
+      /non-empty event\.id\.value/,
+    );
     await expect(
       storage.appendEvents("task-corrupt-event-id", [
         createAggregateEvent("event-after-corrupt-id", "task-corrupt-event-id", 2),
       ]),
-    ).rejects.toThrow(/readable event ID/);
+    ).rejects.toThrow(/non-empty event\.id\.value/);
   });
 
   it("rejects duplicate event IDs already present in stored aggregate history", async () => {
