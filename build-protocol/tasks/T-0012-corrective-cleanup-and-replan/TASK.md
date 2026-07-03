@@ -1,6 +1,6 @@
 # T-0012: Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.8 integrated; T-0012.9 selected
+Status: T-0012.8 integrated; T-0012.8b coverage fix selected
 Start: `2026-07-01 16:48 WEST`
 Baseline commit: `a9769d4`
 Branch: `task/T-0012-cleanup-replan`
@@ -112,7 +112,12 @@ durable documentation. All required review lanes are clean through reviewed
 commit `0d6089a`, final task bookkeeping was committed as `2d0e34e`, and the
 parent integration merge was prepared on `2026-07-03 23:10 WEST`.
 
-Next selected subtask: `T-0012.9 Stand And Entity Updates`.
+Parent integration verification after `T-0012.8` found a real coverage gate
+failure: escalated `pnpm test:coverage` passed all tests but reported 89.2%
+branch coverage, below the 90% threshold. Follow-up subtask
+`T-0012.8b Integration Coverage Fix` is selected before `T-0012.9`.
+
+Next selected subtask: `T-0012.8b Integration Coverage Fix`.
 
 ## T-0012.2 Selection Rationale
 

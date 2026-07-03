@@ -1,6 +1,6 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.8 integrated; T-0012.9 selected
+Status: T-0012.8 integrated; T-0012.8b coverage fix selected
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
@@ -192,8 +192,13 @@ after `T-0012.7c` passed with 37 test files and 347 tests, coverage statements
 durable delivery slice with `Inbox`, `Delivery`, storage-backed inbox records,
 shard pickup/release, live deduplication, focused delivery/storage tests, and
 durable documentation. All required review lanes are clean through reviewed
-commit `0d6089a`, and final task bookkeeping was committed as `2d0e34e`. The
-next selected subtask is `T-0012.9 Stand And Entity Updates`.
+commit `0d6089a`, and final task bookkeeping was committed as `2d0e34e`.
+
+Parent integration verification after `T-0012.8` found a real coverage gate
+failure: escalated `pnpm test:coverage` passed all tests but reported 89.2%
+branch coverage, below the 90% threshold. The next selected subtask is
+`T-0012.8b Integration Coverage Fix`, before `T-0012.9 Stand And Entity
+Updates`.
 
 ## First Selected Subtask
 
