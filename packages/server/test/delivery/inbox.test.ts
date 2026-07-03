@@ -332,6 +332,36 @@ describe("Inbox", () => {
     await expect(receive).rejects.toThrow(/payload/i);
   });
 
+  it("rejects signal type URL accessor failures as inbox message errors", async () => {
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+      }),
+    );
+    const receive = inbox.receive({
+      inboxId: {
+        targetId: "aggregate-1",
+        targetTypeUrl: "type.example.dev/tasks.Aggregate",
+      },
+      signalId: "signal-bad-type-url",
+      signal: {
+        get typeUrl() {
+          throw new Error("type URL getter failed");
+        },
+        value: Buffer.from("payload", "utf8"),
+      } as unknown as Any,
+      label: "HANDLE_COMMAND",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+      whenReceived: new Date("2026-07-02T08:10:00.000Z"),
+      version: 1n,
+    });
+
+    await expect(receive).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(receive).rejects.toThrow(/signal type url/i);
+  });
+
   it("rejects invalid caller timestamps as inbox message errors", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },

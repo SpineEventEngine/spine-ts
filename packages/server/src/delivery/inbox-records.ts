@@ -358,7 +358,7 @@ function packSignal(signal: Any): StoredSignal {
   }
 
   return Object.freeze({
-    typeUrl: requireInputText(signal.typeUrl, "Inbox signal type URL"),
+    typeUrl: requireSignalTypeUrl(signal),
     valueBase64: Buffer.from(value).toString("base64"),
   });
 }
@@ -422,8 +422,9 @@ function readStoredRecord(
   expectedTypeUrl: string,
   label: string,
 ): Record<string, unknown> {
-  if (record.typeUrl !== expectedTypeUrl) {
-    throw new DeliveryStorageCorruptionError(`${label} type URL "${record.typeUrl}" is invalid.`);
+  const typeUrl = readRecordTypeUrl(record, label);
+  if (typeUrl !== expectedTypeUrl) {
+    throw new DeliveryStorageCorruptionError(`${label} type URL "${typeUrl}" is invalid.`);
   }
 
   const value = readStoredBytes(record, label);
@@ -447,6 +448,20 @@ function readStoredRecord(
     }
 
     throw new DeliveryStorageCorruptionError(`${label} contains malformed JSON.`, {
+      cause: error,
+    });
+  }
+}
+
+function readRecordTypeUrl(record: Any, label: string): string {
+  try {
+    return requireStoredText(Reflect.get(record, "typeUrl"), `${label} type URL`);
+  } catch (error) {
+    if (error instanceof DeliveryStorageCorruptionError) {
+      throw error;
+    }
+
+    throw new DeliveryStorageCorruptionError(`${label} type URL is invalid.`, {
       cause: error,
     });
   }
@@ -488,6 +503,18 @@ function requireInputDeliveryLabel(value: unknown): DeliveryLabel {
   }
 
   throw new InboxMessageError(`Inbox delivery label "${String(value)}" is invalid.`);
+}
+
+function requireSignalTypeUrl(signal: Any): string {
+  try {
+    return requireInputText(Reflect.get(signal, "typeUrl"), "Inbox signal type URL");
+  } catch (error) {
+    if (error instanceof InboxMessageError) {
+      throw error;
+    }
+
+    throw new InboxMessageError("Inbox signal type URL is invalid.", { cause: error });
+  }
 }
 
 function requireDeliveryStatus(value: unknown): DeliveryStatus {

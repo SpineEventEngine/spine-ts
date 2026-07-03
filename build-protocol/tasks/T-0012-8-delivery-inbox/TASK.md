@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-44 fix implemented in current commit after log-maintenance
-commit `bc1f3a5`
+Status: round-45 fix implemented in current commit
+Previous completed commit: `641a47a`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -737,5 +737,23 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   touched-file line scan. `node scripts/check-api-docs.mjs` still emitted the
   existing invalid `origin` TypeDoc source-link warning, but exited
   successfully.
-- This round-44 fix commit cannot pre-record its own final hash; identify it
+- Round-44 fixes were committed as `641a47a`.
+- Round-45 review completed from reviewer results supplied to this fix worker.
+  Documentation requested replacing present-tense delivery-worker wording in
+  the developer API because this slice still excludes worker loops. Security
+  requested wrapping stored `Any.typeUrl` accessor failures as
+  `DeliveryStorageCorruptionError` and caller signal `typeUrl` accessor
+  failures as `InboxMessageError`. Code style/maintainability,
+  TypeScript/API docs, and performance/reliability lanes were clean.
+- Round-45 fixes add red-first regressions for stored inbox/dedup/session
+  `Any.typeUrl` accessor failures and caller signal `typeUrl` accessor
+  failures, wrap those reads behind the existing delivery error contracts, and
+  change developer API wording to future/framework delivery code.
+- Final round-45 verification passed with the required focused
+  delivery/storage test suite, `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `node scripts/check-api-docs.mjs`,
+  `git diff --check fce80b2..HEAD`, and a touched-file line scan.
+  `node scripts/check-api-docs.mjs` still emitted the existing invalid
+  `origin` TypeDoc source-link warning, but exited successfully.
+- This round-45 fix commit cannot pre-record its own final hash; identify it
   from package HEAD or `git log`.

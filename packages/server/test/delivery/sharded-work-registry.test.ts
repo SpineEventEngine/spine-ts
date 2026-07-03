@@ -329,6 +329,29 @@ describe("ShardedWorkRegistry", () => {
     );
   });
 
+  it("classifies stored shard-session type URL accessor failures as storage corruption", async () => {
+    const storageFactory = new RawSessionFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:35:00.000Z"),
+    });
+    const shard = new ShardIndex(0, 1);
+
+    await delivery.shards.pickUp(shard, "seed-node");
+    storageFactory.writeRawSession({
+      get typeUrl() {
+        throw new Error("type URL getter failed");
+      },
+      value: Buffer.from("{}", "utf8"),
+    } as unknown as Any);
+
+    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/type url/i);
+  });
+
   it("classifies corrupt stored shard-session coordinates as storage corruption", async () => {
     const storageFactory = new CorruptibleStorageFactory();
     const delivery = new Delivery({
@@ -655,6 +678,84 @@ class CorruptibleStorageFactory extends StorageFactory {
     }
 
     this.#records.set(JSON.stringify("0/1"), record);
+  }
+}
+
+class RawSessionFactory extends StorageFactory {
+  readonly #delegate = new InMemoryStorageFactory();
+  #raw: Message | undefined;
+
+  writeRawSession(record: Message): void {
+    this.#raw = record;
+  }
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new RawSessionStorage(
+      context,
+      recordSpec,
+      this.#delegate.createRecordStorage(context, recordSpec),
+      () => this.#raw,
+    );
+  }
+}
+
+class RawSessionStorage<I, R extends Message> extends RecordStorage<I, R> {
+  readonly #delegate: RecordStorage<I, R>;
+  readonly #raw: () => Message | undefined;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    delegate: RecordStorage<I, R>,
+    raw: () => Message | undefined,
+  ) {
+    super(context, recordSpec);
+    this.#delegate = delegate;
+    this.#raw = raw;
+  }
+
+  override close(): void {
+    this.#delegate.close();
+    super.close();
+  }
+
+  override read(id: I): Promise<R | undefined> {
+    const raw = this.#raw();
+
+    return raw === undefined ? this.#delegate.read(id) : Promise.resolve(raw as R);
+  }
+
+  protected compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    return this.#delegate.compareAndSet(id, expected?.record, next?.record);
+  }
+
+  protected deleteRecord(id: I): Promise<boolean> {
+    return this.#delegate.delete(id);
+  }
+
+  protected queryRecordEntries(query: RecordQuery<I>): Promise<readonly { id: I; record: R }[]> {
+    return this.#delegate.queryEntries(query);
+  }
+
+  protected readRecord(id: I): Promise<R | undefined> {
+    return this.#delegate.read(id);
+  }
+
+  protected writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    return this.#delegate.writeAll(records.map((record) => record.record));
+  }
+
+  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    return this.#delegate.write(record.record);
   }
 }
 

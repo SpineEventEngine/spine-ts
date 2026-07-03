@@ -173,6 +173,26 @@ describe("Inbox record limits", () => {
     expect(() => readInboxMessage(record)).toThrow(DeliveryStorageCorruptionError);
   });
 
+  it("classifies stored inbox type URL accessor failures as storage corruption", () => {
+    const record = {
+      get typeUrl() {
+        throw new Error("type URL getter failed");
+      },
+      value: Buffer.from(
+        JSON.stringify(
+          storedInboxJson({
+            signalId: "signal-1",
+            valueBase64: Buffer.from("payload", "utf8").toString("base64"),
+          }),
+        ),
+        "utf8",
+      ),
+    } as unknown as Any;
+
+    expect(() => readInboxMessage(record)).toThrow(DeliveryStorageCorruptionError);
+    expect(() => readInboxMessage(record)).toThrow(/type url/i);
+  });
+
   it("classifies corrupt stored inbox shard coordinates as storage corruption", () => {
     const record = storedInboxRecord({
       signalId: "signal-1",
@@ -203,6 +223,32 @@ describe("Inbox record limits", () => {
     expect(() => readDedupGuard(record, testDedupKey("signal-1"))).toThrow(
       DeliveryStorageCorruptionError,
     );
+  });
+
+  it("classifies stored dedup type URL accessor failures as storage corruption", () => {
+    const record = {
+      get typeUrl() {
+        throw new Error("type URL getter failed");
+      },
+      value: Buffer.from(
+        JSON.stringify({
+          key: testDedupKey("signal-1"),
+          inbox: testInboxKey,
+          signalId: "signal-1",
+          inboxMessageId: "message-1",
+          shardIndex: 0,
+          shardTotal: 1,
+          state: "FINAL",
+          status: "TO_DELIVER",
+        }),
+        "utf8",
+      ),
+    } as unknown as Any;
+
+    expect(() => readDedupGuard(record, testDedupKey("signal-1"))).toThrow(
+      DeliveryStorageCorruptionError,
+    );
+    expect(() => readDedupGuard(record, testDedupKey("signal-1"))).toThrow(/type url/i);
   });
 
   it("classifies corrupt stored dedup shard coordinates as storage corruption", () => {

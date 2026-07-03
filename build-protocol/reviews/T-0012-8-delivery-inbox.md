@@ -1,7 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 44 fix implemented in current commit after log-maintenance
-commit `bc1f3a5`
+Status: round 45 fix implemented in current commit
+Previous completed commit: `641a47a`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2489,9 +2489,7 @@ Findings to address:
 
 ### Round 44 Fix
 
-Result: implemented in this current commit. Because a commit cannot pre-record
-its own final hash, identify the committed round-44 fix by package HEAD or
-`git log`.
+Result: committed as `641a47a`.
 
 Red-first verification:
 
@@ -2518,3 +2516,78 @@ Fix summary:
 Focused verification:
 
 - the same focused red-first command passed after production changes.
+
+### Round 45
+
+Reviewer input: round-45 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- documentation:
+  `019f2910-0b92-7fd1-b5ba-3fe1fa39eda8` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f2910-778c-7ae3-a078-f2ebe22af3af` (`CHANGES REQUESTED`, closed);
+- code style/maintainability:
+  `019f290f-c65d-7ae3-a856-a854ef2177b9` (`CLEAN`, closed);
+- TypeScript/API docs:
+  `019f2910-4447-7530-8d15-1d62b83dad53` (`CLEAN`, closed); and
+- performance/reliability:
+  `019f2910-c1f4-7d11-8ed2-04a7eec78ebc` (`CLEAN`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- developer API text used present-tense delivery-worker wording for inbox
+  consumption even though this slice excludes worker loops;
+- stored inbox/dedup/session `Any.typeUrl` accessor failures could escape as
+  raw errors before durable corruption wrapping; and
+- caller signal `typeUrl` accessor failures could escape as raw errors before
+  public inbox input wrapping.
+
+### Round 45 Fix
+
+Result: implemented in this current commit. Because a commit cannot pre-record
+its own final hash, identify the committed round-45 fix by package HEAD or
+`git log`.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts` failed before
+  production changes because the four new accessor regressions observed raw
+  `Error: type URL getter failed` instead of `InboxMessageError` or
+  `DeliveryStorageCorruptionError`.
+
+Fix summary:
+
+- stored inbox/dedup/session envelope type URL reads now use private wrappers
+  that preserve `DeliveryStorageCorruptionError`;
+- caller signal type URL reads now use a private wrapper that preserves
+  `InboxMessageError`; and
+- developer API wording now says framework delivery code can read durable rows
+  by shard and a future delivery worker can consume them.
+
+Focused verification:
+
+- the same focused delivery command passed after production changes with
+  `93` tests.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `133` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.

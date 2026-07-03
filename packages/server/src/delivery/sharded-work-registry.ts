@@ -180,9 +180,10 @@ function readStoredSession(record: Any, expectedKey?: string): StoredShardSessio
 }
 
 function readSessionRecord(record: Any): Record<string, unknown> {
-  if (record.typeUrl !== shardSessionTypeUrl) {
+  const typeUrl = readRecordTypeUrl(record);
+  if (typeUrl !== shardSessionTypeUrl) {
     throw new DeliveryStorageCorruptionError(
-      `Shard session record type URL "${record.typeUrl}" is invalid.`,
+      `Shard session record type URL "${typeUrl}" is invalid.`,
     );
   }
 
@@ -206,6 +207,20 @@ function readSessionRecord(record: Any): Record<string, unknown> {
     }
 
     throw new DeliveryStorageCorruptionError("Shard session record contains malformed JSON.", {
+      cause: error,
+    });
+  }
+}
+
+function readRecordTypeUrl(record: Any): string {
+  try {
+    return requireStoredText(Reflect.get(record, "typeUrl"), "Shard session record type URL");
+  } catch (error) {
+    if (error instanceof DeliveryStorageCorruptionError) {
+      throw error;
+    }
+
+    throw new DeliveryStorageCorruptionError("Shard session record type URL is invalid.", {
       cause: error,
     });
   }

@@ -132,7 +132,7 @@ bounded context. It is intentionally smaller than the later worker/retry stack:
 
 - `Delivery` groups `Inbox` and `ShardedWorkRegistry` for one storage context;
 - `Inbox` is the low-level durable delivery storage primitive in this slice: it
-  accepts `InboxMessageInput` with `receive()` and lets the delivery worker
+  accepts `InboxMessageInput` with `receive()` and lets framework delivery code
   read durable inbox rows by `ShardIndex`. Its public `storage` property is an
   intentional low-level escape hatch for storage-focused tests and
   integrations, not an application-facing query facade;
@@ -183,9 +183,9 @@ const pending = await delivery.inbox.read(ShardIndex.single(), {
 ```
 
 Keep the write/read split intact at the application/service/domain level. These
-storage primitives persist inbox rows and let the delivery worker consume them
-by shard; they are not user-facing read-side facades. The current API does not
-invoke repositories from inbox rows, mutate read-side projections, run retry
+storage primitives persist inbox rows so a future delivery worker can consume
+them by shard; they are not user-facing read-side facades. The current API does
+not invoke repositories from inbox rows, mutate read-side projections, run retry
 workers, or retain attempt/error history.
 
 ## Public Services

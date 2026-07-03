@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-44 fix implemented in current commit after log-maintenance
-commit `bc1f3a5`
+Status: round-45 fix implemented in current commit
+Previous completed commit: `641a47a`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1596,5 +1596,64 @@ Final verification:
 `node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
 TypeDoc source-link warning, but exited successfully.
 
-This round-44 fix commit cannot pre-record its own final hash; identify it
+Round-44 fixes were committed as `641a47a`.
+
+## Round 45 Review
+
+Round 45 found one documentation overclaim and one security accessor-wrapping
+gap. Documentation requested changing present-tense delivery-worker wording in
+the developer API because this slice persists/readies inbox rows but does not
+deliver worker loops. Security found stored `Any.typeUrl` and caller signal
+`typeUrl` accessor failures could escape as raw errors before the existing
+corruption/input wrappers.
+
+Code style/maintainability, TypeScript/API docs, and performance/reliability
+lanes were clean.
+
+## Round 45 Fix
+
+Round-45 fixes stay local to delivery record parsing, shard-session parsing,
+focused delivery tests, and developer API wording:
+
+- added red-first regressions for stored inbox/dedup/session `Any.typeUrl`
+  accessor failures and caller signal `typeUrl` accessor failure;
+- wrapped stored inbox/dedup/session envelope type URL reads as
+  `DeliveryStorageCorruptionError`;
+- wrapped caller signal type URL reads as `InboxMessageError`; and
+- changed developer API text from present-tense delivery-worker consumption to
+  framework/future delivery-worker wording.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts` failed before
+  production changes with four new failing regressions. The inbox and inbox
+  record paths surfaced raw `Error: type URL getter failed`; the raw shard
+  storage regression also surfaced the raw getter failure.
+
+Focused verification:
+
+- the same focused delivery command passed after production changes with
+  `93` tests.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `133` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+This round-45 fix commit cannot pre-record its own final hash; identify it
 from package HEAD or `git log`.
