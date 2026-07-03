@@ -307,4 +307,7 @@ entityStateType)` returns a zero-based shard index and that all messages for
 - Focused delivery verification passed with 42 tests after the round-25 fix:
   `pnpm test packages/server/test/delivery/inbox.test.ts`
   `packages/server/test/delivery/sharded-work-registry.test.ts`.
+- Controller verification then applied the stricter full touched-file line scan
+  and reflowed long touched API/architecture documentation lines before
+  preparing the next review package.
 - No blocking human question is known.

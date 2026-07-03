@@ -428,6 +428,10 @@ Round-25 fixes:
 - changed `InboxStorage.#ensureInboxRow()` to decode an existing row through
   bounded `readInboxMessage()` before treating it as a matching collision.
 
+A stricter full touched-file line scan found long touched API/architecture
+documentation lines after the round-25 fix. Those docs were reflowed before
+the next review package.
+
 Focused delivery verification passed with 42 tests:
 
 `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`.
