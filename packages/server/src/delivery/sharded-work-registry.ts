@@ -154,6 +154,14 @@ function readSession(record: Any, expectedKey?: string): ShardSession {
 }
 
 function readStoredSession(record: Any, expectedKey?: string): StoredShardSession {
+  const decoded = readSessionRecord(record);
+  const shard = readSessionShard(decoded);
+  const key = readSessionKey(decoded, shard, expectedKey);
+
+  return buildStoredSession(decoded, shard, key);
+}
+
+function readSessionRecord(record: Any): Record<string, unknown> {
   if (record.typeUrl !== shardSessionTypeUrl) {
     throw new DeliveryStorageCorruptionError(
       `Shard session record type URL "${record.typeUrl}" is invalid.`,
@@ -172,29 +180,7 @@ function readStoredSession(record: Any, expectedKey?: string): StoredShardSessio
       throw new DeliveryStorageCorruptionError("Shard session record is not a JSON object.");
     }
 
-    const shard = new ShardIndex(
-      requireNumber(Reflect.get(decoded, "shardIndex"), "Shard session index"),
-      requireNumber(Reflect.get(decoded, "shardTotal"), "Shard session total"),
-    );
-    const key = requireText(Reflect.get(decoded, "key"), "Shard session key", maxSessionKeyBytes);
-    if (key !== shard.key()) {
-      throw new DeliveryStorageCorruptionError("Shard session key does not match shard.");
-    }
-    if (expectedKey !== undefined && key !== expectedKey) {
-      throw new DeliveryStorageCorruptionError(
-        `Shard session "${key}" does not match storage key "${expectedKey}".`,
-      );
-    }
-
-    return Object.freeze({
-      key,
-      id: requireText(Reflect.get(decoded, "id"), "Shard session ID", maxSessionTextBytes),
-      node: requireText(Reflect.get(decoded, "node"), "Shard session node", maxSessionTextBytes),
-      shardIndex: shard.index,
-      shardTotal: shard.ofTotal,
-      pickedUpAtMs: requireNumber(Reflect.get(decoded, "pickedUpAtMs"), "Shard pickup time"),
-      expiresAtMs: requireNumber(Reflect.get(decoded, "expiresAtMs"), "Shard expiry time"),
-    });
+    return decoded as Record<string, unknown>;
   } catch (error) {
     if (error instanceof DeliveryStorageCorruptionError) {
       throw error;
@@ -204,6 +190,47 @@ function readStoredSession(record: Any, expectedKey?: string): StoredShardSessio
       cause: error,
     });
   }
+}
+
+function readSessionShard(decoded: Record<string, unknown>): ShardIndex {
+  return new ShardIndex(
+    requireNumber(Reflect.get(decoded, "shardIndex"), "Shard session index"),
+    requireNumber(Reflect.get(decoded, "shardTotal"), "Shard session total"),
+  );
+}
+
+function readSessionKey(
+  decoded: Record<string, unknown>,
+  shard: ShardIndex,
+  expectedKey?: string,
+): string {
+  const key = requireText(Reflect.get(decoded, "key"), "Shard session key", maxSessionKeyBytes);
+  if (key !== shard.key()) {
+    throw new DeliveryStorageCorruptionError("Shard session key does not match shard.");
+  }
+  if (expectedKey !== undefined && key !== expectedKey) {
+    throw new DeliveryStorageCorruptionError(
+      `Shard session "${key}" does not match storage key "${expectedKey}".`,
+    );
+  }
+
+  return key;
+}
+
+function buildStoredSession(
+  decoded: Record<string, unknown>,
+  shard: ShardIndex,
+  key: string,
+): StoredShardSession {
+  return Object.freeze({
+    key,
+    id: requireText(Reflect.get(decoded, "id"), "Shard session ID", maxSessionTextBytes),
+    node: requireText(Reflect.get(decoded, "node"), "Shard session node", maxSessionTextBytes),
+    shardIndex: shard.index,
+    shardTotal: shard.ofTotal,
+    pickedUpAtMs: requireNumber(Reflect.get(decoded, "pickedUpAtMs"), "Shard pickup time"),
+    expiresAtMs: requireNumber(Reflect.get(decoded, "expiresAtMs"), "Shard expiry time"),
+  });
 }
 
 function decodeStoredUtf8(value: Uint8Array): string {

@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 29 fix complete
+Status: round 30 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1438,6 +1438,93 @@ Verification:
 - green:
   - `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
     passed with 53 tests;
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check`; and
+  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+    over 120 columns).
+
+### Round 30
+
+Reviewer input: round-30 reviewer results supplied to this fix worker.
+
+Diff package:
+`.superpowers/sdd/review-round-30-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2819-24ac-7e20-955e-3a3468b6ecb4` (`CHANGES REQUESTED`, closed);
+- documentation:
+  `019f2819-253c-73a1-ae66-7d59fe2808ec` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f2819-25e1-7f10-99f2-3af8ce1f579a` (`CLEAN`, closed);
+- security:
+  `019f2819-2659-7562-8369-0c20cf49b0a1` (`CHANGES REQUESTED`, closed); and
+- performance/reliability:
+  `019f2819-26ea-7eb2-9bce-3bfbfb886e09` (`CHANGES REQUESTED`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- `readStoredDedupRecord()`, `parseStoredInboxMessage()`, and
+  `readStoredSession()` were still multi-responsibility parser hotspots past
+  the method-size target;
+- corruption/recovery helpers and scenario support still made
+  `packages/server/test/delivery/inbox.test.ts` too monolithic;
+- `RUNTIME_ARCHITECTURE.md` still overstated delivery integration by implying
+  accepted commands/events can already be recorded before async delivery
+  handoff, rather than describing the current standalone `Delivery` / `Inbox`
+  / `ShardedWorkRegistry` slice;
+- durable task/report/review/work-log state needed round-30 package/current
+  state entries;
+- write-side composed inbox/dedup keys could still exceed the `64 KiB`
+  read-side invariant after escaping; and
+- individually valid inputs could still overflow the pending dedup envelope
+  without an explicit aggregate-budget rejection.
+
+TypeScript/API docs was clean. Code style/maintainability, documentation,
+security, and performance/reliability requested changes.
+
+### Round 30 Fix
+
+Result: implemented in this worktree.
+
+Fix summary:
+
+- split the inbox/dedup and shard-session parser bodies into smaller local
+  read/validate/build helpers;
+- moved shared inbox corruption/recovery doubles into
+  `packages/server/test/delivery/inbox-test-support.ts` and added
+  `packages/server/test/delivery/inbox-records.test.ts` for focused record
+  limit regressions;
+- narrowed `RUNTIME_ARCHITECTURE.md` to storage-level delivery primitives and
+  async handoff without claiming CommandBus/EventBus integration;
+- added explicit post-composition caps for `inboxKey()` and `dedupGuardKey()`
+  to match the `64 KiB` read invariant; and
+- added an explicit pending-dedup aggregate-budget rejection before generic
+  record packing.
+
+Verification:
+
+- red:
+  - focused round-30 record-limit regressions:
+
+    ```sh
+    pnpm test packages/server/test/delivery/inbox-records.test.ts
+    ```
+
+    failed with the expected three regressions before implementation:
+    composed inbox keys and dedup keys still serialized without throwing, and
+    the oversized pending dedup claim still failed with the generic
+    `Inbox dedup record exceeds 524288 bytes and cannot be stored.` error;
+- green:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    passed with 56 tests;
   - `pnpm typecheck`;
   - `pnpm lint`;
   - `pnpm format:check`;

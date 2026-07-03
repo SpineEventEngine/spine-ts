@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-29 fix complete
+Status: round-30 fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -380,5 +380,29 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   `pnpm test packages/server/test/delivery/inbox.test.ts`
   `packages/server/test/delivery/sharded-work-registry.test.ts`.
 - Final round-29 verification also passed with `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `git diff --check`, and a full touched-file line scan.
+- Round-30 review package is prepared at
+  `.superpowers/sdd/review-round-30-fce80b2-current.diff`.
+- Round-30 review completed from reviewer results supplied to this fix worker.
+  Code style/maintainability, documentation, security, and
+  performance/reliability requested changes. TypeScript/API docs was clean.
+  All five round-30 reviewer sub-agents are closed.
+- Round-30 fixes split the inbox and shard-session parser hotspots into small
+  local semantic helpers, moved inbox corruption/recovery doubles into
+  `packages/server/test/delivery/inbox-test-support.ts`, added the narrower
+  `packages/server/test/delivery/inbox-records.test.ts` regression file,
+  narrowed `RUNTIME_ARCHITECTURE.md` to storage-level delivery primitives
+  rather than bus integration, rejected oversized composed inbox/dedup keys at
+  write time, and added an explicit pending-dedup aggregate-budget rejection.
+- Red-first focused regressions captured the expected pre-fix failures:
+  escaped target/signal inputs still serialized composed inbox/dedup keys that
+  would later exceed the `64 KiB` read cap, and the oversized pending dedup
+  envelope still failed with a generic serialized-record overflow instead of
+  an explicit aggregate-budget rejection.
+- Focused delivery verification passed with 56 tests after the round-30 fix:
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`.
+- Final round-30 verification also passed with `pnpm typecheck`, `pnpm lint`,
   `pnpm format:check`, `git diff --check`, and a full touched-file line scan.
 - No blocking human question is known.

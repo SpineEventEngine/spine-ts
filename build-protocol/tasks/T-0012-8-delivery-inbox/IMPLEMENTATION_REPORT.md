@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-29 fix complete
+Status: round-30 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -668,6 +668,69 @@ serialization:
 Verification for the round-29 fix passed with:
 
 - `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm format:check`
+- `git diff --check`
+- `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+  over 120 columns)
+
+## Round 30 Review
+
+Round 30 found no TypeScript/API docs issue. Code style/maintainability
+requested splitting the `readStoredDedupRecord()`,
+`parseStoredInboxMessage()`, and `readStoredSession()` hotspots into smaller
+semantic helpers and moving corruption/recovery support out of the monolithic
+`inbox.test.ts`. Documentation requested narrowing
+`RUNTIME_ARCHITECTURE.md` so this slice is described as storage-level delivery
+primitives plus async handoff, not integrated CommandBus/EventBus recording,
+and advancing the durable task/report/review/work-log state to the round-30
+package `.superpowers/sdd/review-round-30-fce80b2-current.diff`. Security
+requested explicit post-composition caps for `inboxKey()` and
+`dedupGuardKey()` so escaped composites cannot exceed the `64 KiB` read
+invariant after passing per-field limits. Performance/reliability requested an
+explicit pending-dedup aggregate budget and early rejection instead of the
+generic serialized-record overflow.
+
+Red-first regressions failed before implementation:
+
+- focused round-30 record-limit regressions:
+
+  ```sh
+  pnpm test packages/server/test/delivery/inbox-records.test.ts
+  ```
+
+  failed with the expected three regressions before implementation: composed
+  inbox keys and dedup keys with individually valid escaped fields serialized
+  without throwing, and an oversized pending dedup claim failed only with the
+  generic `Inbox dedup record exceeds 524288 bytes and cannot be stored.`
+  error instead of an explicit aggregate-budget rejection.
+
+## Round 30 Fix
+
+Round-30 fixes stayed local to delivery record parsing, write-time validation,
+test organization, and durable docs:
+
+- split `readStoredDedupRecord()`, `parseStoredInboxMessage()`, and
+  `readStoredSession()` into small local read/validate/build helpers while
+  keeping the public delivery surface unchanged;
+- moved shared inbox corruption/recovery doubles and payload builders into
+  `packages/server/test/delivery/inbox-test-support.ts` and added the focused
+  `packages/server/test/delivery/inbox-records.test.ts` regression file;
+- narrowed `RUNTIME_ARCHITECTURE.md` so this slice is described as the durable
+  storage-level delivery primitive and async handoff model, not integrated bus
+  recording;
+- added explicit post-composition `64 KiB` caps for `inboxKey()` and
+  `dedupGuardKey()` so write-time validation matches the read-side invariant;
+  and
+- added an explicit `Inbox pending dedup claim exceeds 524288 bytes aggregate budget.`
+  rejection before generic record packing.
+
+Verification for the round-30 fix passed with:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
 - `pnpm typecheck`
 - `pnpm lint`
 - `pnpm format:check`

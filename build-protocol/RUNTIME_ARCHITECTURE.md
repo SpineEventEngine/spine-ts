@@ -195,8 +195,9 @@ adapter behind the same contract.
 
 The current TS runtime preserves only the first durable inbox slice:
 
-- accepted commands/events can be recorded before the asynchronous delivery
-  handoff point where durability is configured;
+- standalone delivery writes can be recorded before the asynchronous worker
+  handoff point where durability is configured, but this slice does not yet
+  integrate `CommandBus` or `EventBus` intake with that handoff;
 - durable inbox rows store the inbox target identity, signal identity, shard,
   status, label, receive time, version, optional signal payload, and optional
   dedup retention;
