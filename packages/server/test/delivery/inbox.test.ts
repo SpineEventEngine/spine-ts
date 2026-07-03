@@ -303,6 +303,35 @@ describe("Inbox", () => {
     ).rejects.toThrow(/payload/i);
   });
 
+  it("rejects proxy-backed signal payloads as inbox message errors", async () => {
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+      }),
+    );
+    const payload = new Proxy(new Uint8Array(1), {});
+    const receive = inbox.receive({
+      inboxId: {
+        targetId: "aggregate-1",
+        targetTypeUrl: "type.example.dev/tasks.Aggregate",
+      },
+      signalId: "signal-proxy",
+      signal: {
+        typeUrl: "type.example.dev/tasks.ProxySignal",
+        value: payload,
+      } as Any,
+      label: "HANDLE_COMMAND",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+      whenReceived: new Date("2026-07-02T08:10:00.000Z"),
+      version: 1n,
+    });
+
+    await expect(receive).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(receive).rejects.toThrow(/payload/i);
+  });
+
   it("rejects invalid caller timestamps as inbox message errors", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -312,6 +341,21 @@ describe("Inbox", () => {
     const write = storage.write({
       ...createMessage("message-invalid-time", "signal-invalid-time", 1n),
       whenReceived: new Date(Number.NaN),
+    });
+
+    await expect(write).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(write).rejects.toThrow(/receive time/i);
+  });
+
+  it("rejects proxy-backed caller timestamps as inbox message errors", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const whenReceived = new Proxy(new Date("2026-07-02T08:00:00.000Z"), {});
+    const write = storage.write({
+      ...createMessage("message-proxy-time", "signal-proxy-time", 1n),
+      whenReceived,
     });
 
     await expect(write).rejects.toBeInstanceOf(InboxMessageError);

@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 42 fix implemented in worktree
+Status: round 43 fix implemented for handoff
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1057,7 +1057,7 @@ security, and performance/reliability requested changes.
 
 ### Round 25 Fix
 
-Result: implemented in this worktree.
+Result: committed as `0235f0b`.
 
 Fix summary:
 
@@ -2367,9 +2367,59 @@ Fix summary:
 
 - final dedup guard reads now require guard status/retention metadata to match
   the visible inbox row before dedup blocking or replacement decisions; and
-- durable task/report/review/work logs now record committed round-41 state and
-  the current round-42 fix trail.
+- durable task/report/review/work logs now record committed round-41 state.
 
 Focused verification:
 
 - the same focused red-first command passed after production changes.
+
+### Round 43
+
+Reviewer input: round-43 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- documentation:
+  `019f28f3-24b2-7a22-87c7-15adabd06948` (`CHANGES REQUESTED`, closed);
+- maintainability:
+  `019f28f2-ec65-7291-b507-a6d06266c538` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f28f3-8db6-75e1-bef9-930ca1cb9d25` (`CHANGES REQUESTED`, closed);
+- code style/maintainability:
+  `019f28e9-5da3-7c32-a1ba-e75ac4a8a9e7` (`CLEAN`, closed);
+- TypeScript/API docs:
+  `019f28f3-587a-71e1-b181-1798ee23ca6d` (`CLEAN`, closed); and
+- performance/reliability:
+  `019f28f3-bef5-7473-9be3-57f55497e288` (`CLEAN`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable logs still described round 42 as current-worktree state even though
+  it was committed as `0235f0b`; and
+- proxy-backed caller `Uint8Array` payloads and `Date` timestamps could leak
+  raw `TypeError` instead of `InboxMessageError` through public inbox writes.
+
+### Round 43 Fix
+
+Result: implemented for handoff.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
+  `proxy-backed` failed before production changes because both proxy
+  regressions observed raw `TypeError` instead of `InboxMessageError`.
+
+Fix summary:
+
+- caller byte validation now snapshots valid `Uint8Array` inputs through
+  `Buffer.from()` and wraps proxy trap failures as `InboxMessageError`;
+- caller timestamp validation now wraps `Date.getTime()` proxy trap failures as
+  `InboxMessageError`; and
+- durable task/report/review/work logs now record committed round-42 state and
+  this round-43 fix trail.
+
+Focused verification:
+
+- the same focused proxy-backed command passed after production changes.

@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-42 fix implemented in worktree
+Status: round-43 fix implemented for handoff
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -701,5 +701,14 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   clean.
 - Round-42 fixes add a red-first regression for corrupt final dedup metadata,
   require final dedup guard status/retention metadata to match the visible row,
-  and refresh durable logs through committed round 41 and the current round-42
-  fix.
+  and refresh durable logs through committed round 41.
+- Round-42 fixes were committed as `0235f0b`.
+- Round-43 review completed from reviewer results supplied to this fix worker.
+  Documentation and maintainability requested durable-log state corrections for
+  committed round 42. Security requested classifying proxy-backed caller signal
+  payload and timestamp failures as `InboxMessageError` before durable writes.
+  Code style/maintainability, TypeScript/API docs, and
+  performance/reliability were otherwise clean.
+- Round-43 fixes add red-first proxy payload/timestamp regressions, wrap caller
+  byte and timestamp validation failures as `InboxMessageError`, and refresh
+  durable logs for committed round 42 plus this handoff state.

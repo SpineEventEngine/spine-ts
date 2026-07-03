@@ -565,7 +565,11 @@ function requireInputBytes(value: unknown, label: string): Uint8Array {
     throw new InboxMessageError(`${label} must be a Uint8Array.`);
   }
 
-  return value;
+  try {
+    return Buffer.from(value);
+  } catch (error) {
+    throw new InboxMessageError(`${label} is invalid.`, { cause: error });
+  }
 }
 
 function requireInputObject(value: unknown, label: string): Record<string, unknown> {
@@ -627,7 +631,12 @@ function requireInputTimestamp(value: unknown, label: string): number {
     throw new InboxMessageError(`${label} must be a Date.`);
   }
 
-  const time = value.getTime();
+  let time: number;
+  try {
+    time = value.getTime();
+  } catch (error) {
+    throw new InboxMessageError(`${label} is invalid.`, { cause: error });
+  }
 
   if (!Number.isFinite(time)) {
     throw new InboxMessageError(`${label} is invalid.`);

@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-42 fix implemented in worktree
+Status: round-43 fix implemented for handoff
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1468,8 +1468,9 @@ logs:
 - changed final dedup guard reads to fail closed with
   `DeliveryStorageCorruptionError` unless guard status/retention metadata
   matches the visible inbox row; and
-- refreshed task/report/review/work logs through committed round 41 and the
-  current round-42 fix.
+- refreshed task/report/review/work logs through committed round 41.
+
+Committed as `0235f0b`.
 
 Red-first verification:
 
@@ -1481,3 +1482,38 @@ Red-first verification:
 Focused verification:
 
 - the same focused red-first command passed after production changes.
+
+## Round 43 Review
+
+Round 43 found one durable-log state issue and one security input-validation
+issue. Documentation and maintainability requested that durable logs record
+the committed round-42 fix at `0235f0b` instead of describing it as only
+current-worktree state. Security found that proxy-backed caller signal payloads
+and timestamps could leak raw `TypeError` through `Inbox.receive()` and
+`InboxStorage.write()`.
+
+Code style/maintainability was otherwise clean, and the TypeScript/API docs and
+performance/reliability lanes were clean.
+
+## Round 43 Fix
+
+Round-43 fixes stay local to caller-input validation, focused inbox tests, and
+durable logs:
+
+- added red-first regressions for proxy-backed `Uint8Array` signal payloads
+  through `Inbox.receive()` and proxy-backed `Date` receive times through
+  `InboxStorage.write()`;
+- changed caller byte and timestamp validation to wrap proxy trap failures as
+  `InboxMessageError` before storage writes; and
+- refreshed task/report/review/work logs for committed round 42 and this
+  round-43 handoff state.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
+  `proxy-backed` failed before production changes because both tests observed
+  raw `TypeError` instead of `InboxMessageError`.
+
+Focused verification:
+
+- the same focused proxy-backed command passed after production changes.
