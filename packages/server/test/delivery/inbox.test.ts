@@ -227,6 +227,36 @@ describe("Inbox", () => {
     expect(second.outcome).toBe("WRITTEN");
   });
 
+  it("rejects invalid storage clocks before live dedup retention decisions", async () => {
+    const inboxId = {
+      targetId: "projection-1",
+      targetTypeUrl: "type.example.dev/tasks.Projection",
+    };
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => new Date(Number.NaN),
+    });
+
+    const first = await storage.write({
+      ...createMessage("message-1", "signal-1", 1n),
+      inboxId,
+      signalId: "signal-1",
+      status: "DELIVERED",
+      keepUntil: new Date("2026-07-02T08:15:00.000Z"),
+    });
+    const second = storage.write({
+      ...createMessage("message-2", "signal-1", 2n),
+      inboxId,
+      signalId: "signal-1",
+    });
+
+    expect(first.outcome).toBe("WRITTEN");
+    await expect(second).rejects.toThrow(/clock/i);
+    await expect(second).rejects.not.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(second).rejects.not.toBeInstanceOf(InboxMessageError);
+  });
+
   it("rejects oversized signal payloads before serializing storage records", async () => {
     const inbox = new Inbox(
       new InboxStorage({

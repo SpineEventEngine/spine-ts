@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 39 fix complete
+Status: round 40 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2179,7 +2179,7 @@ Findings to address:
 
 ### Round 39 Fix
 
-Result: implemented in this worktree.
+Result: committed as `72df1a4`.
 
 Red-first verification:
 
@@ -2218,3 +2218,76 @@ Final verification:
 - `node scripts/check-api-docs.mjs`;
 - `git diff --check fce80b2..HEAD`; and
 - touched-file line scan with no lines over 120 columns.
+
+### Round 40
+
+Reviewer input: round-40 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- documentation:
+  `019f28d5-7939-7b41-9cfd-4cf60237c8df` (`CHANGES REQUESTED`, closed);
+- code style/maintainability:
+  `019f28d5-4389-7bb2-913c-7bea38014353` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f28d5-efe7-7d21-8572-0c5dbcff495e` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f28d5-b7f3-72a1-ab3f-fa5e16a3c4ed` (`CLEAN`, closed); and
+- performance/reliability:
+  `019f28d6-2f90-79b2-a3d4-a74f472f5bea` (`CLEAN`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable task/report/review/work logs were not current with committed
+  round-39 state at `72df1a4`;
+- `inbox-records.ts` exported unused `dedupMessageId()` with no production or
+  test caller;
+- `Inbox`, `RecordStorage`, and `TenantRecords` support declarations preceded
+  their filename-matching primary declarations; and
+- `InboxStorage` trusted invalid `now()` values during dedup retention checks,
+  allowing a live delivered dedup guard to be treated as non-blocking.
+
+### Round 40 Fix
+
+Result: implemented in this worktree.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
+  `'rejects invalid storage clocks before live dedup retention decisions'`
+  failed before production changes because the duplicate write resolved
+  `WRITTEN`.
+
+Fix summary:
+
+- added the invalid-clock regression;
+- validated `InboxStorage.now()` before dedup retention decisions and
+  pending-guard dedup mutations;
+- removed the unused exported `dedupMessageId()` helper;
+- moved primary declarations ahead of supporting declarations in
+  `inbox.ts`, `record-storage.ts`, and `tenant-records.ts`; and
+- refreshed durable logs through the committed round-39 and current round-40
+  state.
+
+Focused verification:
+
+- the same focused red-first command passed after production changes.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `120` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+Result: committed in the final task commit after verification.

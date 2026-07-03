@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-39 fix complete
+Status: round-40 fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -653,3 +653,36 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   `pnpm lint`, `pnpm format:check`, `node scripts/check-api-docs.mjs`,
   `git diff --check fce80b2..HEAD`, and a touched-file line scan.
 - No blocking human question is known.
+- Round-39 fixes were committed as `72df1a4`.
+- Round-40 review completed from reviewer results supplied to this fix worker.
+  Documentation requested current durable state for committed round 39 and the
+  round-40 pass. Maintainability requested removing the unused exported
+  `dedupMessageId()` helper and moving primary declarations before support
+  declarations in inbox/storage files. Security requested validating
+  `InboxStorage` clock values before dedup retention decisions so invalid
+  clocks fail closed instead of unblocking live dedup guards. TypeScript/API
+  docs and reliability lanes were clean.
+- Round-40 fixes add a red-first regression for invalid `InboxStorage.now()`
+  behavior, validate the injected inbox storage clock before dedup
+  retention decisions or dedup recovery/finalization mutations, remove the
+  unused exported `dedupMessageId()` helper, and place primary declarations
+  first in the inbox, record-storage, and tenant-records files.
+- Red-first focused verification failed for the intended round-40 regression:
+  `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
+  `'rejects invalid storage clocks before live dedup retention decisions'`.
+  The pre-fix path resolved `WRITTEN` for the duplicate message instead of
+  rejecting the invalid storage clock.
+- Focused round-40 verification passed with the same red-first command after
+  production changes.
+- Final round-40 verification passed with
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` (`120` tests),
+  `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
+  `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
+  touched-file line scan. `node scripts/check-api-docs.mjs` still emitted the
+  existing invalid `origin` TypeDoc source-link warning, but exited
+  successfully.
+- Round-40 fixes were committed in the final task commit after verification.

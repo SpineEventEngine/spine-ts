@@ -131,6 +131,7 @@ export class InboxStorage {
     message: InboxMessage,
   ): Promise<WriteStep> {
     const { guard, message: storedMessage } = storedGuard;
+    const now = this.#dedupNow();
     let expected = current;
     if (isPendingDedupRecord(current)) {
       expected = writeDedupRecord(storedMessage);
@@ -140,7 +141,7 @@ export class InboxStorage {
       }
     }
 
-    return this.#messageBlocks(guard, this.#now())
+    return this.#messageBlocks(guard, now)
       ? this.#duplicate(storedMessage)
       : { kind: "CLAIM", expected, message };
   }
@@ -157,6 +158,7 @@ export class InboxStorage {
       return { kind: "RETRY" };
     }
 
+    const now = this.#dedupNow();
     const storedMessage = await this.#ensureInboxRow(
       inboxStorage,
       pendingMessage,
@@ -169,7 +171,7 @@ export class InboxStorage {
       return { kind: "RETRY" };
     }
 
-    return this.#messageBlocks(storedMessage, this.#now())
+    return this.#messageBlocks(storedMessage, now)
       ? this.#written(storedMessage)
       : { kind: "CLAIM", expected: finalRecord, message };
   }
@@ -267,12 +269,26 @@ export class InboxStorage {
     return Object.freeze({ guard: guardState, message });
   }
 
-  #messageBlocks(message: Pick<InboxMessage, "status" | "keepUntil">, now: Date): boolean {
+  #messageBlocks(message: Pick<InboxMessage, "status" | "keepUntil">, now: number): boolean {
     if (message.status !== "DELIVERED") {
       return true;
     }
 
-    return message.keepUntil !== undefined && message.keepUntil.getTime() >= now.getTime();
+    return message.keepUntil !== undefined && message.keepUntil.getTime() >= now;
+  }
+
+  #dedupNow(): number {
+    const now = this.#now();
+    if (!(now instanceof Date)) {
+      throw new Error("Inbox storage clock must return a Date.");
+    }
+
+    const time = now.getTime();
+    if (!Number.isFinite(time)) {
+      throw new Error("Inbox storage clock returned an invalid time.");
+    }
+
+    return time;
   }
 
   #sameRecord(left: Any, right: Any): boolean {

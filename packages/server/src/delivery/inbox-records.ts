@@ -194,10 +194,6 @@ export function readDedupGuard(record: Any, expectedKey?: string): DedupGuardSta
       );
 }
 
-export function dedupMessageId(record: Any, expectedKey?: string): InboxMessageId {
-  return readDedupGuard(record, expectedKey).messageId;
-}
-
 export function readPendingMessage(record: Any): InboxMessage | undefined {
   const dedup = readStoredDedupRecord(record);
   return dedup.state === "PENDING" ? inboxMessageFromStored(dedup.message) : undefined;

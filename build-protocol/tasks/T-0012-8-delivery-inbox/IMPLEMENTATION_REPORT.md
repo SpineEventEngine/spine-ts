@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-39 fix complete
+Status: round-40 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1345,9 +1345,68 @@ Verification for the round-39 fix so far:
     `packages/storage/test/memory/in-memory-record-storage.test.ts`
     `packages/server/test/repository/aggregate-storage.test.ts` passed with
     `119` tests;
-  - `pnpm typecheck`;
-  - `pnpm lint`;
-  - `pnpm format:check`;
-  - `node scripts/check-api-docs.mjs`;
-  - `git diff --check fce80b2..HEAD`; and
-  - touched-file line scan with no lines over 120 columns.
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+Committed as `72df1a4`.
+
+## Round 40 Review
+
+Round 40 found stale durable round-39 state, one unused exported helper, three
+declaration-order nits, and one invalid-clock dedup retention bug. The review
+requested recording commit `72df1a4` and the round-40 fix state across durable
+task/report/review/work logs, removing the unused exported `dedupMessageId()`,
+moving primary declarations before support declarations in inbox/storage files,
+and validating `InboxStorage.now()` before dedup decisions/mutations so invalid
+clocks receive plain public-error treatment and cannot let duplicate live
+delivered messages through.
+
+The TypeScript/API docs and reliability lanes were clean.
+
+## Round 40 Fix
+
+Round-40 fixes stay local to durable logs, inbox storage, inbox record exports,
+declaration ordering, and focused inbox tests:
+
+- added a red-first regression for invalid `InboxStorage.now()` allowing a
+  duplicate write while a delivered dedup guard is still live;
+- validated the injected inbox storage clock before dedup retention decisions
+  and before pending-guard recovery/finalization can mutate dedup state;
+- removed the unused exported `dedupMessageId()` helper; and
+- moved the primary `Inbox`, `RecordStorage`, and `TenantRecords`
+  declarations before their supporting declarations.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
+  `'rejects invalid storage clocks before live dedup retention decisions'`
+  failed before production changes because the second write resolved
+  `WRITTEN` instead of rejecting the invalid storage clock.
+
+Focused verification:
+
+- the same focused red-first command passed after production changes.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `120` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+Committed in the final task commit after verification.

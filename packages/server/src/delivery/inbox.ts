@@ -5,6 +5,34 @@ import type { Any } from "@bufbuild/protobuf/wkt";
 import type { InboxStorage } from "./inbox-storage.js";
 import type { ShardIndex } from "./shard-index.js";
 
+/** Small JVM-style inbox facade over durable storage. */
+export class Inbox {
+  /** Intentional low-level escape hatch for storage-focused tests and integrations. */
+  readonly storage: InboxStorage;
+
+  /** Open an inbox over one durable inbox storage. */
+  constructor(storage: InboxStorage) {
+    this.storage = storage;
+    Object.freeze(this);
+  }
+
+  /** Receive one message into durable inbox storage. */
+  receive(input: InboxMessageInput): Promise<InboxWriteResult> {
+    return this.storage.write({
+      ...input,
+      id: {
+        value: randomUUID(),
+        shard: input.shard,
+      },
+    });
+  }
+
+  /** Read ordered messages for one shard. */
+  read(shard: ShardIndex, options: InboxReadOptions = {}): Promise<readonly InboxMessage[]> {
+    return this.storage.read(shard, options);
+  }
+}
+
 /** Durable target inbox identity. */
 export interface InboxId {
   /** Target entity ID routed to one inbox. */
@@ -100,32 +128,4 @@ export interface InboxWriteResult {
   readonly outcome: "WRITTEN" | "DUPLICATE";
   /** Stored message selected for the outcome. */
   readonly message: InboxMessage;
-}
-
-/** Small JVM-style inbox facade over durable storage. */
-export class Inbox {
-  /** Intentional low-level escape hatch for storage-focused tests and integrations. */
-  readonly storage: InboxStorage;
-
-  /** Open an inbox over one durable inbox storage. */
-  constructor(storage: InboxStorage) {
-    this.storage = storage;
-    Object.freeze(this);
-  }
-
-  /** Receive one message into durable inbox storage. */
-  receive(input: InboxMessageInput): Promise<InboxWriteResult> {
-    return this.storage.write({
-      ...input,
-      id: {
-        value: randomUUID(),
-        shard: input.shard,
-      },
-    });
-  }
-
-  /** Read ordered messages for one shard. */
-  read(shard: ShardIndex, options: InboxReadOptions = {}): Promise<readonly InboxMessage[]> {
-    return this.storage.read(shard, options);
-  }
 }

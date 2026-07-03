@@ -4,12 +4,6 @@ import type { RecordFilter, RecordOrder, RecordQuery } from "../record/record-qu
 import type { RecordSpec } from "../record/record-spec.js";
 import type { RecordEntry } from "../record/record-storage.js";
 
-type StoredRecord<I, R extends Message> = ReturnType<RecordSpec<I, R>["materialize"]>;
-interface StoredEntry<I, R extends Message> {
-  readonly slotId: I;
-  readonly stored: StoredRecord<I, R>;
-}
-
 /** Record slice owned by one tenant of an in-memory record storage. */
 export class TenantRecords<I, R extends Message> {
   readonly #records = new Map<string, StoredEntry<I, R>>();
@@ -72,6 +66,13 @@ export class TenantRecords<I, R extends Message> {
       this.write(record);
     }
   }
+}
+
+type StoredRecord<I, R extends Message> = ReturnType<RecordSpec<I, R>["materialize"]>;
+
+interface StoredEntry<I, R extends Message> {
+  readonly slotId: I;
+  readonly stored: StoredRecord<I, R>;
 }
 
 function recordsEqual<I, R extends Message>(

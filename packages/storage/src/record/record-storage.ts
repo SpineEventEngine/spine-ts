@@ -6,12 +6,6 @@ import type { RecordReadOptions } from "./record-query.js";
 import type { RecordSpec } from "./record-spec.js";
 import type { Storage, StorageContext } from "../storage/storage.js";
 
-/** One queried record together with the storage slot ID it came from. */
-export interface RecordEntry<I, R extends Message> {
-  readonly id: I;
-  readonly record: R;
-}
-
 /** Common record-oriented storage contract for identified Protobuf messages. */
 export abstract class RecordStorage<I, R extends Message> implements Storage {
   readonly #context: StorageContext;
@@ -140,4 +134,10 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
       throw new Error("RecordStorage is closed.");
     }
   }
+}
+
+/** One queried record together with the storage slot ID it came from. */
+export interface RecordEntry<I, R extends Message> {
+  readonly id: I;
+  readonly record: R;
 }
