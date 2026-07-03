@@ -260,6 +260,24 @@ describe("ShardedWorkRegistry", () => {
     );
   });
 
+  it("rejects oversized stored shard sessions before parsing JSON", async () => {
+    const storageFactory = new CorruptibleStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:35:00.000Z"),
+    });
+    const shard = new ShardIndex(0, 1);
+
+    await delivery.shards.pickUp(shard, "seed-node");
+    storageFactory.writeStoredSession({
+      typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
+      value: Buffer.concat([Buffer.from("{", "utf8"), Buffer.alloc(512 * 1024)]),
+    });
+
+    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/record exceeds/i);
+  });
+
   it("keeps multitenant shard sessions isolated by tenant", async () => {
     const storageFactory = new InMemoryStorageFactory();
     let tenantId = "tenant-a";

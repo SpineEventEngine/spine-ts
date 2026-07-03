@@ -284,6 +284,52 @@ describe("Inbox", () => {
     );
   });
 
+  it("rejects malformed signal base64 in stored inbox rows", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedInboxRecord({
+          signalId: "signal-malformed",
+          valueBase64: "not base64!",
+        }),
+      ]),
+    });
+
+    await expect(storage.read(ShardIndex.single())).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("rejects non-canonical signal base64 in stored inbox rows", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedInboxRecord({
+          signalId: "signal-non-canonical",
+          valueBase64: "Zg==\n",
+        }),
+      ]),
+    });
+
+    await expect(storage.read(ShardIndex.single())).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("rejects oversized stored inbox records before parsing JSON", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/internal/InboxMessageRecord",
+          value: oversizedStoredRecord(),
+        }),
+      ]),
+    });
+
+    await expect(storage.read(ShardIndex.single())).rejects.toThrow(/record exceeds/i);
+  });
+
   it("rejects oversized signal payloads in pending dedup guards", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -297,6 +343,54 @@ describe("Inbox", () => {
 
     await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("rejects malformed signal base64 in pending dedup guards", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new CorruptGuardFactory({
+        guard: pendingDedupRecord({
+          signalId: "signal-1",
+          valueBase64: "not base64!",
+        }),
+      }),
+    });
+
+    await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("rejects non-canonical signal base64 in pending dedup guards", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new CorruptGuardFactory({
+        guard: pendingDedupRecord({
+          signalId: "signal-1",
+          valueBase64: "Zg==\n",
+        }),
+      }),
+    });
+
+    await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("rejects oversized pending dedup records before parsing JSON", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new CorruptGuardFactory({
+        guard: create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/internal/InboxDedupRecord",
+          value: oversizedStoredRecord(),
+        }),
+      }),
+    });
+
+    await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toThrow(
+      /record exceeds/i,
     );
   });
 
@@ -315,6 +409,27 @@ describe("Inbox", () => {
 
     await expect(storage.write(createMessage("message-2", "signal-1", 2n))).resolves.toMatchObject({
       outcome: "WRITTEN",
+      message: { id: { value: "message-1" }, signalId: "signal-1" },
+    });
+    await expect(storage.read(ShardIndex.single(), { limit: 10 })).resolves.toMatchObject([
+      { id: { value: "message-1" }, signalId: "signal-1" },
+    ]);
+  });
+
+  it("recovers a pending dedup claim after finalization fails with a durable inbox row", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FaultyStorageFactory({
+        throwDedupFinalizeOnce: true,
+      }),
+    });
+
+    await expect(storage.write(createMessage("message-1", "signal-1", 1n))).rejects.toThrow(
+      /dedup finalize failed/i,
+    );
+
+    await expect(storage.write(createMessage("message-2", "signal-1", 2n))).resolves.toMatchObject({
+      outcome: "DUPLICATE",
       message: { id: { value: "message-1" }, signalId: "signal-1" },
     });
     await expect(storage.read(ShardIndex.single(), { limit: 10 })).resolves.toMatchObject([
@@ -625,6 +740,7 @@ interface FaultPlan {
   failInboxWriteOnce?: boolean;
   skipDedupDeleteOnce?: boolean;
   skipDedupFinalizeOnce?: boolean;
+  throwDedupFinalizeOnce?: boolean;
 }
 
 class SlowInboxCreateFactory extends StorageFactory {
@@ -810,6 +926,15 @@ class FaultyRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
       ) {
         this.#plan.skipDedupFinalizeOnce = false;
         return Promise.resolve(false);
+      }
+
+      if (
+        expected !== undefined &&
+        next !== undefined &&
+        this.#plan.throwDedupFinalizeOnce === true
+      ) {
+        this.#plan.throwDedupFinalizeOnce = false;
+        return Promise.reject(new Error("Dedup finalize failed."));
       }
     }
 
@@ -1058,6 +1183,10 @@ function storedInboxJson(fields: PendingGuardFields): Record<string, unknown> {
 
 function oversizedPayload(): string {
   return Buffer.alloc(256 * 1024 + 1).toString("base64");
+}
+
+function oversizedStoredRecord(): Buffer {
+  return Buffer.concat([Buffer.from("{", "utf8"), Buffer.alloc(512 * 1024)]);
 }
 
 function testDedupKey(signalId: string): string {

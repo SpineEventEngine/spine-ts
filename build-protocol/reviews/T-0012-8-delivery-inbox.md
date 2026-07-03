@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 24 review prep
+Status: round 25 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -961,4 +961,44 @@ Diff package:
 
 Reviewer sub-agents: pending.
 
-Result: pending.
+Result: changes requested.
+
+Findings to address:
+
+- stored signal `valueBase64` values must reject malformed and non-canonical
+  base64 before accepting decoded payloads;
+- pending dedup guards must receive the same malformed/non-canonical
+  `valueBase64` coverage;
+- `InboxStorage.#claimAndWrite()` must not roll back a pending dedup guard
+  after the inbox row is durable;
+- inbox and dedup `Any.value` records must reject oversized serialized records
+  before UTF-8 conversion and JSON parsing; and
+- shard-session `Any.value` records must reject oversized serialized records
+  before parsing.
+
+The consolidated round-24 implementer received these reviewer results from
+the task handoff. No reviewer sub-agent IDs were provided in that handoff.
+
+### Round 24 Fix
+
+Result: implemented in this worktree and ready for round-25 review.
+
+Fix summary:
+
+- stored inbox and pending dedup signal payloads now reject malformed and
+  non-canonical base64;
+- inbox, dedup, and shard-session records now check serialized `Any.value`
+  size before UTF-8 conversion and JSON parsing;
+- `InboxStorage.#claimAndWrite()` now rolls back pending dedup guards only
+  when `#ensureInboxRow()` fails before a row is known to be durable; and
+- regressions cover malformed base64, oversized serialized records, and
+  recovery after dedup finalization throws with a durable inbox row.
+
+Verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts
+packages/server/test/delivery/sharded-work-registry.test.ts` passed with
+  38 tests.
+
+Round-25 review package:
+`.superpowers/sdd/review-round-25-fce80b2-current.diff`.

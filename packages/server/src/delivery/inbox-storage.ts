@@ -184,18 +184,20 @@ export class InboxStorage {
       return undefined;
     }
 
+    let storedMessage: InboxMessage;
     try {
-      const storedMessage = await this.#ensureInboxRow(inboxStorage, step.message);
-      const finalized = await dedupStorage.compareAndSet(
-        dedupKey,
-        pending,
-        writeDedupRecord(storedMessage),
-      );
-      return finalized ? this.#written(storedMessage).result : undefined;
+      storedMessage = await this.#ensureInboxRow(inboxStorage, step.message);
     } catch (error) {
       await dedupStorage.compareAndSet(dedupKey, pending, step.expected);
       throw error;
     }
+
+    const finalized = await dedupStorage.compareAndSet(
+      dedupKey,
+      pending,
+      writeDedupRecord(storedMessage),
+    );
+    return finalized ? this.#written(storedMessage).result : undefined;
   }
 
   async #ensureInboxRow(

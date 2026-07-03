@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-24 review prep
+Status: round-25 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -344,6 +344,27 @@ verification passed with 20 tests:
 
 Round-24 review package
 `.superpowers/sdd/review-round-24-fce80b2-current.diff` was prepared after the
+fixes.
+
+## Round 24 Review
+
+Round 24 found no code style/maintainability, documentation, or TypeScript/API
+docs issue. Security requested rejecting malformed and non-canonical stored
+signal `valueBase64` values before accepting decoded payloads. Performance and
+reliability requested keeping pending dedup guards after a durable inbox row
+when finalization fails, rejecting oversized inbox/dedup `Any.value` records
+before UTF-8 conversion and JSON parsing, and applying the same pre-parse size
+guard to shard-session records.
+
+Round-24 fixes added canonical base64 validation for stored inbox and pending
+dedup signals, bounded serialized inbox/dedup/shard records before decoding,
+and narrowed `InboxStorage` rollback to failures before the inbox row is known
+durable. Focused delivery verification passed with 38 tests:
+
+`pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`.
+
+Round-25 review package
+`.superpowers/sdd/review-round-25-fce80b2-current.diff` was prepared after the
 fixes.
 
 ## Round 2 Review

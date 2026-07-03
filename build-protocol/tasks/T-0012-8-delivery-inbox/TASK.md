@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-24 review prep
+Status: round-25 review prep
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -281,4 +281,15 @@ entityStateType)` returns a zero-based shard index and that all messages for
   `pnpm test packages/server/test/delivery/inbox.test.ts`.
 - Round-24 review package is prepared at
   `.superpowers/sdd/review-round-24-fce80b2-current.diff`.
+- Round-24 review completed with security and performance/reliability
+  findings. Code style/maintainability, documentation, and TypeScript/API docs
+  lanes had no new required code/API/doc changes.
+- Round-24 fixes reject malformed and non-canonical stored signal base64,
+  reject oversized inbox/dedup/shard serialized records before UTF-8 decoding
+  and JSON parsing, and keep a pending dedup guard when finalization fails
+  after the inbox row is durable.
+- Focused delivery verification passed with 38 tests after the round-24 fix:
+  `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`.
+- Round-25 review package is prepared at
+  `.superpowers/sdd/review-round-25-fce80b2-current.diff`.
 - No blocking human question is known.

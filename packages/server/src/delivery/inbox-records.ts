@@ -392,6 +392,12 @@ function readStoredRecord(
     throw new DeliveryStorageCorruptionError(`${label} type URL "${record.typeUrl}" is invalid.`);
   }
 
+  if (record.value.byteLength > maxStoredRecordBytes) {
+    throw new DeliveryStorageCorruptionError(
+      `${label} exceeds ${String(maxStoredRecordBytes)} bytes and cannot be read.`,
+    );
+  }
+
   try {
     const decoded = JSON.parse(Buffer.from(record.value).toString("utf8")) as unknown;
 
@@ -497,7 +503,15 @@ function decodeSignalPayload(valueBase64: string): Buffer {
     );
   }
 
+  if (!canonicalBase64Pattern.test(valueBase64)) {
+    throw new DeliveryStorageCorruptionError("Inbox signal payload base64 is invalid.");
+  }
+
   const value = Buffer.from(valueBase64, "base64");
+  if (value.toString("base64") !== valueBase64) {
+    throw new DeliveryStorageCorruptionError("Inbox signal payload base64 is not canonical.");
+  }
+
   if (value.byteLength > maxSignalPayloadBytes) {
     throw new DeliveryStorageCorruptionError(
       `Inbox signal payload exceeds ${String(maxSignalPayloadBytes)} bytes and cannot be stored.`,
@@ -510,3 +524,5 @@ function decodeSignalPayload(valueBase64: string): Buffer {
 const inboxRecordTypeUrl = "type.spine-ts.dev/internal/InboxMessageRecord";
 const dedupRecordTypeUrl = "type.spine-ts.dev/internal/InboxDedupRecord";
 const maxSignalPayloadChars = Math.ceil(maxSignalPayloadBytes / 3) * 4;
+const maxStoredRecordBytes = 512 * 1024;
+const canonicalBase64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u;

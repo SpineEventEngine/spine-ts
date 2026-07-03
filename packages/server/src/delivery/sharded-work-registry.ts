@@ -156,6 +156,12 @@ function readStoredSession(record: Any): StoredShardSession {
     );
   }
 
+  if (record.value.byteLength > maxSessionRecordBytes) {
+    throw new DeliveryStorageCorruptionError(
+      `Shard session record exceeds ${String(maxSessionRecordBytes)} bytes and cannot be read.`,
+    );
+  }
+
   try {
     const decoded = JSON.parse(Buffer.from(record.value).toString("utf8")) as unknown;
     if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
@@ -247,3 +253,4 @@ function requireTime(value: Date, label: string): number {
 }
 
 const shardSessionTypeUrl = "type.spine-ts.dev/internal/ShardSessionRecord";
+const maxSessionRecordBytes = 512 * 1024;
