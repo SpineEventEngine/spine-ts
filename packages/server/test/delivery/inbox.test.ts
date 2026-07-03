@@ -1,10 +1,18 @@
-import { create } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
-import { InMemoryStorageFactory } from "@spine-ts/storage";
+import { create, type Message } from "@bufbuild/protobuf";
+import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
+import {
+  InMemoryStorageFactory,
+  type RecordQuery,
+  type RecordSpec,
+  RecordStorage,
+  StorageFactory,
+  type StorageContext,
+} from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
 import {
+  inboxRecordSpec,
   writeDedupClaim,
   writeDedupRecord,
   writeInboxMessage,
@@ -18,26 +26,18 @@ import {
   type DeliveryStatus,
   type InboxId,
 } from "../../src/index.js";
+import { createMessage, oversizedText, oversizedVersion } from "./inbox-message-fixture.js";
 import {
-  CorruptGuardFactory,
-  ExistingInboxRowFactory,
-  FakeStorageFactory,
-  FaultyStorageFactory,
-  RecoverPendingConflictFactory,
-  SlowInboxCreateFactory,
-  createMessage,
   finalDedupRecord,
   invalidUtf8JsonBytes,
   oversizedPayload,
   oversizedStoredRecord,
-  oversizedText,
-  oversizedVersion,
   pendingDedupRecord,
   storedInboxJson,
   storedInboxRecord,
   testDedupKey,
   testInboxKey,
-} from "./inbox-test-support.js";
+} from "./inbox-record-fixture.js";
 
 describe("Inbox", () => {
   it("writes durable inbox messages in received/version order and deduplicates live writes", async () => {
@@ -395,6 +395,29 @@ describe("Inbox", () => {
     await expect(storage.read(ShardIndex.single())).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
+  });
+
+  it("rejects a queried inbox row copied under another backend key", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const copied = createMessage("message-1", "signal-1", 1n);
+    const records = storageFactory.createRecordStorage(
+      { name: "Tasks.delivery.inbox", multitenant: false },
+      inboxRecordSpec,
+    );
+
+    await storage.write(copied);
+    await records.compareAndSet("0/1:copied-row", undefined, writeInboxMessage(copied));
+
+    await expect(storage.read(ShardIndex.single(), { limit: 10 })).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+    await expect(storage.read(ShardIndex.single(), { limit: 10 })).rejects.toThrow(/storage key/i);
+
+    records.close();
   });
 
   it("rejects oversized signal payloads in stored inbox rows", async () => {
@@ -901,3 +924,603 @@ const liveStatuses: readonly DeliveryStatus[] = Object.freeze([
   "SCHEDULED",
   "TO_CATCH_UP",
 ]);
+
+class FakeStorageFactory extends StorageFactory {
+  readonly #records: readonly Any[];
+
+  constructor(records: readonly Any[]) {
+    super();
+    this.#records = records;
+  }
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new FakeRecordStorage(
+      context,
+      recordSpec as unknown as RecordSpec<string, Any>,
+      this.#records,
+    ) as unknown as RecordStorage<I, R>;
+  }
+}
+
+class FakeRecordStorage extends RecordStorage<string, Any> {
+  readonly #records: readonly Any[];
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<string, Any>,
+    records: readonly Any[],
+  ) {
+    super(context, recordSpec);
+    this.#records = records;
+  }
+
+  protected compareAndSetRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected deleteRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected queryRecords(): Promise<readonly Any[]> {
+    return Promise.resolve(this.#records);
+  }
+
+  protected readRecord(): Promise<Any | undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  protected writeAllRecords(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  protected writeRecord(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+interface FaultPlan {
+  failInboxWriteOnce?: boolean;
+  skipDedupDeleteOnce?: boolean;
+  skipDedupFinalizeOnce?: boolean;
+  throwDedupFinalizeOnce?: boolean;
+}
+
+class FaultyStorageFactory extends StorageFactory {
+  readonly #delegate = new InMemoryStorageFactory();
+  readonly #plan: FaultPlan;
+
+  constructor(plan: FaultPlan) {
+    super();
+    this.#plan = plan;
+  }
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    const storage = this.#delegate.createRecordStorage(context, recordSpec);
+
+    return new FaultyRecordStorage(context, recordSpec, storage, this.#plan);
+  }
+}
+
+class FaultyRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+  readonly #delegate: RecordStorage<I, R>;
+  readonly #plan: FaultPlan;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    delegate: RecordStorage<I, R>,
+    plan: FaultPlan,
+  ) {
+    super(context, recordSpec);
+    this.#delegate = delegate;
+    this.#plan = plan;
+  }
+
+  override close(): void {
+    this.#delegate.close();
+    super.close();
+  }
+
+  protected compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    if (
+      this.#isInboxStorage() &&
+      expected === undefined &&
+      next !== undefined &&
+      this.#plan.failInboxWriteOnce === true
+    ) {
+      this.#plan.failInboxWriteOnce = false;
+      return Promise.reject(new Error("Inbox write failed."));
+    }
+
+    if (this.#isDedupStorage()) {
+      if (next === undefined && this.#plan.skipDedupDeleteOnce === true) {
+        this.#plan.skipDedupDeleteOnce = false;
+        return Promise.resolve(false);
+      }
+
+      if (
+        expected !== undefined &&
+        next !== undefined &&
+        this.#plan.skipDedupFinalizeOnce === true
+      ) {
+        this.#plan.skipDedupFinalizeOnce = false;
+        return Promise.resolve(false);
+      }
+
+      if (
+        expected !== undefined &&
+        next !== undefined &&
+        this.#plan.throwDedupFinalizeOnce === true
+      ) {
+        this.#plan.throwDedupFinalizeOnce = false;
+        return Promise.reject(new Error("Dedup finalize failed."));
+      }
+    }
+
+    return this.#delegate.compareAndSet(id, expected?.record, next?.record);
+  }
+
+  protected deleteRecord(id: I): Promise<boolean> {
+    return this.#delegate.delete(id);
+  }
+
+  protected queryRecords(query: RecordQuery<I>): Promise<readonly R[]> {
+    return this.#delegate.query(query);
+  }
+
+  protected readRecord(id: I): Promise<R | undefined> {
+    return this.#delegate.read(id);
+  }
+
+  protected writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    return this.#delegate.writeAll(records.map((record) => record.record));
+  }
+
+  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    return this.#delegate.write(record.record);
+  }
+
+  #isDedupStorage(): boolean {
+    return this.context.name.endsWith(".delivery.inbox-dedup");
+  }
+
+  #isInboxStorage(): boolean {
+    return this.context.name.endsWith(".delivery.inbox");
+  }
+}
+
+class SlowInboxCreateFactory extends StorageFactory {
+  readonly #delegate = new InMemoryStorageFactory();
+  readonly #firstCreate = new Deferred<void>();
+  readonly #contender = new Deferred<void>();
+  readonly #release = new Deferred<void>();
+  #phase: "READY" | "BLOCKED" | "RELEASED" = "READY";
+
+  waitForBlockedCreate(): Promise<void> {
+    return this.#firstCreate.promise;
+  }
+
+  waitForContender(): Promise<void> {
+    return this.#contender.promise;
+  }
+
+  releaseFirstCreate(): void {
+    this.#release.resolve(undefined);
+  }
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    const storage = this.#delegate.createRecordStorage(context, recordSpec);
+
+    return new SlowInboxCreateStorage(context, recordSpec, storage, this);
+  }
+
+  notifyBlockedCreate(): void {
+    this.#phase = "BLOCKED";
+    this.#firstCreate.resolve(undefined);
+  }
+
+  notifyContender(): void {
+    if (this.#phase === "BLOCKED") {
+      this.#contender.resolve(undefined);
+    }
+  }
+
+  async waitForRelease(): Promise<void> {
+    await this.#release.promise;
+    this.#phase = "RELEASED";
+  }
+
+  nextInboxCreateAction(): "BLOCK" | "CONTENDER" | "PASS" {
+    if (this.#phase === "READY") {
+      return "BLOCK";
+    }
+    if (this.#phase === "BLOCKED") {
+      return "CONTENDER";
+    }
+    return "PASS";
+  }
+}
+
+class SlowInboxCreateStorage<I, R extends Message> extends RecordStorage<I, R> {
+  readonly #delegate: RecordStorage<I, R>;
+  readonly #factory: SlowInboxCreateFactory;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    delegate: RecordStorage<I, R>,
+    factory: SlowInboxCreateFactory,
+  ) {
+    super(context, recordSpec);
+    this.#delegate = delegate;
+    this.#factory = factory;
+  }
+
+  override close(): void {
+    this.#delegate.close();
+    super.close();
+  }
+
+  protected async compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    if (this.#isInboxStorage() && expected === undefined && next !== undefined) {
+      const action = this.#factory.nextInboxCreateAction();
+      if (action === "BLOCK") {
+        this.#factory.notifyBlockedCreate();
+        await this.#factory.waitForRelease();
+      } else if (action === "CONTENDER") {
+        this.#factory.notifyContender();
+      }
+    }
+
+    return this.#delegate.compareAndSet(id, expected?.record, next?.record);
+  }
+
+  protected deleteRecord(id: I): Promise<boolean> {
+    return this.#delegate.delete(id);
+  }
+
+  protected queryRecords(query: RecordQuery<I>): Promise<readonly R[]> {
+    return this.#delegate.query(query);
+  }
+
+  protected readRecord(id: I): Promise<R | undefined> {
+    return this.#delegate.read(id);
+  }
+
+  protected writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    return this.#delegate.writeAll(records.map((record) => record.record));
+  }
+
+  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    return this.#delegate.write(record.record);
+  }
+
+  #isInboxStorage(): boolean {
+    return this.context.name.endsWith(".delivery.inbox");
+  }
+}
+
+class Deferred<T> {
+  readonly promise: Promise<T>;
+  #resolve!: (value: T) => void;
+
+  constructor() {
+    this.promise = new Promise<T>((resolve) => {
+      this.#resolve = resolve;
+    });
+  }
+
+  resolve(value: T): void {
+    this.#resolve(value);
+  }
+}
+
+class CorruptGuardFactory extends StorageFactory {
+  readonly #records: CorruptGuardRecords;
+
+  constructor(records: CorruptGuardRecords) {
+    super();
+    this.#records = records;
+  }
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new CorruptGuardStorage(
+      context,
+      recordSpec as unknown as RecordSpec<string, Any>,
+      this.#records,
+    ) as unknown as RecordStorage<I, R>;
+  }
+}
+
+interface CorruptGuardRecords {
+  readonly guard: Any;
+  readonly inbox?: Any;
+}
+
+class CorruptGuardStorage extends RecordStorage<string, Any> {
+  readonly #records: CorruptGuardRecords;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<string, Any>,
+    records: CorruptGuardRecords,
+  ) {
+    super(context, recordSpec);
+    this.#records = records;
+  }
+
+  protected compareAndSetRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected deleteRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected queryRecords(): Promise<readonly Any[]> {
+    return Promise.resolve([]);
+  }
+
+  protected readRecord(): Promise<Any | undefined> {
+    if (this.context.name.endsWith(".delivery.inbox-dedup")) {
+      return Promise.resolve(this.#records.guard);
+    }
+
+    if (this.context.name.endsWith(".delivery.inbox")) {
+      return Promise.resolve(this.#records.inbox);
+    }
+
+    return Promise.resolve(undefined);
+  }
+
+  protected writeAllRecords(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  protected writeRecord(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+class ExistingInboxRowFactory extends StorageFactory {
+  readonly #inbox: Any;
+
+  constructor(records: { inbox: Any }) {
+    super();
+    this.#inbox = records.inbox;
+  }
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new ExistingInboxRowStorage(
+      context,
+      recordSpec as unknown as RecordSpec<string, Any>,
+      this.#inbox,
+    ) as unknown as RecordStorage<I, R>;
+  }
+}
+
+class ExistingInboxRowStorage extends RecordStorage<string, Any> {
+  readonly #inbox: Any;
+  readonly #dedup = new Map<string, Any>();
+
+  constructor(context: StorageContext, recordSpec: RecordSpec<string, Any>, inbox: Any) {
+    super(context, recordSpec);
+    this.#inbox = inbox;
+  }
+
+  protected compareAndSetRecord(
+    id: string,
+    expected: ReturnType<RecordSpec<string, Any>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<string, Any>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    if (this.context.name.endsWith(".delivery.inbox")) {
+      return Promise.resolve(false);
+    }
+
+    const current = this.#dedup.get(id);
+    if (current !== expected?.record && !(current === undefined && expected === undefined)) {
+      return Promise.resolve(false);
+    }
+
+    if (next === undefined) {
+      this.#dedup.delete(id);
+      return Promise.resolve(true);
+    }
+
+    this.#dedup.set(id, next.record);
+    return Promise.resolve(true);
+  }
+
+  protected deleteRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected queryRecords(): Promise<readonly Any[]> {
+    return Promise.resolve([]);
+  }
+
+  protected readRecord(id: string): Promise<Any | undefined> {
+    return this.context.name.endsWith(".delivery.inbox")
+      ? Promise.resolve(this.#inbox)
+      : Promise.resolve(this.#dedup.get(id));
+  }
+
+  protected writeAllRecords(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  protected writeRecord(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+class RecoverPendingConflictFactory extends StorageFactory {
+  readonly #dedup = new Map<string, Any>();
+  readonly #inbox = new Map<string, Any>();
+  readonly #conflictingInbox: Any;
+  #hasHiddenConflictingInbox = false;
+
+  constructor(records: { pendingGuard: Any; conflictingInbox: Any }) {
+    super();
+    this.#conflictingInbox = records.conflictingInbox;
+    this.#dedup.set(testDedupKey("signal-1"), records.pendingGuard);
+  }
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new RecoverPendingConflictStorage(
+      context,
+      recordSpec as unknown as RecordSpec<string, Any>,
+      this,
+    ) as unknown as RecordStorage<I, R>;
+  }
+
+  readDedup(id: string): Any | undefined {
+    return this.#dedup.get(id);
+  }
+
+  compareAndSetDedup(id: string, expected: Any | undefined, next: Any | undefined): boolean {
+    const current = this.#dedup.get(id);
+    if (!sameStoredRecord(current, expected)) {
+      return false;
+    }
+
+    if (next === undefined) {
+      this.#dedup.delete(id);
+      return true;
+    }
+
+    this.#dedup.set(id, next);
+    return true;
+  }
+
+  readInbox(id: string): Any | undefined {
+    if (id === "0/1:message-1" && !this.#hasHiddenConflictingInbox) {
+      this.#hasHiddenConflictingInbox = true;
+      return undefined;
+    }
+
+    return this.#inbox.get(id);
+  }
+
+  compareAndSetInbox(id: string, expected: Any | undefined, next: Any | undefined): boolean {
+    const current = this.#inbox.get(id);
+    if (!sameStoredRecord(current, expected)) {
+      return false;
+    }
+
+    if (id === "0/1:message-1" && expected === undefined && next !== undefined) {
+      this.#inbox.set(id, this.#conflictingInbox);
+      return false;
+    }
+
+    if (next === undefined) {
+      this.#inbox.delete(id);
+      return true;
+    }
+
+    this.#inbox.set(id, next);
+    return true;
+  }
+
+  queryInbox(): readonly Any[] {
+    return [...this.#inbox.values()];
+  }
+}
+
+class RecoverPendingConflictStorage extends RecordStorage<string, Any> {
+  readonly #factory: RecoverPendingConflictFactory;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<string, Any>,
+    factory: RecoverPendingConflictFactory,
+  ) {
+    super(context, recordSpec);
+    this.#factory = factory;
+  }
+
+  protected compareAndSetRecord(
+    id: string,
+    expected: ReturnType<RecordSpec<string, Any>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<string, Any>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    if (this.context.name.endsWith(".delivery.inbox-dedup")) {
+      return Promise.resolve(this.#factory.compareAndSetDedup(id, expected?.record, next?.record));
+    }
+
+    if (this.context.name.endsWith(".delivery.inbox")) {
+      return Promise.resolve(this.#factory.compareAndSetInbox(id, expected?.record, next?.record));
+    }
+
+    return Promise.resolve(false);
+  }
+
+  protected deleteRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected queryRecords(): Promise<readonly Any[]> {
+    return Promise.resolve(
+      this.context.name.endsWith(".delivery.inbox") ? this.#factory.queryInbox() : [],
+    );
+  }
+
+  protected readRecord(id: string): Promise<Any | undefined> {
+    if (this.context.name.endsWith(".delivery.inbox-dedup")) {
+      return Promise.resolve(this.#factory.readDedup(id));
+    }
+
+    if (this.context.name.endsWith(".delivery.inbox")) {
+      return Promise.resolve(this.#factory.readInbox(id));
+    }
+
+    return Promise.resolve(undefined);
+  }
+
+  protected writeAllRecords(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  protected writeRecord(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+function sameStoredRecord(left: Any | undefined, right: Any | undefined): boolean {
+  if (left === undefined || right === undefined) {
+    return left === right;
+  }
+
+  return left.typeUrl === right.typeUrl && Buffer.from(left.value).equals(Buffer.from(right.value));
+}

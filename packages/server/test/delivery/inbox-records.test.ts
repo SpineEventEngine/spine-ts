@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { writeDedupClaim, writeInboxMessage } from "../../src/delivery/inbox-records.js";
 import { InboxMessageError } from "../../src/index.js";
-import { createMessage, oversizedText } from "./inbox-test-support.js";
+import { createMessage, oversizedText } from "./inbox-message-fixture.js";
 
 describe("Inbox record limits", () => {
   it("rejects composed inbox keys that overflow the durable read cap after escaping", () => {

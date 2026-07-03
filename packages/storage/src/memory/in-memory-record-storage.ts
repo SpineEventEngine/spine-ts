@@ -1,5 +1,6 @@
 import type { Message } from "@bufbuild/protobuf";
 
+import type { RecordEntry } from "../record/record-storage.js";
 import type { RecordQuery } from "../record/record-query.js";
 import type { RecordSpec } from "../record/record-spec.js";
 import { RecordStorage } from "../record/record-storage.js";
@@ -33,6 +34,12 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
 
   protected queryRecords(query: RecordQuery<I>): Promise<readonly R[]> {
     return Promise.resolve(this.records().query(this.recordSpec, query));
+  }
+
+  protected override queryRecordEntries(
+    query: RecordQuery<I>,
+  ): Promise<readonly RecordEntry<I, R>[]> {
+    return Promise.resolve(this.records().queryEntries(this.recordSpec, query));
   }
 
   protected readRecord(id: I): Promise<R | undefined> {

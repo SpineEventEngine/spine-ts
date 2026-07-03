@@ -6,6 +6,12 @@ import type { RecordReadOptions } from "./record-query.js";
 import type { RecordSpec } from "./record-spec.js";
 import type { Storage, StorageContext } from "../storage/storage.js";
 
+/** One queried record together with the storage slot ID it came from. */
+export interface RecordEntry<I, R extends Message> {
+  readonly id: I;
+  readonly record: R;
+}
+
 /** Common record-oriented storage contract for identified Protobuf messages. */
 export abstract class RecordStorage<I, R extends Message> implements Storage {
   readonly #context: StorageContext;
@@ -55,18 +61,27 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
 
   /** Read matching record identifiers in deterministic query order. */
   async index(query: RecordQuery<I> = {}): Promise<readonly I[]> {
-    const records = await this.query(query);
-    return records.map((record) => this.#recordSpec.cloneId(this.#recordSpec.idValueIn(record)));
+    const entries = await this.queryEntries(query);
+    return entries.map((entry) => entry.id);
   }
 
   /** Query records by IDs, columns, sorting, limits, and optional masks. */
   async query(query: RecordQuery<I> = {}): Promise<readonly R[]> {
+    const entries = await this.queryEntries(query);
+    return entries.map((entry) => entry.record);
+  }
+
+  /** Query records together with the storage slot IDs they currently occupy. */
+  async queryEntries(query: RecordQuery<I> = {}): Promise<readonly RecordEntry<I, R>[]> {
     this.requireOpen();
     RecordQuery.validate(query);
-    const records = await this.queryRecords(query);
+    const entries = await this.queryRecordEntries(query);
 
-    return records.map((record) =>
-      RecordMask.apply(this.#recordSpec.cloneRecord(record), query.mask),
+    return entries.map((entry) =>
+      Object.freeze({
+        id: this.#recordSpec.cloneId(entry.id),
+        record: RecordMask.apply(this.#recordSpec.cloneRecord(entry.record), query.mask),
+      }),
     );
   }
 
@@ -104,6 +119,14 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   }
 
   protected abstract deleteRecord(id: I): Promise<boolean>;
+  protected async queryRecordEntries(query: RecordQuery<I>): Promise<readonly RecordEntry<I, R>[]> {
+    const records = await this.queryRecords(query);
+
+    return records.map((record) => ({
+      id: this.#recordSpec.cloneId(this.#recordSpec.idValueIn(record)),
+      record,
+    }));
+  }
   protected abstract queryRecords(query: RecordQuery<I>): Promise<readonly R[]>;
   protected abstract readRecord(id: I): Promise<R | undefined>;
   protected abstract compareAndSetRecord(

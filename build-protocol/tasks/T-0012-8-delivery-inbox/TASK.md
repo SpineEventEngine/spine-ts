@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-30 fix complete
+Status: round-31 fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -404,5 +404,32 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   `packages/server/test/delivery/inbox-records.test.ts`
   `packages/server/test/delivery/sharded-work-registry.test.ts`.
 - Final round-30 verification also passed with `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `git diff --check`, and a full touched-file line scan.
+- Round-31 review package is prepared at
+  `.superpowers/sdd/review-round-31-fce80b2-current.diff`.
+- Round-31 review completed from reviewer results supplied to this fix worker.
+  TypeScript/API docs and performance/reliability were clean. Code
+  style/maintainability, documentation, and security requested changes. All
+  five round-31 reviewer sub-agents are closed.
+- Round-31 fixes localize the inbox-only storage doubles back into
+  `packages/server/test/delivery/inbox.test.ts`, replace the catch-all
+  `inbox-test-support.ts` with the narrower
+  `inbox-message-fixture.ts` / `inbox-record-fixture.ts` helpers, centralize
+  inbox message-ID text validation through `InboxMessageIdText`, and extend
+  record-storage query results to expose actual storage slot IDs so
+  `InboxStorage.read()` rejects copied inbox rows stored under a second backend
+  key.
+- Red-first focused regressions captured the expected pre-fix failure:
+  `pnpm test packages/server/test/delivery/inbox.test.ts` failed because
+  `rejects a queried inbox row copied under another backend key` resolved with
+  two delivered `message-1` rows instead of rejecting the copied-row replay as
+  storage corruption.
+- Focused delivery/storage verification passed with 68 tests after the
+  round-31 fix:
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`.
+- Final round-31 verification also passed with `pnpm typecheck`, `pnpm lint`,
   `pnpm format:check`, `git diff --check`, and a full touched-file line scan.
 - No blocking human question is known.

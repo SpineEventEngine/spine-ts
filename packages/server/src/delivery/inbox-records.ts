@@ -60,6 +60,19 @@ type StoredDedupRecord = StoredPendingDedupRecord | StoredFinalDedupRecord;
 const maxSignalPayloadBytes: number = 256 * 1024;
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
+export const InboxMessageIdText: Readonly<{
+  key(id: InboxMessageId): string;
+  require(value: string): string;
+}> = Object.freeze({
+  key(id: InboxMessageId): string {
+    return `${id.shard.key()}:${InboxMessageIdText.require(id.value)}`;
+  },
+
+  require(value: string): string {
+    return requireInputText(value, "Inbox message ID");
+  },
+});
+
 export const inboxRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, Any>({
   schema: AnySchema,
   extractId: (record) => readStoredInboxMessage(record).key,
@@ -129,7 +142,7 @@ export function writeDedupRecord(message: InboxMessage): Any {
     key: dedupGuardKey(message),
     inbox: inboxKey(message.inboxId),
     signalId: requireInputText(message.signalId, "Inbox signal ID"),
-    inboxMessageId: requireInputText(message.id.value, "Inbox message ID"),
+    inboxMessageId: InboxMessageIdText.require(message.id.value),
     shardIndex: message.id.shard.index,
     shardTotal: message.id.shard.ofTotal,
     state: "FINAL",
@@ -185,7 +198,7 @@ function inboxKey(inboxId: InboxMessage["inboxId"]): string {
 }
 
 function inboxMessageKey(id: InboxMessageId): string {
-  return `${id.shard.key()}:${requireInputText(id.value, "Inbox message ID")}`;
+  return InboxMessageIdText.key(id);
 }
 
 function packRecord(
@@ -209,7 +222,7 @@ function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
 
   return Object.freeze({
     key: inboxMessageKey(message.id),
-    id: requireInputText(message.id.value, "Inbox message ID"),
+    id: InboxMessageIdText.require(message.id.value),
     shard: message.shard.key(),
     shardIndex: message.shard.index,
     shardTotal: message.shard.ofTotal,
@@ -235,7 +248,7 @@ function validateInboxMessage(message: InboxMessage): void {
     throw new InboxMessageError("Inbox message ID shard does not match message shard.");
   }
 
-  requireInputText(message.id.value, "Inbox message ID");
+  InboxMessageIdText.require(message.id.value);
   requireInputText(message.signalId, "Inbox signal ID");
   requireInputText(message.inboxId.targetId, "Inbox target ID");
   requireInputText(message.inboxId.targetTypeUrl, "Inbox target type URL");

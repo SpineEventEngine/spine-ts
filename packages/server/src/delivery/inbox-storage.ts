@@ -13,6 +13,7 @@ import {
   dedupMessageId,
   dedupGuardKey,
   dedupRecordSpec,
+  InboxMessageIdText,
   inboxRecordSpec,
   isPendingDedupRecord,
   readPendingMessage,
@@ -44,13 +45,13 @@ export class InboxStorage {
     const storage = this.#inboxStorage();
 
     try {
-      const records = await storage.query({
+      const records = await storage.queryEntries({
         filters: [{ column: "shard", value: shard.key() }, ...statusFilters(options.statuses)],
         sort: [{ field: "receivedAt" }, { field: "version" }, { field: "messageId" }],
         limit: options.limit ?? defaultReadLimit,
       });
 
-      return Object.freeze(records.map((record) => readInboxMessage(record)));
+      return Object.freeze(records.map((entry) => readInboxMessage(entry.record, entry.id)));
     } finally {
       storage.close();
     }
@@ -283,20 +284,7 @@ export class InboxStorage {
   }
 
   #messageKey(id: Pick<InboxMessage["id"], "value" | "shard">): string {
-    return `${id.shard.key()}:${this.#requireMessageId(id.value)}`;
-  }
-
-  #requireMessageId(value: string): string {
-    if (value.trim().length === 0) {
-      throw new InboxMessageError("Inbox message ID must be a non-empty string.");
-    }
-    if (Buffer.byteLength(value, "utf8") > maxInboxTextBytes) {
-      throw new InboxMessageError(
-        `Inbox message ID exceeds ${String(maxInboxTextBytes)} bytes and cannot be stored.`,
-      );
-    }
-
-    return value;
+    return InboxMessageIdText.key(id);
   }
 
   #inboxStorage(): RecordStorage<string, Any> {
@@ -363,5 +351,3 @@ function deliveryStorageContext(context: StorageContext, name: string): StorageC
         multitenant: false,
       };
 }
-
-const maxInboxTextBytes = 16 * 1024;

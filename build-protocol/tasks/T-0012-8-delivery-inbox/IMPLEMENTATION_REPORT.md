@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-30 fix complete
+Status: round-31 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -730,6 +730,66 @@ Verification for the round-30 fix passed with:
 
 - `pnpm test packages/server/test/delivery/inbox.test.ts`
   `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm format:check`
+- `git diff --check`
+- `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+  over 120 columns)
+
+## Round 31 Review
+
+Round 31 found no TypeScript/API docs or performance/reliability issue. Code
+style/maintainability requested splitting or localizing the broad
+`packages/server/test/delivery/inbox-test-support.ts` support surface.
+Documentation requested advancing the durable task/report/review/work-log
+state to the round-31 package
+`.superpowers/sdd/review-round-31-fce80b2-current.diff`. Security requested
+that `InboxStorage.read()` validate the actual storage slot for queried inbox
+rows so a copied backend row cannot be delivered again, and maintainability
+also requested centralizing the duplicated inbox message-ID text-budget
+validation between `inbox-records.ts` and `inbox-storage.ts`.
+
+Red-first regressions failed before implementation:
+
+- focused round-31 copied-row replay regression:
+
+  ```sh
+  pnpm test packages/server/test/delivery/inbox.test.ts
+  ```
+
+  failed with the expected copied-row replay regression before
+  implementation: `rejects a queried inbox row copied under another backend
+key` resolved with two delivered `message-1` rows instead of rejecting the
+  second backend slot as storage corruption.
+
+## Round 31 Fix
+
+Round-31 fixes stayed local to record-storage querying, inbox-key validation,
+test organization, and durable logs:
+
+- added `RecordStorage.queryEntries()` and in-memory slot tracking so query
+  callers can see the actual backend slot ID instead of only the record's
+  embedded ID;
+- changed `InboxStorage.read()` to validate each queried inbox row against its
+  real storage slot, which now rejects copied inbox rows stored under another
+  backend key;
+- centralized inbox message-ID validation in the small exported
+  `InboxMessageIdText` object and removed the duplicate
+  `InboxStorage.#requireMessageId()` path; and
+- localized inbox-only storage doubles back into
+  `packages/server/test/delivery/inbox.test.ts`, replaced the catch-all
+  `inbox-test-support.ts` module with the narrower
+  `inbox-message-fixture.ts` and `inbox-record-fixture.ts` helpers, and
+  updated the durable task/report/review/work-log state to the round-31
+  package/current state.
+
+Verification for the round-31 fix passed with:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
   `packages/server/test/delivery/sharded-work-registry.test.ts`
 - `pnpm typecheck`
 - `pnpm lint`

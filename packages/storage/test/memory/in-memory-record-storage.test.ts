@@ -320,6 +320,21 @@ describe("InMemoryRecordStorage", () => {
     await expect(storage.compareAndSet(replacedId, replaced, undefined)).resolves.toBe(true);
     await expect(storage.read(createdId)).resolves.toBeUndefined();
   });
+
+  it("reports query entry ids from the actual storage slot", async () => {
+    const storage = createStorage();
+    const stored = createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n);
+    const copiedId = create(EventIdSchema, { value: "event-copy" });
+
+    await storage.compareAndSet(copiedId, undefined, stored);
+
+    await expect(storage.queryEntries()).resolves.toMatchObject([
+      {
+        id: { value: "event-copy" },
+        record: { id: { value: "event-1" } },
+      },
+    ]);
+  });
 });
 
 function createStorage(
