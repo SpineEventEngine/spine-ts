@@ -1,6 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-43 fix committed and verified at `4307077`
+Status: round-44 fix implemented in current commit after log-maintenance
+commit `bc1f3a5`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -717,3 +718,24 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   `4307077` as the committed and verified round-43 state. This docs-only
   commit intentionally does not try to pre-record its own future hash; reviewers
   should identify it from package HEAD or `git log`.
+- Post-round-43 durable-log fix was committed as `bc1f3a5`.
+- Round-44 review completed from reviewer results supplied to this fix worker.
+  Documentation requested replacing stale work-log current state left over from
+  the post-round-43 log fix. Performance/reliability requested classifying
+  corrupt durable shard coordinates as `DeliveryStorageCorruptionError`.
+  Security requested classifying corrupt stored `Any` envelopes as
+  `DeliveryStorageCorruptionError`. Code style/maintainability and
+  TypeScript/API docs were clean.
+- Round-44 fixes add red-first regressions for corrupt stored inbox, dedup, and
+  shard-session `Any` envelopes plus invalid durable shard coordinates. Stored
+  inbox/dedup/session parsers now validate `Any.value` before byte reads and
+  wrap durable shard-coordinate construction as
+  `DeliveryStorageCorruptionError`.
+- Final round-44 verification passed with the required focused delivery/storage
+  test suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
+  `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
+  touched-file line scan. `node scripts/check-api-docs.mjs` still emitted the
+  existing invalid `origin` TypeDoc source-link warning, but exited
+  successfully.
+- This round-44 fix commit cannot pre-record its own final hash; identify it
+  from package HEAD or `git log`.

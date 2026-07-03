@@ -1,6 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-43 fix committed and verified at `4307077`
+Status: round-44 fix implemented in current commit after log-maintenance
+commit `bc1f3a5`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1525,3 +1526,75 @@ Final state:
   wording with the known committed state and to record the log-maintenance
   self-reference rule. This commit's own hash is intentionally not embedded in
   the commit; identify it by package HEAD or `git log`.
+
+## Post-Round 43 Durable Log Fix
+
+The post-round-43 durable-log fix was committed as `bc1f3a5`. The logs now
+name `4307077` as the committed and verified round-43 fix and record the
+log-maintenance convention: a current log-maintenance commit cannot pre-record
+its own final hash, so reviewers should identify it by package HEAD or
+`git log`.
+
+## Round 44 Review
+
+Round 44 found stale work-log current state plus two durable-corruption
+classification gaps. Documentation requested replacing the work-log tail that
+still said the next step was committing the post-round-43 log fix, even though
+`bc1f3a5` was already package HEAD. Performance/reliability requested wrapping
+invalid stored shard coordinates, and security requested wrapping malformed
+stored `Any` envelopes, as `DeliveryStorageCorruptionError`.
+
+Code style/maintainability and TypeScript/API docs were clean.
+
+## Round 44 Fix
+
+Round-44 fixes stay local to inbox record parsing, shard-session parsing,
+focused delivery tests, and durable logs:
+
+- added red-first regressions for corrupt stored inbox/dedup `Any` envelopes,
+  corrupt stored inbox/dedup shard coordinates, corrupt stored shard-session
+  `Any` envelopes, and corrupt stored shard-session coordinates;
+- validated stored `Any.value` before byte-length and UTF-8 decoding in inbox
+  and shard-session durable parsers;
+- wrapped stored inbox/dedup/session shard-coordinate construction failures as
+  `DeliveryStorageCorruptionError`; and
+- refreshed durable task/report/review/work logs through committed
+  post-round-43 log state at `bc1f3a5`.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `-- --runInBand -t 'classifies corrupt stored inbox Any envelopes|`
+  `classifies corrupt stored inbox shard coordinates|classifies corrupt`
+  `stored dedup Any envelopes|classifies corrupt stored dedup shard`
+  `coordinates|classifies corrupt stored shard-session Any envelopes|`
+  `classifies corrupt stored shard-session coordinates'` failed before
+  production changes because the paths surfaced raw `TypeError`, plain
+  `Error`, or a generic storage clone error instead of
+  `DeliveryStorageCorruptionError`.
+
+Focused verification:
+
+- the same focused red-first command passed after production changes.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `129` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+This round-44 fix commit cannot pre-record its own final hash; identify it
+from package HEAD or `git log`.

@@ -1,5 +1,5 @@
 import { create, type Message } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
+import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import {
   InMemoryStorageFactory,
   RecordSpec,
@@ -309,6 +309,57 @@ describe("ShardedWorkRegistry", () => {
     );
   });
 
+  it("classifies corrupt stored shard-session Any envelopes as storage corruption", async () => {
+    const storageFactory = new CorruptibleStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:35:00.000Z"),
+    });
+    const shard = new ShardIndex(0, 1);
+
+    await delivery.shards.pickUp(shard, "seed-node");
+    storageFactory.writeRawStoredSession({
+      typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
+      value: undefined as unknown as Uint8Array,
+    } as unknown as Any);
+
+    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("classifies corrupt stored shard-session coordinates as storage corruption", async () => {
+    const storageFactory = new CorruptibleStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:35:00.000Z"),
+    });
+    const shard = new ShardIndex(0, 1);
+
+    await delivery.shards.pickUp(shard, "seed-node");
+    storageFactory.writeStoredSession({
+      typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
+      value: Buffer.from(
+        JSON.stringify({
+          key: "0/0",
+          id: "session-1",
+          node: "node-a",
+          shardIndex: 0,
+          shardTotal: 0,
+          pickedUpAtMs: Date.parse("2026-07-02T09:34:30.000Z"),
+          expiresAtMs: Date.parse("2026-07-02T09:35:30.000Z"),
+        }),
+        "utf8",
+      ),
+    });
+
+    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
   it("rejects oversized shard nodes before building a session record", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -596,6 +647,14 @@ class CorruptibleStorageFactory extends StorageFactory {
     }
 
     this.#records.set(JSON.stringify("0/1"), create(AnySchema, record));
+  }
+
+  writeRawStoredSession(record: Message): void {
+    if (!this.#capturedStorage) {
+      throw new Error("Expected shard storage to be captured.");
+    }
+
+    this.#records.set(JSON.stringify("0/1"), record);
   }
 }
 

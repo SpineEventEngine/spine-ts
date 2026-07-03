@@ -1,6 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 43 fix committed and verified at `4307077`
+Status: round 44 fix implemented in current commit after log-maintenance
+commit `bc1f3a5`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2211,6 +2212,24 @@ Final verification:
   `packages/server/test/delivery/sharded-work-registry.test.ts`
   `packages/storage/test/memory/in-memory-record-storage.test.ts`
   `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `129` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
   `119` tests;
 - `pnpm typecheck`;
 - `pnpm lint`;
@@ -2435,3 +2454,67 @@ Fix summary:
 - durable logs record that docs-only log-maintenance commits cannot contain
   their own final hash. Name completed feature/fix commits once known; identify
   the current log-maintenance commit by package HEAD or `git log`.
+
+Result: committed as `bc1f3a5`.
+
+### Round 44
+
+Reviewer input: round-44 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- documentation:
+  `019f2901-74bd-7fc0-a09b-33fe9dd41650` (`CHANGES REQUESTED`, closed);
+- performance/reliability:
+  `019f2902-0b2c-7e03-874c-a13b9e795a62` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f2901-d9e1-7002-8e98-c386c9f0a3b5` (`CHANGES REQUESTED`, closed);
+- code style/maintainability:
+  `019f2901-3b25-7851-9570-f484b3534dbe` (`CLEAN`, closed); and
+- TypeScript/API docs:
+  `019f2901-aa96-7873-82fd-05343ce71ff3` (`CLEAN`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- work-log current state still said the next step was committing the
+  post-round-43 durable-log fix, even though package HEAD `bc1f3a5` already
+  contained that fix;
+- corrupt stored inbox/dedup/shard-session shard coordinates could escape as
+  plain `Error`; and
+- corrupt stored inbox/dedup/shard-session `Any` envelopes could escape as raw
+  `TypeError` or generic storage clone errors instead of
+  `DeliveryStorageCorruptionError`.
+
+### Round 44 Fix
+
+Result: implemented in this current commit. Because a commit cannot pre-record
+its own final hash, identify the committed round-44 fix by package HEAD or
+`git log`.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `-- --runInBand -t 'classifies corrupt stored inbox Any envelopes|`
+  `classifies corrupt stored inbox shard coordinates|classifies corrupt`
+  `stored dedup Any envelopes|classifies corrupt stored dedup shard`
+  `coordinates|classifies corrupt stored shard-session Any envelopes|`
+  `classifies corrupt stored shard-session coordinates'` failed before
+  production changes because the paths surfaced raw `TypeError`, plain
+  `Error`, or a generic storage clone error instead of
+  `DeliveryStorageCorruptionError`.
+
+Fix summary:
+
+- stored inbox and dedup parsers validate `Any.value` before size/UTF-8 reads;
+- stored inbox and dedup shard-coordinate construction failures now wrap as
+  `DeliveryStorageCorruptionError`;
+- shard-session reads classify malformed durable session `Any` rows and
+  invalid durable session coordinates as `DeliveryStorageCorruptionError`; and
+- durable logs now name committed post-round-43 log state `bc1f3a5`.
+
+Focused verification:
+
+- the same focused red-first command passed after production changes.

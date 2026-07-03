@@ -227,13 +227,16 @@ function dedupGuardState(
   status: DeliveryStatus,
   keepUntilMs?: number,
 ): DedupGuardState {
+  const shard = storedShardIndex(
+    requireNumber(shardIndex, "Inbox dedup shard index"),
+    requireNumber(shardTotal, "Inbox dedup shard total"),
+    "Inbox dedup shard",
+  );
+
   return Object.freeze({
     messageId: Object.freeze({
       value: requireStoredText(messageId, "Inbox dedup message ID"),
-      shard: new ShardIndex(
-        requireNumber(shardIndex, "Inbox dedup shard index"),
-        requireNumber(shardTotal, "Inbox dedup shard total"),
-      ),
+      shard,
     }),
     status,
     ...(keepUntilMs === undefined
@@ -423,14 +426,15 @@ function readStoredRecord(
     throw new DeliveryStorageCorruptionError(`${label} type URL "${record.typeUrl}" is invalid.`);
   }
 
-  if (record.value.byteLength > maxStoredRecordBytes) {
+  const value = readStoredBytes(record, label);
+  if (value.byteLength > maxStoredRecordBytes) {
     throw new DeliveryStorageCorruptionError(
       `${label} exceeds ${String(maxStoredRecordBytes)} bytes and cannot be read.`,
     );
   }
 
   try {
-    const decoded = JSON.parse(decodeStoredUtf8(record.value, label)) as unknown;
+    const decoded = JSON.parse(decodeStoredUtf8(value, label)) as unknown;
 
     if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
       throw new DeliveryStorageCorruptionError(`${label} is not a JSON object.`);
@@ -752,9 +756,10 @@ function requireStoredObject(value: unknown, label: string): Record<string, unkn
 }
 
 function readStoredShard(decoded: Record<string, unknown>): ShardIndex {
-  const shard = new ShardIndex(
+  const shard = storedShardIndex(
     requireNumber(decoded.shardIndex, "Inbox shard index"),
     requireNumber(decoded.shardTotal, "Inbox shard total"),
+    "Inbox shard",
   );
   if (requireStoredText(decoded.shard, "Inbox shard key", maxCompositeTextBytes) !== shard.key()) {
     throw new DeliveryStorageCorruptionError(
@@ -763,6 +768,31 @@ function readStoredShard(decoded: Record<string, unknown>): ShardIndex {
   }
 
   return shard;
+}
+
+function readStoredBytes(record: Any, label: string): Uint8Array {
+  try {
+    const value = Reflect.get(record, "value") as unknown;
+    if (!(value instanceof Uint8Array)) {
+      throw new DeliveryStorageCorruptionError(`${label} value must be a Uint8Array.`);
+    }
+
+    return value;
+  } catch (error) {
+    if (error instanceof DeliveryStorageCorruptionError) {
+      throw error;
+    }
+
+    throw new DeliveryStorageCorruptionError(`${label} value is invalid.`, { cause: error });
+  }
+}
+
+function storedShardIndex(index: number, total: number, label: string): ShardIndex {
+  try {
+    return new ShardIndex(index, total);
+  } catch (error) {
+    throw new DeliveryStorageCorruptionError(`${label} is invalid.`, { cause: error });
+  }
 }
 
 function readStoredMessageKey(

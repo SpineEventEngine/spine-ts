@@ -4,13 +4,21 @@ import { describe, expect, it } from "vitest";
 
 import {
   readInboxMessage,
+  readDedupGuard,
   readPendingMessage,
   writeDedupClaim,
   writeDedupRecord,
   writeInboxMessage,
 } from "../../src/delivery/inbox-records.js";
-import { InboxMessageError } from "../../src/index.js";
+import { DeliveryStorageCorruptionError, InboxMessageError } from "../../src/index.js";
 import { createMessage, oversizedText } from "./inbox-message-fixture.js";
+import {
+  finalDedupRecord,
+  storedInboxJson,
+  storedInboxRecord,
+  testDedupKey,
+  testInboxKey,
+} from "./inbox-record-fixture.js";
 
 describe("Inbox record limits", () => {
   it("rejects composed inbox keys that overflow the durable read cap after escaping", () => {
@@ -154,5 +162,72 @@ describe("Inbox record limits", () => {
     const pendingMessage = readPendingMessage(writeDedupClaim(message));
 
     expect(pendingMessage?.signal?.value.byteLength).toBe(1);
+  });
+
+  it("classifies corrupt stored inbox Any envelopes as storage corruption", () => {
+    const record = {
+      typeUrl: "type.spine-ts.dev/internal/InboxMessageRecord",
+      value: undefined,
+    } as unknown as Any;
+
+    expect(() => readInboxMessage(record)).toThrow(DeliveryStorageCorruptionError);
+  });
+
+  it("classifies corrupt stored inbox shard coordinates as storage corruption", () => {
+    const record = storedInboxRecord({
+      signalId: "signal-1",
+      valueBase64: Buffer.from("payload", "utf8").toString("base64"),
+    });
+    record.value = Buffer.from(
+      JSON.stringify({
+        ...storedInboxJson({
+          signalId: "signal-1",
+          valueBase64: Buffer.from("payload", "utf8").toString("base64"),
+        }),
+        key: "-1/1:message-1",
+        shard: "-1/1",
+        shardIndex: -1,
+      }),
+      "utf8",
+    );
+
+    expect(() => readInboxMessage(record)).toThrow(DeliveryStorageCorruptionError);
+  });
+
+  it("classifies corrupt stored dedup Any envelopes as storage corruption", () => {
+    const record = {
+      typeUrl: "type.spine-ts.dev/internal/InboxDedupRecord",
+      value: undefined,
+    } as unknown as Any;
+
+    expect(() => readDedupGuard(record, testDedupKey("signal-1"))).toThrow(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("classifies corrupt stored dedup shard coordinates as storage corruption", () => {
+    const record = finalDedupRecord({
+      key: testDedupKey("signal-1"),
+      inbox: testInboxKey,
+      signalId: "signal-1",
+      inboxMessageId: "message-1",
+    });
+    record.value = Buffer.from(
+      JSON.stringify({
+        key: testDedupKey("signal-1"),
+        inbox: testInboxKey,
+        signalId: "signal-1",
+        inboxMessageId: "message-1",
+        shardIndex: 1,
+        shardTotal: 1,
+        state: "FINAL",
+        status: "TO_DELIVER",
+      }),
+      "utf8",
+    );
+
+    expect(() => readDedupGuard(record, testDedupKey("signal-1"))).toThrow(
+      DeliveryStorageCorruptionError,
+    );
   });
 });

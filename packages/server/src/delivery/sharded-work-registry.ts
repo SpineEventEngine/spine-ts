@@ -44,7 +44,7 @@ export class ShardedWorkRegistry {
 
     try {
       for (;;) {
-        const currentRecord = await storage.read(nextShard.key());
+        const currentRecord = await readShardRecord(storage, nextShard.key());
         const current =
           currentRecord === undefined ? undefined : readSession(currentRecord, nextShard.key());
         if (current !== undefined && current.expiresAt.getTime() > now) {
@@ -78,7 +78,7 @@ export class ShardedWorkRegistry {
 
     try {
       for (;;) {
-        const currentRecord = await storage.read(expected.key);
+        const currentRecord = await readShardRecord(storage, expected.key);
         if (currentRecord === undefined) {
           return false;
         }
@@ -186,14 +186,15 @@ function readSessionRecord(record: Any): Record<string, unknown> {
     );
   }
 
-  if (record.value.byteLength > maxSessionRecordBytes) {
+  const value = readStoredBytes(record);
+  if (value.byteLength > maxSessionRecordBytes) {
     throw new DeliveryStorageCorruptionError(
       `Shard session record exceeds ${String(maxSessionRecordBytes)} bytes and cannot be read.`,
     );
   }
 
   try {
-    const decoded = JSON.parse(decodeStoredUtf8(record.value)) as unknown;
+    const decoded = JSON.parse(decodeStoredUtf8(value)) as unknown;
     if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
       throw new DeliveryStorageCorruptionError("Shard session record is not a JSON object.");
     }
@@ -211,9 +212,10 @@ function readSessionRecord(record: Any): Record<string, unknown> {
 }
 
 function readSessionShard(decoded: Record<string, unknown>): ShardIndex {
-  return new ShardIndex(
+  return storedShardIndex(
     requireNumber(Reflect.get(decoded, "shardIndex"), "Shard session index"),
     requireNumber(Reflect.get(decoded, "shardTotal"), "Shard session total"),
+    "Shard session",
   );
 }
 
@@ -266,6 +268,50 @@ function decodeStoredUtf8(value: Uint8Array): string {
     throw new DeliveryStorageCorruptionError("Shard session record contains invalid UTF-8.", {
       cause: error,
     });
+  }
+}
+
+async function readShardRecord(
+  storage: RecordStorage<string, Any>,
+  key: string,
+): Promise<Any | undefined> {
+  try {
+    return await storage.read(key);
+  } catch (error) {
+    if (error instanceof Error && error.message === "Storage record could not be cloned.") {
+      throw new DeliveryStorageCorruptionError("Shard session record is invalid.", {
+        cause: error,
+      });
+    }
+
+    throw error;
+  }
+}
+
+function readStoredBytes(record: Any): Uint8Array {
+  try {
+    const value = Reflect.get(record, "value") as unknown;
+    if (!(value instanceof Uint8Array)) {
+      throw new DeliveryStorageCorruptionError("Shard session record value must be a Uint8Array.");
+    }
+
+    return value;
+  } catch (error) {
+    if (error instanceof DeliveryStorageCorruptionError) {
+      throw error;
+    }
+
+    throw new DeliveryStorageCorruptionError("Shard session record value is invalid.", {
+      cause: error,
+    });
+  }
+}
+
+function storedShardIndex(index: number, total: number, label: string): ShardIndex {
+  try {
+    return new ShardIndex(index, total);
+  } catch (error) {
+    throw new DeliveryStorageCorruptionError(`${label} is invalid.`, { cause: error });
   }
 }
 
