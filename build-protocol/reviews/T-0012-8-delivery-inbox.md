@@ -1,7 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 56 fix verified for current pass
-Previous completed commit: `8cd3cf3`
+Status: round 57 docs/API hygiene fix verified for current pass
+Previous completed commit: `d58daa4`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -3300,9 +3300,7 @@ Security review evaluation:
 
 ### Round 56 Fix
 
-Result: implemented for this current pass. The future commit hash cannot be
-pre-recorded inside the commit itself; identify the committed round-56 fix by
-package HEAD or `git log`.
+Result: committed as `d58daa4`.
 
 Fix summary:
 
@@ -3345,30 +3343,54 @@ Final verification:
 - `git diff --check fce80b2..HEAD`; and
 - touched-file line scan with no lines over 120 columns.
 
-Focused verification:
+### Round 57
 
-- `pnpm test packages/storage/test/memory/in-memory-record-storage.test.ts`
-  passed;
-- `pnpm test packages/server/test/delivery/inbox.test.ts`
-  passed; and
-- `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
-  passed.
+Reviewer input: round-57 reviewer results supplied to this fix worker.
 
-Final verification:
+Reviewer sub-agents:
 
-- `pnpm test packages/server/test/index.test.ts`
-  `packages/server/test/delivery/inbox.test.ts`
-  `packages/server/test/delivery/inbox-records.test.ts`
-  `packages/server/test/delivery/shard-index.test.ts`
-  `packages/server/test/delivery/sharded-work-registry.test.ts`
-  `packages/storage/test/memory/in-memory-record-storage.test.ts`
-  `packages/server/test/repository/aggregate-storage.test.ts`;
-- `pnpm typecheck`;
-- `pnpm lint`;
-- `pnpm format:check`;
+- documentation: `round-57-documentation` (`CHANGES REQUESTED`, supplied); and
+- TypeScript/API docs:
+  `round-57-typescript-api-docs` (`CHANGES REQUESTED`, supplied).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable task/report/review/work-log state still described round 56 as a
+  current verified pass instead of committed `d58daa4`, and this review-log
+  tail still carried a duplicate round-56 focused/final verification block; and
+- `packages/storage/src/record/record-storage.ts` still needed adapter-facing
+  TSDoc that makes the slot-ID contract explicit: `index()` returns logical
+  record IDs derived from stored record bodies, `queryRecordEntries()`
+  implementations must return actual storage slot IDs in `RecordEntry.id`, and
+  `RecordEntry.record` is the stored record value.
+
+### Round 57 Fix
+
+Result: implemented for this current pass. The future commit hash cannot be
+pre-recorded inside the commit itself; identify the committed round-57 fix by
+package HEAD or `git log`.
+
+Fix summary:
+
+- refreshed durable task/report/review/work-log state through committed round
+  56 at `d58daa4` and removed the duplicate round-56 verification block from
+  this review-log tail;
+- clarified `RecordStorage` TSDoc so adapter authors can distinguish logical
+  record IDs from storage slot IDs, including the `RecordEntry.id` /
+  `RecordEntry.record` contract; and
+- regenerated API reference output so the current `DeliveryOptions.now`
+  wording and storage slot-ID docs are reflected in generated HTML.
+
+Verification:
+
+- `pnpm docs:check`;
 - `node scripts/check-api-docs.mjs`;
+- `pnpm format:check`;
 - `git diff --check fce80b2..HEAD`; and
 - touched-file line scan with no lines over 120 columns.
 
-`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
-TypeDoc source-link warning, but exited successfully.
+`pnpm docs:check` and `node scripts/check-api-docs.mjs` may still emit the
+existing invalid `origin` TypeDoc source-link warning, but successful exits are
+the expected pass condition.

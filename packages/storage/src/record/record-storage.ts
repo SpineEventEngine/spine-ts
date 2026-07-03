@@ -53,7 +53,10 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
       : RecordMask.apply(this.#recordSpec.cloneRecord(record), options.mask);
   }
 
-  /** Read matching logical record identifiers derived from record bodies in deterministic query order. */
+  /**
+   * Read matching logical record identifiers derived from stored record bodies
+   * in deterministic query order.
+   */
   async index(query: RecordQuery<I> = {}): Promise<readonly I[]> {
     this.requireOpen();
     RecordQuery.validate(query);
@@ -70,7 +73,10 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     return entries.map((entry) => entry.record);
   }
 
-  /** Query records together with the actual storage slot IDs they currently occupy. */
+  /**
+   * Query stored records together with the actual storage slot IDs they
+   * currently occupy.
+   */
   async queryEntries(query: RecordQuery<I> = {}): Promise<readonly RecordEntry<I, R>[]> {
     this.requireOpen();
     RecordQuery.validate(query);
@@ -118,6 +124,15 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   }
 
   protected abstract deleteRecord(id: I): Promise<boolean>;
+  /**
+   * Query stored records together with their actual storage slot IDs.
+   *
+   * Implementations must return `RecordEntry.id` as the concrete storage slot
+   * identifier for the row or document that currently stores the record.
+   * `RecordStorage.index()` derives logical record identifiers from
+   * `RecordEntry.record`, so adapters must not substitute logical IDs into
+   * `RecordEntry.id` here.
+   */
   protected abstract queryRecordEntries(
     query: RecordQuery<I>,
   ): Promise<readonly RecordEntry<I, R>[]>;
@@ -141,7 +156,13 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   }
 }
 
-/** One queried record together with the storage slot ID it currently occupies. */
+/**
+ * One queried storage row or document.
+ *
+ * `id` is the actual storage slot identifier. `record` is the stored record
+ * value whose logical identifier may differ and is derived through
+ * `RecordSpec.idValueIn(...)`.
+ */
 export interface RecordEntry<I, R extends Message> {
   readonly id: I;
   readonly record: R;

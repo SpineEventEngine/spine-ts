@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-56 fix verified for current pass
-Previous completed commit: `8cd3cf3`
+Status: round-57 docs/API hygiene fix verified for current pass
+Previous completed commit: `d58daa4`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -992,4 +992,22 @@ concurrent changes`, add shard pickup/release regressions proving thrown
   `packages/storage/test/memory/in-memory-record-storage.test.ts`,
   the required focused delivery/storage suite, `pnpm typecheck`, `pnpm lint`,
   `pnpm format:check`, `node scripts/check-api-docs.mjs`,
+  `git diff --check fce80b2..HEAD`, and a touched-file line scan.
+- Round-56 fixes were committed as `d58daa4`.
+- Round-57 review completed from supplied reviewer results. Documentation
+  requested refreshing durable task/report/review/work-log state so committed
+  round 56 is recorded as `d58daa4`, removing the duplicate round-56
+  verification block in the review log tail, and recording this fix trail.
+  TypeScript/API docs requested making the storage-slot-ID contract explicit in
+  `RecordStorage` TSDoc for adapter authors and regenerating API reference
+  output so the updated `DeliveryOptions.now` wording and storage-slot docs are
+  visible in the generated HTML.
+- Round-57 fixes stay local to storage TSDoc, generated API reference output,
+  and durable logs. They keep `RecordStorage.index()` returning logical record
+  IDs derived from record bodies, document that `queryRecordEntries()`
+  implementations must return actual storage slot IDs in `RecordEntry.id`,
+  regenerate the API reference, and refresh durable task/report/review/work
+  logs through committed round 56 at `d58daa4` plus this round-57 fix trail.
+- Final round-57 verification passed with `pnpm docs:check`,
+  `node scripts/check-api-docs.mjs`, `pnpm format:check`,
   `git diff --check fce80b2..HEAD`, and a touched-file line scan.

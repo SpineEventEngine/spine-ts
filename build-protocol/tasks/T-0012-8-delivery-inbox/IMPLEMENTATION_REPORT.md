@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-56 fix verified for current pass
-Previous completed commit: `8cd3cf3`
+Status: round-57 docs/API hygiene fix verified for current pass
+Previous completed commit: `d58daa4`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2395,3 +2395,44 @@ Final verification:
 
 `node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
 TypeDoc source-link warning, but exited successfully.
+
+Round-56 fixes were committed as `d58daa4`.
+
+## Round 57 Review
+
+Round 57 found one durable-log drift issue and one API-doc freshness issue.
+Documentation requested refreshing task/report/review/work-log state so
+committed round 56 is recorded as `d58daa4`, removing the duplicate round-56
+focused/final verification block near the review-log tail, and recording this
+fix trail. TypeScript/API docs requested making the storage-slot-ID contract
+explicit in `RecordStorage` TSDoc for adapter authors and regenerating the API
+reference so the updated `DeliveryOptions.now` wording and storage slot-ID
+docs are reflected in the generated HTML.
+
+## Round 57 Fix
+
+Round-57 fixes stay local to storage TSDoc, generated API reference output,
+and durable logs:
+
+- clarified `packages/storage/src/record/record-storage.ts` so `index()`
+  explicitly returns logical record IDs derived from stored record bodies,
+  `queryRecordEntries()` explicitly requires actual storage slot IDs in
+  `RecordEntry.id`, and `RecordEntry.record` is described as the stored record
+  value;
+- regenerated the API reference with `pnpm docs:check` so the generated
+  `DeliveryOptions` and storage reference pages match current source docs; and
+- refreshed durable task/report/review/work-log state through committed round
+  56 at `d58daa4` plus this round-57 fix trail, including removal of the
+  duplicate round-56 verification block from the review log tail.
+
+Verification:
+
+- `pnpm docs:check`;
+- `node scripts/check-api-docs.mjs`;
+- `pnpm format:check`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`pnpm docs:check` and `node scripts/check-api-docs.mjs` still emitted the
+existing invalid `origin` TypeDoc source-link warning, but both commands
+exited successfully.
