@@ -1,7 +1,8 @@
 # T-0012.8: Delivery And Inbox
 
-Status: completed through round-64 cleanup trail commit `9f26eff`; current docs cleanup awaiting review.
-Previous completed commit: `9f26eff`
+Status: complete. Implementation and required review loop are complete through
+`0d6089a`; current task state can move to selecting/starting the next task.
+Completed reviewed commit: `0d6089a`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -1141,5 +1142,14 @@ concurrent changes`, add shard pickup/release regressions proving thrown
 - Round-63 docs-only verification-warning cleanup was committed as `a4ee110`.
 - Post-commit durable documentation status cleanup was committed as `a64e83a`,
   then pinned to concrete commit `a64e83a` by `446af50`.
-- Round-64 cleanup trail documentation was committed as `9f26eff`. Current
-  round-65 docs cleanup is in progress and awaiting review.
+- Round-64 cleanup trail documentation was committed as `9f26eff`.
+- Round-65 cleanup trail documentation was committed as `0d6089a`, refreshing
+  the durable task/report/review/work-log state after the round-64 cleanup
+  trail and removing stale moving-HEAD wording.
+- Round-66 review package
+  `.superpowers/sdd/review-9f26eff..0d6089a.diff` completed cleanly across all
+  five required lanes: code style/maintainability, documentation,
+  TypeScript/API docs, security, and performance/reliability.
+- Completed code/docs state is concrete through `0d6089a`; T-0012.8
+  implementation and required review loop are complete, so current task state
+  can move to selecting/starting the next task.
