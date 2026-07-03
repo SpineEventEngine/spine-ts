@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-61 pickup-shard/docs fix committed at current HEAD
-Previous completed commit: `dd36ae7`
+Status: round-61 post-commit docs cleanup committed at current HEAD
+Previous completed commit: `a647db5`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2627,3 +2627,8 @@ Verification:
   `origin` TypeDoc source-link warning;
 - `git diff --check fce80b2..HEAD`; and
 - touched-file line scan with no lines over 120 columns.
+
+Round-61 pickup-shard/docs fixes were committed as `a647db5`. A follow-up
+docs-only cleanup removes stale post-commit wording from the round-61 report,
+work-log current state, and durable headers; that cleanup is recorded as the
+current package HEAD.

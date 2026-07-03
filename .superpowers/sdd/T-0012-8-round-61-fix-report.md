@@ -1,6 +1,6 @@
 # T-0012.8 Round 61 Fix Report
 
-Status: verified; commit pending.
+Status: committed as `a647db5`.
 
 Changed files:
 
@@ -49,7 +49,7 @@ Verification commands and results:
 
 Commit hash:
 
-- Current package HEAD after commit; final response records the concrete hash.
+- `a647db5`
 
 Concerns:
 

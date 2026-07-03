@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-61 pickup-shard/docs fix committed at current HEAD
-Previous completed commit: `dd36ae7`
+Status: round-61 post-commit docs cleanup committed at current HEAD
+Previous completed commit: `a647db5`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -1099,3 +1099,7 @@ concurrent changes`, add shard pickup/release regressions proving thrown
   `git diff --check fce80b2..HEAD`, and a touched-file line scan. The API docs
   check still emitted the pre-existing invalid `origin` TypeDoc source-link
   warning while exiting successfully.
+- Round-61 pickup-shard/docs fixes were committed as `a647db5`.
+- A follow-up docs-only cleanup removes stale post-commit wording from the
+  round-61 fix report, work-log current state, and durable headers. This
+  latest cleanup is recorded as the current package HEAD.
