@@ -468,7 +468,7 @@ describe("Inbox", () => {
       },
     };
 
-    const receive = Promise.resolve().then(() => inbox.receive(input));
+    const receive = inbox.receive(input);
 
     await expect(receive).rejects.toBeInstanceOf(InboxMessageError);
     await expect(receive).rejects.toThrow(/signal id/i);

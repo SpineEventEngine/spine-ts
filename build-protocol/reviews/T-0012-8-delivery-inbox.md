@@ -1,7 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 48 fix implemented in current commit
-Previous completed commit: `da705d4`
+Status: round 49 fix verified for current pass
+Previous completed commit: `d3bdfae`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2253,9 +2253,7 @@ Findings to address:
 
 ### Round 48 Fix
 
-Result: implemented in this current commit. Because a commit cannot pre-record
-its own final hash, identify the committed round-48 fix by package HEAD or
-`git log`.
+Result: committed as `d3bdfae`.
 
 Fix summary:
 
@@ -2274,6 +2272,78 @@ Red-first verification:
   `'signal value accessor|top-level receive input'` failed before production
   changes because both new tests observed raw getter `Error` values instead of
   `InboxMessageError`.
+
+Focused verification:
+
+- the same focused delivery command passed after production changes with
+  `62` tests.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `138` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+### Round 49
+
+Reviewer input: round-49 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- documentation:
+  `019f2946-4919-7020-b20b-f4b7e88aaa43` (`CHANGES REQUESTED`, closed);
+- code style/maintainability:
+  `019f2945-ffa9-7bf0-a10f-5715550470f9` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f2946-875d-7033-85ee-a910b6ed86b8` (`CLEAN`, closed);
+- security:
+  `019f2946-ca77-7872-9444-0d64d82aa6fb` (`CLEAN`, closed); and
+- performance/reliability:
+  `019f2947-04f8-7d70-999b-9d3ff025487c` (`CLEAN`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable logs still said the next step was to commit round 48 even though
+  package HEAD was `d3bdfae`; and
+- public `Inbox.receive()` could throw top-level input snapshot failures
+  synchronously before returning its documented `Promise<InboxWriteResult>`.
+
+### Round 49 Fix
+
+Result: implemented for this current pass. The future commit hash cannot be
+pre-recorded inside the commit itself; identify the committed round-49 fix by
+package HEAD or `git log`.
+
+Fix summary:
+
+- changed the top-level `Inbox.receive()` accessor regression to assert the
+  returned promise rejects directly;
+- made `Inbox.receive()` async so public input snapshot failures reject through
+  the returned promise; and
+- durable task/report/review/work logs now name committed round-48 state
+  `d3bdfae` and record this round-49 fix trail.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
+  `'rejects top-level receive input accessor failures as inbox message errors'`
+  failed before production changes because `Inbox.receive()` threw
+  `InboxMessageError` synchronously.
 
 Focused verification:
 

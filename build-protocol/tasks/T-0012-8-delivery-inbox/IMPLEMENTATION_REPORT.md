@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-48 fix implemented in current commit
-Previous completed commit: `da705d4`
+Status: round-49 fix verified for current pass
+Previous completed commit: `d3bdfae`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1814,5 +1814,56 @@ Final verification:
 `node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
 TypeDoc source-link warning, but exited successfully.
 
-This round-48 fix commit cannot pre-record its own final hash; identify it
-from package HEAD or `git log`.
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `138` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+Round-48 fixes were committed as `d3bdfae`.
+
+## Round 49 Review
+
+Round 49 found one durable-log issue and one public promise-contract issue.
+Documentation requested replacing stale work-log state that still said the
+next step was to commit round 48 even though package HEAD was `d3bdfae`.
+Code style/maintainability requested that top-level `Inbox.receive()`
+validation failures reject through the returned `Promise<InboxWriteResult>`
+instead of throwing synchronously. TypeScript/API docs, security, and
+performance/reliability lanes were clean.
+
+## Round 49 Fix
+
+Round-49 fixes stay local to the public inbox facade and durable logs:
+
+- changed the top-level receive-input accessor regression to assert
+  `Inbox.receive()` directly as a rejected promise;
+- made `Inbox.receive()` async so input snapshot failures are normalized into
+  the returned promise; and
+- durable task/report/review/work logs now record committed round 48 at
+  `d3bdfae` and this round-49 fix trail.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
+  `'rejects top-level receive input accessor failures as inbox message errors'`
+  failed before production changes because `Inbox.receive()` threw
+  `InboxMessageError` synchronously.
+
+Focused verification:
+
+- the same focused delivery command passed after production changes with
+  `62` tests.

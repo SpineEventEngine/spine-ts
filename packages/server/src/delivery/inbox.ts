@@ -17,7 +17,7 @@ export class Inbox {
   }
 
   /** Receive one message into durable inbox storage. */
-  receive(input: InboxMessageInput): Promise<InboxWriteResult> {
+  async receive(input: InboxMessageInput): Promise<InboxWriteResult> {
     const messageInput = this.#inputObject(input, "Inbox message input");
     const shard = this.#readInput(messageInput, "shard", "Inbox message shard") as ShardIndex;
     const signal = this.#readInput(messageInput, "signal", "Inbox signal") as Any | undefined;

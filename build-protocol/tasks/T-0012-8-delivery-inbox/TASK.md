@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-48 fix implemented in current commit
-Previous completed commit: `da705d4`
+Status: round-49 fix verified for current pass
+Previous completed commit: `d3bdfae`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -806,5 +806,20 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
   `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
   touched-file line scan.
-- This round-48 fix commit cannot pre-record its own final hash; identify it
-  from package HEAD or `git log`.
+- Round-48 fixes were committed as `d3bdfae`.
+- Round-49 review completed from reviewer results supplied to this fix worker.
+  Documentation requested durable-log refresh for committed round 48 at
+  `d3bdfae` and removal of the stale "commit round-48" next step. Code
+  style/maintainability requested normalizing top-level public
+  `Inbox.receive()` validation failures into the returned promise. TypeScript/API
+  docs, security, and performance/reliability lanes were clean.
+- Red-first focused round-49 verification failed before production changes
+  because the direct `Inbox.receive()` rejection assertion observed a
+  synchronous `InboxMessageError` throw.
+- Round-49 fixes make `Inbox.receive()` async so top-level validation failures
+  reject through the returned promise, adjust the regression to assert the
+  promise rejection directly, and refresh durable logs for committed round 48.
+- Final round-49 verification passed with the required focused
+  delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
+  `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
+  touched-file line scan.
