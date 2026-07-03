@@ -341,6 +341,16 @@ describe("InMemoryRecordStorage", () => {
     ]);
   });
 
+  it("keeps record index ids aligned with logical record ids instead of storage slots", async () => {
+    const storage = createStorage();
+    const stored = createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n);
+    const copiedId = create(EventIdSchema, { value: "event-copy" });
+
+    await storage.compareAndSet(copiedId, undefined, stored);
+
+    await expect(storage.index()).resolves.toMatchObject([{ value: "event-1" }]);
+  });
+
   it("uses query-entry adapters as the single query hook", async () => {
     const storage = new QueryEntriesStorage({ name: "Tasks", multitenant: false }, createSpec(), [
       createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n),

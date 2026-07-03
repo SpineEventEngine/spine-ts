@@ -17,6 +17,7 @@ export class Delivery {
       new InboxStorage({
         context: options.context,
         storageFactory: options.storageFactory,
+        ...(options.now === undefined ? {} : { now: options.now }),
       }),
     );
     this.shards = new ShardedWorkRegistry({
@@ -37,6 +38,6 @@ export interface DeliveryOptions {
   readonly storageFactory: StorageFactory;
   /** Optional shard lease duration in milliseconds. */
   readonly leaseMs?: number;
-  /** Optional clock used for shard lease expiry decisions. */
+  /** Optional clock used for delivery timing decisions such as lease and dedup expiry. */
   readonly now?: () => Date;
 }

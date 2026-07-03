@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-54 fix verified for current pass
-Previous completed commit: `c2e67c6`
+Status: round-55 fix verified for current pass
+Previous completed commit: `5153077`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2239,5 +2239,87 @@ Final verification:
 `node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
 TypeDoc source-link warning, but exited successfully.
 
-This round-54 fix commit cannot pre-record its own final hash; identify it
+Round-54 fixes were committed as `5153077`.
+
+## Round 55 Review
+
+Round 55 found one durable-log drift issue, one storage contract regression,
+one delivery clock propagation gap, and two shard corruption-classification
+gaps. Documentation requested refreshing durable task/report/review/work logs
+through committed round 54 at `5153077` and removing stale text that still
+described round 54 as an uncommitted current pass or said the next step was to
+commit already-committed round-54 work. Maintainability requested restoring
+the logical-record-id contract of `RecordStorage.index()` and mapping both
+`Storage record could not be cloned.` and `Storage value could not be cloned.`
+to `DeliveryStorageCorruptionError` on shard read and compare-and-set paths.
+Performance/reliability requested passing `DeliveryOptions.now` through to
+`InboxStorage` so inbox dedup expiry/keep-until decisions respect the owner
+clock and adding focused regression coverage.
+
+## Round 55 Fix
+
+Round-55 fixes stay local to record storage, delivery timing, shard error
+classification, focused tests, and durable logs:
+
+- restored `packages/storage/src/record/record-storage.ts#index()` to derive
+  logical IDs from each queried record via `RecordSpec.idValueIn(...)` while
+  leaving `queryEntries()` as the raw storage-slot-ID API;
+- passed `DeliveryOptions.now` through `packages/server/src/delivery/delivery.ts`
+  into `InboxStorage` and updated the TSDoc to describe delivery timing rather
+  than shard-only timing;
+- added a small shard compare-and-set wrapper in
+  `packages/server/src/delivery/sharded-work-registry.ts` so shard read and
+  compare-and-set clone failures are both classified as
+  `DeliveryStorageCorruptionError`, including the sibling
+  `Storage value could not be cloned.` case;
+- added focused regressions covering logical `index()` IDs, delivery-owner
+  clock control of inbox dedup expiry, shard read clone classification, and
+  shard pickup/release compare-and-set clone classification; and
+- refreshed durable task/report/review/work logs through committed round 54 at
+  `5153077` and this round-55 fix trail.
+
+Red-first verification:
+
+- `pnpm test packages/storage/test/memory/in-memory-record-storage.test.ts`
+  failed before production changes because the new index regression still
+  received storage slot key `event-copy` instead of logical record ID
+  `event-1`;
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  failed before production changes because the new delivery-clock regression
+  still returned `DUPLICATE` instead of expiring the dedup guard through the
+  owner clock; and
+- `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  failed before production changes because shard read/pickup/release clone
+  failures still surfaced raw storage clone wording instead of
+  `DeliveryStorageCorruptionError`.
+
+Focused verification:
+
+- `pnpm test packages/storage/test/memory/in-memory-record-storage.test.ts`
+  passed after restoring logical `index()` IDs;
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  passed after forwarding `DeliveryOptions.now` to `InboxStorage`; and
+- `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  passed after classifying shard read and compare-and-set clone failures.
+
+Final verification:
+
+- `pnpm test packages/server/test/index.test.ts`
+  `packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+This round-55 fix commit cannot pre-record its own final hash; identify it
 from package HEAD or `git log`.

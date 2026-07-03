@@ -226,6 +226,42 @@ describe("Inbox", () => {
     expect(second.outcome).toBe("WRITTEN");
   });
 
+  it("uses the delivery owner clock for inbox dedup expiry decisions", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2099-01-01T00:00:10.000Z"),
+    });
+    const inboxId = {
+      targetId: "projection-1",
+      targetTypeUrl: "type.example.dev/tasks.Projection",
+    };
+
+    const first = await delivery.inbox.receive({
+      inboxId,
+      signalId: "signal-1",
+      label: "UPDATE_SUBSCRIBER",
+      status: "DELIVERED",
+      shard: ShardIndex.single(),
+      whenReceived: new Date("2099-01-01T00:00:00.000Z"),
+      version: 1n,
+      keepUntil: new Date("2099-01-01T00:00:05.000Z"),
+    });
+    const second = await delivery.inbox.receive({
+      inboxId,
+      signalId: "signal-1",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+      whenReceived: new Date("2099-01-01T00:00:01.000Z"),
+      version: 2n,
+    });
+
+    expect(first.outcome).toBe("WRITTEN");
+    expect(second.outcome).toBe("WRITTEN");
+  });
+
   it("rejects invalid storage clocks before live dedup retention decisions", async () => {
     const inboxId = {
       targetId: "projection-1",

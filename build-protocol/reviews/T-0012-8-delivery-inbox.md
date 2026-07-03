@@ -1,7 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 54 fix verified for current pass
-Previous completed commit: `c2e67c6`
+Status: round 55 fix verified for current pass
+Previous completed commit: `5153077`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -3157,9 +3157,7 @@ Findings to address:
 
 ### Round 54 Fix
 
-Result: implemented for this current pass. The future commit hash cannot be
-pre-recorded inside the commit itself; identify the committed round-54 fix by
-package HEAD or `git log`.
+Result: committed as `5153077`.
 
 Fix summary:
 
@@ -3198,6 +3196,79 @@ Focused verification:
   `fails clearly when shard release compare-and-set keeps missing|`
   `propagates shard pickup compare-and-set failures|`
   `propagates shard release compare-and-set failures'`
+  passed.
+
+### Round 55
+
+Reviewer input: round-55 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- performance/reliability: `round-55-performance-reliability`
+  (`CHANGES REQUESTED`, supplied);
+- maintainability: `round-55-maintainability` (`CHANGES REQUESTED`, supplied);
+- documentation: `round-55-documentation` (`CHANGES REQUESTED`, supplied).
+
+Result: changes requested.
+
+Findings to address:
+
+- `packages/storage/src/record/record-storage.ts` regressed the `index()`
+  contract by returning raw `queryEntries()` slot IDs instead of logical
+  record IDs derived from each record;
+- `packages/server/src/delivery/delivery.ts` forwarded `DeliveryOptions.now`
+  only to `ShardedWorkRegistry`, so inbox dedup expiry/keep-until decisions
+  ignored the delivery owner clock;
+- `packages/server/src/delivery/sharded-work-registry.ts` classified
+  `Storage record could not be cloned.` on read but missed sibling
+  `Storage value could not be cloned.`, and shard pickup/release compare-and-set
+  clone/materialization failures still leaked raw storage wording instead of
+  `DeliveryStorageCorruptionError`; and
+- task/report/review/work-log durable state still described round 54 as a
+  current verified pass instead of committed `5153077`, and the work log still
+  pointed at committing already-committed round-54 work.
+
+### Round 55 Fix
+
+Result: implemented for this current pass. The future commit hash cannot be
+pre-recorded inside the commit itself; identify the committed round-55 fix by
+package HEAD or `git log`.
+
+Fix summary:
+
+- restored `RecordStorage.index()` to derive logical IDs from each record while
+  preserving `queryEntries()` as the raw slot-ID API;
+- passed `DeliveryOptions.now` through to `InboxStorage` and updated the
+  delivery timing TSDoc;
+- classified shard read and compare-and-set clone failures, including
+  `Storage value could not be cloned.`, as
+  `DeliveryStorageCorruptionError`;
+- added focused regressions for logical index IDs, delivery-owner clock inbox
+  dedup expiry, shard read clone classification, and shard pickup/release
+  compare-and-set clone classification; and
+- refreshed durable task/report/review/work-log state through committed round
+  54 at `5153077` and this round-55 fix trail.
+
+Red-first verification:
+
+- `pnpm test packages/storage/test/memory/in-memory-record-storage.test.ts`
+  failed before production changes because the new index regression still
+  returned storage slot key `event-copy` instead of logical record ID
+  `event-1`;
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  failed before production changes because the new delivery-owner-clock
+  regression still returned `DUPLICATE`; and
+- `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  failed before production changes because shard read/pickup/release clone
+  failures still surfaced raw storage clone wording.
+
+Focused verification:
+
+- `pnpm test packages/storage/test/memory/in-memory-record-storage.test.ts`
+  passed;
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  passed; and
+- `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
   passed.
 
 Final verification:

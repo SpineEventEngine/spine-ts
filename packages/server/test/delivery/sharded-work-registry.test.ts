@@ -352,6 +352,21 @@ describe("ShardedWorkRegistry", () => {
     await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/type url/i);
   });
 
+  it("classifies shard-session value clone failures during pickup as storage corruption", async () => {
+    const storageFactory = new CloneFailureStorageFactory({
+      throwReadError: new Error("Storage value could not be cloned."),
+    });
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:35:00.000Z"),
+    });
+
+    await expect(delivery.shards.pickUp(new ShardIndex(0, 1), "node-a")).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
   it("classifies corrupt stored shard-session coordinates as storage corruption", async () => {
     const storageFactory = new CorruptibleStorageFactory();
     const delivery = new Delivery({
@@ -640,6 +655,22 @@ describe("ShardedWorkRegistry", () => {
     expect(storageFactory.createAttempts).toBe(1);
   });
 
+  it("classifies shard pickup compare-and-set clone failures as storage corruption", async () => {
+    const storageFactory = new RetryingStorageFactory({
+      throwCreateError: new Error("Storage value could not be cloned."),
+    });
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:50:00.000Z"),
+    });
+
+    await expect(delivery.shards.pickUp(new ShardIndex(0, 1), "node-a")).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+    expect(storageFactory.createAttempts).toBe(1);
+  });
+
   it("propagates shard release compare-and-set failures", async () => {
     const storageFactory = new RetryingStorageFactory({
       throwReleaseError: new Error("Shard release storage failed."),
@@ -656,6 +687,27 @@ describe("ShardedWorkRegistry", () => {
     }
 
     await expect(delivery.shards.release(session)).rejects.toThrow(/shard release storage failed/i);
+    expect(storageFactory.releaseAttempts).toBe(1);
+  });
+
+  it("classifies shard release compare-and-set clone failures as storage corruption", async () => {
+    const storageFactory = new RetryingStorageFactory({
+      throwReleaseError: new Error("Storage value could not be cloned."),
+    });
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:50:00.000Z"),
+    });
+    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+
+    if (session === undefined) {
+      throw new Error("Expected shard pickup to create a session.");
+    }
+
+    await expect(delivery.shards.release(session)).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
     expect(storageFactory.releaseAttempts).toBe(1);
   });
 
@@ -931,6 +983,59 @@ class RetryingStorageFactory extends StorageFactory {
         this.releaseAttempts += 1;
       },
     );
+  }
+}
+
+class CloneFailureStorageFactory extends StorageFactory {
+  readonly #error: Error | undefined;
+
+  constructor(plan: { throwReadError?: Error }) {
+    super();
+    this.#error = plan.throwReadError;
+  }
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new CloneFailureRecordStorage(context, recordSpec, this.#error);
+  }
+}
+
+class CloneFailureRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+  readonly #error: Error | undefined;
+
+  constructor(context: StorageContext, recordSpec: RecordSpec<I, R>, error: Error | undefined) {
+    super(context, recordSpec);
+    this.#error = error;
+  }
+
+  protected compareAndSetRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected deleteRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected queryRecordEntries(): Promise<readonly { id: I; record: R }[]> {
+    return Promise.resolve([]);
+  }
+
+  protected readRecord(): Promise<R | undefined> {
+    if (this.#error !== undefined) {
+      return Promise.reject(this.#error);
+    }
+
+    return Promise.resolve(undefined);
+  }
+
+  protected writeAllRecords(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  protected writeRecord(): Promise<void> {
+    return Promise.resolve();
   }
 }
 

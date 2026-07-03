@@ -61,7 +61,7 @@ export class ShardedWorkRegistry {
           new Date(now + this.#leaseMs),
         );
         const nextRecord = writeSession(next);
-        const claimed = await storage.compareAndSet(nextShard.key(), currentRecord, nextRecord);
+        const claimed = await casShardRecord(storage, nextShard.key(), currentRecord, nextRecord);
 
         if (claimed) {
           return next;
@@ -92,7 +92,7 @@ export class ShardedWorkRegistry {
           return false;
         }
 
-        if (await storage.compareAndSet(expected.key, currentRecord, undefined)) {
+        if (await casShardRecord(storage, expected.key, currentRecord, undefined)) {
           return true;
         }
       }
@@ -303,14 +303,35 @@ async function readShardRecord(
   try {
     return await storage.read(key);
   } catch (error) {
-    if (error instanceof Error && error.message === "Storage record could not be cloned.") {
-      throw new DeliveryStorageCorruptionError("Shard session record is invalid.", {
-        cause: error,
-      });
-    }
-
-    throw error;
+    throw shardStorageError(error);
   }
+}
+
+async function casShardRecord(
+  storage: RecordStorage<string, Any>,
+  key: string,
+  expected: Any | undefined,
+  next: Any | undefined,
+): Promise<boolean> {
+  try {
+    return await storage.compareAndSet(key, expected, next);
+  } catch (error) {
+    throw shardStorageError(error);
+  }
+}
+
+function shardStorageError(error: unknown): Error {
+  if (
+    error instanceof Error &&
+    (error.message === "Storage record could not be cloned." ||
+      error.message === "Storage value could not be cloned.")
+  ) {
+    return new DeliveryStorageCorruptionError("Shard session record is invalid.", {
+      cause: error,
+    });
+  }
+
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 function readStoredBytes(record: Any): Uint8Array {

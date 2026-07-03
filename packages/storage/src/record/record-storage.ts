@@ -55,8 +55,13 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
 
   /** Read matching record identifiers in deterministic query order. */
   async index(query: RecordQuery<I> = {}): Promise<readonly I[]> {
-    const entries = await this.queryEntries(query);
-    return entries.map((entry) => entry.id);
+    this.requireOpen();
+    RecordQuery.validate(query);
+    const entries = await this.queryRecordEntries(query);
+
+    return entries.map((entry) =>
+      this.#recordSpec.cloneId(this.#recordSpec.idValueIn(entry.record)),
+    );
   }
 
   /** Query records by IDs, columns, sorting, limits, and optional masks. */

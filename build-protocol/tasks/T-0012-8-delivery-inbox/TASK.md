@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-54 fix verified for current pass
-Previous completed commit: `c2e67c6`
+Status: round-55 fix verified for current pass
+Previous completed commit: `5153077`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -930,6 +930,35 @@ concurrent changes`, add shard pickup/release regressions proving thrown
   task/report/review/work-log state through committed round 53 at `c2e67c6`
   plus this round-54 fix trail.
 - Final round-54 verification passed with the required focused
+  delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
+  `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
+  touched-file line scan.
+- Round-54 fixes were committed as `5153077`.
+- Round-55 review completed from reviewer results supplied to this fix worker.
+  Documentation requested refreshing durable task/report/review/work-log state
+  through committed round 54 at `5153077` and removing stale wording that
+  still described round 54 as only a current pass or pointed at committing
+  already-committed round-54 work. Maintainability requested restoring the
+  logical-record-id contract of `RecordStorage.index()` and classifying shard
+  clone/materialization failures from both read and compare-and-set paths as
+  `DeliveryStorageCorruptionError`. Performance/reliability requested passing
+  `DeliveryOptions.now` through to `InboxStorage` so inbox dedup expiry uses
+  the caller clock and adding focused regression coverage for the storage index
+  and delivery clock behaviors.
+- Red-first round-55 verification failed before production changes because
+  `RecordStorage.index()` returned the storage slot key instead of the logical
+  record ID, `Delivery` inbox dedup still ignored the owner clock and treated
+  the duplicate as live, and shard read/CAS clone failures still surfaced raw
+  storage clone wording.
+- Round-55 fixes keep changes local to delivery storage contracts, focused
+  delivery/storage tests, and durable logs. They restore
+  `RecordStorage.index()` to derive logical IDs from records while leaving
+  `queryEntries()` as the raw slot-ID API, pass `DeliveryOptions.now` through
+  to `InboxStorage` and update the delivery timing TSDoc, classify shard read
+  and compare-and-set clone failures behind `DeliveryStorageCorruptionError`,
+  and refresh durable task/report/review/work-log state through committed round
+  54 at `5153077` plus this round-55 fix trail.
+- Final round-55 verification passed with the required focused
   delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
   `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
   touched-file line scan.
