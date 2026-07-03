@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-34 fix complete
+Status: round-35 fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -494,4 +494,33 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   storage-level `EventStore` event-ID guard now rejects corrupt whitespace
   stored event IDs before the aggregate-routing guard. The aggregate storage
   regression was aligned to the new first failing guard.
+- Round-35 review package is supplied to this fix worker as
+  `.superpowers/sdd/review-round-35-fce80b2-current.diff`.
+- Round-35 review completed from reviewer results supplied to this fix worker.
+  Code style/maintainability, documentation, security, and
+  performance/reliability requested changes. TypeScript/API docs was clean.
+  All five round-35 reviewer lanes are closed.
+- Round-35 fixes reject invalid shard-shaped caller input and non-`Uint8Array`
+  signal payloads before inbox/dedup serialization, fail closed when pending
+  dedup guards embed invalid inbox timestamps even if the guarded inbox row
+  already exists, restore chronological review-log ordering for rounds 28-34,
+  and advance the durable task/report/review/work-log state to the round-35
+  package/current fix.
+- Red-first focused verification failed as expected before the production fix:
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  failed with the expected three regressions across pending-guard timestamp
+  corruption, fake shard-shaped caller input, and non-`Uint8Array` signal
+  payload caller input.
+- Focused round-35 verification passed with
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`.
+- Final round-35 verification passed with
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`,
+  `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `git diff --check`, and
+  a full touched-file line scan.
 - No blocking human question is known.

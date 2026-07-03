@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 34 fix complete
+Status: round 35 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1279,257 +1279,6 @@ Verification:
   - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
     over 120 columns).
 
-### Round 32
-
-Reviewer input: round-32 reviewer results supplied to this fix worker.
-
-Diff package:
-`.superpowers/sdd/review-round-32-fce80b2-current.diff`.
-
-Reviewer sub-agents:
-
-- code style/maintainability:
-  `019f2843-0569-7df1-933f-eec1fbd6b628` (`CLEAN`, closed);
-- documentation:
-  `019f2843-0601-7e22-b480-fb61f64f13f3` (`CHANGES REQUESTED`, closed);
-- TypeScript/API docs:
-  `019f2843-066c-7ed0-a608-5098760a8ad6` (`CHANGES REQUESTED`, closed);
-- security:
-  `019f2843-06fe-7bd0-adfb-26c8c82659af` (`CHANGES REQUESTED`, closed); and
-- performance/reliability:
-  `019f2843-0766-7f11-be63-b8f23e255e2c` (`CHANGES REQUESTED`, closed).
-
-Result: changes requested.
-
-Findings to address:
-
-- durable task/report/review/work-log state was stale against the round-32
-  package/current state;
-- `Inbox.storage` publicly exposed the lower-level storage seam without
-  explicitly documenting that this is an intentional escape hatch;
-- `InboxStorage.write()` still raised a raw `Error` when a caller reused one
-  inbox message ID with different contents;
-- persisted out-of-range inbox/dedup timestamps still produced `Invalid Date`
-  and could fail open in read/dedup paths;
-- persisted out-of-range shard-session expiry timestamps still produced
-  `Invalid Date` and could fail open in shard pickup/release paths;
-- the default `RecordStorage.queryRecordEntries()` fallback still reconstructed
-  entry IDs from record bodies instead of requiring adapters to report real
-  storage-slot identities; and
-- duplicate short-circuiting in `InboxStorage.write()` still skipped full
-  caller-input validation, so malformed retries could resolve `DUPLICATE`
-  instead of rejecting invalid input.
-
-Code style/maintainability was clean. Documentation, TypeScript/API docs,
-security, and performance/reliability requested changes.
-
-### Round 32 Fix
-
-Result: implemented in this worktree.
-
-Fix summary:
-
-- documented `Inbox.storage` as the intentional low-level storage escape hatch
-  in code comments and `build-protocol/DEVELOPER_API.md`;
-- changed direct inbox message-key reuse to raise `InboxMessageError` instead
-  of a raw `Error`;
-- validated full caller inbox input at the start of `InboxStorage.write()` by
-  reusing the inbox/dedup serialization checks before any duplicate
-  short-circuit;
-- rejected out-of-range stored inbox `whenReceived` / `keepUntil` timestamps
-  and shard-session `pickedUpAt` / `expiresAt` timestamps as storage
-  corruption instead of materializing `Invalid Date`;
-- removed the unsafe `RecordStorage.queryRecordEntries()` fallback so adapters
-  must report actual storage-slot identities explicitly; and
-- updated the affected storage/delivery regression tests plus the durable
-  task/report/review/work-log state for the round-32 package.
-
-Verification:
-
-- red:
-  - focused round-32 regressions:
-
-    ```sh
-    pnpm test packages/server/test/delivery/inbox.test.ts \
-      -t 'rejects direct inbox writes that reuse an existing message key'
-    pnpm test packages/server/test/delivery/inbox.test.ts \
-      -t 'rejects malformed retries even when a live dedup guard already exists'
-    pnpm test packages/server/test/delivery/inbox.test.ts \
-      -t 'fails closed when stored inbox timestamps are out of range'
-    pnpm test packages/server/test/delivery/inbox.test.ts \
-      -t 'fails closed when stored dedup inbox timestamps are out of range'
-    pnpm test packages/server/test/delivery/sharded-work-registry.test.ts \
-      -t 'fails closed when a stored shard-session expiry time is out of range'
-    pnpm test packages/storage/test/memory/in-memory-record-storage.test.ts \
-      -t 'rejects query-entry adapters that do not provide slot identities'
-    ```
-
-    failed with the expected pre-fix regressions: direct message-key reuse
-    still surfaced a raw `Error`, malformed retries still resolved
-    `DUPLICATE`, stored out-of-range inbox timestamps still materialized
-    `Date { NaN }`, stored out-of-range dedup retention still wrote a fresh
-    live row, shard-session expiry corruption still resolved a replacement
-    session, and query-entry adapters still silently reused the embedded record
-    ID;
-- green:
-  - `pnpm test packages/server/test/delivery/inbox.test.ts`
-    `packages/server/test/delivery/inbox-records.test.ts`
-    `packages/server/test/delivery/sharded-work-registry.test.ts`
-    `packages/storage/test/memory/in-memory-record-storage.test.ts`
-  - `pnpm typecheck`;
-  - `pnpm lint`;
-  - `pnpm format:check`;
-  - `git diff --check`; and
-  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
-    over 120 columns).
-
-### Round 33
-
-Reviewer input: round-33 reviewer results supplied to this fix worker.
-
-Diff package:
-`.superpowers/sdd/review-round-33-fce80b2-current.diff`.
-
-Reviewer sub-agents:
-
-- code style/maintainability:
-  `019f285c-d193-7d12-b56e-1d1e8726e320` (`CLEAN`, closed);
-- documentation:
-  `019f285c-d22b-7703-9785-bd738823aa48` (`CHANGES REQUESTED`, closed);
-- TypeScript/API docs:
-  `019f285c-d2ae-78e2-90b1-e87b39eebdd5` (`CHANGES REQUESTED`, closed);
-- security:
-  `019f285c-d325-7f30-a8b1-2e4011efa42c` (`CLEAN`, closed); and
-- performance/reliability:
-  `019f285c-d3a1-7b92-98dd-e7d23242497c` (`CHANGES REQUESTED`, closed).
-
-Result: changes requested.
-
-Findings to address:
-
-- durable task/report/review/work-log entries were stale against the round-33
-  package;
-- `DeliveryStorageCorruptionError` was raised from public delivery APIs but was
-  not exported or documented beside `InboxMessageError`; and
-- final dedup guard reads still accepted corrupt/out-of-range `keepUntilMs`
-  instead of failing closed as `DeliveryStorageCorruptionError`.
-
-### Round 33 Fix
-
-Result: implemented in this worktree.
-
-Fix summary:
-
-- exported `DeliveryStorageCorruptionError` from the public server entrypoint
-  and documented the delivery error contract beside `InboxMessageError`;
-- added the red-first regression for out-of-range final dedup guard
-  `keepUntilMs`; and
-- validated final dedup `keepUntilMs` in the guard read path so corrupt values
-  now fail closed as `DeliveryStorageCorruptionError`.
-
-Verification:
-
-- red:
-  - `pnpm test packages/server/test/delivery/inbox.test.ts`
-    `-- --runInBand -t "fails closed when final dedup guard keep-until`
-    `timestamps are out of range"`
-    failed before the production change because the corrupt guard still
-    resolved `WRITTEN`;
-- green:
-  - `pnpm test packages/server/test/delivery/inbox.test.ts`
-    `packages/server/test/delivery/inbox-records.test.ts`
-    `packages/server/test/delivery/sharded-work-registry.test.ts`
-    `packages/storage/test/memory/in-memory-record-storage.test.ts`
-  - `pnpm typecheck`;
-  - `pnpm lint`;
-  - `pnpm format:check`;
-  - `git diff --check`; and
-  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
-    over 120 columns).
-
-### Round 34
-
-Reviewer input: round-34 reviewer results supplied to this fix worker.
-
-Diff package:
-`.superpowers/sdd/review-round-34-fce80b2-current.diff`.
-
-Reviewer sub-agents:
-
-- code style/maintainability:
-  `019f286c-6540-7752-9b75-5021569fc77b` (`CHANGES REQUESTED`, closed);
-- documentation:
-  `019f286c-65cc-7a60-9526-2b0cfa1704d0` (`CHANGES REQUESTED`, closed);
-- TypeScript/API docs:
-  `019f286c-6651-7701-a884-dd4a3ea7eec2` (`CHANGES REQUESTED`, closed);
-- security:
-  `019f286c-66bf-7651-b86a-fa08f4fa057c` (`CHANGES REQUESTED`, closed); and
-- performance/reliability:
-  `019f286c-6750-77f3-b3ba-a071e1b91cca` (`CHANGES REQUESTED`, closed).
-
-Result: changes requested.
-
-Findings to address:
-
-- `RecordStorage` still exposed two protected query-extension points even
-  though only `queryRecordEntries()` was a real runtime path, so adapters could
-  still compile against the dead hook and fail at runtime;
-- `packages/server/src/delivery/inbox-records.ts` still exported
-  `InboxMessageIdText` and `validateInboxMessageInput` without a production
-  need;
-- durable task/report/review/work-log state was stale against the round-34
-  package, and the review log needed the round-32/33/34 trail completed;
-- `ShardedWorkRegistry.pickUp()` caller validation for blank or oversized
-  `node` values still raised `DeliveryStorageCorruptionError` even though the
-  public docs reserve that error for corrupt durable storage;
-- corrupt persisted inbox composite-key checks could still surface
-  `InboxMessageError` by recomputing canonical keys through input-side
-  builders; and
-- caller-side write validation still surfaced generic `Error` or
-  `DeliveryStorageCorruptionError` for oversized inbox payloads or invalid
-  caller timestamps instead of `InboxMessageError`.
-
-### Round 34 Fix
-
-Result: implemented in this worktree.
-
-Fix summary:
-
-- removed the dead `queryRecords()` hook and made `queryRecordEntries()` the
-  single abstract record-query extension point for storage adapters;
-- removed the exported `InboxMessageIdText` / `validateInboxMessageInput`
-  helper surface and kept inbox message-ID/key validation local to
-  `inbox-records.ts` and `InboxStorage.write()`;
-- moved caller-side inbox payload/date/serialized-row validation onto
-  `InboxMessageError`, and kept stored inbox/dedup key integrity checks on
-  stored-only recomputation paths so corrupt durable rows remain
-  `DeliveryStorageCorruptionError`;
-- changed shard pickup caller validation for `node` / `now` to throw plain
-  `Error` before storage access, and updated the delivery API docs to state
-  that boundary explicitly; and
-- advanced the durable task/report/review/work-log state to the round-34
-  package/current fix.
-
-Verification:
-
-- red:
-  - `pnpm test packages/server/test/delivery/inbox.test.ts`
-    `packages/server/test/delivery/sharded-work-registry.test.ts`
-    failed before the production change with the expected five wrong-class
-    regressions across inbox caller validation, stored composite-key
-    corruption, and shard pickup caller validation;
-- green:
-  - `pnpm test packages/server/test/delivery/inbox.test.ts`
-    `packages/server/test/delivery/inbox-records.test.ts`
-    `packages/server/test/delivery/sharded-work-registry.test.ts`
-    `packages/storage/test/memory/in-memory-record-storage.test.ts`
-  - `pnpm typecheck`;
-  - `pnpm lint`;
-  - `pnpm format:check`;
-  - `git diff --check`; and
-  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
-    over 120 columns).
-
 ### Round 28
 
 Reviewer input: round-28 reviewer results supplied to this fix worker.
@@ -1860,6 +1609,339 @@ Verification:
     `packages/server/test/delivery/sharded-work-registry.test.ts`
     `packages/storage/test/memory/in-memory-record-storage.test.ts`
     passed with 68 tests;
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check`; and
+  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+    over 120 columns).
+
+### Round 32
+
+Reviewer input: round-32 reviewer results supplied to this fix worker.
+
+Diff package:
+`.superpowers/sdd/review-round-32-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2843-0569-7df1-933f-eec1fbd6b628` (`CLEAN`, closed);
+- documentation:
+  `019f2843-0601-7e22-b480-fb61f64f13f3` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f2843-066c-7ed0-a608-5098760a8ad6` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f2843-06fe-7bd0-adfb-26c8c82659af` (`CHANGES REQUESTED`, closed); and
+- performance/reliability:
+  `019f2843-0766-7f11-be63-b8f23e255e2c` (`CHANGES REQUESTED`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable task/report/review/work-log state was stale against the round-32
+  package/current state;
+- `Inbox.storage` publicly exposed the lower-level storage seam without
+  explicitly documenting that this is an intentional escape hatch;
+- `InboxStorage.write()` still raised a raw `Error` when a caller reused one
+  inbox message ID with different contents;
+- persisted out-of-range inbox/dedup timestamps still produced `Invalid Date`
+  and could fail open in read/dedup paths;
+- persisted out-of-range shard-session expiry timestamps still produced
+  `Invalid Date` and could fail open in shard pickup/release paths;
+- the default `RecordStorage.queryRecordEntries()` fallback still reconstructed
+  entry IDs from record bodies instead of requiring adapters to report real
+  storage-slot identities; and
+- duplicate short-circuiting in `InboxStorage.write()` still skipped full
+  caller-input validation, so malformed retries could resolve `DUPLICATE`
+  instead of rejecting invalid input.
+
+Code style/maintainability was clean. Documentation, TypeScript/API docs,
+security, and performance/reliability requested changes.
+
+### Round 32 Fix
+
+Result: implemented in this worktree.
+
+Fix summary:
+
+- documented `Inbox.storage` as the intentional low-level storage escape hatch
+  in code comments and `build-protocol/DEVELOPER_API.md`;
+- changed direct inbox message-key reuse to raise `InboxMessageError` instead
+  of a raw `Error`;
+- validated full caller inbox input at the start of `InboxStorage.write()` by
+  reusing the inbox/dedup serialization checks before any duplicate
+  short-circuit;
+- rejected out-of-range stored inbox `whenReceived` / `keepUntil` timestamps
+  and shard-session `pickedUpAt` / `expiresAt` timestamps as storage
+  corruption instead of materializing `Invalid Date`;
+- removed the unsafe `RecordStorage.queryRecordEntries()` fallback so adapters
+  must report actual storage-slot identities explicitly; and
+- updated the affected storage/delivery regression tests plus the durable
+  task/report/review/work-log state for the round-32 package.
+
+Verification:
+
+- red:
+  - focused round-32 regressions:
+
+    ```sh
+    pnpm test packages/server/test/delivery/inbox.test.ts \
+      -t 'rejects direct inbox writes that reuse an existing message key'
+    pnpm test packages/server/test/delivery/inbox.test.ts \
+      -t 'rejects malformed retries even when a live dedup guard already exists'
+    pnpm test packages/server/test/delivery/inbox.test.ts \
+      -t 'fails closed when stored inbox timestamps are out of range'
+    pnpm test packages/server/test/delivery/inbox.test.ts \
+      -t 'fails closed when stored dedup inbox timestamps are out of range'
+    pnpm test packages/server/test/delivery/sharded-work-registry.test.ts \
+      -t 'fails closed when a stored shard-session expiry time is out of range'
+    pnpm test packages/storage/test/memory/in-memory-record-storage.test.ts \
+      -t 'rejects query-entry adapters that do not provide slot identities'
+    ```
+
+    failed with the expected pre-fix regressions: direct message-key reuse
+    still surfaced a raw `Error`, malformed retries still resolved
+    `DUPLICATE`, stored out-of-range inbox timestamps still materialized
+    `Date { NaN }`, stored out-of-range dedup retention still wrote a fresh
+    live row, shard-session expiry corruption still resolved a replacement
+    session, and query-entry adapters still silently reused the embedded record
+    ID;
+- green:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check`; and
+  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+    over 120 columns).
+
+### Round 33
+
+Reviewer input: round-33 reviewer results supplied to this fix worker.
+
+Diff package:
+`.superpowers/sdd/review-round-33-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f285c-d193-7d12-b56e-1d1e8726e320` (`CLEAN`, closed);
+- documentation:
+  `019f285c-d22b-7703-9785-bd738823aa48` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f285c-d2ae-78e2-90b1-e87b39eebdd5` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f285c-d325-7f30-a8b1-2e4011efa42c` (`CLEAN`, closed); and
+- performance/reliability:
+  `019f285c-d3a1-7b92-98dd-e7d23242497c` (`CHANGES REQUESTED`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable task/report/review/work-log entries were stale against the round-33
+  package;
+- `DeliveryStorageCorruptionError` was raised from public delivery APIs but was
+  not exported or documented beside `InboxMessageError`; and
+- final dedup guard reads still accepted corrupt/out-of-range `keepUntilMs`
+  instead of failing closed as `DeliveryStorageCorruptionError`.
+
+### Round 33 Fix
+
+Result: implemented in this worktree.
+
+Fix summary:
+
+- exported `DeliveryStorageCorruptionError` from the public server entrypoint
+  and documented the delivery error contract beside `InboxMessageError`;
+- added the red-first regression for out-of-range final dedup guard
+  `keepUntilMs`; and
+- validated final dedup `keepUntilMs` in the guard read path so corrupt values
+  now fail closed as `DeliveryStorageCorruptionError`.
+
+Verification:
+
+- red:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `-- --runInBand -t "fails closed when final dedup guard keep-until`
+    `timestamps are out of range"`
+    failed before the production change because the corrupt guard still
+    resolved `WRITTEN`;
+- green:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check`; and
+  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+    over 120 columns).
+
+### Round 34
+
+Reviewer input: round-34 reviewer results supplied to this fix worker.
+
+Diff package:
+`.superpowers/sdd/review-round-34-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f286c-6540-7752-9b75-5021569fc77b` (`CHANGES REQUESTED`, closed);
+- documentation:
+  `019f286c-65cc-7a60-9526-2b0cfa1704d0` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f286c-6651-7701-a884-dd4a3ea7eec2` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f286c-66bf-7651-b86a-fa08f4fa057c` (`CHANGES REQUESTED`, closed); and
+- performance/reliability:
+  `019f286c-6750-77f3-b3ba-a071e1b91cca` (`CHANGES REQUESTED`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- `RecordStorage` still exposed two protected query-extension points even
+  though only `queryRecordEntries()` was a real runtime path, so adapters could
+  still compile against the dead hook and fail at runtime;
+- `packages/server/src/delivery/inbox-records.ts` still exported
+  `InboxMessageIdText` and `validateInboxMessageInput` without a production
+  need;
+- durable task/report/review/work-log state was stale against the round-34
+  package, and the review log needed the round-32/33/34 trail completed;
+- `ShardedWorkRegistry.pickUp()` caller validation for blank or oversized
+  `node` values still raised `DeliveryStorageCorruptionError` even though the
+  public docs reserve that error for corrupt durable storage;
+- corrupt persisted inbox composite-key checks could still surface
+  `InboxMessageError` by recomputing canonical keys through input-side
+  builders; and
+- caller-side write validation still surfaced generic `Error` or
+  `DeliveryStorageCorruptionError` for oversized inbox payloads or invalid
+  caller timestamps instead of `InboxMessageError`.
+
+### Round 34 Fix
+
+Result: implemented in this worktree.
+
+Fix summary:
+
+- removed the dead `queryRecords()` hook and made `queryRecordEntries()` the
+  single abstract record-query extension point for storage adapters;
+- removed the exported `InboxMessageIdText` / `validateInboxMessageInput`
+  helper surface and kept inbox message-ID/key validation local to
+  `inbox-records.ts` and `InboxStorage.write()`;
+- moved caller-side inbox payload/date/serialized-row validation onto
+  `InboxMessageError`, and kept stored inbox/dedup key integrity checks on
+  stored-only recomputation paths so corrupt durable rows remain
+  `DeliveryStorageCorruptionError`;
+- changed shard pickup caller validation for `node` / `now` to throw plain
+  `Error` before storage access, and updated the delivery API docs to state
+  that boundary explicitly; and
+- advanced the durable task/report/review/work-log state to the round-34
+  package/current fix.
+
+Verification:
+
+- red:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    failed before the production change with the expected five wrong-class
+    regressions across inbox caller validation, stored composite-key
+    corruption, and shard pickup caller validation;
+- green:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check`; and
+  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+    over 120 columns).
+
+### Round 35
+
+Reviewer input: round-35 reviewer results supplied to this fix worker.
+
+Diff package:
+`.superpowers/sdd/review-round-35-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2882-77ae-7550-8c5b-b613968b7a5b` (`CHANGES REQUESTED`, closed);
+- documentation:
+  `019f2882-7835-7cd1-a460-79721d41a6fc` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f2882-78a6-75b1-b5e6-acb69684af51` (`CLEAN`, closed);
+- security:
+  `019f2882-7928-70b3-a584-50f01ad07a69` (`CHANGES REQUESTED`, closed); and
+- performance/reliability:
+  `019f2882-79ae-7961-bb91-282ac6edca39` (`CHANGES REQUESTED`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- review-log sections around rounds 28-34 were no longer chronological and the
+  review trail needed to be restored without dropping content;
+- durable task/report/work-log state stopped at round 34 and needed the
+  round-35 package/review/fix breadcrumb;
+- fake shard-shaped caller input with invalid `index` / `ofTotal` could still
+  be serialized into durable inbox/dedup records, and non-`Uint8Array`
+  `Any.value` payloads could still pass through `Buffer.from(...)` coercion;
+  and
+- the pending dedup fast recovery/finalization path still skipped stored
+  inbox-timestamp validation, so corrupt pending guards could be silently
+  healed once the guarded inbox row already existed.
+
+TypeScript/API docs was clean. Code style/maintainability, documentation,
+security, and performance/reliability requested changes.
+
+### Round 35 Fix
+
+Result: implemented in this worktree.
+
+Fix summary:
+
+- restored chronological review-log ordering for rounds 28-34 and recorded the
+  round-35 package/review/fix breadcrumb across the durable task/report/work
+  logs;
+- re-materialized caller shard input through real `ShardIndex` semantics before
+  inbox/final-dedup serialization, so fake shard-shaped objects with invalid
+  counts now fail early as `InboxMessageError`;
+- required `Any.value` to already be `Uint8Array` before payload-size checks
+  or base64 encoding, so invalid caller payload shapes fail as
+  `InboxMessageError`; and
+- validated stored inbox timestamps during pending dedup message parsing, so
+  corrupt pending guards fail closed even when a durable inbox row already
+  exists and recovery could otherwise finalize.
+
+Verification:
+
+- red:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    failed before the production change with the expected three regressions:
+    corrupt pending guards still resolved `DUPLICATE`, fake shard-shaped caller
+    input still serialized inbox/dedup rows, and non-`Uint8Array` signal
+    payloads still serialized through `Buffer.from(...)`;
+- green:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `packages/storage/test/memory/in-memory-record-storage.test.ts`
+    `packages/server/test/repository/aggregate-storage.test.ts`
   - `pnpm typecheck`;
   - `pnpm lint`;
   - `pnpm format:check`;

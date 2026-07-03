@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-34 fix complete
+Status: round-35 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -967,6 +967,70 @@ Verification for the round-34 fix passed with:
     `packages/server/test/delivery/inbox-records.test.ts`
     `packages/server/test/delivery/sharded-work-registry.test.ts`
     `packages/storage/test/memory/in-memory-record-storage.test.ts`;
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check`; and
+  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+    over 120 columns).
+
+## Round 35 Review
+
+Round 35 found one durable-log ordering issue, one missing round-35
+breadcrumb, and two storage hardening gaps. The review requested restoring the
+chronological round-28-through-34 review trail, recording the round-35
+package/review/fix state across the durable task/report/work logs, rejecting
+fake shard-shaped caller input plus non-`Uint8Array` signal payloads before
+serialization, and failing closed when a pending dedup guard embeds invalid
+inbox timestamps even if the guarded inbox row already exists and recovery
+could otherwise finalize.
+
+Red-first regressions failed before implementation:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+
+The pre-fix failures matched the review findings: a pending dedup guard with
+an out-of-range embedded inbox timestamp still resolved `DUPLICATE` once the
+inbox row existed, fake shard-shaped caller input still serialized inbox and
+dedup records, and a non-`Uint8Array` `Any.value` still passed through
+`Buffer.from(...)` coercion.
+
+## Round 35 Fix
+
+Round-35 fixes stayed local to inbox-record parsing/serialization, the focused
+delivery tests, and the durable logs:
+
+- inbox-record writes now re-materialize caller shard input through real
+  `ShardIndex` semantics before serializing stored shard keys or counts, so
+  fake shard-shaped objects with invalid `index` / `ofTotal` fail early as
+  `InboxMessageError`;
+- inbox-record writes now require `Any.value` to already be a `Uint8Array`
+  before payload-size checks or `Buffer.from(...)` base64 encoding, so invalid
+  caller payload shapes fail as `InboxMessageError`;
+- stored inbox timestamps now use the stored-date range validator during
+  pending dedup message parsing, so corrupt pending guards fail closed even on
+  the fast path where a durable inbox row already exists; and
+- the review log is back in chronological order around rounds 28-34, with the
+  round-35 package/review/fix breadcrumb recorded across task/report/work
+  logs.
+
+Verification for the round-35 fix passed with:
+
+- red:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    failed before the production change with the expected three regressions
+    across pending-guard timestamp corruption, fake shard-shaped caller input,
+    and non-`Uint8Array` signal payload caller input;
+- green:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`;
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `packages/storage/test/memory/in-memory-record-storage.test.ts`
+    `packages/server/test/repository/aggregate-storage.test.ts`;
   - `pnpm typecheck`;
   - `pnpm lint`;
   - `pnpm format:check`;

@@ -12,7 +12,6 @@ import { describe, expect, it } from "vitest";
 
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
 import {
-  dedupRecordSpec,
   inboxRecordSpec,
   writeDedupClaim,
   writeDedupRecord,
@@ -994,57 +993,67 @@ describe("Inbox", () => {
   });
 
   it("fails closed when stored dedup inbox timestamps are out of range", async () => {
-    const storageFactory = new InMemoryStorageFactory();
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
-      storageFactory,
-    });
-
-    const inboxRecords = storageFactory.createRecordStorage(
-      { name: "Tasks.delivery.inbox", multitenant: false },
-      inboxRecordSpec,
-    );
-    const dedupRecords = storageFactory.createRecordStorage(
-      { name: "Tasks.delivery.inbox-dedup", multitenant: false },
-      dedupRecordSpec,
-    );
-
-    await inboxRecords.compareAndSet(
-      "0/1:message-1",
-      undefined,
-      create(AnySchema, {
-        typeUrl: "type.spine-ts.dev/internal/InboxMessageRecord",
-        value: Buffer.from(
-          JSON.stringify({
-            ...storedInboxJson({
-              signalId: "signal-1",
-              valueBase64: Buffer.from("payload", "utf8").toString("base64"),
+      storageFactory: new CorruptGuardFactory({
+        guard: finalDedupRecord({
+          key: testDedupKey("signal-1"),
+          inbox: testInboxKey,
+          signalId: "signal-1",
+          inboxMessageId: "message-1",
+        }),
+        inbox: create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/internal/InboxMessageRecord",
+          value: Buffer.from(
+            JSON.stringify({
+              ...storedInboxJson({
+                signalId: "signal-1",
+                valueBase64: Buffer.from("payload", "utf8").toString("base64"),
+              }),
+              status: "DELIVERED",
+              keepUntilMs: Number.MAX_SAFE_INTEGER,
             }),
-            status: "DELIVERED",
-            keepUntilMs: Number.MAX_SAFE_INTEGER,
-          }),
-          "utf8",
-        ),
+            "utf8",
+          ),
+        }),
       }),
-    );
-    await dedupRecords.compareAndSet(
-      testDedupKey("signal-1"),
-      undefined,
-      finalDedupRecord({
-        key: testDedupKey("signal-1"),
-        inbox: testInboxKey,
-        signalId: "signal-1",
-        inboxMessageId: "message-1",
-      }),
-    );
+    });
 
     const write = storage.write(createMessage("message-2", "signal-1", 2n));
 
     await expect(write).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
     await expect(write).rejects.toThrow(/keep-until time/i);
+  });
 
-    inboxRecords.close();
-    dedupRecords.close();
+  it("fails closed when a pending dedup guard embeds invalid inbox timestamps on fast recovery", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new CorruptGuardFactory({
+        guard: create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/internal/InboxDedupRecord",
+          value: Buffer.from(
+            JSON.stringify({
+              key: testDedupKey("signal-1"),
+              state: "PENDING",
+              message: {
+                ...storedInboxJson({
+                  signalId: "signal-1",
+                  valueBase64: Buffer.from("payload", "utf8").toString("base64"),
+                }),
+                whenReceivedMs: Number.MAX_SAFE_INTEGER,
+              },
+            }),
+            "utf8",
+          ),
+        }),
+        inbox: writeInboxMessage(createMessage("message-1", "signal-1", 1n)),
+      }),
+    });
+
+    const write = storage.write(createMessage("message-2", "signal-1", 2n));
+
+    await expect(write).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(write).rejects.toThrow(/receive time/i);
   });
 
   it("fails closed when final dedup guard keep-until timestamps are out of range", async () => {
