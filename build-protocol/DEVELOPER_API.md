@@ -152,7 +152,9 @@ bounded context. It is intentionally smaller than the later worker/retry stack:
 Public error contract for this slice is intentionally small: callers should
 expect `InboxMessageError` for invalid inbox message input and
 `DeliveryStorageCorruptionError` when durable delivery storage is corrupt or
-out of contract.
+out of contract. `ShardedWorkRegistry.pickUp()` caller validation for blank or
+oversized `node` values, or invalid clock values supplied through `now`,
+currently throws plain `Error` before any storage read/write begins.
 
 Current usage is deliberately narrow:
 

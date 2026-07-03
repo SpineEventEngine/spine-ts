@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-33 fix complete
+Status: round-34 fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -464,4 +464,29 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   `packages/storage/test/memory/in-memory-record-storage.test.ts`,
   `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `git diff --check`, and a
   full touched-file line scan.
+- Round-34 review package is supplied to this fix worker as
+  `.superpowers/sdd/review-round-34-fce80b2-current.diff`.
+- Round-34 review completed with documentation, code style/maintainability,
+  TypeScript/API docs, security, and performance/reliability findings. All
+  five round-34 reviewer lanes are now closed.
+- Round-34 fixes simplify `RecordStorage` down to one real protected query hook
+  (`queryRecordEntries()`), remove the exported `InboxMessageIdText` /
+  `validateInboxMessageInput` helper sprawl, keep corrupt stored inbox/dedup
+  composite-key checks on stored-only validation paths, route caller-side inbox
+  payload/date validation through `InboxMessageError`, route caller-side shard
+  pickup node/clock validation through plain `Error`, and advance the durable
+  task/report/review/work-log state to the round-34 package/current fix.
+- Red-first focused verification failed as expected before the production fix:
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  produced the expected wrong-class failures for oversized inbox payloads,
+  invalid inbox timestamps, corrupt stored inbox composite keys, and invalid
+  shard pickup node/clock validation.
+- Focused round-34 verification passed with
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`.
+- Final round-34 verification passed with `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `git diff --check`, and a full touched-file line scan.
 - No blocking human question is known.

@@ -47,27 +47,27 @@ export class ShardedWorkRegistry {
     Object.freeze(this);
   }
 
-  /** Pick up one shard if it is free or expired. */
+  /** Pick up one shard if it is free or expired. Invalid caller node/clock values throw before storage access. */
   async pickUp(shard: ShardIndex, node: string): Promise<ShardSession | undefined> {
     const storage = this.#storage();
+    const nextNode = requireInputText(node, "Shard node", maxSessionTextBytes);
 
     try {
       for (;;) {
-        const now = this.#now();
+        const now = requireInputTime(this.#now(), "Shard pickup time");
         const currentRecord = await storage.read(shard.key());
         const current =
           currentRecord === undefined ? undefined : readSession(currentRecord, shard.key());
-        if (current !== undefined && current.expiresAt.getTime() > now.getTime()) {
+        if (current !== undefined && current.expiresAt.getTime() > now) {
           return undefined;
         }
-        const nextNode = requireText(node, "Shard node", maxSessionTextBytes);
 
         const next = new ShardSession(
           randomUUID(),
           new ShardIndex(shard.index, shard.ofTotal),
           nextNode,
-          new Date(now.getTime()),
-          new Date(now.getTime() + this.#leaseMs),
+          new Date(now),
+          new Date(now + this.#leaseMs),
         );
         const nextRecord = writeSession(next);
         const claimed = await storage.compareAndSet(shard.key(), currentRecord, nextRecord);
@@ -204,7 +204,11 @@ function readSessionKey(
   shard: ShardIndex,
   expectedKey?: string,
 ): string {
-  const key = requireText(Reflect.get(decoded, "key"), "Shard session key", maxSessionKeyBytes);
+  const key = requireStoredText(
+    Reflect.get(decoded, "key"),
+    "Shard session key",
+    maxSessionKeyBytes,
+  );
   if (key !== shard.key()) {
     throw new DeliveryStorageCorruptionError("Shard session key does not match shard.");
   }
@@ -224,8 +228,12 @@ function buildStoredSession(
 ): StoredShardSession {
   return Object.freeze({
     key,
-    id: requireText(Reflect.get(decoded, "id"), "Shard session ID", maxSessionTextBytes),
-    node: requireText(Reflect.get(decoded, "node"), "Shard session node", maxSessionTextBytes),
+    id: requireStoredText(Reflect.get(decoded, "id"), "Shard session ID", maxSessionTextBytes),
+    node: requireStoredText(
+      Reflect.get(decoded, "node"),
+      "Shard session node",
+      maxSessionTextBytes,
+    ),
     shardIndex: shard.index,
     shardTotal: shard.ofTotal,
     pickedUpAtMs: requireNumber(Reflect.get(decoded, "pickedUpAtMs"), "Shard pickup time"),
@@ -259,17 +267,17 @@ function shardRegistryContext(context: StorageContext): StorageContext {
 function writeSession(session: ShardSession): Any {
   const stored: StoredShardSession = {
     key: session.shard.key(),
-    id: requireText(session.id, "Shard session ID", maxSessionTextBytes),
-    node: requireText(session.node, "Shard session node", maxSessionTextBytes),
+    id: requireInputText(session.id, "Shard session ID", maxSessionTextBytes),
+    node: requireInputText(session.node, "Shard session node", maxSessionTextBytes),
     shardIndex: session.shard.index,
     shardTotal: session.shard.ofTotal,
-    pickedUpAtMs: requireTime(session.pickedUpAt, "Shard pickup time"),
-    expiresAtMs: requireTime(session.expiresAt, "Shard expiry time"),
+    pickedUpAtMs: requireInputTime(session.pickedUpAt, "Shard pickup time"),
+    expiresAtMs: requireInputTime(session.expiresAt, "Shard expiry time"),
   };
   const value = Buffer.from(JSON.stringify(stored), "utf8");
 
   if (value.byteLength > maxSessionRecordBytes) {
-    throw new DeliveryStorageCorruptionError(
+    throw new Error(
       `Shard session record exceeds ${String(maxSessionRecordBytes)} bytes and cannot be stored.`,
     );
   }
@@ -288,7 +296,7 @@ function requireNumber(value: unknown, label: string): number {
   return value as number;
 }
 
-function requireText(value: unknown, label: string, maxBytes = maxSessionTextBytes): string {
+function requireStoredText(value: unknown, label: string, maxBytes = maxSessionTextBytes): string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new DeliveryStorageCorruptionError(`${label} must be a non-empty string.`);
   }
@@ -301,10 +309,21 @@ function requireText(value: unknown, label: string, maxBytes = maxSessionTextByt
   return value;
 }
 
-function requireTime(value: Date, label: string): number {
+function requireInputText(value: unknown, label: string, maxBytes = maxSessionTextBytes): string {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${label} must be a non-empty string.`);
+  }
+  if (Buffer.byteLength(value, "utf8") > maxBytes) {
+    throw new Error(`${label} exceeds ${String(maxBytes)} bytes and cannot be stored.`);
+  }
+
+  return value;
+}
+
+function requireInputTime(value: Date, label: string): number {
   const time = value.getTime();
   if (!Number.isFinite(time)) {
-    throw new DeliveryStorageCorruptionError(`${label} is invalid.`);
+    throw new Error(`${label} is invalid.`);
   }
 
   return time;

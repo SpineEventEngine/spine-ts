@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-33 fix complete
+Status: round-34 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -900,6 +900,68 @@ Verification for the round-33 fix passed with:
     `timestamps are out of range"`
     failed before the production change because the corrupt final dedup guard
     still resolved `WRITTEN`;
+- green:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `packages/storage/test/memory/in-memory-record-storage.test.ts`;
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check`; and
+  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+    over 120 columns).
+
+## Round 34 Review
+
+Round 34 found stale durable review/task/report/work-log state again, one dead
+record-storage adapter hook, an over-broad exported inbox-helper surface,
+public shard pickup caller validation that still used
+`DeliveryStorageCorruptionError`, and two error-boundary problems: caller-side
+inbox payload/date validation still surfaced generic or corruption errors, and
+stored inbox composite-key integrity checks could still leak
+`InboxMessageError` by recomputing canonical keys through input-side builders.
+
+Red-first regressions failed before implementation:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+
+The pre-fix failures matched the review findings: oversized inbox payloads
+still raised generic `Error`, invalid caller timestamps still raised
+`DeliveryStorageCorruptionError`, corrupt stored inbox composite-key checks
+leaked `InboxMessageError`, and invalid shard pickup node/clock inputs still
+raised `DeliveryStorageCorruptionError`.
+
+## Round 34 Fix
+
+Round-34 fixes stayed local to the storage query seam, inbox-record
+validation/helpers, shard pickup input validation, and durable logs:
+
+- `RecordStorage` now has a single abstract query-extension point:
+  `queryRecordEntries()`. The dead `queryRecords()` hook is removed, and the
+  in-memory adapter plus local test doubles now implement real slot-entry
+  queries directly;
+- removed the exported `InboxMessageIdText` and `validateInboxMessageInput`
+  helpers. `InboxStorage.write()` now performs caller-input preflight by
+  serializing the inbox and pending-dedup rows up front, while
+  `inbox-records.ts` keeps the message-ID/key helpers local;
+- caller-side inbox payload, serialized-row, label/status, and timestamp
+  validation now surfaces `InboxMessageError`, while stored inbox/dedup key
+  integrity checks use stored-only key recomputation so corrupt durable rows
+  remain `DeliveryStorageCorruptionError`; and
+- shard pickup validates caller `node` and `now` values with plain `Error`
+  before any storage read/write, matching the documented storage-corruption
+  boundary and keeping durable logs current through round 34.
+
+Verification for the round-34 fix passed with:
+
+- red:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    failed before the production change with the expected five wrong-class
+    regressions across inbox caller validation, stored composite-key
+    corruption, and shard pickup caller validation;
 - green:
   - `pnpm test packages/server/test/delivery/inbox.test.ts`
     `packages/server/test/delivery/inbox-records.test.ts`

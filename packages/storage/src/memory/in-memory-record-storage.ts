@@ -32,10 +32,6 @@ export class InMemoryRecordStorage<I, R extends Message> extends RecordStorage<I
     return Promise.resolve(this.records().compareAndSet(id, expected, next));
   }
 
-  protected queryRecords(query: RecordQuery<I>): Promise<readonly R[]> {
-    return Promise.resolve(this.records().query(this.recordSpec, query));
-  }
-
   protected override queryRecordEntries(
     query: RecordQuery<I>,
   ): Promise<readonly RecordEntry<I, R>[]> {

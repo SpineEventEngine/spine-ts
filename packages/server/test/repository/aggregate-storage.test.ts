@@ -1092,8 +1092,13 @@ class CorruptSnapshotStorage<I, R extends Message> extends RecordStorage<I, R> {
     return Promise.resolve(false);
   }
 
-  protected queryRecords(): Promise<readonly R[]> {
-    return Promise.resolve([this.record]);
+  protected queryRecordEntries(): Promise<readonly { id: I; record: R }[]> {
+    return Promise.resolve([
+      {
+        id: this.recordSpec.idValueIn(this.record),
+        record: this.record,
+      },
+    ]);
   }
 
   protected readRecord(): Promise<R | undefined> {
@@ -1126,8 +1131,13 @@ class CorruptEventStorage<I, R extends Message> extends RecordStorage<I, R> {
     return Promise.resolve(false);
   }
 
-  protected queryRecords(): Promise<readonly R[]> {
-    return Promise.resolve(this.events);
+  protected queryRecordEntries(): Promise<readonly { id: I; record: R }[]> {
+    return Promise.resolve(
+      this.events.map((record) => ({
+        id: this.recordSpec.idValueIn(record),
+        record,
+      })),
+    );
   }
 
   protected readRecord(): Promise<R | undefined> {

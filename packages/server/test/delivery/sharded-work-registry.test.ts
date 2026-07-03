@@ -316,9 +316,10 @@ describe("ShardedWorkRegistry", () => {
       now: () => new Date("2026-07-02T09:36:00.000Z"),
     });
 
-    await expect(
-      delivery.shards.pickUp(new ShardIndex(0, 1), oversizedText(20 * 1024)),
-    ).rejects.toThrow(/node/i);
+    const pickUp = delivery.shards.pickUp(new ShardIndex(0, 1), oversizedText(20 * 1024));
+
+    await expect(pickUp).rejects.toThrow(/node/i);
+    await expect(pickUp).rejects.not.toBeInstanceOf(DeliveryStorageCorruptionError);
   });
 
   it("rejects a shard session record stored under another shard slot during pickup", async () => {
@@ -430,12 +431,13 @@ describe("ShardedWorkRegistry", () => {
       now: () => new Date(Number.NaN),
     });
 
-    await expect(blankNodeDelivery.shards.pickUp(shard, "   ")).rejects.toBeInstanceOf(
-      DeliveryStorageCorruptionError,
-    );
-    await expect(invalidTimeDelivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
-      DeliveryStorageCorruptionError,
-    );
+    const blankNodePickup = blankNodeDelivery.shards.pickUp(shard, "   ");
+    const invalidTimePickup = invalidTimeDelivery.shards.pickUp(shard, "node-a");
+
+    await expect(blankNodePickup).rejects.toThrow(/node/i);
+    await expect(blankNodePickup).rejects.not.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(invalidTimePickup).rejects.toThrow(/pickup time/i);
+    await expect(invalidTimePickup).rejects.not.toBeInstanceOf(DeliveryStorageCorruptionError);
   });
 
   it("uses the default clock and retries a failed claim compare-and-set", async () => {
@@ -544,8 +546,13 @@ class CorruptibleRecordStorage<I, R extends Message> extends RecordStorage<I, R>
     return Promise.resolve(this.#records.delete(JSON.stringify(id)));
   }
 
-  protected queryRecords(): Promise<readonly R[]> {
-    return Promise.resolve([...this.#records.values()] as R[]);
+  protected queryRecordEntries(): Promise<readonly { id: I; record: R }[]> {
+    return Promise.resolve(
+      [...this.#records.entries()].map(([key, record]) => ({
+        id: JSON.parse(key) as I,
+        record: record as R,
+      })),
+    );
   }
 
   protected readRecord(id: I): Promise<R | undefined> {
@@ -636,8 +643,8 @@ class RetryingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     return this.#delegate.delete(id);
   }
 
-  protected queryRecords(query: RecordQuery<I>): Promise<readonly R[]> {
-    return this.#delegate.query(query);
+  protected queryRecordEntries(query: RecordQuery<I>): Promise<readonly { id: I; record: R }[]> {
+    return this.#delegate.queryEntries(query);
   }
 
   protected readRecord(id: I): Promise<R | undefined> {

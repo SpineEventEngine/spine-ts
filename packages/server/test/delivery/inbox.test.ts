@@ -252,7 +252,40 @@ describe("Inbox", () => {
         whenReceived: new Date("2026-07-02T08:10:00.000Z"),
         version: 1n,
       }),
+    ).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(
+      inbox.receive({
+        inboxId: {
+          targetId: "aggregate-1",
+          targetTypeUrl: "type.example.dev/tasks.Aggregate",
+        },
+        signalId: "signal-large",
+        signal: create(AnySchema, {
+          typeUrl: "type.example.dev/tasks.LargeSignal",
+          value: new Uint8Array(256 * 1024 + 1),
+        }),
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+        shard: ShardIndex.single(),
+        whenReceived: new Date("2026-07-02T08:10:00.000Z"),
+        version: 1n,
+      }),
     ).rejects.toThrow(/payload/i);
+  });
+
+  it("rejects invalid caller timestamps as inbox message errors", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+
+    const write = storage.write({
+      ...createMessage("message-invalid-time", "signal-invalid-time", 1n),
+      whenReceived: new Date(Number.NaN),
+    });
+
+    await expect(write).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(write).rejects.toThrow(/receive time/i);
   });
 
   it("writes and reads back an empty signal payload", async () => {
@@ -396,6 +429,37 @@ describe("Inbox", () => {
     await expect(storage.read(ShardIndex.single())).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
+  });
+
+  it("treats oversized stored inbox composite keys as storage corruption", async () => {
+    const escaped = oversizedText(16 * 1024, "\\");
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/internal/InboxMessageRecord",
+          value: Buffer.from(
+            JSON.stringify({
+              ...storedInboxJson({
+                signalId: "signal-stored-composite",
+                valueBase64: Buffer.from("payload", "utf8").toString("base64"),
+              }),
+              inbox: "bogus-inbox-key",
+              inboxId: {
+                targetId: escaped,
+                targetTypeUrl: escaped,
+              },
+            }),
+            "utf8",
+          ),
+        }),
+      ]),
+    });
+
+    await expect(storage.read(ShardIndex.single())).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+    await expect(storage.read(ShardIndex.single())).rejects.not.toBeInstanceOf(InboxMessageError);
   });
 
   it("rejects a queried inbox row copied under another backend key", async () => {
@@ -571,6 +635,44 @@ describe("Inbox", () => {
     await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
+  });
+
+  it("treats oversized stored dedup composite keys as storage corruption", async () => {
+    const escaped = oversizedText(16 * 1024, "\\");
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new CorruptGuardFactory({
+        guard: create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/internal/InboxDedupRecord",
+          value: Buffer.from(
+            JSON.stringify({
+              key: "bogus-dedup-key",
+              state: "PENDING",
+              message: {
+                ...storedInboxJson({
+                  signalId: "signal-1",
+                  valueBase64: Buffer.from("payload", "utf8").toString("base64"),
+                }),
+                inbox: JSON.stringify({
+                  targetId: escaped,
+                  targetTypeUrl: escaped,
+                }),
+                inboxId: {
+                  targetId: escaped,
+                  targetTypeUrl: escaped,
+                },
+              },
+            }),
+            "utf8",
+          ),
+        }),
+      }),
+    });
+
+    const write = storage.write(createMessage("message-2", "signal-1", 2n));
+
+    await expect(write).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(write).rejects.not.toBeInstanceOf(InboxMessageError);
   });
 
   it("treats an oversized existing inbox row as storage corruption during direct write recovery", async () => {
@@ -1110,10 +1212,6 @@ class FakeRecordStorage extends RecordStorage<string, Any> {
     return Promise.resolve(false);
   }
 
-  protected queryRecords(): Promise<readonly Any[]> {
-    return Promise.resolve(this.#records);
-  }
-
   protected override queryRecordEntries(): Promise<readonly { id: string; record: Any }[]> {
     return Promise.resolve(
       this.#records.map((record) => ({
@@ -1227,10 +1325,6 @@ class FaultyRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
 
   protected deleteRecord(id: I): Promise<boolean> {
     return this.#delegate.delete(id);
-  }
-
-  protected queryRecords(query: RecordQuery<I>): Promise<readonly R[]> {
-    return this.#delegate.query(query);
   }
 
   protected override queryRecordEntries(
@@ -1359,10 +1453,6 @@ class SlowInboxCreateStorage<I, R extends Message> extends RecordStorage<I, R> {
     return this.#delegate.delete(id);
   }
 
-  protected queryRecords(query: RecordQuery<I>): Promise<readonly R[]> {
-    return this.#delegate.query(query);
-  }
-
   protected override queryRecordEntries(
     query: RecordQuery<I>,
   ): Promise<readonly { id: I; record: R }[]> {
@@ -1448,7 +1538,7 @@ class CorruptGuardStorage extends RecordStorage<string, Any> {
     return Promise.resolve(false);
   }
 
-  protected queryRecords(): Promise<readonly Any[]> {
+  protected queryRecordEntries(): Promise<readonly { id: string; record: Any }[]> {
     return Promise.resolve([]);
   }
 
@@ -1529,7 +1619,7 @@ class ExistingInboxRowStorage extends RecordStorage<string, Any> {
     return Promise.resolve(false);
   }
 
-  protected queryRecords(): Promise<readonly Any[]> {
+  protected queryRecordEntries(): Promise<readonly { id: string; record: Any }[]> {
     return Promise.resolve([]);
   }
 
@@ -1654,12 +1744,6 @@ class RecoverPendingConflictStorage extends RecordStorage<string, Any> {
 
   protected deleteRecord(): Promise<boolean> {
     return Promise.resolve(false);
-  }
-
-  protected queryRecords(): Promise<readonly Any[]> {
-    return Promise.resolve(
-      this.context.name.endsWith(".delivery.inbox") ? this.#factory.queryInbox() : [],
-    );
   }
 
   protected override queryRecordEntries(): Promise<readonly { id: string; record: Any }[]> {

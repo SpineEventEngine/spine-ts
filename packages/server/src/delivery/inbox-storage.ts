@@ -13,12 +13,10 @@ import {
   dedupMessageId,
   dedupGuardKey,
   dedupRecordSpec,
-  InboxMessageIdText,
   inboxRecordSpec,
   isPendingDedupRecord,
   readPendingMessage,
   readInboxMessage,
-  validateInboxMessageInput,
   writeDedupClaim,
   writeDedupRecord,
   writeInboxMessage,
@@ -60,7 +58,10 @@ export class InboxStorage {
 
   /** Write one inbox message unless a live dedup key already exists. */
   async write(message: InboxMessage): Promise<InboxWriteResult> {
-    validateInboxMessageInput(message);
+    // Serialize both durable row shapes up front so caller-input validation
+    // stays on the write side before any storage read or compare-and-set.
+    writeInboxMessage(message);
+    writeDedupClaim(message);
 
     const inboxStorage = this.#inboxStorage();
     const dedupStorage = this.#dedupStorage();
@@ -283,7 +284,7 @@ export class InboxStorage {
   }
 
   #messageKey(id: Pick<InboxMessage["id"], "value" | "shard">): string {
-    return InboxMessageIdText.key(id);
+    return `${id.shard.key()}:${id.value}`;
   }
 
   #inboxStorage(): RecordStorage<string, Any> {

@@ -119,15 +119,9 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   }
 
   protected abstract deleteRecord(id: I): Promise<boolean>;
-  protected queryRecordEntries(query: RecordQuery<I>): Promise<readonly RecordEntry<I, R>[]> {
-    void query;
-    return Promise.reject(
-      new Error(
-        "RecordStorage adapters must override queryRecordEntries() to report storage slot identities.",
-      ),
-    );
-  }
-  protected abstract queryRecords(query: RecordQuery<I>): Promise<readonly R[]>;
+  protected abstract queryRecordEntries(
+    query: RecordQuery<I>,
+  ): Promise<readonly RecordEntry<I, R>[]>;
   protected abstract readRecord(id: I): Promise<R | undefined>;
   protected abstract compareAndSetRecord(
     id: I,

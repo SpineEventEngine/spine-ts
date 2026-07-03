@@ -341,14 +341,13 @@ describe("InMemoryRecordStorage", () => {
     ]);
   });
 
-  it("rejects query-entry adapters that do not provide slot identities", async () => {
-    const storage = new QueryRecordsOnlyStorage(
-      { name: "Tasks", multitenant: false },
-      createSpec(),
-      [createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n)],
-    );
+  it("uses query-entry adapters as the single query hook", async () => {
+    const storage = new QueryEntriesStorage({ name: "Tasks", multitenant: false }, createSpec(), [
+      createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n),
+    ]);
 
-    await expect(storage.queryEntries()).rejects.toThrow(/queryRecordEntries/i);
+    await expect(storage.query()).resolves.toMatchObject([{ id: { value: "event-1" } }]);
+    await expect(storage.index()).resolves.toMatchObject([{ value: "event-1" }]);
   });
 });
 
@@ -383,7 +382,7 @@ function createLookupStorage(values: Record<string, unknown>) {
   );
 }
 
-class QueryRecordsOnlyStorage extends RecordStorage<EventId, Event> {
+class QueryEntriesStorage extends RecordStorage<EventId, Event> {
   readonly #records: readonly Event[];
 
   constructor(
@@ -403,8 +402,13 @@ class QueryRecordsOnlyStorage extends RecordStorage<EventId, Event> {
     return Promise.resolve(false);
   }
 
-  protected queryRecords(): Promise<readonly Event[]> {
-    return Promise.resolve(this.#records);
+  protected queryRecordEntries(): Promise<readonly { id: EventId; record: Event }[]> {
+    return Promise.resolve(
+      this.#records.map((record) => ({
+        id: this.recordSpec.idValueIn(record),
+        record,
+      })),
+    );
   }
 
   protected readRecord(): Promise<Event | undefined> {

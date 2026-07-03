@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 33 fix complete
+Status: round 34 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1435,6 +1435,89 @@ Verification:
     `timestamps are out of range"`
     failed before the production change because the corrupt guard still
     resolved `WRITTEN`;
+- green:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check`; and
+  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+    over 120 columns).
+
+### Round 34
+
+Reviewer input: round-34 reviewer results supplied to this fix worker.
+
+Diff package:
+`.superpowers/sdd/review-round-34-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f286c-6540-7752-9b75-5021569fc77b` (`CHANGES REQUESTED`, closed);
+- documentation:
+  `019f286c-65cc-7a60-9526-2b0cfa1704d0` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f286c-6651-7701-a884-dd4a3ea7eec2` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f286c-66bf-7651-b86a-fa08f4fa057c` (`CHANGES REQUESTED`, closed); and
+- performance/reliability:
+  `019f286c-6750-77f3-b3ba-a071e1b91cca` (`CHANGES REQUESTED`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- `RecordStorage` still exposed two protected query-extension points even
+  though only `queryRecordEntries()` was a real runtime path, so adapters could
+  still compile against the dead hook and fail at runtime;
+- `packages/server/src/delivery/inbox-records.ts` still exported
+  `InboxMessageIdText` and `validateInboxMessageInput` without a production
+  need;
+- durable task/report/review/work-log state was stale against the round-34
+  package, and the review log needed the round-32/33/34 trail completed;
+- `ShardedWorkRegistry.pickUp()` caller validation for blank or oversized
+  `node` values still raised `DeliveryStorageCorruptionError` even though the
+  public docs reserve that error for corrupt durable storage;
+- corrupt persisted inbox composite-key checks could still surface
+  `InboxMessageError` by recomputing canonical keys through input-side
+  builders; and
+- caller-side write validation still surfaced generic `Error` or
+  `DeliveryStorageCorruptionError` for oversized inbox payloads or invalid
+  caller timestamps instead of `InboxMessageError`.
+
+### Round 34 Fix
+
+Result: implemented in this worktree.
+
+Fix summary:
+
+- removed the dead `queryRecords()` hook and made `queryRecordEntries()` the
+  single abstract record-query extension point for storage adapters;
+- removed the exported `InboxMessageIdText` / `validateInboxMessageInput`
+  helper surface and kept inbox message-ID/key validation local to
+  `inbox-records.ts` and `InboxStorage.write()`;
+- moved caller-side inbox payload/date/serialized-row validation onto
+  `InboxMessageError`, and kept stored inbox/dedup key integrity checks on
+  stored-only recomputation paths so corrupt durable rows remain
+  `DeliveryStorageCorruptionError`;
+- changed shard pickup caller validation for `node` / `now` to throw plain
+  `Error` before storage access, and updated the delivery API docs to state
+  that boundary explicitly; and
+- advanced the durable task/report/review/work-log state to the round-34
+  package/current fix.
+
+Verification:
+
+- red:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    failed before the production change with the expected five wrong-class
+    regressions across inbox caller validation, stored composite-key
+    corruption, and shard pickup caller validation;
 - green:
   - `pnpm test packages/server/test/delivery/inbox.test.ts`
     `packages/server/test/delivery/inbox-records.test.ts`
