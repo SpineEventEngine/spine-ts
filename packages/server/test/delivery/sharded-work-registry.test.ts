@@ -398,6 +398,38 @@ describe("ShardedWorkRegistry", () => {
     );
   });
 
+  it("fails closed when stored shard-session text fields exceed storage limits", async () => {
+    const storageFactory = new CorruptibleStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:35:00.000Z"),
+    });
+    const shard = new ShardIndex(0, 1);
+
+    await delivery.shards.pickUp(shard, "seed-node");
+    storageFactory.writeStoredSession({
+      typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
+      value: Buffer.from(
+        JSON.stringify({
+          key: "0/1",
+          id: oversizedText(20 * 1024),
+          node: "node-a",
+          shardIndex: 0,
+          shardTotal: 1,
+          pickedUpAtMs: Date.parse("2026-07-02T09:34:30.000Z"),
+          expiresAtMs: Date.parse("2026-07-02T09:35:30.000Z"),
+        }),
+        "utf8",
+      ),
+    });
+
+    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/session id/i);
+  });
+
   it("rejects oversized shard nodes before building a session record", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -635,6 +667,54 @@ describe("ShardedWorkRegistry", () => {
     expect(JSON.stringify(totalRejection)).not.toContain("confidential getter failed");
     expect((indexRejection as Error & { cause?: unknown }).cause).toBeUndefined();
     expect((totalRejection as Error & { cause?: unknown }).cause).toBeUndefined();
+
+    expect(storageFactory.opens).toBe(0);
+    expect(storageFactory.closes).toBe(0);
+  });
+
+  it("rejects non-object pickup shards before opening shard storage", async () => {
+    const storageFactory = new CountingStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:46:00.000Z"),
+    });
+
+    await expect(
+      delivery.shards.pickUp(undefined as unknown as ShardIndex, "node-a"),
+    ).rejects.toThrow("Shard index is invalid.");
+
+    expect(storageFactory.opens).toBe(0);
+    expect(storageFactory.closes).toBe(0);
+  });
+
+  it("rejects non-integer pickup shard coordinates before opening shard storage", async () => {
+    const storageFactory = new CountingStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:46:00.000Z"),
+    });
+
+    await expect(
+      delivery.shards.pickUp({ index: "0", ofTotal: 1 } as unknown as ShardIndex, "node-a"),
+    ).rejects.toThrow(/finite integer/);
+
+    expect(storageFactory.opens).toBe(0);
+    expect(storageFactory.closes).toBe(0);
+  });
+
+  it("rejects out-of-range pickup shard coordinates before opening shard storage", async () => {
+    const storageFactory = new CountingStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:46:00.000Z"),
+    });
+
+    await expect(
+      delivery.shards.pickUp({ index: 0, ofTotal: 0 } as unknown as ShardIndex, "node-a"),
+    ).rejects.toThrow("Shard index is invalid.");
 
     expect(storageFactory.opens).toBe(0);
     expect(storageFactory.closes).toBe(0);

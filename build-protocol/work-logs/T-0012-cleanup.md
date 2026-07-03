@@ -1,6 +1,6 @@
 # Work Log: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.8 integrated; T-0012.9 selected
+Status: T-0012.8b integrated; T-0012.9 selected
 
 ## Entries
 
@@ -29,6 +29,8 @@ Status: T-0012.8 integrated; T-0012.9 selected
 | `2026-07-02 07:44 WEST` | Main orchestrator     | Integrated `T-0012.7c` and selected next subtask.                                             | Merged `task/T-0012-7c-integration-verification-fix` into `main`; updated parent task/report/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                                       | `T-0012.7c` is complete with all review lanes clean and escalated `env CI=true corepack pnpm verify` passing. Next selected subtask is `T-0012.8 Delivery And Inbox`.                                                                                                                                                                                                                                                  |
 | `2026-07-02 07:49 WEST` | Main orchestrator     | Verified tracked parent state after `T-0012.7c` integration.                                  | `check:node`; `typecheck`; `lint`; tracked-file Prettier check; escalated `test`; escalated `test:coverage`; `docs:check`; `proto:lint`; `proto:generate`; `proto:check-generated`; `git diff --check`.                                                                                                                                                                                                                                                                                                                                       | Passed on `main`: 37 test files and 347 tests; coverage statements 94.92%, branches 90.50%, functions 96.33%, lines 94.93%; docs/API checks passed with the existing invalid-`origin` TypeDoc warning; proto generated output is ignored, untracked, and freshly regenerated. Root still has unrelated untracked `human-review-1-jul.md`, so monolithic `format:check` is not used for the parent tracked-state proof. |
 | `2026-07-03 23:10 WEST` | Main orchestrator     | Integrated `T-0012.8` and selected next subtask.                                              | `git merge --no-ff --no-commit task/T-0012-8-delivery-inbox`; updated parent task/report/review/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                                    | `T-0012.8` is complete with all review lanes clean through reviewed commit `0d6089a`; final task bookkeeping was committed as `2d0e34e`. Next selected subtask is `T-0012.9 Stand And Entity Updates`. Parent integration verification is next.                                                                                                                                                                        |
+| `2026-07-03 23:15 WEST` | Main orchestrator     | Opened `T-0012.8b` integration coverage fix.                                                  | `pnpm check:node`; `pnpm typecheck`; `pnpm lint`; tracked-file Prettier check; `pnpm test`; escalated `pnpm test`; `pnpm test:coverage`; escalated `pnpm test:coverage`; `git worktree add .worktrees/T-0012-8b-integration-coverage-fix -b task/T-0012-8b-integration-coverage-fix main`.                                                                                                                                                                                                                                                    | Node, typecheck, lint, tracked formatting, and escalated tests passed. Non-escalated tests/coverage hit the known ZeroMQ local IPC sandbox failure. Escalated coverage passed all tests but failed branch coverage at 89.2%, below the 90% threshold, so `T-0012.8b Integration Coverage Fix` is selected before `T-0012.9`.                                                                                           |
+| `2026-07-03 23:51 WEST` | Main orchestrator     | Integrated `T-0012.8b` and selected next subtask.                                             | `git merge --no-ff --no-commit task/T-0012-8b-integration-coverage-fix`; updated parent task/report/review/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                         | `T-0012.8b` is complete with all review lanes clean through reviewed commit `8e2e410`. It recovered branch coverage to 90.02% with focused delivery tests. Next selected subtask is `T-0012.9 Stand And Entity Updates`.                                                                                                                                                                                               |
 
 ## Current State
 
@@ -45,6 +47,7 @@ Status: T-0012.8 integrated; T-0012.9 selected
 - `T-0012.7b Aggregate Storage And Signal Routing` is integrated.
 - `T-0012.7c Integration Verification Fix` is integrated.
 - `T-0012.8 Delivery And Inbox` is integrated.
+- `T-0012.8b Integration Coverage Fix` is integrated.
 - Next selected implementable cleanup subtask is
   `T-0012.9 Stand And Entity Updates`.
 - Parent verification passed after `T-0012.1` integration.
@@ -57,5 +60,9 @@ Status: T-0012.8 integrated; T-0012.9 selected
 - Parent verification passed at `T-0012.7c` task branch HEAD before
   integration.
 - Parent tracked-state verification passed after `T-0012.7c` integration.
-- Parent integration verification for `T-0012.8` is pending.
+- Parent integration verification for `T-0012.8` found a coverage threshold
+  failure: escalated tests passed, but branch coverage was 89.2% against the
+  90% threshold.
+- `T-0012.8b` recovered global branch coverage to 90.02% and passed all
+  required review lanes.
 - No blocking human question is known.

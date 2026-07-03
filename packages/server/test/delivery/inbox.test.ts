@@ -156,6 +156,28 @@ describe("Inbox", () => {
     ]);
   });
 
+  it("keeps multitenant inbox storage isolated by tenant", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const tenantA = new InboxStorage({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      storageFactory,
+    });
+    const tenantB = new InboxStorage({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-b" },
+      storageFactory,
+    });
+
+    await tenantA.write(createMessage("message-1", "signal-1", 1n));
+    await tenantB.write(createMessage("message-2", "signal-2", 2n));
+
+    await expect(tenantA.read(ShardIndex.single(), { limit: 10 })).resolves.toMatchObject([
+      { id: { value: "message-1" }, signalId: "signal-1" },
+    ]);
+    await expect(tenantB.read(ShardIndex.single(), { limit: 10 })).resolves.toMatchObject([
+      { id: { value: "message-2" }, signalId: "signal-2" },
+    ]);
+  });
+
   it("orders equal receive time and version ties by inbox message UUID and supports paging limits", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -212,6 +234,41 @@ describe("Inbox", () => {
 
     await expect(throwingShardRead).rejects.toBeInstanceOf(InboxMessageError);
     await expect(throwingShardRead).rejects.toThrow("Inbox shard is invalid.");
+    expect(storageFactory.opens).toBe(0);
+    expect(storageFactory.closes).toBe(0);
+    expect(storageFactory.queryCount).toBe(0);
+  });
+
+  it("rejects non-object read shards before opening inbox storage", async () => {
+    const storageFactory = new RecordingInboxQueryFactory();
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+
+    await expect(storage.read(undefined as unknown as ShardIndex)).rejects.toThrow(
+      "Inbox shard is invalid.",
+    );
+
+    expect(storageFactory.opens).toBe(0);
+    expect(storageFactory.closes).toBe(0);
+    expect(storageFactory.queryCount).toBe(0);
+  });
+
+  it("rejects non-integer read shard coordinates before opening inbox storage", async () => {
+    const storageFactory = new RecordingInboxQueryFactory();
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+
+    await expect(
+      storage.read({
+        index: "0",
+        ofTotal: 1,
+      } as unknown as ShardIndex),
+    ).rejects.toThrow("Inbox shard index must be a finite integer.");
+
     expect(storageFactory.opens).toBe(0);
     expect(storageFactory.closes).toBe(0);
     expect(storageFactory.queryCount).toBe(0);
@@ -826,6 +883,25 @@ describe("Inbox", () => {
     );
   });
 
+  it("fails closed when stored inbox record payload accessors throw", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        {
+          typeUrl: "type.spine-ts.dev/internal/InboxMessageRecord",
+          get value(): Uint8Array {
+            throw new Error("Inbox payload getter failed.");
+          },
+        } as unknown as Any,
+      ]),
+    });
+
+    await expect(storage.read(ShardIndex.single())).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+    await expect(storage.read(ShardIndex.single())).rejects.toThrow(/value is invalid/i);
+  });
+
   it("translates queried inbox row clone failures into storage corruption", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -893,6 +969,32 @@ describe("Inbox", () => {
     records.close();
   });
 
+  it("rejects stored inbox rows whose record key does not match message identity", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/internal/InboxMessageRecord",
+          value: Buffer.from(
+            JSON.stringify({
+              ...storedInboxJson({
+                signalId: "signal-key-mismatch",
+                valueBase64: Buffer.from("payload", "utf8").toString("base64"),
+              }),
+              key: "0/1:message-2",
+            }),
+            "utf8",
+          ),
+        }),
+      ]),
+    });
+
+    await expect(storage.read(ShardIndex.single())).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+    await expect(storage.read(ShardIndex.single())).rejects.toThrow(/message identity/i);
+  });
+
   it("rejects oversized signal payloads in stored inbox rows", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -909,6 +1011,23 @@ describe("Inbox", () => {
     );
   });
 
+  it("rejects stored signal payloads whose base64 text exceeds the encoded size limit", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedInboxRecord({
+          signalId: "signal-oversized-base64-text",
+          valueBase64: `${Buffer.alloc(256 * 1024).toString("base64")}AAAA`,
+        }),
+      ]),
+    });
+
+    await expect(storage.read(ShardIndex.single())).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+    await expect(storage.read(ShardIndex.single())).rejects.toThrow(/payload exceeds/i);
+  });
+
   it("rejects malformed signal base64 in stored inbox rows", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -923,6 +1042,23 @@ describe("Inbox", () => {
     await expect(storage.read(ShardIndex.single())).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
+  });
+
+  it("rejects non-canonical pad bits in stored signal payload base64", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedInboxRecord({
+          signalId: "signal-non-canonical-pad-bits",
+          valueBase64: "Zh==",
+        }),
+      ]),
+    });
+
+    await expect(storage.read(ShardIndex.single())).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+    await expect(storage.read(ShardIndex.single())).rejects.toThrow(/not canonical/i);
   });
 
   it("rejects non-canonical signal base64 in stored inbox rows", async () => {

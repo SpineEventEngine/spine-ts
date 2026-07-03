@@ -6,7 +6,7 @@ Branch: `task/T-0012-cleanup-replan`
 Baseline commit: `a9769d4`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
-Status: T-0012.8 integrated; T-0012.9 selected.
+Status: T-0012.8b integrated; T-0012.9 selected.
 
 ## Required Review Lanes
 
@@ -168,6 +168,26 @@ style/maintainability, documentation, TypeScript/API docs, security, and
 performance/reliability.
 
 ## Next Review Focus
+
+Parent integration verification after `T-0012.8` found a real coverage gate
+failure: escalated `pnpm test:coverage` passed all tests but reported 89.2%
+branch coverage, below the 90% threshold. Follow-up subtask
+`T-0012.8b Integration Coverage Fix` is selected before `T-0012.9`.
+
+For `T-0012.8b Integration Coverage Fix`, reviewers must focus on:
+
+- the smallest meaningful coverage recovery after T-0012.8;
+- tests covering real behavior rather than implementation trivia;
+- no production changes unless a focused test exposes a real runtime defect;
+- global branch coverage at or above 90%; and
+- durable disclosure of the known ZeroMQ local IPC sandbox failure and the
+  TypeDoc invalid-`origin` warning when they appear in verification.
+
+## Next Review Focus After T-0012.8b
+
+`T-0012.8b Integration Coverage Fix` is integrated. All required review lanes
+are clean through reviewed commit `8e2e410`, and global branch coverage is
+back above the 90% threshold at 90.02%.
 
 For `T-0012.9 Stand And Entity Updates`, reviewers must focus on:
 
