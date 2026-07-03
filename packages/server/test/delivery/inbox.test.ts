@@ -718,7 +718,7 @@ describe("Inbox", () => {
   it("translates queried inbox row clone failures into storage corruption", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new DurableReadCloneFailureFactory({
+      storageFactory: new CloneFailFactory({
         inboxQueryEntries: [unclonableStoredRecord()],
       }),
     });
@@ -863,7 +863,7 @@ describe("Inbox", () => {
   it("translates dedup guard clone failures into storage corruption", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new DurableReadCloneFailureFactory({
+      storageFactory: new CloneFailFactory({
         dedupRead: unclonableStoredRecord(),
       }),
     });
@@ -876,7 +876,7 @@ describe("Inbox", () => {
   it("translates conflicting inbox row clone failures into storage corruption", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new DurableReadCloneFailureFactory({
+      storageFactory: new CloneFailFactory({
         failInboxCreate: true,
         inboxRead: unclonableStoredRecord(),
       }),
@@ -890,7 +890,7 @@ describe("Inbox", () => {
   it("translates guarded inbox row clone failures into storage corruption", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new DurableReadCloneFailureFactory({
+      storageFactory: new CloneFailFactory({
         dedupRead: finalDedupRecord({
           key: testDedupKey("signal-1"),
           inbox: testInboxKey,
@@ -898,6 +898,38 @@ describe("Inbox", () => {
           inboxMessageId: "message-1",
         }),
         inboxRead: unclonableStoredRecord(),
+      }),
+    });
+
+    await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("translates pending dedup recovery compare-and-set clone failures into storage corruption", async () => {
+    const pending = createMessage("message-1", "signal-1", 1n);
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new CloneFailFactory({
+        dedupRead: cloneFailsOnReuse(DedupRecords.writeClaim(pending)),
+      }),
+    });
+
+    await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("translates dedup re-claim compare-and-set clone failures into storage corruption", async () => {
+    const delivered = {
+      ...createMessage("message-1", "signal-1", 1n),
+      status: "DELIVERED" as const,
+    };
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new CloneFailFactory({
+        dedupRead: cloneFailsOnReuse(DedupRecords.writeFinal(delivered)),
+        inboxRead: InboxRecords.write(delivered),
       }),
     });
 
@@ -1088,6 +1120,20 @@ describe("Inbox", () => {
     await expect(storage.read(ShardIndex.single(), { limit: 10 })).resolves.toMatchObject([
       { id: { value: "message-1" }, signalId: "signal-1" },
     ]);
+  });
+
+  it("preserves the inbox write failure when dedup rollback also throws", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FaultyStorageFactory({
+        failInboxWriteOnce: true,
+        throwDedupRollbackOnce: true,
+      }),
+    });
+
+    await expect(storage.write(createMessage("message-1", "signal-1", 1n))).rejects.toThrow(
+      /inbox write failed/i,
+    );
   });
 
   it("recovers a pending dedup claim once the inbox row is visible", async () => {
@@ -1759,6 +1805,7 @@ interface FaultPlan {
   skipDedupDeleteOnce?: boolean;
   skipDedupFinalizeOnce?: boolean;
   throwDedupFinalizeOnce?: boolean;
+  throwDedupRollbackOnce?: boolean;
 }
 
 class FaultyStorageFactory extends StorageFactory {
@@ -1819,6 +1866,15 @@ class FaultyRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
       if (next === undefined && this.#plan.skipDedupDeleteOnce === true) {
         this.#plan.skipDedupDeleteOnce = false;
         return Promise.resolve(false);
+      }
+
+      if (
+        expected !== undefined &&
+        next === undefined &&
+        this.#plan.throwDedupRollbackOnce === true
+      ) {
+        this.#plan.throwDedupRollbackOnce = false;
+        return Promise.reject(new Error("Dedup rollback failed."));
       }
 
       if (
@@ -2087,15 +2143,19 @@ class CorruptGuardStorage extends RecordStorage<string, Any> {
   }
 }
 
-class DurableReadCloneFailureFactory extends StorageFactory {
-  readonly #records: DurableReadCloneFailurePlan;
+class CloneFailFactory extends StorageFactory {
+  readonly #records: CloneFailPlan;
   readonly #dedup = new Map<string, Any>();
+  readonly #inbox = new Map<string, Any>();
 
-  constructor(records: DurableReadCloneFailurePlan) {
+  constructor(records: CloneFailPlan) {
     super();
     this.#records = records;
     if (records.dedupRead !== undefined) {
       this.#dedup.set(testDedupKey("signal-1"), records.dedupRead);
+    }
+    if (records.inboxRead !== undefined) {
+      this.#inbox.set("0/1:message-1", records.inboxRead);
     }
   }
 
@@ -2103,35 +2163,39 @@ class DurableReadCloneFailureFactory extends StorageFactory {
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
   ): RecordStorage<I, R> {
-    return new DurableReadCloneFailureStorage(
+    return new CloneFailStorage(
       context,
       recordSpec as unknown as RecordSpec<string, Any>,
       this.#records,
       this.#dedup,
+      this.#inbox,
     ) as unknown as RecordStorage<I, R>;
   }
 }
 
-interface DurableReadCloneFailurePlan {
+interface CloneFailPlan {
   readonly dedupRead?: Any;
   readonly inboxQueryEntries?: readonly Any[];
   readonly inboxRead?: Any;
   readonly failInboxCreate?: boolean;
 }
 
-class DurableReadCloneFailureStorage extends RecordStorage<string, Any> {
-  readonly #records: DurableReadCloneFailurePlan;
+class CloneFailStorage extends RecordStorage<string, Any> {
+  readonly #records: CloneFailPlan;
   readonly #dedup: Map<string, Any>;
+  readonly #inbox: Map<string, Any>;
 
   constructor(
     context: StorageContext,
     recordSpec: RecordSpec<string, Any>,
-    records: DurableReadCloneFailurePlan,
+    records: CloneFailPlan,
     dedup: Map<string, Any>,
+    inbox: Map<string, Any>,
   ) {
     super(context, recordSpec);
     this.#records = records;
     this.#dedup = dedup;
+    this.#inbox = inbox;
   }
 
   protected compareAndSetRecord(
@@ -2163,6 +2227,21 @@ class DurableReadCloneFailureStorage extends RecordStorage<string, Any> {
       return Promise.resolve(true);
     }
 
+    if (this.context.name.endsWith(".delivery.inbox")) {
+      const current = this.#inbox.get(id);
+      if (current !== expected?.record && !(current === undefined && expected === undefined)) {
+        return Promise.resolve(false);
+      }
+
+      if (next === undefined) {
+        this.#inbox.delete(id);
+        return Promise.resolve(true);
+      }
+
+      this.#inbox.set(id, next.record);
+      return Promise.resolve(true);
+    }
+
     return Promise.resolve(false);
   }
 
@@ -2189,7 +2268,7 @@ class DurableReadCloneFailureStorage extends RecordStorage<string, Any> {
     }
 
     if (this.context.name.endsWith(".delivery.inbox")) {
-      return Promise.resolve(this.#records.inboxRead);
+      return Promise.resolve(this.#inbox.get(id) ?? this.#records.inboxRead);
     }
 
     return Promise.resolve(undefined);
@@ -2202,6 +2281,23 @@ class DurableReadCloneFailureStorage extends RecordStorage<string, Any> {
   protected writeRecord(): Promise<void> {
     return Promise.resolve();
   }
+}
+
+function cloneFailsOnReuse(record: Any): Any {
+  const rematerialized = {
+    ...create(AnySchema, record),
+    value: Buffer.from(record.value),
+  } as unknown as Any & { clone: () => Any };
+  rematerialized.clone = () => {
+    throw new Error("Storage record could not be cloned.");
+  };
+
+  const firstRead = {
+    ...create(AnySchema, record),
+    value: Buffer.from(record.value),
+  } as unknown as Any & { clone: () => Any };
+  firstRead.clone = () => rematerialized;
+  return firstRead;
 }
 
 class ExistingInboxRowFactory extends StorageFactory {

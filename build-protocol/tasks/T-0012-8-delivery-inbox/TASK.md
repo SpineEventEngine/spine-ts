@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-51 fix verified for current pass
+Status: round-52 fix verified for current pass
 Previous completed commit: `5a00b30`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
@@ -853,6 +853,31 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   one private `InboxStorage` durable-read helper, and refresh durable
   task/report/review/work logs for committed round 50 at `5a00b30`.
 - Final round-51 verification passed with the required focused
+  delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
+  `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
+  touched-file line scan.
+- Round-51 fixes were committed as `dd04528`.
+- Round-52 review completed from reviewer results supplied to this fix worker.
+  Security requested translating dedup compare-and-set clone/materialization
+  failures in pending recovery and re-claim paths into
+  `DeliveryStorageCorruptionError`, preserving the original inbox-write error
+  when rollback throws, shortening new clone-failure test helper names, and
+  restoring the missing `DeliveryStorageCorruptionError` root export snapshot.
+  Documentation requested refreshing durable logs for committed round 51 at
+  `dd04528`.
+- Red-first round-52 verification failed before production changes because the
+  new pending-recovery and re-claim CAS regressions observed raw
+  `Error: Storage record could not be cloned.`, and the rollback regression was
+  masked by `Dedup rollback failed.` instead of the original inbox-write
+  failure.
+- Round-52 fixes add focused CAS clone/materialization regressions and a
+  rollback-preservation regression, normalize durable dedup
+  `RecordStorage.compareAndSet()` clone/materialization failures through one
+  private `InboxStorage` helper, preserve the original inbox-write error when
+  rollback throws, shorten clone-failure test helper names, restore the
+  package export snapshot, and refresh durable task/report/review/work logs for
+  committed round 51 at `dd04528`.
+- Final round-52 verification passed with the required focused
   delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
   `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
   touched-file line scan.

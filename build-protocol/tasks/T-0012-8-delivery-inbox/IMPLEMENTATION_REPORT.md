@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-51 fix verified for current pass
+Status: round-52 fix verified for current pass
 Previous completed commit: `5a00b30`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
@@ -1977,5 +1977,89 @@ Final verification:
 `node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
 TypeDoc source-link warning, but exited successfully.
 
-This round-51 fix commit cannot pre-record its own final hash; identify it
+Round-51 fixes were committed as `dd04528`.
+
+## Round 52 Review
+
+Round 52 found one security issue, one maintainability issue, one API export
+snapshot issue, and durable-log drift. Security requested translating dedup
+compare-and-set clone/materialization failures during pending-claim recovery
+and dedup re-claim into `DeliveryStorageCorruptionError`, plus preserving the
+original inbox-write error when rollback throws. Maintainability requested
+shorter local helper names in the new clone-failure tests. The root export
+snapshot also needed to include `DeliveryStorageCorruptionError`. Documentation
+requested refreshing durable logs for committed round 51 at `dd04528`.
+
+## Round 52 Fix
+
+Round-52 fixes stay local to inbox storage compare-and-set paths, focused
+tests, export coverage, and durable logs:
+
+- added red-first regressions in `packages/server/test/delivery/inbox.test.ts`
+  for pending dedup recovery compare-and-set clone failure, dedup re-claim
+  compare-and-set clone failure, and rollback preserving the original
+  inbox-write error when rollback throws;
+- shortened the local durable clone-failure test helper names to
+  `CloneFailFactory`, `CloneFailPlan`, and `CloneFailStorage`;
+- extended `InboxStorage` with one private durable compare-and-set helper that
+  normalizes storage clone/materialization failures into
+  `DeliveryStorageCorruptionError`, while leaving non-clone errors untouched;
+- preserved the original inbox-write failure when the best-effort dedup
+  rollback throws; and
+- restored `DeliveryStorageCorruptionError` to the expected package export
+  snapshot and refreshed durable task/report/review/work logs for committed
+  round 51 at `dd04528` and this round-52 fix trail.
+
+Red-first verification:
+
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'translates pending dedup recovery compare-and-set clone failures into storage corruption'`
+  failed before production changes because the new regression observed raw
+  `Error: Storage record could not be cloned.` instead of
+  `DeliveryStorageCorruptionError`;
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'translates dedup re-claim compare-and-set clone failures into storage corruption'`
+  failed before production changes because the new regression observed raw
+  `Error: Storage record could not be cloned.` instead of
+  `DeliveryStorageCorruptionError`; and
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'preserves the inbox write failure when dedup rollback also throws'`
+  failed before production changes because the regression observed
+  `Dedup rollback failed.` instead of the original inbox-write failure.
+
+Focused verification:
+
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'translates pending dedup recovery compare-and-set clone failures into storage corruption'`
+  passed after the production change;
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'translates dedup re-claim compare-and-set clone failures into storage corruption'`
+  passed;
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'preserves the inbox write failure when dedup rollback also throws'`
+  passed; and
+- `pnpm exec vitest run packages/server/test/index.test.ts -t`
+  `'exports the descriptor-derived entity and handler metadata surface'`
+  passed.
+
+Final verification:
+
+- `pnpm test packages/server/test/index.test.ts`
+  `packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+This round-52 fix commit cannot pre-record its own final hash; identify it
 from package HEAD or `git log`.

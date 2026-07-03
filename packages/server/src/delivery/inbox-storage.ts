@@ -131,7 +131,13 @@ export class InboxStorage {
     let expected = current;
     if (DedupRecords.isPending(current)) {
       expected = DedupRecords.writeFinal(storedMessage);
-      const finalized = await dedupStorage.compareAndSet(dedupKey, current, expected);
+      const finalized = await this.#durableCompareAndSet(
+        "Inbox dedup guard",
+        dedupStorage,
+        dedupKey,
+        current,
+        expected,
+      );
       if (!finalized) {
         return { kind: "RETRY" };
       }
@@ -162,7 +168,13 @@ export class InboxStorage {
     );
 
     const finalRecord = DedupRecords.writeFinal(storedMessage);
-    const finalized = await dedupStorage.compareAndSet(dedupKey, current, finalRecord);
+    const finalized = await this.#durableCompareAndSet(
+      "Inbox dedup guard",
+      dedupStorage,
+      dedupKey,
+      current,
+      finalRecord,
+    );
     if (!finalized) {
       return { kind: "RETRY" };
     }
@@ -179,7 +191,13 @@ export class InboxStorage {
     step: WriteClaim,
   ): Promise<InboxWriteResult | undefined> {
     const pending = DedupRecords.writeClaim(step.message);
-    const claimed = await dedupStorage.compareAndSet(dedupKey, step.expected, pending);
+    const claimed = await this.#durableCompareAndSet(
+      "Inbox dedup guard",
+      dedupStorage,
+      dedupKey,
+      step.expected,
+      pending,
+    );
     if (!claimed) {
       return undefined;
     }
@@ -188,11 +206,23 @@ export class InboxStorage {
     try {
       storedMessage = await this.#ensureInboxRow(inboxStorage, step.message);
     } catch (error) {
-      await dedupStorage.compareAndSet(dedupKey, pending, step.expected);
+      try {
+        await this.#durableCompareAndSet(
+          "Inbox dedup guard",
+          dedupStorage,
+          dedupKey,
+          pending,
+          step.expected,
+        );
+      } catch {
+        // Preserve the original inbox-write failure even if rollback also fails.
+      }
       throw error;
     }
 
-    const finalized = await dedupStorage.compareAndSet(
+    const finalized = await this.#durableCompareAndSet(
+      "Inbox dedup guard",
+      dedupStorage,
       dedupKey,
       pending,
       DedupRecords.writeFinal(storedMessage),
@@ -318,14 +348,36 @@ export class InboxStorage {
     try {
       return await read();
     } catch (error) {
-      if (error instanceof Error && error.message === "Storage record could not be cloned.") {
-        throw new DeliveryStorageCorruptionError(`${label} is invalid.`, {
-          cause: error,
-        });
-      }
-
-      throw error;
+      throw this.#storageCorruptionError(label, error);
     }
+  }
+
+  async #durableCompareAndSet(
+    label: string,
+    storage: RecordStorage<string, Any>,
+    id: string,
+    expected: Any | undefined,
+    next: Any | undefined,
+  ): Promise<boolean> {
+    try {
+      return await storage.compareAndSet(id, expected, next);
+    } catch (error) {
+      throw this.#storageCorruptionError(label, error);
+    }
+  }
+
+  #storageCorruptionError(label: string, error: unknown): Error {
+    if (
+      error instanceof Error &&
+      (error.message === "Storage record could not be cloned." ||
+        error.message === "Storage value could not be cloned.")
+    ) {
+      return new DeliveryStorageCorruptionError(`${label} is invalid.`, {
+        cause: error,
+      });
+    }
+
+    return error instanceof Error ? error : new Error(String(error));
   }
 
   #written(message: InboxMessage): WriteReturn {

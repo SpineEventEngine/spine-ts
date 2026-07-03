@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 51 fix verified for current pass
+Status: round 52 fix verified for current pass
 Previous completed commit: `5a00b30`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
@@ -2936,9 +2936,7 @@ Findings to address:
 
 ### Round 51 Fix
 
-Result: implemented for this current pass. The future commit hash cannot be
-pre-recorded inside the commit itself; identify the committed round-51 fix by
-package HEAD or `git log`.
+Result: committed as `dd04528`.
 
 Fix summary:
 
@@ -2951,6 +2949,56 @@ Fix summary:
   `DeliveryStorageCorruptionError`; and
 - refreshed durable task/report/review/work logs for committed round 50 at
   `5a00b30` and this round-51 fix trail.
+
+### Round 52
+
+Reviewer input: round-52 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- security: `round-52-security` (`CHANGES REQUESTED`, supplied);
+- maintainability: `round-52-maintainability` (`CHANGES REQUESTED`, supplied);
+- TypeScript/API docs: `round-52-typescript-api-docs`
+  (`CHANGES REQUESTED`, supplied); and
+- documentation: `round-52-documentation` (`CHANGES REQUESTED`, supplied).
+
+Result: changes requested.
+
+Findings to address:
+
+- dedup compare-and-set paths in `packages/server/src/delivery/inbox-storage.ts`
+  still let clone/materialization failures escape as raw storage errors during
+  pending recovery and dedup re-claim/finalization;
+- `#claimAndWrite()` can mask the original inbox-write failure if the rollback
+  compare-and-set throws;
+- new durable clone-failure test helper names exceeded the four-component
+  naming limit;
+- `packages/server/test/index.test.ts` omitted
+  `DeliveryStorageCorruptionError` from the expected root export snapshot; and
+- implementation/report/work-log durable state still reflected round 51 as a
+  verified-but-uncommitted current pass instead of committed `dd04528`.
+
+### Round 52 Fix
+
+Result: implemented for this current pass. The future commit hash cannot be
+pre-recorded inside the commit itself; identify the committed round-52 fix by
+package HEAD or `git log`.
+
+Fix summary:
+
+- added red-first inbox regressions for pending dedup recovery compare-and-set
+  clone failure, dedup re-claim compare-and-set clone failure, and rollback
+  preserving the original inbox-write error;
+- wrapped durable dedup `RecordStorage.compareAndSet()` boundaries behind one
+  private `InboxStorage` helper that translates storage clone/materialization
+  failures into `DeliveryStorageCorruptionError`;
+- preserved the original inbox-write failure when best-effort dedup rollback
+  throws;
+- shortened the new clone-failure test helper names to `CloneFailFactory`,
+  `CloneFailPlan`, and `CloneFailStorage`;
+- restored `DeliveryStorageCorruptionError` to the package export snapshot; and
+- refreshed durable task/report/review/work logs for committed round 51 at
+  `dd04528` and this round-52 fix trail.
 
 Red-first verification:
 
