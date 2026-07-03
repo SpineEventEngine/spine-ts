@@ -58,6 +58,7 @@ interface StoredFinalDedupRecord {
 type StoredDedupRecord = StoredPendingDedupRecord | StoredFinalDedupRecord;
 
 const maxSignalPayloadBytes: number = 256 * 1024;
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
 export const inboxRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, Any>({
   schema: AnySchema,
@@ -424,7 +425,7 @@ function readStoredRecord(
   }
 
   try {
-    const decoded = JSON.parse(Buffer.from(record.value).toString("utf8")) as unknown;
+    const decoded = JSON.parse(decodeStoredUtf8(record.value, label)) as unknown;
 
     if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
       throw new DeliveryStorageCorruptionError(`${label} is not a JSON object.`);
@@ -437,6 +438,16 @@ function readStoredRecord(
     }
 
     throw new DeliveryStorageCorruptionError(`${label} contains malformed JSON.`, {
+      cause: error,
+    });
+  }
+}
+
+function decodeStoredUtf8(value: Uint8Array, label: string): string {
+  try {
+    return utf8Decoder.decode(value);
+  } catch (error) {
+    throw new DeliveryStorageCorruptionError(`${label} contains invalid UTF-8.`, {
       cause: error,
     });
   }

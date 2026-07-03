@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-27 fix complete
+Status: round-28 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -552,6 +552,64 @@ Round-27 fixes stayed small and local to the durable inbox read path:
 Verification for the round-27 fix passed with:
 
 - `pnpm test packages/server/test/delivery/inbox.test.ts`
+- `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm format:check`
+- `git diff --check`
+- `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+  over 120 columns)
+
+## Round 28 Review
+
+Round 28 found no code style/maintainability or TypeScript/API docs issue.
+Documentation requested advancing the durable task/report/work-log state to the
+actual round-28 review package
+`.superpowers/sdd/review-round-28-fce80b2-current.diff`. Security requested
+strict UTF-8 validation before `JSON.parse()` for persisted inbox, dedup, and
+shard-session records. Performance/reliability requested rolling back a stale
+pending dedup guard when recovery races with a conflicting inbox-row create,
+while preserving the earlier rule not to roll back after the inbox row is
+already durable and the failure is only dedup finalization.
+
+Red-first regressions failed before implementation:
+
+- focused round-28 UTF-8 and recovery regressions:
+
+  ```sh
+  pnpm exec vitest run packages/server/test/delivery/inbox.test.ts \
+    -t 'fails closed when stored inbox records contain invalid UTF-8'
+  pnpm exec vitest run packages/server/test/delivery/inbox.test.ts \
+    -t 'fails closed when pending dedup guards contain invalid UTF-8'
+  pnpm exec vitest run packages/server/test/delivery/inbox.test.ts \
+    -t 'rolls back a pending dedup guard when recovery finds a conflicting inbox row'
+  pnpm exec vitest run packages/server/test/delivery/sharded-work-registry.test.ts \
+    -t 'fails closed when stored shard sessions contain invalid UTF-8'
+  ```
+
+  failed with the expected four regressions before implementation:
+  the stored inbox row was read back with a replacement-character signal type
+  URL instead of rejecting, the pending dedup guard write recovered and
+  returned `WRITTEN` instead of rejecting, the retry after a recovery conflict
+  stayed trapped behind the stale pending guard, and shard pickup returned
+  `undefined` for the invalid UTF-8 stored session instead of rejecting.
+
+## Round 28 Fix
+
+Round-28 fixes stayed small and local to delivery record decoding and pending
+claim recovery:
+
+- added strict UTF-8 decoding immediately before `JSON.parse()` in
+  `inbox-records.ts` and `sharded-work-registry.ts`, surfacing invalid bytes as
+  `DeliveryStorageCorruptionError` instead of lossy replacement-character JSON;
+- added focused regressions for invalid UTF-8 persisted inbox rows, pending
+  dedup guards, and shard-session rows; and
+- rolled back a stale pending dedup guard only when
+  `InboxStorage.#recoverPendingClaim()` fails before the guarded inbox row is
+  known durable, leaving the existing finalization-only retry behavior intact.
+
+Verification for the round-28 fix passed with:
+
 - `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
 - `pnpm typecheck`
 - `pnpm lint`

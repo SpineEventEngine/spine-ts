@@ -278,6 +278,37 @@ describe("ShardedWorkRegistry", () => {
     await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/record exceeds/i);
   });
 
+  it("fails closed when stored shard sessions contain invalid UTF-8", async () => {
+    const storageFactory = new CorruptibleStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:35:00.000Z"),
+    });
+    const shard = new ShardIndex(0, 1);
+
+    await delivery.shards.pickUp(shard, "seed-node");
+    storageFactory.writeStoredSession({
+      typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
+      value: invalidUtf8JsonBytes(
+        {
+          key: "0/1",
+          id: "session-1",
+          node: "node-a",
+          shardIndex: 0,
+          shardTotal: 1,
+          pickedUpAtMs: Date.parse("2026-07-02T09:34:30.000Z"),
+          expiresAtMs: Date.parse("2026-07-02T09:35:30.000Z"),
+        },
+        "node-a",
+      ),
+    });
+
+    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
   it("rejects oversized shard nodes before building a session record", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -630,4 +661,20 @@ function storedSessionRecord(
       "utf8",
     ),
   });
+}
+
+function invalidUtf8JsonBytes(value: Record<string, unknown>, marker: string): Buffer {
+  const encoded = Buffer.from(JSON.stringify(value), "utf8");
+  const markerBytes = Buffer.from(marker, "utf8");
+  const markerIndex = encoded.indexOf(markerBytes);
+
+  if (markerIndex < 0) {
+    throw new Error(`Expected marker "${marker}" in encoded JSON.`);
+  }
+
+  return Buffer.concat([
+    encoded.subarray(0, markerIndex),
+    Buffer.from([0x80]),
+    encoded.subarray(markerIndex + 1),
+  ]);
 }

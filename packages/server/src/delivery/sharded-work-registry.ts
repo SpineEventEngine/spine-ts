@@ -26,6 +26,8 @@ export class ShardSession {
   }
 }
 
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
+
 /** Storage-backed shard pickup registry. */
 export class ShardedWorkRegistry {
   readonly #context: StorageContext;
@@ -165,7 +167,7 @@ function readStoredSession(record: Any, expectedKey?: string): StoredShardSessio
   }
 
   try {
-    const decoded = JSON.parse(Buffer.from(record.value).toString("utf8")) as unknown;
+    const decoded = JSON.parse(decodeStoredUtf8(record.value)) as unknown;
     if (typeof decoded !== "object" || decoded === null || Array.isArray(decoded)) {
       throw new DeliveryStorageCorruptionError("Shard session record is not a JSON object.");
     }
@@ -199,6 +201,16 @@ function readStoredSession(record: Any, expectedKey?: string): StoredShardSessio
     }
 
     throw new DeliveryStorageCorruptionError("Shard session record contains malformed JSON.", {
+      cause: error,
+    });
+  }
+}
+
+function decodeStoredUtf8(value: Uint8Array): string {
+  try {
+    return utf8Decoder.decode(value);
+  } catch (error) {
+    throw new DeliveryStorageCorruptionError("Shard session record contains invalid UTF-8.", {
       cause: error,
     });
   }

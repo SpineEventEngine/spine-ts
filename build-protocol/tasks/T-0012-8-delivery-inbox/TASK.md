@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-27 fix complete
+Status: round-28 fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -340,5 +340,24 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   `pnpm test packages/server/test/delivery/inbox.test.ts`
   `packages/server/test/delivery/sharded-work-registry.test.ts`.
 - Final round-27 verification also passed with `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `git diff --check`, and a full touched-file line scan.
+- Round-28 review package is prepared at
+  `.superpowers/sdd/review-round-28-fce80b2-current.diff`.
+- Round-28 review completed from reviewer results supplied to this fix worker.
+  Code style/maintainability and TypeScript/API docs were clean.
+  Documentation, security, and performance/reliability requested changes and
+  are now closed.
+- Round-28 fixes add strict UTF-8 validation for stored inbox/dedup and
+  shard-session JSON before `JSON.parse()`, and roll back stale pending dedup
+  guards when recovery hits a conflicting inbox row before the guarded row is
+  durable.
+- Red-first focused delivery verification captured the expected pre-fix
+  failures: stored inbox rows, pending dedup guards, and shard-session records
+  with invalid UTF-8 were accepted, and a recovery-conflict retry stayed
+  trapped behind the stale pending guard.
+- Focused delivery verification passed with 52 tests after the round-28 fix:
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`.
+- Final round-28 verification also passed with `pnpm typecheck`, `pnpm lint`,
   `pnpm format:check`, `git diff --check`, and a full touched-file line scan.
 - No blocking human question is known.

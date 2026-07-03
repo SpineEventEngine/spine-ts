@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 27 fix complete
+Status: round 28 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1272,6 +1272,89 @@ Verification:
     passed with 34 tests;
   - `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
     passed with 48 tests;
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check`; and
+  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+    over 120 columns).
+
+### Round 28
+
+Reviewer input: round-28 reviewer results supplied to this fix worker.
+
+Diff package:
+`.superpowers/sdd/review-round-28-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f27f9-d19c-7e32-852c-0d982f037a10` (`CLEAN`, closed);
+- documentation:
+  `019f27f9-d237-7be3-948d-5c03ac000fa2` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f27f9-d2a6-77f0-8084-f43b1fca1955` (`CLEAN`, closed);
+- security:
+  `019f27f9-d31f-7112-b74b-775747016b3a` (`CHANGES REQUESTED`, closed); and
+- performance/reliability:
+  `019f27f9-d3ac-74b0-aaed-8274e5c5c0f5` (`CHANGES REQUESTED`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable task/report/work-log entries were one round behind the actual
+  round-28 review package/current state;
+- persisted inbox, dedup, and shard-session record bytes still use
+  `Buffer.toString("utf8")`, which lossy-decodes invalid UTF-8 before
+  `JSON.parse()`; and
+- `InboxStorage.#recoverPendingClaim()` leaves a dedup key stuck `PENDING`
+  when recovery races with a conflicting inbox-row create, so later retries can
+  stay trapped behind the stale guard.
+
+Code style/maintainability and TypeScript/API docs were clean. Documentation,
+security, and performance/reliability requested changes.
+
+### Round 28 Fix
+
+Result: implemented in this worktree.
+
+Fix summary:
+
+- advanced `TASK.md`, `IMPLEMENTATION_REPORT.md`, and the durable work log to
+  the actual round-28 review package/current state;
+- added strict UTF-8 decoding immediately before `JSON.parse()` in the inbox /
+  dedup and shard-session record readers so invalid bytes fail closed as
+  `DeliveryStorageCorruptionError`; and
+- rolled back stale pending dedup guards when
+  `InboxStorage.#recoverPendingClaim()` fails before the guarded inbox row is
+  durable, while preserving the earlier no-rollback rule for finalization-only
+  failures.
+
+Verification:
+
+- red:
+  - focused round-28 delivery regressions:
+
+    ```sh
+    pnpm exec vitest run packages/server/test/delivery/inbox.test.ts \
+      -t 'fails closed when stored inbox records contain invalid UTF-8'
+    pnpm exec vitest run packages/server/test/delivery/inbox.test.ts \
+      -t 'fails closed when pending dedup guards contain invalid UTF-8'
+    pnpm exec vitest run packages/server/test/delivery/inbox.test.ts \
+      -t 'rolls back a pending dedup guard when recovery finds a conflicting inbox row'
+    pnpm exec vitest run packages/server/test/delivery/sharded-work-registry.test.ts \
+      -t 'fails closed when stored shard sessions contain invalid UTF-8'
+    ```
+
+    failed with the expected four regressions before implementation:
+    the stored inbox row was accepted with a replacement-character signal type
+    URL, the pending dedup guard recovered and returned `WRITTEN`, the
+    recovery-conflict retry stayed trapped behind the stale pending guard, and
+    shard pickup returned `undefined` for the invalid UTF-8 stored session;
+- green:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
+    passed with 52 tests;
   - `pnpm typecheck`;
   - `pnpm lint`;
   - `pnpm format:check`;

@@ -363,6 +363,28 @@ describe("Inbox", () => {
     await expect(storage.read(ShardIndex.single())).rejects.toThrow(/storage corruption/i);
   });
 
+  it("fails closed when stored inbox records contain invalid UTF-8", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/internal/InboxMessageRecord",
+          value: invalidUtf8JsonBytes(
+            storedInboxJson({
+              signalId: "signal-invalid-utf8",
+              valueBase64: Buffer.from("payload", "utf8").toString("base64"),
+            }),
+            "type.example.dev/tasks.LargeSignal",
+          ),
+        }),
+      ]),
+    });
+
+    await expect(storage.read(ShardIndex.single())).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
   it("rejects oversized signal payloads in stored inbox rows", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -489,6 +511,32 @@ describe("Inbox", () => {
     );
   });
 
+  it("fails closed when pending dedup guards contain invalid UTF-8", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new CorruptGuardFactory({
+        guard: create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/internal/InboxDedupRecord",
+          value: invalidUtf8JsonBytes(
+            {
+              key: testDedupKey("signal-1"),
+              state: "PENDING",
+              message: storedInboxJson({
+                signalId: "signal-1",
+                valueBase64: Buffer.from("payload", "utf8").toString("base64"),
+              }),
+            },
+            "type.example.dev/tasks.LargeSignal",
+          ),
+        }),
+      }),
+    });
+
+    await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
   it("treats an oversized existing inbox row as storage corruption during direct write recovery", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -586,6 +634,33 @@ describe("Inbox", () => {
     });
     await expect(storage.read(ShardIndex.single(), { limit: 10 })).resolves.toMatchObject([
       { id: { value: "message-1" }, signalId: "signal-1" },
+      { id: { value: "message-2" }, signalId: "signal-1" },
+    ]);
+  });
+
+  it("rolls back a pending dedup guard when recovery finds a conflicting inbox row", async () => {
+    const pending = createMessage("message-1", "signal-1", 1n);
+    const conflicting = {
+      ...createMessage("message-1", "signal-conflict", 1n),
+      whenReceived: new Date("2026-07-02T08:00:01.000Z"),
+    };
+    const retryMessage = createMessage("message-2", "signal-1", 2n);
+    const storageFactory = new RecoverPendingConflictFactory({
+      pendingGuard: writeDedupClaim(pending),
+      conflictingInbox: writeInboxMessage(conflicting),
+    });
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+
+    await expect(storage.write(retryMessage)).rejects.toThrow(/already exists/i);
+    await expect(storage.write(retryMessage)).resolves.toMatchObject({
+      outcome: "WRITTEN",
+      message: { id: { value: "message-2" }, signalId: "signal-1" },
+    });
+    await expect(storage.read(ShardIndex.single(), { limit: 10 })).resolves.toMatchObject([
+      { id: { value: "message-1" }, signalId: "signal-conflict" },
       { id: { value: "message-2" }, signalId: "signal-1" },
     ]);
   });
@@ -1235,6 +1310,141 @@ class ExistingInboxRowFactory extends StorageFactory {
   }
 }
 
+class RecoverPendingConflictFactory extends StorageFactory {
+  readonly #dedup = new Map<string, Any>();
+  readonly #inbox = new Map<string, Any>();
+  readonly #conflictingInbox: Any;
+  #hasHiddenConflictingInbox = false;
+
+  constructor(records: { pendingGuard: Any; conflictingInbox: Any }) {
+    super();
+    this.#conflictingInbox = records.conflictingInbox;
+    this.#dedup.set(testDedupKey("signal-1"), records.pendingGuard);
+  }
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new RecoverPendingConflictStorage(
+      context,
+      recordSpec as unknown as RecordSpec<string, Any>,
+      this,
+    ) as unknown as RecordStorage<I, R>;
+  }
+
+  readDedup(id: string): Any | undefined {
+    return this.#dedup.get(id);
+  }
+
+  compareAndSetDedup(id: string, expected: Any | undefined, next: Any | undefined): boolean {
+    const current = this.#dedup.get(id);
+    if (!sameStoredRecord(current, expected)) {
+      return false;
+    }
+
+    if (next === undefined) {
+      this.#dedup.delete(id);
+      return true;
+    }
+
+    this.#dedup.set(id, next);
+    return true;
+  }
+
+  readInbox(id: string): Any | undefined {
+    if (id === "0/1:message-1" && !this.#hasHiddenConflictingInbox) {
+      this.#hasHiddenConflictingInbox = true;
+      return undefined;
+    }
+
+    return this.#inbox.get(id);
+  }
+
+  compareAndSetInbox(id: string, expected: Any | undefined, next: Any | undefined): boolean {
+    const current = this.#inbox.get(id);
+    if (!sameStoredRecord(current, expected)) {
+      return false;
+    }
+
+    if (id === "0/1:message-1" && expected === undefined && next !== undefined) {
+      this.#inbox.set(id, this.#conflictingInbox);
+      return false;
+    }
+
+    if (next === undefined) {
+      this.#inbox.delete(id);
+      return true;
+    }
+
+    this.#inbox.set(id, next);
+    return true;
+  }
+
+  queryInbox(): readonly Any[] {
+    return [...this.#inbox.values()];
+  }
+}
+
+class RecoverPendingConflictStorage extends RecordStorage<string, Any> {
+  readonly #factory: RecoverPendingConflictFactory;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<string, Any>,
+    factory: RecoverPendingConflictFactory,
+  ) {
+    super(context, recordSpec);
+    this.#factory = factory;
+  }
+
+  protected compareAndSetRecord(
+    id: string,
+    expected: ReturnType<RecordSpec<string, Any>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<string, Any>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    if (this.context.name.endsWith(".delivery.inbox-dedup")) {
+      return Promise.resolve(this.#factory.compareAndSetDedup(id, expected?.record, next?.record));
+    }
+
+    if (this.context.name.endsWith(".delivery.inbox")) {
+      return Promise.resolve(this.#factory.compareAndSetInbox(id, expected?.record, next?.record));
+    }
+
+    return Promise.resolve(false);
+  }
+
+  protected deleteRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected queryRecords(): Promise<readonly Any[]> {
+    return Promise.resolve(
+      this.context.name.endsWith(".delivery.inbox") ? this.#factory.queryInbox() : [],
+    );
+  }
+
+  protected readRecord(id: string): Promise<Any | undefined> {
+    if (this.context.name.endsWith(".delivery.inbox-dedup")) {
+      return Promise.resolve(this.#factory.readDedup(id));
+    }
+
+    if (this.context.name.endsWith(".delivery.inbox")) {
+      return Promise.resolve(this.#factory.readInbox(id));
+    }
+
+    return Promise.resolve(undefined);
+  }
+
+  protected writeAllRecords(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  protected writeRecord(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
 class ExistingInboxRowStorage extends RecordStorage<string, Any> {
   readonly #inbox: Any;
   readonly #dedup = new Map<string, Any>();
@@ -1361,6 +1571,30 @@ function storedInboxJson(fields: PendingGuardFields): Record<string, unknown> {
     whenReceivedMs: Date.parse("2026-07-02T08:00:00.000Z"),
     version: "1",
   };
+}
+
+function invalidUtf8JsonBytes(value: Record<string, unknown>, marker: string): Buffer {
+  const encoded = Buffer.from(JSON.stringify(value), "utf8");
+  const markerBytes = Buffer.from(marker, "utf8");
+  const markerIndex = encoded.indexOf(markerBytes);
+
+  if (markerIndex < 0) {
+    throw new Error(`Expected marker "${marker}" in encoded JSON.`);
+  }
+
+  return Buffer.concat([
+    encoded.subarray(0, markerIndex),
+    Buffer.from([0x80]),
+    encoded.subarray(markerIndex + 1),
+  ]);
+}
+
+function sameStoredRecord(left: Any | undefined, right: Any | undefined): boolean {
+  if (left === undefined || right === undefined) {
+    return left === right;
+  }
+
+  return left.typeUrl === right.typeUrl && Buffer.from(left.value).equals(Buffer.from(right.value));
 }
 
 function oversizedPayload(): string {
