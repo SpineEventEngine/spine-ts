@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-40 fix complete
+Status: round-41 documentation fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1409,4 +1409,20 @@ Final verification:
 `node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
 TypeDoc source-link warning, but exited successfully.
 
-Committed in the final task commit after verification.
+Committed as `3a05e4b` after verification.
+
+## Round 41 Review
+
+Round 41 found no code style/maintainability, TypeScript/API docs, security,
+or performance/reliability issue. Documentation requested one durable-log
+precision fix: the current round-40 state must explicitly name committed
+round-40 fix commit `3a05e4b` instead of referring only to the final task
+commit or verification timing.
+
+## Round 41 Fix
+
+Round-41 fixes are documentation-only:
+
+- name `3a05e4b` as the committed round-40 fix commit in task, report, review,
+  and work logs; and
+- record this round-41 docs-only review/fix trail in the durable logs.

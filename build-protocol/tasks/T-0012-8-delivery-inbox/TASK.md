@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-40 fix complete
+Status: round-41 documentation fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -685,4 +685,10 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   touched-file line scan. `node scripts/check-api-docs.mjs` still emitted the
   existing invalid `origin` TypeDoc source-link warning, but exited
   successfully.
-- Round-40 fixes were committed in the final task commit after verification.
+- Round-40 fixes were committed as `3a05e4b` after verification.
+- Round-41 review completed from reviewer results supplied to this fix worker.
+  Documentation requested naming committed round-40 fix commit `3a05e4b`
+  explicitly in durable logs. Code style/maintainability, TypeScript/API docs,
+  security, and performance/reliability lanes were clean.
+- Round-41 documentation-only fixes name `3a05e4b` in the current round-40
+  state and record this docs-only fix trail.

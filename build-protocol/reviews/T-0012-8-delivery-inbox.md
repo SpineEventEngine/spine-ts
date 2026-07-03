@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 40 fix complete
+Status: round 41 documentation fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2290,4 +2290,38 @@ Final verification:
 - `git diff --check fce80b2..HEAD`; and
 - touched-file line scan with no lines over 120 columns.
 
-Result: committed in the final task commit after verification.
+Result: committed as `3a05e4b` after verification.
+
+### Round 41
+
+Reviewer input: round-41 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- documentation:
+  `019f28e3-0c57-7ed1-8358-77d730d9060f` (`CHANGES REQUESTED`, closed);
+- code style/maintainability:
+  `019f28e2-d864-75b0-a8a2-86e7a616684f` (`CLEAN`, closed);
+- TypeScript/API docs:
+  `019f28e3-3f97-7cb3-b26a-18236fc578e3` (`CLEAN`, closed);
+- security:
+  `019f28e3-6f4b-7b42-a888-009deb44163e` (`CLEAN`, closed); and
+- performance/reliability:
+  `019f28e3-9d09-7d32-ac8f-8868d0bed58c` (`CLEAN`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable task/report/review/work logs named the round-40 fix only as the
+  final task commit or as happening after verification instead of explicitly
+  naming committed round-40 fix commit `3a05e4b`.
+
+### Round 41 Fix
+
+Result: implemented in this worktree.
+
+Fix summary:
+
+- named `3a05e4b` explicitly in the current committed round-40 state; and
+- recorded the round-41 documentation-only fix trail.
