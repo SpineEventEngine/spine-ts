@@ -114,6 +114,24 @@ primitive aggregate IDs, route consistency, and aggregate version order before
 storage. It does not implement handler invocation, delivery, catch-up,
 read-side indexing, subscriptions, system events, or aggregate repository
 caching.
+Delivery exports include `Delivery`, `DeliveryOptions`,
+`DeliveryStorageCorruptionError`, `Inbox`, `InboxId`, `InboxMessage`,
+`InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
+`InboxReadOptions`, `InboxWriteResult`, `InboxStorage`, `InboxStorageOptions`,
+`DeliveryLabel`, `DeliveryStatus`, `ShardIndex`, `ShardSession`,
+`ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`. This slice persists
+inbox messages and shard lease records through `StorageFactory` /
+`RecordStorage`, deduplicates live inbox writes durably by
+`(signalId, inboxId)` through small internal guard records, keeps shard
+ordering metadata on each message with receive time (`whenReceived`),
+`version`, and inbox message UUID ordering. Direct inbox writes require
+`InboxMessage.id.shard` to match `InboxMessage.shard`. Delivery also exposes a
+storage-backed shard pickup / release seam backed by atomic
+`RecordStorage.compareAndSet()`.
+`InboxReadOptions.limit` is the current positive page-size control with a
+bounded default when omitted. This slice does not run worker loops,
+retry monitors, conveyor/stations, repository invocation, `Stand`, gRPC
+services, transport retries, example app work, or read-side catch-up loops.
 Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field
@@ -272,9 +290,10 @@ filter chain, storage write, dispatcher, delivery mechanism, tenant/message
 validator, service, transport, or handler invocation.
 
 Storage exports include `Storage`, `StorageContext`, `StorageFactory`,
-`RecordStorage`, `RecordSpec`, `RecordColumn`, `RecordQuery`, `RecordFilter`,
-`RecordOrder`, `RecordReadOptions`, `RecordMask`, `InMemoryStorageFactory`,
-`InMemoryRecordStorage`, `EventStore`, and `OnEventAccepted`. `StorageFactory`
+`RecordStorage`, `RecordEntry`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
+`RecordFilter`, `RecordOrder`, `RecordReadOptions`, `RecordMask`,
+`InMemoryStorageFactory`, `InMemoryRecordStorage`, `EventStore`, and
+`OnEventAccepted`. `StorageFactory`
 owns one mandatory adapter seam, `createRecordStorage(context, spec)`.
 `RecordStorage` persists identified Protobuf records with deterministic
 ID/column/path queries, positive limits, and simple field masks over cloned
@@ -282,12 +301,24 @@ results. The in-memory adapter is process-local, tenant-aware through
 `StorageContext`, shared by factory, context name, tenant mode, tenant ID, and
 `RecordSpec` instance, and non-durable. Storage adapters must make repeated
 `createRecordStorage(context, spec)` calls observe the same logical records
-while returning independently closeable storage handles. `EventStore` is a
-framework delegate over `RecordStorage<EventId, Event>` and is storage-only in
-this slice: it persists and reads generated Spine events, rejects missing,
-blank, or duplicate event IDs on the local append path, and can run
-`OnEventAccepted` between precheck and append with one captured storage context.
-It does not dispatch events, manage delivery, or fan out to subscribers.
+while returning independently closeable storage handles.
+`RecordStorage.delete(id)`, `read(id)`, and
+`compareAndSet(id, expected, next)` address actual storage slot IDs.
+`RecordStorage.query()` and `RecordStorage.queryEntries()` also filter
+`RecordQuery.ids` against actual storage slot IDs; `queryEntries()` returns
+those slot IDs beside each record for callers that need slot-addressed
+validation or repair. `RecordStorage.index()` is the deliberate exception: it
+returns logical record IDs derived from each record body through the
+`RecordSpec`.
+`RecordStorage.compareAndSet(id, expected, next)` must be atomic across those
+handles for one logical backing store; `next: undefined` is a conditional
+delete, and `false` means the expected value did not match so no mutation was
+applied. `EventStore` is a framework delegate over
+`RecordStorage<EventId, Event>` and is storage-only in this slice: it persists
+and reads generated Spine events, rejects missing, blank, or duplicate event
+IDs on the local append path, and can run `OnEventAccepted` between precheck
+and append with one captured storage context. It does not dispatch events,
+manage delivery, or fan out to subscribers.
 
 Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
 `TransportTopicInput`, `TransportTopic`, `TransportRoutingDescriptor`,

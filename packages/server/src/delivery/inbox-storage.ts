@@ -1,0 +1,519 @@
+import type { Any } from "@bufbuild/protobuf/wkt";
+import type { RecordStorage, StorageContext, StorageFactory } from "@spine-ts/storage";
+
+import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
+import {
+  InboxMessageError,
+  type DeliveryStatus,
+  type InboxMessage,
+  type InboxReadOptions,
+  type InboxWriteResult,
+} from "./inbox.js";
+import {
+  DedupRecords,
+  dedupRecordSpec,
+  InboxRecords,
+  inboxRecordSpec,
+  type DedupGuardState,
+} from "./inbox-records.js";
+import { ShardIndex } from "./shard-index.js";
+
+const defaultReadLimit = 100;
+const casRetryLimit = 8;
+
+/** Durable inbox storage over record storage. */
+export class InboxStorage {
+  readonly #context: StorageContext;
+  readonly #storageFactory: StorageFactory;
+  readonly #now: () => Date;
+
+  /** Open an inbox storage from one storage context and storage factory. */
+  constructor(options: InboxStorageOptions) {
+    this.#context = options.context;
+    this.#storageFactory = options.storageFactory;
+    this.#now = options.now ?? (() => new Date());
+    Object.freeze(this);
+  }
+
+  /** Read ordered inbox messages for one shard. */
+  async read(shard: ShardIndex, options: InboxReadOptions = {}): Promise<readonly InboxMessage[]> {
+    const nextShard = requireReadShard(shard);
+    const storage = this.#inboxStorage();
+
+    try {
+      const records = await this.#durableRead("Inbox record", () =>
+        storage.queryEntries({
+          filters: [
+            { column: "shard", value: nextShard.key() },
+            ...statusFilters(options.statuses),
+          ],
+          sort: [{ field: "receivedAt" }, { field: "version" }, { field: "messageId" }],
+          limit: options.limit ?? defaultReadLimit,
+        }),
+      );
+
+      return Object.freeze(records.map((entry) => InboxRecords.read(entry.record, entry.id)));
+    } finally {
+      storage.close();
+    }
+  }
+
+  /** Write one inbox message unless a live dedup key already exists. */
+  async write(message: InboxMessage): Promise<InboxWriteResult> {
+    // Serialize the inbox row once so validation and all later CAS keys use
+    // one immutable caller-input snapshot.
+    const snapshot = InboxRecords.read(InboxRecords.write(message));
+    DedupRecords.writeClaim(snapshot);
+
+    const inboxStorage = this.#inboxStorage();
+    const dedupStorage = this.#dedupStorage();
+
+    try {
+      return await this.#writeWithDedup(inboxStorage, dedupStorage, snapshot);
+    } finally {
+      inboxStorage.close();
+      dedupStorage.close();
+    }
+  }
+
+  async #writeWithDedup(
+    inboxStorage: RecordStorage<string, Any>,
+    dedupStorage: RecordStorage<string, Any>,
+    message: InboxMessage,
+  ): Promise<InboxWriteResult> {
+    const dedupKey = DedupRecords.guardKey(message);
+
+    for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
+      const step = await this.#readWriteStep(inboxStorage, dedupStorage, dedupKey, message);
+      if (step.kind === "RETURN") {
+        return step.result;
+      }
+      if (step.kind === "RETRY") {
+        continue;
+      }
+      const result = await this.#claimAndWrite(inboxStorage, dedupStorage, dedupKey, step);
+      if (result !== undefined) {
+        return result;
+      }
+    }
+
+    throw casRetriesExhausted("Inbox dedup guard");
+  }
+
+  async #readWriteStep(
+    inboxStorage: RecordStorage<string, Any>,
+    dedupStorage: RecordStorage<string, Any>,
+    dedupKey: string,
+    message: InboxMessage,
+  ): Promise<WriteStep> {
+    const current = await this.#durableRead("Inbox dedup guard", () => dedupStorage.read(dedupKey));
+    if (current === undefined) {
+      return { kind: "CLAIM", expected: undefined, message };
+    }
+
+    const storedGuard = await this.#readGuardMessage(inboxStorage, dedupKey, current);
+
+    if (storedGuard !== undefined) {
+      return this.#handleStoredGuardMessage(dedupStorage, dedupKey, current, storedGuard, message);
+    }
+
+    if (!DedupRecords.isPending(current)) {
+      throw new DeliveryStorageCorruptionError(
+        `Inbox dedup guard "${dedupKey}" points to a missing inbox message.`,
+      );
+    }
+
+    return this.#recoverPendingClaim(inboxStorage, dedupStorage, dedupKey, current, message);
+  }
+
+  async #handleStoredGuardMessage(
+    dedupStorage: RecordStorage<string, Any>,
+    dedupKey: string,
+    current: Any,
+    storedGuard: GuardMessage,
+    message: InboxMessage,
+  ): Promise<WriteStep> {
+    const { guard, message: storedMessage } = storedGuard;
+    let expected = current;
+    if (DedupRecords.isPending(current)) {
+      expected = DedupRecords.writeFinal(storedMessage);
+      const finalized = await this.#durableCompareAndSet(
+        "Inbox dedup guard",
+        dedupStorage,
+        dedupKey,
+        current,
+        expected,
+      );
+      if (!finalized) {
+        return { kind: "RETRY" };
+      }
+    }
+
+    return this.#messageBlocks(guard)
+      ? this.#duplicate(storedMessage)
+      : { kind: "CLAIM", expected, message };
+  }
+
+  async #recoverPendingClaim(
+    inboxStorage: RecordStorage<string, Any>,
+    dedupStorage: RecordStorage<string, Any>,
+    dedupKey: string,
+    current: Any,
+    message: InboxMessage,
+  ): Promise<WriteStep> {
+    const pendingMessage = DedupRecords.readPendingMessage(current);
+    if (pendingMessage === undefined) {
+      return { kind: "RETRY" };
+    }
+
+    const storedMessage = await this.#ensureInboxRow(
+      inboxStorage,
+      pendingMessage,
+      "STORAGE_CORRUPTION",
+    );
+
+    const finalRecord = DedupRecords.writeFinal(storedMessage);
+    const finalized = await this.#durableCompareAndSet(
+      "Inbox dedup guard",
+      dedupStorage,
+      dedupKey,
+      current,
+      finalRecord,
+    );
+    if (!finalized) {
+      return { kind: "RETRY" };
+    }
+
+    return this.#messageBlocks(storedMessage)
+      ? this.#written(storedMessage)
+      : { kind: "CLAIM", expected: finalRecord, message };
+  }
+
+  async #claimAndWrite(
+    inboxStorage: RecordStorage<string, Any>,
+    dedupStorage: RecordStorage<string, Any>,
+    dedupKey: string,
+    step: WriteClaim,
+  ): Promise<InboxWriteResult | undefined> {
+    const pending = DedupRecords.writeClaim(step.message);
+    const claimed = await this.#durableCompareAndSet(
+      "Inbox dedup guard",
+      dedupStorage,
+      dedupKey,
+      step.expected,
+      pending,
+    );
+    if (!claimed) {
+      return undefined;
+    }
+
+    let storedMessage: InboxMessage;
+    try {
+      storedMessage = await this.#ensureInboxRow(inboxStorage, step.message);
+    } catch (error) {
+      try {
+        await this.#durableCompareAndSet(
+          "Inbox dedup guard",
+          dedupStorage,
+          dedupKey,
+          pending,
+          step.expected,
+        );
+      } catch {
+        // Preserve the original inbox-write failure even if rollback also fails.
+      }
+      throw error;
+    }
+
+    const finalized = await this.#durableCompareAndSet(
+      "Inbox dedup guard",
+      dedupStorage,
+      dedupKey,
+      pending,
+      DedupRecords.writeFinal(storedMessage),
+    );
+    return finalized ? this.#written(storedMessage).result : undefined;
+  }
+
+  async #ensureInboxRow(
+    inboxStorage: RecordStorage<string, Any>,
+    message: InboxMessage,
+    conflict: InboxConflict = "CALLER_INPUT",
+  ): Promise<InboxMessage> {
+    const key = this.#messageKey(message.id);
+    const record = InboxRecords.write(message);
+
+    for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
+      if (await this.#durableCompareAndSet("Inbox record", inboxStorage, key, undefined, record)) {
+        return InboxRecords.read(record);
+      }
+
+      const current = await this.#durableRead("Inbox record", () => inboxStorage.read(key));
+      if (current === undefined) {
+        continue;
+      }
+
+      const storedMessage = InboxRecords.read(current, key);
+      if (this.#sameRecord(InboxRecords.write(storedMessage), record)) {
+        return storedMessage;
+      }
+
+      if (conflict === "STORAGE_CORRUPTION") {
+        throw new DeliveryStorageCorruptionError(
+          `Inbox message "${key}" already exists with conflicting inbox bytes.`,
+        );
+      }
+
+      throw new InboxMessageError(`Inbox message "${key}" already exists.`);
+    }
+
+    throw casRetriesExhausted("Inbox record");
+  }
+
+  async #readGuardMessage(
+    inboxStorage: RecordStorage<string, Any>,
+    dedupKey: string,
+    guard: Any,
+  ): Promise<GuardMessage | undefined> {
+    const guardState = DedupRecords.readGuard(guard, dedupKey);
+    const expectedKey = this.#messageKey(guardState.messageId);
+    const storedRecord = await this.#durableRead("Inbox record", () =>
+      inboxStorage.read(expectedKey),
+    );
+    if (storedRecord === undefined) {
+      return undefined;
+    }
+
+    const message = InboxRecords.read(storedRecord, expectedKey);
+    if (DedupRecords.guardKey(message) !== dedupKey) {
+      throw new DeliveryStorageCorruptionError(
+        `Inbox dedup guard "${dedupKey}" points to another dedup key.`,
+      );
+    }
+
+    const pendingMessage = DedupRecords.isPending(guard)
+      ? DedupRecords.readPendingMessage(guard)
+      : undefined;
+    if (
+      pendingMessage !== undefined &&
+      !this.#sameRecord(InboxRecords.write(pendingMessage), storedRecord)
+    ) {
+      throw new DeliveryStorageCorruptionError(
+        `Inbox pending dedup guard "${dedupKey}" does not match the visible inbox row.`,
+      );
+    }
+
+    if (pendingMessage === undefined && !this.#sameGuardMetadata(guardState, message)) {
+      throw new DeliveryStorageCorruptionError(
+        `Inbox final dedup guard "${dedupKey}" does not match the visible inbox row.`,
+      );
+    }
+
+    return Object.freeze({ guard: guardState, message });
+  }
+
+  #messageBlocks(message: Pick<InboxMessage, "status" | "keepUntil">): boolean {
+    if (message.status !== "DELIVERED") {
+      return true;
+    }
+
+    const keepUntil = message.keepUntil;
+    if (keepUntil === undefined) {
+      return false;
+    }
+
+    return keepUntil.getTime() >= this.#dedupNow();
+  }
+
+  #dedupNow(): number {
+    const now = this.#now();
+    if (!(now instanceof Date)) {
+      throw new Error("Inbox storage clock must return a Date.");
+    }
+
+    const time = now.getTime();
+    if (!Number.isFinite(time)) {
+      throw new Error("Inbox storage clock returned an invalid time.");
+    }
+
+    return time;
+  }
+
+  #sameRecord(left: Any, right: Any): boolean {
+    return (
+      left.typeUrl === right.typeUrl && Buffer.from(left.value).equals(Buffer.from(right.value))
+    );
+  }
+
+  #sameGuardMetadata(
+    guard: Pick<DedupGuardState, "status" | "keepUntil">,
+    message: Pick<InboxMessage, "status" | "keepUntil">,
+  ): boolean {
+    return guard.status === message.status && this.#sameTime(guard.keepUntil, message.keepUntil);
+  }
+
+  #sameTime(left: Date | undefined, right: Date | undefined): boolean {
+    return left?.getTime() === right?.getTime();
+  }
+
+  async #durableRead<T>(label: string, read: () => Promise<T>): Promise<T> {
+    try {
+      return await read();
+    } catch (error) {
+      throw this.#storageCorruptionError(label, error);
+    }
+  }
+
+  async #durableCompareAndSet(
+    label: string,
+    storage: RecordStorage<string, Any>,
+    id: string,
+    expected: Any | undefined,
+    next: Any | undefined,
+  ): Promise<boolean> {
+    try {
+      return await storage.compareAndSet(id, expected, next);
+    } catch (error) {
+      throw this.#storageCorruptionError(label, error);
+    }
+  }
+
+  #storageCorruptionError(label: string, error: unknown): Error {
+    if (
+      error instanceof Error &&
+      (error.message === "Storage record could not be cloned." ||
+        error.message === "Storage value could not be cloned.")
+    ) {
+      return new DeliveryStorageCorruptionError(`${label} is invalid.`, {
+        cause: error,
+      });
+    }
+
+    return error instanceof Error ? error : new Error(String(error));
+  }
+
+  #written(message: InboxMessage): WriteReturn {
+    return {
+      kind: "RETURN",
+      result: Object.freeze({
+        outcome: "WRITTEN" as const,
+        message,
+      }),
+    };
+  }
+
+  #duplicate(message: InboxMessage): WriteReturn {
+    return {
+      kind: "RETURN",
+      result: Object.freeze({
+        outcome: "DUPLICATE" as const,
+        message,
+      }),
+    };
+  }
+
+  #messageKey(id: Pick<InboxMessage["id"], "value" | "shard">): string {
+    return `${id.shard.key()}:${id.value}`;
+  }
+
+  #inboxStorage(): RecordStorage<string, Any> {
+    return this.#storageFactory.createRecordStorage(
+      inboxStorageContext(this.#context),
+      inboxRecordSpec,
+    );
+  }
+
+  #dedupStorage(): RecordStorage<string, Any> {
+    return this.#storageFactory.createRecordStorage(
+      dedupStorageContext(this.#context),
+      dedupRecordSpec,
+    );
+  }
+}
+
+/** Inbox storage construction options. */
+export interface InboxStorageOptions {
+  /** Storage context owning this inbox set. */
+  readonly context: StorageContext;
+  /** Storage factory used for durable records. */
+  readonly storageFactory: StorageFactory;
+  /** Optional clock used for deduplication retention decisions. */
+  readonly now?: () => Date;
+}
+
+function statusFilters(statuses: readonly DeliveryStatus[] | undefined) {
+  return statuses === undefined || statuses.length === 0
+    ? []
+    : [{ column: "status", value: [...statuses] as readonly DeliveryStatus[] }];
+}
+
+interface WriteClaim {
+  readonly kind: "CLAIM";
+  readonly expected: Any | undefined;
+  readonly message: InboxMessage;
+}
+
+interface WriteReturn {
+  readonly kind: "RETURN";
+  readonly result: InboxWriteResult;
+}
+
+interface GuardMessage {
+  readonly guard: DedupGuardState;
+  readonly message: InboxMessage;
+}
+
+type InboxConflict = "CALLER_INPUT" | "STORAGE_CORRUPTION";
+type WriteStep = WriteClaim | WriteReturn | { readonly kind: "RETRY" };
+
+function dedupStorageContext(context: StorageContext): StorageContext {
+  return deliveryStorageContext(context, "inbox-dedup");
+}
+
+function inboxStorageContext(context: StorageContext): StorageContext {
+  return deliveryStorageContext(context, "inbox");
+}
+
+function deliveryStorageContext(context: StorageContext, name: string): StorageContext {
+  return context.multitenant
+    ? {
+        name: `${context.name}.delivery.${name}`,
+        multitenant: true,
+        ...(context.tenantId === undefined ? {} : { tenantId: context.tenantId }),
+      }
+    : {
+        name: `${context.name}.delivery.${name}`,
+        multitenant: false,
+      };
+}
+
+function casRetriesExhausted(label: string): Error {
+  return new Error(`${label} could not be completed due to concurrent changes.`);
+}
+
+function requireReadShard(value: unknown): ShardIndex {
+  if (typeof value !== "object" || value === null) {
+    throw new InboxMessageError("Inbox shard is invalid.");
+  }
+
+  try {
+    return new ShardIndex(
+      requireReadInteger(Reflect.get(value, "index"), "Inbox shard index"),
+      requireReadInteger(Reflect.get(value, "ofTotal"), "Inbox shard total"),
+    );
+  } catch (error) {
+    if (error instanceof InboxMessageError) {
+      throw error;
+    }
+
+    throw new InboxMessageError("Inbox shard is invalid.", { cause: error });
+  }
+}
+
+function requireReadInteger(value: unknown, label: string): number {
+  if (!Number.isInteger(value) || !Number.isFinite(value)) {
+    throw new InboxMessageError(`${label} must be a finite integer.`);
+  }
+
+  return value as number;
+}

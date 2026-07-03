@@ -1,0 +1,33 @@
+import { ShardIndex, type InboxMessage } from "../../src/index.js";
+
+export function createMessage(
+  id: string,
+  signalId: string,
+  version: bigint,
+  whenReceived = new Date("2026-07-02T08:00:00.000Z"),
+): InboxMessage {
+  return Object.freeze({
+    id: Object.freeze({
+      value: id,
+      shard: ShardIndex.single(),
+    }),
+    inboxId: Object.freeze({
+      targetId: "projection-1",
+      targetTypeUrl: "type.example.dev/tasks.Projection",
+    }),
+    signalId,
+    label: "UPDATE_SUBSCRIBER" as const,
+    status: "TO_DELIVER" as const,
+    shard: ShardIndex.single(),
+    whenReceived,
+    version,
+  });
+}
+
+export function oversizedText(length: number, char = "x"): string {
+  return char.repeat(length);
+}
+
+export function oversizedVersion(): bigint {
+  return BigInt(`1${"0".repeat(16 * 1024)}`);
+}

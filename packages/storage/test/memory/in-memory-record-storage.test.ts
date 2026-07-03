@@ -4,7 +4,12 @@ import type { Event, EventId } from "@spine-ts/proto";
 import { EventIdSchema, EventSchema } from "@spine-ts/proto";
 import { describe, expect, it } from "vitest";
 
-import { InMemoryStorageFactory, RecordColumn, RecordSpec } from "../../src/index.js";
+import {
+  InMemoryStorageFactory,
+  RecordColumn,
+  RecordSpec,
+  RecordStorage,
+} from "../../src/index.js";
 
 describe("InMemoryRecordStorage", () => {
   it("reads back cloned protobuf records and applies simple masks", async () => {
@@ -246,6 +251,9 @@ describe("InMemoryRecordStorage", () => {
     const storage = createStorage();
 
     await expect(storage.query({ limit: 0 })).rejects.toThrow(/positive/);
+    await expect(storage.query({ limit: Number.NaN })).rejects.toThrow(/positive/);
+    await expect(storage.query({ limit: Number.POSITIVE_INFINITY })).rejects.toThrow(/positive/);
+    await expect(storage.query({ limit: 1.5 })).rejects.toThrow(/positive/);
 
     const multitenant = createStorage({ name: "Tasks", multitenant: true });
     await expect(multitenant.query()).rejects.toThrow(/tenantId/);
@@ -286,6 +294,71 @@ describe("InMemoryRecordStorage", () => {
     ).rejects.toThrow(/Second record rejected/);
     await expect(storage.query()).resolves.toEqual([]);
   });
+
+  it("supports compare-and-set for create, replace, and delete by record id", async () => {
+    const storage = createStorage();
+    const created = createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n);
+    const replaced = createEvent("event-1", "type.spine.io/tasks.TaskUpdated", 2n);
+    const createdId = created.id;
+    const replacedId = replaced.id;
+
+    if (createdId === undefined || replacedId === undefined) {
+      throw new Error("Expected compare-and-set test event IDs.");
+    }
+
+    await expect(storage.compareAndSet(createdId, undefined, created)).resolves.toBe(true);
+    await expect(
+      storage.compareAndSet(
+        createdId,
+        undefined,
+        createEvent("event-1", "type.spine.io/tasks.TaskClosed", 3n),
+      ),
+    ).resolves.toBe(false);
+    await expect(storage.compareAndSet(createdId, created, replaced)).resolves.toBe(true);
+    await expect(
+      storage.compareAndSet(
+        createdId,
+        created,
+        createEvent("event-1", "type.spine.io/tasks.TaskClosed", 4n),
+      ),
+    ).resolves.toBe(false);
+    await expect(storage.compareAndSet(replacedId, replaced, undefined)).resolves.toBe(true);
+    await expect(storage.read(createdId)).resolves.toBeUndefined();
+  });
+
+  it("reports query entry ids from the actual storage slot", async () => {
+    const storage = createStorage();
+    const stored = createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n);
+    const copiedId = create(EventIdSchema, { value: "event-copy" });
+
+    await storage.compareAndSet(copiedId, undefined, stored);
+
+    await expect(storage.queryEntries()).resolves.toMatchObject([
+      {
+        id: { value: "event-copy" },
+        record: { id: { value: "event-1" } },
+      },
+    ]);
+  });
+
+  it("keeps record index ids aligned with logical record ids instead of storage slots", async () => {
+    const storage = createStorage();
+    const stored = createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n);
+    const copiedId = create(EventIdSchema, { value: "event-copy" });
+
+    await storage.compareAndSet(copiedId, undefined, stored);
+
+    await expect(storage.index()).resolves.toMatchObject([{ value: "event-1" }]);
+  });
+
+  it("uses query-entry adapters as the single query hook", async () => {
+    const storage = new QueryEntriesStorage({ name: "Tasks", multitenant: false }, createSpec(), [
+      createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n),
+    ]);
+
+    await expect(storage.query()).resolves.toMatchObject([{ id: { value: "event-1" } }]);
+    await expect(storage.index()).resolves.toMatchObject([{ value: "event-1" }]);
+  });
 });
 
 function createStorage(
@@ -317,6 +390,48 @@ function createLookupStorage(values: Record<string, unknown>) {
       columns: [new RecordColumn<Event>("value", (event) => values[event.id?.value ?? "missing"])],
     }),
   );
+}
+
+class QueryEntriesStorage extends RecordStorage<EventId, Event> {
+  readonly #records: readonly Event[];
+
+  constructor(
+    context: { name: string; multitenant: boolean; tenantId?: string },
+    recordSpec: RecordSpec<EventId, Event>,
+    records: readonly Event[],
+  ) {
+    super(context, recordSpec);
+    this.#records = records;
+  }
+
+  protected compareAndSetRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected deleteRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected queryRecordEntries(): Promise<readonly { id: EventId; record: Event }[]> {
+    return Promise.resolve(
+      this.#records.map((record) => ({
+        id: this.recordSpec.idValueIn(record),
+        record,
+      })),
+    );
+  }
+
+  protected readRecord(): Promise<Event | undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  protected writeAllRecords(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  protected writeRecord(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 function createSpec() {

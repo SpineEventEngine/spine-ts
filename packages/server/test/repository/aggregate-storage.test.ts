@@ -623,12 +623,14 @@ describe("AggregateStorage", () => {
       eventSchemas: [AggregateStateSchema],
     });
 
-    await expect(storage.readHistory("task-corrupt-event-id")).rejects.toThrow(/readable event ID/);
+    await expect(storage.readHistory("task-corrupt-event-id")).rejects.toThrow(
+      /non-empty event\.id\.value/,
+    );
     await expect(
       storage.appendEvents("task-corrupt-event-id", [
         createAggregateEvent("event-after-corrupt-id", "task-corrupt-event-id", 2),
       ]),
-    ).rejects.toThrow(/readable event ID/);
+    ).rejects.toThrow(/non-empty event\.id\.value/);
   });
 
   it("rejects duplicate event IDs already present in stored aggregate history", async () => {
@@ -1088,8 +1090,17 @@ class CorruptSnapshotStorage<I, R extends Message> extends RecordStorage<I, R> {
     return Promise.resolve(false);
   }
 
-  protected queryRecords(): Promise<readonly R[]> {
-    return Promise.resolve([this.record]);
+  protected compareAndSetRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected queryRecordEntries(): Promise<readonly { id: I; record: R }[]> {
+    return Promise.resolve([
+      {
+        id: this.recordSpec.idValueIn(this.record),
+        record: this.record,
+      },
+    ]);
   }
 
   protected readRecord(): Promise<R | undefined> {
@@ -1118,8 +1129,17 @@ class CorruptEventStorage<I, R extends Message> extends RecordStorage<I, R> {
     return Promise.resolve(false);
   }
 
-  protected queryRecords(): Promise<readonly R[]> {
-    return Promise.resolve(this.events);
+  protected compareAndSetRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected queryRecordEntries(): Promise<readonly { id: I; record: R }[]> {
+    return Promise.resolve(
+      this.events.map((record) => ({
+        id: this.recordSpec.idValueIn(record),
+        record,
+      })),
+    );
   }
 
   protected readRecord(): Promise<R | undefined> {

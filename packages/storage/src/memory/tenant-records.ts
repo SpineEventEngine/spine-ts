@@ -2,30 +2,63 @@ import type { Message } from "@bufbuild/protobuf";
 
 import type { RecordFilter, RecordOrder, RecordQuery } from "../record/record-query.js";
 import type { RecordSpec } from "../record/record-spec.js";
-
-type StoredRecord<I, R extends Message> = ReturnType<RecordSpec<I, R>["materialize"]>;
+import type { RecordEntry } from "../record/record-storage.js";
 
 /** Record slice owned by one tenant of an in-memory record storage. */
 export class TenantRecords<I, R extends Message> {
-  readonly #records = new Map<string, StoredRecord<I, R>>();
+  readonly #records = new Map<string, StoredEntry<I, R>>();
+
+  compareAndSet(
+    id: I,
+    expected: StoredRecord<I, R> | undefined,
+    next: StoredRecord<I, R> | undefined,
+  ): boolean {
+    const key = StoredValues.key(id);
+    const current = this.#records.get(key)?.stored;
+
+    if (!recordsEqual(current, expected)) {
+      return false;
+    }
+
+    if (next === undefined) {
+      this.#records.delete(key);
+      return true;
+    }
+
+    this.#records.set(key, {
+      slotId: id,
+      stored: next,
+    });
+    return true;
+  }
 
   delete(id: I): boolean {
     return this.#records.delete(StoredValues.key(id));
   }
 
-  query(spec: RecordSpec<I, R>, query: RecordQuery<I>): readonly R[] {
-    const records = [...this.#records.values()].filter((entry) => matches(spec, entry, query));
-    const sorted = records.sort((left, right) => compareEntries(left, right, query.sort ?? []));
+  queryEntries(spec: RecordSpec<I, R>, query: RecordQuery<I>): readonly RecordEntry<I, R>[] {
+    const records = [...this.#records.values()].filter((entry) =>
+      matches(spec, entry.stored, query),
+    );
+    const sorted = records.sort((left, right) =>
+      compareEntries(left.stored, right.stored, query.sort ?? []),
+    );
 
-    return applyLimit(sorted, query.limit).map((entry) => entry.record);
+    return applyLimit(sorted, query.limit).map((entry) => ({
+      id: entry.slotId,
+      record: entry.stored.record,
+    }));
   }
 
   read(id: I): R | undefined {
-    return this.#records.get(StoredValues.key(id))?.record;
+    return this.#records.get(StoredValues.key(id))?.stored.record;
   }
 
   write(record: StoredRecord<I, R>): void {
-    this.#records.set(StoredValues.key(record.id), record);
+    this.#records.set(StoredValues.key(record.id), {
+      slotId: record.id,
+      stored: record,
+    });
   }
 
   writeAll(records: readonly StoredRecord<I, R>[]): void {
@@ -35,10 +68,25 @@ export class TenantRecords<I, R extends Message> {
   }
 }
 
-function applyLimit<I, R extends Message>(
-  records: readonly StoredRecord<I, R>[],
-  limit: number | undefined,
-): readonly StoredRecord<I, R>[] {
+type StoredRecord<I, R extends Message> = ReturnType<RecordSpec<I, R>["materialize"]>;
+
+interface StoredEntry<I, R extends Message> {
+  readonly slotId: I;
+  readonly stored: StoredRecord<I, R>;
+}
+
+function recordsEqual<I, R extends Message>(
+  left: StoredRecord<I, R> | undefined,
+  right: StoredRecord<I, R> | undefined,
+): boolean {
+  if (left === undefined || right === undefined) {
+    return left === right;
+  }
+
+  return StoredValues.key(left.record) === StoredValues.key(right.record);
+}
+
+function applyLimit<T>(records: readonly T[], limit: number | undefined): readonly T[] {
   return limit === undefined ? records : records.slice(0, limit);
 }
 

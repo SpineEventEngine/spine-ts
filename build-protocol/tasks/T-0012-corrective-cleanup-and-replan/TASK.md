@@ -1,6 +1,6 @@
 # T-0012: Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.7c integrated; T-0012.8 selected
+Status: T-0012.8 integrated; T-0012.9 selected
 Start: `2026-07-01 16:48 WEST`
 Baseline commit: `a9769d4`
 Branch: `task/T-0012-cleanup-replan`
@@ -105,7 +105,14 @@ docs/API, proto lint/generate/clean, and `git diff --check`. The unrelated
 untracked root file `human-review-1-jul.md` remains outside the autonomous task
 scope.
 
-Next selected subtask: `T-0012.8 Delivery And Inbox`.
+`T-0012.8 Delivery And Inbox` is integrated on `main`. It added the first
+durable delivery slice with `Inbox`, `Delivery`, storage-backed inbox records,
+shard pickup/release, live deduplication, focused delivery/storage tests, and
+durable documentation. All required review lanes are clean through reviewed
+commit `0d6089a`, final task bookkeeping was committed as `2d0e34e`, and the
+parent integration merge was prepared on `2026-07-03 23:10 WEST`.
+
+Next selected subtask: `T-0012.9 Stand And Entity Updates`.
 
 ## T-0012.2 Selection Rationale
 

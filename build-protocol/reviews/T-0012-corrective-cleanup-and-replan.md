@@ -6,7 +6,7 @@ Branch: `task/T-0012-cleanup-replan`
 Baseline commit: `a9769d4`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
-Status: T-0012.4 integrated; T-0012.5 selected.
+Status: T-0012.8 integrated; T-0012.9 selected.
 
 ## Required Review Lanes
 
@@ -153,3 +153,27 @@ reviewers must focus on:
 - no delivery, Stand, gRPC, transport execution, scheduler, import bus, or
   system context runtime behavior; and
 - keeping public APIs small and JVM-familiar.
+
+`T-0012.7`, `T-0012.7b`, and `T-0012.7c` are integrated. All required review
+lanes are clean, and parent tracked-state verification after `T-0012.7c`
+passed.
+
+## T-0012.8 Review Status
+
+`T-0012.8 Delivery And Inbox` is integrated. The final reviewed code/docs state
+is concrete through `0d6089a`, final task bookkeeping was committed as
+`2d0e34e`, and the parent integration merge was prepared on
+`2026-07-03 23:10 WEST`. All required review lanes are clean: code
+style/maintainability, documentation, TypeScript/API docs, security, and
+performance/reliability.
+
+## Next Review Focus
+
+For `T-0012.9 Stand And Entity Updates`, reviewers must focus on:
+
+- close alignment with Spine JVM `Stand` and read-side responsibilities;
+- query execution and subscription lifecycle over real read-side state, not
+  gRPC service simulation;
+- entity-updated system events emitted from entity state changes;
+- strict write-side/read-side segregation; and
+- no gRPC service adapters until the direct `Stand` API is usable.

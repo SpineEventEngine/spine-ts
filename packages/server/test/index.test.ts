@@ -3,6 +3,7 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
 import { deriveTypeUrl } from "@spine-ts/core";
+import { InMemoryStorageFactory } from "@spine-ts/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { CommandSchema, file_spine_options } from "@spine-ts/proto";
 import {
@@ -34,9 +35,14 @@ import {
   type EventEndpoint,
   type TenantMode,
   Aggregate,
+  Delivery,
   type EntityVersionMetadata,
+  Inbox,
+  InboxStorage,
   type PlainEntityVersionMetadata,
   Repository,
+  ShardIndex,
+  ShardSession,
   HandlerMetadataRegistry,
   defineEntityHandlers,
   type RuntimeStateErrorCode,
@@ -188,6 +194,8 @@ describe("@spine-ts/server", () => {
         "BoundedContextNameError",
         "CommandBus",
         "CommandRegistrationReadiness",
+        "Delivery",
+        "DeliveryStorageCorruptionError",
         "EntityTransactionDraftStateError",
         "EntityTransaction",
         "EntityTransactionStateError",
@@ -200,11 +208,17 @@ describe("@spine-ts/server", () => {
         "HandlerMetadataRegistry",
         "HandlerMetadataRegistryError",
         "Entity",
+        "Inbox",
+        "InboxMessageError",
+        "InboxStorage",
         "ProcessManager",
         "Projection",
         "Repository",
         "RepositoryIdentityError",
         "ServerRuntimeStateError",
+        "ShardIndex",
+        "ShardSession",
+        "ShardedWorkRegistry",
         "SingleProcessServerRuntime",
         "TransactionalEntity",
         "TransactionalEntityScopeError",
@@ -257,6 +271,29 @@ describe("@spine-ts/server", () => {
     expect(acceptSignalIntake("command").acceptedFor).toBe("async-work");
     expect(failSignalIntake("event", "MALFORMED_ENVELOPE").failure.code).toBe("MALFORMED_ENVELOPE");
     expect(new CommandBus()).toBeInstanceOf(CommandBus);
+    expect(
+      new Delivery({
+        context: { name: "Exports", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+      }),
+    ).toBeInstanceOf(Delivery);
+    expect(
+      new InboxStorage({
+        context: { name: "Exports", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+      }),
+    ).toBeInstanceOf(InboxStorage);
+    expect(
+      new Inbox(
+        new InboxStorage({
+          context: { name: "Exports", multitenant: false },
+          storageFactory: new InMemoryStorageFactory(),
+        }),
+      ),
+    ).toBeInstanceOf(Inbox);
+    expect(
+      new ShardSession("session-1", ShardIndex.single(), "node-1", new Date(0), new Date(1)),
+    ).toBeInstanceOf(ShardSession);
     expect("dispatch" in new CommandBus()).toBe(false);
     expectTypeOf<CommandBus>().not.toHaveProperty("dispatch");
     expectTypeOf<CommandDispatcher>().toExtend<{

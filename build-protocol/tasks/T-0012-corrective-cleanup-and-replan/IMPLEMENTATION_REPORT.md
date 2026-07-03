@@ -1,6 +1,6 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.7c integrated; T-0012.8 selected
+Status: T-0012.8 integrated; T-0012.9 selected
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
@@ -186,8 +186,14 @@ Inspected notes and source confirm:
 
 `T-0012.7b` and `T-0012.7c` are integrated. Parent tracked-state verification
 after `T-0012.7c` passed with 37 test files and 347 tests, coverage statements
-94.92%, branches 90.50%, functions 96.33%, and lines 94.93%. The next selected
-subtask is `T-0012.8 Delivery And Inbox`.
+94.92%, branches 90.50%, functions 96.33%, and lines 94.93%.
+
+`T-0012.8 Delivery And Inbox` is integrated on `main`. It added the first
+durable delivery slice with `Inbox`, `Delivery`, storage-backed inbox records,
+shard pickup/release, live deduplication, focused delivery/storage tests, and
+durable documentation. All required review lanes are clean through reviewed
+commit `0d6089a`, and final task bookkeeping was committed as `2d0e34e`. The
+next selected subtask is `T-0012.9 Stand And Entity Updates`.
 
 ## First Selected Subtask
 

@@ -36,6 +36,17 @@ Current slice exposes:
   snapshot/history seam, backed by `StorageFactory`, `RecordStorage`, and
   `EventStore`;
   and
+- `Delivery`, `Inbox`, `InboxStorage`, `ShardIndex`, `ShardSession`, and
+  `ShardedWorkRegistry` for the first durable delivery slice: inbox writes with
+  durable `(signalId, inboxId)` live deduplication through internal guard
+  records, shard ordering metadata with an explicit inbox-message UUID
+  tie-breaker, bounded read paging via `InboxReadOptions.limit`, and
+  storage-backed shard pickup/release over atomic
+  `RecordStorage.compareAndSet()` handles for one backing store. This slice
+  explicitly excludes worker loops, retry monitors, conveyor/stations,
+  repository invocation, `Stand`, gRPC services, transport retries, and example
+  app work;
+- and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
 - first-field routing hints from descriptor order;

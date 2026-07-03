@@ -37,13 +37,13 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     return this.#open;
   }
 
-  /** Delete one stored record by ID. */
+  /** Delete one stored record by actual storage slot ID. */
   async delete(id: I): Promise<boolean> {
     this.requireOpen();
     return this.deleteRecord(this.#recordSpec.cloneId(id));
   }
 
-  /** Read one record by ID, optionally applying a simple field mask. */
+  /** Read one record by actual storage slot ID, optionally applying a simple field mask. */
   async read(id: I, options: RecordReadOptions = {}): Promise<R | undefined> {
     this.requireOpen();
     const record = await this.readRecord(this.#recordSpec.cloneId(id));
@@ -53,20 +53,54 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
       : RecordMask.apply(this.#recordSpec.cloneRecord(record), options.mask);
   }
 
-  /** Read matching record identifiers in deterministic query order. */
+  /**
+   * Read matching logical record identifiers derived from stored record bodies
+   * in deterministic query order.
+   */
   async index(query: RecordQuery<I> = {}): Promise<readonly I[]> {
-    const records = await this.query(query);
-    return records.map((record) => this.#recordSpec.cloneId(this.#recordSpec.idValueIn(record)));
+    this.requireOpen();
+    RecordQuery.validate(query);
+    const entries = await this.queryRecordEntries(query);
+
+    return entries.map((entry) =>
+      this.#recordSpec.cloneId(this.#recordSpec.idValueIn(entry.record)),
+    );
   }
 
-  /** Query records by IDs, columns, sorting, limits, and optional masks. */
+  /**
+   * Query records by actual storage slot IDs, columns, sorting, limits, and
+   * optional masks.
+   *
+   * `RecordQuery.ids`, when present, filters storage slot IDs rather than
+   * logical IDs derived from record bodies.
+   */
   async query(query: RecordQuery<I> = {}): Promise<readonly R[]> {
     this.requireOpen();
     RecordQuery.validate(query);
-    const records = await this.queryRecords(query);
+    const entries = await this.queryRecordEntries(query);
 
-    return records.map((record) =>
-      RecordMask.apply(this.#recordSpec.cloneRecord(record), query.mask),
+    return entries.map((entry) =>
+      RecordMask.apply(this.#recordSpec.cloneRecord(entry.record), query.mask),
+    );
+  }
+
+  /**
+   * Query stored records together with the actual storage slot IDs they
+   * currently occupy.
+   *
+   * `RecordQuery.ids`, when present, filters those storage slot IDs rather
+   * than logical IDs derived from record bodies.
+   */
+  async queryEntries(query: RecordQuery<I> = {}): Promise<readonly RecordEntry<I, R>[]> {
+    this.requireOpen();
+    RecordQuery.validate(query);
+    const entries = await this.queryRecordEntries(query);
+
+    return entries.map((entry) =>
+      Object.freeze({
+        id: this.#recordSpec.cloneId(entry.id),
+        record: RecordMask.apply(this.#recordSpec.cloneRecord(entry.record), query.mask),
+      }),
     );
   }
 
@@ -74,6 +108,27 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   async write(record: R): Promise<void> {
     this.requireOpen();
     await this.writeRecord(this.#recordSpec.materialize(record));
+  }
+
+  /**
+   * Compare the current stored record for one ID with an expected value and
+   * write or delete only when they still match.
+   *
+   * Implementations must apply this atomically across independently opened
+   * storage handles that share the same logical backing store. Passing
+   * `undefined` as `next` performs a conditional delete. A `false` result means
+   * the current stored value did not match `expected`, so no mutation was
+   * applied. The `id` argument names an actual storage slot, not a logical ID
+   * derived from a record body. Adapters that cannot guarantee this behavior
+   * are not valid for delivery leasing or deduplication.
+   */
+  async compareAndSet(id: I, expected: R | undefined, next: R | undefined): Promise<boolean> {
+    this.requireOpen();
+    return this.compareAndSetRecord(
+      this.#recordSpec.cloneId(id),
+      expected === undefined ? undefined : this.#recordSpec.materialize(expected),
+      next === undefined ? undefined : this.#recordSpec.materialize(next),
+    );
   }
 
   /** Write records in order, failing before persistence if any materialization step fails. */
@@ -84,8 +139,24 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   }
 
   protected abstract deleteRecord(id: I): Promise<boolean>;
-  protected abstract queryRecords(query: RecordQuery<I>): Promise<readonly R[]>;
+  /**
+   * Query stored records together with their actual storage slot IDs.
+   *
+   * Implementations must return `RecordEntry.id` as the concrete storage slot
+   * identifier for the row or document that currently stores the record.
+   * `RecordStorage.index()` derives logical record identifiers from
+   * `RecordEntry.record`, so adapters must not substitute logical IDs into
+   * `RecordEntry.id` here.
+   */
+  protected abstract queryRecordEntries(
+    query: RecordQuery<I>,
+  ): Promise<readonly RecordEntry<I, R>[]>;
   protected abstract readRecord(id: I): Promise<R | undefined>;
+  protected abstract compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean>;
   protected abstract writeAllRecords(
     records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
   ): Promise<void>;
@@ -98,4 +169,16 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
       throw new Error("RecordStorage is closed.");
     }
   }
+}
+
+/**
+ * One queried storage row or document.
+ *
+ * `id` is the actual storage slot identifier. `record` is the stored record
+ * value whose logical identifier may differ and is derived through
+ * `RecordSpec.idValueIn(...)`.
+ */
+export interface RecordEntry<I, R extends Message> {
+  readonly id: I;
+  readonly record: R;
 }

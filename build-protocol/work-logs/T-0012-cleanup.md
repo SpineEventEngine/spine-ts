@@ -1,6 +1,6 @@
 # Work Log: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.7c integrated; T-0012.8 selected
+Status: T-0012.8 integrated; T-0012.9 selected
 
 ## Entries
 
@@ -28,6 +28,7 @@ Status: T-0012.7c integrated; T-0012.8 selected
 | `2026-07-02 07:12 WEST` | Main orchestrator     | Integrated `T-0012.7b` and opened integration verification fix.                               | Merged `task/T-0012-7b-aggregate-storage-routing` into `main`; initial integrated verify found one real bounded-context test-fixture failure, one unrelated untracked `human-review-1-jul.md` formatting stop, and the known sandbox-only ZeroMQ IPC failure.                                                                                                                                                                                                                                                                                 | `T-0012.7b` is complete with all review lanes clean. Follow-up subtask `T-0012.7c Integration Verification Fix` was created for the real server test failure.                                                                                                                                                                                                                                                          |
 | `2026-07-02 07:44 WEST` | Main orchestrator     | Integrated `T-0012.7c` and selected next subtask.                                             | Merged `task/T-0012-7c-integration-verification-fix` into `main`; updated parent task/report/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                                       | `T-0012.7c` is complete with all review lanes clean and escalated `env CI=true corepack pnpm verify` passing. Next selected subtask is `T-0012.8 Delivery And Inbox`.                                                                                                                                                                                                                                                  |
 | `2026-07-02 07:49 WEST` | Main orchestrator     | Verified tracked parent state after `T-0012.7c` integration.                                  | `check:node`; `typecheck`; `lint`; tracked-file Prettier check; escalated `test`; escalated `test:coverage`; `docs:check`; `proto:lint`; `proto:generate`; `proto:check-generated`; `git diff --check`.                                                                                                                                                                                                                                                                                                                                       | Passed on `main`: 37 test files and 347 tests; coverage statements 94.92%, branches 90.50%, functions 96.33%, lines 94.93%; docs/API checks passed with the existing invalid-`origin` TypeDoc warning; proto generated output is ignored, untracked, and freshly regenerated. Root still has unrelated untracked `human-review-1-jul.md`, so monolithic `format:check` is not used for the parent tracked-state proof. |
+| `2026-07-03 23:10 WEST` | Main orchestrator     | Integrated `T-0012.8` and selected next subtask.                                              | `git merge --no-ff --no-commit task/T-0012-8-delivery-inbox`; updated parent task/report/review/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                                    | `T-0012.8` is complete with all review lanes clean through reviewed commit `0d6089a`; final task bookkeeping was committed as `2d0e34e`. Next selected subtask is `T-0012.9 Stand And Entity Updates`. Parent integration verification is next.                                                                                                                                                                        |
 
 ## Current State
 
@@ -43,7 +44,9 @@ Status: T-0012.7c integrated; T-0012.8 selected
 - `T-0012.7 Repository Registration And Storage Opening` is integrated.
 - `T-0012.7b Aggregate Storage And Signal Routing` is integrated.
 - `T-0012.7c Integration Verification Fix` is integrated.
-- Next selected implementable cleanup subtask is `T-0012.8 Delivery And Inbox`.
+- `T-0012.8 Delivery And Inbox` is integrated.
+- Next selected implementable cleanup subtask is
+  `T-0012.9 Stand And Entity Updates`.
 - Parent verification passed after `T-0012.1` integration.
 - Parent verification passed after `T-0012.2` integration.
 - Parent verification passed after `T-0012.3` integration.
@@ -54,4 +57,5 @@ Status: T-0012.7c integrated; T-0012.8 selected
 - Parent verification passed at `T-0012.7c` task branch HEAD before
   integration.
 - Parent tracked-state verification passed after `T-0012.7c` integration.
+- Parent integration verification for `T-0012.8` is pending.
 - No blocking human question is known.
