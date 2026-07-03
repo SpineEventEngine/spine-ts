@@ -499,6 +499,12 @@ function requireTimestamp(value: Date, label: string): number {
   return time;
 }
 
+function requireStoredTimestampNumber(value: unknown, label: string): number {
+  const time = requireNumber(value, label);
+  storedDate(time, label);
+  return time;
+}
+
 function storedDate(value: number, label: string): Date {
   const date = new Date(value);
 
@@ -581,7 +587,10 @@ function readFinalDedup(decoded: Record<string, unknown>, key: string): StoredFi
     ...(decoded.keepUntilMs === undefined
       ? {}
       : {
-          keepUntilMs: requireNumber(decoded.keepUntilMs, "Inbox dedup keep-until time"),
+          keepUntilMs: requireStoredTimestampNumber(
+            decoded.keepUntilMs,
+            "Inbox dedup keep-until time",
+          ),
         }),
   });
 }

@@ -945,6 +945,49 @@ describe("Inbox", () => {
     dedupRecords.close();
   });
 
+  it("fails closed when final dedup guard keep-until timestamps are out of range", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new CorruptGuardFactory({
+        guard: create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/internal/InboxDedupRecord",
+          value: Buffer.from(
+            JSON.stringify({
+              key: testDedupKey("signal-1"),
+              inbox: testInboxKey,
+              signalId: "signal-1",
+              inboxMessageId: "message-1",
+              shardIndex: 0,
+              shardTotal: 1,
+              state: "FINAL",
+              status: "DELIVERED",
+              keepUntilMs: Number.MAX_SAFE_INTEGER,
+            }),
+            "utf8",
+          ),
+        }),
+        inbox: create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/internal/InboxMessageRecord",
+          value: Buffer.from(
+            JSON.stringify({
+              ...storedInboxJson({
+                signalId: "signal-1",
+                valueBase64: Buffer.from("payload", "utf8").toString("base64"),
+              }),
+              status: "DELIVERED",
+            }),
+            "utf8",
+          ),
+        }),
+      }),
+    });
+
+    const write = storage.write(createMessage("message-2", "signal-1", 2n));
+
+    await expect(write).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(write).rejects.toThrow(/keep-until time/i);
+  });
+
   it("rejects a final dedup guard whose key does not match its signal", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },

@@ -21,7 +21,11 @@ export interface InboxMessageId {
   readonly shard: ShardIndex;
 }
 
-/** Raised when a caller provides an invalid inbox message. */
+/**
+ * Raised by public delivery APIs when a caller provides an invalid inbox
+ * message. Corrupt durable delivery rows raise
+ * `DeliveryStorageCorruptionError`.
+ */
 export class InboxMessageError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);

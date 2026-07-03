@@ -1,4 +1,4 @@
-/** Raised when durable delivery records cannot be decoded safely. */
+/** Raised by public delivery APIs when durable delivery records are corrupt or invalid. */
 export class DeliveryStorageCorruptionError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(`Delivery storage corruption: ${message}`, options);

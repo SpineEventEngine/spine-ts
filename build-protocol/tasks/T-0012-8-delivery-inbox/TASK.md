@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-32 fix complete
+Status: round-33 fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -442,4 +442,26 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   stored inbox/dedup/shard timestamps as storage corruption, remove the unsafe
   default `RecordStorage.queryRecordEntries()` fallback, and update the durable
   task/report/review/work-log state.
+- Round-33 review completed from reviewer results supplied to this fix worker.
+  Code style/maintainability and security were clean. Documentation and
+  TypeScript/API docs requested durable log/API-contract updates, and
+  performance/reliability requested a final dedup guard `keepUntilMs`
+  fail-closed regression plus validation. All five round-33 reviewer
+  sub-agents are closed.
+- Round-33 fixes export `DeliveryStorageCorruptionError` from the public server
+  surface, document the delivery error contract beside `InboxMessageError`,
+  add a red-first regression for out-of-range final dedup `keepUntilMs`, and
+  validate that timestamp in the final dedup guard read path.
+- Red-first focused verification failed as expected before the production fix:
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `-- --runInBand -t "fails closed when final dedup guard keep-until`
+  `timestamps are out of range"`
+  resolved `WRITTEN` instead of rejecting corrupt storage.
+- Final round-33 verification passed with
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`,
+  `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `git diff --check`, and a
+  full touched-file line scan.
 - No blocking human question is known.

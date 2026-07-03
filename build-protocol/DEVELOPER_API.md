@@ -143,10 +143,16 @@ bounded context. It is intentionally smaller than the later worker/retry stack:
   lease snapshot for that shard, and `ShardedWorkRegistry` persists shard
   pickup/release across processes; and
 - `DeliveryLabel`, `DeliveryStatus`, `InboxId`, `InboxMessage`,
-  `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
+  `DeliveryStorageCorruptionError`, `InboxMessageError`, `InboxMessageId`,
+  `InboxMessageInput`,
   `InboxReadOptions`, `InboxWriteResult`, `InboxStorageOptions`,
   `DeliveryOptions`, and `ShardedWorkRegistryOptions` describe the stable
   inputs/outputs of this slice.
+
+Public error contract for this slice is intentionally small: callers should
+expect `InboxMessageError` for invalid inbox message input and
+`DeliveryStorageCorruptionError` when durable delivery storage is corrupt or
+out of contract.
 
 Current usage is deliberately narrow:
 

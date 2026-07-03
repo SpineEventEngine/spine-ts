@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-32 fix complete
+Status: round-33 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -865,6 +865,52 @@ Verification for the round-32 fix passed with:
 - `git diff --check`
 - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
   over 120 columns)
+
+## Round 33 Review
+
+Round 33 found no maintainability or security issue. Documentation requested
+advancing the durable task/report/review/work-log state to the round-33
+package. TypeScript/API docs requested exporting and documenting
+`DeliveryStorageCorruptionError` as part of the public delivery error
+contract. Performance/reliability requested a red-first regression plus
+fail-closed validation for out-of-range final dedup guard `keepUntilMs`.
+
+## Round 33 Fix
+
+Round-33 fixes stayed local to the delivery error contract, final dedup guard
+validation, and durable logs:
+
+- exported `DeliveryStorageCorruptionError` from `packages/server/src/index.ts`
+  and documented the public delivery error contract in
+  `build-protocol/DEVELOPER_API.md`, `inbox.ts`, and
+  `delivery-storage-error.ts`;
+- added the focused regression
+  `fails closed when final dedup guard keep-until timestamps are out of range`
+  before the production edit and confirmed the pre-fix failure resolved
+  `WRITTEN` instead of rejecting corrupt storage; and
+- validated final dedup `keepUntilMs` through the same `Date`-range check used
+  by stored inbox timestamps so corrupt/out-of-range values now fail closed as
+  `DeliveryStorageCorruptionError`.
+
+Verification for the round-33 fix passed with:
+
+- red:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `-- --runInBand -t "fails closed when final dedup guard keep-until`
+    `timestamps are out of range"`
+    failed before the production change because the corrupt final dedup guard
+    still resolved `WRITTEN`;
+- green:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `packages/storage/test/memory/in-memory-record-storage.test.ts`;
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check`; and
+  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+    over 120 columns).
 
 ## Round 2 Review
 

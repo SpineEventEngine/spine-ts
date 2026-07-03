@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 32 fix complete
+Status: round 33 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1371,6 +1371,70 @@ Verification:
     live row, shard-session expiry corruption still resolved a replacement
     session, and query-entry adapters still silently reused the embedded record
     ID;
+- green:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check`; and
+  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+    over 120 columns).
+
+### Round 33
+
+Reviewer input: round-33 reviewer results supplied to this fix worker.
+
+Diff package:
+`.superpowers/sdd/review-round-33-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f285c-d193-7d12-b56e-1d1e8726e320` (`CLEAN`, closed);
+- documentation:
+  `019f285c-d22b-7703-9785-bd738823aa48` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f285c-d2ae-78e2-90b1-e87b39eebdd5` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f285c-d325-7f30-a8b1-2e4011efa42c` (`CLEAN`, closed); and
+- performance/reliability:
+  `019f285c-d3a1-7b92-98dd-e7d23242497c` (`CHANGES REQUESTED`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable task/report/review/work-log entries were stale against the round-33
+  package;
+- `DeliveryStorageCorruptionError` was raised from public delivery APIs but was
+  not exported or documented beside `InboxMessageError`; and
+- final dedup guard reads still accepted corrupt/out-of-range `keepUntilMs`
+  instead of failing closed as `DeliveryStorageCorruptionError`.
+
+### Round 33 Fix
+
+Result: implemented in this worktree.
+
+Fix summary:
+
+- exported `DeliveryStorageCorruptionError` from the public server entrypoint
+  and documented the delivery error contract beside `InboxMessageError`;
+- added the red-first regression for out-of-range final dedup guard
+  `keepUntilMs`; and
+- validated final dedup `keepUntilMs` in the guard read path so corrupt values
+  now fail closed as `DeliveryStorageCorruptionError`.
+
+Verification:
+
+- red:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `-- --runInBand -t "fails closed when final dedup guard keep-until`
+    `timestamps are out of range"`
+    failed before the production change because the corrupt guard still
+    resolved `WRITTEN`;
 - green:
   - `pnpm test packages/server/test/delivery/inbox.test.ts`
     `packages/server/test/delivery/inbox-records.test.ts`
