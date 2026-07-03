@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8b Integration Coverage Fix
 
-Status: selected after T-0012.8 integration coverage failure
+Status: implemented and verified before final commit
 Branch: `task/T-0012-8b-integration-coverage-fix`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8b-integration-coverage-fix`
@@ -12,8 +12,7 @@ This task exists because parent integration coverage after merging
 `T-0012.8 Delivery And Inbox` fell below the global branch threshold:
 89.2% branches versus the required 90%.
 
-The implementation should be test-focused. Production changes are allowed only
-if a focused test exposes a real runtime defect.
+The implementation is test-focused. No production code was changed.
 
 ## Initial Evidence
 
@@ -37,5 +36,38 @@ additional selected/skipped skills in this report or the work log.
 
 ## Current State
 
-- Implementation is pending.
+- Added focused delivery tests in:
+  - `packages/server/test/delivery/inbox.test.ts`
+  - `packages/server/test/delivery/sharded-work-registry.test.ts`
+- Covered meaningful branches for:
+  - multitenant inbox storage isolation by tenant;
+  - inbox read shard validation before storage opens;
+  - corrupted stored inbox record payload access;
+  - stored inbox record key/message identity mismatch;
+  - stored signal payload encoded-size and non-canonical base64 guards;
+  - oversized stored shard-session text fields;
+  - invalid pickup shard input validation before storage opens.
+- Escalated `pnpm test:coverage` passed all tests and raised global branch
+  coverage to 90.02%.
 - No blocking human question is known.
+
+## Verification Evidence
+
+- `pnpm install`: sandboxed run failed with npm `ENOTFOUND`; escalated retry
+  succeeded.
+- `pnpm proto:generate`: passed; generated files remain ignored.
+- Sandboxed `pnpm test:coverage`: initially failed in local IPC smoke tests with
+  `Operation not permitted`; escalated coverage was required for final evidence.
+- Baseline escalated `pnpm test:coverage`: 42 files and 478 tests passed, then
+  failed threshold with 89.2% branch coverage.
+- Focused post-change tests:
+  `pnpm vitest run packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts --coverage.enabled false`
+  passed with 2 files and 121 tests.
+- `pnpm typecheck`: passed.
+- `pnpm lint`: passed.
+- Escalated post-change `pnpm test:coverage`: passed with 42 files and 489
+  tests; branch coverage 90.02%.
+- `pnpm format:check`: failed because it also reported pre-existing formatting
+  issues in `build-protocol/work-logs/T-0012-cleanup.md`; touched-file
+  Prettier check passed for all task-changed files.
+- `git diff --check`: passed after test formatting.

@@ -1,6 +1,6 @@
 # Review Log: T-0012.8b Integration Coverage Fix
 
-Status: awaiting implementation
+Status: implementation ready for review after final commit
 Task log:
 `build-protocol/tasks/T-0012-8b-integration-coverage-fix/TASK.md`
 Branch: `task/T-0012-8b-integration-coverage-fix`
@@ -29,4 +29,9 @@ Reviewers must verify:
 
 ## Current State
 
+- Implementation is test-only.
+- Coverage recovered from the reproduced baseline of 89.2% branch coverage to
+  90.02% branch coverage under escalated `pnpm test:coverage`.
+- Sandboxed local IPC tests failed with `Operation not permitted`; escalated
+  coverage is the authoritative full-suite result.
 - No implementation review has run yet.
