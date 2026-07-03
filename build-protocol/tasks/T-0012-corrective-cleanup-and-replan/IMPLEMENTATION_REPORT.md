@@ -204,6 +204,16 @@ review lanes, and recovered global branch coverage to 90.02% under escalated
 `pnpm test:coverage`. The next selected subtask is `T-0012.9 Stand And Entity
 Updates`.
 
+Parent tracked-state verification after integrating `T-0012.8b` passed:
+`pnpm check:node`, `pnpm typecheck`, `pnpm lint`, tracked-file Prettier,
+escalated `pnpm test`, escalated `pnpm test:coverage`, `pnpm docs:check`,
+`pnpm proto:lint`, `pnpm proto:generate`, `pnpm proto:check-generated`, and
+`git diff --check`. Escalated coverage passed with 42 test files, 489 tests,
+statements 94.85%, branches 90.02%, functions 96.95%, and lines 94.88%.
+Docs/API checks still report only the known invalid-`origin` TypeDoc warning.
+The unrelated untracked root file `human-review-1-jul.md` remains outside the
+autonomous task scope.
+
 ## First Selected Subtask
 
 Selected: `T-0012.1 Cleanup Enforcement Baseline`.

@@ -121,6 +121,13 @@ delivery tests for meaningful inbox, shard, corruption, base64, and tenant
 branches, recovered global branch coverage to 90.02%, passed all required
 review lanes, and landed through reviewed commit `8e2e410`.
 
+Parent tracked-state verification passed after `T-0012.8b` integration:
+check-node, typecheck, lint, tracked-file formatting, escalated tests,
+escalated coverage, docs/API, proto lint/generate/clean, and
+`git diff --check`. Non-escalated tests and coverage still hit the known
+ZeroMQ local IPC sandbox failure. Coverage was statements 94.85%, branches
+90.02%, functions 96.95%, and lines 94.88%.
+
 Next selected subtask: `T-0012.9 Stand And Entity Updates`.
 
 ## T-0012.2 Selection Rationale
