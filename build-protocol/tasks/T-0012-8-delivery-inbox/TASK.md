@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-50 fix verified for current pass
-Previous completed commit: `855e54e`
+Status: round-51 fix verified for current pass
+Previous completed commit: `5a00b30`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -833,6 +833,26 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   support declarations, and refresh durable logs for committed round 49 at
   `855e54e`.
 - Final round-50 verification passed with the required focused
+  delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
+  `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
+  touched-file line scan.
+- Round-50 fixes were committed as `5a00b30`.
+- Round-51 review completed from reviewer results supplied to this fix worker.
+  Security requested translating durable inbox and dedup clone/materialization
+  failures at `InboxStorage` read/query boundaries into
+  `DeliveryStorageCorruptionError`. Documentation requested restoring the
+  implementation-report tail to chronological round-48 through round-50 order,
+  removing duplicate verification blocks, and refreshing durable-log current
+  state for committed round 50 at `5a00b30`.
+- Red-first round-51 verification failed before production changes because the
+  new queried inbox-row clone regression observed raw
+  `Error: Storage record could not be cloned.` instead of
+  `DeliveryStorageCorruptionError`.
+- Round-51 fixes add focused clone/materialization regressions for inbox and
+  dedup durable-read boundaries, translate only storage clone failures through
+  one private `InboxStorage` durable-read helper, and refresh durable
+  task/report/review/work logs for committed round 50 at `5a00b30`.
+- Final round-51 verification passed with the required focused
   delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
   `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
   touched-file line scan.

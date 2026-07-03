@@ -715,6 +715,19 @@ describe("Inbox", () => {
     );
   });
 
+  it("translates queried inbox row clone failures into storage corruption", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new DurableReadCloneFailureFactory({
+        inboxQueryEntries: [unclonableStoredRecord()],
+      }),
+    });
+
+    await expect(storage.read(ShardIndex.single())).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
   it("treats oversized stored inbox composite keys as storage corruption", async () => {
     const escaped = oversizedText(16 * 1024, "\\");
     const storage = new InboxStorage({
@@ -839,6 +852,52 @@ describe("Inbox", () => {
           signalId: "signal-1",
           valueBase64: oversizedPayload(),
         }),
+      }),
+    });
+
+    await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("translates dedup guard clone failures into storage corruption", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new DurableReadCloneFailureFactory({
+        dedupRead: unclonableStoredRecord(),
+      }),
+    });
+
+    await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("translates conflicting inbox row clone failures into storage corruption", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new DurableReadCloneFailureFactory({
+        failInboxCreate: true,
+        inboxRead: unclonableStoredRecord(),
+      }),
+    });
+
+    await expect(storage.write(createMessage("message-2", "signal-2", 2n))).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("translates guarded inbox row clone failures into storage corruption", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new DurableReadCloneFailureFactory({
+        dedupRead: finalDedupRecord({
+          key: testDedupKey("signal-1"),
+          inbox: testInboxKey,
+          signalId: "signal-1",
+          inboxMessageId: "message-1",
+        }),
+        inboxRead: unclonableStoredRecord(),
       }),
     });
 
@@ -1954,6 +2013,10 @@ class Deferred<T> {
   }
 }
 
+function unclonableStoredRecord(): Any {
+  return {} as Any;
+}
+
 class CorruptGuardFactory extends StorageFactory {
   readonly #records: CorruptGuardRecords;
 
@@ -2010,6 +2073,123 @@ class CorruptGuardStorage extends RecordStorage<string, Any> {
 
     if (this.context.name.endsWith(".delivery.inbox")) {
       return Promise.resolve(this.#records.inbox);
+    }
+
+    return Promise.resolve(undefined);
+  }
+
+  protected writeAllRecords(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  protected writeRecord(): Promise<void> {
+    return Promise.resolve();
+  }
+}
+
+class DurableReadCloneFailureFactory extends StorageFactory {
+  readonly #records: DurableReadCloneFailurePlan;
+  readonly #dedup = new Map<string, Any>();
+
+  constructor(records: DurableReadCloneFailurePlan) {
+    super();
+    this.#records = records;
+    if (records.dedupRead !== undefined) {
+      this.#dedup.set(testDedupKey("signal-1"), records.dedupRead);
+    }
+  }
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new DurableReadCloneFailureStorage(
+      context,
+      recordSpec as unknown as RecordSpec<string, Any>,
+      this.#records,
+      this.#dedup,
+    ) as unknown as RecordStorage<I, R>;
+  }
+}
+
+interface DurableReadCloneFailurePlan {
+  readonly dedupRead?: Any;
+  readonly inboxQueryEntries?: readonly Any[];
+  readonly inboxRead?: Any;
+  readonly failInboxCreate?: boolean;
+}
+
+class DurableReadCloneFailureStorage extends RecordStorage<string, Any> {
+  readonly #records: DurableReadCloneFailurePlan;
+  readonly #dedup: Map<string, Any>;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<string, Any>,
+    records: DurableReadCloneFailurePlan,
+    dedup: Map<string, Any>,
+  ) {
+    super(context, recordSpec);
+    this.#records = records;
+    this.#dedup = dedup;
+  }
+
+  protected compareAndSetRecord(
+    id: string,
+    expected: ReturnType<RecordSpec<string, Any>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<string, Any>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    if (
+      this.context.name.endsWith(".delivery.inbox") &&
+      this.#records.failInboxCreate === true &&
+      expected === undefined &&
+      next !== undefined
+    ) {
+      return Promise.resolve(false);
+    }
+
+    if (this.context.name.endsWith(".delivery.inbox-dedup")) {
+      const current = this.#dedup.get(id);
+      if (current !== expected?.record && !(current === undefined && expected === undefined)) {
+        return Promise.resolve(false);
+      }
+
+      if (next === undefined) {
+        this.#dedup.delete(id);
+        return Promise.resolve(true);
+      }
+
+      this.#dedup.set(id, next.record);
+      return Promise.resolve(true);
+    }
+
+    return Promise.resolve(false);
+  }
+
+  protected deleteRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected queryRecordEntries(): Promise<readonly { id: string; record: Any }[]> {
+    if (!this.context.name.endsWith(".delivery.inbox")) {
+      return Promise.resolve([]);
+    }
+
+    return Promise.resolve(
+      (this.#records.inboxQueryEntries ?? []).map((record, index) => ({
+        id: `0/1:query-${String(index)}`,
+        record,
+      })),
+    );
+  }
+
+  protected readRecord(id: string): Promise<Any | undefined> {
+    if (this.context.name.endsWith(".delivery.inbox-dedup")) {
+      return Promise.resolve(this.#dedup.get(id));
+    }
+
+    if (this.context.name.endsWith(".delivery.inbox")) {
+      return Promise.resolve(this.#records.inboxRead);
     }
 
     return Promise.resolve(undefined);

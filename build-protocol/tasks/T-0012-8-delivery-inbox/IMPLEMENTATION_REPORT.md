@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-50 fix verified for current pass
-Previous completed commit: `855e54e`
+Status: round-51 fix verified for current pass
+Previous completed commit: `5a00b30`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1814,85 +1814,6 @@ Final verification:
 `node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
 TypeDoc source-link warning, but exited successfully.
 
-Round-49 fixes were committed as `855e54e`.
-
-## Round 50 Review
-
-Round 50 found no TypeScript/API docs, security, or performance/reliability
-issues. Documentation and maintainability requested restoring semantic
-chronological order in the review log tail, recording the final round-49
-verification summary in this report, and moving the filename-matching
-`InboxRecords` declaration before supporting inbox-record declarations.
-
-## Round 50 Fix
-
-Round-50 fixes are intentionally mechanical:
-
-- moved `InboxRecords` before supporting stored-record declarations and specs
-  in `inbox-records.ts`;
-- restored review-log order so rounds 40 through 49 read chronologically; and
-- refreshed durable logs for committed round 49 at `855e54e` and this
-  round-50 fix trail.
-
-Final verification:
-
-- `pnpm test packages/server/test/delivery/inbox.test.ts`
-  `packages/server/test/delivery/inbox-records.test.ts`
-  `packages/server/test/delivery/shard-index.test.ts`
-  `packages/server/test/delivery/sharded-work-registry.test.ts`
-  `packages/storage/test/memory/in-memory-record-storage.test.ts`
-  `packages/server/test/repository/aggregate-storage.test.ts` passed with
-  `138` tests;
-- `pnpm typecheck`;
-- `pnpm lint`;
-- `pnpm format:check`;
-- `node scripts/check-api-docs.mjs`;
-- `git diff --check fce80b2..HEAD`; and
-- touched-file line scan with no lines over 120 columns.
-
-`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
-TypeDoc source-link warning, but exited successfully.
-
-Final verification:
-
-- `pnpm test packages/server/test/delivery/inbox.test.ts`
-  `packages/server/test/delivery/inbox-records.test.ts`
-  `packages/server/test/delivery/shard-index.test.ts`
-  `packages/server/test/delivery/sharded-work-registry.test.ts`
-  `packages/storage/test/memory/in-memory-record-storage.test.ts`
-  `packages/server/test/repository/aggregate-storage.test.ts` passed with
-  `138` tests;
-- `pnpm typecheck`;
-- `pnpm lint`;
-- `pnpm format:check`;
-- `node scripts/check-api-docs.mjs`;
-- `git diff --check fce80b2..HEAD`; and
-- touched-file line scan with no lines over 120 columns.
-
-`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
-TypeDoc source-link warning, but exited successfully.
-
-Final verification:
-
-- `pnpm test packages/server/test/delivery/inbox.test.ts`
-  `packages/server/test/delivery/inbox-records.test.ts`
-  `packages/server/test/delivery/shard-index.test.ts`
-  `packages/server/test/delivery/sharded-work-registry.test.ts`
-  `packages/storage/test/memory/in-memory-record-storage.test.ts`
-  `packages/server/test/repository/aggregate-storage.test.ts` passed with
-  `138` tests;
-- `pnpm typecheck`;
-- `pnpm lint`;
-- `pnpm format:check`;
-- `node scripts/check-api-docs.mjs`;
-- `git diff --check fce80b2..HEAD`; and
-- touched-file line scan with no lines over 120 columns.
-
-`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
-TypeDoc source-link warning, but exited successfully.
-
-Round-48 fixes were committed as `d3bdfae`.
-
 ## Round 49 Review
 
 Round 49 found one durable-log issue and one public promise-contract issue.
@@ -1925,3 +1846,136 @@ Focused verification:
 
 - the same focused delivery command passed after production changes with
   `62` tests.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `138` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+Round-49 fixes were committed as `855e54e`.
+
+## Round 50 Review
+
+Round 50 found no TypeScript/API docs, security, or performance/reliability
+issues. Documentation and maintainability requested restoring semantic
+chronological order in the review-log tail, recording the final round-49
+verification summary in this report, and moving the filename-matching
+`InboxRecords` declaration before supporting inbox-record declarations.
+
+## Round 50 Fix
+
+Round-50 fixes are intentionally mechanical:
+
+- moved `InboxRecords` before supporting stored-record declarations and specs
+  in `inbox-records.ts`;
+- restored review-log order so rounds 40 through 49 read chronologically; and
+- refreshed durable logs for committed round 49 at `855e54e` and this
+  round-50 fix trail.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `138` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+Round-50 fixes were committed as `5a00b30`.
+
+## Round 51 Review
+
+Round 51 found one security issue and durable-log tail drift. Security
+requested translating durable inbox and dedup clone/materialization failures at
+the `InboxStorage` durable-read boundaries into
+`DeliveryStorageCorruptionError` instead of leaking plain storage clone errors.
+Documentation requested restoring chronological round-48 through round-50 tail
+ordering in this report, removing duplicated verification blocks, and
+refreshing durable task/report/review/work-log state for committed round 50 at
+`5a00b30`.
+
+Code style/maintainability, TypeScript/API docs, and
+performance/reliability lanes were otherwise clean.
+
+## Round 51 Fix
+
+Round-51 fixes stay local to durable inbox-read boundaries and durable logs:
+
+- added red-first regressions in `packages/server/test/delivery/inbox.test.ts`
+  for clone/materialization failures at inbox query, dedup guard read,
+  conflicting inbox-row read, and dedup-targeted inbox-row read boundaries;
+- wrapped those durable `RecordStorage.queryEntries()` and `read()` boundaries
+  in one private `InboxStorage` helper that translates only
+  `"Storage record could not be cloned."` into
+  `DeliveryStorageCorruptionError`, while leaving closed/programming errors
+  untouched; and
+- refreshed durable task/report/review/work logs for committed round 50 at
+  `5a00b30` and this round-51 fix trail.
+
+Red-first verification:
+
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'translates queried inbox row clone failures into storage corruption'`
+  failed before production changes because the new regression observed raw
+  `Error: Storage record could not be cloned.` instead of
+  `DeliveryStorageCorruptionError`.
+
+Focused verification:
+
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'translates queried inbox row clone failures into storage corruption'`
+  passed after the production change;
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'translates dedup guard clone failures into storage corruption'`
+  passed;
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'translates conflicting inbox row clone failures into storage corruption'`
+  passed; and
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'translates guarded inbox row clone failures into storage corruption'`
+  passed.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+This round-51 fix commit cannot pre-record its own final hash; identify it
+from package HEAD or `git log`.

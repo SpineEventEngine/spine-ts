@@ -1,7 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 50 fix verified for current pass
-Previous completed commit: `855e54e`
+Status: round 51 fix verified for current pass
+Previous completed commit: `5a00b30`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2885,9 +2885,7 @@ Findings to address:
 
 ### Round 50 Fix
 
-Result: implemented for this current pass. The future commit hash cannot be
-pre-recorded inside the commit itself; identify the committed round-50 fix by
-package HEAD or `git log`.
+Result: committed as `5a00b30`.
 
 Fix summary:
 
@@ -2906,6 +2904,84 @@ Final verification:
   `packages/storage/test/memory/in-memory-record-storage.test.ts`
   `packages/server/test/repository/aggregate-storage.test.ts` passed with
   `138` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+### Round 51
+
+Reviewer input: round-51 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- security: `round-51-security` (`CHANGES REQUESTED`, supplied); and
+- documentation: `round-51-documentation` (`CHANGES REQUESTED`, supplied).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable inbox and dedup reads in `packages/server/src/delivery/inbox-storage.ts`
+  let `RecordStorage.queryEntries()` / `read()` clone/materialization failures
+  escape as raw storage errors instead of
+  `DeliveryStorageCorruptionError`; and
+- implementation/report/work-log durable state still reflected committed round
+  49 at `855e54e`, and this report tail needed explicit round-51 tracking.
+
+### Round 51 Fix
+
+Result: implemented for this current pass. The future commit hash cannot be
+pre-recorded inside the commit itself; identify the committed round-51 fix by
+package HEAD or `git log`.
+
+Fix summary:
+
+- added red-first inbox regressions for queried inbox-row clone failure, dedup
+  guard clone failure, conflicting inbox-row clone failure, and guarded inbox
+  row clone failure;
+- wrapped durable inbox/dedup `RecordStorage.queryEntries()` and `read()`
+  boundaries behind one private `InboxStorage` helper that translates only
+  `"Storage record could not be cloned."` into
+  `DeliveryStorageCorruptionError`; and
+- refreshed durable task/report/review/work logs for committed round 50 at
+  `5a00b30` and this round-51 fix trail.
+
+Red-first verification:
+
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'translates queried inbox row clone failures into storage corruption'`
+  failed before production changes because the new regression observed raw
+  `Error: Storage record could not be cloned.` instead of
+  `DeliveryStorageCorruptionError`.
+
+Focused verification:
+
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'translates queried inbox row clone failures into storage corruption'`
+  passed;
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'translates dedup guard clone failures into storage corruption'` passed;
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'translates conflicting inbox row clone failures into storage corruption'`
+  passed; and
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'translates guarded inbox row clone failures into storage corruption'`
+  passed.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`;
 - `pnpm typecheck`;
 - `pnpm lint`;
 - `pnpm format:check`;

@@ -39,11 +39,13 @@ export class InboxStorage {
     const storage = this.#inboxStorage();
 
     try {
-      const records = await storage.queryEntries({
-        filters: [{ column: "shard", value: shard.key() }, ...statusFilters(options.statuses)],
-        sort: [{ field: "receivedAt" }, { field: "version" }, { field: "messageId" }],
-        limit: options.limit ?? defaultReadLimit,
-      });
+      const records = await this.#durableRead("Inbox record", () =>
+        storage.queryEntries({
+          filters: [{ column: "shard", value: shard.key() }, ...statusFilters(options.statuses)],
+          sort: [{ field: "receivedAt" }, { field: "version" }, { field: "messageId" }],
+          limit: options.limit ?? defaultReadLimit,
+        }),
+      );
 
       return Object.freeze(records.map((entry) => InboxRecords.read(entry.record, entry.id)));
     } finally {
@@ -97,7 +99,7 @@ export class InboxStorage {
     dedupKey: string,
     message: InboxMessage,
   ): Promise<WriteStep> {
-    const current = await dedupStorage.read(dedupKey);
+    const current = await this.#durableRead("Inbox dedup guard", () => dedupStorage.read(dedupKey));
     if (current === undefined) {
       return { kind: "CLAIM", expected: undefined, message };
     }
@@ -211,7 +213,7 @@ export class InboxStorage {
         return InboxRecords.read(record);
       }
 
-      const current = await inboxStorage.read(key);
+      const current = await this.#durableRead("Inbox record", () => inboxStorage.read(key));
       if (current === undefined) {
         continue;
       }
@@ -238,7 +240,9 @@ export class InboxStorage {
   ): Promise<GuardMessage | undefined> {
     const guardState = DedupRecords.readGuard(guard, dedupKey);
     const expectedKey = this.#messageKey(guardState.messageId);
-    const storedRecord = await inboxStorage.read(expectedKey);
+    const storedRecord = await this.#durableRead("Inbox record", () =>
+      inboxStorage.read(expectedKey),
+    );
     if (storedRecord === undefined) {
       return undefined;
     }
@@ -308,6 +312,20 @@ export class InboxStorage {
 
   #sameTime(left: Date | undefined, right: Date | undefined): boolean {
     return left?.getTime() === right?.getTime();
+  }
+
+  async #durableRead<T>(label: string, read: () => Promise<T>): Promise<T> {
+    try {
+      return await read();
+    } catch (error) {
+      if (error instanceof Error && error.message === "Storage record could not be cloned.") {
+        throw new DeliveryStorageCorruptionError(`${label} is invalid.`, {
+          cause: error,
+        });
+      }
+
+      throw error;
+    }
   }
 
   #written(message: InboxMessage): WriteReturn {
