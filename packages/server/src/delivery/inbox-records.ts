@@ -310,27 +310,53 @@ function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
 }
 
 function snapshotInboxMessage(message: InboxMessage): InboxMessageSnapshot {
-  const idInput = requireInputObject(message.id, "Inbox message ID");
-  const inboxIdInput = requireInputObject(message.inboxId, "Inbox target identity");
-  const idShard = requireInputShard(Reflect.get(idInput, "shard"), "Inbox message ID shard");
-  const shard = requireInputShard(message.shard, "Inbox message shard");
+  const messageInput = requireInputObject(message, "Inbox message");
+  const idInput = requireInputObject(
+    readInputProperty(messageInput, "id", "Inbox message ID"),
+    "Inbox message ID",
+  );
+  const inboxIdInput = requireInputObject(
+    readInputProperty(messageInput, "inboxId", "Inbox target identity"),
+    "Inbox target identity",
+  );
+  const idShard = requireInputShard(
+    readInputProperty(idInput, "shard", "Inbox message ID shard"),
+    "Inbox message ID shard",
+  );
+  const shard = requireInputShard(
+    readInputProperty(messageInput, "shard", "Inbox message shard"),
+    "Inbox message shard",
+  );
   if (idShard.key() !== shard.key()) {
     throw new InboxMessageError("Inbox message ID shard does not match message shard.");
   }
 
-  const id = requireMessageIdText(Reflect.get(idInput, "value"));
-  const targetId = requireInputText(Reflect.get(inboxIdInput, "targetId"), "Inbox target ID");
+  const id = requireMessageIdText(readInputProperty(idInput, "value", "Inbox message ID"));
+  const targetId = requireInputText(
+    readInputProperty(inboxIdInput, "targetId", "Inbox target ID"),
+    "Inbox target ID",
+  );
   const targetTypeUrl = requireInputText(
-    Reflect.get(inboxIdInput, "targetTypeUrl"),
+    readInputProperty(inboxIdInput, "targetTypeUrl", "Inbox target type URL"),
     "Inbox target type URL",
   );
-  const signalId = requireInputText(message.signalId, "Inbox signal ID");
-  const label = requireInputDeliveryLabel(message.label);
-  const status = requireInputDeliveryStatus(message.status);
-  const whenReceivedMs = requireInputTimestamp(message.whenReceived, "Inbox receive time");
-  const version = requireInputVersion(message.version);
-  const signal = message.signal;
-  const keepUntil = message.keepUntil;
+  const signalId = requireInputText(
+    readInputProperty(messageInput, "signalId", "Inbox signal ID"),
+    "Inbox signal ID",
+  );
+  const label = requireInputDeliveryLabel(
+    readInputProperty(messageInput, "label", "Inbox delivery label"),
+  );
+  const status = requireInputDeliveryStatus(
+    readInputProperty(messageInput, "status", "Inbox delivery status"),
+  );
+  const whenReceivedMs = requireInputTimestamp(
+    readInputProperty(messageInput, "whenReceived", "Inbox receive time"),
+    "Inbox receive time",
+  );
+  const version = requireInputVersion(readInputProperty(messageInput, "version", "Inbox version"));
+  const signal = readInputProperty(messageInput, "signal", "Inbox signal") as Any | undefined;
+  const keepUntil = readInputProperty(messageInput, "keepUntil", "Inbox keep-until time");
 
   return Object.freeze({
     id,
@@ -348,6 +374,18 @@ function snapshotInboxMessage(message: InboxMessage): InboxMessageSnapshot {
       ? {}
       : { keepUntilMs: requireInputTimestamp(keepUntil, "Inbox keep-until time") }),
   });
+}
+
+function readInputProperty(
+  value: Record<string, unknown>,
+  property: string,
+  label: string,
+): unknown {
+  try {
+    return Reflect.get(value, property);
+  } catch (error) {
+    throw new InboxMessageError(`${label} is invalid.`, { cause: error });
+  }
 }
 
 function inboxMessageFromStored(stored: StoredInboxMessage): InboxMessage {

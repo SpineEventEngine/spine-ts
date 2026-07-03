@@ -1,7 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 46 fix implemented in current commit
-Previous completed commit: `e93d165`
+Status: round 47 fix implemented in current commit
+Previous completed commit: `cd2b13b`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2611,9 +2611,7 @@ Findings to address:
 
 ### Round 46 Fix
 
-Result: implemented in this current commit. Because a commit cannot pre-record
-its own final hash, identify the committed round-46 fix by package HEAD or
-`git log`.
+Result: committed as `cd2b13b`.
 
 Fix summary:
 
@@ -2633,6 +2631,77 @@ Final verification:
   `packages/storage/test/memory/in-memory-record-storage.test.ts`
   `packages/server/test/repository/aggregate-storage.test.ts` passed with
   `135` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+### Round 47
+
+Reviewer input: round-47 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- documentation:
+  `019f292f-b109-7ac1-8160-ebd2d819cc58` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f2930-2de7-71b0-bd42-b48b10a4ae65` (`CHANGES REQUESTED`, closed);
+- code style/maintainability:
+  `019f292f-6b1c-7f42-9505-b36dc6a56009` (`CLEAN`, closed);
+- TypeScript/API docs:
+  `019f292f-f3b4-73f1-977e-e14e4ebb276a` (`CLEAN`, closed); and
+- performance/reliability:
+  `019f2930-688b-7011-8028-da8560b46f38` (`CLEAN`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- the work log still said the next step was committing the current round-46
+  fix, even though package HEAD was `cd2b13b`; and
+- `snapshotInboxMessage()` read top-level caller `InboxMessage` properties
+  directly before the guarded input snapshot, letting proxy/getter failures
+  leak as raw errors from the public write path.
+
+### Round 47 Fix
+
+Result: implemented in this current commit. Because a commit cannot pre-record
+its own final hash, identify the committed round-47 fix by package HEAD or
+`git log`.
+
+Fix summary:
+
+- added a red-first public write-path regression for a top-level caller field
+  getter that previously leaked raw `Error: signal ID getter failed`;
+- routed top-level caller inbox message property reads through an
+  `InboxMessageError` boundary before validation and serialization; and
+- durable task/report/review/work logs now name committed round-46 state
+  `cd2b13b` and record this round-47 fix trail.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts` failed before
+  production changes with one failing regression.
+
+Focused verification:
+
+- the same focused delivery command passed after production changes with
+  `60` tests.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `136` tests;
 - `pnpm typecheck`;
 - `pnpm lint`;
 - `pnpm format:check`;

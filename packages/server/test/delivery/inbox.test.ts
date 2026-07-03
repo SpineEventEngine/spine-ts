@@ -408,6 +408,22 @@ describe("Inbox", () => {
     await expect(write).rejects.toThrow(/receive time/i);
   });
 
+  it("rejects top-level caller field accessor failures as inbox message errors", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const write = storage.write({
+      ...createMessage("message-getter", "signal-getter", 1n),
+      get signalId(): string {
+        throw new Error("signal ID getter failed");
+      },
+    });
+
+    await expect(write).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(write).rejects.toThrow(/signal id/i);
+  });
+
   it("writes one immutable snapshot when caller getters drift after validation", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },

@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-46 fix implemented in current commit
-Previous completed commit: `e93d165`
+Status: round-47 fix implemented in current commit
+Previous completed commit: `cd2b13b`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -770,5 +770,23 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   `packages/server/test/delivery/shard-index.test.ts`, `pnpm typecheck`,
   `pnpm lint`, `pnpm format:check`, `node scripts/check-api-docs.mjs`,
   `git diff --check fce80b2..HEAD`, and a touched-file line scan.
-- This round-46 fix commit cannot pre-record its own final hash; identify it
+- Round-46 fixes were committed as `cd2b13b`.
+- Round-47 review completed from reviewer results supplied to this fix worker.
+  Documentation requested replacing stale work-log current state that still
+  described round 46 as uncommitted even though package HEAD was `cd2b13b`.
+  Security requested wrapping top-level caller `InboxMessage` property access
+  in the public input error boundary. Code style/maintainability,
+  TypeScript/API docs, and performance/reliability lanes were clean.
+- Red-first focused verification failed for the intended round-47 regression
+  with `pnpm test packages/server/test/delivery/inbox.test.ts`: the new
+  top-level caller field accessor test observed raw
+  `Error: signal ID getter failed` instead of `InboxMessageError`.
+- Round-47 fixes wrap caller-controlled top-level inbox message property reads
+  behind `InboxMessageError` and update durable logs for committed round 46 at
+  `cd2b13b`.
+- Final round-47 verification passed with the required focused
+  delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
+  `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
+  touched-file line scan.
+- This round-47 fix commit cannot pre-record its own final hash; identify it
   from package HEAD or `git log`.
