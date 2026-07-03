@@ -1,6 +1,6 @@
 # Review Log: T-0012.8b Integration Coverage Fix
 
-Status: implementation ready for review after final commit
+Status: review round 1 fixes addressed for follow-up commit
 Task log:
 `build-protocol/tasks/T-0012-8b-integration-coverage-fix/TASK.md`
 Branch: `task/T-0012-8b-integration-coverage-fix`
@@ -34,4 +34,8 @@ Reviewers must verify:
   90.02% branch coverage under escalated `pnpm test:coverage`.
 - Sandboxed local IPC tests failed with `Operation not permitted`; escalated
   coverage is the authoritative full-suite result.
-- No implementation review has run yet.
+- Review round 1 follow-up addressed:
+  - the brittle exact invalid pickup shard-coordinate error assertion;
+  - stale `TASK.md` current state;
+  - ambiguous Prettier evidence scope for inherited parent markdown formatting.
+- Review round 1 is addressed; follow-up commit is pending.

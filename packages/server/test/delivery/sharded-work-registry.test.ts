@@ -698,7 +698,7 @@ describe("ShardedWorkRegistry", () => {
 
     await expect(
       delivery.shards.pickUp({ index: "0", ofTotal: 1 } as unknown as ShardIndex, "node-a"),
-    ).rejects.toThrow("Shard index index must be a finite integer.");
+    ).rejects.toThrow(/finite integer/);
 
     expect(storageFactory.opens).toBe(0);
     expect(storageFactory.closes).toBe(0);

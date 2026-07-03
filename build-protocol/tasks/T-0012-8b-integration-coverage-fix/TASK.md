@@ -1,6 +1,6 @@
 # T-0012.8b: Integration Coverage Fix
 
-Status: selected after T-0012.8 integration coverage failure
+Status: implemented and verified; review round 1 fixes addressed for follow-up commit
 Start: `2026-07-03 23:15 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8b-integration-coverage-fix`
@@ -100,7 +100,10 @@ Skipped relevant-looking skills:
 
 ## Current State
 
-- Task branch and worktree are created from parent integration commit
+- Task branch and worktree were created from parent integration commit
   `939514e`.
-- Implementation has not started.
+- Test-only implementation commit `ce5e9d8` restored global branch coverage to
+  90.02% under escalated `pnpm test:coverage`.
+- Review round 1 follow-up addressed documentation wording and a brittle exact
+  error-message assertion.
 - No blocking human question is known.
