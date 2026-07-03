@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-58 inbox/storage follow-up verified for current pass
-Previous completed commit: `e5410c3`
+Status: round-59 durable-log refresh committed at current HEAD
+Previous completed commit: `4b40a95`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`

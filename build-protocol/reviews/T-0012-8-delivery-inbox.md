@@ -1,7 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 58 inbox/storage follow-up verified for current pass
-Previous completed commit: `e5410c3`
+Status: round 59 durable-log refresh committed at current HEAD
+Previous completed commit: `4b40a95`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -3419,9 +3419,7 @@ Findings to address:
 
 ### Round 58 Fix
 
-Result: implemented for this current pass. The future commit hash cannot be
-pre-recorded inside the commit itself; identify the committed round-58 fix by
-package HEAD or `git log`.
+Result: committed as `4b40a95`.
 
 Fix summary:
 
@@ -3453,6 +3451,43 @@ Verification:
   `packages/server/test/repository/aggregate-storage.test.ts`;
 - `pnpm typecheck`;
 - `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+## Round 59 Review
+
+Reviewer input: round-59 reviewer results supplied to this fix worker.
+
+Result:
+
+- code style/maintainability: `round-59-maintainability` (`CHANGES REQUESTED`,
+  supplied);
+- documentation: `round-59-documentation` (`CHANGES REQUESTED`, supplied);
+- TypeScript/API docs: `round-59-api-docs` (`CLEAN`, supplied);
+- security: `round-59-security` (`CLEAN`, supplied); and
+- performance/reliability: `round-59-reliability` (`CLEAN`, supplied).
+
+Findings:
+
+- durable task/report/review/work-log state still described round 58 as a
+  current verified pass instead of committed `4b40a95`, and the work log still
+  pointed at committing already-committed round-58 work.
+
+## Round 59 Fix
+
+Result: committed in the current package HEAD. The commit cannot record its
+own hash; identify the committed round-59 fix with package HEAD or `git log`.
+
+Fix summary:
+
+- refreshed durable task/report/review/work-log state through committed round
+  58 at `4b40a95`; and
+- removed stale pending-commit wording for already-committed round 58.
+
+Verification:
+
 - `pnpm format:check`;
 - `node scripts/check-api-docs.mjs`;
 - `git diff --check fce80b2..HEAD`; and

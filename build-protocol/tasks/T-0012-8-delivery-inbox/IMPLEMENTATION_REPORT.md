@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-58 inbox/storage follow-up verified for current pass
-Previous completed commit: `e5410c3`
+Status: round-59 durable-log refresh committed at current HEAD
+Previous completed commit: `4b40a95`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2154,9 +2154,6 @@ Final verification:
 - `git diff --check fce80b2..HEAD`; and
 - touched-file line scan with no lines over 120 columns.
 
-`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
-TypeDoc source-link warning, but exited successfully.
-
 Round-53 fixes were committed as `c2e67c6`.
 
 ## Round 54 Review
@@ -2486,6 +2483,30 @@ time.` from eager `#dedupNow()` calls in `#handleStoredGuardMessage()`;
   `packages/server/test/repository/aggregate-storage.test.ts`;
 - `pnpm typecheck`;
 - `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+Round-58 fixes were committed as `4b40a95`.
+
+## Round 59 Review
+
+Round 59 found no TypeScript/API docs, security, or performance/reliability
+issues. Documentation and maintainability requested only a durable-log refresh
+so the task, report, review log, and work log name committed round 58 at
+`4b40a95` instead of describing it as an uncommitted current pass.
+
+## Round 59 Fix
+
+Round-59 fixes are docs-only:
+
+- refreshed durable task/report/review/work-log state through committed round
+  58 at `4b40a95`; and
+- removed stale pending-commit wording for already-committed round 58.
+
+Verification:
+
 - `pnpm format:check`;
 - `node scripts/check-api-docs.mjs`;
 - `git diff --check fce80b2..HEAD`; and
