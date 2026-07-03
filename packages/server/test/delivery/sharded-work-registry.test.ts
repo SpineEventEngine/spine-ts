@@ -440,6 +440,31 @@ describe("ShardedWorkRegistry", () => {
     await expect(invalidTimePickup).rejects.not.toBeInstanceOf(DeliveryStorageCorruptionError);
   });
 
+  it("sanitizes shard pickup input once when caller key disagrees with shard coordinates", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => new Date("2026-07-02T09:46:00.000Z"),
+    });
+    const fakeShard = Object.freeze({
+      index: 1,
+      ofTotal: 2,
+      key: () => "0/2",
+    });
+
+    const session = await delivery.shards.pickUp(fakeShard, "node-a");
+
+    expect(session).toMatchObject({
+      node: "node-a",
+      shard: new ShardIndex(1, 2),
+    });
+    await expect(delivery.shards.pickUp(new ShardIndex(1, 2), "node-b")).resolves.toBeUndefined();
+    await expect(delivery.shards.pickUp(new ShardIndex(0, 2), "node-c")).resolves.toMatchObject({
+      node: "node-c",
+      shard: new ShardIndex(0, 2),
+    });
+  });
+
   it("uses the default clock and retries a failed claim compare-and-set", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },

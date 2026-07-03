@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-35 fix complete
+Status: round-36 fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -523,4 +523,40 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   `packages/server/test/repository/aggregate-storage.test.ts`,
   `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `git diff --check`, and
   a full touched-file line scan.
+- Round-36 review completed from reviewer results supplied to this fix worker.
+  Documentation, code style/maintainability, security, and
+  performance/reliability requested changes. TypeScript/API docs was clean.
+  All five round-36 reviewer lanes are closed.
+- Round-36 fixes advance durable breadcrumbs, remove `TenantRecords.query()`,
+  place the primary shard-registry declaration before `ShardSession`, route
+  inbox writes through one immutable validated snapshot, classify pending
+  recovery conflicts with same-key different inbox bytes as storage
+  corruption, and key shard pickup from one sanitized shard value.
+- Red-first focused verification failed as expected before the production fix:
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `-- --runInBand -t 'writes one immutable snapshot when caller getters drift`
+  `after validation|fails closed when pending dedup recovery finds same-key`
+  `conflicting inbox bytes'` and
+  `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  `-- --runInBand -t 'sanitizes shard pickup input once when caller key`
+  `disagrees with shard coordinates'`.
+  The pre-fix outcomes were drifted caller getter values reaching storage,
+  same-key recovery conflict surfacing `InboxMessageError`, and fake shard
+  keys claiming the wrong backend slot.
+- Focused round-36 verification passed with
+  `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand`
+  `-t 'writes one immutable snapshot when caller getters drift after`
+  `validation|fails closed when pending dedup recovery finds same-key`
+  `conflicting inbox bytes'` and
+  `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  `-- --runInBand -t 'sanitizes shard pickup input once when caller key`
+  `disagrees with shard coordinates'`.
+- Final round-36 verification passed with
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`,
+  `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
+  `git diff --check fce80b2..HEAD`, and a touched-file line scan.
 - No blocking human question is known.

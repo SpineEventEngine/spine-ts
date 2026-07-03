@@ -12,22 +12,6 @@ import {
 import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
 import { ShardIndex } from "./shard-index.js";
 
-/** One active shard pickup session. */
-export class ShardSession {
-  /** Create a shard session snapshot. */
-  constructor(
-    readonly id: string,
-    readonly shard: ShardIndex,
-    readonly node: string,
-    readonly pickedUpAt: Date,
-    readonly expiresAt: Date,
-  ) {
-    Object.freeze(this);
-  }
-}
-
-const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
-
 /** Storage-backed shard pickup registry. */
 export class ShardedWorkRegistry {
   readonly #context: StorageContext;
@@ -50,27 +34,28 @@ export class ShardedWorkRegistry {
   /** Pick up one shard if it is free or expired. Invalid caller node/clock values throw before storage access. */
   async pickUp(shard: ShardIndex, node: string): Promise<ShardSession | undefined> {
     const storage = this.#storage();
+    const nextShard = requireInputShard(shard, "Shard index");
     const nextNode = requireInputText(node, "Shard node", maxSessionTextBytes);
 
     try {
       for (;;) {
         const now = requireInputTime(this.#now(), "Shard pickup time");
-        const currentRecord = await storage.read(shard.key());
+        const currentRecord = await storage.read(nextShard.key());
         const current =
-          currentRecord === undefined ? undefined : readSession(currentRecord, shard.key());
+          currentRecord === undefined ? undefined : readSession(currentRecord, nextShard.key());
         if (current !== undefined && current.expiresAt.getTime() > now) {
           return undefined;
         }
 
         const next = new ShardSession(
           randomUUID(),
-          new ShardIndex(shard.index, shard.ofTotal),
+          nextShard,
           nextNode,
           new Date(now),
           new Date(now + this.#leaseMs),
         );
         const nextRecord = writeSession(next);
-        const claimed = await storage.compareAndSet(shard.key(), currentRecord, nextRecord);
+        const claimed = await storage.compareAndSet(nextShard.key(), currentRecord, nextRecord);
 
         if (claimed) {
           return next;
@@ -114,6 +99,20 @@ export class ShardedWorkRegistry {
   }
 }
 
+/** One active shard pickup session. */
+export class ShardSession {
+  /** Create a shard session snapshot. */
+  constructor(
+    readonly id: string,
+    readonly shard: ShardIndex,
+    readonly node: string,
+    readonly pickedUpAt: Date,
+    readonly expiresAt: Date,
+  ) {
+    Object.freeze(this);
+  }
+}
+
 /** Shard registry construction options. */
 export interface ShardedWorkRegistryOptions {
   /** Storage context owning the shard registry. */
@@ -135,6 +134,8 @@ interface StoredShardSession {
   readonly pickedUpAtMs: number;
   readonly expiresAtMs: number;
 }
+
+const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
 const shardSessionRecordSpec = new RecordSpec<string, Any>({
   schema: AnySchema,
@@ -318,6 +319,33 @@ function requireInputText(value: unknown, label: string, maxBytes = maxSessionTe
   }
 
   return value;
+}
+
+function requireInputShard(value: unknown, label: string): ShardIndex {
+  if (typeof value !== "object" || value === null) {
+    throw new Error(`${label} is invalid.`);
+  }
+
+  try {
+    return new ShardIndex(
+      requireInputInteger(Reflect.get(value, "index"), `${label} index`),
+      requireInputInteger(Reflect.get(value, "ofTotal"), `${label} total`),
+    );
+  } catch (error) {
+    if (error instanceof Error && error.message.includes(label)) {
+      throw error;
+    }
+
+    throw new Error(`${label} is invalid.`, { cause: error });
+  }
+}
+
+function requireInputInteger(value: unknown, label: string): number {
+  if (!Number.isInteger(value) || !Number.isFinite(value)) {
+    throw new Error(`${label} must be a finite integer.`);
+  }
+
+  return value as number;
 }
 
 function requireInputTime(value: Date, label: string): number {

@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-35 fix complete
+Status: round-36 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1037,6 +1037,71 @@ Verification for the round-35 fix passed with:
   - `git diff --check`; and
   - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
     over 120 columns).
+
+## Round 36 Review
+
+Round 36 found stale durable task/report/review/work-log breadcrumbs, one dead
+in-memory record query wrapper, a declaration-order nit in the shard registry,
+and three storage hardening gaps. The review requested removing
+`TenantRecords.query()`, placing `ShardedWorkRegistry` before supporting
+`ShardSession`, treating same-dedup-key pending recovery conflicts as
+`DeliveryStorageCorruptionError`, snapshotting caller inbox messages once
+before deriving storage keys or payloads, and sanitizing shard pickup input
+once before using a slot key or persisted shard record.
+
+Red-first regressions failed before implementation:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `-- --runInBand -t 'writes one immutable snapshot when caller getters drift`
+  `after validation|fails closed when pending dedup recovery finds same-key`
+  `conflicting inbox bytes'`
+- `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  `-- --runInBand -t 'sanitizes shard pickup input once when caller key`
+  `disagrees with shard coordinates'`
+
+The pre-fix failures matched the review findings: getter-backed caller
+messages drifted to `message-2` / `projection-2` / `signal-2` after validation,
+same-key pending recovery conflicts raised `InboxMessageError`, and fake shard
+keys claimed slot `0/2` while persisting shard coordinates `1/2`.
+
+## Round 36 Fix
+
+Round-36 fixes stayed local to inbox storage, shard registry, in-memory tenant
+records, focused delivery tests, and durable logs:
+
+- `InboxStorage.write()` now builds one validated immutable snapshot from the
+  initial inbox record and uses that snapshot for dedup keys, pending guards,
+  inbox slot keys, and persisted payloads;
+- pending dedup recovery calls the inbox-row ensure path with a storage
+  corruption boundary, so same-key different inbox bytes fail closed as
+  `DeliveryStorageCorruptionError`;
+- `ShardedWorkRegistry.pickUp()` sanitizes caller shard input into one
+  `ShardIndex` and uses it for both the backend slot and persisted session;
+- the dead `TenantRecords.query()` wrapper is removed; and
+- the shard registry file now presents the primary registry declaration before
+  supporting `ShardSession`.
+
+Verification for the round-36 fix passed with:
+
+- green:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand`
+    `-t 'writes one immutable snapshot when caller getters drift after`
+    `validation|fails closed when pending dedup recovery finds same-key`
+    `conflicting inbox bytes'`;
+  - `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+    `-- --runInBand -t 'sanitizes shard pickup input once when caller key`
+    `disagrees with shard coordinates'`;
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `packages/storage/test/memory/in-memory-record-storage.test.ts`
+    `packages/server/test/repository/aggregate-storage.test.ts`;
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check fce80b2..HEAD`; and
+  - `awk 'length($0) > 120 { ... }'` across the touched files (no lines over
+    120 columns).
 
 ## Round 2 Review
 

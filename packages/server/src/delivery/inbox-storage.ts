@@ -58,16 +58,16 @@ export class InboxStorage {
 
   /** Write one inbox message unless a live dedup key already exists. */
   async write(message: InboxMessage): Promise<InboxWriteResult> {
-    // Serialize both durable row shapes up front so caller-input validation
-    // stays on the write side before any storage read or compare-and-set.
-    writeInboxMessage(message);
-    writeDedupClaim(message);
+    // Serialize the inbox row once so validation and all later CAS keys use
+    // one immutable caller-input snapshot.
+    const snapshot = readInboxMessage(writeInboxMessage(message));
+    writeDedupClaim(snapshot);
 
     const inboxStorage = this.#inboxStorage();
     const dedupStorage = this.#dedupStorage();
 
     try {
-      return await this.#writeWithDedup(inboxStorage, dedupStorage, message);
+      return await this.#writeWithDedup(inboxStorage, dedupStorage, snapshot);
     } finally {
       inboxStorage.close();
       dedupStorage.close();
@@ -161,7 +161,11 @@ export class InboxStorage {
       return { kind: "RETRY" };
     }
 
-    const storedMessage = await this.#ensureInboxRow(inboxStorage, pendingMessage);
+    const storedMessage = await this.#ensureInboxRow(
+      inboxStorage,
+      pendingMessage,
+      "STORAGE_CORRUPTION",
+    );
 
     const finalRecord = writeDedupRecord(storedMessage);
     const finalized = await dedupStorage.compareAndSet(dedupKey, current, finalRecord);
@@ -205,6 +209,7 @@ export class InboxStorage {
   async #ensureInboxRow(
     inboxStorage: RecordStorage<string, Any>,
     message: InboxMessage,
+    conflict: InboxConflict = "CALLER_INPUT",
   ): Promise<InboxMessage> {
     const key = this.#messageKey(message.id);
     const record = writeInboxMessage(message);
@@ -222,6 +227,12 @@ export class InboxStorage {
       const storedMessage = readInboxMessage(current, key);
       if (this.#sameRecord(writeInboxMessage(storedMessage), record)) {
         return storedMessage;
+      }
+
+      if (conflict === "STORAGE_CORRUPTION") {
+        throw new DeliveryStorageCorruptionError(
+          `Inbox message "${key}" already exists with conflicting inbox bytes.`,
+        );
       }
 
       throw new InboxMessageError(`Inbox message "${key}" already exists.`);
@@ -329,6 +340,7 @@ interface WriteReturn {
   readonly result: InboxWriteResult;
 }
 
+type InboxConflict = "CALLER_INPUT" | "STORAGE_CORRUPTION";
 type WriteStep = WriteClaim | WriteReturn | { readonly kind: "RETRY" };
 
 function dedupStorageContext(context: StorageContext): StorageContext {

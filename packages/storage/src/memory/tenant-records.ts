@@ -42,10 +42,6 @@ export class TenantRecords<I, R extends Message> {
     return this.#records.delete(StoredValues.key(id));
   }
 
-  query(spec: RecordSpec<I, R>, query: RecordQuery<I>): readonly R[] {
-    return this.queryEntries(spec, query).map((entry) => entry.record);
-  }
-
   queryEntries(spec: RecordSpec<I, R>, query: RecordQuery<I>): readonly RecordEntry<I, R>[] {
     const records = [...this.#records.values()].filter((entry) =>
       matches(spec, entry.stored, query),

@@ -287,6 +287,64 @@ describe("Inbox", () => {
     await expect(write).rejects.toThrow(/receive time/i);
   });
 
+  it("writes one immutable snapshot when caller getters drift after validation", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const initialShard = new ShardIndex(0, 2);
+    const driftedShard = new ShardIndex(1, 2);
+    let drifted = false;
+    const message = {
+      get id() {
+        return Object.freeze({
+          value: drifted ? "message-2" : "message-1",
+          shard: drifted ? driftedShard : initialShard,
+        });
+      },
+      get inboxId() {
+        return Object.freeze({
+          targetId: drifted ? "projection-2" : "projection-1",
+          targetTypeUrl: "type.example.dev/tasks.Projection",
+        });
+      },
+      get signalId() {
+        return drifted ? "signal-2" : "signal-1";
+      },
+      label: "UPDATE_SUBSCRIBER" as const,
+      status: "TO_DELIVER" as const,
+      get shard() {
+        return drifted ? driftedShard : initialShard;
+      },
+      whenReceived: new Date("2026-07-02T08:00:00.000Z"),
+      version: 1n,
+      get keepUntil() {
+        drifted = true;
+        return undefined;
+      },
+    } as unknown as ReturnType<typeof createMessage>;
+
+    const result = await storage.write(message);
+
+    expect(result).toMatchObject({
+      outcome: "WRITTEN",
+      message: {
+        id: { value: "message-1" },
+        inboxId: { targetId: "projection-1" },
+        signalId: "signal-1",
+      },
+    });
+    expect(result.message.shard.key()).toBe(initialShard.key());
+    await expect(storage.read(initialShard, { limit: 10 })).resolves.toMatchObject([
+      {
+        id: { value: "message-1" },
+        inboxId: { targetId: "projection-1" },
+        signalId: "signal-1",
+      },
+    ]);
+    await expect(storage.read(driftedShard, { limit: 10 })).resolves.toEqual([]);
+  });
+
   it("writes and reads back an empty signal payload", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -799,6 +857,29 @@ describe("Inbox", () => {
     await expect(storage.read(ShardIndex.single(), { limit: 10 })).resolves.toMatchObject([
       { id: { value: "message-1" }, signalId: "signal-conflict" },
     ]);
+  });
+
+  it("fails closed when pending dedup recovery finds same-key conflicting inbox bytes", async () => {
+    const pending = createMessage("message-1", "signal-1", 1n);
+    const conflicting = {
+      ...createMessage("message-1", "signal-1", 9n),
+      whenReceived: new Date("2026-07-02T08:00:09.000Z"),
+    };
+    const retryMessage = createMessage("message-2", "signal-1", 2n);
+    const storageFactory = new RecoverPendingConflictFactory({
+      pendingGuard: writeDedupClaim(pending),
+      conflictingInbox: writeInboxMessage(conflicting),
+    });
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+
+    const write = storage.write(retryMessage);
+
+    await expect(write).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(write).rejects.not.toBeInstanceOf(InboxMessageError);
+    await expect(write).rejects.toThrow(/conflicting inbox/i);
   });
 
   it("keeps the first pending claim canonical when a slow writer races a contender", async () => {

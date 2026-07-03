@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 35 fix complete
+Status: round 36 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1948,3 +1948,87 @@ Verification:
   - `git diff --check`; and
   - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
     over 120 columns).
+
+### Round 36
+
+Reviewer input: round-36 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- documentation:
+  `019f2898-e089-7c10-a811-3828aed260f1` (`CHANGES REQUESTED`, closed);
+- code style/maintainability:
+  `019f2898-e006-7a12-b134-b6b513d602ad` (`CHANGES REQUESTED`, closed);
+- performance/reliability:
+  `019f2898-e215-7293-a09a-2704f1daada7` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f2898-e189-78d3-9d2c-8a0c892e283c` (`CHANGES REQUESTED`, closed); and
+- TypeScript/API docs:
+  `019f2898-e114-7c92-91bd-21b24573864f` (`CLEAN`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable task/report/review/work-log entries were still anchored to round 35
+  and needed round-36 review/fix breadcrumbs;
+- `TenantRecords.query()` was dead after storage query-entry cleanup;
+- `ShardedWorkRegistry` should be the primary declaration before supporting
+  `ShardSession` if feasible without churn;
+- pending dedup recovery reused the inbox-row ensure path, so an expected inbox
+  slot with different bytes but the same dedup key surfaced caller-input
+  `InboxMessageError` instead of storage-corruption
+  `DeliveryStorageCorruptionError`;
+- `InboxStorage.write()` validated by serializing caller input, then derived
+  keys and persisted records from the live caller object, allowing
+  getter-backed objects to drift between calls; and
+- `ShardedWorkRegistry.pickUp()` trusted `shard.key()` separately from
+  `shard.index` / `shard.ofTotal`, allowing a fake shard object to claim one
+  backend slot while persisting another shard.
+
+### Round 36 Fix
+
+Result: implemented in this worktree.
+
+Fix summary:
+
+- added red-first regressions for getter-backed inbox message drift,
+  same-key pending recovery conflict error class, and fake shard key/coordinate
+  disagreement;
+- changed `InboxStorage.write()` to materialize one immutable validated inbox
+  snapshot and use that snapshot for dedup keys, pending guards, inbox slots,
+  and stored records;
+- changed pending recovery conflicts against an expected inbox slot to raise
+  `DeliveryStorageCorruptionError`;
+- sanitized shard pickup input once through `ShardIndex` construction before
+  using storage keys or writing sessions;
+- removed dead `TenantRecords.query()`; and
+- moved `ShardedWorkRegistry` ahead of `ShardSession`.
+
+Verification:
+
+- red:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand`
+    `-t 'writes one immutable snapshot when caller getters drift after`
+    `validation|fails closed when pending dedup recovery finds same-key`
+    `conflicting inbox bytes'` failed before production changes because
+    getter-backed caller values drifted into storage and same-key recovery
+    conflict raised `InboxMessageError`;
+  - `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+    `-- --runInBand -t 'sanitizes shard pickup input once when caller key`
+    `disagrees with shard coordinates'` failed before production changes
+    because fake shard key `0/2` claimed a session while persisting shard
+    coordinates `1/2`;
+- green:
+  - the same focused commands passed after production changes;
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `packages/storage/test/memory/in-memory-record-storage.test.ts`
+    `packages/server/test/repository/aggregate-storage.test.ts`;
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check fce80b2..HEAD`; and
+  - `awk 'length($0) > 120 { ... }'` across the touched files (no lines over
+    120 columns).
