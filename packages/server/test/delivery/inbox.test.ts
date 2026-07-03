@@ -1101,6 +1101,19 @@ describe("Inbox", () => {
     ]);
   });
 
+  it("fails clearly when dedup guard compare-and-set keeps missing", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FaultyStorageFactory({
+        failDedupClaimAlways: true,
+      }),
+    });
+
+    await expect(storage.write(createMessage("message-1", "signal-1", 1n))).rejects.toThrow(
+      /dedup guard compare-and-set retry budget exhausted/i,
+    );
+  });
+
   it("recovers a pending dedup claim after finalization fails with a durable inbox row", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -1249,6 +1262,33 @@ describe("Inbox", () => {
     await expect(write).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
     await expect(write).rejects.not.toBeInstanceOf(InboxMessageError);
     await expect(write).rejects.toThrow(/conflicting inbox/i);
+  });
+
+  it("fails clearly when inbox row compare-and-set keeps missing", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new CloneFailFactory({
+        failInboxCreateAlways: true,
+      }),
+    });
+
+    await expect(storage.write(createMessage("message-1", "signal-1", 1n))).rejects.toThrow(
+      /inbox record compare-and-set retry budget exhausted/i,
+    );
+  });
+
+  it("classifies inbox compare-and-set clone failures as storage corruption", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new CloneFailFactory({
+        throwInboxCreateCloneFailure: true,
+      }),
+    });
+
+    const write = storage.write(createMessage("message-1", "signal-1", 1n));
+
+    await expect(write).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(write).rejects.toThrow(/inbox record is invalid/i);
   });
 
   it("keeps the first pending claim canonical when a slow writer races a contender", async () => {
@@ -1802,6 +1842,7 @@ class FakeRecordStorage extends RecordStorage<string, Any> {
 
 interface FaultPlan {
   failInboxWriteOnce?: boolean;
+  failDedupClaimAlways?: boolean;
   skipDedupDeleteOnce?: boolean;
   skipDedupFinalizeOnce?: boolean;
   throwDedupFinalizeOnce?: boolean;
@@ -1863,6 +1904,14 @@ class FaultyRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     }
 
     if (this.#isDedupStorage()) {
+      if (
+        expected === undefined &&
+        next !== undefined &&
+        this.#plan.failDedupClaimAlways === true
+      ) {
+        return Promise.resolve(false);
+      }
+
       if (next === undefined && this.#plan.skipDedupDeleteOnce === true) {
         this.#plan.skipDedupDeleteOnce = false;
         return Promise.resolve(false);
@@ -2178,6 +2227,8 @@ interface CloneFailPlan {
   readonly inboxQueryEntries?: readonly Any[];
   readonly inboxRead?: Any;
   readonly failInboxCreate?: boolean;
+  readonly failInboxCreateAlways?: boolean;
+  readonly throwInboxCreateCloneFailure?: boolean;
 }
 
 class CloneFailStorage extends RecordStorage<string, Any> {
@@ -2205,11 +2256,18 @@ class CloneFailStorage extends RecordStorage<string, Any> {
   ): Promise<boolean> {
     if (
       this.context.name.endsWith(".delivery.inbox") &&
-      this.#records.failInboxCreate === true &&
       expected === undefined &&
       next !== undefined
     ) {
-      return Promise.resolve(false);
+      if (this.#records.throwInboxCreateCloneFailure === true) {
+        return Promise.reject(new Error("Storage record could not be cloned."));
+      }
+      if (this.#records.failInboxCreateAlways === true) {
+        return Promise.resolve(false);
+      }
+      if (this.#records.failInboxCreate === true) {
+        return Promise.resolve(false);
+      }
     }
 
     if (this.context.name.endsWith(".delivery.inbox-dedup")) {

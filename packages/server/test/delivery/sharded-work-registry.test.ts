@@ -595,6 +595,35 @@ describe("ShardedWorkRegistry", () => {
     await expect(delivery.shards.release(session)).resolves.toBe(true);
   });
 
+  it("fails clearly when shard pickup compare-and-set keeps missing", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new RetryingStorageFactory({ failCreateAlways: true }),
+      now: () => new Date("2026-07-02T09:50:00.000Z"),
+    });
+
+    await expect(delivery.shards.pickUp(new ShardIndex(0, 1), "node-a")).rejects.toThrow(
+      /shard pickup compare-and-set retry budget exhausted/i,
+    );
+  });
+
+  it("fails clearly when shard release compare-and-set keeps missing", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new RetryingStorageFactory({ failReleaseAlways: true }),
+      now: () => new Date("2026-07-02T09:50:00.000Z"),
+    });
+    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+
+    if (session === undefined) {
+      throw new Error("Expected shard pickup to create a session.");
+    }
+
+    await expect(delivery.shards.release(session)).rejects.toThrow(
+      /shard release compare-and-set retry budget exhausted/i,
+    );
+  });
+
   it("uses one canonical release snapshot when caller session shard drifts", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -828,10 +857,17 @@ class RetryingStorageFactory extends StorageFactory {
   readonly #delegate = new InMemoryStorageFactory();
   readonly #plan: {
     failCreateOnce?: boolean;
+    failCreateAlways?: boolean;
     failReleaseOnce?: boolean;
+    failReleaseAlways?: boolean;
   };
 
-  constructor(plan: { failCreateOnce?: boolean; failReleaseOnce?: boolean }) {
+  constructor(plan: {
+    failCreateOnce?: boolean;
+    failCreateAlways?: boolean;
+    failReleaseOnce?: boolean;
+    failReleaseAlways?: boolean;
+  }) {
     super();
     this.#plan = plan;
   }
@@ -850,14 +886,21 @@ class RetryingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   readonly #delegate: RecordStorage<I, R>;
   readonly #plan: {
     failCreateOnce?: boolean;
+    failCreateAlways?: boolean;
     failReleaseOnce?: boolean;
+    failReleaseAlways?: boolean;
   };
 
   constructor(
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
     delegate: RecordStorage<I, R>,
-    plan: { failCreateOnce?: boolean; failReleaseOnce?: boolean },
+    plan: {
+      failCreateOnce?: boolean;
+      failCreateAlways?: boolean;
+      failReleaseOnce?: boolean;
+      failReleaseAlways?: boolean;
+    },
   ) {
     super(context, recordSpec);
     this.#delegate = delegate;
@@ -875,8 +918,16 @@ class RetryingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
     if (this.context.name.endsWith(".delivery.shards")) {
+      if (expected === undefined && next !== undefined && this.#plan.failCreateAlways === true) {
+        return Promise.resolve(false);
+      }
+
       if (expected === undefined && next !== undefined && this.#plan.failCreateOnce === true) {
         this.#plan.failCreateOnce = false;
+        return Promise.resolve(false);
+      }
+
+      if (expected !== undefined && next === undefined && this.#plan.failReleaseAlways === true) {
         return Promise.resolve(false);
       }
 

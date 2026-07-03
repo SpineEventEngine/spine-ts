@@ -12,6 +12,8 @@ import {
 import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
 import { ShardIndex } from "./shard-index.js";
 
+const casRetryLimit = 8;
+
 /** Storage-backed shard pickup registry. */
 export class ShardedWorkRegistry {
   readonly #context: StorageContext;
@@ -43,7 +45,7 @@ export class ShardedWorkRegistry {
     const storage = this.#storage();
 
     try {
-      for (;;) {
+      for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
         const currentRecord = await readShardRecord(storage, nextShard.key());
         const current =
           currentRecord === undefined ? undefined : readSession(currentRecord, nextShard.key());
@@ -66,6 +68,8 @@ export class ShardedWorkRegistry {
         }
         now = requireInputTime(this.#now(), "Shard pickup time");
       }
+
+      throw casRetriesExhausted("Shard pickup");
     } finally {
       storage.close();
     }
@@ -77,7 +81,7 @@ export class ShardedWorkRegistry {
     const storage = this.#storage();
 
     try {
-      for (;;) {
+      for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
         const currentRecord = await readShardRecord(storage, expected.key);
         if (currentRecord === undefined) {
           return false;
@@ -92,6 +96,8 @@ export class ShardedWorkRegistry {
           return true;
         }
       }
+
+      throw casRetriesExhausted("Shard release");
     } finally {
       storage.close();
     }
@@ -169,6 +175,10 @@ function readSession(record: Any, expectedKey?: string): ShardSession {
     storedDate(stored.pickedUpAtMs, "Shard pickup time"),
     storedDate(stored.expiresAtMs, "Shard expiry time"),
   );
+}
+
+function casRetriesExhausted(label: string): Error {
+  return new Error(`${label} compare-and-set retry budget exhausted.`);
 }
 
 function readStoredSession(record: Any, expectedKey?: string): StoredShardSession {

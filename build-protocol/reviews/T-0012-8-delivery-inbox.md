@@ -1,7 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 52 fix verified for current pass
-Previous completed commit: `5a00b30`
+Status: round 53 fix verified for current pass
+Previous completed commit: `fdf079e`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2980,9 +2980,7 @@ Findings to address:
 
 ### Round 52 Fix
 
-Result: implemented for this current pass. The future commit hash cannot be
-pre-recorded inside the commit itself; identify the committed round-52 fix by
-package HEAD or `git log`.
+Result: completed and closed after commit `fdf079e`.
 
 Fix summary:
 
@@ -3025,6 +3023,117 @@ Focused verification:
 Final verification:
 
 - `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+### Round 53
+
+Reviewer input: round-53 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- performance/reliability: `round-53-performance-reliability`
+  (`CHANGES REQUESTED`, supplied);
+- maintainability: `round-53-maintainability` (`CHANGES REQUESTED`, supplied);
+- TypeScript/API docs: `round-53-typescript-api-docs`
+  (`CHANGES REQUESTED`, supplied); and
+- documentation: `round-53-documentation` (`CHANGES REQUESTED`, supplied).
+
+Result: changes requested.
+
+Findings to address:
+
+- `packages/server/src/delivery/inbox-storage.ts` still has unbounded
+  compare-and-set retry loops in `#writeWithDedup()` and `#ensureInboxRow()`,
+  so persistent compare-and-set misses can hang `write()` forever;
+- `packages/server/src/delivery/sharded-work-registry.ts` still has unbounded
+  compare-and-set retry loops in `pickUp()` and `release()`, so persistent
+  compare-and-set misses can hang shard coordination forever;
+- `InboxStorage.#ensureInboxRow()` still calls raw
+  `inboxStorage.compareAndSet()` and lets inbox compare-and-set
+  clone/materialization failures escape as raw storage errors instead of
+  `DeliveryStorageCorruptionError`; and
+- task/report/work-log durable state still reflected round 52 as a
+  verified-but-uncommitted current pass instead of committed `fdf079e`.
+
+### Round 53 Fix
+
+Result: implemented for this current pass. The future commit hash cannot be
+pre-recorded inside the commit itself; identify the committed round-53 fix by
+package HEAD or `git log`.
+
+Fix summary:
+
+- added red-first inbox regressions for persistent dedup-guard compare-and-set
+  misses, persistent inbox-row compare-and-set misses, and inbox-row
+  compare-and-set clone-failure classification;
+- added red-first shard-registry regressions for persistent shard pickup and
+  shard release compare-and-set misses;
+- bounded inbox and shard compare-and-set retry loops behind small private
+  retry limits so persistent misses fail with explicit exhaustion errors
+  instead of looping forever;
+- routed `InboxStorage.#ensureInboxRow()` create compare-and-set through the
+  existing durable compare-and-set helper so inbox clone/materialization
+  failures stay classified as `DeliveryStorageCorruptionError`; and
+- refreshed durable task/report/review/work logs for committed round 52 at
+  `fdf079e` and this round-53 fix trail.
+
+Red-first verification:
+
+- `perl -e 'alarm shift @ARGV; exec @ARGV' 5 pnpm exec vitest run`
+  `packages/server/test/delivery/inbox.test.ts -t`
+  `'fails clearly when dedup guard compare-and-set keeps missing'`
+  failed before production changes because the regression hung until the
+  5-second alarm terminated the process after only the Vitest `RUN` banner;
+- `perl -e 'alarm shift @ARGV; exec @ARGV' 5 pnpm exec vitest run`
+  `packages/server/test/delivery/inbox.test.ts -t`
+  `'fails clearly when inbox row compare-and-set keeps missing'`
+  failed before production changes because the regression hung until the
+  5-second alarm terminated the process after only the Vitest `RUN` banner;
+- `perl -e 'alarm shift @ARGV; exec @ARGV' 5 pnpm exec vitest run`
+  `packages/server/test/delivery/sharded-work-registry.test.ts -t`
+  `'fails clearly when shard pickup compare-and-set keeps missing'`
+  failed before production changes because the regression hung until the
+  5-second alarm terminated the process after only the Vitest `RUN` banner;
+- `perl -e 'alarm shift @ARGV; exec @ARGV' 5 pnpm exec vitest run`
+  `packages/server/test/delivery/sharded-work-registry.test.ts -t`
+  `'fails clearly when shard release compare-and-set keeps missing'`
+  failed before production changes because the regression hung until the
+  5-second alarm terminated the process after only the Vitest `RUN` banner; and
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'classifies inbox compare-and-set clone failures as storage corruption'`
+  failed before production changes because the regression observed raw
+  `Error: Storage record could not be cloned.` instead of
+  `DeliveryStorageCorruptionError`.
+
+Focused verification:
+
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'fails clearly when dedup guard compare-and-set keeps missing|`
+  `fails clearly when inbox row compare-and-set keeps missing|`
+  `classifies inbox compare-and-set clone failures as storage corruption'`
+  passed after the production change; and
+- `pnpm exec vitest run packages/server/test/delivery/sharded-work-registry.test.ts -t`
+  `'fails clearly when shard pickup compare-and-set keeps missing|`
+  `fails clearly when shard release compare-and-set keeps missing'`
+  passed.
+
+Final verification:
+
+- `pnpm test packages/server/test/index.test.ts`
+  `packages/server/test/delivery/inbox.test.ts`
   `packages/server/test/delivery/inbox-records.test.ts`
   `packages/server/test/delivery/shard-index.test.ts`
   `packages/server/test/delivery/sharded-work-registry.test.ts`

@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-52 fix verified for current pass
-Previous completed commit: `5a00b30`
+Status: round-53 fix verified for current pass
+Previous completed commit: `fdf079e`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2061,5 +2061,101 @@ Final verification:
 `node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
 TypeDoc source-link warning, but exited successfully.
 
-This round-52 fix commit cannot pre-record its own final hash; identify it
+Round-52 fixes were committed as `fdf079e`.
+
+## Round 53 Review
+
+Round 53 found bounded-progress issues in inbox/shard compare-and-set loops, an
+inbox CAS classification hole, and durable-log drift. Maintainability and
+performance/reliability requested small explicit retry budgets for persistent
+compare-and-set misses in `InboxStorage.#writeWithDedup()`,
+`InboxStorage.#ensureInboxRow()`, `ShardedWorkRegistry.pickUp()`, and
+`ShardedWorkRegistry.release()`. TypeScript/API docs requested that
+`#ensureInboxRow()` stop calling raw `inboxStorage.compareAndSet()` so inbox CAS
+clone/materialization failures still become
+`DeliveryStorageCorruptionError`. Documentation requested refreshing durable
+task/report/review/work logs for committed round 52 at `fdf079e`.
+
+## Round 53 Fix
+
+Round-53 fixes stay local to inbox storage, shard registry, focused tests, and
+durable logs:
+
+- added red-first regressions in
+  `packages/server/test/delivery/inbox.test.ts` for persistent dedup-guard CAS
+  misses, persistent inbox-row CAS misses, and inbox-row CAS clone failure
+  classification;
+- added red-first regressions in
+  `packages/server/test/delivery/sharded-work-registry.test.ts` for persistent
+  shard pickup and shard release CAS misses;
+- added one small private compare-and-set retry budget in each delivery module
+  so inbox dedup writes, inbox row creation, shard pickup, and shard release
+  fail clearly instead of looping forever when compare-and-set keeps returning
+  `false`;
+- routed `InboxStorage.#ensureInboxRow()` create CAS through the existing
+  durable compare-and-set helper so inbox clone/materialization failures stay
+  classified as `DeliveryStorageCorruptionError`; and
+- refreshed durable task/report/review/work logs for committed round 52 at
+  `fdf079e` and this round-53 fix trail.
+
+Red-first verification:
+
+- `perl -e 'alarm shift @ARGV; exec @ARGV' 5 pnpm exec vitest run`
+  `packages/server/test/delivery/inbox.test.ts -t`
+  `'fails clearly when dedup guard compare-and-set keeps missing'`
+  failed before production changes because the regression hung until the
+  5-second alarm terminated the process after only the Vitest `RUN` banner;
+- `perl -e 'alarm shift @ARGV; exec @ARGV' 5 pnpm exec vitest run`
+  `packages/server/test/delivery/inbox.test.ts -t`
+  `'fails clearly when inbox row compare-and-set keeps missing'`
+  failed before production changes because the regression hung until the
+  5-second alarm terminated the process after only the Vitest `RUN` banner;
+- `perl -e 'alarm shift @ARGV; exec @ARGV' 5 pnpm exec vitest run`
+  `packages/server/test/delivery/sharded-work-registry.test.ts -t`
+  `'fails clearly when shard pickup compare-and-set keeps missing'`
+  failed before production changes because the regression hung until the
+  5-second alarm terminated the process after only the Vitest `RUN` banner;
+- `perl -e 'alarm shift @ARGV; exec @ARGV' 5 pnpm exec vitest run`
+  `packages/server/test/delivery/sharded-work-registry.test.ts -t`
+  `'fails clearly when shard release compare-and-set keeps missing'`
+  failed before production changes because the regression hung until the
+  5-second alarm terminated the process after only the Vitest `RUN` banner; and
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'classifies inbox compare-and-set clone failures as storage corruption'`
+  failed before production changes because the new regression observed raw
+  `Error: Storage record could not be cloned.` instead of
+  `DeliveryStorageCorruptionError`.
+
+Focused verification:
+
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'fails clearly when dedup guard compare-and-set keeps missing|`
+  `fails clearly when inbox row compare-and-set keeps missing|`
+  `classifies inbox compare-and-set clone failures as storage corruption'`
+  passed after the production change; and
+- `pnpm exec vitest run packages/server/test/delivery/sharded-work-registry.test.ts -t`
+  `'fails clearly when shard pickup compare-and-set keeps missing|`
+  `fails clearly when shard release compare-and-set keeps missing'`
+  passed.
+
+Final verification:
+
+- `pnpm test packages/server/test/index.test.ts`
+  `packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+This round-53 fix commit cannot pre-record its own final hash; identify it
 from package HEAD or `git log`.

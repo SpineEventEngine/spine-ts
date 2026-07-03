@@ -19,6 +19,7 @@ import {
 import { ShardIndex } from "./shard-index.js";
 
 const defaultReadLimit = 100;
+const casRetryLimit = 8;
 
 /** Durable inbox storage over record storage. */
 export class InboxStorage {
@@ -78,7 +79,7 @@ export class InboxStorage {
   ): Promise<InboxWriteResult> {
     const dedupKey = DedupRecords.guardKey(message);
 
-    for (;;) {
+    for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
       const step = await this.#readWriteStep(inboxStorage, dedupStorage, dedupKey, message);
       if (step.kind === "RETURN") {
         return step.result;
@@ -91,6 +92,8 @@ export class InboxStorage {
         return result;
       }
     }
+
+    throw casRetriesExhausted("Inbox dedup guard");
   }
 
   async #readWriteStep(
@@ -238,8 +241,8 @@ export class InboxStorage {
     const key = this.#messageKey(message.id);
     const record = InboxRecords.write(message);
 
-    for (;;) {
-      if (await inboxStorage.compareAndSet(key, undefined, record)) {
+    for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
+      if (await this.#durableCompareAndSet("Inbox record", inboxStorage, key, undefined, record)) {
         return InboxRecords.read(record);
       }
 
@@ -261,6 +264,8 @@ export class InboxStorage {
 
       throw new InboxMessageError(`Inbox message "${key}" already exists.`);
     }
+
+    throw casRetriesExhausted("Inbox record");
   }
 
   async #readGuardMessage(
@@ -473,4 +478,8 @@ function deliveryStorageContext(context: StorageContext, name: string): StorageC
         name: `${context.name}.delivery.${name}`,
         multitenant: false,
       };
+}
+
+function casRetriesExhausted(label: string): Error {
+  return new Error(`${label} compare-and-set retry budget exhausted.`);
 }

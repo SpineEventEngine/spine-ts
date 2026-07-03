@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-52 fix verified for current pass
-Previous completed commit: `5a00b30`
+Status: round-53 fix verified for current pass
+Previous completed commit: `fdf079e`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -878,6 +878,30 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   package export snapshot, and refresh durable task/report/review/work logs for
   committed round 51 at `dd04528`.
 - Final round-52 verification passed with the required focused
+  delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
+  `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
+  touched-file line scan.
+- Round-52 fixes were committed as `fdf079e`.
+- Round-53 review completed from reviewer results supplied to this fix worker.
+  Maintainability and performance/reliability requested bounded retry budgets
+  for persistent compare-and-set misses in inbox dedup writes, inbox row
+  creation, shard pickup, and shard release. TypeScript/API docs requested
+  routing `#ensureInboxRow()` compare-and-set failures through the existing
+  durable compare helper so inbox clone/materialization failures stay classified
+  as `DeliveryStorageCorruptionError`. Documentation requested refreshing
+  durable logs for committed round 52 at `fdf079e`.
+- Red-first round-53 verification failed before production changes because the
+  new persistent compare-and-set miss regressions hung until the red-check time
+  budget expired, and the new inbox-row compare-and-set clone regression still
+  observed raw `Error: Storage record could not be cloned.` instead of
+  `DeliveryStorageCorruptionError`.
+- Round-53 fixes add focused retry-budget regressions and the missing inbox CAS
+  classification regression, bound inbox and shard compare-and-set retry loops
+  behind small private retry limits with explicit exhaustion errors, route
+  `#ensureInboxRow()` create CAS through the durable compare helper, and
+  refresh durable task/report/review/work logs for committed round 52 at
+  `fdf079e`.
+- Final round-53 verification passed with the required focused
   delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
   `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
   touched-file line scan.
