@@ -12,6 +12,22 @@ import {
 } from "./inbox.js";
 import { ShardIndex } from "./shard-index.js";
 
+/** Encodes and decodes durable inbox message records. */
+export const InboxRecords: Readonly<{
+  read(record: Any, expectedKey?: string): InboxMessage;
+  write(message: InboxMessage): Any;
+}> = Object.freeze({
+  /** Read a durable inbox message record. */
+  read(record: Any, expectedKey?: string): InboxMessage {
+    return inboxMessageFromStored(readStoredInboxMessage(record, expectedKey));
+  },
+
+  /** Write a durable inbox message record. */
+  write(message: InboxMessage): Any {
+    return packRecord(inboxRecordTypeUrl, "Inbox message record", storedInboxMessage(message));
+  },
+});
+
 interface StoredSignal {
   readonly typeUrl: string;
   readonly valueBase64: string;
@@ -104,22 +120,6 @@ export const inboxRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, A
 export const dedupRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, Any>({
   schema: AnySchema,
   extractId: (record) => readStoredDedupRecord(record).key,
-});
-
-/** Encodes and decodes durable inbox message records. */
-export const InboxRecords: Readonly<{
-  read(record: Any, expectedKey?: string): InboxMessage;
-  write(message: InboxMessage): Any;
-}> = Object.freeze({
-  /** Read a durable inbox message record. */
-  read(record: Any, expectedKey?: string): InboxMessage {
-    return inboxMessageFromStored(readStoredInboxMessage(record, expectedKey));
-  },
-
-  /** Write a durable inbox message record. */
-  write(message: InboxMessage): Any {
-    return packRecord(inboxRecordTypeUrl, "Inbox message record", storedInboxMessage(message));
-  },
 });
 
 /** Encodes, decodes, and keys durable dedup guard records. */

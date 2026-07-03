@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-49 fix verified for current pass
-Previous completed commit: `d3bdfae`
+Status: round-50 fix verified for current pass
+Previous completed commit: `855e54e`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1794,6 +1794,64 @@ Focused verification:
 
 - the same focused delivery command passed after production changes with
   `62` tests.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `138` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+Round-49 fixes were committed as `855e54e`.
+
+## Round 50 Review
+
+Round 50 found no TypeScript/API docs, security, or performance/reliability
+issues. Documentation and maintainability requested restoring semantic
+chronological order in the review log tail, recording the final round-49
+verification summary in this report, and moving the filename-matching
+`InboxRecords` declaration before supporting inbox-record declarations.
+
+## Round 50 Fix
+
+Round-50 fixes are intentionally mechanical:
+
+- moved `InboxRecords` before supporting stored-record declarations and specs
+  in `inbox-records.ts`;
+- restored review-log order so rounds 40 through 49 read chronologically; and
+- refreshed durable logs for committed round 49 at `855e54e` and this
+  round-50 fix trail.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `138` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
 
 Final verification:
 

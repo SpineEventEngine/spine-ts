@@ -1,7 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 49 fix verified for current pass
-Previous completed commit: `d3bdfae`
+Status: round 50 fix verified for current pass
+Previous completed commit: `855e54e`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2223,152 +2223,6 @@ Final verification:
 `node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
 TypeDoc source-link warning, but exited successfully.
 
-### Round 48
-
-Reviewer input: round-48 reviewer results supplied to this fix worker.
-
-Reviewer sub-agents:
-
-- documentation:
-  `019f293a-cadf-7790-b2f1-55861a5892a6` (`CHANGES REQUESTED`, closed);
-- TypeScript/API docs:
-  `019f293b-097a-7a03-83b1-51d732c7634a` (`CHANGES REQUESTED`, closed);
-- security:
-  `019f293b-4f29-7440-b14f-4e2012c851cf` (`CHANGES REQUESTED`, closed);
-- code style/maintainability:
-  `019f293a-8787-7e31-a8c5-8294e279dbb4` (`CLEAN`, closed); and
-- performance/reliability:
-  `019f293b-87c5-7a72-9adb-7762f61b22fc` (`CLEAN`, closed).
-
-Result: changes requested.
-
-Findings to address:
-
-- durable logs still described round 47 as pending even though package HEAD
-  was `da705d4`;
-- `packSignal()` read caller-controlled `signal.value` directly, allowing
-  getter/proxy failures to escape raw; and
-- `Inbox.receive()` spread public input before delegating to storage, allowing
-  top-level getter failures to escape raw.
-
-### Round 48 Fix
-
-Result: committed as `d3bdfae`.
-
-Fix summary:
-
-- added red-first regressions for caller signal `value` getter failures and
-  public receive input getter failures;
-- public receive input is now snapshotted through an `InboxMessageError`
-  boundary before storage delegation;
-- signal packing now reads caller payload values through the guarded input
-  property reader; and
-- durable task/report/review/work logs now name committed round-47 state
-  `da705d4` and record this round-48 fix trail.
-
-Red-first verification:
-
-- `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
-  `'signal value accessor|top-level receive input'` failed before production
-  changes because both new tests observed raw getter `Error` values instead of
-  `InboxMessageError`.
-
-Focused verification:
-
-- the same focused delivery command passed after production changes with
-  `62` tests.
-
-Final verification:
-
-- `pnpm test packages/server/test/delivery/inbox.test.ts`
-  `packages/server/test/delivery/inbox-records.test.ts`
-  `packages/server/test/delivery/shard-index.test.ts`
-  `packages/server/test/delivery/sharded-work-registry.test.ts`
-  `packages/storage/test/memory/in-memory-record-storage.test.ts`
-  `packages/server/test/repository/aggregate-storage.test.ts` passed with
-  `138` tests;
-- `pnpm typecheck`;
-- `pnpm lint`;
-- `pnpm format:check`;
-- `node scripts/check-api-docs.mjs`;
-- `git diff --check fce80b2..HEAD`; and
-- touched-file line scan with no lines over 120 columns.
-
-`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
-TypeDoc source-link warning, but exited successfully.
-
-### Round 49
-
-Reviewer input: round-49 reviewer results supplied to this fix worker.
-
-Reviewer sub-agents:
-
-- documentation:
-  `019f2946-4919-7020-b20b-f4b7e88aaa43` (`CHANGES REQUESTED`, closed);
-- code style/maintainability:
-  `019f2945-ffa9-7bf0-a10f-5715550470f9` (`CHANGES REQUESTED`, closed);
-- TypeScript/API docs:
-  `019f2946-875d-7033-85ee-a910b6ed86b8` (`CLEAN`, closed);
-- security:
-  `019f2946-ca77-7872-9444-0d64d82aa6fb` (`CLEAN`, closed); and
-- performance/reliability:
-  `019f2947-04f8-7d70-999b-9d3ff025487c` (`CLEAN`, closed).
-
-Result: changes requested.
-
-Findings to address:
-
-- durable logs still said the next step was to commit round 48 even though
-  package HEAD was `d3bdfae`; and
-- public `Inbox.receive()` could throw top-level input snapshot failures
-  synchronously before returning its documented `Promise<InboxWriteResult>`.
-
-### Round 49 Fix
-
-Result: implemented for this current pass. The future commit hash cannot be
-pre-recorded inside the commit itself; identify the committed round-49 fix by
-package HEAD or `git log`.
-
-Fix summary:
-
-- changed the top-level `Inbox.receive()` accessor regression to assert the
-  returned promise rejects directly;
-- made `Inbox.receive()` async so public input snapshot failures reject through
-  the returned promise; and
-- durable task/report/review/work logs now name committed round-48 state
-  `d3bdfae` and record this round-49 fix trail.
-
-Red-first verification:
-
-- `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
-  `'rejects top-level receive input accessor failures as inbox message errors'`
-  failed before production changes because `Inbox.receive()` threw
-  `InboxMessageError` synchronously.
-
-Focused verification:
-
-- the same focused delivery command passed after production changes with
-  `62` tests.
-
-Final verification:
-
-- `pnpm test packages/server/test/delivery/inbox.test.ts`
-  `packages/server/test/delivery/inbox-records.test.ts`
-  `packages/server/test/delivery/shard-index.test.ts`
-  `packages/server/test/delivery/sharded-work-registry.test.ts`
-  `packages/storage/test/memory/in-memory-record-storage.test.ts`
-  `packages/server/test/repository/aggregate-storage.test.ts` passed with
-  `138` tests;
-- `pnpm typecheck`;
-- `pnpm lint`;
-- `pnpm format:check`;
-- `node scripts/check-api-docs.mjs`;
-- `git diff --check fce80b2..HEAD`; and
-- touched-file line scan with no lines over 120 columns.
-
-`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
-TypeDoc source-link warning, but exited successfully.
-
 ### Round 40
 
 Reviewer input: round-40 reviewer results supplied to this fix worker.
@@ -2848,6 +2702,210 @@ Final verification:
   `packages/storage/test/memory/in-memory-record-storage.test.ts`
   `packages/server/test/repository/aggregate-storage.test.ts` passed with
   `136` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+### Round 48
+
+Reviewer input: round-48 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- documentation:
+  `019f293a-cadf-7790-b2f1-55861a5892a6` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f293b-097a-7a03-83b1-51d732c7634a` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f293b-4f29-7440-b14f-4e2012c851cf` (`CHANGES REQUESTED`, closed);
+- code style/maintainability:
+  `019f293a-8787-7e31-a8c5-8294e279dbb4` (`CLEAN`, closed); and
+- performance/reliability:
+  `019f293b-87c5-7a72-9adb-7762f61b22fc` (`CLEAN`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable logs still described round 47 as pending even though package HEAD
+  was `da705d4`;
+- `packSignal()` read caller-controlled `signal.value` directly, allowing
+  getter/proxy failures to escape raw; and
+- `Inbox.receive()` spread public input before delegating to storage, allowing
+  top-level getter failures to escape raw.
+
+### Round 48 Fix
+
+Result: committed as `d3bdfae`.
+
+Fix summary:
+
+- added red-first regressions for caller signal `value` getter failures and
+  public receive input getter failures;
+- public receive input is now snapshotted through an `InboxMessageError`
+  boundary before storage delegation;
+- signal packing now reads caller payload values through the guarded input
+  property reader; and
+- durable task/report/review/work logs now name committed round-47 state
+  `da705d4` and record this round-48 fix trail.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
+  `'signal value accessor|top-level receive input'` failed before production
+  changes because both new tests observed raw getter `Error` values instead of
+  `InboxMessageError`.
+
+Focused verification:
+
+- the same focused delivery command passed after production changes with
+  `62` tests.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `138` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+### Round 49
+
+Reviewer input: round-49 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- documentation:
+  `019f2946-4919-7020-b20b-f4b7e88aaa43` (`CHANGES REQUESTED`, closed);
+- code style/maintainability:
+  `019f2945-ffa9-7bf0-a10f-5715550470f9` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f2946-875d-7033-85ee-a910b6ed86b8` (`CLEAN`, closed);
+- security:
+  `019f2946-ca77-7872-9444-0d64d82aa6fb` (`CLEAN`, closed); and
+- performance/reliability:
+  `019f2947-04f8-7d70-999b-9d3ff025487c` (`CLEAN`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable logs still said the next step was to commit round 48 even though
+  package HEAD was `d3bdfae`; and
+- public `Inbox.receive()` could throw top-level input snapshot failures
+  synchronously before returning its documented `Promise<InboxWriteResult>`.
+
+### Round 49 Fix
+
+Result: committed as `855e54e`.
+
+Fix summary:
+
+- changed the top-level `Inbox.receive()` accessor regression to assert the
+  returned promise rejects directly;
+- made `Inbox.receive()` async so public input snapshot failures reject through
+  the returned promise; and
+- durable task/report/review/work logs now name committed round-48 state
+  `d3bdfae` and record this round-49 fix trail.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
+  `'rejects top-level receive input accessor failures as inbox message errors'`
+  failed before production changes because `Inbox.receive()` threw
+  `InboxMessageError` synchronously.
+
+Focused verification:
+
+- the same focused delivery command passed after production changes with
+  `62` tests.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `138` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+### Round 50
+
+Reviewer input: round-50 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2950-e09e-79d2-af00-c1483bf08a42` (`CHANGES REQUESTED`, closed);
+- documentation:
+  `019f2951-1f69-7533-b262-f6e0b7c9211a` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f2951-579e-7e11-8578-e20ca3d3871a` (`CLEAN`, closed);
+- security:
+  `019f2951-9347-7fc2-bb53-7d547f771c1e` (`CLEAN`, closed); and
+- performance/reliability:
+  `019f2951-c6a9-7350-a06b-e15c703fbcbc` (`CLEAN`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- review-log tail placed Round 49 before Round 40;
+- `IMPLEMENTATION_REPORT.md` omitted the final round-49 suite/static/API/diff
+  verification summary; and
+- `inbox-records.ts` placed support declarations/specs before the
+  filename-matching primary `InboxRecords` declaration.
+
+### Round 50 Fix
+
+Result: implemented for this current pass. The future commit hash cannot be
+pre-recorded inside the commit itself; identify the committed round-50 fix by
+package HEAD or `git log`.
+
+Fix summary:
+
+- restored semantic chronological order for review-log rounds 40 through 49;
+- added the missing final round-49 verification summary to the implementation
+  report and named committed round-49 state `855e54e`; and
+- moved `InboxRecords` before supporting stored-record declarations and
+  exported record specs.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `138` tests;
 - `pnpm typecheck`;
 - `pnpm lint`;
 - `pnpm format:check`;

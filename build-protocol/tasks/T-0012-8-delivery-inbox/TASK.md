@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-49 fix verified for current pass
-Previous completed commit: `d3bdfae`
+Status: round-50 fix verified for current pass
+Previous completed commit: `855e54e`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -820,6 +820,19 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   reject through the returned promise, adjust the regression to assert the
   promise rejection directly, and refresh durable logs for committed round 48.
 - Final round-49 verification passed with the required focused
+  delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
+  `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
+  touched-file line scan.
+- Round-49 fixes were committed as `855e54e`.
+- Round-50 review completed from reviewer results supplied to this fix worker.
+  Documentation and maintainability requested restoring semantic chronological
+  order in the review log tail, adding the omitted final round-49 verification
+  summary to the implementation report, and moving the filename-matching
+  `InboxRecords` declaration before supporting record declarations/specs.
+- Round-50 fixes restore review-log ordering, move `InboxRecords` before
+  support declarations, and refresh durable logs for committed round 49 at
+  `855e54e`.
+- Final round-50 verification passed with the required focused
   delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
   `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
   touched-file line scan.
