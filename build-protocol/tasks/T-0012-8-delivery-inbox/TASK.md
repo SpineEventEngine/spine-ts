@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-63 docs-only verification-warning fix verified for commit
-Previous completed commit: `fa7045a`
+Status: round-63 docs-only verification-warning fix committed as `a4ee110`
+Previous completed commit: `a4ee110`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`

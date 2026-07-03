@@ -1,5 +1,7 @@
 # T-0012.8 Round 63 Docs-Only Fix Report
 
+Committed as `a4ee110`.
+
 ## Scope
 
 - Addressed the documentation finding that `TASK.md`'s round-62 verification
