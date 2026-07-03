@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-55 fix verified for current pass
-Previous completed commit: `5153077`
+Status: round-56 fix verified for current pass
+Previous completed commit: `8cd3cf3`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -962,3 +962,34 @@ concurrent changes`, add shard pickup/release regressions proving thrown
   delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
   `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
   touched-file line scan.
+- Round-55 fixes were committed as `8cd3cf3`.
+- Round-56 review completed from reviewer results supplied to this fix worker.
+  Documentation requested refreshing durable task/report/review/work-log state
+  so committed round 55 is recorded as `8cd3cf3` instead of a current-pass
+  placeholder and no artifact still says the next step is to commit already
+  committed round-55 work. Maintainability requested stable invalid-clock input
+  handling in `ShardedWorkRegistry.requireInputTime(...)`. TypeScript/API docs
+  requested making the storage-ID contract explicit in `RecordStorage` TSDoc
+  and `docs/api/README.md`. Security reviewer suggestions that `index()`
+  should return storage slot IDs and that non-clone backend exceptions should
+  be sanitized were evaluated against local docs/tests and not accepted because
+  they conflict with the established logical-ID contract and the intentional
+  propagation coverage for non-clone backend failures.
+- Red-first round-56 verification failed before production changes because a
+  `Delivery` clock returning a non-`Date` still surfaced unstable raw wording
+  `value.getTime is not a function` instead of the stable public error
+  `Shard pickup time is invalid.`.
+- Round-56 fixes keep changes local to shard clock validation, storage API
+  docs, and durable logs. They reject non-`Date` shard pickup clocks with the
+  stable invalid-time error before opening storage, add a focused regression
+  proving the rejection and zero storage opens, clarify that
+  `RecordStorage.index()` returns logical record IDs while `queryEntries()`
+  returns actual storage slot IDs, and refresh durable task/report/review/work
+  logs through committed round 55 at `8cd3cf3` plus this round-56 fix trail.
+- Final round-56 verification passed with focused
+  `pnpm test`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`,
+  the required focused delivery/storage suite, `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `node scripts/check-api-docs.mjs`,
+  `git diff --check fce80b2..HEAD`, and a touched-file line scan.

@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-55 fix verified for current pass
-Previous completed commit: `5153077`
+Status: round-56 fix verified for current pass
+Previous completed commit: `8cd3cf3`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2321,5 +2321,77 @@ Final verification:
 `node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
 TypeDoc source-link warning, but exited successfully.
 
-This round-55 fix commit cannot pre-record its own final hash; identify it
-from package HEAD or `git log`.
+Round-55 fixes were committed as `8cd3cf3`.
+
+## Round 56 Review
+
+Round 56 found one durable-log drift issue, one shard clock-validation gap,
+and one storage API documentation gap. Documentation requested refreshing
+durable task/report/review/work logs so committed round 55 is recorded as
+`8cd3cf3` and no artifact still describes round 55 as an uncommitted current
+pass or says the next step is to commit already-committed work.
+Maintainability requested making `ShardedWorkRegistry.requireInputTime(...)`
+reject non-`Date` clock values with the stable public wording
+`Shard pickup time is invalid.` before any storage access. TypeScript/API docs
+requested making the storage-ID contract explicit: `RecordStorage.index()`
+returns logical record IDs derived from record bodies, while
+`RecordStorage.queryEntries()` returns actual storage slot IDs.
+
+Security reviewer suggestions that `RecordStorage.index()` should return
+storage slot IDs and that non-clone backend exceptions should be sanitized
+were evaluated and not accepted. Local storage tests and docs already establish
+`queryEntries()` as the slot-ID API and `index()` as the logical-ID API, while
+delivery regressions intentionally keep non-clone backend failures observable
+and only classify clone/materialization-style corruption wording.
+
+## Round 56 Fix
+
+Round-56 fixes stay local to shard clock validation, storage API docs, focused
+tests, and durable logs:
+
+- changed `packages/server/src/delivery/sharded-work-registry.ts` so
+  `requireInputTime(...)` rejects non-`Date` values with
+  `Error(\"<label> is invalid.\")` before calling `getTime()`;
+- added a red-first focused regression in
+  `packages/server/test/delivery/sharded-work-registry.test.ts` proving a
+  `Delivery` clock returning a non-`Date` fails with stable public wording and
+  does not open shard storage;
+- clarified `packages/storage/src/record/record-storage.ts` and
+  `docs/api/README.md` so `index()` explicitly refers to logical record IDs and
+  `queryEntries()` explicitly refers to actual storage slot IDs; and
+- refreshed durable task/report/review/work-log state through committed round
+  55 at `8cd3cf3` plus this round-56 fix trail.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  failed before production changes because the new non-`Date` clock regression
+  still received raw wording `value.getTime is not a function` instead of
+  `Shard pickup time is invalid.`.
+
+Focused verification:
+
+- `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  passed after rejecting non-`Date` pickup clocks before storage access; and
+- `pnpm test packages/storage/test/memory/in-memory-record-storage.test.ts`
+  passed with the logical-ID `index()` and storage-slot `queryEntries()`
+  contract unchanged.
+
+Final verification:
+
+- `pnpm test packages/server/test/index.test.ts`
+  `packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.

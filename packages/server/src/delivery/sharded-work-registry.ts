@@ -472,6 +472,10 @@ function requireInputInteger(value: unknown, label: string): number {
 }
 
 function requireInputTime(value: Date, label: string): number {
+  if (!(value instanceof Date)) {
+    throw new Error(`${label} is invalid.`);
+  }
+
   const time = value.getTime();
   if (!Number.isFinite(time)) {
     throw new Error(`${label} is invalid.`);

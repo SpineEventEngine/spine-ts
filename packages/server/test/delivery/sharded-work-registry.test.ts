@@ -553,6 +553,22 @@ describe("ShardedWorkRegistry", () => {
     expect(storageFactory.closes).toBe(0);
   });
 
+  it("rejects non-Date pickup clocks before opening shard storage", async () => {
+    const storageFactory = new CountingStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: (() => "2026-07-02T09:45:00.000Z") as unknown as () => Date,
+    });
+
+    await expect(delivery.shards.pickUp(new ShardIndex(0, 1), "node-a")).rejects.toThrow(
+      "Shard pickup time is invalid.",
+    );
+
+    expect(storageFactory.opens).toBe(0);
+    expect(storageFactory.closes).toBe(0);
+  });
+
   it("sanitizes shard pickup input once when caller key disagrees with shard coordinates", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },

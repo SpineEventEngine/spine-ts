@@ -53,7 +53,7 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
       : RecordMask.apply(this.#recordSpec.cloneRecord(record), options.mask);
   }
 
-  /** Read matching record identifiers in deterministic query order. */
+  /** Read matching logical record identifiers derived from record bodies in deterministic query order. */
   async index(query: RecordQuery<I> = {}): Promise<readonly I[]> {
     this.requireOpen();
     RecordQuery.validate(query);
@@ -70,7 +70,7 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
     return entries.map((entry) => entry.record);
   }
 
-  /** Query records together with the storage slot IDs they currently occupy. */
+  /** Query records together with the actual storage slot IDs they currently occupy. */
   async queryEntries(query: RecordQuery<I> = {}): Promise<readonly RecordEntry<I, R>[]> {
     this.requireOpen();
     RecordQuery.validate(query);
@@ -141,7 +141,7 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   }
 }
 
-/** One queried record together with the storage slot ID it came from. */
+/** One queried record together with the storage slot ID it currently occupies. */
 export interface RecordEntry<I, R extends Message> {
   readonly id: I;
   readonly record: R;

@@ -1,7 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 55 fix verified for current pass
-Previous completed commit: `5153077`
+Status: round 56 fix verified for current pass
+Previous completed commit: `8cd3cf3`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -3230,9 +3230,7 @@ Findings to address:
 
 ### Round 55 Fix
 
-Result: implemented for this current pass. The future commit hash cannot be
-pre-recorded inside the commit itself; identify the committed round-55 fix by
-package HEAD or `git log`.
+Result: committed as `8cd3cf3`.
 
 Fix summary:
 
@@ -3261,6 +3259,91 @@ Red-first verification:
 - `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
   failed before production changes because shard read/pickup/release clone
   failures still surfaced raw storage clone wording.
+
+### Round 56
+
+Reviewer input: round-56 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- maintainability: `round-56-maintainability` (`CHANGES REQUESTED`, supplied);
+- documentation: `round-56-documentation` (`CHANGES REQUESTED`, supplied);
+- TypeScript/API docs:
+  `round-56-typescript-api-docs` (`CHANGES REQUESTED`, supplied);
+- security: `round-56-security` (`COMMENTARY ONLY`, supplied).
+
+Result: changes requested.
+
+Findings to address:
+
+- `packages/server/src/delivery/sharded-work-registry.ts` still called
+  `value.getTime()` directly in `requireInputTime(...)`, so a non-`Date`
+  delivery clock leaked raw wording instead of failing with the stable public
+  error `Shard pickup time is invalid.` before storage access;
+- `packages/storage/src/record/record-storage.ts` and `docs/api/README.md`
+  still needed explicit wording that `index()` returns logical record IDs
+  derived from record bodies while `queryEntries()` returns actual storage slot
+  IDs; and
+- durable task/report/review/work-log state still described round 55 as a
+  current verified pass instead of committed `8cd3cf3`, and the work log still
+  pointed at committing already-committed round-55 work.
+
+Security review evaluation:
+
+- the suggestion to make `RecordStorage.index()` return storage slot IDs was
+  not accepted because local storage tests and docs establish `index()` as the
+  logical-ID API and `queryEntries()` as the slot-ID API; and
+- the suggestion to sanitize non-clone backend exceptions was not accepted
+  because local delivery tests intentionally propagate non-clone backend
+  failures while only clone/materialization-style corruption wording is mapped
+  to `DeliveryStorageCorruptionError`.
+
+### Round 56 Fix
+
+Result: implemented for this current pass. The future commit hash cannot be
+pre-recorded inside the commit itself; identify the committed round-56 fix by
+package HEAD or `git log`.
+
+Fix summary:
+
+- changed shard clock validation to reject non-`Date` values with stable public
+  wording before any storage access;
+- added a focused regression proving a non-`Date` delivery clock does not open
+  storage and fails with `Shard pickup time is invalid.`;
+- clarified the storage API docs so `index()` is explicitly the logical-ID API
+  and `queryEntries()` is explicitly the storage-slot API; and
+- refreshed durable task/report/review/work-log state through committed round
+  55 at `8cd3cf3` and this round-56 fix trail.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  failed before production changes because the new non-`Date` clock regression
+  still surfaced `value.getTime is not a function`.
+
+Focused verification:
+
+- `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  passed after the shard clock validation change; and
+- `pnpm test packages/storage/test/memory/in-memory-record-storage.test.ts`
+  passed with the logical-ID `index()` / storage-slot `queryEntries()`
+  contract intact.
+
+Final verification:
+
+- `pnpm test packages/server/test/index.test.ts`
+  `packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
 
 Focused verification:
 
