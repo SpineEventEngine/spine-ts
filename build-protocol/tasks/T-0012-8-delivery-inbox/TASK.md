@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-47 fix implemented in current commit
-Previous completed commit: `cd2b13b`
+Status: round-48 fix implemented in current commit
+Previous completed commit: `da705d4`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -789,4 +789,22 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
   touched-file line scan.
 - This round-47 fix commit cannot pre-record its own final hash; identify it
+  from package HEAD or `git log`.
+- Round-47 fixes were committed as `da705d4`.
+- Round-48 review completed from reviewer results supplied to this fix worker.
+  Documentation requested durable-log refresh for committed round 47 at
+  `da705d4`. TypeScript/API docs and security requested classifying caller
+  `signal.value` accessor failures and public `Inbox.receive()` top-level
+  input getter failures as `InboxMessageError`. Code style/maintainability and
+  performance/reliability lanes were clean.
+- Round-48 fixes add red-first regressions for the two caller input boundaries,
+  snapshot public receive input before storage delegation, guard caller signal
+  payload property reads, and refresh durable logs for committed round 47.
+- Red-first round-48 verification failed before production changes with raw
+  getter `Error` values instead of `InboxMessageError`.
+- Final round-48 verification passed with the required focused
+  delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
+  `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
+  touched-file line scan.
+- This round-48 fix commit cannot pre-record its own final hash; identify it
   from package HEAD or `git log`.

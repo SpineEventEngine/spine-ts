@@ -1,7 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 47 fix implemented in current commit
-Previous completed commit: `cd2b13b`
+Status: round 48 fix implemented in current commit
+Previous completed commit: `da705d4`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2213,6 +2213,82 @@ Final verification:
   `packages/storage/test/memory/in-memory-record-storage.test.ts`
   `packages/server/test/repository/aggregate-storage.test.ts` passed with
   `129` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+### Round 48
+
+Reviewer input: round-48 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- documentation:
+  `019f293a-cadf-7790-b2f1-55861a5892a6` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f293b-097a-7a03-83b1-51d732c7634a` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f293b-4f29-7440-b14f-4e2012c851cf` (`CHANGES REQUESTED`, closed);
+- code style/maintainability:
+  `019f293a-8787-7e31-a8c5-8294e279dbb4` (`CLEAN`, closed); and
+- performance/reliability:
+  `019f293b-87c5-7a72-9adb-7762f61b22fc` (`CLEAN`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable logs still described round 47 as pending even though package HEAD
+  was `da705d4`;
+- `packSignal()` read caller-controlled `signal.value` directly, allowing
+  getter/proxy failures to escape raw; and
+- `Inbox.receive()` spread public input before delegating to storage, allowing
+  top-level getter failures to escape raw.
+
+### Round 48 Fix
+
+Result: implemented in this current commit. Because a commit cannot pre-record
+its own final hash, identify the committed round-48 fix by package HEAD or
+`git log`.
+
+Fix summary:
+
+- added red-first regressions for caller signal `value` getter failures and
+  public receive input getter failures;
+- public receive input is now snapshotted through an `InboxMessageError`
+  boundary before storage delegation;
+- signal packing now reads caller payload values through the guarded input
+  property reader; and
+- durable task/report/review/work logs now name committed round-47 state
+  `da705d4` and record this round-48 fix trail.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
+  `'signal value accessor|top-level receive input'` failed before production
+  changes because both new tests observed raw getter `Error` values instead of
+  `InboxMessageError`.
+
+Focused verification:
+
+- the same focused delivery command passed after production changes with
+  `62` tests.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `138` tests;
 - `pnpm typecheck`;
 - `pnpm lint`;
 - `pnpm format:check`;

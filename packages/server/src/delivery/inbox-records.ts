@@ -414,7 +414,11 @@ function inboxMessageFromStored(stored: StoredInboxMessage): InboxMessage {
 }
 
 function packSignal(signal: Any): StoredSignal {
-  const value = requireInputBytes(signal.value, "Inbox signal payload");
+  const signalInput = requireInputObject(signal, "Inbox signal");
+  const value = requireInputBytes(
+    readInputProperty(signalInput, "value", "Inbox signal payload"),
+    "Inbox signal payload",
+  );
   if (value.byteLength > maxSignalPayloadBytes) {
     throw new InboxMessageError(
       `Inbox signal payload exceeds ${String(maxSignalPayloadBytes)} bytes and cannot be stored.`,
@@ -422,7 +426,7 @@ function packSignal(signal: Any): StoredSignal {
   }
 
   return Object.freeze({
-    typeUrl: requireSignalTypeUrl(signal),
+    typeUrl: requireSignalTypeUrl(signalInput),
     valueBase64: Buffer.from(value).toString("base64"),
   });
 }
@@ -569,7 +573,7 @@ function requireInputDeliveryLabel(value: unknown): DeliveryLabel {
   throw new InboxMessageError(`Inbox delivery label "${String(value)}" is invalid.`);
 }
 
-function requireSignalTypeUrl(signal: Any): string {
+function requireSignalTypeUrl(signal: Record<string, unknown>): string {
   try {
     return requireInputText(Reflect.get(signal, "typeUrl"), "Inbox signal type URL");
   } catch (error) {

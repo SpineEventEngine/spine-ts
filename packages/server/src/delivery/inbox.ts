@@ -18,11 +18,25 @@ export class Inbox {
 
   /** Receive one message into durable inbox storage. */
   receive(input: InboxMessageInput): Promise<InboxWriteResult> {
+    const messageInput = this.#inputObject(input, "Inbox message input");
+    const shard = this.#readInput(messageInput, "shard", "Inbox message shard") as ShardIndex;
+    const signal = this.#readInput(messageInput, "signal", "Inbox signal") as Any | undefined;
+    const keepUntil = this.#readInput(messageInput, "keepUntil", "Inbox keep-until time") as
+      Date | undefined;
+
     return this.storage.write({
-      ...input,
+      inboxId: this.#readInput(messageInput, "inboxId", "Inbox target identity") as InboxId,
+      signalId: this.#readInput(messageInput, "signalId", "Inbox signal ID") as string,
+      label: this.#readInput(messageInput, "label", "Inbox delivery label") as DeliveryLabel,
+      status: this.#readInput(messageInput, "status", "Inbox delivery status") as DeliveryStatus,
+      shard,
+      whenReceived: this.#readInput(messageInput, "whenReceived", "Inbox receive time") as Date,
+      version: this.#readInput(messageInput, "version", "Inbox version") as bigint,
+      ...(signal === undefined ? {} : { signal }),
+      ...(keepUntil === undefined ? {} : { keepUntil }),
       id: {
         value: randomUUID(),
-        shard: input.shard,
+        shard,
       },
     });
   }
@@ -30,6 +44,22 @@ export class Inbox {
   /** Read ordered messages for one shard. */
   read(shard: ShardIndex, options: InboxReadOptions = {}): Promise<readonly InboxMessage[]> {
     return this.storage.read(shard, options);
+  }
+
+  #inputObject(value: unknown, label: string): Record<string, unknown> {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      throw new InboxMessageError(`${label} is invalid.`);
+    }
+
+    return value as Record<string, unknown>;
+  }
+
+  #readInput(value: Record<string, unknown>, property: string, label: string): unknown {
+    try {
+      return Reflect.get(value, property);
+    } catch (error) {
+      throw new InboxMessageError(`${label} is invalid.`, { cause: error });
+    }
   }
 }
 

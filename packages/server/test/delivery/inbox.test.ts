@@ -361,6 +361,36 @@ describe("Inbox", () => {
     await expect(receive).rejects.toThrow(/signal type url/i);
   });
 
+  it("rejects signal value accessor failures as inbox message errors", async () => {
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+      }),
+    );
+    const receive = inbox.receive({
+      inboxId: {
+        targetId: "aggregate-1",
+        targetTypeUrl: "type.example.dev/tasks.Aggregate",
+      },
+      signalId: "signal-bad-value",
+      signal: {
+        typeUrl: "type.example.dev/tasks.BadValueSignal",
+        get value() {
+          throw new Error("signal value getter failed");
+        },
+      } as unknown as Any,
+      label: "HANDLE_COMMAND",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+      whenReceived: new Date("2026-07-02T08:10:00.000Z"),
+      version: 1n,
+    });
+
+    await expect(receive).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(receive).rejects.toThrow(/signal payload/i);
+  });
+
   it("rejects invalid caller timestamps as inbox message errors", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -422,6 +452,26 @@ describe("Inbox", () => {
 
     await expect(write).rejects.toBeInstanceOf(InboxMessageError);
     await expect(write).rejects.toThrow(/signal id/i);
+  });
+
+  it("rejects top-level receive input accessor failures as inbox message errors", async () => {
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+      }),
+    );
+    const input = {
+      ...createMessage("message-getter", "signal-getter", 1n),
+      get signalId(): string {
+        throw new Error("receive signal ID getter failed");
+      },
+    };
+
+    const receive = Promise.resolve().then(() => inbox.receive(input));
+
+    await expect(receive).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(receive).rejects.toThrow(/signal id/i);
   });
 
   it("writes one immutable snapshot when caller getters drift after validation", async () => {

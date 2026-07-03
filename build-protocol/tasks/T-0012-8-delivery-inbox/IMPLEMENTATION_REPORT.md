@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-47 fix implemented in current commit
-Previous completed commit: `cd2b13b`
+Status: round-48 fix implemented in current commit
+Previous completed commit: `da705d4`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1758,4 +1758,61 @@ Final verification:
 TypeDoc source-link warning, but exited successfully.
 
 This round-47 fix commit cannot pre-record its own final hash; identify it
+from package HEAD or `git log`.
+
+## Round 48 Review
+
+Round 48 found one durable-log state issue and two caller input-boundary
+issues. Documentation requested replacing stale current state that still named
+round 46/47 work even though package HEAD was `da705d4`. TypeScript/API docs
+and security requested wrapping caller-controlled `signal.value` access and
+public `Inbox.receive()` top-level input access as `InboxMessageError`.
+
+Code style/maintainability and performance/reliability lanes were clean.
+
+## Round 48 Fix
+
+Round-48 fixes stay local to public inbox input boundaries and durable logs:
+
+- added red-first regressions for a caller signal payload `value` getter and a
+  top-level `Inbox.receive()` input getter;
+- changed `Inbox.receive()` to snapshot public input fields through an
+  `InboxMessageError` boundary before delegating to storage;
+- changed signal packing to read the caller payload through the existing
+  guarded property reader; and
+- durable task/report/review/work logs now record committed round 47 at
+  `da705d4` and this round-48 fix trail.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts -- --runInBand -t`
+  `'signal value accessor|top-level receive input'` failed before production
+  changes with both new regressions observing raw getter `Error` values instead
+  of `InboxMessageError`.
+
+Focused verification:
+
+- the same focused delivery command passed after production changes with
+  `62` tests.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `138` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+This round-48 fix commit cannot pre-record its own final hash; identify it
 from package HEAD or `git log`.
