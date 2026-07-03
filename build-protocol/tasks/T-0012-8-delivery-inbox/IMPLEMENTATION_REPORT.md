@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-61 post-commit docs cleanup committed at current HEAD
-Previous completed commit: `a647db5`
+Status: round-62 security/docs fix committed at current HEAD
+Previous completed commit: `fa7045a`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2629,6 +2629,58 @@ Verification:
 - touched-file line scan with no lines over 120 columns.
 
 Round-61 pickup-shard/docs fixes were committed as `a647db5`. A follow-up
-docs-only cleanup removes stale post-commit wording from the round-61 report,
-work-log current state, and durable headers; that cleanup is recorded as the
-current package HEAD.
+docs-only cleanup removed stale post-commit wording from the round-61 report,
+work-log current state, and durable headers; that cleanup was committed as
+`fa7045a`, the current package HEAD at round-62 review intake.
+
+## Round 62 Review
+
+Round 62 found no code style/maintainability, TypeScript/API docs, or
+performance/reliability issues. Security requested removing raw `cause`
+exposure from caller-supplied shard accessor/proxy failures in
+`requireInputShard()`. Documentation requested rewriting the work-log tail so
+timestamps are chronological and consistent with commit metadata for
+`9c9baf7`, `dd36ae7`, `a647db5`, and `fa7045a`.
+
+## Round 62 Fix
+
+Round-62 fixes stay local to shard pickup validation, focused tests, and
+durable logs:
+
+- extended the pickup-shard accessor regression so it inspects the actual
+  rejection object and asserts `confidential getter failed` is absent from
+  `.message`, `.cause`, and JSON diagnostic surface while storage opens remain
+  zero;
+- updated `requireInputShard()` so caller property access failures throw stable
+  invalid-shard wording without attaching the raw accessor/proxy exception as
+  `cause`; and
+- rewrote the work-log cleanup tail to place the `fa7045a` docs cleanup before
+  round-62 intake without postdating cleanup start or verification after the
+  commit metadata.
+
+Verification:
+
+- red-first:
+  `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  failed because `indexRejection.cause` still exposed
+  `Shard index confidential getter failed`;
+- green:
+  `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`;
+- `pnpm test`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`;
+- `pnpm test`
+  `packages/server/test/index.test.ts`
+  `packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs` passed with the pre-existing invalid
+  `origin` TypeDoc source-link warning;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.

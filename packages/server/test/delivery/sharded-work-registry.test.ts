@@ -598,8 +598,8 @@ describe("ShardedWorkRegistry", () => {
       now: () => new Date("2026-07-02T09:45:00.000Z"),
     });
 
-    await expect(
-      delivery.shards.pickUp(
+    const indexRejection = await delivery.shards
+      .pickUp(
         {
           get index() {
             throw new Error("Shard index confidential getter failed");
@@ -607,10 +607,13 @@ describe("ShardedWorkRegistry", () => {
           ofTotal: 2,
         } as unknown as ShardIndex,
         "node-a",
-      ),
-    ).rejects.toThrow("Shard index is invalid.");
-    await expect(
-      delivery.shards.pickUp(
+      )
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    const totalRejection = await delivery.shards
+      .pickUp(
         {
           index: 0,
           get ofTotal() {
@@ -618,8 +621,20 @@ describe("ShardedWorkRegistry", () => {
           },
         } as unknown as ShardIndex,
         "node-a",
-      ),
-    ).rejects.toThrow("Shard index is invalid.");
+      )
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    expect(indexRejection).toBeInstanceOf(Error);
+    expect(totalRejection).toBeInstanceOf(Error);
+    expect(indexRejection).toMatchObject({ message: "Shard index is invalid." });
+    expect(totalRejection).toMatchObject({ message: "Shard index is invalid." });
+    expect(JSON.stringify(indexRejection)).not.toContain("confidential getter failed");
+    expect(JSON.stringify(totalRejection)).not.toContain("confidential getter failed");
+    expect((indexRejection as Error & { cause?: unknown }).cause).toBeUndefined();
+    expect((totalRejection as Error & { cause?: unknown }).cause).toBeUndefined();
 
     expect(storageFactory.opens).toBe(0);
     expect(storageFactory.closes).toBe(0);

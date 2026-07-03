@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-61 post-commit docs cleanup committed at current HEAD
-Previous completed commit: `a647db5`
+Status: round-62 security/docs fix committed at current HEAD
+Previous completed commit: `fa7045a`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -1100,6 +1100,28 @@ concurrent changes`, add shard pickup/release regressions proving thrown
   check still emitted the pre-existing invalid `origin` TypeDoc source-link
   warning while exiting successfully.
 - Round-61 pickup-shard/docs fixes were committed as `a647db5`.
-- A follow-up docs-only cleanup removes stale post-commit wording from the
+- A follow-up docs-only cleanup removed stale post-commit wording from the
   round-61 fix report, work-log current state, and durable headers. This
-  latest cleanup is recorded as the current package HEAD.
+  cleanup was committed as `fa7045a`, the current package HEAD at round-62
+  review intake.
+- Round-62 review completed from supplied reviewer results. Code
+  style/maintainability, TypeScript/API docs, and performance/reliability were
+  clean. Security requested removing raw `cause` exposure from caller shard
+  getter/proxy failures. Documentation requested rewriting the work-log tail
+  timestamps so they are chronological and consistent with commit metadata for
+  `9c9baf7`, `dd36ae7`, `a647db5`, and `fa7045a`.
+- Red-first round-62 focused verification failed before production changes:
+  `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  showed the rejected pickup-shard error still exposed
+  `Shard index confidential getter failed` through `.cause`, even though the
+  public message was stable and storage opens remained zero.
+- Round-62 fixes stay local to pickup shard validation, focused
+  shard-registry regression coverage, and durable logs. Caller shard property
+  access failures now throw stable invalid-shard wording without attaching the
+  raw accessor/proxy exception as `cause`; deterministic integer validation and
+  `ShardIndex` constructor validation remain on their existing paths.
+- Round-62 verification passed with the focused shard red-green cycle, the
+  required shard/storage pair, the focused delivery/storage/repository suite,
+  `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, and
+  `node scripts/check-api-docs.mjs`. Final `git diff --check fce80b2..HEAD`
+  and touched-file line scan also passed after durable-log updates.

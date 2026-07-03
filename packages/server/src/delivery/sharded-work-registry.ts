@@ -462,8 +462,8 @@ function requireInputShard(value: unknown, label: string): ShardIndex {
   try {
     indexValue = Reflect.get(value, "index");
     totalValue = Reflect.get(value, "ofTotal");
-  } catch (error) {
-    throw new Error(`${label} is invalid.`, { cause: error });
+  } catch {
+    throw new Error(`${label} is invalid.`);
   }
 
   const index = requireInputInteger(indexValue, `${label} index`);

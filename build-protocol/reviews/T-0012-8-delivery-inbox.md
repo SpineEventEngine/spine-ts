@@ -1,7 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 61 post-commit docs cleanup committed at current HEAD
-Previous completed commit: `a647db5`
+Status: round 62 security/docs fix committed at current HEAD
+Previous completed commit: `fa7045a`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -3620,5 +3620,70 @@ Verification:
 - touched-file line scan with no lines over 120 columns.
 
 Follow-up docs-only cleanup: stale post-commit wording in the round-61 report,
-work-log current state, and durable headers is removed in the current package
-HEAD.
+work-log current state, and durable headers was removed in `fa7045a`, the
+current package HEAD at round-62 review intake.
+
+## Round 62 Review
+
+Reviewer input: round-62 reviewer results supplied to this fix worker.
+
+Result:
+
+- code style/maintainability: `round-62-maintainability` (`CLEAN`, supplied);
+- documentation: `round-62-documentation` (`CHANGES_REQUESTED`, supplied);
+- TypeScript/API docs: `round-62-api-docs` (`CLEAN`, supplied);
+- security: `round-62-security` (`CHANGES_REQUESTED`, supplied); and
+- performance/reliability: `round-62-reliability` (`CLEAN`, supplied).
+
+Findings:
+
+- `packages/server/src/delivery/sharded-work-registry.ts` still wrapped caller
+  shard getter/proxy failures with a raw `cause`, so attacker-controlled
+  getter text could leak through caller inspection or diagnostics even though
+  the public message was stable; and
+- `build-protocol/work-logs/T-0012-8.md` tail timestamps described the
+  round-61 docs cleanup as starting and verifying after the actual `fa7045a`
+  commit metadata, so the cleanup timeline needed to be rewritten around
+  committed `9c9baf7`, `dd36ae7`, `a647db5`, and `fa7045a`.
+
+## Round 62 Fix
+
+Result: committed at current HEAD.
+
+Fix summary:
+
+- extended the pickup-shard accessor regression to assert the rejected error
+  exposes no `confidential getter failed` text through `.message`, `.cause`,
+  or JSON diagnostic surface while storage opens remain zero;
+- removed raw `cause` attachment from `requireInputShard()` caller property
+  access failures while leaving deterministic integer and `ShardIndex`
+  validation paths intact; and
+- rewrote the work-log tail so the docs cleanup is recorded before `fa7045a`
+  and round-62 work starts after that committed package HEAD.
+
+Verification:
+
+- red-first:
+  `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  failed because the new assertion observed
+  `Shard index confidential getter failed` in `.cause`;
+- green:
+  `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`;
+- `pnpm test`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`;
+- `pnpm test`
+  `packages/server/test/index.test.ts`
+  `packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs` passed with the pre-existing invalid
+  `origin` TypeDoc source-link warning;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
