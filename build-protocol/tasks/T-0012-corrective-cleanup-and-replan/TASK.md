@@ -1,6 +1,6 @@
 # T-0012: Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.8b integrated; T-0012.9 selected
+Status: T-0012.9 in progress
 Start: `2026-07-01 16:48 WEST`
 Baseline commit: `a9769d4`
 Branch: `task/T-0012-cleanup-replan`
@@ -128,7 +128,8 @@ escalated coverage, docs/API, proto lint/generate/clean, and
 ZeroMQ local IPC sandbox failure. Coverage was statements 94.85%, branches
 90.02%, functions 96.95%, and lines 94.88%.
 
-Next selected subtask: `T-0012.9 Stand And Entity Updates`.
+Next selected subtask `T-0012.9 Stand And Entity Updates` is in progress on
+branch `task/T-0012-9-stand-entity-updates`.
 
 ## T-0012.2 Selection Rationale
 

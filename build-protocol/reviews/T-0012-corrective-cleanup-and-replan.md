@@ -6,7 +6,7 @@ Branch: `task/T-0012-cleanup-replan`
 Baseline commit: `a9769d4`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
-Status: T-0012.8b integrated; T-0012.9 selected.
+Status: T-0012.9 in progress.
 
 ## Required Review Lanes
 
@@ -197,3 +197,6 @@ For `T-0012.9 Stand And Entity Updates`, reviewers must focus on:
 - entity-updated system events emitted from entity state changes;
 - strict write-side/read-side segregation; and
 - no gRPC service adapters until the direct `Stand` API is usable.
+
+`T-0012.9` is in progress on branch
+`task/T-0012-9-stand-entity-updates`.

@@ -1,6 +1,6 @@
 # Work Log: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.8b integrated; T-0012.9 selected
+Status: T-0012.9 in progress
 
 ## Entries
 
@@ -32,6 +32,7 @@ Status: T-0012.8b integrated; T-0012.9 selected
 | `2026-07-03 23:15 WEST` | Main orchestrator     | Opened `T-0012.8b` integration coverage fix.                                                  | `pnpm check:node`; `pnpm typecheck`; `pnpm lint`; tracked-file Prettier check; `pnpm test`; escalated `pnpm test`; `pnpm test:coverage`; escalated `pnpm test:coverage`; `git worktree add .worktrees/T-0012-8b-integration-coverage-fix -b task/T-0012-8b-integration-coverage-fix main`.                                                                                                                                                                                                                                                    | Node, typecheck, lint, tracked formatting, and escalated tests passed. Non-escalated tests/coverage hit the known ZeroMQ local IPC sandbox failure. Escalated coverage passed all tests but failed branch coverage at 89.2%, below the 90% threshold, so `T-0012.8b Integration Coverage Fix` is selected before `T-0012.9`.                                                                                                     |
 | `2026-07-03 23:51 WEST` | Main orchestrator     | Integrated `T-0012.8b` and selected next subtask.                                             | `git merge --no-ff --no-commit task/T-0012-8b-integration-coverage-fix`; updated parent task/report/review/work logs.                                                                                                                                                                                                                                                                                                                                                                                                                         | `T-0012.8b` is complete with all review lanes clean through reviewed commit `8e2e410`. It recovered branch coverage to 90.02% with focused delivery tests. Next selected subtask is `T-0012.9 Stand And Entity Updates`.                                                                                                                                                                                                         |
 | `2026-07-03 23:54 WEST` | Main orchestrator     | Verified parent tracked state after `T-0012.8b` integration.                                  | `pnpm check:node`; `pnpm typecheck`; `pnpm lint`; tracked-file Prettier check; non-escalated and escalated `pnpm test`; non-escalated and escalated `pnpm test:coverage`; `pnpm docs:check`; `pnpm proto:lint`; `pnpm proto:generate`; `pnpm proto:check-generated`; `git diff --check`.                                                                                                                                                                                                                                                      | Passed on `main`: 42 test files and 489 tests; coverage statements 94.85%, branches 90.02%, functions 96.95%, lines 94.88%; docs/API checks passed with the existing invalid-`origin` TypeDoc warning; generated proto output is ignored, untracked, and freshly regenerated. Non-escalated tests and coverage still hit the known ZeroMQ local IPC sandbox failure. Root still has unrelated untracked `human-review-1-jul.md`. |
+| `2026-07-03 23:56 WEST` | Main orchestrator     | Opened `T-0012.9` implementation task.                                                        | `git worktree add .worktrees/T-0012-9-stand-entity-updates -b task/T-0012-9-stand-entity-updates main`; created `T-0012.9` task/report/review/work logs; updated parent task/report/review/work logs.                                                                                                                                                                                                                                                                             | `T-0012.9 Stand And Entity Updates` is in progress. First implementation slice is a direct storage-backed `Stand` and entity update API before gRPC services.                                                                                                                                                                                                                                                           |
 
 ## Current State
 
@@ -49,8 +50,7 @@ Status: T-0012.8b integrated; T-0012.9 selected
 - `T-0012.7c Integration Verification Fix` is integrated.
 - `T-0012.8 Delivery And Inbox` is integrated.
 - `T-0012.8b Integration Coverage Fix` is integrated.
-- Next selected implementable cleanup subtask is
-  `T-0012.9 Stand And Entity Updates`.
+- `T-0012.9 Stand And Entity Updates` is in progress.
 - Parent verification passed after `T-0012.1` integration.
 - Parent verification passed after `T-0012.2` integration.
 - Parent verification passed after `T-0012.3` integration.

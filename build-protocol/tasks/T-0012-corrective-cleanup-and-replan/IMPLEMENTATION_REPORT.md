@@ -1,6 +1,6 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.8b integrated; T-0012.9 selected
+Status: T-0012.9 in progress
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
@@ -213,6 +213,11 @@ statements 94.85%, branches 90.02%, functions 96.95%, and lines 94.88%.
 Docs/API checks still report only the known invalid-`origin` TypeDoc warning.
 The unrelated untracked root file `human-review-1-jul.md` remains outside the
 autonomous task scope.
+
+`T-0012.9 Stand And Entity Updates` is in progress on branch
+`task/T-0012-9-stand-entity-updates`. The selected first slice is a direct
+storage-backed `Stand` API and entity update notifications, leaving real gRPC
+services for `T-0012.10`.
 
 ## First Selected Subtask
 
