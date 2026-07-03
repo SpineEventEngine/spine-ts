@@ -142,6 +142,7 @@ const expectedStorageExports = [
   "InMemoryStorageFactory",
   "OnEventAccepted",
   "RecordColumn",
+  "RecordEntry",
   "RecordFilter",
   "RecordMask",
   "RecordOrder",
@@ -627,7 +628,6 @@ const forbiddenTypeDocNamePatterns = [
   /\bspineTs\w*\b/u,
 ];
 const forbiddenStorageTypeDocNames = [
-  "RecordEntry",
   "RecordIdSchema",
   "RecordMaskApi",
   "RecordQueryApi",

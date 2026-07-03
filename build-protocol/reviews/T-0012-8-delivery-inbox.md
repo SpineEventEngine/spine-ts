@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 38 fix in progress
+Status: round 39 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2110,7 +2110,7 @@ Findings to address:
 
 ### Round 38 Fix
 
-Result: implemented in this worktree.
+Result: committed as `0efeccb`.
 
 Red-first verification:
 
@@ -2146,3 +2146,75 @@ Verification:
   - `pnpm format:check`;
   - `git diff --check fce80b2..HEAD`; and
   - touched-file line scan with no lines over 120 columns.
+
+### Round 39
+
+Reviewer input: round-39 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- documentation:
+  `019f28c7-56b2-7a01-a19a-45a7cd02f6f2` (`CHANGES REQUESTED`, closed);
+- code style/maintainability:
+  `019f28c7-2402-7021-8532-94d1604f9dda` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f28c7-88fa-7eb1-9348-ecdb6147d91d` (`CHANGES REQUESTED`, closed);
+- performance/reliability:
+  `019f28c7-e92c-7353-a21b-a7bfca18148b` (`CHANGES REQUESTED`, closed); and
+- security:
+  `019f28c7-b5de-70b3-835e-1610a981cc2e` (`CHANGES REQUESTED`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable task/report/review/work logs were not current with committed
+  round-38 state at `0efeccb`;
+- `RecordEntry` is exported from `@spine-ts/storage` but missing from the API
+  docs and expected export guard, while still listed as forbidden;
+- pending dedup finalization accepted a visible inbox row with the same
+  dedup/message key but different canonical bytes; and
+- `ShardedWorkRegistry.release()` repeatedly trusted mutable caller session
+  fields instead of one canonical shard/id/node snapshot.
+
+### Round 39 Fix
+
+Result: implemented in this worktree.
+
+Red-first verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `-- --runInBand -t 'fails closed when pending dedup guard and visible`
+  `inbox row bytes differ|uses one canonical release snapshot when caller`
+  `session shard drifts'` failed before production changes. The pre-fix inbox
+  path resolved `DUPLICATE` from same-key conflicting bytes, and shard release
+  returned `false` after caller shard drift.
+
+Fix summary:
+
+- added `RecordEntry` to storage API docs and export expectations, and removed
+  it from the forbidden storage TypeDoc list;
+- required pending dedup guard finalization to compare the visible inbox row
+  bytes with the guard's embedded canonical inbox message; and
+- snapshot `ShardedWorkRegistry.release()` session shard/id/node once before
+  storage read, validation, and compare-and-set delete.
+
+Focused verification:
+
+- the same focused red-first command passed after production changes.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `119` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.

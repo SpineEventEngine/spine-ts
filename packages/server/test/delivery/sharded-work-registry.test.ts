@@ -521,6 +521,47 @@ describe("ShardedWorkRegistry", () => {
     await expect(delivery.shards.release(session)).resolves.toBe(true);
   });
 
+  it("uses one canonical release snapshot when caller session shard drifts", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => new Date("2026-07-02T09:52:00.000Z"),
+    });
+    const shard = new ShardIndex(0, 2);
+    const otherShard = new ShardIndex(1, 2);
+    const session = await delivery.shards.pickUp(shard, "node-a");
+    let shardReads = 0;
+
+    if (session === undefined) {
+      throw new Error("Expected shard pickup to create a session.");
+    }
+
+    const driftingSession: ShardSession = {
+      get id() {
+        return session.id;
+      },
+      get shard() {
+        shardReads += 1;
+        return shardReads <= 2 ? shard : otherShard;
+      },
+      get node() {
+        return session.node;
+      },
+      get pickedUpAt() {
+        return session.pickedUpAt;
+      },
+      get expiresAt() {
+        return session.expiresAt;
+      },
+    };
+
+    await expect(delivery.shards.release(driftingSession)).resolves.toBe(true);
+    await expect(delivery.shards.pickUp(shard, "node-b")).resolves.toMatchObject({
+      node: "node-b",
+      shard,
+    });
+  });
+
   it("passes multitenant shard contexts through to storage validation", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: true },

@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-38 fix complete
+Status: round-39 fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -622,4 +622,34 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
 - Final round-38 hygiene verification passed with `pnpm typecheck`,
   `pnpm lint`, `pnpm format:check`, `git diff --check fce80b2..HEAD`, and a
   touched-file line scan.
+- Round-38 fixes were committed as `0efeccb`.
+- Round-39 review completed from reviewer results supplied to this fix worker.
+  Documentation and maintainability requested durable log state updates,
+  TypeScript/API docs requested adding public `RecordEntry` storage export
+  expectations, performance/reliability requested pending dedup guard byte
+  equality before finalization, and security requested immutable canonical
+  shard-session release snapshots.
+- Red-first round-39 verification failed for the intended regressions:
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `-- --runInBand -t 'fails closed when pending dedup guard and visible`
+  `inbox row bytes differ|uses one canonical release snapshot when caller`
+  `session shard drifts'`. The pre-fix outcomes were a `DUPLICATE` result
+  from conflicting pending/inbox bytes and `release()` returning `false` after
+  caller session shard drift.
+- Round-39 fixes add `RecordEntry` to storage API docs/expectations, verify
+  pending guard canonical inbox bytes against the visible inbox row before
+  finalization, and snapshot release session shard/id/node once through
+  bounded canonical input validation.
+- Focused round-39 verification passed with the same red-first regression
+  command after production changes.
+- Final round-39 focused-suite verification passed with
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` (`119` tests).
+- Final round-39 hygiene verification passed with `pnpm typecheck`,
+  `pnpm lint`, `pnpm format:check`, `node scripts/check-api-docs.mjs`,
+  `git diff --check fce80b2..HEAD`, and a touched-file line scan.
 - No blocking human question is known.

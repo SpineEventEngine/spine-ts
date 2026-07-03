@@ -254,6 +254,16 @@ export class InboxStorage {
       );
     }
 
+    const pendingMessage = isPendingDedupRecord(guard) ? readPendingMessage(guard) : undefined;
+    if (
+      pendingMessage !== undefined &&
+      !this.#sameRecord(writeInboxMessage(pendingMessage), storedRecord)
+    ) {
+      throw new DeliveryStorageCorruptionError(
+        `Inbox pending dedup guard "${dedupKey}" does not match the visible inbox row.`,
+      );
+    }
+
     return Object.freeze({ guard: guardState, message });
   }
 

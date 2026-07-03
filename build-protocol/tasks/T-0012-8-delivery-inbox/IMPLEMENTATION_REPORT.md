@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-38 fix complete
+Status: round-39 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1296,3 +1296,58 @@ Verification for the round-38 fix passed with:
   - `git diff --check fce80b2..HEAD`; and
   - `awk 'length($0) > 120 { ... }'` across the touched files (no lines over
     120 columns).
+
+Committed as `0efeccb`.
+
+## Round 39 Review
+
+Round 39 found stale durable round-38 state, one public storage API-doc drift,
+and two storage hardening gaps. The review requested recording commit
+`0efeccb` and the round-39 fix state across durable task/report/review/work
+logs, adding `RecordEntry` to the public storage export docs and guard,
+checking pending dedup guard bytes against the visible inbox row before
+finalizing, and snapshotting shard-release session input once through
+canonical shard/id/node validation.
+
+## Round 39 Fix
+
+Round-39 fixes stay local to API docs, inbox storage, shard registry release,
+focused delivery tests, and durable logs:
+
+- added `RecordEntry` to the public storage export list and removed it from
+  the forbidden storage TypeDoc names;
+- added a red-first regression for pending dedup guards whose visible inbox
+  row has the same dedup/message key but different canonical bytes;
+- changed pending dedup finalization to fail closed with
+  `DeliveryStorageCorruptionError` unless the visible inbox row bytes match
+  the pending guard's embedded canonical message;
+- added a red-first regression for caller shard drift during shard-session
+  release; and
+- changed `ShardedWorkRegistry.release()` to snapshot and validate session
+  shard/id/node once before storage reads, validation, and compare-and-set
+  delete.
+
+Verification for the round-39 fix so far:
+
+- red:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `-- --runInBand -t 'fails closed when pending dedup guard and visible`
+    `inbox row bytes differ|uses one canonical release snapshot when caller`
+    `session shard drifts'` failed before production changes because the
+    pending guard path returned `DUPLICATE` from conflicting bytes and
+    shard release returned `false` after caller session shard drift;
+- green:
+  - the same focused red-first command passed after production changes.
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `packages/storage/test/memory/in-memory-record-storage.test.ts`
+    `packages/server/test/repository/aggregate-storage.test.ts` passed with
+    `119` tests;
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `node scripts/check-api-docs.mjs`;
+  - `git diff --check fce80b2..HEAD`; and
+  - touched-file line scan with no lines over 120 columns.

@@ -290,9 +290,10 @@ filter chain, storage write, dispatcher, delivery mechanism, tenant/message
 validator, service, transport, or handler invocation.
 
 Storage exports include `Storage`, `StorageContext`, `StorageFactory`,
-`RecordStorage`, `RecordSpec`, `RecordColumn`, `RecordQuery`, `RecordFilter`,
-`RecordOrder`, `RecordReadOptions`, `RecordMask`, `InMemoryStorageFactory`,
-`InMemoryRecordStorage`, `EventStore`, and `OnEventAccepted`. `StorageFactory`
+`RecordStorage`, `RecordEntry`, `RecordSpec`, `RecordColumn`, `RecordQuery`,
+`RecordFilter`, `RecordOrder`, `RecordReadOptions`, `RecordMask`,
+`InMemoryStorageFactory`, `InMemoryRecordStorage`, `EventStore`, and
+`OnEventAccepted`. `StorageFactory`
 owns one mandatory adapter seam, `createRecordStorage(context, spec)`.
 `RecordStorage` persists identified Protobuf records with deterministic
 ID/column/path queries, positive limits, and simple field masks over cloned

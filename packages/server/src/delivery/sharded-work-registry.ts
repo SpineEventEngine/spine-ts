@@ -73,21 +73,22 @@ export class ShardedWorkRegistry {
 
   /** Release one shard session if it is still current. */
   async release(session: ShardSession): Promise<boolean> {
+    const expected = snapshotReleaseSession(session);
     const storage = this.#storage();
 
     try {
       for (;;) {
-        const currentRecord = await storage.read(session.shard.key());
+        const currentRecord = await storage.read(expected.key);
         if (currentRecord === undefined) {
           return false;
         }
 
-        const current = readSession(currentRecord, session.shard.key());
-        if (current.id !== session.id || current.node !== session.node) {
+        const current = readSession(currentRecord, expected.key);
+        if (current.id !== expected.id || current.node !== expected.node) {
           return false;
         }
 
-        if (await storage.compareAndSet(session.shard.key(), currentRecord, undefined)) {
+        if (await storage.compareAndSet(expected.key, currentRecord, undefined)) {
           return true;
         }
       }
@@ -143,6 +144,12 @@ interface StoredShardSession {
   readonly shardTotal: number;
   readonly pickedUpAtMs: number;
   readonly expiresAtMs: number;
+}
+
+interface ReleaseSession {
+  readonly key: string;
+  readonly id: string;
+  readonly node: string;
 }
 
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
@@ -296,6 +303,20 @@ function writeSession(session: ShardSession): Any {
   return create(AnySchema, {
     typeUrl: shardSessionTypeUrl,
     value,
+  });
+}
+
+function snapshotReleaseSession(session: unknown): ReleaseSession {
+  if (typeof session !== "object" || session === null) {
+    throw new Error("Shard session is invalid.");
+  }
+
+  const shard = requireInputShard(Reflect.get(session, "shard"), "Shard session shard");
+
+  return Object.freeze({
+    key: shard.key(),
+    id: requireInputText(Reflect.get(session, "id"), "Shard session ID", maxSessionTextBytes),
+    node: requireInputText(Reflect.get(session, "node"), "Shard session node", maxSessionTextBytes),
   });
 }
 

@@ -891,6 +891,39 @@ describe("Inbox", () => {
     ]);
   });
 
+  it("fails closed when pending dedup guard and visible inbox row bytes differ", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const inboxRecords = storageFactory.createRecordStorage(
+      { name: "Tasks.delivery.inbox", multitenant: false },
+      inboxRecordSpec,
+    );
+    const dedupRecords = storageFactory.createRecordStorage(
+      { name: "Tasks.delivery.inbox-dedup", multitenant: false },
+      dedupRecordSpec,
+    );
+    const pending = createMessage("message-1", "signal-1", 1n);
+    const conflicting = {
+      ...createMessage("message-1", "signal-1", 9n),
+      status: "DELIVERED" as const,
+      whenReceived: new Date("2026-07-02T08:00:09.000Z"),
+    };
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+
+    await dedupRecords.compareAndSet(testDedupKey("signal-1"), undefined, writeDedupClaim(pending));
+    await inboxRecords.compareAndSet("0/1:message-1", undefined, writeInboxMessage(conflicting));
+
+    const write = storage.write(createMessage("message-2", "signal-1", 2n));
+
+    await expect(write).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(write).rejects.toThrow(/pending dedup/i);
+
+    inboxRecords.close();
+    dedupRecords.close();
+  });
+
   it("fails closed when pending dedup recovery finds a conflicting inbox row", async () => {
     const pending = createMessage("message-1", "signal-1", 1n);
     const conflicting = {
