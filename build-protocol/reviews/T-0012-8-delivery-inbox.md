@@ -959,7 +959,15 @@ Verification:
 Diff package:
 `.superpowers/sdd/review-round-24-fce80b2-current.diff`.
 
-Reviewer sub-agents: pending.
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f27b3-c6d4-7590-9a0c-524da938f1ac`;
+- documentation: `019f27b3-ec64-7bc2-b54c-0d5b620948a4`;
+- TypeScript/API docs: `019f27b4-0cdf-7b22-8a68-377cbda74e87`;
+- security: `019f27b4-2f0b-7ff0-9e3d-140e7ee102c6`;
+- performance/reliability:
+  `019f27b4-5f90-7291-8972-7d15e2a0b3e3`.
 
 Result: changes requested.
 
@@ -976,8 +984,9 @@ Findings to address:
 - shard-session `Any.value` records must reject oversized serialized records
   before parsing.
 
-The consolidated round-24 implementer received these reviewer results from
-the task handoff. No reviewer sub-agent IDs were provided in that handoff.
+Code style/maintainability, documentation, and TypeScript/API docs lanes were
+clean. All five round-24 reviewer sub-agents were closed after their reports
+were collected.
 
 ### Round 24 Fix
 
