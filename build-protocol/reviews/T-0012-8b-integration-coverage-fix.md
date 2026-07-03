@@ -1,6 +1,6 @@
 # Review Log: T-0012.8b Integration Coverage Fix
 
-Status: review round 1 fixes addressed for follow-up commit
+Status: round 1 follow-up committed; ready for round 2 review
 Task log:
 `build-protocol/tasks/T-0012-8b-integration-coverage-fix/TASK.md`
 Branch: `task/T-0012-8b-integration-coverage-fix`
@@ -38,4 +38,6 @@ Reviewers must verify:
   - the brittle exact invalid pickup shard-coordinate error assertion;
   - stale `TASK.md` current state;
   - ambiguous Prettier evidence scope for inherited parent markdown formatting.
-- Review round 1 is addressed; follow-up commit is pending.
+- Review round 1 follow-up was committed at `a76b72e`; this log is ready for
+  round 2 review.
+- Round 2 change is documentation-only; no tests are required.
