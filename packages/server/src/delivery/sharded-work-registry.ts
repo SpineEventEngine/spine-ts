@@ -178,7 +178,7 @@ function readSession(record: Any, expectedKey?: string): ShardSession {
 }
 
 function casRetriesExhausted(label: string): Error {
-  return new Error(`${label} compare-and-set retry budget exhausted.`);
+  return new Error(`${label} could not be completed due to concurrent changes.`);
 }
 
 function readStoredSession(record: Any, expectedKey?: string): StoredShardSession {

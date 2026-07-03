@@ -603,7 +603,7 @@ describe("ShardedWorkRegistry", () => {
     });
 
     await expect(delivery.shards.pickUp(new ShardIndex(0, 1), "node-a")).rejects.toThrow(
-      /shard pickup compare-and-set retry budget exhausted/i,
+      /shard pickup could not be completed due to concurrent changes/i,
     );
   });
 
@@ -620,8 +620,43 @@ describe("ShardedWorkRegistry", () => {
     }
 
     await expect(delivery.shards.release(session)).rejects.toThrow(
-      /shard release compare-and-set retry budget exhausted/i,
+      /shard release could not be completed due to concurrent changes/i,
     );
+  });
+
+  it("propagates shard pickup compare-and-set failures", async () => {
+    const storageFactory = new RetryingStorageFactory({
+      throwCreateError: new Error("Shard pickup storage failed."),
+    });
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:50:00.000Z"),
+    });
+
+    await expect(delivery.shards.pickUp(new ShardIndex(0, 1), "node-a")).rejects.toThrow(
+      /shard pickup storage failed/i,
+    );
+    expect(storageFactory.createAttempts).toBe(1);
+  });
+
+  it("propagates shard release compare-and-set failures", async () => {
+    const storageFactory = new RetryingStorageFactory({
+      throwReleaseError: new Error("Shard release storage failed."),
+    });
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:50:00.000Z"),
+    });
+    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+
+    if (session === undefined) {
+      throw new Error("Expected shard pickup to create a session.");
+    }
+
+    await expect(delivery.shards.release(session)).rejects.toThrow(/shard release storage failed/i);
+    expect(storageFactory.releaseAttempts).toBe(1);
   });
 
   it("uses one canonical release snapshot when caller session shard drifts", async () => {
@@ -860,13 +895,19 @@ class RetryingStorageFactory extends StorageFactory {
     failCreateAlways?: boolean;
     failReleaseOnce?: boolean;
     failReleaseAlways?: boolean;
+    throwCreateError?: Error;
+    throwReleaseError?: Error;
   };
+  createAttempts = 0;
+  releaseAttempts = 0;
 
   constructor(plan: {
     failCreateOnce?: boolean;
     failCreateAlways?: boolean;
     failReleaseOnce?: boolean;
     failReleaseAlways?: boolean;
+    throwCreateError?: Error;
+    throwReleaseError?: Error;
   }) {
     super();
     this.#plan = plan;
@@ -878,7 +919,18 @@ class RetryingStorageFactory extends StorageFactory {
   ): RecordStorage<I, R> {
     const storage = this.#delegate.createRecordStorage(context, recordSpec);
 
-    return new RetryingRecordStorage(context, recordSpec, storage, this.#plan);
+    return new RetryingRecordStorage(
+      context,
+      recordSpec,
+      storage,
+      this.#plan,
+      () => {
+        this.createAttempts += 1;
+      },
+      () => {
+        this.releaseAttempts += 1;
+      },
+    );
   }
 }
 
@@ -889,7 +941,11 @@ class RetryingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     failCreateAlways?: boolean;
     failReleaseOnce?: boolean;
     failReleaseAlways?: boolean;
+    throwCreateError?: Error;
+    throwReleaseError?: Error;
   };
+  readonly #countCreateAttempt: () => void;
+  readonly #countReleaseAttempt: () => void;
 
   constructor(
     context: StorageContext,
@@ -900,11 +956,17 @@ class RetryingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
       failCreateAlways?: boolean;
       failReleaseOnce?: boolean;
       failReleaseAlways?: boolean;
+      throwCreateError?: Error;
+      throwReleaseError?: Error;
     },
+    countCreateAttempt: () => void,
+    countReleaseAttempt: () => void,
   ) {
     super(context, recordSpec);
     this.#delegate = delegate;
     this.#plan = plan;
+    this.#countCreateAttempt = countCreateAttempt;
+    this.#countReleaseAttempt = countReleaseAttempt;
   }
 
   override close(): void {
@@ -919,21 +981,43 @@ class RetryingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   ): Promise<boolean> {
     if (this.context.name.endsWith(".delivery.shards")) {
       if (expected === undefined && next !== undefined && this.#plan.failCreateAlways === true) {
+        this.#countCreateAttempt();
         return Promise.resolve(false);
       }
 
       if (expected === undefined && next !== undefined && this.#plan.failCreateOnce === true) {
+        this.#countCreateAttempt();
         this.#plan.failCreateOnce = false;
         return Promise.resolve(false);
       }
 
+      if (
+        expected === undefined &&
+        next !== undefined &&
+        this.#plan.throwCreateError !== undefined
+      ) {
+        this.#countCreateAttempt();
+        throw this.#plan.throwCreateError;
+      }
+
       if (expected !== undefined && next === undefined && this.#plan.failReleaseAlways === true) {
+        this.#countReleaseAttempt();
         return Promise.resolve(false);
       }
 
       if (expected !== undefined && next === undefined && this.#plan.failReleaseOnce === true) {
+        this.#countReleaseAttempt();
         this.#plan.failReleaseOnce = false;
         return Promise.resolve(false);
+      }
+
+      if (
+        expected !== undefined &&
+        next === undefined &&
+        this.#plan.throwReleaseError !== undefined
+      ) {
+        this.#countReleaseAttempt();
+        throw this.#plan.throwReleaseError;
       }
     }
 

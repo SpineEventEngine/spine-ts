@@ -1,7 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 53 fix verified for current pass
-Previous completed commit: `fdf079e`
+Status: round 54 fix verified for current pass
+Previous completed commit: `c2e67c6`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -3070,9 +3070,7 @@ Findings to address:
 
 ### Round 53 Fix
 
-Result: implemented for this current pass. The future commit hash cannot be
-pre-recorded inside the commit itself; identify the committed round-53 fix by
-package HEAD or `git log`.
+Result: completed and closed after commit `c2e67c6`.
 
 Fix summary:
 
@@ -3128,6 +3126,78 @@ Focused verification:
 - `pnpm exec vitest run packages/server/test/delivery/sharded-work-registry.test.ts -t`
   `'fails clearly when shard pickup compare-and-set keeps missing|`
   `fails clearly when shard release compare-and-set keeps missing'`
+  passed.
+
+### Round 54
+
+Reviewer input: round-54 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- performance/reliability: `round-54-performance-reliability`
+  (`CHANGES REQUESTED`, supplied);
+- maintainability: `round-54-maintainability` (`CHANGES REQUESTED`, supplied);
+- documentation: `round-54-documentation` (`CHANGES REQUESTED`, supplied).
+
+Result: changes requested.
+
+Findings to address:
+
+- `packages/server/src/delivery/inbox-storage.ts` and
+  `packages/server/src/delivery/sharded-work-registry.ts` still exposed the
+  internal phrase `compare-and-set retry budget exhausted.` in caller-facing
+  errors;
+- `packages/server/test/delivery/sharded-work-registry.test.ts` was missing
+  regression coverage proving thrown non-CAS storage failures from shard
+  pickup/release compare-and-set paths propagate immediately instead of being
+  retried as contention; and
+- task/report/review/work-log durable state still described round 53 as a
+  current verified pass instead of committed `c2e67c6`, and the work log still
+  pointed at committing already-committed round-53 work.
+
+### Round 54 Fix
+
+Result: implemented for this current pass. The future commit hash cannot be
+pre-recorded inside the commit itself; identify the committed round-54 fix by
+package HEAD or `git log`.
+
+Fix summary:
+
+- replaced the public compare-and-set exhaustion wording with
+  `could not be completed due to concurrent changes`;
+- updated focused inbox/shard regressions to assert the stable public wording;
+- added shard-registry regressions proving thrown compare-and-set storage
+  failures propagate immediately and are not retried; and
+- refreshed durable task/report/review/work-log state through committed round
+  53 at `c2e67c6` and this round-54 fix trail.
+
+Red-first verification:
+
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'fails clearly when dedup guard compare-and-set keeps missing|`
+  `fails clearly when inbox row compare-and-set keeps missing'`
+  failed before production changes because the regressions still observed the
+  internal `compare-and-set retry budget exhausted` message; and
+- `pnpm exec vitest run packages/server/test/delivery/sharded-work-registry.test.ts -t`
+  `'fails clearly when shard pickup compare-and-set keeps missing|`
+  `fails clearly when shard release compare-and-set keeps missing|`
+  `propagates shard pickup compare-and-set failures|`
+  `propagates shard release compare-and-set failures'`
+  failed before production changes only on the two public-message assertions,
+  while the new thrown-failure regressions already passed on the existing
+  implementation.
+
+Focused verification:
+
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'fails clearly when dedup guard compare-and-set keeps missing|`
+  `fails clearly when inbox row compare-and-set keeps missing'`
+  passed; and
+- `pnpm exec vitest run packages/server/test/delivery/sharded-work-registry.test.ts -t`
+  `'fails clearly when shard pickup compare-and-set keeps missing|`
+  `fails clearly when shard release compare-and-set keeps missing|`
+  `propagates shard pickup compare-and-set failures|`
+  `propagates shard release compare-and-set failures'`
   passed.
 
 Final verification:

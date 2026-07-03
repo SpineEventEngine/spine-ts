@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-53 fix verified for current pass
-Previous completed commit: `fdf079e`
+Status: round-54 fix verified for current pass
+Previous completed commit: `c2e67c6`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2157,5 +2157,87 @@ Final verification:
 `node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
 TypeDoc source-link warning, but exited successfully.
 
-This round-53 fix commit cannot pre-record its own final hash; identify it
+Round-53 fixes were committed as `c2e67c6`.
+
+## Round 54 Review
+
+Round 54 found one public error-message leak, one missing shard-registry
+coverage gap, and durable-log drift. Maintainability requested replacing the
+caller-facing `compare-and-set retry budget exhausted` wording in
+`InboxStorage` and `ShardedWorkRegistry` with a stable higher-level message
+that does not expose CAS/retry-budget internals. Performance/reliability
+requested regression coverage proving thrown non-CAS storage failures from
+shard `pickUp()` and `release()` compare-and-set paths propagate immediately
+instead of being retried as contention. Documentation requested refreshing
+durable task/report/review/work logs through committed round 53 at `c2e67c6`
+and removing stale text that still described round 53 as an uncommitted
+current pass.
+
+## Round 54 Fix
+
+Round-54 fixes stay local to delivery inbox/shard messaging, focused tests, and
+durable logs:
+
+- updated the public compare-and-set exhaustion message in
+  `packages/server/src/delivery/inbox-storage.ts` and
+  `packages/server/src/delivery/sharded-work-registry.ts` to
+  `could not be completed due to concurrent changes`;
+- updated the focused inbox and shard tests to assert the new stable
+  caller-facing wording;
+- added shard-registry regressions in
+  `packages/server/test/delivery/sharded-work-registry.test.ts` proving thrown
+  storage failures from pickup and release compare-and-set paths propagate
+  immediately and are not retried as contention; and
+- refreshed durable task/report/review/work logs through committed round 53 at
+  `c2e67c6` and this round-54 fix trail.
+
+Red-first verification:
+
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'fails clearly when dedup guard compare-and-set keeps missing|`
+  `fails clearly when inbox row compare-and-set keeps missing'`
+  failed before production changes because both regressions still observed the
+  internal `compare-and-set retry budget exhausted` message;
+- `pnpm exec vitest run packages/server/test/delivery/sharded-work-registry.test.ts -t`
+  `'fails clearly when shard pickup compare-and-set keeps missing|`
+  `fails clearly when shard release compare-and-set keeps missing|`
+  `propagates shard pickup compare-and-set failures|`
+  `propagates shard release compare-and-set failures'`
+  failed before production changes only on the two public-message assertions;
+  the new thrown compare-and-set failure regressions already passed on the
+  existing implementation, confirming production behavior was already correct.
+
+Focused verification:
+
+- `pnpm exec vitest run packages/server/test/delivery/inbox.test.ts -t`
+  `'fails clearly when dedup guard compare-and-set keeps missing|`
+  `fails clearly when inbox row compare-and-set keeps missing'`
+  passed after the message change; and
+- `pnpm exec vitest run packages/server/test/delivery/sharded-work-registry.test.ts -t`
+  `'fails clearly when shard pickup compare-and-set keeps missing|`
+  `fails clearly when shard release compare-and-set keeps missing|`
+  `propagates shard pickup compare-and-set failures|`
+  `propagates shard release compare-and-set failures'`
+  passed.
+
+Final verification:
+
+- `pnpm test packages/server/test/index.test.ts`
+  `packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+This round-54 fix commit cannot pre-record its own final hash; identify it
 from package HEAD or `git log`.

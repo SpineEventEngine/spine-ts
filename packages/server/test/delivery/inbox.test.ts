@@ -1110,7 +1110,7 @@ describe("Inbox", () => {
     });
 
     await expect(storage.write(createMessage("message-1", "signal-1", 1n))).rejects.toThrow(
-      /dedup guard compare-and-set retry budget exhausted/i,
+      /inbox dedup guard could not be completed due to concurrent changes/i,
     );
   });
 
@@ -1273,7 +1273,7 @@ describe("Inbox", () => {
     });
 
     await expect(storage.write(createMessage("message-1", "signal-1", 1n))).rejects.toThrow(
-      /inbox record compare-and-set retry budget exhausted/i,
+      /inbox record could not be completed due to concurrent changes/i,
     );
   });
 

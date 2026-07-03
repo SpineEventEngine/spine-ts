@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-53 fix verified for current pass
-Previous completed commit: `fdf079e`
+Status: round-54 fix verified for current pass
+Previous completed commit: `c2e67c6`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -902,6 +902,34 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   refresh durable task/report/review/work logs for committed round 52 at
   `fdf079e`.
 - Final round-53 verification passed with the required focused
+  delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
+  `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
+  touched-file line scan.
+- Round-53 fixes were committed as `c2e67c6`.
+- Round-54 review completed from reviewer results supplied to this fix worker.
+  Documentation requested refreshing durable task/report/review/work-log state
+  through committed round 53 at `c2e67c6` and removing stale wording that still
+  described round 53 as only a current pass or said the next step was to commit
+  already-committed work. Maintainability requested replacing caller-facing
+  compare-and-set exhaustion messages with a stable higher-level message that
+  does not expose CAS/retry-budget internals. Performance/reliability
+  requested regression coverage proving thrown non-CAS storage failures from
+  shard `pickUp()` and `release()` compare-and-set paths propagate immediately
+  instead of being retried as contention.
+- Red-first round-54 verification failed before production changes because the
+  reviewed focused inbox and shard message regressions still observed the old
+  internal `compare-and-set retry budget exhausted` text. The new shard thrown
+  compare-and-set failure regressions already passed on the existing
+  implementation, confirming production behavior was already correct and only
+  coverage was missing.
+- Round-54 fixes keep changes local to delivery inbox/shard messaging, focused
+  shard compare-and-set coverage, and durable logs. They replace the public
+  compare-and-set exhaustion text with `could not be completed due to
+concurrent changes`, add shard pickup/release regressions proving thrown
+  storage failures propagate without retry, and refresh durable
+  task/report/review/work-log state through committed round 53 at `c2e67c6`
+  plus this round-54 fix trail.
+- Final round-54 verification passed with the required focused
   delivery/storage suite, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
   `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
   touched-file line scan.
