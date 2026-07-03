@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-57 docs/API hygiene fix verified for current pass
-Previous completed commit: `d58daa4`
+Status: round-58 inbox/storage follow-up verified for current pass
+Previous completed commit: `e5410c3`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2436,3 +2436,57 @@ Verification:
 `pnpm docs:check` and `node scripts/check-api-docs.mjs` still emitted the
 existing invalid `origin` TypeDoc source-link warning, but both commands
 exited successfully.
+
+Round-57 fixes were committed as `e5410c3`.
+
+## Round 58 Review
+
+Round 58 found one durable-log drift issue and two maintainability follow-ups.
+Documentation requested refreshing task/report/review/work-log state so
+committed round 57 is recorded as `e5410c3` and no artifact still describes
+round 57 as a current pass or says the next step is to commit already
+committed round-57 work. Maintainability requested deferring
+`InboxStorage` clock reads until a live `keepUntil` comparison is actually
+required, preserving invalid-clock failures when retention comparison is still
+needed, and simplifying `RecordStorage.query()` so it validates and reads
+records directly instead of routing through `queryEntries()` and discarding
+slot IDs.
+
+## Round 58 Fix
+
+Round-58 fixes stay local to inbox dedup timing, focused inbox regressions,
+`RecordStorage.query()`, and durable logs:
+
+- added focused red-first inbox regressions for invalid injected clocks on a
+  live `TO_DELIVER` duplicate path and on pending-claim recovery with a visible
+  `DELIVERED` row that has no `keepUntil`;
+- updated `packages/server/src/delivery/inbox-storage.ts` so
+  `#handleStoredGuardMessage()` and `#recoverPendingClaim()` defer storage
+  clock reads until `#messageBlocks()` actually needs a live retention
+  comparison, while still rejecting invalid clocks on retention-dependent
+  `DELIVERED` paths; and
+- simplified `packages/storage/src/record/record-storage.ts` so `query()`
+  validates the query, calls `queryRecordEntries(query)` directly, and returns
+  masked cloned records without routing through `queryEntries()`.
+
+Verification:
+
+- red-first: `pnpm test packages/server/test/delivery/inbox.test.ts` failed
+  with two new regressions throwing `Inbox storage clock returned an invalid
+time.` from eager `#dedupNow()` calls in `#handleStoredGuardMessage()`;
+- green: `pnpm test packages/server/test/delivery/inbox.test.ts`;
+- `pnpm test packages/server/test/delivery/inbox.test.ts packages/storage/test/memory/in-memory-record-storage.test.ts`;
+- `pnpm test`
+  `packages/server/test/index.test.ts`
+  `packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.

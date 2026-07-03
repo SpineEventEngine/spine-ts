@@ -292,6 +292,37 @@ describe("Inbox", () => {
     await expect(second).rejects.not.toBeInstanceOf(InboxMessageError);
   });
 
+  it("treats live TO_DELIVER duplicates as clock-independent", async () => {
+    const inboxId = {
+      targetId: "projection-1",
+      targetTypeUrl: "type.example.dev/tasks.Projection",
+    };
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => new Date(Number.NaN),
+    });
+
+    const first = await storage.write({
+      ...createMessage("message-1", "signal-1", 1n),
+      inboxId,
+      signalId: "signal-1",
+      status: "TO_DELIVER",
+    });
+    const second = await storage.write({
+      ...createMessage("message-2", "signal-1", 2n),
+      inboxId,
+      signalId: "signal-1",
+      status: "TO_DELIVER",
+    });
+
+    expect(first.outcome).toBe("WRITTEN");
+    expect(second).toMatchObject({
+      outcome: "DUPLICATE",
+      message: { id: { value: "message-1" }, signalId: "signal-1", status: "TO_DELIVER" },
+    });
+  });
+
   it("rejects oversized signal payloads before serializing storage records", async () => {
     const inbox = new Inbox(
       new InboxStorage({
@@ -1207,6 +1238,36 @@ describe("Inbox", () => {
     expect(second).toMatchObject({
       outcome: "WRITTEN",
       message: { id: { value: "message-2" }, signalId: "signal-1" },
+    });
+    await expect(storage.read(ShardIndex.single(), { limit: 10 })).resolves.toMatchObject([
+      { id: { value: "message-1" }, signalId: "signal-1" },
+      { id: { value: "message-2" }, signalId: "signal-1" },
+    ]);
+  });
+
+  it("recovers a pending dedup claim with a visible delivered row without reading the clock", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FaultyStorageFactory({
+        skipDedupFinalizeOnce: true,
+      }),
+      now: () => new Date(Number.NaN),
+    });
+
+    const first = await storage.write({
+      ...createMessage("message-1", "signal-1", 1n),
+      status: "DELIVERED",
+    });
+    const second = await storage.write({
+      ...createMessage("message-2", "signal-1", 2n),
+      status: "DELIVERED",
+      whenReceived: new Date("2026-07-02T08:00:01.000Z"),
+    });
+
+    expect(first.outcome).toBe("WRITTEN");
+    expect(second).toMatchObject({
+      outcome: "WRITTEN",
+      message: { id: { value: "message-2" }, signalId: "signal-1", status: "DELIVERED" },
     });
     await expect(storage.read(ShardIndex.single(), { limit: 10 })).resolves.toMatchObject([
       { id: { value: "message-1" }, signalId: "signal-1" },

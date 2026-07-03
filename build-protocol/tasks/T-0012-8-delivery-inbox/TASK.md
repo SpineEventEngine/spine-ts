@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-57 docs/API hygiene fix verified for current pass
-Previous completed commit: `d58daa4`
+Status: round-58 inbox/storage follow-up verified for current pass
+Previous completed commit: `e5410c3`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -1010,4 +1010,27 @@ concurrent changes`, add shard pickup/release regressions proving thrown
   logs through committed round 56 at `d58daa4` plus this round-57 fix trail.
 - Final round-57 verification passed with `pnpm docs:check`,
   `node scripts/check-api-docs.mjs`, `pnpm format:check`,
+  `git diff --check fce80b2..HEAD`, and a touched-file line scan.
+- Round-57 fixes were committed as `e5410c3`.
+- Round-58 review completed from supplied reviewer results. Documentation
+  requested refreshing durable task/report/review/work-log state so committed
+  round 57 is recorded as `e5410c3` and no artifact still says round 57 is a
+  current pass or that the next step is to commit already-committed round-57
+  work. Maintainability requested deferring inbox clock reads until live
+  retention comparisons actually need `keepUntil`, and simplifying
+  `RecordStorage.query()` to query records directly instead of routing through
+  `queryEntries()` only to drop slot IDs.
+- Round-58 fixes stay local to inbox dedup timing, focused inbox regressions,
+  the `RecordStorage.query()` read path, and durable logs. `InboxStorage` now
+  reads the storage clock only when comparing live `DELIVERED` retention
+  windows, focused inbox tests cover invalid injected clocks on
+  clock-independent duplicate and pending-claim recovery paths, and
+  `RecordStorage.query()` now validates and clones masked records directly from
+  `queryRecordEntries()`.
+- Final round-58 verification passed with the focused inbox red/green cycle,
+  `pnpm test`
+  `packages/server/test/delivery/inbox.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`,
+  the required focused delivery/storage suite, `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `node scripts/check-api-docs.mjs`,
   `git diff --check fce80b2..HEAD`, and a touched-file line scan.

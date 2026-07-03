@@ -130,7 +130,6 @@ export class InboxStorage {
     message: InboxMessage,
   ): Promise<WriteStep> {
     const { guard, message: storedMessage } = storedGuard;
-    const now = this.#dedupNow();
     let expected = current;
     if (DedupRecords.isPending(current)) {
       expected = DedupRecords.writeFinal(storedMessage);
@@ -146,7 +145,7 @@ export class InboxStorage {
       }
     }
 
-    return this.#messageBlocks(guard, now)
+    return this.#messageBlocks(guard)
       ? this.#duplicate(storedMessage)
       : { kind: "CLAIM", expected, message };
   }
@@ -163,7 +162,6 @@ export class InboxStorage {
       return { kind: "RETRY" };
     }
 
-    const now = this.#dedupNow();
     const storedMessage = await this.#ensureInboxRow(
       inboxStorage,
       pendingMessage,
@@ -182,7 +180,7 @@ export class InboxStorage {
       return { kind: "RETRY" };
     }
 
-    return this.#messageBlocks(storedMessage, now)
+    return this.#messageBlocks(storedMessage)
       ? this.#written(storedMessage)
       : { kind: "CLAIM", expected: finalRecord, message };
   }
@@ -310,12 +308,17 @@ export class InboxStorage {
     return Object.freeze({ guard: guardState, message });
   }
 
-  #messageBlocks(message: Pick<InboxMessage, "status" | "keepUntil">, now: number): boolean {
+  #messageBlocks(message: Pick<InboxMessage, "status" | "keepUntil">): boolean {
     if (message.status !== "DELIVERED") {
       return true;
     }
 
-    return message.keepUntil !== undefined && message.keepUntil.getTime() >= now;
+    const keepUntil = message.keepUntil;
+    if (keepUntil === undefined) {
+      return false;
+    }
+
+    return keepUntil.getTime() >= this.#dedupNow();
   }
 
   #dedupNow(): number {
