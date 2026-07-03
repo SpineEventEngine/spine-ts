@@ -2,7 +2,8 @@
 
 Navigation: [README](README.md) | Related: [Code Quality](CODE_QUALITY.md)
 
-This protocol governs future autonomous development of the TypeScript framework in Codex on macOS with sub-agents and worktrees available.
+This protocol governs future autonomous development of the TypeScript framework
+in Codex on macOS with sub-agents and worktrees available.
 
 ## Human Review Reset
 
@@ -35,7 +36,10 @@ Binding reset requirements:
 
 ## Prime Directive
 
-The main agent must keep development resumable after sudden interruption, including computer restart, lost internet, or thread compaction. No change may be made without updating the appropriate log first or in the same atomic work step.
+The main agent must keep development resumable after sudden interruption,
+including computer restart, lost internet, or thread compaction. No change may
+be made without updating the appropriate log first or in the same atomic work
+step.
 
 Required persistent files during implementation:
 
@@ -55,7 +59,8 @@ Every development cycle uses:
 - One implementing sub-agent per task or sub-task.
 - Reviewer sub-agents for code style, documentation, TypeScript/API docs, security, and performance/reliability.
 
-When spawning sub-agents, the orchestrator must instruct each to impersonate a senior engineer specializing in the assigned aspect.
+When spawning sub-agents, the orchestrator must instruct each to impersonate a
+senior engineer specializing in the assigned aspect.
 
 ## Work Breakdown
 
@@ -117,7 +122,9 @@ Non-blocking questions:
 
 - The orchestrator spawns several advisory sub-agents to propose solutions.
 - Advisory sub-agents vote or rank the proposed solutions.
-- The orchestrator records the question, candidate solutions, vote result, chosen solution, and rationale in a separate decision file or `DECISION_LOG.md`.
+- The orchestrator records the question, candidate solutions, vote result,
+  chosen solution, and rationale in a separate decision file or
+  `DECISION_LOG.md`.
 - Work continues with the chosen solution.
 
 ## Skills and Tooling
@@ -218,6 +225,10 @@ Every task/sub-task log must include:
 - integration result.
 
 Logs must be updated before or alongside changes so work can resume after interruption.
+Committed feature and fix commits must be named in durable logs once their
+hashes are known. A current log-maintenance commit cannot name its own future
+hash; identify that commit by the package HEAD or `git log`, then record the
+hash in a later log update if another durable-log pass is needed.
 
 ## Quality Gates
 
@@ -254,12 +265,16 @@ From the start, the implementation repository must maintain:
 - TypeDoc/API reference generation;
 - architecture notes.
 
-Architecture diagrams are not required from the start, but should be added once the architecture stabilizes enough to make diagrams valuable.
+Architecture diagrams are not required from the start, but should be added once
+the architecture stabilizes enough to make diagrams valuable.
 
 ## To-Do Example Requirement
 
-The implementation roadmap must include a standalone to-do list server-side application built on top of the TS framework. It is a proof of usability and must be treated as part of acceptance, not as an afterthought.
+The implementation roadmap must include a standalone to-do list server-side
+application built on top of the TS framework. It is a proof of usability and
+must be treated as part of acceptance, not as an afterthought.
 
 ## Agent Closure
 
-Once a sub-agent completes its role, the orchestrator must close it. This applies to splitters, implementers, reviewers, fixers, and advisory sub-agents.
+Once a sub-agent completes its role, the orchestrator must close it. This
+applies to splitters, implementers, reviewers, fixers, and advisory sub-agents.

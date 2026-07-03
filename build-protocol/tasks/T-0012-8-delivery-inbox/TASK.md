@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-43 fix implemented for handoff
+Status: round-43 fix committed and verified at `4307077`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -711,4 +711,9 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   performance/reliability were otherwise clean.
 - Round-43 fixes add red-first proxy payload/timestamp regressions, wrap caller
   byte and timestamp validation failures as `InboxMessageError`, and refresh
-  durable logs for committed round 42 plus this handoff state.
+  durable logs for committed round 42 plus the round-43 handoff state.
+- Round-43 fixes were committed as `4307077` after controller verification.
+- Post-round-43 durable-log fix updates task/report/review/work logs to name
+  `4307077` as the committed and verified round-43 state. This docs-only
+  commit intentionally does not try to pre-record its own future hash; reviewers
+  should identify it from package HEAD or `git log`.

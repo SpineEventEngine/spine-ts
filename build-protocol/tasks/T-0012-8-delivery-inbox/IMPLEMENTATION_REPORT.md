@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-43 fix implemented for handoff
+Status: round-43 fix committed and verified at `4307077`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1517,3 +1517,11 @@ Red-first verification:
 Focused verification:
 
 - the same focused proxy-backed command passed after production changes.
+
+Final state:
+
+- Round-43 fixes were committed as `4307077` after controller verification.
+- This post-round-43 durable-log pass exists only to replace stale handoff
+  wording with the known committed state and to record the log-maintenance
+  self-reference rule. This commit's own hash is intentionally not embedded in
+  the commit; identify it by package HEAD or `git log`.
