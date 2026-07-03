@@ -2,9 +2,9 @@ import { create, type Message } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import {
   InMemoryStorageFactory,
+  RecordSpec,
   RecordStorage,
   type RecordQuery,
-  type RecordSpec,
   type StorageContext,
   StorageFactory,
 } from "@spine-ts/storage";
@@ -365,6 +365,29 @@ describe("ShardedWorkRegistry", () => {
         new ShardSession("session-1", shard, "node-a", new Date(1), new Date(2)),
       ),
     ).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+  });
+
+  it("fails closed when a stored shard-session expiry time is out of range", async () => {
+    const storageFactory = new CorruptibleStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:38:00.000Z"),
+    });
+    const shard = new ShardIndex(0, 1);
+
+    await delivery.shards.pickUp(shard, "seed-node");
+    storageFactory.writeStoredSession(
+      storedSessionRecord("0/1", "session-1", "node-a", {
+        pickedUpAtMs: Date.parse("2026-07-02T09:37:30.000Z"),
+        expiresAtMs: Number.MAX_SAFE_INTEGER,
+      }),
+    );
+
+    const pickup = delivery.shards.pickUp(shard, "node-a");
+
+    await expect(pickup).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(pickup).rejects.toThrow(/expiry time/i);
   });
 
   it("keeps multitenant shard sessions isolated by tenant", async () => {

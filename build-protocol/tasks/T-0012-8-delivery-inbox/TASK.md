@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-31 fix complete
+Status: round-32 fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -432,4 +432,14 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   `packages/storage/test/memory/in-memory-record-storage.test.ts`.
 - Final round-31 verification also passed with `pnpm typecheck`, `pnpm lint`,
   `pnpm format:check`, `git diff --check`, and a full touched-file line scan.
+- Round-32 review package is supplied to this fix worker as
+  `.superpowers/sdd/review-round-32-fce80b2-current.diff`.
+- Round-32 review completed with documentation, TypeScript/API docs, security,
+  and performance/reliability findings. Code style/maintainability was clean.
+- Round-32 fixes document `Inbox.storage` as the intentional low-level escape
+  hatch, change direct message-key reuse to `InboxMessageError`, validate full
+  caller inbox input before duplicate short-circuiting, reject out-of-range
+  stored inbox/dedup/shard timestamps as storage corruption, remove the unsafe
+  default `RecordStorage.queryRecordEntries()` fallback, and update the durable
+  task/report/review/work-log state.
 - No blocking human question is known.

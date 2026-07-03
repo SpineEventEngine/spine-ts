@@ -18,6 +18,7 @@ import {
   isPendingDedupRecord,
   readPendingMessage,
   readInboxMessage,
+  validateInboxMessageInput,
   writeDedupClaim,
   writeDedupRecord,
   writeInboxMessage,
@@ -59,9 +60,7 @@ export class InboxStorage {
 
   /** Write one inbox message unless a live dedup key already exists. */
   async write(message: InboxMessage): Promise<InboxWriteResult> {
-    if (message.id.shard.key() !== message.shard.key()) {
-      throw new InboxMessageError("Inbox message ID shard does not match message shard.");
-    }
+    validateInboxMessageInput(message);
 
     const inboxStorage = this.#inboxStorage();
     const dedupStorage = this.#dedupStorage();
@@ -224,7 +223,7 @@ export class InboxStorage {
         return storedMessage;
       }
 
-      throw new Error(`Inbox message "${key}" already exists.`);
+      throw new InboxMessageError(`Inbox message "${key}" already exists.`);
     }
   }
 

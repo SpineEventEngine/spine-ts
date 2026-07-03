@@ -148,8 +148,8 @@ function readSession(record: Any, expectedKey?: string): ShardSession {
     stored.id,
     new ShardIndex(stored.shardIndex, stored.shardTotal),
     stored.node,
-    new Date(stored.pickedUpAtMs),
-    new Date(stored.expiresAtMs),
+    storedDate(stored.pickedUpAtMs, "Shard pickup time"),
+    storedDate(stored.expiresAtMs, "Shard expiry time"),
   );
 }
 
@@ -308,6 +308,15 @@ function requireTime(value: Date, label: string): number {
   }
 
   return time;
+}
+
+function storedDate(value: number, label: string): Date {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    throw new DeliveryStorageCorruptionError(`${label} is invalid.`);
+  }
+
+  return date;
 }
 
 const shardSessionTypeUrl = "type.spine-ts.dev/internal/ShardSessionRecord";

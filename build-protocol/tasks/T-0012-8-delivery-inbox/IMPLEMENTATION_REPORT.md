@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-31 fix complete
+Status: round-32 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -791,6 +791,74 @@ Verification for the round-31 fix passed with:
   `packages/server/test/delivery/inbox-records.test.ts`
   `packages/storage/test/memory/in-memory-record-storage.test.ts`
   `packages/server/test/delivery/sharded-work-registry.test.ts`
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm format:check`
+- `git diff --check`
+- `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+  over 120 columns)
+
+## Round 32 Review
+
+Round 32 found no maintainability issue. Documentation requested updating the
+durable task/report/review/work-log state for the round-32 package and current
+fix. TypeScript/API docs requested either hiding `Inbox.storage` or documenting
+it as an intentional low-level escape hatch, and requested that same
+message-ID/different-content direct writes surface a public invalid-input error
+type instead of a raw `Error`. Security requested rejecting out-of-range stored
+inbox/dedup timestamps and shard-session expiry timestamps as storage
+corruption instead of materializing `Invalid Date`. Performance/reliability
+requested the same fail-closed timestamp behavior, removing the
+`queryRecordEntries()` ID-from-record fallback, and validating malformed retry
+inputs before duplicate short-circuiting.
+
+Red-first regressions failed before implementation:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `-t 'rejects direct inbox writes that reuse an existing message key'`
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `-t 'rejects malformed retries even when a live dedup guard already exists'`
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `-t 'fails closed when stored inbox timestamps are out of range'`
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `-t 'fails closed when stored dedup inbox timestamps are out of range'`
+- `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  `-t 'fails closed when a stored shard-session expiry time is out of range'`
+- `pnpm test packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `-t 'rejects query-entry adapters that do not provide slot identities'`
+
+The pre-fix outcomes matched the review findings: direct message-key reuse
+raised a raw `Error`, malformed retries resolved `DUPLICATE`, stored
+out-of-range inbox timestamps read back as `Date { NaN }`, corrupt dedup
+retention allowed a fresh live write, corrupt shard expiry resolved a
+replacement session, and a query-only adapter still fabricated entry IDs from
+record bodies.
+
+## Round 32 Fix
+
+Round-32 fixes stayed local to delivery storage validation, shard timestamp
+validation, record-storage query identity, API docs, and durable logs:
+
+- `Inbox.storage` remains public, but it is now explicitly documented in code
+  and `build-protocol/DEVELOPER_API.md` as an intentional low-level escape
+  hatch for storage-focused tests and integrations;
+- `InboxStorage.write()` now validates the full caller input up front by
+  reusing the inbox/dedup serialization checks before any duplicate
+  short-circuit, and direct message-key reuse now raises `InboxMessageError`;
+- stored inbox `whenReceived` / `keepUntil` timestamps and shard-session
+  `pickedUpAt` / `expiresAt` timestamps are validated after `Date`
+  construction and now fail closed as `DeliveryStorageCorruptionError`;
+- the default `RecordStorage.queryRecordEntries()` implementation now fails
+  clearly so adapters must provide real storage-slot identities; and
+- the affected delivery/storage tests and durable task/report/review/work-log
+  state now reflect the round-32 package and fixes.
+
+Verification for the round-32 fix passed with:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
 - `pnpm typecheck`
 - `pnpm lint`
 - `pnpm format:check`

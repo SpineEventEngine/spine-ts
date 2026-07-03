@@ -4,7 +4,12 @@ import type { Event, EventId } from "@spine-ts/proto";
 import { EventIdSchema, EventSchema } from "@spine-ts/proto";
 import { describe, expect, it } from "vitest";
 
-import { InMemoryStorageFactory, RecordColumn, RecordSpec } from "../../src/index.js";
+import {
+  InMemoryStorageFactory,
+  RecordColumn,
+  RecordSpec,
+  RecordStorage,
+} from "../../src/index.js";
 
 describe("InMemoryRecordStorage", () => {
   it("reads back cloned protobuf records and applies simple masks", async () => {
@@ -335,6 +340,16 @@ describe("InMemoryRecordStorage", () => {
       },
     ]);
   });
+
+  it("rejects query-entry adapters that do not provide slot identities", async () => {
+    const storage = new QueryRecordsOnlyStorage(
+      { name: "Tasks", multitenant: false },
+      createSpec(),
+      [createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n)],
+    );
+
+    await expect(storage.queryEntries()).rejects.toThrow(/queryRecordEntries/i);
+  });
 });
 
 function createStorage(
@@ -366,6 +381,43 @@ function createLookupStorage(values: Record<string, unknown>) {
       columns: [new RecordColumn<Event>("value", (event) => values[event.id?.value ?? "missing"])],
     }),
   );
+}
+
+class QueryRecordsOnlyStorage extends RecordStorage<EventId, Event> {
+  readonly #records: readonly Event[];
+
+  constructor(
+    context: { name: string; multitenant: boolean; tenantId?: string },
+    recordSpec: RecordSpec<EventId, Event>,
+    records: readonly Event[],
+  ) {
+    super(context, recordSpec);
+    this.#records = records;
+  }
+
+  protected compareAndSetRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected deleteRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected queryRecords(): Promise<readonly Event[]> {
+    return Promise.resolve(this.#records);
+  }
+
+  protected readRecord(): Promise<Event | undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  protected writeAllRecords(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  protected writeRecord(): Promise<void> {
+    return Promise.resolve();
+  }
 }
 
 function createSpec() {

@@ -100,7 +100,6 @@ export function readInboxMessage(record: Any, expectedKey?: string): InboxMessag
 }
 
 export function writeInboxMessage(message: InboxMessage): Any {
-  validateInboxMessage(message);
   return packRecord(inboxRecordTypeUrl, "Inbox message record", storedInboxMessage(message));
 }
 
@@ -133,6 +132,19 @@ export function writeDedupClaim(message: InboxMessage): Any {
   assertPendingClaimBudget(stored);
 
   return packRecord(dedupRecordTypeUrl, "Inbox dedup record", stored);
+}
+
+export function validateInboxMessageInput(message: InboxMessage): void {
+  const storedMessage = storedInboxMessage(message);
+  assertStoredRecordSize(
+    Buffer.from(JSON.stringify(storedMessage), "utf8"),
+    "Inbox message record",
+  );
+  assertPendingClaimBudget({
+    key: dedupGuardKey(message),
+    state: "PENDING",
+    message: storedMessage,
+  });
 }
 
 export function writeDedupRecord(message: InboxMessage): Any {
@@ -273,10 +285,12 @@ function inboxMessageFromStored(stored: StoredInboxMessage): InboxMessage {
     label: stored.label,
     status: stored.status,
     shard,
-    whenReceived: new Date(stored.whenReceivedMs),
+    whenReceived: storedDate(stored.whenReceivedMs, "Inbox receive time"),
     version: parseStoredVersion(stored.version),
     ...(stored.signal === undefined ? {} : { signal: unpackSignal(stored.signal) }),
-    ...(stored.keepUntilMs === undefined ? {} : { keepUntil: new Date(stored.keepUntilMs) }),
+    ...(stored.keepUntilMs === undefined
+      ? {}
+      : { keepUntil: storedDate(stored.keepUntilMs, "Inbox keep-until time") }),
   });
 }
 
@@ -483,6 +497,16 @@ function requireTimestamp(value: Date, label: string): number {
   }
 
   return time;
+}
+
+function storedDate(value: number, label: string): Date {
+  const date = new Date(value);
+
+  if (!Number.isFinite(date.getTime())) {
+    throw new DeliveryStorageCorruptionError(`${label} is invalid.`);
+  }
+
+  return date;
 }
 
 function parseStoredVersion(value: string): bigint {

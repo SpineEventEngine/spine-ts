@@ -100,8 +100,12 @@ export interface InboxWriteResult {
 
 /** Small JVM-style inbox facade over durable storage. */
 export class Inbox {
+  /** Intentional low-level escape hatch for storage-focused tests and integrations. */
+  readonly storage: InboxStorage;
+
   /** Open an inbox over one durable inbox storage. */
-  constructor(readonly storage: InboxStorage) {
+  constructor(storage: InboxStorage) {
+    this.storage = storage;
     Object.freeze(this);
   }
 

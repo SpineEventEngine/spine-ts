@@ -119,13 +119,13 @@ export abstract class RecordStorage<I, R extends Message> implements Storage {
   }
 
   protected abstract deleteRecord(id: I): Promise<boolean>;
-  protected async queryRecordEntries(query: RecordQuery<I>): Promise<readonly RecordEntry<I, R>[]> {
-    const records = await this.queryRecords(query);
-
-    return records.map((record) => ({
-      id: this.#recordSpec.cloneId(this.#recordSpec.idValueIn(record)),
-      record,
-    }));
+  protected queryRecordEntries(query: RecordQuery<I>): Promise<readonly RecordEntry<I, R>[]> {
+    void query;
+    return Promise.reject(
+      new Error(
+        "RecordStorage adapters must override queryRecordEntries() to report storage slot identities.",
+      ),
+    );
   }
   protected abstract queryRecords(query: RecordQuery<I>): Promise<readonly R[]>;
   protected abstract readRecord(id: I): Promise<R | undefined>;

@@ -133,7 +133,9 @@ bounded context. It is intentionally smaller than the later worker/retry stack:
 - `Delivery` groups `Inbox` and `ShardedWorkRegistry` for one storage context;
 - `Inbox` is the low-level durable delivery storage primitive in this slice: it
   accepts `InboxMessageInput` with `receive()` and lets the delivery worker
-  read durable inbox rows by `ShardIndex`;
+  read durable inbox rows by `ShardIndex`. Its public `storage` property is an
+  intentional low-level escape hatch for storage-focused tests and
+  integrations, not an application-facing query facade;
 - `InboxStorage` is the lower-level durable storage seam behind `Inbox`,
   useful for framework tests or storage-focused integrations rather than as an
   application-facing read-side/query facade;

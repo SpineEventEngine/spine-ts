@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 31 fix complete
+Status: round 32 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1272,6 +1272,110 @@ Verification:
     passed with 34 tests;
   - `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
     passed with 48 tests;
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check`; and
+  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+    over 120 columns).
+
+### Round 32
+
+Reviewer input: round-32 reviewer results supplied to this fix worker.
+
+Diff package:
+`.superpowers/sdd/review-round-32-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f2843-0569-7df1-933f-eec1fbd6b628` (`CLEAN`, closed);
+- documentation:
+  `019f2843-0601-7e22-b480-fb61f64f13f3` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f2843-066c-7ed0-a608-5098760a8ad6` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f2843-06fe-7bd0-adfb-26c8c82659af` (`CHANGES REQUESTED`, closed); and
+- performance/reliability:
+  `019f2843-0766-7f11-be63-b8f23e255e2c` (`CHANGES REQUESTED`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable task/report/review/work-log state was stale against the round-32
+  package/current state;
+- `Inbox.storage` publicly exposed the lower-level storage seam without
+  explicitly documenting that this is an intentional escape hatch;
+- `InboxStorage.write()` still raised a raw `Error` when a caller reused one
+  inbox message ID with different contents;
+- persisted out-of-range inbox/dedup timestamps still produced `Invalid Date`
+  and could fail open in read/dedup paths;
+- persisted out-of-range shard-session expiry timestamps still produced
+  `Invalid Date` and could fail open in shard pickup/release paths;
+- the default `RecordStorage.queryRecordEntries()` fallback still reconstructed
+  entry IDs from record bodies instead of requiring adapters to report real
+  storage-slot identities; and
+- duplicate short-circuiting in `InboxStorage.write()` still skipped full
+  caller-input validation, so malformed retries could resolve `DUPLICATE`
+  instead of rejecting invalid input.
+
+Code style/maintainability was clean. Documentation, TypeScript/API docs,
+security, and performance/reliability requested changes.
+
+### Round 32 Fix
+
+Result: implemented in this worktree.
+
+Fix summary:
+
+- documented `Inbox.storage` as the intentional low-level storage escape hatch
+  in code comments and `build-protocol/DEVELOPER_API.md`;
+- changed direct inbox message-key reuse to raise `InboxMessageError` instead
+  of a raw `Error`;
+- validated full caller inbox input at the start of `InboxStorage.write()` by
+  reusing the inbox/dedup serialization checks before any duplicate
+  short-circuit;
+- rejected out-of-range stored inbox `whenReceived` / `keepUntil` timestamps
+  and shard-session `pickedUpAt` / `expiresAt` timestamps as storage
+  corruption instead of materializing `Invalid Date`;
+- removed the unsafe `RecordStorage.queryRecordEntries()` fallback so adapters
+  must report actual storage-slot identities explicitly; and
+- updated the affected storage/delivery regression tests plus the durable
+  task/report/review/work-log state for the round-32 package.
+
+Verification:
+
+- red:
+  - focused round-32 regressions:
+
+    ```sh
+    pnpm test packages/server/test/delivery/inbox.test.ts \
+      -t 'rejects direct inbox writes that reuse an existing message key'
+    pnpm test packages/server/test/delivery/inbox.test.ts \
+      -t 'rejects malformed retries even when a live dedup guard already exists'
+    pnpm test packages/server/test/delivery/inbox.test.ts \
+      -t 'fails closed when stored inbox timestamps are out of range'
+    pnpm test packages/server/test/delivery/inbox.test.ts \
+      -t 'fails closed when stored dedup inbox timestamps are out of range'
+    pnpm test packages/server/test/delivery/sharded-work-registry.test.ts \
+      -t 'fails closed when a stored shard-session expiry time is out of range'
+    pnpm test packages/storage/test/memory/in-memory-record-storage.test.ts \
+      -t 'rejects query-entry adapters that do not provide slot identities'
+    ```
+
+    failed with the expected pre-fix regressions: direct message-key reuse
+    still surfaced a raw `Error`, malformed retries still resolved
+    `DUPLICATE`, stored out-of-range inbox timestamps still materialized
+    `Date { NaN }`, stored out-of-range dedup retention still wrote a fresh
+    live row, shard-session expiry corruption still resolved a replacement
+    session, and query-entry adapters still silently reused the embedded record
+    ID;
+- green:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `packages/storage/test/memory/in-memory-record-storage.test.ts`
   - `pnpm typecheck`;
   - `pnpm lint`;
   - `pnpm format:check`;

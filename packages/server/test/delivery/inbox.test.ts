@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
 import {
+  dedupRecordSpec,
   inboxRecordSpec,
   writeDedupClaim,
   writeDedupRecord,
@@ -778,9 +779,10 @@ describe("Inbox", () => {
 
     await storage.write(createMessage("message-1", "signal-1", 1n));
 
-    await expect(storage.write(createMessage("message-1", "signal-2", 2n))).rejects.toThrow(
-      /already exists/i,
-    );
+    const write = storage.write(createMessage("message-1", "signal-2", 2n));
+
+    await expect(write).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(write).rejects.toThrow(/already exists/i);
   });
 
   it("rejects direct inbox writes with mismatched shard identities", async () => {
@@ -802,6 +804,26 @@ describe("Inbox", () => {
 
     await expect(write).rejects.toBeInstanceOf(InboxMessageError);
     await expect(write).rejects.toThrow(/shard/i);
+  });
+
+  it("rejects malformed retries even when a live dedup guard already exists", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+
+    await storage.write(createMessage("message-1", "signal-1", 1n));
+
+    const write = storage.write({
+      ...createMessage("message-2", "signal-1", 2n),
+      signal: create(AnySchema, {
+        typeUrl: " ",
+        value: Buffer.from("retry", "utf8"),
+      }),
+    });
+
+    await expect(write).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(write).rejects.toThrow(/signal type url/i);
   });
 
   it("rejects oversized versions before building inbox or dedup records", () => {
@@ -841,6 +863,86 @@ describe("Inbox", () => {
     await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
     );
+  });
+
+  it("fails closed when stored inbox timestamps are out of range", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/internal/InboxMessageRecord",
+          value: Buffer.from(
+            JSON.stringify({
+              ...storedInboxJson({
+                signalId: "signal-invalid-time",
+                valueBase64: Buffer.from("payload", "utf8").toString("base64"),
+              }),
+              whenReceivedMs: Number.MAX_SAFE_INTEGER,
+            }),
+            "utf8",
+          ),
+        }),
+      ]),
+    });
+
+    await expect(storage.read(ShardIndex.single())).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+    await expect(storage.read(ShardIndex.single())).rejects.toThrow(/receive time/i);
+  });
+
+  it("fails closed when stored dedup inbox timestamps are out of range", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+
+    const inboxRecords = storageFactory.createRecordStorage(
+      { name: "Tasks.delivery.inbox", multitenant: false },
+      inboxRecordSpec,
+    );
+    const dedupRecords = storageFactory.createRecordStorage(
+      { name: "Tasks.delivery.inbox-dedup", multitenant: false },
+      dedupRecordSpec,
+    );
+
+    await inboxRecords.compareAndSet(
+      "0/1:message-1",
+      undefined,
+      create(AnySchema, {
+        typeUrl: "type.spine-ts.dev/internal/InboxMessageRecord",
+        value: Buffer.from(
+          JSON.stringify({
+            ...storedInboxJson({
+              signalId: "signal-1",
+              valueBase64: Buffer.from("payload", "utf8").toString("base64"),
+            }),
+            status: "DELIVERED",
+            keepUntilMs: Number.MAX_SAFE_INTEGER,
+          }),
+          "utf8",
+        ),
+      }),
+    );
+    await dedupRecords.compareAndSet(
+      testDedupKey("signal-1"),
+      undefined,
+      finalDedupRecord({
+        key: testDedupKey("signal-1"),
+        inbox: testInboxKey,
+        signalId: "signal-1",
+        inboxMessageId: "message-1",
+      }),
+    );
+
+    const write = storage.write(createMessage("message-2", "signal-1", 2n));
+
+    await expect(write).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(write).rejects.toThrow(/keep-until time/i);
+
+    inboxRecords.close();
+    dedupRecords.close();
   });
 
   it("rejects a final dedup guard whose key does not match its signal", async () => {
@@ -969,6 +1071,15 @@ class FakeRecordStorage extends RecordStorage<string, Any> {
     return Promise.resolve(this.#records);
   }
 
+  protected override queryRecordEntries(): Promise<readonly { id: string; record: Any }[]> {
+    return Promise.resolve(
+      this.#records.map((record) => ({
+        id: this.recordSpec.idValueIn(record),
+        record,
+      })),
+    );
+  }
+
   protected readRecord(): Promise<Any | undefined> {
     return Promise.resolve(undefined);
   }
@@ -1077,6 +1188,12 @@ class FaultyRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
 
   protected queryRecords(query: RecordQuery<I>): Promise<readonly R[]> {
     return this.#delegate.query(query);
+  }
+
+  protected override queryRecordEntries(
+    query: RecordQuery<I>,
+  ): Promise<readonly { id: I; record: R }[]> {
+    return this.#delegate.queryEntries(query);
   }
 
   protected readRecord(id: I): Promise<R | undefined> {
@@ -1201,6 +1318,12 @@ class SlowInboxCreateStorage<I, R extends Message> extends RecordStorage<I, R> {
 
   protected queryRecords(query: RecordQuery<I>): Promise<readonly R[]> {
     return this.#delegate.query(query);
+  }
+
+  protected override queryRecordEntries(
+    query: RecordQuery<I>,
+  ): Promise<readonly { id: I; record: R }[]> {
+    return this.#delegate.queryEntries(query);
   }
 
   protected readRecord(id: I): Promise<R | undefined> {
@@ -1493,6 +1616,17 @@ class RecoverPendingConflictStorage extends RecordStorage<string, Any> {
   protected queryRecords(): Promise<readonly Any[]> {
     return Promise.resolve(
       this.context.name.endsWith(".delivery.inbox") ? this.#factory.queryInbox() : [],
+    );
+  }
+
+  protected override queryRecordEntries(): Promise<readonly { id: string; record: Any }[]> {
+    return Promise.resolve(
+      this.context.name.endsWith(".delivery.inbox")
+        ? this.#factory.queryInbox().map((record) => ({
+            id: this.recordSpec.idValueIn(record),
+            record,
+          }))
+        : [],
     );
   }
 
