@@ -440,6 +440,30 @@ describe("ShardedWorkRegistry", () => {
     await expect(invalidTimePickup).rejects.not.toBeInstanceOf(DeliveryStorageCorruptionError);
   });
 
+  it("rejects invalid pickup inputs before opening shard storage", async () => {
+    const storageFactory = new CountingStorageFactory();
+    const blankNodeDelivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:45:00.000Z"),
+    });
+    const invalidTimeDelivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date(Number.NaN),
+    });
+
+    await expect(blankNodeDelivery.shards.pickUp(new ShardIndex(0, 1), "   ")).rejects.toThrow(
+      /node/i,
+    );
+    await expect(invalidTimeDelivery.shards.pickUp(new ShardIndex(0, 1), "node-a")).rejects.toThrow(
+      /pickup time/i,
+    );
+
+    expect(storageFactory.opens).toBe(0);
+    expect(storageFactory.closes).toBe(0);
+  });
+
   it("sanitizes shard pickup input once when caller key disagrees with shard coordinates", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -661,6 +685,75 @@ class RetryingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
       }
     }
 
+    return this.#delegate.compareAndSet(id, expected?.record, next?.record);
+  }
+
+  protected deleteRecord(id: I): Promise<boolean> {
+    return this.#delegate.delete(id);
+  }
+
+  protected queryRecordEntries(query: RecordQuery<I>): Promise<readonly { id: I; record: R }[]> {
+    return this.#delegate.queryEntries(query);
+  }
+
+  protected readRecord(id: I): Promise<R | undefined> {
+    return this.#delegate.read(id);
+  }
+
+  protected writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    return this.#delegate.writeAll(records.map((record) => record.record));
+  }
+
+  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    return this.#delegate.write(record.record);
+  }
+}
+
+class CountingStorageFactory extends StorageFactory {
+  readonly #delegate = new InMemoryStorageFactory();
+  opens = 0;
+  closes = 0;
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    this.opens += 1;
+    const storage = this.#delegate.createRecordStorage(context, recordSpec);
+    return new CountingRecordStorage(context, recordSpec, storage, () => {
+      this.closes += 1;
+    });
+  }
+}
+
+class CountingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+  readonly #delegate: RecordStorage<I, R>;
+  readonly #onClose: () => void;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    delegate: RecordStorage<I, R>,
+    onClose: () => void,
+  ) {
+    super(context, recordSpec);
+    this.#delegate = delegate;
+    this.#onClose = onClose;
+  }
+
+  override close(): void {
+    this.#delegate.close();
+    this.#onClose();
+    super.close();
+  }
+
+  protected compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
     return this.#delegate.compareAndSet(id, expected?.record, next?.record);
   }
 

@@ -31,15 +31,19 @@ export class ShardedWorkRegistry {
     Object.freeze(this);
   }
 
-  /** Pick up one shard if it is free or expired. Invalid caller node/clock values throw before storage access. */
+  /**
+   * Pick up one shard if it is free or expired.
+   *
+   * Invalid caller shard, node, and clock values throw before storage access.
+   */
   async pickUp(shard: ShardIndex, node: string): Promise<ShardSession | undefined> {
-    const storage = this.#storage();
     const nextShard = requireInputShard(shard, "Shard index");
     const nextNode = requireInputText(node, "Shard node", maxSessionTextBytes);
+    let now = requireInputTime(this.#now(), "Shard pickup time");
+    const storage = this.#storage();
 
     try {
       for (;;) {
-        const now = requireInputTime(this.#now(), "Shard pickup time");
         const currentRecord = await storage.read(nextShard.key());
         const current =
           currentRecord === undefined ? undefined : readSession(currentRecord, nextShard.key());
@@ -60,6 +64,7 @@ export class ShardedWorkRegistry {
         if (claimed) {
           return next;
         }
+        now = requireInputTime(this.#now(), "Shard pickup time");
       }
     } finally {
       storage.close();
@@ -103,10 +108,15 @@ export class ShardedWorkRegistry {
 export class ShardSession {
   /** Create a shard session snapshot. */
   constructor(
+    /** Unique pickup session identifier. */
     readonly id: string,
+    /** Shard claimed by this session. */
     readonly shard: ShardIndex,
+    /** Worker node that owns this session. */
     readonly node: string,
+    /** Time when the shard was picked up. */
     readonly pickedUpAt: Date,
+    /** Time when the session lease expires. */
     readonly expiresAt: Date,
   ) {
     Object.freeze(this);

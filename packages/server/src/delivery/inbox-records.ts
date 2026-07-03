@@ -198,8 +198,8 @@ function packRecord(
 }
 
 function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
-  const { idShard, shard } = validateInboxMessage(message);
-  assertSignalPayloadSize(message.signal);
+  const signal = message.signal;
+  const { idShard, shard } = validateInboxMessage(message, signal);
   const id = requireMessageIdText(message.id.value);
   const version = requireInputText(message.version.toString(), "Inbox version");
 
@@ -219,7 +219,7 @@ function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
     status: requireInputDeliveryStatus(message.status),
     whenReceivedMs: requireInputTimestamp(message.whenReceived, "Inbox receive time"),
     version,
-    ...(message.signal === undefined ? {} : { signal: packSignal(message.signal) }),
+    ...(signal === undefined ? {} : { signal: packSignal(signal) }),
     ...(message.keepUntil === undefined
       ? {}
       : { keepUntilMs: requireInputTimestamp(message.keepUntil, "Inbox keep-until time") }),
@@ -228,6 +228,7 @@ function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
 
 function validateInboxMessage(
   message: InboxMessage,
+  signal: Any | undefined = message.signal,
 ): Readonly<{ idShard: ShardIndex; shard: ShardIndex }> {
   const idShard = requireInputShard(message.id.shard, "Inbox message ID shard");
   const shard = requireInputShard(message.shard, "Inbox message shard");
@@ -239,9 +240,9 @@ function validateInboxMessage(
   requireInputText(message.signalId, "Inbox signal ID");
   requireInputText(message.inboxId.targetId, "Inbox target ID");
   requireInputText(message.inboxId.targetTypeUrl, "Inbox target type URL");
-  if (message.signal !== undefined) {
-    requireInputText(message.signal.typeUrl, "Inbox signal type URL");
-    requireInputBytes(message.signal.value, "Inbox signal payload");
+  if (signal !== undefined) {
+    requireInputText(signal.typeUrl, "Inbox signal type URL");
+    requireInputBytes(signal.value, "Inbox signal payload");
   }
 
   return Object.freeze({ idShard, shard });
@@ -274,6 +275,11 @@ function inboxMessageFromStored(stored: StoredInboxMessage): InboxMessage {
 
 function packSignal(signal: Any): StoredSignal {
   const value = requireInputBytes(signal.value, "Inbox signal payload");
+  if (value.byteLength > maxSignalPayloadBytes) {
+    throw new InboxMessageError(
+      `Inbox signal payload exceeds ${String(maxSignalPayloadBytes)} bytes and cannot be stored.`,
+    );
+  }
 
   return Object.freeze({
     typeUrl: requireInputText(signal.typeUrl, "Inbox signal type URL"),
@@ -568,17 +574,6 @@ function parseStoredVersion(value: string): bigint {
     throw error instanceof DeliveryStorageCorruptionError
       ? error
       : new DeliveryStorageCorruptionError("Inbox version is invalid.", { cause: error });
-  }
-}
-
-function assertSignalPayloadSize(signal: Any | undefined): void {
-  if (
-    signal !== undefined &&
-    requireInputBytes(signal.value, "Inbox signal payload").byteLength > maxSignalPayloadBytes
-  ) {
-    throw new InboxMessageError(
-      `Inbox signal payload exceeds ${String(maxSignalPayloadBytes)} bytes and cannot be stored.`,
-    );
   }
 }
 

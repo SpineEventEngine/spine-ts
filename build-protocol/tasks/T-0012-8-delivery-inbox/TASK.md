@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-36 fix complete
+Status: round-37 fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -559,4 +559,37 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   `packages/server/test/repository/aggregate-storage.test.ts`,
   `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
   `git diff --check fce80b2..HEAD`, and a touched-file line scan.
+- Round-37 review completed from reviewer results supplied to this fix worker.
+  Code style/maintainability, documentation, TypeScript/API docs, security,
+  and performance/reliability requested changes. All five round-37 reviewer
+  lanes are closed.
+- Round-37 fixes make the work log current after commit `c0c319b`, restore the
+  implementation report tail to chronological order, add public TSDoc for
+  `ShardIndex` and `ShardSession` constructor-parameter properties, capture
+  signal payloads once before inbox-record serialization, enforce the signal
+  payload cap inside `packSignal()`, and validate shard pickup input before
+  storage access.
+- Red-first focused verification failed as expected before the production fix:
+  `pnpm test packages/server/test/delivery/inbox-records.test.ts`
+  `-- --runInBand -t 'rejects signal payloads that grow after validation'`
+  did not throw, and
+  `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  `-- --runInBand -t 'rejects invalid pickup inputs before opening shard`
+  `storage'` observed two storage opens before validation.
+- Focused round-37 verification passed with
+  `pnpm test packages/server/test/delivery/inbox-records.test.ts`
+  `-- --runInBand -t 'captures one signal payload before validation and`
+  `serialization'` and
+  `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  `-- --runInBand -t 'rejects invalid pickup inputs before opening shard`
+  `storage'`.
+- Final round-37 focused-suite verification passed with
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` (`113` tests).
+- Final round-37 hygiene verification passed with `pnpm typecheck`,
+  `pnpm lint`, `pnpm format:check`, `git diff --check fce80b2..HEAD`, and a
+  touched-file line scan.
 - No blocking human question is known.

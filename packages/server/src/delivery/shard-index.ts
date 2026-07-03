@@ -2,7 +2,9 @@
 export class ShardIndex {
   /** Create a shard index. */
   constructor(
+    /** Zero-based position of this shard. */
     readonly index: number,
+    /** Total number of shards in the same shard set. */
     readonly ofTotal: number,
   ) {
     if (!Number.isInteger(index) || index < 0) {

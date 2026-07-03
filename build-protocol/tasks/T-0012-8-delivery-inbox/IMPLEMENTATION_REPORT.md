@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-36 fix complete
+Status: round-37 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -66,6 +66,75 @@ Round-2 fixes completed the remaining correctness and documentation gaps:
 
 `pnpm docs:check` passed with the existing TypeDoc warning about an invalid
 `origin` remote for source links.
+
+## Round 1 Review
+
+Round 1 requested fixes across all lanes. The main correction is that the
+initial implementation over-promised durable cross-process compare-and-set and
+deduplication behavior while using process-local promise queues over an
+unconditional `RecordStorage.write()` API. Reviewers also requested narrower
+public delivery contracts until real Spine delivery protos are available, an
+explicit UUID ordering tie-breaker, clearer paging deferral, safer internal
+record parsing and payload limits, and more precise JVM source/proto evidence
+logging.
+
+This round records both missing local source artifacts separately: the JVM Java
+delivery sources were absent from the checked local research tree, and the
+local delivery proto directory was present but empty.
+
+## Round 1 Fix
+
+Fix sub-agent `019f21a1-64ba-7c52-bcf2-507196104b9b` completed and was closed
+after commit `c2553cf`.
+
+The fix:
+
+- added `RecordStorage.compareAndSet()` with in-memory support;
+- moved shard pickup/release and inbox deduplication to storage-level
+  compare-and-set instead of process-local queues;
+- narrowed the delivery public surface by removing the early delivery strategy
+  seam;
+- added an explicit inbox ordering tie-breaker, positive read limits, storage
+  clock based dedup retention checks, internal record corruption checks, and a
+  signal payload cap;
+- updated the API docs and the task logs with separate Java/proto research
+  evidence.
+
+Verification reported by the fix sub-agent:
+
+- focused delivery/storage tests with `pnpm test`:
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`,
+  `packages/server/test/delivery/inbox.test.ts`,
+  `packages/server/test/delivery/sharded-work-registry.test.ts`, and
+  `packages/server/test/index.test.ts`
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm format:check`
+- `pnpm docs:check`
+- `git diff --check`
+
+`pnpm docs:check` passed with the existing TypeDoc warning about an invalid
+`origin` remote for source links.
+
+## Round 2 Review
+
+Round 2 requested fixes across all lanes. The main correction is that
+deduplication still used a guard-before-message sequence without an explicit
+pending claim or atomic multi-record write. Reviewers also requested clearer
+`RecordStorage.compareAndSet()` atomicity documentation, bounded inbox reads,
+strict query limit validation, simpler internal exports, consistent delivery
+storage corruption errors, and documentation/log updates.
+
+## Round 3 Review
+
+Round 3 found that the second fix still needed simplification and stronger
+trust boundaries. The main correctness issue is that pending dedup claims used
+local wall-clock age to decide that another writer's claim was abandoned. That
+can preempt a slow but healthy writer. Reviewers also requested removing
+white-box helper exports, splitting the core dedup write method into smaller
+steps, removing caller-controlled shard lease time, protecting direct
+`InboxStorage.write()` calls from caller-controlled message ID overwrites, and
+refreshing stale task/work-log state.
 
 ## Round 3 Fix
 
@@ -1103,71 +1172,69 @@ Verification for the round-36 fix passed with:
   - `awk 'length($0) > 120 { ... }'` across the touched files (no lines over
     120 columns).
 
-## Round 2 Review
+## Round 37 Review
 
-Round 2 requested fixes across all lanes. The main correction is that
-deduplication still used a guard-before-message sequence without an explicit
-pending claim or atomic multi-record write. Reviewers also requested clearer
-`RecordStorage.compareAndSet()` atomicity documentation, bounded inbox reads,
-strict query limit validation, simpler internal exports, consistent delivery
-storage corruption errors, and documentation/log updates.
+Round 37 found stale durable work-log state, non-chronological implementation
+report tail material, missing TSDoc on exported constructor-parameter
+properties, and two validation-before-persistence issues. The review requested
+adding public parameter docs for `ShardIndex` and `ShardSession`, validating
+shard pickup caller input before opening storage, and preventing getter-backed
+signals from passing a small validated payload but persisting a larger payload.
 
-## Round 3 Review
+Red-first regressions failed before implementation:
 
-Round 3 found that the second fix still needed simplification and stronger
-trust boundaries. The main correctness issue is that pending dedup claims used
-local wall-clock age to decide that another writer's claim was abandoned. That
-can preempt a slow but healthy writer. Reviewers also requested removing
-white-box helper exports, splitting the core dedup write method into smaller
-steps, removing caller-controlled shard lease time, protecting direct
-`InboxStorage.write()` calls from caller-controlled message ID overwrites, and
-refreshing stale task/work-log state.
+- `pnpm test packages/server/test/delivery/inbox-records.test.ts`
+  `-- --runInBand -t 'rejects signal payloads that grow after validation'`
+- `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+  `-- --runInBand -t 'rejects invalid pickup inputs before opening shard`
+  `storage'`
 
-## Round 1 Review
+The pre-fix failures matched the review findings: inbox-record serialization
+could read a larger signal payload after validation, and invalid pickup input
+opened shard storage before failing validation.
 
-Round 1 requested fixes across all lanes. The main correction is that the
-initial implementation over-promised durable cross-process compare-and-set and
-deduplication behavior while using process-local promise queues over an
-unconditional `RecordStorage.write()` API. Reviewers also requested narrower
-public delivery contracts until real Spine delivery protos are available, an
-explicit UUID ordering tie-breaker, clearer paging deferral, safer internal
-record parsing and payload limits, and more precise JVM source/proto evidence
-logging.
+## Round 37 Fix
 
-This round records both missing local source artifacts separately: the JVM Java
-delivery sources were absent from the checked local research tree, and the
-local delivery proto directory was present but empty.
+Round-37 fixes stay local to inbox-record serialization, shard pickup, API
+docs, focused tests, and durable logs:
 
-## Round 1 Fix
+- inbox-record writes now capture the optional signal once before validation
+  and serialization, so getter-backed payload drift cannot substitute a later
+  oversized payload after validation;
+- `packSignal()` also enforces the signal payload cap at the serialization
+  boundary;
+- `ShardedWorkRegistry.pickUp()` validates shard, node, and the first clock
+  value before opening storage, then refreshes the clock on compare-and-set
+  retries;
+- exported `ShardIndex` and `ShardSession` constructor-parameter properties
+  now have TSDoc; and
+- the implementation report's old Round 1/2/3 material is restored to
+  chronological order before the Round 3 fix trail.
 
-Fix sub-agent `019f21a1-64ba-7c52-bcf2-507196104b9b` completed and was closed
-after commit `c2553cf`.
+Verification for the round-37 fix passed with:
 
-The fix:
-
-- added `RecordStorage.compareAndSet()` with in-memory support;
-- moved shard pickup/release and inbox deduplication to storage-level
-  compare-and-set instead of process-local queues;
-- narrowed the delivery public surface by removing the early delivery strategy
-  seam;
-- added an explicit inbox ordering tie-breaker, positive read limits, storage
-  clock based dedup retention checks, internal record corruption checks, and a
-  signal payload cap;
-- updated the API docs and the task logs with separate Java/proto research
-  evidence.
-
-Verification reported by the fix sub-agent:
-
-- focused delivery/storage tests with `pnpm test`:
-  `packages/storage/test/memory/in-memory-record-storage.test.ts`,
-  `packages/server/test/delivery/inbox.test.ts`,
-  `packages/server/test/delivery/sharded-work-registry.test.ts`, and
-  `packages/server/test/index.test.ts`
-- `pnpm typecheck`
-- `pnpm lint`
-- `pnpm format:check`
-- `pnpm docs:check`
-- `git diff --check`
-
-`pnpm docs:check` passed with the existing TypeDoc warning about an invalid
-`origin` remote for source links.
+- red:
+  - `pnpm test packages/server/test/delivery/inbox-records.test.ts`
+    `-- --runInBand -t 'rejects signal payloads that grow after validation'`
+    failed before the production change because no error was thrown;
+  - `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+    `-- --runInBand -t 'rejects invalid pickup inputs before opening shard`
+    `storage'` failed before the production change with two storage opens;
+- green:
+  - `pnpm test packages/server/test/delivery/inbox-records.test.ts`
+    `-- --runInBand -t 'captures one signal payload before validation and`
+    `serialization'`;
+  - `pnpm test packages/server/test/delivery/sharded-work-registry.test.ts`
+    `-- --runInBand -t 'rejects invalid pickup inputs before opening shard`
+    `storage'`;
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    `packages/server/test/delivery/inbox-records.test.ts`
+    `packages/server/test/delivery/sharded-work-registry.test.ts`
+    `packages/storage/test/memory/in-memory-record-storage.test.ts`
+    `packages/server/test/repository/aggregate-storage.test.ts`;
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check fce80b2..HEAD`; and
+  - `awk 'length($0) > 120 { ... }'` across the touched files (no lines over
+    120 columns).

@@ -3,6 +3,8 @@ import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 
 import {
+  readInboxMessage,
+  readPendingMessage,
   writeDedupClaim,
   writeDedupRecord,
   writeInboxMessage,
@@ -124,5 +126,33 @@ describe("Inbox record limits", () => {
     expect(() => writeInboxMessage(message)).toThrow(/payload/i);
     expect(() => writeDedupClaim(message)).toThrow(InboxMessageError);
     expect(() => writeDedupRecord(message)).toThrow(InboxMessageError);
+  });
+
+  it("captures one signal payload before validation and serialization", () => {
+    let reads = 0;
+    const smallSignal = create(AnySchema, {
+      typeUrl: "type.example.dev/tasks.Payload",
+      value: new Uint8Array(1),
+    });
+    const oversizedSignal = create(AnySchema, {
+      typeUrl: "type.example.dev/tasks.Payload",
+      value: new Uint8Array(256 * 1024 + 1),
+    });
+    const message = {
+      ...createMessage("message-1", "signal-1", 1n),
+      get signal() {
+        reads += 1;
+        return reads < 5 ? smallSignal : oversizedSignal;
+      },
+    };
+
+    const inboxMessage = readInboxMessage(writeInboxMessage(message));
+
+    expect(inboxMessage.signal?.value.byteLength).toBe(1);
+    reads = 0;
+
+    const pendingMessage = readPendingMessage(writeDedupClaim(message));
+
+    expect(pendingMessage?.signal?.value.byteLength).toBe(1);
   });
 });
