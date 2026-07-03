@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 62 security/docs fix committed at current HEAD
+Status: round 63 docs-only verification-warning fix verified for commit
 Previous completed commit: `fa7045a`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
@@ -3613,6 +3613,33 @@ Verification:
   `packages/server/test/repository/aggregate-storage.test.ts`;
 - `pnpm typecheck`;
 - `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs` passed with the pre-existing invalid
+  `origin` TypeDoc source-link warning;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+## Round 63 Documentation Finding
+
+Reviewer input: round-63 documentation finding supplied to this docs-only fix
+worker.
+
+Finding:
+
+- `build-protocol/tasks/T-0012-8-delivery-inbox/TASK.md` summarized round-62
+  verification as passing `node scripts/check-api-docs.mjs` but omitted that
+  the command still emitted the pre-existing invalid `origin` TypeDoc
+  source-link warning.
+
+Fix:
+
+- updated the round-62 verification bullet in `TASK.md` to disclose the known
+  warning while preserving the successful-exit result; and
+- recorded this round-63 docs-only fix in the durable task, review,
+  implementation, work-log, and SDD report files.
+
+Verification:
+
 - `pnpm format:check`;
 - `node scripts/check-api-docs.mjs` passed with the pre-existing invalid
   `origin` TypeDoc source-link warning;

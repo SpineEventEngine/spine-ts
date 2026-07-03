@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-62 security/docs fix committed at current HEAD
+Status: round-63 docs-only verification-warning fix verified for commit
 Previous completed commit: `fa7045a`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
@@ -1123,5 +1123,18 @@ concurrent changes`, add shard pickup/release regressions proving thrown
 - Round-62 verification passed with the focused shard red-green cycle, the
   required shard/storage pair, the focused delivery/storage/repository suite,
   `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, and
-  `node scripts/check-api-docs.mjs`. Final `git diff --check fce80b2..HEAD`
-  and touched-file line scan also passed after durable-log updates.
+  `node scripts/check-api-docs.mjs`, which still emitted the pre-existing
+  invalid `origin` TypeDoc source-link warning while exiting successfully.
+  Final `git diff --check fce80b2..HEAD` and touched-file line scan also
+  passed after durable-log updates.
+
+## Round 63 Documentation Fix
+
+- Documentation review noted that the round-62 verification summary above
+  named `node scripts/check-api-docs.mjs` as passing but omitted the known
+  invalid `origin` TypeDoc source-link warning. This round is docs-only and
+  restores that warning disclosure in the durable task summary.
+- Round-63 verification passed with `pnpm format:check`,
+  `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
+  touched-file line scan. The API-doc check still emitted the pre-existing
+  invalid `origin` TypeDoc source-link warning while exiting successfully.
