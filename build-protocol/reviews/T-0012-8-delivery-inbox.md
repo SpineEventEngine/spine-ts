@@ -1,7 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: current docs cleanup awaiting review after `446af50`
-Previous completed commit: `446af50`
+Status: completed through round-64 cleanup trail commit `9f26eff`; current docs cleanup awaiting review.
+Previous completed commit: `9f26eff`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -3649,6 +3649,10 @@ Verification:
 Follow-up docs-only cleanup: stale post-commit wording in the round-61 report,
 work-log current state, and durable headers was removed in `fa7045a`, the
 current package HEAD at round-62 review intake.
+
+Round-64 cleanup trail: post-commit durable documentation status cleanup was
+committed as `a64e83a`, pinned by `446af50`, and recorded through cleanup
+trail commit `9f26eff`. Current round-65 docs-only cleanup awaits review.
 
 ## Round 62 Review
 

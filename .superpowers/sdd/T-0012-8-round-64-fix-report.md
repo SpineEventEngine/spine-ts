@@ -1,6 +1,6 @@
 # T-0012.8 Round 64 Docs Cleanup Trail
 
-Status: current docs cleanup awaiting review.
+Status: committed as `9f26eff`.
 
 ## Finding
 
@@ -13,7 +13,7 @@ Status: current docs cleanup awaiting review.
 - `a64e83a` replaced stale current-pass and commit-next wording with durable
   post-commit cleanup status in `build-protocol/work-logs/T-0012-8.md`.
 - `446af50` pinned that cleanup status to concrete commit `a64e83a`.
-- The current docs-only cleanup records this recovery trail durably and pins
+- This docs-only cleanup records this recovery trail durably and pins
   the round-62 fix result to concrete commit `2abf091`.
 
 ## Scope

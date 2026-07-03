@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-63 docs-only verification-warning fix committed as `a4ee110`
-Previous completed commit: `a4ee110`
+Status: completed through round-64 cleanup trail commit `9f26eff`; current docs cleanup awaiting review.
+Previous completed commit: `9f26eff`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -1138,3 +1138,8 @@ concurrent changes`, add shard pickup/release regressions proving thrown
   `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
   touched-file line scan. The API-doc check still emitted the pre-existing
   invalid `origin` TypeDoc source-link warning while exiting successfully.
+- Round-63 docs-only verification-warning cleanup was committed as `a4ee110`.
+- Post-commit durable documentation status cleanup was committed as `a64e83a`,
+  then pinned to concrete commit `a64e83a` by `446af50`.
+- Round-64 cleanup trail documentation was committed as `9f26eff`. Current
+  round-65 docs cleanup is in progress and awaiting review.

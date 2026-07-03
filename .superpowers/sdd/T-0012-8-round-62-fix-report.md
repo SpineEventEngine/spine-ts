@@ -1,6 +1,6 @@
 # T-0012.8 Round 62 Fix Report
 
-Status: committed at current HEAD
+Status: committed as `2abf091`.
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`

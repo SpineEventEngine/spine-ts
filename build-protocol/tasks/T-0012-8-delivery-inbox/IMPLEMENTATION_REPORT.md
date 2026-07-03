@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-63 docs-only verification-warning fix committed as `a4ee110`
-Previous completed commit: `a4ee110`
+Status: completed through round-64 cleanup trail commit `9f26eff`; current docs cleanup awaiting review.
+Previous completed commit: `9f26eff`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2649,6 +2649,12 @@ Round-61 pickup-shard/docs fixes were committed as `a647db5`. A follow-up
 docs-only cleanup removed stale post-commit wording from the round-61 report,
 work-log current state, and durable headers; that cleanup was committed as
 `fa7045a`, the current package HEAD at round-62 review intake.
+
+Round-62 fixes were committed as `2abf091`. Round-63 docs-only
+verification-warning cleanup was committed as `a4ee110`. Post-commit durable
+documentation status cleanup was committed as `a64e83a`, pinned by `446af50`,
+and recorded through the round-64 cleanup trail committed as `9f26eff`. The
+current round-65 docs cleanup is awaiting review.
 
 ## Round 62 Review
 
