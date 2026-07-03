@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-26 fix complete
+Status: round-27 fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -324,4 +324,21 @@ entityStateType)` returns a zero-based shard index and that all messages for
 - Controller verification then applied the stricter full touched-file line scan
   and reflowed long touched API/architecture documentation lines before
   preparing the next review package.
+- Round-27 review completed from reviewer results supplied to this fix worker.
+  Documentation and TypeScript/API docs were clean. Code
+  style/maintainability, security, and performance/reliability requested
+  changes and are now closed.
+- Round-27 fixes reuse the existing parameterized corrupt-guard fixture instead
+  of one-off storage factories, add empty/large signal payload round-trip
+  regressions, and allow stored signal base64 payloads to be empty while using
+  the max-signal-byte-derived base64 text cap on reads.
+- Red-first focused inbox verification captured the expected pre-fix failures:
+  empty signal payload reads failed with `Inbox signal payload must be a
+non-empty string.`, and a valid `20 KiB` signal payload failed with
+  `Inbox signal payload exceeds 16384 bytes and cannot be stored.`
+- Focused delivery verification passed with 48 tests after the round-27 fix:
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`.
+- Final round-27 verification also passed with `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `git diff --check`, and a full touched-file line scan.
 - No blocking human question is known.

@@ -242,6 +242,58 @@ describe("Inbox", () => {
     ).rejects.toThrow(/payload/i);
   });
 
+  it("writes and reads back an empty signal payload", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const signal = create(AnySchema, {
+      typeUrl: "type.example.dev/tasks.EmptySignal",
+      value: new Uint8Array(),
+    });
+
+    const result = await storage.write({
+      ...createMessage("message-empty", "signal-empty", 1n),
+      signal,
+    });
+    const messages = await storage.read(ShardIndex.single(), { limit: 10 });
+
+    expect(result.outcome).toBe("WRITTEN");
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      id: { value: "message-empty" },
+      signalId: "signal-empty",
+      signal: { typeUrl: signal.typeUrl },
+    });
+    expect(Buffer.from(messages[0]?.signal?.value ?? [])).toEqual(Buffer.from(signal.value));
+  });
+
+  it("writes and reads back a signal payload larger than the generic text cap", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const signal = create(AnySchema, {
+      typeUrl: "type.example.dev/tasks.LargeSignal",
+      value: new Uint8Array(20 * 1024),
+    });
+
+    const result = await storage.write({
+      ...createMessage("message-large-signal", "signal-large-signal", 1n),
+      signal,
+    });
+    const messages = await storage.read(ShardIndex.single(), { limit: 10 });
+
+    expect(result.outcome).toBe("WRITTEN");
+    expect(messages).toHaveLength(1);
+    expect(messages[0]).toMatchObject({
+      id: { value: "message-large-signal" },
+      signalId: "signal-large-signal",
+      signal: { typeUrl: signal.typeUrl },
+    });
+    expect(Buffer.from(messages[0]?.signal?.value ?? [])).toEqual(Buffer.from(signal.value));
+  });
+
   it("rejects oversized signal payloads before serializing dedup claims", () => {
     expect(() =>
       writeDedupClaim({
@@ -660,7 +712,14 @@ describe("Inbox", () => {
   it("uses the delivery corruption error only for a final dedup guard that still points to no inbox row", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new MissingMessageGuardFactory(),
+      storageFactory: new CorruptGuardFactory({
+        guard: finalDedupRecord({
+          key: testDedupKey("signal-1"),
+          inbox: testInboxKey,
+          signalId: "signal-1",
+          inboxMessageId: "message-1",
+        }),
+      }),
     });
 
     await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toBeInstanceOf(
@@ -671,7 +730,14 @@ describe("Inbox", () => {
   it("rejects a final dedup guard whose key does not match its signal", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new WrongKeyGuardFactory(),
+      storageFactory: new CorruptGuardFactory({
+        guard: finalDedupRecord({
+          key: testDedupKey("signal-2"),
+          inbox: testInboxKey,
+          signalId: "signal-1",
+          inboxMessageId: "message-1",
+        }),
+      }),
     });
 
     await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toThrow(
@@ -682,7 +748,15 @@ describe("Inbox", () => {
   it("rejects a final dedup guard that points to another dedup key", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new WrongTargetGuardFactory(),
+      storageFactory: new CorruptGuardFactory({
+        guard: finalDedupRecord({
+          key: testDedupKey("signal-1"),
+          inbox: testInboxKey,
+          signalId: "signal-1",
+          inboxMessageId: "message-1",
+        }),
+        inbox: writeInboxMessage(createMessage("message-1", "signal-2", 1n)),
+      }),
     });
 
     await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toThrow(
@@ -690,10 +764,18 @@ describe("Inbox", () => {
     );
   });
 
-  it("rejects a dedup guard whose inbox row matches the dedup key but not the guarded message slot", async () => {
+  it("rejects a dedup guard whose inbox row uses another message slot", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new WrongMessageSlotGuardFactory(),
+      storageFactory: new CorruptGuardFactory({
+        guard: finalDedupRecord({
+          key: testDedupKey("signal-1"),
+          inbox: testInboxKey,
+          signalId: "signal-1",
+          inboxMessageId: "message-1",
+        }),
+        inbox: writeInboxMessage(createMessage("message-2", "signal-1", 1n)),
+      }),
     });
 
     await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toThrow(
@@ -704,7 +786,15 @@ describe("Inbox", () => {
   it("rejects a final dedup guard stored under another key", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new StorageKeyMismatchFactory(),
+      storageFactory: new CorruptGuardFactory({
+        guard: finalDedupRecord({
+          key: testDedupKey("signal-2"),
+          inbox: testInboxKey,
+          signalId: "signal-2",
+          inboxMessageId: "message-1",
+        }),
+        inbox: writeInboxMessage(createMessage("message-1", "signal-1", 1n)),
+      }),
     });
 
     await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toThrow(
@@ -1055,22 +1145,6 @@ class FaultyRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   }
 }
 
-class MissingMessageGuardFactory extends StorageFactory {
-  protected onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-  ): RecordStorage<I, R> {
-    return new CorruptGuardStorage(context, recordSpec as unknown as RecordSpec<string, Any>, {
-      guard: finalDedupRecord({
-        key: testDedupKey("signal-1"),
-        inbox: testInboxKey,
-        signalId: "signal-1",
-        inboxMessageId: "message-1",
-      }),
-    }) as unknown as RecordStorage<I, R>;
-  }
-}
-
 class CorruptGuardFactory extends StorageFactory {
   readonly #records: CorruptGuardRecords;
 
@@ -1088,73 +1162,6 @@ class CorruptGuardFactory extends StorageFactory {
       recordSpec as unknown as RecordSpec<string, Any>,
       this.#records,
     ) as unknown as RecordStorage<I, R>;
-  }
-}
-
-class WrongKeyGuardFactory extends StorageFactory {
-  protected onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-  ): RecordStorage<I, R> {
-    return new CorruptGuardStorage(context, recordSpec as unknown as RecordSpec<string, Any>, {
-      guard: finalDedupRecord({
-        key: testDedupKey("signal-2"),
-        inbox: testInboxKey,
-        signalId: "signal-1",
-        inboxMessageId: "message-1",
-      }),
-    }) as unknown as RecordStorage<I, R>;
-  }
-}
-
-class WrongTargetGuardFactory extends StorageFactory {
-  protected onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-  ): RecordStorage<I, R> {
-    return new CorruptGuardStorage(context, recordSpec as unknown as RecordSpec<string, Any>, {
-      guard: finalDedupRecord({
-        key: testDedupKey("signal-1"),
-        inbox: testInboxKey,
-        signalId: "signal-1",
-        inboxMessageId: "message-1",
-      }),
-      inbox: writeInboxMessage(createMessage("message-1", "signal-2", 1n)),
-    }) as unknown as RecordStorage<I, R>;
-  }
-}
-
-class WrongMessageSlotGuardFactory extends StorageFactory {
-  protected onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-  ): RecordStorage<I, R> {
-    return new CorruptGuardStorage(context, recordSpec as unknown as RecordSpec<string, Any>, {
-      guard: finalDedupRecord({
-        key: testDedupKey("signal-1"),
-        inbox: testInboxKey,
-        signalId: "signal-1",
-        inboxMessageId: "message-1",
-      }),
-      inbox: writeInboxMessage(createMessage("message-2", "signal-1", 1n)),
-    }) as unknown as RecordStorage<I, R>;
-  }
-}
-
-class StorageKeyMismatchFactory extends StorageFactory {
-  protected onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-  ): RecordStorage<I, R> {
-    return new CorruptGuardStorage(context, recordSpec as unknown as RecordSpec<string, Any>, {
-      guard: finalDedupRecord({
-        key: testDedupKey("signal-2"),
-        inbox: testInboxKey,
-        signalId: "signal-2",
-        inboxMessageId: "message-1",
-      }),
-      inbox: writeInboxMessage(createMessage("message-1", "signal-1", 1n)),
-    }) as unknown as RecordStorage<I, R>;
   }
 }
 

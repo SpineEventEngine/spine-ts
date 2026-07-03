@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-26 fix complete
+Status: round-27 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -501,6 +501,58 @@ Focused delivery verification passed with 46 tests:
 
 Final round-26 verification also passed with:
 
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm format:check`
+- `git diff --check`
+- `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+  over 120 columns)
+
+## Round 27 Review
+
+Round 27 found no documentation or TypeScript/API docs issue. Code
+style/maintainability requested removing four one-off corrupt-guard
+`StorageFactory` subclasses in `inbox.test.ts` and reusing the existing
+parameterized corrupt-guard fixture instead. Security requested accepting valid
+empty signal payloads whose `Any.value` base64 encodes to the empty string.
+Performance/reliability requested accepting valid signal payloads whose base64
+text exceeds the generic `16 KiB` text cap but remains within the
+`256 KiB` signal payload limit.
+
+Red-first regressions failed before implementation:
+
+- focused round-27 inbox regressions:
+
+  ```sh
+  pnpm test packages/server/test/delivery/inbox.test.ts
+  ```
+
+  failed with the expected two regressions before implementation:
+  `writes and reads back an empty signal payload` failed with
+  `Inbox signal payload must be a non-empty string.`, and
+  `writes and reads back a signal payload larger than the generic text cap`
+  failed with
+  `Inbox signal payload exceeds 16384 bytes and cannot be stored.`
+
+## Round 27 Fix
+
+Round-27 fixes stayed small and local to the durable inbox read path:
+
+- replaced the single-use corrupt-guard test factories with direct
+  `CorruptGuardFactory` setup in `inbox.test.ts`, which also removes the
+  five-component `WrongMessageSlotGuardFactory` name from the suite;
+- added two clear round-trip regressions for empty signal payloads and
+  non-empty `20 KiB` signal payloads that exceed the generic text cap but stay
+  within the signal payload byte limit; and
+- added one private stored-signal base64 validator in `inbox-records.ts` so
+  stored signal payloads accept the empty string, keep malformed/non-canonical
+  payload rejection in `decodeSignalPayload()`, and apply a text cap derived
+  from `maxSignalPayloadBytes` instead of the generic `16 KiB` stored-text cap.
+
+Verification for the round-27 fix passed with:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+- `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
 - `pnpm typecheck`
 - `pnpm lint`
 - `pnpm format:check`

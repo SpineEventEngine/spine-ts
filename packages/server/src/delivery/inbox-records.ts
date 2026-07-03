@@ -305,7 +305,7 @@ function packSignal(signal: Any): StoredSignal {
 }
 
 function unpackSignal(signal: StoredSignal): Any {
-  const valueBase64 = requireStoredText(signal.valueBase64, "Inbox signal payload");
+  const valueBase64 = requireStoredSignalBase64(signal.valueBase64);
 
   return create(AnySchema, {
     typeUrl: requireStoredText(signal.typeUrl, "Inbox signal type URL"),
@@ -393,7 +393,7 @@ function readStoredSignal(value: unknown): StoredSignal {
 
   return Object.freeze({
     typeUrl: requireStoredText(Reflect.get(value, "typeUrl"), "Inbox signal type URL"),
-    valueBase64: requireStoredText(Reflect.get(value, "valueBase64"), "Inbox signal payload"),
+    valueBase64: requireStoredSignalBase64(Reflect.get(value, "valueBase64")),
   });
 }
 
@@ -504,6 +504,19 @@ function requireInputText(value: unknown, label: string, maxBytes = maxTextBytes
   }
   if (Buffer.byteLength(value, "utf8") > maxBytes) {
     throw new InboxMessageError(`${label} exceeds ${String(maxBytes)} bytes and cannot be stored.`);
+  }
+
+  return value;
+}
+
+function requireStoredSignalBase64(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new DeliveryStorageCorruptionError("Inbox signal payload must be a string.");
+  }
+  if (Buffer.byteLength(value, "utf8") > maxSignalPayloadChars) {
+    throw new DeliveryStorageCorruptionError(
+      `Inbox signal payload exceeds ${String(maxSignalPayloadBytes)} bytes and cannot be stored.`,
+    );
   }
 
   return value;

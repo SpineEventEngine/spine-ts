@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 26 fix complete
+Status: round 27 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1201,3 +1201,80 @@ Verification:
 - green:
   - `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
     passed with 46 tests.
+
+### Round 27
+
+Reviewer input: round-27 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f27ee-1170-7113-a1e1-2fe5a939fd0b` (`CHANGES REQUESTED`, closed);
+- documentation: `019f27ee-120a-7ea2-a80f-06b3b0cf5209` (`CLEAN`, closed);
+- TypeScript/API docs:
+  `019f27ee-1276-7cb2-9346-b4850d3eab28` (`CLEAN`, closed);
+- security: `019f27ee-1304-7843-9a75-2269e6a1dd7d` (`CHANGES REQUESTED`, closed);
+- performance/reliability:
+  `019f27ee-1382-7890-a88d-d39b9631b42c` (`CHANGES REQUESTED`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- `inbox.test.ts` added four one-off corrupt-guard `StorageFactory`
+  subclasses even though the suite already had a parameterized
+  `CorruptGuardFactory` / `CorruptGuardStorage` pair that could cover those
+  cases, and the test-only `WrongMessageSlotGuardFactory` name exceeded the
+  four-component limit;
+- valid empty `Any.value` signal payloads serialize to the empty base64 string
+  but stored signal reads reject empty strings as corruption; and
+- stored signal payload reads still apply the generic `16 KiB` text cap rather
+  than the base64-text length implied by the `256 KiB` signal payload limit, so
+  valid payloads can write and later fail as corruption.
+
+Documentation and TypeScript/API docs were clean. Code
+style/maintainability, security, and performance/reliability requested
+changes.
+
+### Round 27 Fix
+
+Result: implemented in this worktree.
+
+Fix summary:
+
+- replaced the one-off corrupt-guard factories in `inbox.test.ts` with direct
+  `CorruptGuardFactory` setup and renamed the wrong-slot regression so no test
+  helper name exceeds the four-component limit;
+- added red-first inbox regressions for empty signal payload round-trips and
+  valid `20 KiB` signal payload round-trips; and
+- introduced one private stored-signal base64 validator that accepts empty
+  base64 strings and uses the `maxSignalPayloadBytes`-derived base64 text cap,
+  while leaving malformed/non-canonical/oversized payload rejection in the
+  existing decode path.
+
+Verification:
+
+- red:
+  - focused round-27 inbox regressions:
+
+    ```sh
+    pnpm test packages/server/test/delivery/inbox.test.ts
+    ```
+
+    failed with the expected two regressions before implementation:
+    `writes and reads back an empty signal payload` failed with
+    `Inbox signal payload must be a non-empty string.`, and
+    `writes and reads back a signal payload larger than the generic text cap`
+    failed with
+    `Inbox signal payload exceeds 16384 bytes and cannot be stored.`;
+- green:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts`
+    passed with 34 tests;
+  - `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
+    passed with 48 tests;
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check`; and
+  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+    over 120 columns).
