@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 59 durable-log refresh committed at current HEAD
+Status: round 60 boundary-hardening fix committed at current HEAD
 Previous completed commit: `4b40a95`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
@@ -3488,6 +3488,70 @@ Fix summary:
 
 Verification:
 
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+## Round 60 Review
+
+Reviewer input: round-60 reviewer results supplied to this fix worker.
+
+Result:
+
+- code style/maintainability: `round-60-maintainability` (`CHANGES REQUESTED`,
+  supplied);
+- documentation: `round-60-documentation` (`CHANGES REQUESTED`, supplied);
+- TypeScript/API docs: `round-60-api-docs` (`CLEAN`, supplied);
+- security: `round-60-security` (`CHANGES REQUESTED`, supplied); and
+- performance/reliability: `round-60-reliability` (`CLEAN`, supplied).
+
+Findings:
+
+- `packages/server/src/delivery/sharded-work-registry.ts` still leaked raw
+  getter/proxy exceptions from `session.shard`, `session.id`, `session.node`,
+  and throwing `Date#getTime()` clocks instead of stable invalid-input
+  wording;
+- `packages/server/src/delivery/inbox-storage.ts` still trusted caller
+  `shard.key()` directly during `read()` and could feed a fake key into
+  storage filters or leak structural getter failures; and
+- `build-protocol/tasks/T-0012-8-delivery-inbox/TASK.md` body tail stopped at
+  round-58 verification and omitted the committed round-58 `4b40a95` plus the
+  round-59 current-HEAD durable-log refresh trail already reflected elsewhere.
+
+## Round 60 Fix
+
+Result: committed in the current package HEAD. The commit cannot record its
+own hash; identify the committed round-60 fix with package HEAD or `git log`.
+
+Fix summary:
+
+- added focused regressions proving shard release accessor failures and
+  throwing pickup clocks fail closed with stable invalid-input wording before
+  storage access;
+- normalized inbox read shards from coordinates before opening storage or
+  building query filters so fake caller `key()` values are ignored; and
+- refreshed TASK/report/review/work-log state with the missing round-58/59
+  tail bullets and this round-60 fix trail.
+
+Verification:
+
+- red-first:
+  `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
+  failed with four regressions exposing the raw clock/accessor exceptions and
+  fake shard-key storage filter;
+- green:
+  `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`;
+- `pnpm test`
+  `packages/server/test/index.test.ts`
+  `packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`;
+- `pnpm typecheck`;
+- `pnpm lint`;
 - `pnpm format:check`;
 - `node scripts/check-api-docs.mjs`;
 - `git diff --check fce80b2..HEAD`; and

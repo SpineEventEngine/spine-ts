@@ -37,12 +37,16 @@ export class InboxStorage {
 
   /** Read ordered inbox messages for one shard. */
   async read(shard: ShardIndex, options: InboxReadOptions = {}): Promise<readonly InboxMessage[]> {
+    const nextShard = requireReadShard(shard);
     const storage = this.#inboxStorage();
 
     try {
       const records = await this.#durableRead("Inbox record", () =>
         storage.queryEntries({
-          filters: [{ column: "shard", value: shard.key() }, ...statusFilters(options.statuses)],
+          filters: [
+            { column: "shard", value: nextShard.key() },
+            ...statusFilters(options.statuses),
+          ],
           sort: [{ field: "receivedAt" }, { field: "version" }, { field: "messageId" }],
           limit: options.limit ?? defaultReadLimit,
         }),
@@ -485,4 +489,31 @@ function deliveryStorageContext(context: StorageContext, name: string): StorageC
 
 function casRetriesExhausted(label: string): Error {
   return new Error(`${label} could not be completed due to concurrent changes.`);
+}
+
+function requireReadShard(value: unknown): ShardIndex {
+  if (typeof value !== "object" || value === null) {
+    throw new InboxMessageError("Inbox shard is invalid.");
+  }
+
+  try {
+    return new ShardIndex(
+      requireReadInteger(Reflect.get(value, "index"), "Inbox shard index"),
+      requireReadInteger(Reflect.get(value, "ofTotal"), "Inbox shard total"),
+    );
+  } catch (error) {
+    if (error instanceof InboxMessageError) {
+      throw error;
+    }
+
+    throw new InboxMessageError("Inbox shard is invalid.", { cause: error });
+  }
+}
+
+function requireReadInteger(value: unknown, label: string): number {
+  if (!Number.isInteger(value) || !Number.isFinite(value)) {
+    throw new InboxMessageError(`${label} must be a finite integer.`);
+  }
+
+  return value as number;
 }

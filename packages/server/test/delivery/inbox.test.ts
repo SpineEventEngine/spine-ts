@@ -173,6 +173,50 @@ describe("Inbox", () => {
     ]);
   });
 
+  it("normalizes read shards before using them in storage filters", async () => {
+    const storageFactory = new RecordingInboxQueryFactory();
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+
+    await expect(
+      storage.read({
+        index: 1,
+        ofTotal: 2,
+        key: () => "0/2",
+      }),
+    ).resolves.toEqual([]);
+
+    expect(storageFactory.lastShardFilter).toBe("1/2");
+  });
+
+  it("rejects invalid read shards before opening inbox storage", async () => {
+    const storageFactory = new RecordingInboxQueryFactory();
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+
+    const throwingShardRead = storage.read({
+      get index(): number {
+        throw new Error("read shard index getter failed");
+      },
+      get ofTotal(): number {
+        return 1;
+      },
+      key() {
+        throw new Error("read shard key getter failed");
+      },
+    });
+
+    await expect(throwingShardRead).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(throwingShardRead).rejects.toThrow("Inbox shard is invalid.");
+    expect(storageFactory.opens).toBe(0);
+    expect(storageFactory.closes).toBe(0);
+    expect(storageFactory.queryCount).toBe(0);
+  });
+
   it("bounds reads with a default page size when no explicit limit is provided", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -1892,6 +1936,73 @@ class FakeStorageFactory extends StorageFactory {
       recordSpec as unknown as RecordSpec<string, Any>,
       this.#records,
     ) as unknown as RecordStorage<I, R>;
+  }
+}
+
+class RecordingInboxQueryFactory extends StorageFactory {
+  opens = 0;
+  closes = 0;
+  queryCount = 0;
+  lastShardFilter: unknown;
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    this.opens += 1;
+    return new RecordingInboxQueryStorage(
+      context,
+      recordSpec as unknown as RecordSpec<string, Any>,
+      this,
+    ) as unknown as RecordStorage<I, R>;
+  }
+}
+
+class RecordingInboxQueryStorage extends RecordStorage<string, Any> {
+  readonly #factory: RecordingInboxQueryFactory;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<string, Any>,
+    factory: RecordingInboxQueryFactory,
+  ) {
+    super(context, recordSpec);
+    this.#factory = factory;
+  }
+
+  override close(): void {
+    this.#factory.closes += 1;
+    super.close();
+  }
+
+  protected compareAndSetRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected deleteRecord(): Promise<boolean> {
+    return Promise.resolve(false);
+  }
+
+  protected override queryRecordEntries(
+    query: RecordQuery<string>,
+  ): Promise<readonly { id: string; record: Any }[]> {
+    this.#factory.queryCount += 1;
+    this.#factory.lastShardFilter = (query.filters ?? []).find(
+      (filter) => filter.column === "shard",
+    )?.value;
+    return Promise.resolve([]);
+  }
+
+  protected readRecord(): Promise<Any | undefined> {
+    return Promise.resolve(undefined);
+  }
+
+  protected writeAllRecords(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  protected writeRecord(): Promise<void> {
+    return Promise.resolve();
   }
 }
 

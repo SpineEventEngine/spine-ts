@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-59 durable-log refresh committed at current HEAD
+Status: round-60 boundary-hardening fix committed at current HEAD
 Previous completed commit: `4b40a95`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
@@ -1033,4 +1033,43 @@ concurrent changes`, add shard pickup/release regressions proving thrown
   `packages/storage/test/memory/in-memory-record-storage.test.ts`,
   the required focused delivery/storage suite, `pnpm typecheck`, `pnpm lint`,
   `pnpm format:check`, `node scripts/check-api-docs.mjs`,
+  `git diff --check fce80b2..HEAD`, and a touched-file line scan.
+- Round-58 fixes were committed as `4b40a95`.
+- Round-59 review completed from supplied reviewer results. Documentation and
+  maintainability requested only a durable-log refresh so task/report/review/
+  work-log state records round 58 as committed `4b40a95` instead of a current
+  pass or pending-commit state. TypeScript/API docs, security, and
+  performance/reliability were clean.
+- Round-59 fixes are docs-only and stay local to durable task/report/review/
+  work-log state. They refresh current state through committed round 58 at
+  `4b40a95`, remove stale pending-commit wording, and record the round-59 fix
+  as committed in the current package HEAD.
+- Final round-59 verification passed with `pnpm format:check`,
+  `node scripts/check-api-docs.mjs`, `git diff --check fce80b2..HEAD`, and a
+  touched-file line scan.
+- Round-60 review completed from supplied reviewer results. Security and
+  maintainability requested trust-boundary hardening so shard release and inbox
+  read paths stop leaking raw getter/proxy exceptions or trusting caller
+  `key()` implementations. Documentation requested restoring the missing
+  round-58/59 TASK.md tail bullets so the task body matches the header and
+  work-log state.
+- Red-first round-60 focused verification failed before production changes:
+  `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
+  surfaced four regressions. `ShardedWorkRegistry.pickUp()` leaked raw
+  `pickup clock getter failed`, `release()` leaked raw getter failures from
+  `session.shard` / `session.id` / `session.node`, `InboxStorage.read()` fed a
+  fake shard key `0/2` into storage instead of canonical coordinates `1/2`,
+  and invalid read-shard getters leaked raw accessor errors instead of a
+  stable input error.
+- Round-60 fixes stay local to shard pickup/release validation, inbox read
+  shard normalization, focused regressions, and durable logs. Shard release now
+  snapshots caller session fields behind one stable `Shard session is invalid.`
+  boundary, throwing `Date#getTime()` clocks now reject as
+  `Shard pickup time is invalid.` before storage opens, inbox reads normalize
+  the shard from coordinates before opening storage or building filters, and
+  the new tests prove fake shard keys and throwing structural getters fail
+  closed.
+- Final round-60 verification passed with the focused inbox/shard red-green
+  cycle, the required focused delivery/storage suite, `pnpm typecheck`,
+  `pnpm lint`, `pnpm format:check`, `node scripts/check-api-docs.mjs`,
   `git diff --check fce80b2..HEAD`, and a touched-file line scan.

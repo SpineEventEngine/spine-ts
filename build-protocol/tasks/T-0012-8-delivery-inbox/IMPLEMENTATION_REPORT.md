@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-59 durable-log refresh committed at current HEAD
+Status: round-60 boundary-hardening fix committed at current HEAD
 Previous completed commit: `4b40a95`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
@@ -2507,6 +2507,64 @@ Round-59 fixes are docs-only:
 
 Verification:
 
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+## Round 60 Review
+
+Round 60 found no TypeScript/API docs, security, or performance/reliability
+issues beyond two input-hardening paths. Security and maintainability
+requested closing trust-boundary leaks in shard release/pickup validation and
+inbox reads so caller getters, proxies, and fake shard `key()` methods cannot
+surface raw exceptions or bypass canonical shard coordinates. Documentation
+requested restoring the missing round-58 commit bullet and round-59 refresh
+trail in `TASK.md`.
+
+## Round 60 Fix
+
+Round-60 fixes stay local to shard input validation, inbox read shard
+normalization, focused regressions, and durable logs:
+
+- added red-first regressions in
+  `packages/server/test/delivery/sharded-work-registry.test.ts` proving
+  throwing pickup clocks still reject before storage opens and that
+  `release()` maps shard/id/node accessor failures to stable
+  `Shard session is invalid.` wording;
+- updated `packages/server/src/delivery/sharded-work-registry.ts` so
+  `snapshotReleaseSession()` wraps caller accessor failures behind one stable
+  invalid-session error and `requireInputTime()` classifies throwing
+  `Date#getTime()` calls as `Shard pickup time is invalid.`;
+- added red-first regressions in
+  `packages/server/test/delivery/inbox.test.ts` proving `read()` uses
+  canonical shard coordinates instead of caller `key()` output and that
+  throwing structural getters reject before opening storage; and
+- updated `packages/server/src/delivery/inbox-storage.ts` so `read()` first
+  validates and normalizes the shard snapshot, then uses the canonical
+  `ShardIndex.key()` result in storage filters, plus refreshed the missing
+  round-58/59 TASK tail bullets and round-60 durable-log trail.
+
+Verification:
+
+- red-first:
+  `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
+  failed with four new regressions: raw `pickup clock getter failed`, raw
+  shard-session accessor failures, fake read-shard key `0/2` reaching storage
+  instead of canonical `1/2`, and raw read-shard accessor failures instead of
+  stable invalid-input errors;
+- green:
+  `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`;
+- `pnpm test`
+  `packages/server/test/index.test.ts`
+  `packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts`;
+- `pnpm typecheck`;
+- `pnpm lint`;
 - `pnpm format:check`;
 - `node scripts/check-api-docs.mjs`;
 - `git diff --check fce80b2..HEAD`; and

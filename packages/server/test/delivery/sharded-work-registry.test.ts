@@ -569,6 +569,27 @@ describe("ShardedWorkRegistry", () => {
     expect(storageFactory.closes).toBe(0);
   });
 
+  it("rejects throwing pickup clocks before opening shard storage", async () => {
+    const storageFactory = new CountingStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () =>
+        new (class extends Date {
+          override getTime(): number {
+            throw new Error("pickup clock getter failed");
+          }
+        })("2026-07-02T09:45:00.000Z"),
+    });
+
+    await expect(delivery.shards.pickUp(new ShardIndex(0, 1), "node-a")).rejects.toThrow(
+      "Shard pickup time is invalid.",
+    );
+
+    expect(storageFactory.opens).toBe(0);
+    expect(storageFactory.closes).toBe(0);
+  });
+
   it("sanitizes shard pickup input once when caller key disagrees with shard coordinates", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -766,6 +787,45 @@ describe("ShardedWorkRegistry", () => {
       node: "node-b",
       shard,
     });
+  });
+
+  it("rejects release session accessor failures with a stable invalid-session error", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => new Date("2026-07-02T09:54:00.000Z"),
+    });
+    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+
+    if (session === undefined) {
+      throw new Error("Expected shard pickup to create a session.");
+    }
+
+    await expect(
+      delivery.shards.release({
+        get shard() {
+          throw new Error("session shard getter failed");
+        },
+      } as unknown as ShardSession),
+    ).rejects.toThrow("Shard session is invalid.");
+    await expect(
+      delivery.shards.release({
+        shard: session.shard,
+        get id() {
+          throw new Error("session id getter failed");
+        },
+        node: session.node,
+      } as unknown as ShardSession),
+    ).rejects.toThrow("Shard session is invalid.");
+    await expect(
+      delivery.shards.release({
+        shard: session.shard,
+        id: session.id,
+        get node() {
+          throw new Error("session node getter failed");
+        },
+      } as unknown as ShardSession),
+    ).rejects.toThrow("Shard session is invalid.");
   });
 
   it("passes multitenant shard contexts through to storage validation", async () => {

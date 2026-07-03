@@ -403,13 +403,21 @@ function snapshotReleaseSession(session: unknown): ReleaseSession {
     throw new Error("Shard session is invalid.");
   }
 
-  const shard = requireInputShard(Reflect.get(session, "shard"), "Shard session shard");
+  try {
+    const shard = requireInputShard(Reflect.get(session, "shard"), "Shard session shard");
 
-  return Object.freeze({
-    key: shard.key(),
-    id: requireInputText(Reflect.get(session, "id"), "Shard session ID", maxSessionTextBytes),
-    node: requireInputText(Reflect.get(session, "node"), "Shard session node", maxSessionTextBytes),
-  });
+    return Object.freeze({
+      key: shard.key(),
+      id: requireInputText(Reflect.get(session, "id"), "Shard session ID", maxSessionTextBytes),
+      node: requireInputText(
+        Reflect.get(session, "node"),
+        "Shard session node",
+        maxSessionTextBytes,
+      ),
+    });
+  } catch (error) {
+    throw new Error("Shard session is invalid.", { cause: error });
+  }
 }
 
 function requireNumber(value: unknown, label: string): number {
@@ -476,7 +484,12 @@ function requireInputTime(value: Date, label: string): number {
     throw new Error(`${label} is invalid.`);
   }
 
-  const time = value.getTime();
+  let time: number;
+  try {
+    time = value.getTime();
+  } catch (error) {
+    throw new Error(`${label} is invalid.`, { cause: error });
+  }
   if (!Number.isFinite(time)) {
     throw new Error(`${label} is invalid.`);
   }
