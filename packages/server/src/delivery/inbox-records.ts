@@ -106,24 +106,116 @@ export const dedupRecordSpec: RecordSpec<string, Any> = new RecordSpec<string, A
   extractId: (record) => readStoredDedupRecord(record).key,
 });
 
-export function readInboxMessage(record: Any, expectedKey?: string): InboxMessage {
-  return inboxMessageFromStored(readStoredInboxMessage(record, expectedKey));
-}
+/** Encodes and decodes durable inbox message records. */
+export const InboxRecords: Readonly<{
+  read(record: Any, expectedKey?: string): InboxMessage;
+  write(message: InboxMessage): Any;
+}> = Object.freeze({
+  /** Read a durable inbox message record. */
+  read(record: Any, expectedKey?: string): InboxMessage {
+    return inboxMessageFromStored(readStoredInboxMessage(record, expectedKey));
+  },
 
-export function writeInboxMessage(message: InboxMessage): Any {
-  return packRecord(inboxRecordTypeUrl, "Inbox message record", storedInboxMessage(message));
-}
+  /** Write a durable inbox message record. */
+  write(message: InboxMessage): Any {
+    return packRecord(inboxRecordTypeUrl, "Inbox message record", storedInboxMessage(message));
+  },
+});
 
-export function dedupGuardKey(message: Pick<InboxMessage, "inboxId" | "signalId">): string {
-  return requireCompositeInputText(
-    `${inboxKey(message.inboxId)}:${requireInputText(message.signalId, "Inbox signal ID")}`,
-    "Inbox dedup key",
-  );
-}
+/** Encodes, decodes, and keys durable dedup guard records. */
+export const DedupRecords: Readonly<{
+  guardKey(message: Pick<InboxMessage, "inboxId" | "signalId">): string;
+  isPending(record: Any): boolean;
+  writeClaim(message: InboxMessage): Any;
+  writeFinal(message: InboxMessage): Any;
+  readGuard(record: Any, expectedKey?: string): DedupGuardState;
+  readPendingMessage(record: Any): InboxMessage | undefined;
+}> = Object.freeze({
+  /** Build the durable dedup guard key for one inbox signal target. */
+  guardKey(message: Pick<InboxMessage, "inboxId" | "signalId">): string {
+    return requireCompositeInputText(
+      `${inboxKey(message.inboxId)}:${requireInputText(message.signalId, "Inbox signal ID")}`,
+      "Inbox dedup key",
+    );
+  },
 
-export function isPendingDedupRecord(record: Any): boolean {
-  return readStoredDedupRecord(record).state === "PENDING";
-}
+  /** Whether the durable guard is a pending claim. */
+  isPending(record: Any): boolean {
+    return readStoredDedupRecord(record).state === "PENDING";
+  },
+
+  /** Write a pending durable dedup claim. */
+  writeClaim(message: InboxMessage): Any {
+    const storedMessage = storedInboxMessage(message);
+    const stored: StoredPendingDedupRecord = {
+      key: requireCompositeInputText(
+        storedDedupGuardKey(storedMessage.inbox, storedMessage.signalId),
+        "Inbox dedup key",
+      ),
+      state: "PENDING",
+      message: storedMessage,
+    };
+    assertPendingClaimBudget(stored);
+
+    return packRecord(dedupRecordTypeUrl, "Inbox dedup record", stored);
+  },
+
+  /** Write a final durable dedup guard. */
+  writeFinal(message: InboxMessage): Any {
+    const storedMessage = storedInboxMessage(message);
+
+    const stored: StoredFinalDedupRecord = {
+      key: requireCompositeInputText(
+        storedDedupGuardKey(storedMessage.inbox, storedMessage.signalId),
+        "Inbox dedup key",
+      ),
+      inbox: storedMessage.inbox,
+      signalId: storedMessage.signalId,
+      inboxMessageId: storedMessage.id,
+      shardIndex: storedMessage.shardIndex,
+      shardTotal: storedMessage.shardTotal,
+      state: "FINAL",
+      status: storedMessage.status,
+      ...(storedMessage.keepUntilMs === undefined
+        ? {}
+        : { keepUntilMs: storedMessage.keepUntilMs }),
+    };
+
+    return packRecord(dedupRecordTypeUrl, "Inbox dedup record", stored);
+  },
+
+  /** Read a durable dedup guard state. */
+  readGuard(record: Any, expectedKey?: string): DedupGuardState {
+    const dedup = readStoredDedupRecord(record);
+    if (expectedKey !== undefined && dedup.key !== expectedKey) {
+      throw new DeliveryStorageCorruptionError(
+        `Inbox dedup guard "${expectedKey}" does not match its storage key.`,
+      );
+    }
+
+    return dedup.state === "PENDING"
+      ? dedupGuardState(
+          dedup.message.id,
+          dedup.message.shardIndex,
+          dedup.message.shardTotal,
+          dedup.message.status,
+          dedup.message.keepUntilMs,
+        )
+      : dedupGuardState(
+          dedup.inboxMessageId,
+          dedup.shardIndex,
+          dedup.shardTotal,
+          dedup.status,
+          dedup.keepUntilMs,
+        );
+  },
+
+  /** Read the pending message embedded in a durable dedup guard. */
+  readPendingMessage(record: Any): InboxMessage | undefined {
+    const dedup = readStoredDedupRecord(record);
+    return dedup.state === "PENDING" ? inboxMessageFromStored(dedup.message) : undefined;
+  },
+});
 
 function readStoredDedupRecord(record: Any): StoredDedupRecord {
   const decoded = readStoredRecord(record, dedupRecordTypeUrl, "Inbox dedup record");
@@ -131,72 +223,6 @@ function readStoredDedupRecord(record: Any): StoredDedupRecord {
   const key = requireStoredText(decoded.key, "Inbox dedup key", maxCompositeTextBytes);
 
   return state === "PENDING" ? readPendingDedup(decoded, key) : readFinalDedup(decoded, key);
-}
-
-export function writeDedupClaim(message: InboxMessage): Any {
-  const storedMessage = storedInboxMessage(message);
-  const stored: StoredPendingDedupRecord = {
-    key: requireCompositeInputText(
-      storedDedupGuardKey(storedMessage.inbox, storedMessage.signalId),
-      "Inbox dedup key",
-    ),
-    state: "PENDING",
-    message: storedMessage,
-  };
-  assertPendingClaimBudget(stored);
-
-  return packRecord(dedupRecordTypeUrl, "Inbox dedup record", stored);
-}
-
-export function writeDedupRecord(message: InboxMessage): Any {
-  const storedMessage = storedInboxMessage(message);
-
-  const stored: StoredFinalDedupRecord = {
-    key: requireCompositeInputText(
-      storedDedupGuardKey(storedMessage.inbox, storedMessage.signalId),
-      "Inbox dedup key",
-    ),
-    inbox: storedMessage.inbox,
-    signalId: storedMessage.signalId,
-    inboxMessageId: storedMessage.id,
-    shardIndex: storedMessage.shardIndex,
-    shardTotal: storedMessage.shardTotal,
-    state: "FINAL",
-    status: storedMessage.status,
-    ...(storedMessage.keepUntilMs === undefined ? {} : { keepUntilMs: storedMessage.keepUntilMs }),
-  };
-
-  return packRecord(dedupRecordTypeUrl, "Inbox dedup record", stored);
-}
-
-export function readDedupGuard(record: Any, expectedKey?: string): DedupGuardState {
-  const dedup = readStoredDedupRecord(record);
-  if (expectedKey !== undefined && dedup.key !== expectedKey) {
-    throw new DeliveryStorageCorruptionError(
-      `Inbox dedup guard "${expectedKey}" does not match its storage key.`,
-    );
-  }
-
-  return dedup.state === "PENDING"
-    ? dedupGuardState(
-        dedup.message.id,
-        dedup.message.shardIndex,
-        dedup.message.shardTotal,
-        dedup.message.status,
-        dedup.message.keepUntilMs,
-      )
-    : dedupGuardState(
-        dedup.inboxMessageId,
-        dedup.shardIndex,
-        dedup.shardTotal,
-        dedup.status,
-        dedup.keepUntilMs,
-      );
-}
-
-export function readPendingMessage(record: Any): InboxMessage | undefined {
-  const dedup = readStoredDedupRecord(record);
-  return dedup.state === "PENDING" ? inboxMessageFromStored(dedup.message) : undefined;
 }
 
 function inboxKey(inboxId: InboxMessage["inboxId"]): string {

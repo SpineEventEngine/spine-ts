@@ -1,7 +1,7 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-45 fix implemented in current commit
-Previous completed commit: `641a47a`
+Status: round-46 fix implemented in current commit
+Previous completed commit: `e93d165`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1655,5 +1655,51 @@ Final verification:
 `node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
 TypeDoc source-link warning, but exited successfully.
 
-This round-45 fix commit cannot pre-record its own final hash; identify it
+Round-45 fixes were committed as `e93d165`.
+
+## Round 46 Review
+
+Round 46 found README/status drift, stale durable-log current state, one
+maintainability shape issue, and one verification-reporting gap. Documentation
+requested that the root README stop listing delivery/Inbox as wholly deferred
+now that the first durable inbox/delivery slice exists, while still keeping
+worker loops and delivery execution deferred. Maintainability requested
+grouping exported inbox/dedup record helpers behind a small semantic API.
+Performance/reliability requested running and recording the focused delivery
+suite including `shard-index.test.ts`.
+
+TypeScript/API docs and security lanes were clean.
+
+## Round 46 Fix
+
+Round-46 fixes stay local to README/status text, inbox record helper exports,
+internal delivery callers/tests, and durable logs:
+
+- root README now records the first durable delivery/inbox slice for inbox
+  rows, dedup guards, and shard leases while keeping worker execution future;
+- loose exported inbox/dedup record helper functions are grouped behind
+  `InboxRecords` and `DedupRecords`; and
+- durable task/report/review/work logs now record committed round 45 at
+  `e93d165` and this round-46 fix trail.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `135` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+This round-46 fix commit cannot pre-record its own final hash; identify it
 from package HEAD or `git log`.

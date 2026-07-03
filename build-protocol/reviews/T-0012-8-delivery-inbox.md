@@ -1,7 +1,7 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 45 fix implemented in current commit
-Previous completed commit: `641a47a`
+Status: round 46 fix implemented in current commit
+Previous completed commit: `e93d165`
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -2223,21 +2223,6 @@ Final verification:
 `node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
 TypeDoc source-link warning, but exited successfully.
 
-Final verification:
-
-- `pnpm test packages/server/test/delivery/inbox.test.ts`
-  `packages/server/test/delivery/inbox-records.test.ts`
-  `packages/server/test/delivery/sharded-work-registry.test.ts`
-  `packages/storage/test/memory/in-memory-record-storage.test.ts`
-  `packages/server/test/repository/aggregate-storage.test.ts` passed with
-  `119` tests;
-- `pnpm typecheck`;
-- `pnpm lint`;
-- `pnpm format:check`;
-- `node scripts/check-api-docs.mjs`;
-- `git diff --check fce80b2..HEAD`; and
-- touched-file line scan with no lines over 120 columns.
-
 ### Round 40
 
 Reviewer input: round-40 reviewer results supplied to this fix worker.
@@ -2582,6 +2567,72 @@ Final verification:
   `packages/storage/test/memory/in-memory-record-storage.test.ts`
   `packages/server/test/repository/aggregate-storage.test.ts` passed with
   `133` tests;
+- `pnpm typecheck`;
+- `pnpm lint`;
+- `pnpm format:check`;
+- `node scripts/check-api-docs.mjs`;
+- `git diff --check fce80b2..HEAD`; and
+- touched-file line scan with no lines over 120 columns.
+
+`node scripts/check-api-docs.mjs` still emitted the existing invalid `origin`
+TypeDoc source-link warning, but exited successfully.
+
+Result: committed as `e93d165`.
+
+### Round 46
+
+Reviewer input: round-46 reviewer results supplied to this fix worker.
+
+Reviewer sub-agents:
+
+- documentation:
+  `019f2920-562c-7940-ae5a-b94169d32fc7` (`CHANGES REQUESTED`, closed);
+- code style/maintainability:
+  `019f291f-c882-7132-b450-39dd93beb339` (`CHANGES REQUESTED`, closed);
+- performance/reliability:
+  `019f2921-042f-7313-a5ce-13234d0450aa` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f2920-9814-7b22-be9b-df781353453f` (`CLEAN`, closed); and
+- security:
+  `019f2920-ca32-7773-8036-a4881030d286` (`CLEAN`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- root README still described delivery/Inbox as deferred, even though the first
+  durable delivery/inbox slice now exists;
+- durable logs still said the next step was committing round 45, even though
+  package HEAD was `e93d165`;
+- `inbox-records.ts` exported standalone inbox/dedup record helper functions
+  without a recorded exception; and
+- final verification did not record
+  `packages/server/test/delivery/shard-index.test.ts`.
+
+### Round 46 Fix
+
+Result: implemented in this current commit. Because a commit cannot pre-record
+its own final hash, identify the committed round-46 fix by package HEAD or
+`git log`.
+
+Fix summary:
+
+- README status now records the first durable delivery/inbox slice while
+  keeping worker loops and delivery execution deferred;
+- exported record helpers are grouped behind `InboxRecords` and
+  `DedupRecords`; and
+- durable task/report/review/work logs now name committed round-45 state
+  `e93d165` and record this round-46 fix trail.
+
+Final verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/inbox-records.test.ts`
+  `packages/server/test/delivery/shard-index.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`
+  `packages/storage/test/memory/in-memory-record-storage.test.ts`
+  `packages/server/test/repository/aggregate-storage.test.ts` passed with
+  `135` tests;
 - `pnpm typecheck`;
 - `pnpm lint`;
 - `pnpm format:check`;

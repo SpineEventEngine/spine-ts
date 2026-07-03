@@ -12,11 +12,10 @@ import { describe, expect, it } from "vitest";
 
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
 import {
+  DedupRecords,
   dedupRecordSpec,
+  InboxRecords,
   inboxRecordSpec,
-  writeDedupClaim,
-  writeDedupRecord,
-  writeInboxMessage,
 } from "../../src/delivery/inbox-records.js";
 import {
   Delivery,
@@ -561,7 +560,7 @@ describe("Inbox", () => {
 
   it("rejects oversized signal payloads before serializing dedup claims", () => {
     expect(() =>
-      writeDedupClaim({
+      DedupRecords.writeClaim({
         ...createMessage("message-large", "signal-large", 1n),
         signal: create(AnySchema, {
           typeUrl: "type.example.dev/tasks.LargeSignal",
@@ -573,19 +572,19 @@ describe("Inbox", () => {
 
   it("rejects oversized signal IDs before building inbox and dedup keys", () => {
     expect(() =>
-      writeInboxMessage({
+      InboxRecords.write({
         ...createMessage("message-large", "signal-large", 1n),
         signalId: oversizedText(20 * 1024),
       }),
     ).toThrow(/signal id/i);
     expect(() =>
-      writeDedupClaim({
+      DedupRecords.writeClaim({
         ...createMessage("message-large", "signal-large", 1n),
         signalId: oversizedText(20 * 1024),
       }),
     ).toThrow(/signal id/i);
     expect(() =>
-      writeDedupRecord({
+      DedupRecords.writeFinal({
         ...createMessage("message-large", "signal-large", 1n),
         signalId: oversizedText(20 * 1024),
       }),
@@ -594,7 +593,7 @@ describe("Inbox", () => {
 
   it("rejects oversized inbox target identity before building inbox and dedup keys", () => {
     const oversizedTargetId = () =>
-      writeDedupClaim({
+      DedupRecords.writeClaim({
         ...createMessage("message-large", "signal-large", 1n),
         inboxId: {
           targetId: oversizedText(20 * 1024),
@@ -602,7 +601,7 @@ describe("Inbox", () => {
         },
       });
     const oversizedTargetTypeUrl = () =>
-      writeInboxMessage({
+      InboxRecords.write({
         ...createMessage("message-large", "signal-large", 1n),
         inboxId: {
           targetId: "projection-1",
@@ -694,7 +693,7 @@ describe("Inbox", () => {
     );
 
     await storage.write(copied);
-    await records.compareAndSet("0/1:copied-row", undefined, writeInboxMessage(copied));
+    await records.compareAndSet("0/1:copied-row", undefined, InboxRecords.write(copied));
 
     await expect(storage.read(ShardIndex.single(), { limit: 10 })).rejects.toBeInstanceOf(
       DeliveryStorageCorruptionError,
@@ -914,7 +913,7 @@ describe("Inbox", () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new ExistingInboxRowFactory({
-        inbox: writeInboxMessage(createMessage("message-2", "signal-1", 1n)),
+        inbox: InboxRecords.write(createMessage("message-2", "signal-1", 1n)),
       }),
     });
 
@@ -1016,8 +1015,12 @@ describe("Inbox", () => {
       storageFactory,
     });
 
-    await dedupRecords.compareAndSet(testDedupKey("signal-1"), undefined, writeDedupClaim(pending));
-    await inboxRecords.compareAndSet("0/1:message-1", undefined, writeInboxMessage(conflicting));
+    await dedupRecords.compareAndSet(
+      testDedupKey("signal-1"),
+      undefined,
+      DedupRecords.writeClaim(pending),
+    );
+    await inboxRecords.compareAndSet("0/1:message-1", undefined, InboxRecords.write(conflicting));
 
     const write = storage.write(createMessage("message-2", "signal-1", 2n));
 
@@ -1036,8 +1039,8 @@ describe("Inbox", () => {
     };
     const retryMessage = createMessage("message-2", "signal-1", 2n);
     const storageFactory = new RecoverPendingConflictFactory({
-      pendingGuard: writeDedupClaim(pending),
-      conflictingInbox: writeInboxMessage(conflicting),
+      pendingGuard: DedupRecords.writeClaim(pending),
+      conflictingInbox: InboxRecords.write(conflicting),
     });
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -1062,8 +1065,8 @@ describe("Inbox", () => {
     };
     const retryMessage = createMessage("message-2", "signal-1", 2n);
     const storageFactory = new RecoverPendingConflictFactory({
-      pendingGuard: writeDedupClaim(pending),
-      conflictingInbox: writeInboxMessage(conflicting),
+      pendingGuard: DedupRecords.writeClaim(pending),
+      conflictingInbox: InboxRecords.write(conflicting),
     });
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -1206,8 +1209,8 @@ describe("Inbox", () => {
   it("rejects oversized versions before building inbox or dedup records", () => {
     const message = createMessage("message-1", "signal-1", oversizedVersion());
 
-    expect(() => writeInboxMessage(message)).toThrow(/version/i);
-    expect(() => writeDedupClaim(message)).toThrow(/version/i);
+    expect(() => InboxRecords.write(message)).toThrow(/version/i);
+    expect(() => DedupRecords.writeClaim(message)).toThrow(/version/i);
   });
 
   it("rejects structural caller versions before building inbox or dedup records", () => {
@@ -1218,8 +1221,8 @@ describe("Inbox", () => {
       } as unknown as bigint,
     };
 
-    expect(() => writeInboxMessage(message)).toThrow(InboxMessageError);
-    expect(() => writeDedupClaim(message)).toThrow(InboxMessageError);
+    expect(() => InboxRecords.write(message)).toThrow(InboxMessageError);
+    expect(() => DedupRecords.writeClaim(message)).toThrow(InboxMessageError);
   });
 
   it("rejects dedup serializers with mismatched shard identities", () => {
@@ -1232,8 +1235,8 @@ describe("Inbox", () => {
       shard: new ShardIndex(0, 2),
     };
 
-    expect(() => writeDedupClaim(message)).toThrow(InboxMessageError);
-    expect(() => writeDedupRecord(message)).toThrow(InboxMessageError);
+    expect(() => DedupRecords.writeClaim(message)).toThrow(InboxMessageError);
+    expect(() => DedupRecords.writeFinal(message)).toThrow(InboxMessageError);
   });
 
   it("uses the delivery corruption error only for a final dedup guard that still points to no inbox row", async () => {
@@ -1334,7 +1337,7 @@ describe("Inbox", () => {
             "utf8",
           ),
         }),
-        inbox: writeInboxMessage(createMessage("message-1", "signal-1", 1n)),
+        inbox: InboxRecords.write(createMessage("message-1", "signal-1", 1n)),
       }),
     });
 
@@ -1400,7 +1403,7 @@ describe("Inbox", () => {
     await inboxRecords.compareAndSet(
       "0/1:message-1",
       undefined,
-      writeInboxMessage({
+      InboxRecords.write({
         ...createMessage("message-1", "signal-1", 1n),
         status: "DELIVERED",
         keepUntil: new Date("2026-07-02T08:00:00.000Z"),
@@ -1443,7 +1446,7 @@ describe("Inbox", () => {
     await inboxRecords.compareAndSet(
       "0/1:message-1",
       undefined,
-      writeInboxMessage(createMessage("message-1", "signal-1", 1n)),
+      InboxRecords.write(createMessage("message-1", "signal-1", 1n)),
     );
     await dedupRecords.compareAndSet(
       testDedupKey("signal-1"),
@@ -1510,7 +1513,7 @@ describe("Inbox", () => {
           signalId: "signal-1",
           inboxMessageId: "message-1",
         }),
-        inbox: writeInboxMessage(createMessage("message-1", "signal-2", 1n)),
+        inbox: InboxRecords.write(createMessage("message-1", "signal-2", 1n)),
       }),
     });
 
@@ -1529,7 +1532,7 @@ describe("Inbox", () => {
           signalId: "signal-1",
           inboxMessageId: "message-1",
         }),
-        inbox: writeInboxMessage(createMessage("message-2", "signal-1", 1n)),
+        inbox: InboxRecords.write(createMessage("message-2", "signal-1", 1n)),
       }),
     });
 
@@ -1548,7 +1551,7 @@ describe("Inbox", () => {
           signalId: "signal-2",
           inboxMessageId: "message-1",
         }),
-        inbox: writeInboxMessage(createMessage("message-1", "signal-1", 1n)),
+        inbox: InboxRecords.write(createMessage("message-1", "signal-1", 1n)),
       }),
     });
 

@@ -1,7 +1,7 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-45 fix implemented in current commit
-Previous completed commit: `641a47a`
+Status: round-46 fix implemented in current commit
+Previous completed commit: `e93d165`
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -755,5 +755,20 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   `git diff --check fce80b2..HEAD`, and a touched-file line scan.
   `node scripts/check-api-docs.mjs` still emitted the existing invalid
   `origin` TypeDoc source-link warning, but exited successfully.
-- This round-45 fix commit cannot pre-record its own final hash; identify it
+- Round-45 fixes were committed as `e93d165`.
+- Round-46 review completed from reviewer results supplied to this fix worker.
+  Documentation requested refreshing README and durable-log current state.
+  Code style/maintainability requested grouping exported inbox record helpers
+  behind a small semantic API. Performance/reliability requested recording the
+  focused delivery suite with `shard-index.test.ts`. TypeScript/API docs and
+  security lanes were clean.
+- Round-46 fixes update the README status to describe the first durable
+  delivery/inbox slice while keeping worker execution deferred, group inbox and
+  dedup record helpers behind `InboxRecords` and `DedupRecords`, and refresh
+  durable task/report/review/work-log state for committed round 45.
+- Final round-46 verification passed with the required focused suite including
+  `packages/server/test/delivery/shard-index.test.ts`, `pnpm typecheck`,
+  `pnpm lint`, `pnpm format:check`, `node scripts/check-api-docs.mjs`,
+  `git diff --check fce80b2..HEAD`, and a touched-file line scan.
+- This round-46 fix commit cannot pre-record its own final hash; identify it
   from package HEAD or `git log`.

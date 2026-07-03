@@ -2,14 +2,7 @@ import { create } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { describe, expect, it } from "vitest";
 
-import {
-  readInboxMessage,
-  readDedupGuard,
-  readPendingMessage,
-  writeDedupClaim,
-  writeDedupRecord,
-  writeInboxMessage,
-} from "../../src/delivery/inbox-records.js";
+import { DedupRecords, InboxRecords } from "../../src/delivery/inbox-records.js";
 import { DeliveryStorageCorruptionError, InboxMessageError } from "../../src/index.js";
 import { createMessage, oversizedText } from "./inbox-message-fixture.js";
 import {
@@ -25,7 +18,7 @@ describe("Inbox record limits", () => {
     const escaped = oversizedText(16 * 1024, "\\");
 
     expect(() =>
-      writeInboxMessage({
+      InboxRecords.write({
         ...createMessage("message-1", "signal-1", 1n),
         inboxId: {
           targetId: escaped,
@@ -34,7 +27,7 @@ describe("Inbox record limits", () => {
       }),
     ).toThrow(InboxMessageError);
     expect(() =>
-      writeInboxMessage({
+      InboxRecords.write({
         ...createMessage("message-1", "signal-1", 1n),
         inboxId: {
           targetId: escaped,
@@ -49,7 +42,7 @@ describe("Inbox record limits", () => {
     const signalId = oversizedText(2_048);
 
     expect(() =>
-      writeDedupClaim({
+      DedupRecords.writeClaim({
         ...createMessage("message-1", signalId, 1n),
         inboxId: {
           targetId: escapedInbox,
@@ -58,7 +51,7 @@ describe("Inbox record limits", () => {
       }),
     ).toThrow(InboxMessageError);
     expect(() =>
-      writeDedupClaim({
+      DedupRecords.writeClaim({
         ...createMessage("message-1", signalId, 1n),
         inboxId: {
           targetId: escapedInbox,
@@ -73,7 +66,7 @@ describe("Inbox record limits", () => {
     const target = oversizedText(12 * 1024);
 
     expect(() =>
-      writeDedupClaim({
+      DedupRecords.writeClaim({
         ...createMessage(escaped, escaped, 1n),
         inboxId: {
           targetId: target,
@@ -86,7 +79,7 @@ describe("Inbox record limits", () => {
       }),
     ).toThrow(InboxMessageError);
     expect(() =>
-      writeDedupClaim({
+      DedupRecords.writeClaim({
         ...createMessage(escaped, escaped, 1n),
         inboxId: {
           targetId: target,
@@ -115,10 +108,10 @@ describe("Inbox record limits", () => {
       shard: fakeShard,
     };
 
-    expect(() => writeInboxMessage(message)).toThrow(InboxMessageError);
-    expect(() => writeInboxMessage(message)).toThrow(/shard/i);
-    expect(() => writeDedupClaim(message)).toThrow(InboxMessageError);
-    expect(() => writeDedupRecord(message)).toThrow(InboxMessageError);
+    expect(() => InboxRecords.write(message)).toThrow(InboxMessageError);
+    expect(() => InboxRecords.write(message)).toThrow(/shard/i);
+    expect(() => DedupRecords.writeClaim(message)).toThrow(InboxMessageError);
+    expect(() => DedupRecords.writeFinal(message)).toThrow(InboxMessageError);
   });
 
   it("rejects non-Uint8Array signal payloads before serializing inbox and dedup records", () => {
@@ -130,10 +123,10 @@ describe("Inbox record limits", () => {
       } as Any,
     };
 
-    expect(() => writeInboxMessage(message)).toThrow(InboxMessageError);
-    expect(() => writeInboxMessage(message)).toThrow(/payload/i);
-    expect(() => writeDedupClaim(message)).toThrow(InboxMessageError);
-    expect(() => writeDedupRecord(message)).toThrow(InboxMessageError);
+    expect(() => InboxRecords.write(message)).toThrow(InboxMessageError);
+    expect(() => InboxRecords.write(message)).toThrow(/payload/i);
+    expect(() => DedupRecords.writeClaim(message)).toThrow(InboxMessageError);
+    expect(() => DedupRecords.writeFinal(message)).toThrow(InboxMessageError);
   });
 
   it("captures one signal payload before validation and serialization", () => {
@@ -154,12 +147,12 @@ describe("Inbox record limits", () => {
       },
     };
 
-    const inboxMessage = readInboxMessage(writeInboxMessage(message));
+    const inboxMessage = InboxRecords.read(InboxRecords.write(message));
 
     expect(inboxMessage.signal?.value.byteLength).toBe(1);
     reads = 0;
 
-    const pendingMessage = readPendingMessage(writeDedupClaim(message));
+    const pendingMessage = DedupRecords.readPendingMessage(DedupRecords.writeClaim(message));
 
     expect(pendingMessage?.signal?.value.byteLength).toBe(1);
   });
@@ -170,7 +163,7 @@ describe("Inbox record limits", () => {
       value: undefined,
     } as unknown as Any;
 
-    expect(() => readInboxMessage(record)).toThrow(DeliveryStorageCorruptionError);
+    expect(() => InboxRecords.read(record)).toThrow(DeliveryStorageCorruptionError);
   });
 
   it("classifies stored inbox type URL accessor failures as storage corruption", () => {
@@ -189,8 +182,8 @@ describe("Inbox record limits", () => {
       ),
     } as unknown as Any;
 
-    expect(() => readInboxMessage(record)).toThrow(DeliveryStorageCorruptionError);
-    expect(() => readInboxMessage(record)).toThrow(/type url/i);
+    expect(() => InboxRecords.read(record)).toThrow(DeliveryStorageCorruptionError);
+    expect(() => InboxRecords.read(record)).toThrow(/type url/i);
   });
 
   it("classifies corrupt stored inbox shard coordinates as storage corruption", () => {
@@ -211,7 +204,7 @@ describe("Inbox record limits", () => {
       "utf8",
     );
 
-    expect(() => readInboxMessage(record)).toThrow(DeliveryStorageCorruptionError);
+    expect(() => InboxRecords.read(record)).toThrow(DeliveryStorageCorruptionError);
   });
 
   it("classifies corrupt stored dedup Any envelopes as storage corruption", () => {
@@ -220,7 +213,7 @@ describe("Inbox record limits", () => {
       value: undefined,
     } as unknown as Any;
 
-    expect(() => readDedupGuard(record, testDedupKey("signal-1"))).toThrow(
+    expect(() => DedupRecords.readGuard(record, testDedupKey("signal-1"))).toThrow(
       DeliveryStorageCorruptionError,
     );
   });
@@ -245,10 +238,10 @@ describe("Inbox record limits", () => {
       ),
     } as unknown as Any;
 
-    expect(() => readDedupGuard(record, testDedupKey("signal-1"))).toThrow(
+    expect(() => DedupRecords.readGuard(record, testDedupKey("signal-1"))).toThrow(
       DeliveryStorageCorruptionError,
     );
-    expect(() => readDedupGuard(record, testDedupKey("signal-1"))).toThrow(/type url/i);
+    expect(() => DedupRecords.readGuard(record, testDedupKey("signal-1"))).toThrow(/type url/i);
   });
 
   it("classifies corrupt stored dedup shard coordinates as storage corruption", () => {
@@ -272,7 +265,7 @@ describe("Inbox record limits", () => {
       "utf8",
     );
 
-    expect(() => readDedupGuard(record, testDedupKey("signal-1"))).toThrow(
+    expect(() => DedupRecords.readGuard(record, testDedupKey("signal-1"))).toThrow(
       DeliveryStorageCorruptionError,
     );
   });

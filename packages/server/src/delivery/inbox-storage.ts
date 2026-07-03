@@ -10,16 +10,10 @@ import {
   type InboxWriteResult,
 } from "./inbox.js";
 import {
-  dedupGuardKey,
+  DedupRecords,
   dedupRecordSpec,
+  InboxRecords,
   inboxRecordSpec,
-  isPendingDedupRecord,
-  readDedupGuard,
-  readPendingMessage,
-  readInboxMessage,
-  writeDedupClaim,
-  writeDedupRecord,
-  writeInboxMessage,
   type DedupGuardState,
 } from "./inbox-records.js";
 import { ShardIndex } from "./shard-index.js";
@@ -51,7 +45,7 @@ export class InboxStorage {
         limit: options.limit ?? defaultReadLimit,
       });
 
-      return Object.freeze(records.map((entry) => readInboxMessage(entry.record, entry.id)));
+      return Object.freeze(records.map((entry) => InboxRecords.read(entry.record, entry.id)));
     } finally {
       storage.close();
     }
@@ -61,8 +55,8 @@ export class InboxStorage {
   async write(message: InboxMessage): Promise<InboxWriteResult> {
     // Serialize the inbox row once so validation and all later CAS keys use
     // one immutable caller-input snapshot.
-    const snapshot = readInboxMessage(writeInboxMessage(message));
-    writeDedupClaim(snapshot);
+    const snapshot = InboxRecords.read(InboxRecords.write(message));
+    DedupRecords.writeClaim(snapshot);
 
     const inboxStorage = this.#inboxStorage();
     const dedupStorage = this.#dedupStorage();
@@ -80,7 +74,7 @@ export class InboxStorage {
     dedupStorage: RecordStorage<string, Any>,
     message: InboxMessage,
   ): Promise<InboxWriteResult> {
-    const dedupKey = dedupGuardKey(message);
+    const dedupKey = DedupRecords.guardKey(message);
 
     for (;;) {
       const step = await this.#readWriteStep(inboxStorage, dedupStorage, dedupKey, message);
@@ -114,7 +108,7 @@ export class InboxStorage {
       return this.#handleStoredGuardMessage(dedupStorage, dedupKey, current, storedGuard, message);
     }
 
-    if (!isPendingDedupRecord(current)) {
+    if (!DedupRecords.isPending(current)) {
       throw new DeliveryStorageCorruptionError(
         `Inbox dedup guard "${dedupKey}" points to a missing inbox message.`,
       );
@@ -133,8 +127,8 @@ export class InboxStorage {
     const { guard, message: storedMessage } = storedGuard;
     const now = this.#dedupNow();
     let expected = current;
-    if (isPendingDedupRecord(current)) {
-      expected = writeDedupRecord(storedMessage);
+    if (DedupRecords.isPending(current)) {
+      expected = DedupRecords.writeFinal(storedMessage);
       const finalized = await dedupStorage.compareAndSet(dedupKey, current, expected);
       if (!finalized) {
         return { kind: "RETRY" };
@@ -153,7 +147,7 @@ export class InboxStorage {
     current: Any,
     message: InboxMessage,
   ): Promise<WriteStep> {
-    const pendingMessage = readPendingMessage(current);
+    const pendingMessage = DedupRecords.readPendingMessage(current);
     if (pendingMessage === undefined) {
       return { kind: "RETRY" };
     }
@@ -165,7 +159,7 @@ export class InboxStorage {
       "STORAGE_CORRUPTION",
     );
 
-    const finalRecord = writeDedupRecord(storedMessage);
+    const finalRecord = DedupRecords.writeFinal(storedMessage);
     const finalized = await dedupStorage.compareAndSet(dedupKey, current, finalRecord);
     if (!finalized) {
       return { kind: "RETRY" };
@@ -182,7 +176,7 @@ export class InboxStorage {
     dedupKey: string,
     step: WriteClaim,
   ): Promise<InboxWriteResult | undefined> {
-    const pending = writeDedupClaim(step.message);
+    const pending = DedupRecords.writeClaim(step.message);
     const claimed = await dedupStorage.compareAndSet(dedupKey, step.expected, pending);
     if (!claimed) {
       return undefined;
@@ -199,7 +193,7 @@ export class InboxStorage {
     const finalized = await dedupStorage.compareAndSet(
       dedupKey,
       pending,
-      writeDedupRecord(storedMessage),
+      DedupRecords.writeFinal(storedMessage),
     );
     return finalized ? this.#written(storedMessage).result : undefined;
   }
@@ -210,11 +204,11 @@ export class InboxStorage {
     conflict: InboxConflict = "CALLER_INPUT",
   ): Promise<InboxMessage> {
     const key = this.#messageKey(message.id);
-    const record = writeInboxMessage(message);
+    const record = InboxRecords.write(message);
 
     for (;;) {
       if (await inboxStorage.compareAndSet(key, undefined, record)) {
-        return readInboxMessage(record);
+        return InboxRecords.read(record);
       }
 
       const current = await inboxStorage.read(key);
@@ -222,8 +216,8 @@ export class InboxStorage {
         continue;
       }
 
-      const storedMessage = readInboxMessage(current, key);
-      if (this.#sameRecord(writeInboxMessage(storedMessage), record)) {
+      const storedMessage = InboxRecords.read(current, key);
+      if (this.#sameRecord(InboxRecords.write(storedMessage), record)) {
         return storedMessage;
       }
 
@@ -242,24 +236,26 @@ export class InboxStorage {
     dedupKey: string,
     guard: Any,
   ): Promise<GuardMessage | undefined> {
-    const guardState = readDedupGuard(guard, dedupKey);
+    const guardState = DedupRecords.readGuard(guard, dedupKey);
     const expectedKey = this.#messageKey(guardState.messageId);
     const storedRecord = await inboxStorage.read(expectedKey);
     if (storedRecord === undefined) {
       return undefined;
     }
 
-    const message = readInboxMessage(storedRecord, expectedKey);
-    if (dedupGuardKey(message) !== dedupKey) {
+    const message = InboxRecords.read(storedRecord, expectedKey);
+    if (DedupRecords.guardKey(message) !== dedupKey) {
       throw new DeliveryStorageCorruptionError(
         `Inbox dedup guard "${dedupKey}" points to another dedup key.`,
       );
     }
 
-    const pendingMessage = isPendingDedupRecord(guard) ? readPendingMessage(guard) : undefined;
+    const pendingMessage = DedupRecords.isPending(guard)
+      ? DedupRecords.readPendingMessage(guard)
+      : undefined;
     if (
       pendingMessage !== undefined &&
-      !this.#sameRecord(writeInboxMessage(pendingMessage), storedRecord)
+      !this.#sameRecord(InboxRecords.write(pendingMessage), storedRecord)
     ) {
       throw new DeliveryStorageCorruptionError(
         `Inbox pending dedup guard "${dedupKey}" does not match the visible inbox row.`,
