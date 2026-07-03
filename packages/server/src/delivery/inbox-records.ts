@@ -237,6 +237,7 @@ function packRecord(
 function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
   validateInboxMessage(message);
   assertSignalPayloadSize(message.signal);
+  const version = requireInputText(message.version.toString(), "Inbox version");
 
   return Object.freeze({
     key: inboxMessageKey(message.id),
@@ -253,7 +254,7 @@ function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
     label: requireDeliveryLabel(message.label),
     status: requireDeliveryStatus(message.status),
     whenReceivedMs: requireTimestamp(message.whenReceived, "Inbox receive time"),
-    version: message.version.toString(),
+    version,
     ...(message.signal === undefined ? {} : { signal: packSignal(message.signal) }),
     ...(message.keepUntil === undefined
       ? {}

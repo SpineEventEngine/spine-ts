@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-28 fix complete
+Status: round-29 fix complete
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -359,5 +359,26 @@ non-empty string.`, and a valid `20 KiB` signal payload failed with
   `pnpm test packages/server/test/delivery/inbox.test.ts`
   `packages/server/test/delivery/sharded-work-registry.test.ts`.
 - Final round-28 verification also passed with `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `git diff --check`, and a full touched-file line scan.
+- Round-29 review package is prepared at
+  `.superpowers/sdd/review-round-29-fce80b2-current.diff`.
+- Round-29 review completed from reviewer results supplied to this fix worker.
+  Code style/maintainability was clean. Documentation, TypeScript/API docs,
+  security, and performance/reliability requested changes and are now closed.
+- Round-29 fixes advance the durable task/report/review/work-log state to the
+  round-29 package, clarify `DEVELOPER_API.md` so `Inbox` /
+  `InboxStorage` stay framed as low-level delivery storage primitives rather
+  than application-facing read/query facades, keep conflicting/corrupt pending
+  dedup recovery fail-closed by retaining the canonical pending guard, and
+  reject oversized stringified inbox `version` values before inbox/dedup record
+  materialization.
+- Red-first focused regressions captured the expected pre-fix failures: the
+  retry after a conflicting pending-guard recovery still wrote a new
+  `message-2` live row, and oversized `version` values still serialized without
+  an early rejection.
+- Focused delivery verification passed with 53 tests after the round-29 fix:
+  `pnpm test packages/server/test/delivery/inbox.test.ts`
+  `packages/server/test/delivery/sharded-work-registry.test.ts`.
+- Final round-29 verification also passed with `pnpm typecheck`, `pnpm lint`,
   `pnpm format:check`, `git diff --check`, and a full touched-file line scan.
 - No blocking human question is known.

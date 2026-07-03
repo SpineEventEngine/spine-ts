@@ -131,10 +131,12 @@ The current public delivery surface is the durable inbox handoff point for one
 bounded context. It is intentionally smaller than the later worker/retry stack:
 
 - `Delivery` groups `Inbox` and `ShardedWorkRegistry` for one storage context;
-- `Inbox` accepts `InboxMessageInput` with `receive()` and reads durable inbox
-  rows by `ShardIndex`;
+- `Inbox` is the low-level durable delivery storage primitive in this slice: it
+  accepts `InboxMessageInput` with `receive()` and lets the delivery worker
+  read durable inbox rows by `ShardIndex`;
 - `InboxStorage` is the lower-level durable storage seam behind `Inbox`,
-  useful for framework tests or storage-focused integrations;
+  useful for framework tests or storage-focused integrations rather than as an
+  application-facing read-side/query facade;
 - `ShardIndex` identifies one delivery shard, `ShardSession` is the durable
   lease snapshot for that shard, and `ShardedWorkRegistry` persists shard
   pickup/release across processes; and
@@ -170,10 +172,11 @@ const pending = await delivery.inbox.read(ShardIndex.single(), {
 });
 ```
 
-Keep the write/read split intact. Write-side code records inbox messages; a
-separate asynchronous delivery step reads them by shard. The current API does
-not invoke repositories from inbox rows, mutate read-side projections, run
-retry workers, or retain attempt/error history.
+Keep the write/read split intact at the application/service/domain level. These
+storage primitives persist inbox rows and let the delivery worker consume them
+by shard; they are not user-facing read-side facades. The current API does not
+invoke repositories from inbox rows, mutate read-side projections, run retry
+workers, or retain attempt/error history.
 
 ## Public Services
 

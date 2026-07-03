@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 28 fix complete
+Status: round 29 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -1355,6 +1355,89 @@ Verification:
 - green:
   - `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
     passed with 52 tests;
+  - `pnpm typecheck`;
+  - `pnpm lint`;
+  - `pnpm format:check`;
+  - `git diff --check`; and
+  - `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+    over 120 columns).
+
+### Round 29
+
+Reviewer input: round-29 reviewer results supplied to this fix worker.
+
+Diff package:
+`.superpowers/sdd/review-round-29-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f280b-f05f-71d1-b4d7-efa46767182d` (`CLEAN`, closed);
+- documentation:
+  `019f280b-f0db-7891-b6de-5a41df3c040f` (`CHANGES REQUESTED`, closed);
+- TypeScript/API docs:
+  `019f280b-f19d-7243-829c-027f52e26917` (`CHANGES REQUESTED`, closed);
+- security:
+  `019f280b-f21a-7a30-bff6-87c8729d42db` (`CHANGES REQUESTED`, closed); and
+- performance/reliability:
+  `019f280b-f28c-7d93-85a8-e16a1e7c944f` (`CHANGES REQUESTED`, closed).
+
+Result: changes requested.
+
+Findings to address:
+
+- durable task/report/work-log entries were one round behind the actual
+  round-29 review package/current state;
+- `DEVELOPER_API.md` said `Inbox` both receives and reads while later
+  describing a strict write/read split, so the wording needed to frame
+  `Inbox` / `InboxStorage` as low-level delivery storage primitives rather than
+  application-facing read-side facades;
+- deleting a pending guard after recovery encounters a conflicting/corrupt
+  inbox row permits replay under a new message ID; and
+- inbox record serialization stringifies `version` without an early size check,
+  and pending-guard retry behavior after the retained-guard fix was not yet
+  covered.
+
+Code style/maintainability was clean. Documentation, TypeScript/API docs,
+security, and performance/reliability requested changes.
+
+### Round 29 Fix
+
+Result: implemented in this worktree.
+
+Fix summary:
+
+- advanced `TASK.md`, `IMPLEMENTATION_REPORT.md`, `DEVELOPER_API.md`, and the
+  durable work log to the actual round-29 review package/current state;
+- clarified that `Inbox` and `InboxStorage` are low-level delivery storage
+  primitives in this slice, while preserving strict application/service/domain
+  write/read segregation;
+- kept pending dedup recovery fail-closed by retaining the canonical pending
+  guard when recovery hits a conflicting/corrupt inbox row, so later retries
+  surface conflict/corruption instead of writing a new live row under a new
+  message ID; and
+- rejected oversized stringified inbox `version` values before inbox/dedup
+  record materialization and added focused retry/size regressions.
+
+Verification:
+
+- red:
+  - focused round-29 guard/version regressions:
+
+    ```sh
+    pnpm exec vitest run packages/server/test/delivery/inbox.test.ts \
+      -t 'fails closed when pending dedup recovery finds a conflicting inbox row'
+    pnpm exec vitest run packages/server/test/delivery/inbox.test.ts \
+      -t 'rejects oversized versions before building inbox or dedup records'
+    ```
+
+    failed with the expected two regressions before implementation: the retry
+    after conflicting pending-guard recovery resolved `WRITTEN` with a new
+    `message-2` live row, and oversized `version` values still serialized
+    without an early rejection;
+- green:
+  - `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
+    passed with 53 tests;
   - `pnpm typecheck`;
   - `pnpm lint`;
   - `pnpm format:check`;

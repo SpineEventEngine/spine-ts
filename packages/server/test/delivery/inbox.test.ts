@@ -638,7 +638,7 @@ describe("Inbox", () => {
     ]);
   });
 
-  it("rolls back a pending dedup guard when recovery finds a conflicting inbox row", async () => {
+  it("fails closed when pending dedup recovery finds a conflicting inbox row", async () => {
     const pending = createMessage("message-1", "signal-1", 1n);
     const conflicting = {
       ...createMessage("message-1", "signal-conflict", 1n),
@@ -655,13 +655,12 @@ describe("Inbox", () => {
     });
 
     await expect(storage.write(retryMessage)).rejects.toThrow(/already exists/i);
-    await expect(storage.write(retryMessage)).resolves.toMatchObject({
-      outcome: "WRITTEN",
-      message: { id: { value: "message-2" }, signalId: "signal-1" },
-    });
+    await expect(storage.write(retryMessage)).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+    await expect(storage.write(retryMessage)).rejects.toThrow(/points to another dedup key/i);
     await expect(storage.read(ShardIndex.single(), { limit: 10 })).resolves.toMatchObject([
       { id: { value: "message-1" }, signalId: "signal-conflict" },
-      { id: { value: "message-2" }, signalId: "signal-1" },
     ]);
   });
 
@@ -768,6 +767,13 @@ describe("Inbox", () => {
 
     await expect(write).rejects.toBeInstanceOf(InboxMessageError);
     await expect(write).rejects.toThrow(/shard/i);
+  });
+
+  it("rejects oversized versions before building inbox or dedup records", () => {
+    const message = createMessage("message-1", "signal-1", oversizedVersion());
+
+    expect(() => writeInboxMessage(message)).toThrow(/version/i);
+    expect(() => writeDedupClaim(message)).toThrow(/version/i);
   });
 
   it("rejects dedup serializers with mismatched shard identities", () => {
@@ -1607,6 +1613,10 @@ function oversizedStoredRecord(): Buffer {
 
 function oversizedText(length: number): string {
   return "x".repeat(length);
+}
+
+function oversizedVersion(): bigint {
+  return BigInt(`1${"0".repeat(16 * 1024)}`);
 }
 
 function testDedupKey(signalId: string): string {

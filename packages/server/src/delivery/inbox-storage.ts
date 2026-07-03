@@ -160,13 +160,7 @@ export class InboxStorage {
       return { kind: "RETRY" };
     }
 
-    let storedMessage: InboxMessage;
-    try {
-      storedMessage = await this.#ensureInboxRow(inboxStorage, pendingMessage);
-    } catch (error) {
-      await dedupStorage.compareAndSet(dedupKey, current, undefined);
-      throw error;
-    }
+    const storedMessage = await this.#ensureInboxRow(inboxStorage, pendingMessage);
 
     const finalRecord = writeDedupRecord(storedMessage);
     const finalized = await dedupStorage.compareAndSet(dedupKey, current, finalRecord);

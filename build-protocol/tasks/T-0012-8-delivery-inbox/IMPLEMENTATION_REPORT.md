@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-28 fix complete
+Status: round-29 fix complete
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -609,6 +609,63 @@ claim recovery:
   known durable, leaving the existing finalization-only retry behavior intact.
 
 Verification for the round-28 fix passed with:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm format:check`
+- `git diff --check`
+- `awk 'length($0) > 120 { ... }'` across the full touched-file set (no lines
+  over 120 columns)
+
+## Round 29 Review
+
+Round 29 found no code style/maintainability issue. Documentation requested
+advancing the durable task/report/review/work-log state to the actual round-29
+review package `.superpowers/sdd/review-round-29-fce80b2-current.diff`.
+TypeScript/API docs requested clarifying that `Inbox` and `InboxStorage` are
+low-level delivery storage primitives in this slice rather than
+application-facing read-side facades, while still preserving the strict
+application/service/domain write/read split. Security requested two fixes:
+pending-guard recovery must not delete the canonical guard after a
+conflicting/corrupt inbox-row recovery path, and oversized stringified inbox
+`version` values must be rejected before inbox/dedup record materialization.
+Performance/reliability repeated the pending-guard fail-open issue and required
+explicit retry coverage.
+
+Red-first regressions failed before implementation:
+
+- focused round-29 guard/version regressions:
+
+  ```sh
+  pnpm exec vitest run packages/server/test/delivery/inbox.test.ts \
+    -t 'fails closed when pending dedup recovery finds a conflicting inbox row'
+  pnpm exec vitest run packages/server/test/delivery/inbox.test.ts \
+    -t 'rejects oversized versions before building inbox or dedup records'
+  ```
+
+  failed with the expected two regressions before implementation: the retry
+  after conflicting pending-guard recovery resolved `WRITTEN` with a new
+  `message-2` live row, and the oversized `version` serializer path did not
+  throw at all.
+
+## Round 29 Fix
+
+Round-29 fixes stayed small and local to delivery inbox storage and record
+serialization:
+
+- clarified `DEVELOPER_API.md` so `Inbox` / `InboxStorage` remain low-level
+  delivery storage primitives rather than application-facing query facades,
+  while preserving the higher-level write/read split wording;
+- kept pending dedup recovery fail-closed by retaining the canonical pending
+  guard when recovery hits a conflicting/corrupt inbox row, so retries surface
+  the conflict/corruption instead of replaying under a new message ID;
+- added focused retry coverage proving the second retry now fails closed with a
+  retained-guard corruption/conflict result; and
+- rejected oversized stringified inbox `version` values before building inbox
+  or pending dedup records.
+
+Verification for the round-29 fix passed with:
 
 - `pnpm test packages/server/test/delivery/inbox.test.ts packages/server/test/delivery/sharded-work-registry.test.ts`
 - `pnpm typecheck`
