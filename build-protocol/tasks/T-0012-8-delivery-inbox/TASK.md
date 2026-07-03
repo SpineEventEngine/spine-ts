@@ -1,6 +1,6 @@
 # T-0012.8: Delivery And Inbox
 
-Status: round-23 review prep
+Status: round-24 review prep
 Start: `2026-07-02 07:52 WEST`
 Parent task: `T-0012 Corrective Cleanup And Roadmap Reset`
 Branch: `task/T-0012-8-delivery-inbox`
@@ -269,4 +269,16 @@ entityStateType)` returns a zero-based shard index and that all messages for
 - Round-22 fix renamed the test-only factory to `StorageKeyMismatchFactory`.
 - Round-23 review package is prepared at
   `.superpowers/sdd/review-round-23-fce80b2-current.diff`.
+- Round-23 review completed with maintainability, security, and
+  performance/reliability findings. Documentation and TypeScript/API docs lanes
+  were clean.
+- All five round-23 reviewer sub-agents were closed after their reports were
+  collected.
+- Round-23 fixes folded storage-key validation into `dedupMessageId()` and
+  added read-side payload-size checks for stored inbox and pending dedup
+  signals.
+- Focused inbox verification passed with 20 tests after the round-23 fix:
+  `pnpm test packages/server/test/delivery/inbox.test.ts`.
+- Round-24 review package is prepared at
+  `.superpowers/sdd/review-round-24-fce80b2-current.diff`.
 - No blocking human question is known.

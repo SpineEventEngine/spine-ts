@@ -268,6 +268,38 @@ describe("Inbox", () => {
     await expect(storage.read(ShardIndex.single())).rejects.toThrow(/storage corruption/i);
   });
 
+  it("rejects oversized signal payloads in stored inbox rows", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FakeStorageFactory([
+        storedInboxRecord({
+          signalId: "signal-large",
+          valueBase64: oversizedPayload(),
+        }),
+      ]),
+    });
+
+    await expect(storage.read(ShardIndex.single())).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
+  it("rejects oversized signal payloads in pending dedup guards", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new CorruptGuardFactory({
+        guard: pendingDedupRecord({
+          signalId: "signal-1",
+          valueBase64: oversizedPayload(),
+        }),
+      }),
+    });
+
+    await expect(storage.write(createMessage("message-2", "signal-1", 2n))).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+  });
+
   it("retries safely after an orphaned pending dedup claim", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -831,6 +863,26 @@ class MissingMessageGuardFactory extends StorageFactory {
   }
 }
 
+class CorruptGuardFactory extends StorageFactory {
+  readonly #records: CorruptGuardRecords;
+
+  constructor(records: CorruptGuardRecords) {
+    super();
+    this.#records = records;
+  }
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new CorruptGuardStorage(
+      context,
+      recordSpec as unknown as RecordSpec<string, Any>,
+      this.#records,
+    ) as unknown as RecordStorage<I, R>;
+  }
+}
+
 class WrongKeyGuardFactory extends StorageFactory {
   protected onCreateRecordStorage<I, R extends Message>(
     context: StorageContext,
@@ -938,6 +990,11 @@ interface FinalGuardFields {
   readonly inboxMessageId: string;
 }
 
+interface PendingGuardFields {
+  readonly signalId: string;
+  readonly valueBase64: string;
+}
+
 function finalDedupRecord(fields: FinalGuardFields): Any {
   return create(AnySchema, {
     typeUrl: "type.spine-ts.dev/internal/InboxDedupRecord",
@@ -952,6 +1009,55 @@ function finalDedupRecord(fields: FinalGuardFields): Any {
       "utf8",
     ),
   });
+}
+
+function pendingDedupRecord(fields: PendingGuardFields): Any {
+  return create(AnySchema, {
+    typeUrl: "type.spine-ts.dev/internal/InboxDedupRecord",
+    value: Buffer.from(
+      JSON.stringify({
+        key: testDedupKey(fields.signalId),
+        state: "PENDING",
+        message: storedInboxJson(fields),
+      }),
+      "utf8",
+    ),
+  });
+}
+
+function storedInboxRecord(fields: PendingGuardFields): Any {
+  return create(AnySchema, {
+    typeUrl: "type.spine-ts.dev/internal/InboxMessageRecord",
+    value: Buffer.from(JSON.stringify(storedInboxJson(fields)), "utf8"),
+  });
+}
+
+function storedInboxJson(fields: PendingGuardFields): Record<string, unknown> {
+  return {
+    key: "0/1:message-1",
+    id: "message-1",
+    shard: "0/1",
+    shardIndex: 0,
+    shardTotal: 1,
+    inbox: testInboxKey,
+    inboxId: {
+      targetId: "projection-1",
+      targetTypeUrl: "type.example.dev/tasks.Projection",
+    },
+    signalId: fields.signalId,
+    signal: {
+      typeUrl: "type.example.dev/tasks.LargeSignal",
+      valueBase64: fields.valueBase64,
+    },
+    label: "UPDATE_SUBSCRIBER",
+    status: "TO_DELIVER",
+    whenReceivedMs: Date.parse("2026-07-02T08:00:00.000Z"),
+    version: "1",
+  };
+}
+
+function oversizedPayload(): string {
+  return Buffer.alloc(256 * 1024 + 1).toString("base64");
 }
 
 function testDedupKey(signalId: string): string {

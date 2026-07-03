@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.8 Delivery And Inbox
 
-Status: round-23 review prep
+Status: round-24 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -327,6 +327,24 @@ Round-22 fix renamed the test-only factory to `StorageKeyMismatchFactory`.
 Round-23 review package
 `.superpowers/sdd/review-round-23-fce80b2-current.diff` was prepared after the
 rename.
+
+## Round 23 Review
+
+Round 23 found no documentation or TypeScript/API docs issue. Maintainability
+requested removing the new standalone `readDedupKey()` export and folding that
+check into an existing records-module operation. Security and
+performance/reliability requested read-side payload-size validation for stored
+inbox rows and pending dedup guards.
+
+Round-23 fixes moved storage-key validation into `dedupMessageId()` and added
+stored signal payload-size checks before/after base64 decoding. Focused inbox
+verification passed with 20 tests:
+
+`pnpm test packages/server/test/delivery/inbox.test.ts`.
+
+Round-24 review package
+`.superpowers/sdd/review-round-24-fce80b2-current.diff` was prepared after the
+fixes.
 
 ## Round 2 Review
 

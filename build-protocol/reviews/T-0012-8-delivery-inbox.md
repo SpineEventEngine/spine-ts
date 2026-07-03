@@ -1,6 +1,6 @@
 # Review Log: T-0012.8 Delivery And Inbox
 
-Status: round 23 review prep
+Status: round 24 review prep
 Branch: `task/T-0012-8-delivery-inbox`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-8-delivery-inbox`
@@ -916,6 +916,48 @@ Fix summary:
 
 Diff package:
 `.superpowers/sdd/review-round-23-fce80b2-current.diff`.
+
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f27ac-9bb0-7a43-950d-a489088ce066`;
+- documentation: `019f27ac-bae9-7761-959c-ee7c4f1b3911`;
+- TypeScript/API docs: `019f27ac-d6af-73f3-b54e-579614dbed56`;
+- security: `019f27ac-f23b-7a20-a2ca-b9595fc929b7`;
+- performance/reliability:
+  `019f27ad-155d-7852-97ef-049aaaf7a30c`.
+
+Result: changes requested.
+
+Findings to address:
+
+- remove the new standalone `readDedupKey()` export and fold storage-key
+  validation into an existing records operation;
+- stored inbox rows and pending dedup guards must reject oversized signal
+  payloads on read.
+
+Documentation and TypeScript/API docs lanes were clean. All five round-23
+reviewer sub-agents were closed after their reports were collected.
+
+### Round 23 Fix
+
+Result: implemented in this worktree and ready for round-24 review.
+
+Fix summary:
+
+- moved dedup storage-key validation into `dedupMessageId()`;
+- removed the standalone `readDedupKey()` export;
+- added stored signal payload-size checks before/after base64 decoding;
+- added regressions for oversized stored inbox and pending dedup payloads.
+
+Verification:
+
+- `pnpm test packages/server/test/delivery/inbox.test.ts` passed with 20 tests.
+
+### Round 24
+
+Diff package:
+`.superpowers/sdd/review-round-24-fce80b2-current.diff`.
 
 Reviewer sub-agents: pending.
 

@@ -98,10 +98,6 @@ export function isPendingDedupRecord(record: Any): boolean {
   return readStoredDedupRecord(record).state === "PENDING";
 }
 
-export function readDedupKey(record: Any): string {
-  return readStoredDedupRecord(record).key;
-}
-
 function readStoredDedupRecord(record: Any): StoredDedupRecord {
   const decoded = readStoredRecord(record, dedupRecordTypeUrl, "Inbox dedup record");
   const state = requireDedupState(decoded.state);
@@ -180,8 +176,13 @@ export function writeDedupRecord(message: InboxMessage): Any {
   return packRecord(dedupRecordTypeUrl, stored);
 }
 
-export function dedupMessageId(record: Any): InboxMessageId {
+export function dedupMessageId(record: Any, expectedKey?: string): InboxMessageId {
   const dedup = readStoredDedupRecord(record);
+  if (expectedKey !== undefined && dedup.key !== expectedKey) {
+    throw new DeliveryStorageCorruptionError(
+      `Inbox dedup guard "${expectedKey}" does not match its storage key.`,
+    );
+  }
 
   if (dedup.state === "PENDING") {
     return Object.freeze({
@@ -289,9 +290,11 @@ function packSignal(signal: Any): StoredSignal {
 }
 
 function unpackSignal(signal: StoredSignal): Any {
+  const valueBase64 = requireText(signal.valueBase64, "Inbox signal payload");
+
   return create(AnySchema, {
     typeUrl: requireText(signal.typeUrl, "Inbox signal type URL"),
-    value: Buffer.from(requireText(signal.valueBase64, "Inbox signal payload"), "base64"),
+    value: decodeSignalPayload(valueBase64),
   });
 }
 
@@ -487,5 +490,23 @@ function assertSignalPayloadSize(signal: Any | undefined): void {
   }
 }
 
+function decodeSignalPayload(valueBase64: string): Buffer {
+  if (valueBase64.length > maxSignalPayloadChars) {
+    throw new DeliveryStorageCorruptionError(
+      `Inbox signal payload exceeds ${String(maxSignalPayloadBytes)} bytes and cannot be stored.`,
+    );
+  }
+
+  const value = Buffer.from(valueBase64, "base64");
+  if (value.byteLength > maxSignalPayloadBytes) {
+    throw new DeliveryStorageCorruptionError(
+      `Inbox signal payload exceeds ${String(maxSignalPayloadBytes)} bytes and cannot be stored.`,
+    );
+  }
+
+  return value;
+}
+
 const inboxRecordTypeUrl = "type.spine-ts.dev/internal/InboxMessageRecord";
 const dedupRecordTypeUrl = "type.spine-ts.dev/internal/InboxDedupRecord";
+const maxSignalPayloadChars = Math.ceil(maxSignalPayloadBytes / 3) * 4;
