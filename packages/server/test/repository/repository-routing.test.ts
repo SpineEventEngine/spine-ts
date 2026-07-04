@@ -18,6 +18,7 @@ import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   Aggregate,
+  AggregateStorage,
   BoundedContext,
   Repository,
   RepositoryIdentityError,
@@ -78,7 +79,96 @@ class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, numbe
   }
 }
 
+class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
+  static assigneeCalls = 0;
+  static applierCalls = 0;
+
+  static reset(): void {
+    this.assigneeCalls = 0;
+    this.applierCalls = 0;
+  }
+
+  assignTask(command: AggregateState) {
+    ExecutingTaskAggregate.assigneeCalls++;
+
+    return packEvent({
+      id: create(EventIdSchema, { value: `event-${command.name}` }),
+      context: create(EventContextSchema),
+      schema: AggregateStateSchema,
+      message: create(AggregateStateSchema, {
+        id: command.id,
+        name: command.name,
+        archived: false,
+      }),
+    });
+  }
+
+  applyTask(event: AggregateState): void {
+    ExecutingTaskAggregate.applierCalls++;
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: event.id,
+        name: `${event.name} (applied)`,
+        archived: true,
+      }),
+    );
+    this.commitTransaction();
+  }
+}
+
 describe("repository signal routing", () => {
+  it("executes aggregate commands through a built bounded-context command bus", async () => {
+    ExecutingTaskAggregate.reset();
+    const factory = new InMemoryStorageFactory();
+    const observed: string[] = [];
+    const repository = createExecutingRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .addEventDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (event) => {
+          observed.push(event.id?.value ?? "missing");
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    const completion = context
+      .commandBus()
+      .post(createAggregateCommand("command-exec", "task-exec", "TaskExec"));
+
+    expect(ExecutingTaskAggregate.assigneeCalls).toBe(0);
+    expect(observed).toEqual([]);
+
+    await completion;
+
+    expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
+    expect(ExecutingTaskAggregate.applierCalls).toBe(1);
+    await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "event-TaskExec" } }]);
+    await expect(storage.readHistory("task-exec")).resolves.toMatchObject({
+      snapshot: {
+        aggregateId: "task-exec",
+        version: 1n,
+        state: {
+          id: "task-exec",
+          name: "TaskExec (applied)",
+          archived: true,
+        },
+      },
+      events: [],
+    });
+    expect(observed).toEqual(["event-TaskExec"]);
+  });
+
   it("routes commands to one aggregate ID by the first command field", async () => {
     const repository = createRoutingRepository();
     const command = createAggregateCommand("command-1", "task-1");
@@ -228,7 +318,20 @@ function createRoutingRepository(): Repository<typeof TaskAggregate> {
   });
 }
 
-function createAggregateCommand(id: string, aggregateId: string) {
+function createExecutingRepository(): Repository<typeof ExecutingTaskAggregate> {
+  const handlers = defineEntityHandlers(ExecutingTaskAggregate, AggregateStateSchema, (builder) => [
+    builder.assign(AggregateStateSchema, "assignTask"),
+    builder.apply(AggregateStateSchema, "applyTask"),
+  ]);
+
+  return new Repository({
+    entityType: ExecutingTaskAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createAggregateCommand(id: string, aggregateId: string, name = "Task") {
   return packCommand({
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
@@ -239,7 +342,7 @@ function createAggregateCommand(id: string, aggregateId: string) {
     schema: AggregateStateSchema,
     message: create(AggregateStateSchema, {
       id: aggregateId,
-      name: "Task",
+      name,
       archived: false,
     }),
   });

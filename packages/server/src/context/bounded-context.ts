@@ -12,7 +12,7 @@ import {
 
 import { CommandBus } from "../bus/command-bus.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
-import { EventBus } from "../bus/event-bus.js";
+import { EventBus, eventBusAccess } from "../bus/event-bus.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import {
   Repository,
@@ -72,6 +72,8 @@ interface RepositoryRegistration {
   readonly storageContext: StorageContext;
   /** Context storage factory. */
   readonly storageFactory: StorageFactory;
+  /** Stored-event dispatch callback into the owning context event bus. */
+  readonly dispatchStored: (event: Event) => Promise<void>;
 }
 
 interface RegistrationSnapshot {
@@ -222,6 +224,7 @@ export class BoundedContext {
       name: cloneName(this.#snapshot.name),
       storageContext: createStorageContext(this.#snapshot.spec),
       storageFactory: this.#storageFactory,
+      dispatchStored: (event) => eventBusAccess.postStored(this.#eventBus, event),
     };
     const preparedRepositories: PreparedRepository[] = [];
     try {
@@ -658,6 +661,11 @@ function prepareRepositoryForContext(
     registration.storageContext,
     createRepositoryRecordSpec(snapshot),
   );
+  repositoryAccess.bindRuntime(repository, {
+    context: registration.storageContext,
+    storageFactory: registration.storageFactory,
+    dispatchStored: registration.dispatchStored,
+  });
 
   return {
     repository,
@@ -667,6 +675,7 @@ function prepareRepositoryForContext(
       registeredRepositories.set(repository, { name: registration.name });
     },
     close: () => {
+      repositoryAccess.clearRuntime(repository);
       storage.close();
     },
   };

@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11a Aggregate Command Execution
 
-Status: in progress
+Status: implementation complete; coverage blocked by sandbox IPC/HTTP2 checks
 Branch: `task/T-0012-11a-aggregate-command-execution`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11a-aggregate-command-execution`
@@ -44,13 +44,61 @@ storage:
 - `EventBus.post()` appends and then dispatches.
 - `AggregateStorage.appendEvents()` already appends aggregate events.
 
-The implementation will choose the smallest correct path and record it here once
-the red tests pin down the exact seam. The preferred direction is to keep
-aggregate append/version validation in `AggregateStorage` and add the smallest
-internal already-stored event dispatch path, because that avoids a second write
-while preserving the current write-side storage seam.
+Chosen path:
+
+- keep aggregate append/version validation and snapshot writes in
+  `AggregateStorage`; and
+- add a small internal `EventBus` access path for already-stored events so the
+  repository can dispatch them asynchronously without calling `EventBus.post()`
+  and appending them again.
+
+The stored-event dispatch path intentionally skips the pre-store append step
+because aggregate-produced events are already persisted through the write-side
+storage seam before event-bus handoff.
 
 ## TDD Record
 
-Pending. The next entry will capture the first focused red test command and its
-expected failure reason before production code changes begin.
+- RED:
+  - Ran `pnpm install` with escalation after sandbox DNS/network failures in the
+    fresh worktree prevented dependency preparation.
+  - Ran `pnpm typecheck:build` to generate protobuf output and build workspace
+    package entrypoints needed by Vitest.
+  - Ran
+    `pnpm test packages/server/test/repository/repository-routing.test.ts`.
+  - The new built-context command-execution test failed for the expected slice
+    reason: `ExecutingTaskAggregate.assigneeCalls` stayed `0`, proving the
+    repository dispatcher still stops at routing instead of invoking the
+    aggregate assignee.
+
+- GREEN:
+  - Added aggregate runtime binding during bounded-context repository
+    registration.
+  - Changed repository command dispatch so aggregate repositories load/create
+    one aggregate, invoke the assignee, bind sequential event versions, apply
+    event appliers, append through `AggregateStorage`, write the latest
+    snapshot, and then dispatch already-stored events through the event bus.
+  - Re-ran
+    `pnpm test packages/server/test/repository/repository-routing.test.ts packages/server/test/repository/aggregate-storage.test.ts`
+    and got 2 files, 36 tests passed.
+
+## Verification
+
+- `pnpm install` passed with escalation after sandbox DNS failures in the fresh
+  worktree.
+- `pnpm typecheck:build` passed.
+- `pnpm test packages/server/test/repository/repository-routing.test.ts`
+  produced the expected RED with `ExecutingTaskAggregate.assigneeCalls` staying
+  `0`.
+- `pnpm test packages/server/test/repository/repository-routing.test.ts packages/server/test/repository/aggregate-storage.test.ts`
+  passed with 2 files and 36 tests after the implementation.
+- `pnpm typecheck` passed.
+- `pnpm lint` passed.
+- `pnpm format:check` passed.
+- `git diff --check` passed.
+- `pnpm docs:check` was not run because this slice did not move public/API docs
+  or package-root public exports.
+- `pnpm test:coverage` failed in the sandbox for known environment reasons:
+  `packages/transport/test/zeromq/local-ipc-smoke.test.ts` hit
+  `Operation not permitted`, and `packages/server/test/services/spine-services.test.ts`
+  hit repeated `listen EPERM: operation not permitted 127.0.0.1` timeouts while
+  starting the real HTTP/2 gRPC server.

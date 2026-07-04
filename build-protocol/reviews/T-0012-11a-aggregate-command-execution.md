@@ -1,6 +1,6 @@
 # Review Log: T-0012.11a Aggregate Command Execution
 
-Status: in progress
+Status: implementation complete; awaiting review
 Task log: `build-protocol/tasks/T-0012-11a-aggregate-command-execution/TASK.md`
 Branch: `task/T-0012-11a-aggregate-command-execution`
 Worktree:
@@ -34,5 +34,6 @@ Reviewers must verify:
 ## Current State
 
 No implementation review has run yet. The branch/worktree exists, the required
-evidence has been read, and durable docs/logs were created before the first red
-test.
+evidence was read before coding, focused repository tests are green, and the
+only remaining verification gap is sandbox-only coverage failure on local IPC
+and loopback HTTP/2 tests.

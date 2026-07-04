@@ -6,6 +6,12 @@ import { SingleProcessServerRuntime } from "../runtime/runtime.js";
 import { EventDispatcherRegistry } from "./event-dispatcher-registry.js";
 import type { EventDispatcher } from "./event-dispatcher.js";
 
+const storedDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
+
+interface EventBusAccess {
+  postStored(eventBus: EventBus, event: Event): Promise<void>;
+}
+
 /**
  * Small single-process multicast event bus.
  *
@@ -23,6 +29,7 @@ export class EventBus {
   constructor(eventStore: EventStore, dispatchers: Iterable<EventDispatcher> = []) {
     this.#eventStore = eventStore;
     this.#started = this.#runtime.start();
+    storedDispatchers.set(this, (event) => this.#postStored(event));
 
     for (const dispatcher of dispatchers) {
       this.register(dispatcher);
@@ -57,9 +64,42 @@ export class EventBus {
     }
   }
 
+  #postStored(event: Event): Promise<void> {
+    const accepted = clone(EventSchema, event);
+
+    return this.#started.then(() => this.#runtime.enqueue(() => this.#dispatchStored(accepted)));
+  }
+
+  async #dispatchStored(event: Event): Promise<void> {
+    const typeUrl = event.message?.typeUrl;
+
+    if (typeUrl === undefined || typeUrl === "") {
+      throw new Error("EventBus requires event.message.typeUrl.");
+    }
+
+    const dispatchers = this.#registry.find(typeUrl);
+
+    for (const dispatcher of dispatchers) {
+      await dispatcher.dispatch(clone(EventSchema, event));
+    }
+  }
+
   async #accept(event: Event, dispatchers: readonly EventDispatcher[]): Promise<void> {
     for (const dispatcher of dispatchers) {
       await dispatcher.accept?.(clone(EventSchema, event));
     }
   }
 }
+
+/** @internal Event-bus access used when events are already stored. */
+export const eventBusAccess: EventBusAccess = Object.freeze({
+  postStored(eventBus: EventBus, event: Event): Promise<void> {
+    const postStored = storedDispatchers.get(eventBus);
+
+    if (postStored === undefined) {
+      throw new TypeError("Stored event dispatch requires an EventBus instance.");
+    }
+
+    return postStored(event);
+  },
+});
