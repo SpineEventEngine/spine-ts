@@ -131,6 +131,12 @@ Resumed-state note:
   and round-2 async-applier fix passes, updated public/API docs, and recorded
   focused plus escalated coverage verification in the child
   task/report/review/work logs.
+- `T-0012.11a` is merged into this parent branch at `1a7b6c8`. Parent
+  verification passed after rebuilding workspace package entrypoints: focused
+  tests (5 files, 62 tests), `pnpm docs:check`, `pnpm typecheck`, `pnpm lint`,
+  `git diff --check HEAD^..HEAD`, and escalated `pnpm test:coverage` (45 files,
+  564 tests; statements 94.85%, branches 90.03%, functions 97.33%, lines
+  94.87%).
 
 ## Staged Subtasks
 

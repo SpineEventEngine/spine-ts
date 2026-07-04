@@ -71,19 +71,12 @@ commit `8804e93`.
 Requirements splitting is complete. The task now has a staged roadmap with five
 concrete implementation slices.
 
-`T-0012.11a Aggregate Command Execution` is the selected first slice. Its
-branch/worktree is open from `8804e93`, and the child worktree has completed
-the aggregate command-execution review-fix and primitive-ID coverage follow-up:
-focused write-side tests, typecheck/lint/format/docs/diff verification, durable
-doc/log updates, and escalated `pnpm test:coverage` are recorded there. The
-sandboxed coverage command still depends on local IPC and loopback listener
-permissions, but the escalated coverage gate passed after the primitive-ID
-tests. A follow-up worker then closed stale docs, executable aggregate version
-typing, helper simplicity, async-assignee, snapshot-failure handoff, and
-reentrant registration cleanup findings; fresh verification passed in the child
-worktree, including escalated coverage with 45 files and 559 tests. A later
-round-2 fix awaited aggregate event appliers before append/snapshot ordering,
-replaced primitive-ID helper-shape coverage with `AggregateStorage` behavior
-coverage, updated stale deferred-work docs/logs, and passed focused verification
-plus escalated coverage with 45 files and 564 tests. Sandboxed coverage remains
-blocked only by local IPC/HTTP2 endpoint permissions.
+`T-0012.11a Aggregate Command Execution` is merged into this parent branch at
+`1a7b6c8`. The child worktree completed the aggregate command-execution
+review-fix, coverage-fix, and round-2 async-applier fix passes. The final parent
+verification passed after rebuilding workspace package entrypoints: focused
+tests (5 files, 62 tests), `pnpm docs:check`, `pnpm typecheck`, `pnpm lint`,
+`git diff --check HEAD^..HEAD`, and escalated `pnpm test:coverage` (45 files,
+564 tests; statements 94.85%, branches 90.03%, functions 97.33%, lines
+94.87%). Sandboxed coverage remains blocked only by local IPC/HTTP2 endpoint
+permissions.
