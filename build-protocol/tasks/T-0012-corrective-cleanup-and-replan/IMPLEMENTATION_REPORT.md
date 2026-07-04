@@ -220,6 +220,16 @@ in-process subscriptions, and public documentation. All required review lanes
 are clean through commit `9202b5e`. The next selected subtask is
 `T-0012.10 Real gRPC Services`.
 
+Parent tracked-state verification after integrating `T-0012.9` passed:
+`pnpm check:node`, `pnpm typecheck`, `pnpm lint`, tracked-file Prettier,
+escalated `pnpm test`, escalated `pnpm test:coverage`, `pnpm docs:check`,
+`pnpm proto:lint`, `pnpm proto:generate`, `pnpm proto:check-generated`, and
+`git diff --check`. Escalated coverage passed with 43 test files, 503 tests,
+statements 94.93%, branches 90.07%, functions 97.05%, and lines 94.96%.
+Docs/API checks still report only the known invalid-`origin` TypeDoc warning.
+The unrelated untracked root file `human-review-1-jul.md` remains outside the
+autonomous task scope.
+
 ## First Selected Subtask
 
 Selected: `T-0012.1 Cleanup Enforcement Baseline`.

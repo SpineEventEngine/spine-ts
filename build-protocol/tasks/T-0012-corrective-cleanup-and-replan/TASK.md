@@ -133,6 +133,13 @@ first direct storage-backed `Stand`, context-owned stand exposure, direct
 entity-state updates, in-process subscriptions, and documentation that keeps
 gRPC `QueryService` and `SubscriptionService` in the next task.
 
+Parent tracked-state verification passed after `T-0012.9` integration:
+check-node, typecheck, lint, tracked-file formatting, escalated tests,
+escalated coverage, docs/API, proto lint/generate/clean, and
+`git diff --check`. Non-escalated tests and coverage still hit the known
+ZeroMQ local IPC sandbox failure. Coverage was statements 94.93%, branches
+90.07%, functions 97.05%, and lines 94.96%.
+
 Next selected subtask: `T-0012.10 Real gRPC Services`.
 
 ## T-0012.2 Selection Rationale
