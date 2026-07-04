@@ -13,7 +13,7 @@ import {
 
 import type { DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import type { EntityLifecycleFlags } from "../entity/entity.js";
-import { primitiveId as readPrimitiveId, unpackPrimitiveId } from "./primitive-id.js";
+import { PrimitiveIds } from "./primitive-id.js";
 
 /**
  * Small aggregate history store over snapshots and events.
@@ -247,7 +247,7 @@ export class AggregateStorage<
   #producerId(event: Event): AggregateId | undefined {
     const producerId = event.context?.producerId;
     if (producerId !== undefined) {
-      const unpacked = unpackPrimitiveId(producerId);
+      const unpacked = PrimitiveIds.unpack(producerId);
       if (unpacked !== undefined) {
         return unpacked;
       }
@@ -271,7 +271,7 @@ export class AggregateStorage<
       const firstField = schema.fields[0];
       if (unpacked !== undefined && firstField !== undefined) {
         const value = (unpacked as Record<string, unknown>)[firstField.localName];
-        return primitiveId(value);
+        return PrimitiveIds.read(value);
       }
     }
 
@@ -283,7 +283,7 @@ export class AggregateStorage<
     if (firstField === undefined) {
       return undefined;
     }
-    return primitiveId((state as Record<string, unknown>)[firstField.localName]);
+    return PrimitiveIds.read((state as Record<string, unknown>)[firstField.localName]);
   }
 
   #validateSnapshot(aggregateId: Id, state: MessageShape<Schema>, version: bigint): void {
@@ -531,7 +531,7 @@ function rejectDuplicateEventIds(events: readonly VersionedEvent[]): void {
 }
 
 function requirePrimitiveId(value: unknown): AggregateId {
-  const id = primitiveId(value);
+  const id = PrimitiveIds.read(value);
   if (id === undefined) {
     throw new Error("Aggregate IDs must be primitive values.");
   }
@@ -539,15 +539,11 @@ function requirePrimitiveId(value: unknown): AggregateId {
 }
 
 function samePrimitiveId(left: unknown, right: unknown): boolean {
-  return primitiveId(left) !== undefined && left === right;
+  return PrimitiveIds.read(left) !== undefined && left === right;
 }
 
 function sameSnapshotId(left: unknown, right: unknown): boolean {
   return samePrimitiveId(left, right);
-}
-
-function primitiveId(value: unknown): AggregateId | undefined {
-  return readPrimitiveId(value);
 }
 
 function compareVersions(left: bigint, right: bigint): number {

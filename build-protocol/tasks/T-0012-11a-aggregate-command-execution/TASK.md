@@ -1,6 +1,6 @@
 # T-0012.11a: Aggregate Command Execution
 
-Status: review findings addressed; verification complete except sandboxed coverage rerun
+Status: follow-up review fixes complete; verification passed with escalated coverage
 Start: `2026-07-04 21:57 WEST`
 Parent task: `T-0012.11 Missing Details And Example Readiness`
 Branch: `task/T-0012-11a-aggregate-command-execution`
@@ -111,3 +111,13 @@ the already-produced events to the existing async event-bus path.
   `Operation not permitted` and HTTP/2 loopback `listen EPERM 127.0.0.1`
   failures while `packages/server/test/services/spine-services.test.ts` starts
   the real gRPC server.
+- The coverage-fix follow-up added primitive-ID tests and escalated
+  `pnpm test:coverage` passed with 45 files and 555 tests. Coverage summary:
+  statements 94.87%, branches 90.03%, functions 97.34%, lines 94.89%.
+- The follow-up review-fix worker addressed the subsequent documentation,
+  public generic, simplicity, and reliability findings. Fresh verification
+  passed: focused tests (6 files, 105 tests), `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `pnpm docs:check`, `git diff --check`, and escalated
+  `pnpm test:coverage` (45 files, 559 tests; statements 94.85%, branches
+  90.03%, functions 97.33%, lines 94.87%). Sandboxed coverage still fails only
+  on local IPC/HTTP2 endpoint permissions.

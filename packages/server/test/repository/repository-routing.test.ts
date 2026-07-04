@@ -13,6 +13,7 @@ import {
   ActorContextSchema,
   CommandContextSchema,
   CommandIdSchema,
+  type Event as SpineEvent,
   EventContextSchema,
   EventIdSchema,
   EventSchema,
@@ -21,7 +22,13 @@ import {
   VersionSchema,
   file_spine_options,
 } from "@spine-ts/proto";
-import { EventStore, InMemoryStorageFactory } from "@spine-ts/storage";
+import {
+  EventStore,
+  InMemoryStorageFactory,
+  RecordStorage,
+  type RecordSpec,
+  type StorageContext,
+} from "@spine-ts/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
@@ -77,7 +84,7 @@ const AggregateStateSchema = messageDesc(
   1,
 ) as GenMessage<AggregateState>;
 
-class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
+class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: AggregateState): void {
     void command;
   }
@@ -126,6 +133,30 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
         id: event.id,
         name: `${event.name} (applied)`,
         archived: true,
+      }),
+    );
+    this.commitTransaction();
+  }
+}
+
+class AsyncAssigneeAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  static resolveCommand: ((eventName: string) => void) | undefined;
+
+  assignTask(command: AggregateState): Promise<SpineEvent> {
+    return new Promise((resolve) => {
+      AsyncAssigneeAggregate.resolveCommand = (eventName) => {
+        resolve(createAggregateEvent(`event-${eventName}`, command.id, 0, eventName));
+      };
+    });
+  }
+
+  applyTask(event: AggregateState): void {
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: event.id,
+        name: `${event.name} (applied)`,
+        archived: event.archived,
       }),
     );
     this.commitTransaction();
@@ -232,6 +263,51 @@ describe("repository signal routing", () => {
     expect(observed).toEqual(["event-TaskExec"]);
   });
 
+  it("keeps an already registered repository executable after a failed second registration", async () => {
+    ExecutingTaskAggregate.reset();
+    const repository = createExecutingRepository();
+    const firstContext = BoundedContext.singleTenant("Tasks").add(repository).build();
+
+    expect(() => BoundedContext.singleTenant("OtherTasks").add(repository).build()).toThrow(
+      "already registered with Bounded Context",
+    );
+
+    await firstContext
+      .commandBus()
+      .post(createAggregateCommand("command-after-registration-failure", "task-after-failure"));
+
+    expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
+    expect(ExecutingTaskAggregate.applierCalls).toBe(1);
+  });
+
+  it("keeps a reentrantly registered repository executable after failed outer cleanup", async () => {
+    ExecutingTaskAggregate.reset();
+    const repository = createExecutingRepository();
+    let nestedContext: BoundedContext | undefined;
+    let attempted = false;
+    const outerFactory = new ReentrantRegistrationStorageFactory(() => {
+      if (attempted) {
+        return;
+      }
+      attempted = true;
+      nestedContext = BoundedContext.singleTenant("Nested")
+        .add(repository)
+        .withStorageFactory(new InMemoryStorageFactory())
+        .build();
+    });
+
+    expect(() =>
+      BoundedContext.singleTenant("Outer").add(repository).withStorageFactory(outerFactory).build(),
+    ).toThrow('already registered with Bounded Context "Nested"');
+
+    await nestedContext
+      ?.commandBus()
+      .post(createAggregateCommand("command-after-reentrant-failure", "task-reentrant"));
+
+    expect(ExecutingTaskAggregate.assigneeCalls).toBe(1);
+    expect(ExecutingTaskAggregate.applierCalls).toBe(1);
+  });
+
   it("persists array command output with sequential aggregate versions", async () => {
     ExecutingTaskAggregate.reset();
     const factory = new InMemoryStorageFactory();
@@ -263,6 +339,42 @@ describe("repository signal routing", () => {
           name: "Multi two (applied)",
           archived: true,
         },
+      },
+      events: [],
+    });
+  });
+
+  it("awaits async aggregate command assignees before storing produced events", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createAsyncAssigneeRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    const completion = context
+      .commandBus()
+      .post(createAggregateCommand("command-async", "task-async", "Async"));
+
+    await Promise.resolve();
+    await expect(storage.readHistory("task-async")).resolves.toMatchObject({
+      snapshot: undefined,
+      events: [],
+    });
+
+    AsyncAssigneeAggregate.resolveCommand?.("Async");
+    await completion;
+
+    await expect(storage.readHistory("task-async")).resolves.toMatchObject({
+      snapshot: {
+        aggregateId: "task-async",
+        version: 1n,
+        state: { name: "Async (applied)" },
       },
       events: [],
     });
@@ -300,6 +412,32 @@ describe("repository signal routing", () => {
       },
       events: [],
     });
+  });
+
+  it("dispatches appended events when snapshot writing fails but rejects command completion", async () => {
+    const factory = new SnapshotFailingStorageFactory();
+    const observed: string[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (event) => {
+          observed.push(event.id?.value ?? "missing");
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("command-snapshot-fails", "task-snapshot-fails")),
+    ).rejects.toThrow("Cannot write aggregate snapshot.");
+
+    await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "event-Task" } }]);
+    expect(observed).toEqual(["event-Task"]);
   });
 
   it("does not block the outer command on nested commands posted from stored-event dispatch", async () => {
@@ -650,6 +788,19 @@ function createExecutingRepository(): Repository<typeof ExecutingTaskAggregate> 
   });
 }
 
+function createAsyncAssigneeRepository(): Repository<typeof AsyncAssigneeAggregate> {
+  const handlers = defineEntityHandlers(AsyncAssigneeAggregate, AggregateStateSchema, (builder) => [
+    builder.assign(AggregateStateSchema, "assignTask"),
+    builder.apply(AggregateStateSchema, "applyTask"),
+  ]);
+
+  return new Repository({
+    entityType: AsyncAssigneeAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
 function createBigintVersionRepository(): Repository<typeof BigintVersionAggregate> {
   const handlers = defineEntityHandlers(BigintVersionAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
@@ -693,7 +844,12 @@ function createMalformedEventRepository(): Repository<typeof MalformedEventAggre
   });
 }
 
-function createAggregateEvent(id: string, aggregateId: string, version: number, name = "Task") {
+function createAggregateEvent(
+  id: string,
+  aggregateId: string,
+  version: number,
+  name = "Task",
+): SpineEvent {
   return packEvent({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
@@ -797,4 +953,78 @@ function createSignal() {
   });
 
   return { promise, resolve };
+}
+
+class SnapshotFailingStorageFactory extends InMemoryStorageFactory {
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new SnapshotFailingRecordStorage(
+      context,
+      recordSpec,
+      super.onCreateRecordStorage(context, recordSpec),
+    );
+  }
+}
+
+class ReentrantRegistrationStorageFactory extends InMemoryStorageFactory {
+  constructor(private readonly onCreate: () => void) {
+    super();
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    const storage = super.onCreateRecordStorage(context, recordSpec);
+    this.onCreate();
+    return storage;
+  }
+}
+
+class SnapshotFailingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    private readonly delegate: RecordStorage<I, R>,
+  ) {
+    super(context, recordSpec);
+  }
+
+  protected deleteRecord(id: I): Promise<boolean> {
+    return this.delegate.delete(id);
+  }
+
+  protected queryRecordEntries(query: Parameters<RecordStorage<I, R>["queryEntries"]>[0]) {
+    return this.delegate.queryEntries(query);
+  }
+
+  protected readRecord(id: I): Promise<R | undefined> {
+    return this.delegate.read(id);
+  }
+
+  protected compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    return this.delegate.compareAndSet(id, expected?.record, next?.record);
+  }
+
+  protected writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    if (records.some((record) => record.record.$typeName === "google.protobuf.Any")) {
+      return Promise.reject(new Error("Cannot write aggregate snapshot."));
+    }
+    return this.delegate.writeAll(records.map((record) => record.record));
+  }
+
+  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    if (record.record.$typeName === "google.protobuf.Any") {
+      return Promise.reject(new Error("Cannot write aggregate snapshot."));
+    }
+    return this.delegate.write(record.record);
+  }
 }

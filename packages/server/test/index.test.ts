@@ -134,7 +134,7 @@ const AggregateStateSchema = messageDesc(
 ) as GenMessage<AggregateState>;
 const GenericStateSchema = messageDesc(fileEntityMetadataFixture, 2) as GenMessage<GenericState>;
 
-class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
+class PublicRuntimeSmokeAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignCommand(command: Message<"spine.core.Command">): void {
     void command;
   }

@@ -661,6 +661,12 @@ function prepareRepositoryForContext(
     registration.storageContext,
     createRepositoryRecordSpec(snapshot),
   );
+  try {
+    rejectRegisteredRepository(repository);
+  } catch (error) {
+    storage.close();
+    throw error;
+  }
   repositoryAccess.bindRuntime(repository, {
     context: registration.storageContext,
     storageFactory: registration.storageFactory,

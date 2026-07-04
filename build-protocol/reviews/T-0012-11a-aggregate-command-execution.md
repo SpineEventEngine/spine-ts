@@ -1,6 +1,6 @@
 # Review Log: T-0012.11a Aggregate Command Execution
 
-Status: coverage gate restored; ready for final verification handoff
+Status: follow-up review-fix worker complete; verification passed with escalated coverage
 Task log: `build-protocol/tasks/T-0012-11a-aggregate-command-execution/TASK.md`
 Branch: `task/T-0012-11a-aggregate-command-execution`
 Worktree:
@@ -31,6 +31,14 @@ Reviewers must verify:
   `EventStore` seams rather than a parallel store abstraction;
 - repository-executed aggregate version metadata stays `bigint`, and produced
   event versions fail cleanly when they exceed the protobuf int32 range;
+- executable aggregate repositories reject non-`bigint` aggregate version
+  metadata at the public type boundary;
+- async aggregate assignees are awaited before produced events are normalized;
+- events already appended to aggregate storage are handed to stored-event
+  dispatch even when snapshot writing fails, while command completion still
+  rejects with the snapshot failure;
+- failed reentrant repository registration cannot clear the executable runtime
+  of the already registered repository;
 - produced events preserve readable producer IDs and primitive producer-ID
   routing stays contract-safe; and
 - tests prove behavior through built bounded contexts and storage seams rather
@@ -38,11 +46,12 @@ Reviewers must verify:
 
 ## Current State
 
-The branch/worktree contains the review-fix pass for findings A-G plus a focused
-coverage-fix test for primitive aggregate producer-ID helpers. Focused
-repository, aggregate-storage, event-bus, command-bus, and primitive-ID tests
-are green, the doc/log updates are in place, and escalated `pnpm test:coverage`
-passes the global gate with 45 files, 555 tests, and branch coverage at 90.03%.
-The sandboxed `pnpm test:coverage` rerun still hits ZeroMQ local IPC
-`Operation not permitted` and HTTP/2 loopback `listen EPERM 127.0.0.1` failures
-outside this slice.
+The branch/worktree contains the original review-fix pass for findings A-G, the
+primitive-ID coverage-fix test, and the follow-up worker changes for stale docs,
+executable aggregate `bigint` typing, helper simplification, async assignees,
+snapshot-failure dispatch, and reentrant registration cleanup. Focused tests
+passed with 6 files and 105 tests, and `pnpm typecheck`, `pnpm lint`,
+`pnpm format:check`, `pnpm docs:check`, and `git diff --check` passed. The
+sandboxed coverage command still fails on local IPC/HTTP2 listener permissions,
+but escalated `pnpm test:coverage` passed with 45 files, 559 tests, and branch
+coverage at 90.03%.

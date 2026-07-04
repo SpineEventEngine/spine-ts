@@ -49,12 +49,13 @@ non-empty/non-blank names and records tenant mode. `builder.add(repository)` /
 the context-owned repository registration list, and `build()` registers those
 repositories with the built context after opening state record storage through
 the context `StorageFactory`; registered repositories also make their entity
-state schemas known to the context `Stand`. Repositories with authentic explicit handler
-metadata now calculate deferred command/event routes, and built contexts install
-internal repository dispatcher adapters. This slice does not create default
-repositories from entity classes, invoke handlers, store entity records, manage
-inboxes/delivery, run cache catch-up, create system contexts, write tenant
-indexes, expose a broad server lifecycle, or integrate transports.
+state schemas known to the context `Stand`. Repositories with authentic explicit
+handler metadata still expose route-only `routeCommand()` / `routeEvent()`
+calculations, and built contexts install internal repository dispatcher adapters
+that execute aggregate command assignees and appliers. This slice does not
+create default repositories from entity classes, invoke projection/query/process
+handlers, manage inboxes/delivery, run cache catch-up, create system contexts,
+write tenant indexes, expose a broad server lifecycle, or integrate transports.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,

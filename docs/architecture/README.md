@@ -361,7 +361,8 @@ The following runtime pieces are still deferred to later explicit tasks:
 - default repository construction from entity classes,
   visibility/type-supplier registration, and lifecycle callbacks over the
   repository identity seam;
-- handler invocation over the deferred repository routes;
+- projection/event handler execution, read-side catch-up, and query/subscription
+  execution over repository routes;
 - inbox/delivery storage, durable storage lifecycle, entity storage/cache
   catch-up, and tenant-index persistence;
 - richer query filtering, event subscriptions, and durable subscription

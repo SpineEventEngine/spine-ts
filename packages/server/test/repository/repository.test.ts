@@ -8,6 +8,7 @@ import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-met
 
 import {
   Aggregate,
+  defineEntityHandlers,
   describeEntityMetadata,
   ProcessManager,
   Projection,
@@ -100,6 +101,16 @@ class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, numbe
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {}
 class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {}
 class RuntimeCheckedAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
+class HandlerBackedNumberAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
+  assignTask(command: AggregateState): void {
+    void command;
+  }
+}
+class HandlerBackedBigintAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  assignTask(command: AggregateState): void {
+    void command;
+  }
+}
 const DomainEntityBase = {
   Aggregate,
 };
@@ -623,6 +634,27 @@ describe("repository identity", () => {
       new Repository({
         entityType: TaskAggregate,
         schema: AggregateStateSchema,
+      });
+      const numberAggregateHandlers = defineEntityHandlers(
+        HandlerBackedNumberAggregate,
+        AggregateStateSchema,
+        (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+      );
+      const bigintAggregateHandlers = defineEntityHandlers(
+        HandlerBackedBigintAggregate,
+        AggregateStateSchema,
+        (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+      );
+      new Repository({
+        entityType: HandlerBackedBigintAggregate,
+        schema: AggregateStateSchema,
+        handlers: bigintAggregateHandlers,
+      });
+      new Repository({
+        entityType: HandlerBackedNumberAggregate,
+        schema: AggregateStateSchema,
+        // @ts-expect-error executable aggregate repositories require bigint version metadata.
+        handlers: numberAggregateHandlers,
       });
       new Repository({
         entityType: TaskProjection,

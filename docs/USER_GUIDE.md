@@ -367,11 +367,11 @@ available:
 import { Aggregate, Projection, ProcessManager } from "@spine-ts/server";
 import { TaskProjectionSchema, TaskStateSchema, TaskWorkflowSchema } from "./generated/tasks_pb.js";
 
-class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, bigint> {}
 class TaskProjection extends Projection<string, typeof TaskProjectionSchema, number> {}
 class TaskWorkflow extends ProcessManager<string, typeof TaskWorkflowSchema, number> {}
 
-new TaskAggregate({ id, schema: TaskStateSchema, state, version: 1 }).entityFamily; // "aggregate"
+new TaskAggregate({ id, schema: TaskStateSchema, state, version: 1n }).entityFamily; // "aggregate"
 ```
 
 These classes inherit `TransactionalEntity` behavior and expose only stable
@@ -389,7 +389,7 @@ bounded context attach that repository during build:
 import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
 import { TaskStateSchema } from "./generated/tasks_pb.js";
 
-class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, bigint> {}
 
 const repository = new Repository({
   entityType: TaskAggregate,
@@ -529,7 +529,7 @@ import {
 import { CreateTaskSchema } from "./generated/task_commands_pb.js";
 import { TaskCreatedSchema, TaskStateSchema } from "./generated/tasks_pb.js";
 
-class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, bigint> {
   create(command: unknown): void {}
   onCreated(event: unknown): void {}
 }

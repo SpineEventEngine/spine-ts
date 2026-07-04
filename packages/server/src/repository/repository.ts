@@ -35,7 +35,7 @@ import {
 } from "../handler/event-registration-readiness.js";
 import { handlerMetadataAccess, type EntityHandlersMetadata } from "../handler/handler-metadata.js";
 import { AggregateStorage } from "./aggregate-storage.js";
-import { packPrimitiveId, primitiveId, unpackPrimitiveId } from "./primitive-id.js";
+import { PrimitiveIds } from "./primitive-id.js";
 
 type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> =
   | Aggregate<unknown, Schema, unknown>
@@ -71,6 +71,13 @@ type RepositoryHandlers<EntityType extends RepositoryEntityType> =
   EntityType["prototype"] extends infer Instance extends object
     ? EntityHandlersMetadata<Instance, RepositoryStateSchema<EntityType>>
     : never;
+
+type RepositoryHandlersOptionFor<EntityType extends RepositoryEntityType> =
+  EntityType["prototype"] extends Aggregate<unknown, DescriptorMessageSchema, infer Version>
+    ? [Version] extends [bigint]
+      ? RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[]
+      : never
+    : RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[];
 
 type IsUnion<Type, Union = Type> = Type extends unknown
   ? [Union] extends [Type]
@@ -130,8 +137,13 @@ export interface RepositoryOptions<
   readonly entityType: EntityType;
   /** Generated Protobuf-ES schema for the entity state owned by this repository identity. */
   readonly schema: RepositoryStateSchema<EntityType>;
-  /** Explicit handler metadata used to register repository command and event routing. */
-  readonly handlers?: RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[];
+  /**
+   * Explicit handler metadata used to register repository command and event routing.
+   *
+   * Aggregate repositories with handlers can be executed by built bounded contexts and therefore
+   * must use `bigint` version metadata, matching the persisted aggregate history version type.
+   */
+  readonly handlers?: RepositoryHandlersOptionFor<EntityType>;
 }
 
 /**
@@ -311,18 +323,23 @@ export class Repository<
     );
   }
 
-  /** Route a command to exactly one entity ID. Handler invocation is deferred. */
+  /** Route a command to exactly one entity ID without invoking the handler. */
   routeCommand(command: Command): RepositoryCommandRoute<RepositoryEntityId<EntityType>> {
     return this.#routing.routeCommand(command);
   }
 
-  /** Route an event to one or more entity IDs. Handler invocation is deferred. */
+  /** Route an event to one or more entity IDs without invoking the handler. */
   routeEvent(event: Event): RepositoryEventRoute<RepositoryEntityId<EntityType>> {
     return this.#routing.routeEvent(event);
   }
 }
 
-/** Repository handler invocation state for this storage/routing slice. */
+/**
+ * Route-only invocation marker returned by direct repository routing APIs.
+ *
+ * Built bounded contexts may execute aggregate command assignees and event appliers through their
+ * command bus; direct `routeCommand()` and `routeEvent()` calls remain routing-only.
+ */
 export type RepositoryRouteInvocation = "deferred";
 
 /** Command route calculated by a repository. */
@@ -331,7 +348,7 @@ export interface RepositoryCommandRoute<Id = unknown> {
   readonly entityId: Id;
   /** Fully qualified command message type name. */
   readonly messageFullTypeName: string;
-  /** Handler invocation is intentionally deferred to a later runtime slice. */
+  /** Direct repository route calculation does not invoke handlers. */
   readonly invocation: RepositoryRouteInvocation;
 }
 
@@ -341,7 +358,7 @@ export interface RepositoryEventRoute<Id = unknown> {
   readonly entityIds: readonly Id[];
   /** Fully qualified event message type name. */
   readonly messageFullTypeName: string;
-  /** Handler invocation is intentionally deferred to a later runtime slice. */
+  /** Direct repository route calculation does not invoke handlers. */
   readonly invocation: RepositoryRouteInvocation;
 }
 
@@ -467,17 +484,6 @@ async function dispatchRepositoryCommand(
     return;
   }
 
-  await executeAggregateCommand(repository, routing, runtime, command);
-}
-
-async function executeAggregateCommand(
-  repository: RepositoryView & {
-    routeCommand(command: Command): RepositoryCommandRoute;
-  },
-  routing: RepositoryRouting,
-  runtime: RepositoryRuntime,
-  command: Command,
-): Promise<void> {
   await new AggregateCommandExecution(repository, routing, runtime, command).run();
 }
 
@@ -519,7 +525,7 @@ class AggregateCommandExecution {
       assignee.handler.schema,
       "command",
     );
-    const produced = invokeEntityMethod(loaded.entity, assignee.handler.methodName, message);
+    const produced = await invokeEntityMethod(loaded.entity, assignee.handler.methodName, message);
     const events = this.#bindProducedEvents(
       this.#normalizeProducedEvents(produced),
       route.entityId,
@@ -534,13 +540,16 @@ class AggregateCommandExecution {
 
     const committedVersion = loaded.version + BigInt(events.length);
     await loaded.storage.appendEvents(route.entityId as never, events);
-    await loaded.storage.writeSnapshot({
-      aggregateId: route.entityId as never,
-      state: repositoryState(loaded.entity) as never,
-      version: committedVersion,
-      lifecycle: repositoryLifecycle(loaded.entity),
-    });
-    this.#dispatchStoredEvents(events);
+    try {
+      await loaded.storage.writeSnapshot({
+        aggregateId: route.entityId as never,
+        state: repositoryState(loaded.entity) as never,
+        version: committedVersion,
+        lifecycle: repositoryLifecycle(loaded.entity),
+      });
+    } finally {
+      this.#dispatchStoredEvents(events);
+    }
   }
 
   async #loadAggregate(entityId: unknown): Promise<{
@@ -673,7 +682,7 @@ class AggregateCommandExecution {
   }
 
   #bindProducedEvent(event: Event, entityId: unknown, version: bigint): Event {
-    const aggregateId = primitiveId(entityId);
+    const aggregateId = PrimitiveIds.read(entityId);
 
     if (aggregateId === undefined) {
       throw new Error("Repository aggregate execution requires primitive aggregate IDs.");
@@ -682,7 +691,7 @@ class AggregateCommandExecution {
     const bound = clone(EventSchema, event);
     const context = clone(EventContextSchema, bound.context ?? create(EventContextSchema));
 
-    context.producerId = packPrimitiveId(aggregateId);
+    context.producerId = PrimitiveIds.pack(aggregateId);
     context.version = create(VersionSchema, { number: eventVersionNumber(version) });
     bound.context = context;
     return bound;
@@ -971,7 +980,7 @@ function readProducerId(event: Event): string | number | boolean | undefined {
     return undefined;
   }
 
-  const unpacked = unpackPrimitiveId(producerId);
+  const unpacked = PrimitiveIds.unpack(producerId);
   if (unpacked !== undefined) {
     return unpacked;
   }

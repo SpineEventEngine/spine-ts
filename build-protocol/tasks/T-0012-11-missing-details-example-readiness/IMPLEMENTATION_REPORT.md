@@ -72,9 +72,13 @@ Requirements splitting is complete. The task now has a staged roadmap with five
 concrete implementation slices.
 
 `T-0012.11a Aggregate Command Execution` is the selected first slice. Its
-branch/worktree is open from `8804e93`, and the implementation sub-agent has
-completed the review-fix pass in its child worktree: focused write-side tests,
-typecheck/lint/format/docs/diff verification, and durable doc/log updates are
-recorded there. The only remaining environment-specific gap is the sandboxed
-coverage rerun, which still depends on local IPC and loopback listener
-permissions.
+branch/worktree is open from `8804e93`, and the child worktree has completed
+the aggregate command-execution review-fix and primitive-ID coverage follow-up:
+focused write-side tests, typecheck/lint/format/docs/diff verification, durable
+doc/log updates, and escalated `pnpm test:coverage` are recorded there. The
+sandboxed coverage command still depends on local IPC and loopback listener
+permissions, but the escalated coverage gate passed after the primitive-ID
+tests. A follow-up worker then closed stale docs, executable aggregate version
+typing, helper simplicity, async-assignee, snapshot-failure handoff, and
+reentrant registration cleanup findings; fresh verification passed in the child
+worktree, including escalated coverage with 45 files and 559 tests.

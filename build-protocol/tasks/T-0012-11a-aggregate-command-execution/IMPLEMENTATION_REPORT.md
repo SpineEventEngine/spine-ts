@@ -157,3 +157,42 @@ producer IDs, and nonprimitive runtime values. No production helpers were added.
 - Coverage-fix escalated `pnpm test:coverage` passed with 45 files and
   555 tests. Coverage summary: statements 94.87%, branches 90.03%, functions
   97.34%, lines 94.89%.
+
+## Review-Fix Worker Follow-up
+
+The T-0012.11a review-fix worker addressed the subsequent documentation,
+public API, simplicity, and reliability findings:
+
+- public docs now distinguish direct route-only repository APIs from built
+  bounded-context aggregate command execution;
+- handler-backed aggregate repository options now require aggregate `bigint`
+  version metadata at the type boundary;
+- primitive producer-ID behavior is grouped behind the `PrimitiveIds` object,
+  and the aggregate-storage one-line primitive wrapper was removed;
+- aggregate command assignees are awaited before produced events are
+  normalized;
+- appended events are handed to stored-event dispatch even when snapshot
+  writing rejects, while command completion still reflects the snapshot
+  failure; and
+- repository preparation checks existing registration before binding runtime,
+  so a failed reentrant build cannot clear an already registered repository's
+  executable runtime.
+
+Focused RED/GREEN coverage was added for async assignees, snapshot-write
+failure dispatch, reentrant registration cleanup, and the bigint public type
+boundary.
+
+Fresh verification for this worker passed:
+
+- `pnpm test packages/server/test/repository/repository-routing.test.ts packages/server/test/repository/repository.test.ts packages/server/test/repository/primitive-id.test.ts packages/server/test/repository/aggregate-storage.test.ts packages/server/test/context/bounded-context.test.ts packages/server/test/index.test.ts`
+  passed with 6 files and 105 tests.
+- `pnpm typecheck` passed.
+- `pnpm lint` passed.
+- `pnpm format:check` passed.
+- `pnpm docs:check` passed and regenerated TypeDoc.
+- `git diff --check` passed.
+- Sandboxed `pnpm test:coverage` failed on known local endpoint permissions:
+  ZeroMQ local IPC `Operation not permitted` and HTTP/2 loopback
+  `listen EPERM: operation not permitted 127.0.0.1`.
+- Escalated `pnpm test:coverage` passed with 45 files and 559 tests. Coverage
+  summary: statements 94.85%, branches 90.03%, functions 97.33%, lines 94.87%.
