@@ -199,8 +199,8 @@ Fresh verification for this worker passed:
 
 ## Round-2 Review-Fix Worker
 
-The round-2 worker is addressing the reliability, style, and documentation
-findings reported after the follow-up review-fix pass:
+The round-2 worker addressed the reliability, style, and documentation findings
+reported after the follow-up review-fix pass:
 
 - aggregate event appliers are now awaited during command execution and
   rehydration before event append/snapshot ordering proceeds;

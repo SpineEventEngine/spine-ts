@@ -81,4 +81,9 @@ permissions, but the escalated coverage gate passed after the primitive-ID
 tests. A follow-up worker then closed stale docs, executable aggregate version
 typing, helper simplicity, async-assignee, snapshot-failure handoff, and
 reentrant registration cleanup findings; fresh verification passed in the child
-worktree, including escalated coverage with 45 files and 559 tests.
+worktree, including escalated coverage with 45 files and 559 tests. A later
+round-2 fix awaited aggregate event appliers before append/snapshot ordering,
+replaced primitive-ID helper-shape coverage with `AggregateStorage` behavior
+coverage, updated stale deferred-work docs/logs, and passed focused verification
+plus escalated coverage with 45 files and 564 tests. Sandboxed coverage remains
+blocked only by local IPC/HTTP2 endpoint permissions.

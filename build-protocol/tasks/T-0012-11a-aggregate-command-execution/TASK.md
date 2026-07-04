@@ -121,7 +121,7 @@ the already-produced events to the existing async event-bus path.
   `pnpm test:coverage` (45 files, 559 tests; statements 94.85%, branches
   90.03%, functions 97.33%, lines 94.87%). Sandboxed coverage still fails only
   on local IPC/HTTP2 endpoint permissions.
-- The round-2 review-fix worker is addressing async aggregate applier
+- The round-2 review-fix worker completed async aggregate applier
   reliability, primitive-ID test style, and stale deferred-work docs/logs.
   Focused RED/GREEN verification passed, the primitive-ID coverage now goes
   through `AggregateStorage`, and small public-surface coverage tests keep the

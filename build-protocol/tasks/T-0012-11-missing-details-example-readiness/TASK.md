@@ -127,8 +127,9 @@ Resumed-state note:
 - `T-0012.11` is split complete and `T-0012.11a` is selected first.
 - The `T-0012.11a` branch/worktree is now created from reviewed split commit
   `8804e93`.
-- The `T-0012.11a` implementation sub-agent has completed the review-fix pass,
-  updated public/API docs, and recorded focused verification in the child
+- The `T-0012.11a` child worktree has completed the review-fix, coverage-fix,
+  and round-2 async-applier fix passes, updated public/API docs, and recorded
+  focused plus escalated coverage verification in the child
   task/report/review/work logs.
 
 ## Staged Subtasks
