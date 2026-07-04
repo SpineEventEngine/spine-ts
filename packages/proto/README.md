@@ -12,11 +12,7 @@ The package root currently exposes a curated Spine proto intake set:
 - Core signal envelope and context contracts:
   `spine.core.Command`, `CommandId`, `CommandContext`, `Event`, `EventId`,
   `EventContext`, `ActorContext`, `TenantId`, `UserId`, `Version`,
-  `MessageId`, `Origin`, `Enrichment`, `Ack`, `Response`, and their nested
-  support messages.
-- Client service contracts and support messages from `spine/client`, including
-  command/query/subscription service descriptors, `Query`, `QueryResponse`,
-  filters, topics, subscriptions, and subscription updates.
+  `MessageId`, `Origin`, `Enrichment`, and their nested support messages.
 - Minimal transitive support contracts from `spine.time`, `spine.net`, and
   `spine.ui` required by the core context messages.
 
@@ -29,6 +25,10 @@ intentionally need a generated module directly, including both extensionless
 imports such as `@spine-ts/proto/generated/spine/core/command_pb` and natural
 ESM `.js` imports such as
 `@spine-ts/proto/generated/spine/core/command_pb.js`.
+The service-slice protos copied for real gRPC support, including `Ack`,
+`Response`, and the `spine/client` command/query/subscription service and
+support messages, are generated and available through those generated subpaths;
+they are not broadly re-exported from the package root.
 
 Run:
 

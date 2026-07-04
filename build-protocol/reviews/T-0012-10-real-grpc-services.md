@@ -1,6 +1,6 @@
 # Review Log: T-0012.10 Real gRPC Services
 
-Status: round 2 fixes verified
+Status: round 3 fixes verified
 Task log: `build-protocol/tasks/T-0012-10-real-grpc-services/TASK.md`
 Branch: `task/T-0012-10-real-grpc-services`
 Worktree:
@@ -73,3 +73,25 @@ and TypeScript/API behavior. The implementation was updated to:
 Focused service tests now cover abandoned inactive subscription cleanup,
 slow-consumer queue closure, and known-target malformed topic rejection.
 Round-2 fixes passed the final required verification pass.
+
+## Round 3
+
+Review round 3 left three issues in security, task documentation, and proto
+README API wording:
+
+- tenant validation must treat `TenantId.domain` and `TenantId.email` as present
+  tenant variants, not just `TenantId.value`;
+- `TASK.md` must reflect the round-3 state instead of the stale round-1 state;
+  and
+- the proto README must clarify that copied service/support protos are generated
+  and available through generated subpaths, while package-root exports remain
+  curated.
+
+The implementation now treats all valid `TenantId` oneof variants as tenant
+presence. `TenantId.value` keeps its raw value key; `TenantId.domain` and
+`TenantId.email` derive stable `domain:<value>` and `email:<value>` keys for
+Stand read/subscription options. Single-tenant command/query/subscription
+services reject any tenant variant with the existing stable contract errors.
+
+Focused service tests cover command, query, and subscription domain/email
+variants. Round-3 fixes passed the requested relevant verification pass.

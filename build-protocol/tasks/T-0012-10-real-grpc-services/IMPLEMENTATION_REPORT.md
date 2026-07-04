@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.10 Real gRPC Services
 
-Status: review round 2 fixes verified
+Status: review round 3 fixes verified
 Branch: `task/T-0012-10-real-grpc-services`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-10-real-grpc-services`
@@ -86,16 +86,35 @@ transport API was added to domain/runtime classes.
 - Documentation was refreshed in the user guide, API guide, architecture
   overview, proto README, work log, and review log.
 
+## Review Round 3 Fixes
+
+- Added TDD regression tests for command, query, and subscription tenant checks
+  using `TenantId.domain` and `TenantId.email` variants.
+- RED evidence: focused service tests failed against the round-3-reviewed
+  implementation with 3 expected failures showing domain/email tenants were
+  treated as absent or accepted by single-tenant services.
+- GREEN evidence: `SpineServices` now treats `TenantId.value`,
+  `TenantId.domain`, and `TenantId.email` as tenant presence. `value` keeps its
+  raw storage key; `domain` and `email` derive stable `domain:<value>` and
+  `email:<value>` keys for Stand options. Focused service tests passed with
+  local loopback escalation: 1 file, 24 tests passed.
+- `TASK.md` now reflects the round-3 state, and the proto README clarifies that
+  service-support protos such as `Ack`, `Response`, and `spine/client` services
+  are available through generated subpaths rather than broad package-root
+  re-exports.
+
 ## Verification
 
 - `pnpm typecheck` passed.
 - `pnpm lint` passed.
 - `pnpm format:check` passed.
 - `pnpm test packages/server/test/services/spine-services.test.ts` passed with
-  local loopback escalation: 21 tests passed.
-- `pnpm test` passed with local loopback escalation: 44 files, 524 tests passed.
-- `pnpm test:coverage` passed with local loopback escalation: 44 files, 524
-  tests passed; global branch coverage `90.06%`.
+  local loopback escalation: 24 tests passed.
+- Full `pnpm test`/`pnpm test:coverage` were not rerun for round 3 because this
+  follow-up only changed the service tenant-key helper plus focused service
+  regressions and documentation; the focused real-service suite covers the
+  touched command/query/subscription behavior, and round 2 had the full
+  44-file/524-test coverage pass.
 - `pnpm docs:check` passed, with the existing TypeDoc invalid-origin warning.
 - `pnpm proto:lint` passed.
 - `pnpm proto:generate` passed.

@@ -6,7 +6,7 @@ import type { Any } from "@bufbuild/protobuf/wkt";
 import { EmptySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import type { MessageSchema } from "@spine-ts/core";
 import { deriveTypeUrl, packAny, unpackAny } from "@spine-ts/core";
-import { CommandIdSchema, type Command, VersionSchema } from "@spine-ts/proto";
+import { CommandIdSchema, type Command, type TenantId, VersionSchema } from "@spine-ts/proto";
 import { ErrorSchema } from "@spine-ts/proto/generated/spine/base/error_pb.js";
 import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
 import type { Target } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
@@ -476,12 +476,17 @@ function topicTenant(topic: Topic | undefined): string | undefined {
   return tenantValue(topic?.context?.tenantId);
 }
 
-function tenantValue(
-  tenantId: { kind: { case: string | undefined; value?: unknown } } | undefined,
-): string | undefined {
-  return tenantId?.kind.case === "value" && typeof tenantId.kind.value === "string"
-    ? tenantId.kind.value
-    : undefined;
+function tenantValue(tenantId: TenantId | undefined): string | undefined {
+  switch (tenantId?.kind.case) {
+    case "value":
+      return tenantId.kind.value;
+    case "domain":
+      return `domain:${tenantId.kind.value.value}`;
+    case "email":
+      return `email:${tenantId.kind.value.value}`;
+    default:
+      return undefined;
+  }
 }
 
 function tenantMismatch(

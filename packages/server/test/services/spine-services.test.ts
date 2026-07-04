@@ -18,7 +18,10 @@ import {
   CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
+  EmailAddressSchema,
+  InternetDomainSchema,
   TenantIdSchema,
+  type TenantId,
   UserIdSchema,
   VersionSchema,
   file_spine_options,
@@ -56,6 +59,8 @@ type ProjectionState = Message<"ProjectionState"> & {
   name: string;
   priority: number;
 };
+
+type TenantInput = string | TenantId;
 
 function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
   const descriptorSet = fromBinary(
@@ -359,6 +364,52 @@ describe("SpineServices", () => {
     }
   });
 
+  it("treats command tenant domain and email variants as present", async () => {
+    const singleTenantDispatches: string[] = [];
+    const multitenantDispatches: string[] = [];
+    const singleTenant = BoundedContext.singleTenant("Single")
+      .addCommandDispatcher(
+        createCommandDispatcher((command) => singleTenantDispatches.push(command.id?.uuid ?? "")),
+      )
+      .build();
+    const multitenant = BoundedContext.multitenant("Multi")
+      .addCommandDispatcher(
+        createCommandDispatcher((command) => multitenantDispatches.push(command.id?.uuid ?? "")),
+      )
+      .build();
+    const singleServer = await startServices(singleTenant);
+    const multiServer = await startServices(multitenant);
+
+    try {
+      const singleClient = createClient(
+        CommandService,
+        createGrpcTransport({ baseUrl: singleServer.baseUrl }),
+      );
+      const multiClient = createClient(
+        CommandService,
+        createGrpcTransport({ baseUrl: multiServer.baseUrl }),
+      );
+
+      const inapplicable = await singleClient.post(
+        createProjectionCommand("single-domain-tenant", tenantDomain("tenant.example")),
+      );
+      const accepted = await multiClient.post(
+        createProjectionCommand("multi-email-tenant", tenantEmail("tenant@example.test")),
+      );
+
+      expect(inapplicable.status?.status.case).toBe("error");
+      expect(errorMessage(inapplicable.status?.status)).toBe(
+        "Tenant is not applicable for this command.",
+      );
+      expect(accepted.status?.status.case).toBe("ok");
+      expect(singleTenantDispatches).toEqual([]);
+      expect(multitenantDispatches).toEqual(["multi-email-tenant"]);
+    } finally {
+      await multiServer.close();
+      await singleServer.close();
+    }
+  });
+
   it("routes commands by registered type without posting to wrong contexts", async () => {
     const wrongPosts: string[] = [];
     const acceptedPosts: string[] = [];
@@ -461,6 +512,60 @@ describe("SpineServices", () => {
     }
   });
 
+  it("treats subscription tenant domain and email variants as present", async () => {
+    const capturedTenantKeys: (string | undefined)[] = [];
+    let deliverUpdate:
+      | ((update: {
+          readonly typeUrl: string;
+          readonly id: unknown;
+          readonly state: ProjectionState;
+        }) => void)
+      | undefined;
+    const singleTenant = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      isMultitenant: false,
+    });
+    const multitenant = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      isMultitenant: true,
+      subscribe: (_schema, callback, options) => {
+        deliverUpdate = callback;
+        capturedTenantKeys.push(options.tenantId);
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const singleHandlers = registeredSubscriptionHandlers(singleTenant);
+    const multiHandlers = registeredSubscriptionHandlers(multitenant);
+
+    await expect(
+      Promise.resolve().then(() =>
+        singleHandlers.subscribe(createTopic(tenantDomain("tenant.example"))),
+      ),
+    ).rejects.toMatchObject({
+      code: Code.InvalidArgument,
+    } satisfies Partial<ConnectError>);
+
+    const subscription = await multiHandlers.subscribe(
+      createTopic(tenantEmail("tenant@example.test")),
+    );
+    const iterator = multiHandlers.activate(subscription)[Symbol.asyncIterator]();
+    const pending = iterator.next();
+
+    await delay(25);
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "task-tenant",
+      state: createState("task-tenant", "Tenant"),
+    });
+    await withTimeout(pending, "subscription tenant activation update");
+    await iterator.return?.();
+
+    expect(capturedTenantKeys).toEqual(["email:tenant@example.test"]);
+  });
+
   it("returns QueryResponse errors for query tenant mismatches", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
@@ -492,6 +597,53 @@ describe("SpineServices", () => {
       expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
       expect(missing.response?.status?.status.case).toBe("error");
       expect(responseErrorMessage(missing)).toBe("Tenant is required for this query.");
+    } finally {
+      await multiServer.close();
+      await singleServer.close();
+    }
+  });
+
+  it("treats query tenant domain and email variants as present", async () => {
+    const capturedTenantKeys: (string | undefined)[] = [];
+    const singleTenant = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      isMultitenant: false,
+    });
+    const multitenant = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      isMultitenant: true,
+      readVersioned: (_schema, _id, options) => {
+        capturedTenantKeys.push(options.tenantId);
+        return Promise.resolve({
+          state: createState("task-1", "Tenant Domain"),
+          version: create(VersionSchema, { number: 11 }),
+        });
+      },
+    });
+    const singleServer = await startServices(singleTenant);
+    const multiServer = await startServices(multitenant);
+
+    try {
+      const singleClient = createClient(
+        QueryService,
+        createGrpcTransport({ baseUrl: singleServer.baseUrl }),
+      );
+      const multiClient = createClient(
+        QueryService,
+        createGrpcTransport({ baseUrl: multiServer.baseUrl }),
+      );
+
+      const inapplicable = await singleClient.read(
+        createQuery("task-1", tenantEmail("tenant@example.test")),
+      );
+      const accepted = await multiClient.read(
+        createQuery("task-1", tenantDomain("tenant.example")),
+      );
+
+      expect(inapplicable.response?.status?.status.case).toBe("error");
+      expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
+      expect(accepted.response?.status?.status.case).toBe("ok");
+      expect(capturedTenantKeys).toEqual(["domain:tenant.example"]);
     } finally {
       await multiServer.close();
       await singleServer.close();
@@ -835,7 +987,7 @@ function createFailingCommandDispatcher(): CommandDispatcher {
   };
 }
 
-function createProjectionCommand(id: string, tenantId?: string) {
+function createProjectionCommand(id: string, tenantId?: TenantInput) {
   return packCommand({
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
@@ -855,11 +1007,11 @@ function createCommandWithoutId() {
   });
 }
 
-function createQuery(id: string, tenantId?: string) {
+function createQuery(id: string, tenantId?: TenantInput) {
   return createQueryWithIds([packStringId(id)], tenantId);
 }
 
-function createQueryWithIds(ids: ReturnType<typeof packAny>[], tenantId?: string) {
+function createQueryWithIds(ids: ReturnType<typeof packAny>[], tenantId?: TenantInput) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "q-1" }),
     target: create(TargetSchema, {
@@ -889,7 +1041,7 @@ function createQueryWithoutIds() {
   });
 }
 
-function createTopic(tenantId?: string) {
+function createTopic(tenantId?: TenantInput) {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "t-1" }),
     target: create(TargetSchema, {
@@ -903,19 +1055,41 @@ function createTopic(tenantId?: string) {
   });
 }
 
-function createActorContext(tenantId?: string) {
+function createActorContext(tenantId?: TenantInput) {
   return create(ActorContextSchema, {
     ...(tenantId === undefined
       ? {}
       : {
-          tenantId: create(TenantIdSchema, {
-            kind: {
-              case: "value",
-              value: tenantId,
-            },
-          }),
+          tenantId: typeof tenantId === "string" ? tenantValue(tenantId) : tenantId,
         }),
     actor: create(UserIdSchema, { value: "user-1" }),
+  });
+}
+
+function tenantValue(value: string): TenantId {
+  return create(TenantIdSchema, {
+    kind: {
+      case: "value",
+      value,
+    },
+  });
+}
+
+function tenantDomain(value: string): TenantId {
+  return create(TenantIdSchema, {
+    kind: {
+      case: "domain",
+      value: create(InternetDomainSchema, { value }),
+    },
+  });
+}
+
+function tenantEmail(value: string): TenantId {
+  return create(TenantIdSchema, {
+    kind: {
+      case: "email",
+      value: create(EmailAddressSchema, { value }),
+    },
   });
 }
 
@@ -972,10 +1146,15 @@ function responseErrorMessage(response: unknown) {
 }
 
 function createFakeContext(options: {
+  readonly isMultitenant?: boolean;
   readonly commandTypes?: readonly string[];
   readonly stateTypes?: readonly string[];
   readonly post?: (command: ReturnType<typeof createProjectionCommand>) => Promise<void>;
-  readonly readVersioned?: () => Promise<undefined>;
+  readonly readVersioned?: (
+    schema: typeof ProjectionStateSchema,
+    id: unknown,
+    options: { readonly tenantId?: string },
+  ) => Promise<{ readonly state: ProjectionState; readonly version?: unknown } | undefined>;
   readonly subscribe?: (
     schema: typeof ProjectionStateSchema,
     callback: (update: {
@@ -983,13 +1162,14 @@ function createFakeContext(options: {
       readonly id: unknown;
       readonly state: ProjectionState;
     }) => void,
+    options: { readonly tenantId?: string },
   ) => { readonly closed: boolean; unsubscribe(): void };
 }) {
   const commandTypes = options.commandTypes ?? [];
   const stateTypes = options.stateTypes ?? [];
 
   return {
-    isMultitenant: false,
+    isMultitenant: options.isMultitenant ?? false,
     commandBus: () =>
       Object.freeze({
         acceptedCommandTypes: () => commandTypes,

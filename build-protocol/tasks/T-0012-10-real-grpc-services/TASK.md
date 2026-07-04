@@ -1,6 +1,6 @@
 # T-0012.10: Real gRPC Services
 
-Status: review round 1 fixes verified
+Status: review round 3 fixes verified
 Branch: `task/T-0012-10-real-grpc-services`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-10-real-grpc-services`
@@ -119,8 +119,7 @@ client DSL, example app code, broad service facade, or simulated transport.
 
 ## Current State
 
-Implementation and review round 1 fixes are verified. Round 1 required
-activation-only subscription delivery, stream/cancel cleanup, command route
-lookup without dispatch-probing, tenant validation, sanitized public errors,
-query version preservation, contractual subscription rejection, scoped DOM
-typing, and documentation updates. No blocking human question is known.
+Implementation and review round 1 through round 3 fixes are verified. Round 3
+fixed TenantId oneof variant handling for command/query/subscription tenant
+checks, refreshed this task status, and clarified proto README generated-subpath
+wording. No blocking human question is known.
