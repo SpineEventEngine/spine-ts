@@ -152,12 +152,15 @@ lifecycle, and the to-do application remain later slices.
 - Semantic tag registration from `(is)` and `(every_is)` into handler/routing
   registries. The server metadata APIs preserve entity tags and explicit
   handler declarations now, but no runtime registry consumes them yet.
-- Default repository construction from entity classes, handler invocation,
-  entity runtime dispatch, system context construction, import buses,
-  richer gRPC service execution, tenant index persistence,
-  ZeroMQ endpoint topology, broker process supervision, retry workers, durable
-  delivery storage, transport-backed service execution, durable production
-  storage, and to-do domain runtime behavior.
+- Default repository construction from entity classes, system context
+  construction, import buses, richer gRPC service execution, tenant index
+  persistence, ZeroMQ endpoint topology, broker process supervision, retry
+  workers, durable delivery storage, transport-backed service execution,
+  durable production storage, and to-do domain runtime behavior.
+- Built bounded contexts can invoke aggregate command assignees and aggregate
+  event appliers now. Other handler/runtime execution remains deferred,
+  including projection updates, process-manager reactions, subscriber/reactor
+  delivery semantics beyond stored-event handoff, and import/catch-up flows.
 
 ## Type Registry
 

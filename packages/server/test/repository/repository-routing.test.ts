@@ -163,6 +163,41 @@ class AsyncAssigneeAggregate extends Aggregate<string, typeof AggregateStateSche
   }
 }
 
+class AsyncApplierAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  static started = createSignal();
+  static gate = createSignal();
+  static rejection: Error | undefined;
+
+  static reset(): void {
+    this.started = createSignal();
+    this.gate = createSignal();
+    this.rejection = undefined;
+  }
+
+  assignTask(command: AggregateState) {
+    return createAggregateEvent("event-async-applier", command.id, 0, command.name);
+  }
+
+  async applyTask(event: AggregateState): Promise<void> {
+    AsyncApplierAggregate.started.resolve();
+    await AsyncApplierAggregate.gate.promise;
+
+    if (AsyncApplierAggregate.rejection !== undefined) {
+      throw AsyncApplierAggregate.rejection;
+    }
+
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: event.id,
+        name: `${event.name} (async applied)`,
+        archived: event.archived,
+      }),
+    );
+    this.commitTransaction();
+  }
+}
+
 class NoApplierAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: AggregateState) {
     return createAggregateEvent("event-no-applier", command.id, 0, command.name);
@@ -378,6 +413,73 @@ describe("repository signal routing", () => {
       },
       events: [],
     });
+  });
+
+  it("awaits async aggregate event appliers before storing snapshots", async () => {
+    AsyncApplierAggregate.reset();
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createAsyncApplierRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    let completed = false;
+
+    const completion = context
+      .commandBus()
+      .post(createAggregateCommand("command-async-applier", "task-async-applier", "AsyncApplier"))
+      .then(() => {
+        completed = true;
+      });
+
+    await AsyncApplierAggregate.started.promise;
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+
+    expect(completed).toBe(false);
+    await expect(storage.readHistory("task-async-applier")).resolves.toMatchObject({
+      snapshot: undefined,
+      events: [],
+    });
+
+    AsyncApplierAggregate.gate.resolve();
+    await completion;
+
+    await expect(storage.readHistory("task-async-applier")).resolves.toMatchObject({
+      snapshot: {
+        aggregateId: "task-async-applier",
+        version: 1n,
+        state: { name: "AsyncApplier (async applied)" },
+      },
+      events: [],
+    });
+  });
+
+  it("rejects aggregate command completion when an async event applier rejects", async () => {
+    AsyncApplierAggregate.reset();
+    AsyncApplierAggregate.rejection = new Error("async applier failed");
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createAsyncApplierRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    const completion = context
+      .commandBus()
+      .post(createAggregateCommand("command-async-applier-fails", "task-async-applier-fails"));
+
+    await AsyncApplierAggregate.started.promise;
+    AsyncApplierAggregate.gate.resolve();
+
+    await expect(completion).rejects.toThrow("async applier failed");
+    await expect(eventStore.read()).resolves.toEqual([]);
   });
 
   it("resolves aggregate command execution after commit when stored-event dispatch later throws", async () => {
@@ -796,6 +898,19 @@ function createAsyncAssigneeRepository(): Repository<typeof AsyncAssigneeAggrega
 
   return new Repository({
     entityType: AsyncAssigneeAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createAsyncApplierRepository(): Repository<typeof AsyncApplierAggregate> {
+  const handlers = defineEntityHandlers(AsyncApplierAggregate, AggregateStateSchema, (builder) => [
+    builder.assign(AggregateStateSchema, "assignTask"),
+    builder.apply(AggregateStateSchema, "applyTask"),
+  ]);
+
+  return new Repository({
+    entityType: AsyncApplierAggregate,
     schema: AggregateStateSchema,
     handlers,
   });

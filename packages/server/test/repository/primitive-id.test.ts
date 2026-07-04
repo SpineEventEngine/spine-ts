@@ -1,35 +1,143 @@
-import { create } from "@bufbuild/protobuf";
-import { AnySchema } from "@bufbuild/protobuf/wkt";
-import { packAny } from "@spine-ts/core";
-import { UserIdSchema } from "@spine-ts/proto";
+import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
+import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
+import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import {
+  BoolValueSchema,
+  DoubleValueSchema,
+  FileDescriptorProtoSchema,
+  FileDescriptorSetSchema,
+  StringValueSchema,
+} from "@bufbuild/protobuf/wkt";
+import { packAny, packEvent } from "@spine-ts/core";
+import { EventContextSchema, EventIdSchema, UserIdSchema, VersionSchema } from "@spine-ts/proto";
+import { InMemoryStorageFactory } from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
-import { PrimitiveIds, type PrimitiveId } from "../../src/repository/primitive-id.js";
+import { AggregateStorage } from "../../src/index.js";
+import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+
+type AggregateState = Message<"AggregateState"> & {
+  id: string;
+  name: string;
+  archived: boolean;
+};
+
+function createFixtureFileDescriptor(descriptorSetBase64: string) {
+  const descriptorSet = fromBinary(
+    FileDescriptorSetSchema,
+    Buffer.from(descriptorSetBase64, "base64"),
+  );
+  const descriptor = descriptorSet.file[0];
+
+  if (descriptor === undefined) {
+    throw new Error("Primitive ID fixture descriptor set is empty.");
+  }
+
+  return fileDesc(Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64"));
+}
+
+const fileEntityMetadataFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
+);
+const AggregateStateSchema = messageDesc(
+  fileEntityMetadataFixture,
+  1,
+) as GenMessage<AggregateState>;
 
 describe("primitive aggregate IDs", () => {
-  it("packs and unpacks string, number, and boolean producer IDs", () => {
-    const ids: readonly PrimitiveId[] = ["task-primitive", 42, true];
+  it("routes string, number, and boolean producer IDs through aggregate storage", async () => {
+    const factory = new InMemoryStorageFactory();
+    const storage = new AggregateStorage<typeof AggregateStateSchema, string | number | boolean>({
+      context: { name: "PrimitiveIds", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [],
+    });
 
-    for (const id of ids) {
-      expect(PrimitiveIds.unpack(PrimitiveIds.pack(id))).toBe(id);
-    }
+    await storage.appendEvents("task-primitive", [
+      createAggregateEvent("event-string", "task-primitive", "String", 1),
+    ]);
+    await storage.appendEvents(42, [createAggregateEvent("event-number", 42, "Number", 1)]);
+    await storage.appendEvents(true, [createAggregateEvent("event-boolean", true, "Boolean", 1)]);
+
+    await expect(storage.readHistory("task-primitive")).resolves.toMatchObject({
+      events: [{ id: { value: "event-string" } }],
+    });
+    await expect(storage.readHistory(42)).resolves.toMatchObject({
+      events: [{ id: { value: "event-number" } }],
+    });
+    await expect(storage.readHistory(true)).resolves.toMatchObject({
+      events: [{ id: { value: "event-boolean" } }],
+    });
   });
 
-  it("reads primitive values and ignores nonprimitive values", () => {
-    expect(PrimitiveIds.read("task-primitive")).toBe("task-primitive");
-    expect(PrimitiveIds.read(42)).toBe(42);
-    expect(PrimitiveIds.read(false)).toBe(false);
-    expect(PrimitiveIds.read({ value: "task-primitive" })).toBeUndefined();
-    expect(PrimitiveIds.read(undefined)).toBeUndefined();
-  });
+  it("routes legacy user ID producer IDs and rejects unreadable producer IDs", async () => {
+    const factory = new InMemoryStorageFactory();
+    const storage = new AggregateStorage({
+      context: { name: "PrimitiveLegacyIds", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [],
+    });
 
-  it("unpacks legacy user IDs and ignores absent or unreadable producer IDs", () => {
-    expect(
-      PrimitiveIds.unpack(packAny(UserIdSchema, create(UserIdSchema, { value: "user-task" }))),
-    ).toBe("user-task");
-    expect(PrimitiveIds.unpack(undefined)).toBeUndefined();
-    expect(
-      PrimitiveIds.unpack(create(AnySchema, { typeUrl: "type.example/Unknown" })),
-    ).toBeUndefined();
+    await storage.appendEvents("user-task", [
+      createAggregateEvent("event-user-id", "user-task", "User", 1, "user"),
+    ]);
+
+    await expect(storage.readHistory("user-task")).resolves.toMatchObject({
+      events: [{ id: { value: "event-user-id" } }],
+    });
+    await expect(
+      storage.appendEvents("unreadable-task", [
+        createAggregateEvent("event-unreadable", "unreadable-task", "Unreadable", 1, "state"),
+      ]),
+    ).rejects.toThrow("readable producer ID");
   });
 });
+
+function createAggregateEvent(
+  id: string,
+  aggregateId: string | number | boolean,
+  name: string,
+  version: number,
+  producerIdKind: "primitive" | "user" | "state" = "primitive",
+) {
+  return packEvent({
+    id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema, {
+      producerId: producerId(producerIdKind, aggregateId),
+      version: create(VersionSchema, { number: version }),
+    }),
+    schema: AggregateStateSchema,
+    message: create(AggregateStateSchema, {
+      id: String(aggregateId),
+      name,
+      archived: false,
+    }),
+  });
+}
+
+function producerId(kind: "primitive" | "user" | "state", id: string | number | boolean) {
+  if (kind === "user") {
+    return packAny(UserIdSchema, create(UserIdSchema, { value: String(id) }));
+  }
+  if (kind === "state") {
+    return packAny(
+      AggregateStateSchema,
+      create(AggregateStateSchema, {
+        id: String(id),
+        name: "Unreadable",
+        archived: false,
+      }),
+    );
+  }
+
+  switch (typeof id) {
+    case "string":
+      return packAny(StringValueSchema, create(StringValueSchema, { value: id }));
+    case "number":
+      return packAny(DoubleValueSchema, create(DoubleValueSchema, { value: id }));
+    case "boolean":
+      return packAny(BoolValueSchema, create(BoolValueSchema, { value: id }));
+  }
+}

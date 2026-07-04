@@ -532,7 +532,7 @@ class AggregateCommandExecution {
       loaded.version,
     );
 
-    this.#applyAggregateEvents(loaded.entity, events);
+    await this.#applyAggregateEvents(loaded.entity, events);
 
     if (events.length === 0) {
       return;
@@ -566,7 +566,7 @@ class AggregateCommandExecution {
     const history = await storage.readHistory(entityId as never);
     const entity = this.#instantiateAggregate(entityId, history.snapshot);
 
-    this.#applyAggregateEvents(entity, history.events);
+    await this.#applyAggregateEvents(entity, history.events);
     return Object.freeze({
       entity,
       storage,
@@ -627,13 +627,13 @@ class AggregateCommandExecution {
     });
   }
 
-  #applyAggregateEvents(entity: object, events: readonly Event[]): void {
+  async #applyAggregateEvents(entity: object, events: readonly Event[]): Promise<void> {
     for (const event of events) {
-      this.#applyAggregateEvent(entity, event);
+      await this.#applyAggregateEvent(entity, event);
     }
   }
 
-  #applyAggregateEvent(entity: object, event: Event): void {
+  async #applyAggregateEvent(entity: object, event: Event): Promise<void> {
     const message = event.message;
 
     if (message === undefined || message.typeUrl === "") {
@@ -647,7 +647,7 @@ class AggregateCommandExecution {
       throw new Error(`Repository aggregate execution has no applier for "${schema.typeName}".`);
     }
 
-    invokeEntityMethod(
+    await invokeEntityMethod(
       entity,
       application.handler.methodName,
       unpackRequired(message, application.handler.schema, "event"),

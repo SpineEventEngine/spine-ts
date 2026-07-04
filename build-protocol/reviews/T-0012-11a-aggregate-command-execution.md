@@ -34,6 +34,9 @@ Reviewers must verify:
 - executable aggregate repositories reject non-`bigint` aggregate version
   metadata at the public type boundary;
 - async aggregate assignees are awaited before produced events are normalized;
+- async aggregate event appliers are awaited before aggregate append/snapshot
+  ordering proceeds, and async applier rejection is observed by command
+  completion;
 - events already appended to aggregate storage are handed to stored-event
   dispatch even when snapshot writing fails, while command completion still
   rejects with the snapshot failure;
@@ -49,9 +52,15 @@ Reviewers must verify:
 The branch/worktree contains the original review-fix pass for findings A-G, the
 primitive-ID coverage-fix test, and the follow-up worker changes for stale docs,
 executable aggregate `bigint` typing, helper simplification, async assignees,
-snapshot-failure dispatch, and reentrant registration cleanup. Focused tests
-passed with 6 files and 105 tests, and `pnpm typecheck`, `pnpm lint`,
-`pnpm format:check`, `pnpm docs:check`, and `git diff --check` passed. The
-sandboxed coverage command still fails on local IPC/HTTP2 listener permissions,
-but escalated `pnpm test:coverage` passed with 45 files, 559 tests, and branch
-coverage at 90.03%.
+snapshot-failure dispatch, and reentrant registration cleanup. Round-2 fixes
+now await aggregate event appliers before append/snapshot ordering, observe
+async applier rejection through command completion, replace the internal
+`PrimitiveIds` helper test with aggregate-storage behavior coverage, and update
+the deferred-work documentation. Small public-surface coverage tests in
+command/event readiness and signal intake keep the global branch gate green
+without reintroducing helper-shape coupling. Final verification passed:
+focused tests with 5 files and 62 tests, `pnpm typecheck`, `pnpm lint`,
+`pnpm format:check`, `pnpm docs:check`, `git diff --check`, and escalated
+`pnpm test:coverage` with 45 files, 564 tests, and branch coverage at 90.03%.
+Sandboxed coverage remains blocked only by local IPC/HTTP2 endpoint
+permissions.

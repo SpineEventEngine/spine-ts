@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11a Aggregate Command Execution
 
-Status: coverage gate restored; ready for final verification handoff
+Status: round-2 review fixes complete; verification passed with escalated coverage
 Branch: `task/T-0012-11a-aggregate-command-execution`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11a-aggregate-command-execution`
@@ -195,4 +195,52 @@ Fresh verification for this worker passed:
   ZeroMQ local IPC `Operation not permitted` and HTTP/2 loopback
   `listen EPERM: operation not permitted 127.0.0.1`.
 - Escalated `pnpm test:coverage` passed with 45 files and 559 tests. Coverage
+  summary: statements 94.85%, branches 90.03%, functions 97.33%, lines 94.87%.
+
+## Round-2 Review-Fix Worker
+
+The round-2 worker is addressing the reliability, style, and documentation
+findings reported after the follow-up review-fix pass:
+
+- aggregate event appliers are now awaited during command execution and
+  rehydration before event append/snapshot ordering proceeds;
+- focused RED/GREEN coverage proves command completion waits for an async
+  applier before snapshots are persisted, and async applier rejection rejects
+  command completion before storage append;
+- `packages/server/test/repository/primitive-id.test.ts` no longer imports the
+  internal `PrimitiveIds` helper and instead proves primitive producer-ID
+  routing through `AggregateStorage`;
+- `docs/USER_GUIDE.md` now distinguishes built aggregate command
+  assignee/applier execution from the remaining deferred handler/runtime work;
+  and
+- small public-surface coverage tests in command/event readiness and signal
+  intake keep the global branch gate green after replacing the direct internal
+  primitive-ID helper test; and
+- this implementation report, the task log, review log, and work log carry
+  explicit round-2 review-fix state.
+
+Focused round-2 verification:
+
+- RED:
+  `pnpm test packages/server/test/repository/repository-routing.test.ts packages/server/test/repository/primitive-id.test.ts`
+  failed because async applier command completion resolved before the applier
+  gate and async applier rejection was unobserved by command completion.
+- GREEN:
+  the same focused command passed with 2 files and 25 tests after awaiting
+  aggregate event appliers and rewriting primitive-ID coverage through storage.
+
+Final round-2 verification passed:
+
+- `pnpm test packages/server/test/repository/repository-routing.test.ts packages/server/test/repository/primitive-id.test.ts packages/server/test/handler/command-registration-readiness.test.ts packages/server/test/handler/event-registration-readiness.test.ts packages/server/test/runtime/signal-intake.test.ts`
+  passed with 5 files and 62 tests.
+- `pnpm typecheck` passed.
+- `pnpm lint` passed.
+- `pnpm format:check` passed.
+- `pnpm docs:check` passed and regenerated TypeDoc with the existing invalid
+  `origin` source-link warning only.
+- `git diff --check` passed.
+- Sandboxed `pnpm test:coverage` failed on known local endpoint permissions:
+  ZeroMQ local IPC `Operation not permitted` and HTTP/2 loopback
+  `listen EPERM: operation not permitted 127.0.0.1`.
+- Escalated `pnpm test:coverage` passed with 45 files and 564 tests. Coverage
   summary: statements 94.85%, branches 90.03%, functions 97.33%, lines 94.87%.
