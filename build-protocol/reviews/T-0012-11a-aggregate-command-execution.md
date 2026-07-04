@@ -50,10 +50,10 @@ Reviewers must verify:
 ## Current State
 
 The branch/worktree contains the original review-fix pass for findings A-G, the
-primitive-ID coverage-fix test, and the follow-up worker changes for stale docs,
-executable aggregate `bigint` typing, helper simplification, async assignees,
-snapshot-failure dispatch, and reentrant registration cleanup. Round-2 fixes
-now await aggregate event appliers before append/snapshot ordering, observe
+primitive-ID coverage-fix test, and the first worker pass for stale docs,
+executable aggregate `bigint` typing, helper simplification, async
+assignees, snapshot-failure dispatch, and reentrant registration cleanup.
+Round-2 fixes now await aggregate event appliers before append/snapshot ordering, observe
 async applier rejection through command completion, replace the internal
 `PrimitiveIds` helper test with aggregate-storage behavior coverage, and update
 the deferred-work documentation. Small public-surface coverage tests in
