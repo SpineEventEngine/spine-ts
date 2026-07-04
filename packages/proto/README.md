@@ -24,8 +24,11 @@ the package root. Build output also exposes generated subpaths for callers that
 intentionally need a generated module directly, including both extensionless
 imports such as `@spine-ts/proto/generated/spine/core/command_pb` and natural
 ESM `.js` imports such as
-`@spine-ts/proto/generated/spine/core/command_pb.js`. High-level `Any` packing
-helpers and command/event factory APIs are deferred to later framework tasks.
+`@spine-ts/proto/generated/spine/core/command_pb.js`.
+The service-slice protos copied for real gRPC support, including `Ack`,
+`Response`, and the `spine/client` command/query/subscription service and
+support messages, are generated and available through those generated subpaths;
+they are not broadly re-exported from the package root.
 
 Run:
 

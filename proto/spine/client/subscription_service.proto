@@ -1,0 +1,85 @@
+/*
+ * Copyright 2022, TeamDev. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Redistribution and use in source and/or binary forms, with or without
+ * modification, must retain the above copyright notice and the following
+ * disclaimer.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+syntax = "proto3";
+
+package spine.client;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+option java_package = "io.spine.client.grpc";
+option java_multiple_files = true;
+option java_outer_classname = "SubscriptionServiceProto";
+
+import "spine/client/subscription.proto";
+import "spine/core/response.proto";
+
+// A service for subscribing to receive updates by a specified topic.
+//
+// The subscription topic define a type in updates of which the client code is interested in, and
+// filtering conditions (e.g. by values of fields or identity).
+//
+// Creating a subscriptions consists of two steps:
+//  * Step 1: creating `Subscription` instance. This steps verifies that type specified in
+//    the `Topic` is available at the server, and prepares backend structures for delivering
+//    updates. Subscription is created by the `Subscribe(Topic)` call.
+//    together with the contexts of the events.
+//
+//  * Step 2: activating the subscription. This step turns the subscription on.
+//    Activation is performed by the `Activate(Subscription)` call.
+//
+// The client will receive updates until the subscription is cancelled via `Cancel(Subscription)`.
+//
+service SubscriptionService {
+
+    // Creates the subscription to the particular read-side updates.
+    //
+    // Topic defines the target of subscription and other attributes (like field masks).
+    //
+    // NOTE: this method only creates a `Subscription` for the passed `Topic`.
+    // To start listening for updates please call `Activate(Subscription)`.
+    //
+    rpc Subscribe(Topic) returns (Subscription);
+
+    // Activates the subscription.
+    //
+    // The client will start receiving the updates when 1) an instance of the type specified
+    // in the topic changes and 2) filtering conditions are met. See `spine.client.Target`.
+    //
+    // Cancelled subscriptions cannot be activated. Passing a cancelled subscription will result
+    // in run-time error.
+    //
+    rpc Activate(Subscription) returns (stream SubscriptionUpdate);
+
+    // Cancels the given subscription.
+    //
+    // Clients will stop receiving the `SubscriptionUpdate` after this method is called.
+    //
+    // The subscription is destroyed as the result of this call. To restore the subscription
+    // please call `Subscribe(Topic)` and then `Activate(Subscription)` again.
+    //
+    rpc Cancel(Subscription) returns (core.Response);
+}

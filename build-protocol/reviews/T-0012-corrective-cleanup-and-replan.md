@@ -6,7 +6,7 @@ Branch: `task/T-0012-cleanup-replan`
 Baseline commit: `a9769d4`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
-Status: T-0012.9 integrated; T-0012.10 selected.
+Status: T-0012.10 integrated; T-0012.11 selected.
 
 ## Required Review Lanes
 
@@ -201,14 +201,15 @@ For `T-0012.9 Stand And Entity Updates`, reviewers must focus on:
 `T-0012.9` is integrated. All required review lanes are clean through reviewed
 commit `9202b5e`.
 
-## Next Review Focus After T-0012.9
+## Next Review Focus After T-0012.10
 
-For `T-0012.10 Real gRPC Services`, reviewers must focus on:
+For `T-0012.11 Missing Details And Example Readiness`, reviewers must focus on:
 
-- exact Spine JVM protobuf service contracts for `CommandService`,
-  `QueryService`, and `SubscriptionService`;
-- real gRPC runtime wiring, not simulation;
-- thin service adapters over the existing command bus, direct `Stand`, and
-  subscription handles;
-- opaque subscription IDs and explicit activation/cancellation semantics; and
-- preserving strict read-side/write-side segregation.
+- concrete framework gaps discovered by the real gRPC implementation and
+  review, not speculative completeness;
+- keeping missing details small and tied to example readiness;
+- avoiding a broad `Server` facade or worker/process runtime unless directly
+  required by the next executable workflow;
+- preserving the real service, bus, Stand, delivery, and storage boundaries
+  already reviewed; and
+- maintaining branch coverage at or above 90%.

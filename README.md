@@ -9,10 +9,13 @@ storage adapter. The server package now includes entity transactions, entity
 families, repository registration, aggregate snapshot/event storage,
 repository command/event route calculation, and the first durable
 delivery/inbox slice for inbox rows, dedup guards, and shard leases. Handler
-invocation, delivery worker loops/execution, Stand/read-side query behavior,
-gRPC services, ZeroMQ transport, production storage adapters, import bus,
-scheduler, process supervision, and the to-do domain are intentionally deferred
-to later tasks.
+invocation, delivery worker loops/execution, ZeroMQ transport, production
+storage adapters, import bus, scheduler, process supervision, and the to-do
+domain are intentionally deferred to later tasks. The first direct
+Stand/read-side state API and raw `SpineServices` route registrar now expose
+real Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
+wiring without adding a broad server lifecycle, client DSL, richer query
+planner, event subscriptions, or durable subscription recovery.
 
 ## Workspace
 

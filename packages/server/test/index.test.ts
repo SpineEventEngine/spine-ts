@@ -35,6 +35,7 @@ import {
   type EventEndpoint,
   type TenantMode,
   Stand,
+  type StandReadResult,
   StandStateTypeError,
   type StandSubscription,
   type StandUpdate,
@@ -224,6 +225,7 @@ describe("@spine-ts/server", () => {
         "ShardSession",
         "ShardedWorkRegistry",
         "SingleProcessServerRuntime",
+        "SpineServices",
         "Stand",
         "StandStateTypeError",
         "TransactionalEntity",
@@ -266,6 +268,7 @@ describe("@spine-ts/server", () => {
       BoundedContext.singleTenant("Exports").build().eventBus(),
     ).toEqualTypeOf<EventEndpoint>();
     expectTypeOf(BoundedContext.singleTenant("Exports").build().stand()).toEqualTypeOf<Stand>();
+    expectTypeOf<StandReadResult>().toExtend<{ readonly state: Message }>();
     expectTypeOf<StandSubscription>().toExtend<{ readonly closed: boolean }>();
     expectTypeOf<StandUpdate>().toExtend<{ readonly typeUrl: string; readonly id: unknown }>();
     expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");

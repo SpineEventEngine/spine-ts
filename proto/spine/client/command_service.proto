@@ -1,0 +1,61 @@
+/*
+ * Copyright 2022, TeamDev. All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Redistribution and use in source and/or binary forms, with or without
+ * modification, must retain the above copyright notice and the following
+ * disclaimer.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+ * "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+ * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+ * A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+ * OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+ * SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+ * LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+ * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+ * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+syntax = "proto3";
+
+package spine.client;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.io";
+// We put gRPC-based classes into `grpc` sub-package, which is annotated as `@Internal`
+// to hide implementation details from the public API of the framework.
+option java_package = "io.spine.client.grpc";
+option java_multiple_files = true;
+option java_outer_classname = "CommandServiceProto";
+
+import "spine/core/command.proto";
+import "spine/core/ack.proto";
+
+// A service for posting commands to the application backend.
+service CommandService {
+
+    // Posts the given command to the application backend.
+    //
+    // When the command is successfully received by the application, it responds with
+    // an acknowledgement. The received `Ack` may have one of the following statuses:
+    //
+    //    1. `Status.ok` — the command is accepted for further processing.
+    //    2. `Status.error` — there has been an error receiving the command. No further
+    //        processing would occur.
+    //    3. `Status.rejection` — business rules do not allow the execution of the command.
+    //        E.g., a user who made a request do not have the required permission.
+    //
+    // In case of internal gRPC errors or issues on a transport layer, an `Ack`
+    // would not be received. All errors that occur on the side of gRPC should
+    // be handled by the means of the chosen client stub.
+    //
+    rpc Post(core.Command) returns (core.Ack);
+}

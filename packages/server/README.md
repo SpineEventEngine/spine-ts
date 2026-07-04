@@ -35,8 +35,12 @@ Current slice exposes:
   and
 - `context.stand()` / `new Stand({ context, storageFactory })` for direct
   read-side entity state registration, latest-state updates, latest-state reads,
-  and explicit in-process subscription cleanup. This is not gRPC
-  QueryService/SubscriptionService;
+  and explicit in-process subscription cleanup;
+  and
+- `new SpineServices({ contexts }).register(router)` for the first real
+  Connect/Node route registration of Spine JVM `CommandService`,
+  `QueryService`, and `SubscriptionService` contracts over built bounded
+  contexts;
   and
 - `AggregateStorage` for the current primitive-`AggregateId`
   snapshot/history seam, backed by `StorageFactory`, `RecordStorage`, and
@@ -50,7 +54,8 @@ Current slice exposes:
   storage-backed shard pickup/release over atomic
   `RecordStorage.compareAndSet()` handles for one backing store. This slice
   explicitly excludes worker loops, retry monitors, conveyor/stations,
-  repository invocation, gRPC services, transport retries, and example app work;
+  repository invocation, broad server lifecycle, transport retries, and example
+  app work;
 - and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
@@ -183,7 +188,7 @@ order. Handler names must refer to own prototype data methods declared with
 normal class method syntax; accessors, `constructor`, inherited methods, and
 instance fields are rejected without invoking user code. The API does not
 invoke handlers, enforce transactions or `(set_once)`, build repositories, write
-storage, register buses, start transport, or implement gRPC services.
+storage, register buses, start transport, or implement service adapters.
 
 The decorator API is an adapter over that explicit contract. Decorators record
 standard per-class metadata from public instance methods only, require explicit
@@ -462,7 +467,8 @@ Registering the same repository instance with another built context is rejected.
 
 This slice deliberately does not create default repositories from entity
 classes, invoke handlers, construct system contexts, start query/subscription
-buses, write tenant indexes, expose gRPC services, or integrate transports.
+buses, write tenant indexes, expose a broad server lifecycle, or integrate
+transports.
 
 ## Direct Stand
 
@@ -486,8 +492,10 @@ that context's stand. Stand reads, updates, and subscriptions reject unknown
 state schemas with `StandStateTypeError`. Multitenant stands require
 `{ tenantId }` on read/update/subscribe; single-tenant stands reject tenant
 options. Direct subscriptions are deterministic in-process callbacks and must
-be cleaned up explicitly. QueryService, SubscriptionService, cross-context
-fallback, client query DSLs, and projection catch-up remain outside this slice.
+be cleaned up explicitly. `SpineServices` adapts built-context command buses and
+stands to the first `CommandService`, `QueryService`, and `SubscriptionService`
+methods. Cross-context fallback, client query DSLs, event subscriptions, field
+filtering, and projection catch-up remain outside this slice.
 
 ## Entity State Shell
 

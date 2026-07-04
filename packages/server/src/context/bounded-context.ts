@@ -86,6 +86,9 @@ interface RegistrationSnapshot {
 
 /** Post-only command endpoint exposed by a built bounded context. */
 export interface CommandEndpoint {
+  /** Canonical command message type URLs accepted by this endpoint. */
+  acceptedCommandTypes(): readonly string[];
+
   /** Posts a command into the context-owned command bus. */
   post(command: Command): Promise<void>;
 }
@@ -184,6 +187,7 @@ export class BoundedContext {
     this.#stand = stand;
     this.#storageFactory = storageFactory;
     this.#commandEndpoint = Object.freeze({
+      acceptedCommandTypes: () => this.#commandBus.acceptedCommandTypes(),
       post: (command: Command) => this.#commandBus.post(command),
     });
     this.#eventEndpoint = Object.freeze({

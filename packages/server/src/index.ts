@@ -15,6 +15,7 @@ export {
   Stand,
   type StandOptions,
   type StandReadOptions,
+  type StandReadResult,
   type StandRegisterOptions,
   type StandSubscribeOptions,
   type StandSubscription,
@@ -22,6 +23,8 @@ export {
   type StandUpdate,
   type StandUpdateOptions,
 } from "./stand/stand.js";
+
+export { SpineServices, type SpineServicesOptions } from "./services/spine-services.js";
 
 export { CommandBus } from "./bus/command-bus.js";
 export type { CommandDispatcher } from "./bus/command-dispatcher.js";

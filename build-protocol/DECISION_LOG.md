@@ -1609,3 +1609,48 @@ Consequences:
 - Later durable storage adapters still need their own atomic insert or
   transaction guarantees; this task only strengthens the current in-process
   implementation without claiming distributed uniqueness.
+
+## D-0056: T-0012.10 Uses Connect v2 For Real Node gRPC-Compatible Service Wiring
+
+Status: Accepted
+
+Date: 2026-07-04
+
+Context: T-0012.10 must expose `CommandService.Post`, `QueryService.Read`, and
+`SubscriptionService.Subscribe/Activate/Cancel` against the exact Spine JVM
+service proto contracts. The repository already uses Buf and
+`@bufbuild/protoc-gen-es@2.12.1`; generated service descriptors are emitted by
+that generator under `packages/proto/generated`. Package lookup on
+2026-07-04 showed `@connectrpc/connect@2.1.2` and
+`@connectrpc/connect-node@2.1.2` current, with peers compatible with
+`@bufbuild/protobuf@2.12.1`. The older
+`@connectrpc/protoc-gen-connect-es@1.7.0` targets Protobuf-ES 1.x and is not
+compatible with this workspace's 2.x generation.
+
+Decision: Use `@connectrpc/connect@2.1.2` and
+`@connectrpc/connect-node@2.1.2` for this first service slice. Register service
+implementations from the Protobuf-ES v2 service descriptors and test them
+through real Connect/Node transports, including the gRPC protocol path. Keep the
+public construction API limited to route registration for the three services;
+do not introduce a broad Spine `Server` facade, client DSL, handwritten service
+schema, or custom in-process protocol.
+
+Alternatives considered:
+
+- Use `@connectrpc/protoc-gen-connect-es`. Rejected because its latest package
+  line is 1.7.0 and peers against Protobuf-ES 1.x generation.
+- Use `@grpc/grpc-js` directly. Rejected for this slice because it would require
+  more handwritten glue around Protobuf-ES descriptors while Connect v2 already
+  supports gRPC, gRPC-Web, and Connect protocols on Node.
+- Simulate RPC with direct method calls or only `createRouterTransport`.
+  Rejected because the task requires real gRPC-compatible runtime wiring.
+
+Consequences:
+
+- Runtime transport types stay in the service adapter package boundary and do
+  not leak into `CommandBus`, `Stand`, or bounded-context domain/runtime
+  classes.
+- Generated service descriptors remain reproducible via the existing Buf /
+  Protobuf-ES workflow; no additional generator is needed.
+- Later tasks can wrap this small route-registration API in a larger server
+  lifecycle only when the roadmap explicitly calls for it.

@@ -1,7 +1,9 @@
 # Architecture Notes
 
 Current status: early implementation notes through the first command/event bus,
-runtime-routing, and transport-foundation seams.
+runtime-routing, transport-foundation seams, and the real Connect/Node
+`SpineServices` route registrar for the raw Spine command/query/subscription
+services.
 
 Architecture documentation starts from the build protocol and specification documents under `build-protocol/`. This folder is reserved for implementation-era architecture notes that evolve with actual package boundaries and runtime behavior.
 
@@ -14,8 +16,9 @@ values, and custom options. This boundary is intentionally contract-only:
 
 - generated schemas are available for later metadata and validation tasks;
 - copied source provenance is verified by `proto/spine-sources.json`;
-- canonical `Command`, `Event`, `ActorContext`, `TenantId`, `UserId`,
-  `Version`, diagnostics, enrichment, and transitive time/net/UI support
+- canonical `Command`, `Event`, `Ack`, `Response`, `ActorContext`,
+  `TenantId`, `UserId`, `Version`, diagnostics, enrichment, Spine client query,
+  subscription, and service contracts, and transitive time/net/UI support
   contracts are available without hand-written TypeScript shapes; and
 - buses, transport, entity runtime behavior, and runtime metadata generation
   remain out of scope until later tasks.
@@ -260,7 +263,8 @@ storage through the context `StorageFactory`, and exposes registered
 repositories as frozen snapshot-backed `RepositoryView` values. Direct
 repository registration is not public API. Built contexts also register
 repository state schemas with their owned direct `Stand`, so the read side can
-reject unknown state types before any future gRPC service layer exists.
+reject unknown state types before service adapters execute queries or
+subscriptions.
 This follows the JVM `Repository` identity surface (`entityClass()`,
 `idClass()`, and `entityStateType()`) plus the first context-owned lifecycle
 step. When authentic explicit handler metadata is supplied, repositories now
@@ -268,7 +272,7 @@ calculate deferred command/event routes and bounded-context assembly registers
 internal dispatcher adapters for those routes. The TypeScript seam deliberately
 omits `create`, `find`, `store`, record conversion, handler invocation,
 entity storage/cache/catch-up, inbox/delivery, lifecycle monitors, gRPC
-services, and transport.
+server lifecycle, and transport.
 
 `EntityTransaction` is the first server-owned draft/result commit boundary over
 one entity state. It buffers a draft state, explicit previous/draft version
@@ -336,11 +340,18 @@ name validation or the builder-only build path by passing ad hoc objects.
 
 The current `Stand` slice is intentionally direct and storage-backed. It owns
 known generated state schemas, latest-state `RecordStorage`, direct
-read/update methods, and deterministic in-process subscription handles with
-explicit `unsubscribe()`. It preserves read-side/write-side segregation by
-requiring callers to record state updates directly; it does not invoke
-repository handlers, run projections, catch up from events, expose gRPC
-QueryService/SubscriptionService, or provide a client query DSL.
+read/update methods, versioned reads for caller-supplied update metadata, and
+deterministic in-process subscription handles with explicit `unsubscribe()`. It
+preserves read-side/write-side segregation by requiring callers to record state
+updates directly; it does not invoke
+repository handlers, run projections, catch up from events, or provide a client
+query DSL. `SpineServices` adapts this direct read side and the context command
+bus to the first real Connect/Node `CommandService`, `QueryService`, and
+`SubscriptionService` routes. Service subscription delivery starts only when a
+client activates the opaque subscription ID, abandoned inactive subscriptions
+expire after a small configurable TTL, slow consumers are bounded by a small
+configurable update queue, and stream/cancel cleanup releases the direct Stand
+handle.
 
 The following runtime pieces are still deferred to later explicit tasks:
 
@@ -350,8 +361,9 @@ The following runtime pieces are still deferred to later explicit tasks:
 - handler invocation over the deferred repository routes;
 - inbox/delivery storage, durable storage lifecycle, entity storage/cache
   catch-up, and tenant-index persistence;
-- gRPC query/subscription service execution and richer query filtering;
-- system-context pairing and server/gRPC services; and
+- richer query filtering, event subscriptions, and durable subscription
+  recovery;
+- system-context pairing and broad server/gRPC lifecycle; and
 - ZeroMQ endpoint topology and transport-backed runtime execution.
 
 ## Server Runtime Closure
@@ -385,10 +397,11 @@ message type names/type URLs plus stable receiver-group and local route/worker
 identities, along with transport correlation keys back to topic/subscription
 arrays and planner-local worker IDs; they do not retain entity names, handler
 names, raw readiness metadata, or duplicate full transport contracts on each
-route. The package root now exports a small executable bus layer and direct
-Stand, but still does not export service, transport, delivery,
-integration-broker, handler invocation/runtime wiring, command/event intake
-validation, or `Ack` mapping as part of this closure.
+route. The package root now exports a small executable bus layer, direct Stand,
+and the `SpineServices` route registrar, but still does not export a broad
+server lifecycle, transport endpoint runner, integration broker, handler
+invocation/runtime wiring, command/event intake validation pipeline, or durable
+subscription store as part of this closure.
 
 The architectural consequence is that later work must add those collaborators
 as explicit tasks at their own seams. Command and event intake can consume the

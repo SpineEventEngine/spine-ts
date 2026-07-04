@@ -4,8 +4,9 @@ Current status: early framework guide for the descriptor registry,
 single-message validation facade, core envelope construction helpers, the first
 server entity, handler, repository, and bounded-context metadata
 layers, the first command/event bus seam, the first server runtime routing
-seam, adapter-agnostic transport contracts, and the first storage contracts
-with an in-memory adapter.
+seam, the real Connect/Node `SpineServices` route registrar for the raw Spine
+command/query/subscription services, adapter-agnostic transport contracts, and
+the first storage contracts with an in-memory adapter.
 
 This guide covers the behavior and contracts available now: Spine proto
 descriptors are exposed through curated packages, `@spine-ts/core` can derive
@@ -29,11 +30,14 @@ command/event readiness, yielding transport topics, subscriptions, and
 planner-local route descriptors without opening sockets or invoking handlers.
 The same package now also exposes a small executable `CommandBus` and
 `EventBus` over registered dispatcher objects, with event storage delegated to
-`EventStore` before event fan-out.
+`EventStore` before event fan-out. `SpineServices` registers generated Spine
+service descriptors with Connect/Node so callers can host `CommandService.Post`,
+`QueryService.Read`, and `SubscriptionService.Subscribe/Activate/Cancel` over a
+real gRPC-compatible runtime.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
 deterministic in-memory adapter for tests/development. Entity runtime dispatch,
-service hosting, transport endpoint execution, durable production storage, and
-the to-do application remain later slices.
+transport endpoint execution, durable production storage, broader server
+lifecycle, and the to-do application remain later slices.
 
 ## What Exists Now
 
@@ -79,8 +83,14 @@ the to-do application remain later slices.
 - A direct storage-backed `Stand` owned by each built `BoundedContext`.
   Registered repositories make their entity state schemas known to the stand,
   which can record latest states, read them by schema and ID, and notify
-  in-process subscribers. This is direct framework API, not gRPC
-  QueryService/SubscriptionService.
+  in-process subscribers.
+- A first `SpineServices` route registrar that adapts built bounded contexts to
+  real Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
+  routes without adding a broad server facade or client DSL. Command routes are
+  selected from built-time bus registrations, queries preserve Stand-recorded
+  versions, and subscriptions attach delivery only after explicit activation.
+  Inactive subscriptions expire by default and active subscriptions use a small
+  bounded update queue for slow consumers.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.
@@ -142,10 +152,9 @@ the to-do application remain later slices.
 - Semantic tag registration from `(is)` and `(every_is)` into handler/routing
   registries. The server metadata APIs preserve entity tags and explicit
   handler declarations now, but no runtime registry consumes them yet.
-- gRPC service implementations.
 - Default repository construction from entity classes, handler invocation,
   entity runtime dispatch, system context construction, import buses,
-  gRPC QueryService/SubscriptionService execution, tenant index persistence,
+  richer gRPC service execution, tenant index persistence,
   ZeroMQ endpoint topology, broker process supervision, retry workers, durable
   delivery storage, transport-backed service execution, durable production
   storage, and to-do domain runtime behavior.
@@ -477,6 +486,7 @@ await stand.update(TaskStateSchema, taskState, {
 });
 
 const latest = await stand.read(TaskStateSchema, taskId);
+const versioned = await stand.readVersioned(TaskStateSchema, taskId);
 const subscription = stand.subscribe(TaskStateSchema, (update) => {
   update.state;
 });
@@ -489,8 +499,11 @@ contexts call it from registered repository metadata. Reads, updates, and
 subscriptions reject unknown state schemas with `StandStateTypeError`.
 Multitenant stands require `{ tenantId }`; single-tenant stands reject tenant
 options. Direct subscriptions are in-process only and must be cleaned up by
-calling `unsubscribe()`. This API is not a gRPC QueryService or
-SubscriptionService, and it does not provide a client query DSL.
+calling `unsubscribe()`. `SpineServices` adapts built-context stands to the
+first raw gRPC-compatible query and subscription routes. Service subscriptions
+allocate IDs in `Subscribe` and attach Stand delivery in `Activate`; updates
+recorded before activation are not replayed by this first slice. This direct API
+does not provide a client query DSL.
 
 ## Runtime Assembly Closure
 
@@ -554,12 +567,12 @@ transport arrays. They do not retain handler names, entity names, raw readiness
 metadata, or ZeroMQ details.
 
 It does not create a TypeScript `Server`, context runtime handle,
-command/event/import bus, service router, storage lifecycle, delivery engine,
-integration broker, gRPC query/subscription service execution, transport
-endpoint, broker supervisor, retry worker, durable delivery store, or handler
-invocation path. Accepted signal intake values still mean only accepted for
-later asynchronous work; they are not `Ack` messages and do not claim
-validation, storage, dispatch, delivery, or successful handling.
+command/event/import bus, broad server lifecycle, storage lifecycle, delivery
+engine, integration broker, transport endpoint, broker supervisor, retry worker,
+durable delivery store, or handler invocation path. Accepted signal intake
+values still mean only accepted for later asynchronous work; they are not `Ack`
+messages and do not claim validation, storage, dispatch, delivery, or
+successful handling.
 
 When a caller already owns executable dispatchers, the current server package
 also exposes the first small bus seam:
