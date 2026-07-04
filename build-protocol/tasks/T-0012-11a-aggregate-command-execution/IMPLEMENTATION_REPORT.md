@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11a Aggregate Command Execution
 
-Status: implementation complete; ready for review
+Status: review findings addressed; ready for final verification handoff
 Branch: `task/T-0012-11a-aggregate-command-execution`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11a-aggregate-command-execution`
@@ -69,6 +69,11 @@ storage seam before event-bus handoff.
     reason: `ExecutingTaskAggregate.assigneeCalls` stayed `0`, proving the
     repository dispatcher still stops at routing instead of invoking the
     aggregate assignee.
+  - After review, added focused failures for stored-event accept hooks,
+    post-commit dispatch isolation, nested command handoff, tenant-scoped
+    aggregate storage, bigint version metadata, protobuf int32 version bounds,
+    readable producer IDs, and primitive producer-ID routing in aggregate
+    storage.
 
 - GREEN:
   - Added aggregate runtime binding during bounded-context repository
@@ -77,9 +82,39 @@ storage seam before event-bus handoff.
     one aggregate, invoke the assignee, bind sequential event versions, apply
     event appliers, append through `AggregateStorage`, write the latest
     snapshot, and then dispatch already-stored events through the event bus.
+  - Follow-up review fixes introduced one cohesive internal aggregate-command
+    executor, command-derived multitenant storage contexts, bigint repository
+    version metadata, explicit protobuf int32 version guards, primitive
+    producer-ID packing/unpacking, stored-event accept-hook replay, and
+    fire-and-forget post-commit stored-event dispatch so delivery failures do
+    not reject already-committed command execution.
   - Re-ran
     `pnpm test packages/server/test/repository/repository-routing.test.ts packages/server/test/repository/aggregate-storage.test.ts`
     and got 2 files, 36 tests passed.
+
+## Review Findings Closure
+
+- A. Command execution now commits aggregate history/snapshots first and then
+  queues already-stored event delivery without awaiting it. Delivery failures
+  stay isolated to the queued event job, and nested commands posted from event
+  delivery no longer hold the outer command open.
+- B. `EventBus` already-stored dispatch now reuses dispatcher accept hooks
+  before delivery without appending again. Accept-hook failures reject only the
+  stored-event delivery job.
+- C. Aggregate storage now derives multitenant storage context from the caller
+  command tenant, preserving tenant isolation for shared aggregate IDs.
+- D. Repository-executed aggregates are instantiated with `bigint` aggregate
+  version metadata, and produced event versions now fail cleanly when they
+  exceed the protobuf int32 range.
+- E. Produced aggregate events now preserve readable primitive producer IDs via
+  packed primitive wrappers, while producer-ID readers remain compatible with
+  existing string `UserId` envelopes.
+- F. Aggregate command execution helpers were gathered into one small internal
+  executor instead of leaving the new behavior spread across more free
+  functions.
+- G. Child and parent durable docs/logs now reflect the review-fix state, and
+  the public docs describe built aggregate repositories as executable write-side
+  components rather than route-only registration metadata.
 
 ## Verification
 
@@ -91,30 +126,16 @@ storage seam before event-bus handoff.
   `0`.
 - `pnpm test packages/server/test/repository/repository-routing.test.ts packages/server/test/repository/aggregate-storage.test.ts`
   passed with 2 files and 36 tests after the implementation.
+- `pnpm test packages/server/test/repository/repository-routing.test.ts packages/server/test/repository/aggregate-storage.test.ts packages/server/test/bus/event-bus.test.ts packages/server/test/bus/command-bus.test.ts`
+  passed with 4 files and 75 tests after the review-fix pass.
 - `pnpm typecheck` passed.
 - `pnpm lint` passed.
 - `pnpm format:check` passed.
+- `pnpm docs:check` passed after the repository/public-doc wording updates.
 - `git diff --check` passed.
-- `pnpm docs:check` was not run because this slice did not move public/API docs
-  or package-root public exports.
-- `pnpm test:coverage` failed in the sandbox for known environment reasons:
-  `packages/transport/test/zeromq/local-ipc-smoke.test.ts` hit
-  `Operation not permitted`, and `packages/server/test/services/spine-services.test.ts`
-  hit repeated `listen EPERM: operation not permitted 127.0.0.1` timeouts while
-  starting the real HTTP/2 gRPC server.
-- Orchestrator reran `pnpm test:coverage` with local IPC/HTTP2 permissions. All
-  528 tests passed, but branch coverage was 89.45% against the required 90%
-  gate.
-- Added focused follow-up tests for array command output, missing aggregate
-  appliers, and malformed produced events before storage.
-- Added event-bus follow-up tests for dispatching already-stored events,
-  malformed stored events, and invalid stored-event access.
-- Added bus validation follow-up tests for missing and blank command/event
-  message type URLs after full coverage still reported 89.75% branch coverage.
-- Added dispatcher-registry follow-up tests for schema collection retry,
-  repeated schema deduplication, and reentrant command dispatcher registration
-  after full coverage still reported 89.87% branch coverage.
-- Added a final same-command-dispatcher registration test after coverage still
-  reported 89.99% branch coverage.
-- Final escalated `pnpm test:coverage` passed with 44 files and 543 tests:
-  statements 94.89%, branches 90.05%, functions 97.3%, lines 94.91%.
+- Fresh sandboxed `pnpm test:coverage` still fails for known environment
+  reasons: `packages/transport/test/zeromq/local-ipc-smoke.test.ts` hits
+  `Operation not permitted`, and
+  `packages/server/test/services/spine-services.test.ts` hits repeated
+  `listen EPERM: operation not permitted 127.0.0.1` while starting the real
+  HTTP/2 gRPC server.

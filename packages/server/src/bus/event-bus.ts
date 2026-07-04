@@ -78,6 +78,7 @@ export class EventBus {
     }
 
     const dispatchers = this.#registry.find(typeUrl);
+    await this.#accept(event, dispatchers);
 
     for (const dispatcher of dispatchers) {
       await dispatcher.dispatch(clone(EventSchema, event));

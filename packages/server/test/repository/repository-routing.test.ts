@@ -1,8 +1,14 @@
 import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { packAny, packCommand, packEvent } from "@spine-ts/core";
+import {
+  BoolValueSchema,
+  DoubleValueSchema,
+  FileDescriptorProtoSchema,
+  FileDescriptorSetSchema,
+  StringValueSchema,
+} from "@bufbuild/protobuf/wkt";
+import { packAny, packCommand, packEvent, unpackAny } from "@spine-ts/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
@@ -10,6 +16,7 @@ import {
   EventContextSchema,
   EventIdSchema,
   EventSchema,
+  TenantIdSchema,
   UserIdSchema,
   VersionSchema,
   file_spine_options,
@@ -80,7 +87,7 @@ class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, numbe
   }
 }
 
-class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
+class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   static assigneeCalls = 0;
   static applierCalls = 0;
 
@@ -125,7 +132,7 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
   }
 }
 
-class NoApplierAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
+class NoApplierAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: AggregateState) {
     return createAggregateEvent("event-no-applier", command.id, 0, command.name);
   }
@@ -135,7 +142,7 @@ class NoApplierAggregate extends Aggregate<string, typeof AggregateStateSchema, 
   }
 }
 
-class MalformedEventAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
+class MalformedEventAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(): unknown {
     return create(EventSchema, {
       id: create(EventIdSchema, { value: "event-malformed" }),
@@ -145,6 +152,31 @@ class MalformedEventAggregate extends Aggregate<string, typeof AggregateStateSch
 
   applyTask(event: AggregateState): void {
     void event;
+  }
+}
+
+class BigintVersionAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  static observedVersions: unknown[] = [];
+
+  static reset(): void {
+    this.observedVersions = [];
+  }
+
+  assignTask(command: AggregateState) {
+    BigintVersionAggregate.observedVersions.push(this.version);
+    return createAggregateEvent(`event-bigint-${command.name}`, command.id, 0, command.name);
+  }
+
+  applyTask(event: AggregateState): void {
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: event.id,
+        name: event.name,
+        archived: event.archived,
+      }),
+    );
+    this.commitTransaction();
   }
 }
 
@@ -236,6 +268,93 @@ describe("repository signal routing", () => {
     });
   });
 
+  it("resolves aggregate command execution after commit when stored-event dispatch later throws", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: () => Promise.reject(new Error("dispatch failed after commit")),
+      })
+      .withStorageFactory(factory)
+      .build();
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("command-dispatch-failure", "task-dispatch")),
+    ).resolves.toBeUndefined();
+
+    await expect(eventStore.read()).resolves.toMatchObject([{ id: { value: "event-Task" } }]);
+    await expect(storage.readHistory("task-dispatch")).resolves.toMatchObject({
+      snapshot: {
+        aggregateId: "task-dispatch",
+        version: 1n,
+      },
+      events: [],
+    });
+  });
+
+  it("does not block the outer command on nested commands posted from stored-event dispatch", async () => {
+    const factory = new InMemoryStorageFactory();
+    const nestedGate = createSignal();
+    const nestedPosted = createSignal();
+    const nestedFinished = createSignal();
+    const contextRef: { current?: BoundedContext } = {};
+
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: async (event) => {
+          if (event.id?.value === "event-Outer") {
+            nestedPosted.resolve();
+            const currentContext = contextRef.current;
+
+            if (currentContext === undefined) {
+              throw new Error("Bounded context is not ready.");
+            }
+
+            await currentContext
+              .commandBus()
+              .post(createAggregateCommand("command-inner", "task-inner", "Inner"));
+            nestedFinished.resolve();
+            return;
+          }
+
+          if (event.id?.value === "event-Inner") {
+            await nestedGate.promise;
+          }
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    contextRef.current = context;
+
+    let outerResolved = false;
+    const outerCompletion = context
+      .commandBus()
+      .post(createAggregateCommand("command-outer", "task-outer", "Outer"))
+      .then(() => {
+        outerResolved = true;
+      });
+
+    await nestedPosted.promise;
+    await Promise.resolve();
+    expect(outerResolved).toBe(true);
+
+    nestedGate.resolve();
+    await outerCompletion;
+    await nestedFinished.promise;
+  });
+
   it("rejects aggregate command output when no applier is registered", async () => {
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
@@ -262,6 +381,111 @@ describe("repository signal routing", () => {
       context.commandBus().post(createAggregateCommand("command-malformed", "task-malformed")),
     ).rejects.toThrow(/event.message.typeUrl/);
     await expect(eventStore.read()).resolves.toEqual([]);
+  });
+
+  it("keeps stored aggregate history tenant-scoped for multitenant command execution", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createExecutingRepository())
+      .withStorageFactory(factory)
+      .build();
+    const tenantAStorage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    const tenantBStorage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-b" },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await context
+      .commandBus()
+      .post(createAggregateCommand("command-tenant-a", "shared-task", "TenantA", "tenant-a"));
+    await context
+      .commandBus()
+      .post(createAggregateCommand("command-tenant-b", "shared-task", "TenantB", "tenant-b"));
+
+    await expect(tenantAStorage.readHistory("shared-task")).resolves.toMatchObject({
+      snapshot: {
+        aggregateId: "shared-task",
+        version: 1n,
+        state: { name: "TenantA (applied)" },
+      },
+    });
+    await expect(tenantBStorage.readHistory("shared-task")).resolves.toMatchObject({
+      snapshot: {
+        aggregateId: "shared-task",
+        version: 1n,
+        state: { name: "TenantB (applied)" },
+      },
+    });
+  });
+
+  it("rehydrates repository-executed aggregates with bigint version metadata", async () => {
+    BigintVersionAggregate.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createBigintVersionRepository())
+      .withStorageFactory(new InMemoryStorageFactory())
+      .build();
+
+    await context
+      .commandBus()
+      .post(createAggregateCommand("command-bigint-1", "task-bigint", "One"));
+    await context
+      .commandBus()
+      .post(createAggregateCommand("command-bigint-2", "task-bigint", "Two"));
+
+    expect(BigintVersionAggregate.observedVersions).toEqual([0n, 1n]);
+  });
+
+  it("rejects produced aggregate versions outside the protobuf int32 range", async () => {
+    const factory = new InMemoryStorageFactory();
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    await storage.writeSnapshot({
+      aggregateId: "task-overflow",
+      state: create(AggregateStateSchema, {
+        id: "task-overflow",
+        name: "Overflow",
+        archived: false,
+      }),
+      version: 2_147_483_647n,
+      lifecycle: { archived: false, deleted: false },
+    });
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("command-overflow", "task-overflow")),
+    ).rejects.toThrow(/int32 range/);
+    await expect(eventStore.read()).resolves.toEqual([]);
+  });
+
+  it("stores produced aggregate events with a readable producer ID", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await context
+      .commandBus()
+      .post(createAggregateCommand("command-producer-id", "task-producer-id"));
+
+    const [stored] = await eventStore.read();
+    expect(readReadableProducerId(stored)).toBe("task-producer-id");
   });
 
   it("routes commands to one aggregate ID by the first command field", async () => {
@@ -426,6 +650,19 @@ function createExecutingRepository(): Repository<typeof ExecutingTaskAggregate> 
   });
 }
 
+function createBigintVersionRepository(): Repository<typeof BigintVersionAggregate> {
+  const handlers = defineEntityHandlers(BigintVersionAggregate, AggregateStateSchema, (builder) => [
+    builder.assign(AggregateStateSchema, "assignTask"),
+    builder.apply(AggregateStateSchema, "applyTask"),
+  ]);
+
+  return new Repository({
+    entityType: BigintVersionAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
 function createNoApplierRepository(): Repository<typeof NoApplierAggregate> {
   const handlers = defineEntityHandlers(NoApplierAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
@@ -471,11 +708,21 @@ function createAggregateEvent(id: string, aggregateId: string, version: number, 
   });
 }
 
-function createAggregateCommand(id: string, aggregateId: string, name = "Task") {
+function createAggregateCommand(id: string, aggregateId: string, name = "Task", tenantId?: string) {
   return packCommand({
     id: create(CommandIdSchema, { uuid: id }),
     context: create(CommandContextSchema, {
       actorContext: create(ActorContextSchema, {
+        ...(tenantId === undefined
+          ? {}
+          : {
+              tenantId: create(TenantIdSchema, {
+                kind: {
+                  case: "value",
+                  value: tenantId,
+                },
+              }),
+            }),
         actor: create(UserIdSchema, { value: "user-1" }),
       }),
     }),
@@ -522,4 +769,32 @@ function projectionProducerId(options: {
     return packAny(UserIdSchema, create(UserIdSchema, { value: options.producerId }));
   }
   return undefined;
+}
+
+function readReadableProducerId(event: { readonly context?: unknown } | undefined) {
+  const producerId = (
+    event?.context as { readonly producerId?: ReturnType<typeof packAny> | undefined } | undefined
+  )?.producerId;
+
+  if (producerId === undefined) {
+    return undefined;
+  }
+
+  return (
+    unpackAny(producerId, DoubleValueSchema)?.value ??
+    unpackAny(producerId, UserIdSchema)?.value ??
+    unpackAny(producerId, StringValueSchema)?.value ??
+    unpackAny(producerId, BoolValueSchema)?.value
+  );
+}
+
+function createSignal() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((fulfill) => {
+    resolve = () => {
+      fulfill();
+    };
+  });
+
+  return { promise, resolve };
 }

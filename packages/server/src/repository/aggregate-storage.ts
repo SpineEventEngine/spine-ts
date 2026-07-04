@@ -1,7 +1,7 @@
 import { clone, create, fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { deriveTypeUrl, unpackAny, type MessageSchema } from "@spine-ts/core";
-import { EventSchema, type Event, UserIdSchema } from "@spine-ts/proto";
+import { EventSchema, type Event } from "@spine-ts/proto";
 import {
   EventStore,
   RecordColumn,
@@ -13,6 +13,7 @@ import {
 
 import type { DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import type { EntityLifecycleFlags } from "../entity/entity.js";
+import { primitiveId as readPrimitiveId, unpackPrimitiveId } from "./primitive-id.js";
 
 /**
  * Small aggregate history store over snapshots and events.
@@ -246,9 +247,9 @@ export class AggregateStorage<
   #producerId(event: Event): AggregateId | undefined {
     const producerId = event.context?.producerId;
     if (producerId !== undefined) {
-      const userId = unpackAny(producerId, UserIdSchema);
-      if (userId?.value !== undefined && userId.value !== "") {
-        return userId.value;
+      const unpacked = unpackPrimitiveId(producerId);
+      if (unpacked !== undefined) {
+        return unpacked;
       }
       throw new Error("Aggregate event routing requires a readable producer ID.");
     }
@@ -546,10 +547,7 @@ function sameSnapshotId(left: unknown, right: unknown): boolean {
 }
 
 function primitiveId(value: unknown): AggregateId | undefined {
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return value;
-  }
-  return undefined;
+  return readPrimitiveId(value);
 }
 
 function compareVersions(left: bigint, right: bigint): number {

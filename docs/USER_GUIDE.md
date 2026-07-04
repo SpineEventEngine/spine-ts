@@ -421,14 +421,16 @@ opens a `RecordStorage` for the repository state schema using the context
 `StorageFactory`. Direct repository registration and registration status APIs
 are not public API.
 
-This slice still does not create, find, or store entities; convert entity
-records; invoke handlers; write inboxes; manage delivery; manage entity
-caches; run catch-up; emit lifecycle events; start buses from repositories; or
-use gRPC/transport. Direct stands can store and read latest entity states, but
-they do not invoke projections or run catch-up. When a repository is constructed with
-authentic explicit handler metadata, it can calculate deferred command/event
-routes, and bounded contexts install internal dispatcher adapters for those
-routes.
+This slice still does not expose direct entity lookup/storage APIs; convert
+entity records; write inboxes; manage delivery; manage entity caches; run
+catch-up; emit lifecycle events; start buses from repositories; or use
+gRPC/transport. Direct stands can store and read latest entity states, but
+they do not invoke projections or run catch-up. When a repository is
+constructed with authentic explicit handler metadata and registered with a
+built bounded context, aggregate commands can load or create one aggregate,
+invoke one assignee, apply the produced events, persist history and snapshots
+through `AggregateStorage`, and queue already-stored events for event-bus
+delivery.
 
 ## Bounded Context Assembly
 
@@ -466,11 +468,12 @@ opened for repositories, and `registeredRepositories()` returns a copy-safe
 list of frozen snapshot-backed `RepositoryView` values. The built context also
 owns `stand()`, and repository state schemas are registered with that stand as
 known state types.
-This slice still does not create default repositories, invoke handlers, write
-inboxes, manage delivery, emit lifecycle events, or start transport.
-Repositories with authentic explicit handler
-metadata do contribute deferred route-calculating dispatcher adapters to the
-built context's buses.
+This slice still does not create default repositories, write inboxes, manage
+delivery, emit lifecycle events, or start transport. Repositories with
+authentic explicit handler metadata do contribute dispatcher adapters to the
+built context's buses; aggregate repositories can therefore execute assignees
+and appliers, persist through `AggregateStorage`, and queue already-stored
+events for event-bus delivery.
 
 ## Direct Stand
 

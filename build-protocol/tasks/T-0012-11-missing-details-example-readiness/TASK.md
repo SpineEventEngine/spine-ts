@@ -127,8 +127,9 @@ Resumed-state note:
 - `T-0012.11` is split complete and `T-0012.11a` is selected first.
 - The `T-0012.11a` branch/worktree is now created from reviewed split commit
   `8804e93`.
-- The implementation sub-agent has started the TDD pass and recorded durable
-  subtask docs/logs before behavior changes.
+- The `T-0012.11a` implementation sub-agent has completed the review-fix pass,
+  updated public/API docs, and recorded focused verification in the child
+  task/report/review/work logs.
 
 ## Staged Subtasks
 

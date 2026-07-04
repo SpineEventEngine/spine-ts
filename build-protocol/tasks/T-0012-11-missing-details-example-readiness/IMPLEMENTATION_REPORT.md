@@ -51,9 +51,9 @@ Rejected for now as unproven blockers:
 
 Selected: `T-0012.11a Aggregate Command Execution`
 
-Proposed branch: `task/T-0012-11a-aggregate-command-execution`
+Branch: `task/T-0012-11a-aggregate-command-execution`
 
-Proposed worktree:
+Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11a-aggregate-command-execution`
 
 Why selected first:
@@ -63,9 +63,8 @@ Why selected first:
 - it is the smallest slice that delivers executable value without introducing a
   speculative runtime shell.
 
-The split only proposes that branch/worktree. The orchestrator creates it after
-splitter review is clean. This task does not claim that `T-0012.11a` has
-already been opened.
+The orchestrator has now created that branch/worktree from reviewed split
+commit `8804e93`.
 
 ## Current State
 
@@ -73,6 +72,9 @@ Requirements splitting is complete. The task now has a staged roadmap with five
 concrete implementation slices.
 
 `T-0012.11a Aggregate Command Execution` is the selected first slice. Its
-branch/worktree is now open from `8804e93`, and the implementation sub-agent
-has started by recording the required subtask task/report/review/work-log files
-before production code changes.
+branch/worktree is open from `8804e93`, and the implementation sub-agent has
+completed the review-fix pass in its child worktree: focused write-side tests,
+typecheck/lint/format/docs/diff verification, and durable doc/log updates are
+recorded there. The only remaining environment-specific gap is the sandboxed
+coverage rerun, which still depends on local IPC and loopback listener
+permissions.

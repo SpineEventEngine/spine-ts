@@ -106,14 +106,16 @@ base classes, and explicitly reparented ES classes with matching same-realm
 prototype chains are treated as metadata. It opens state record storage only
 through `BoundedContextBuilder.build()`; direct repository registration is not
 public API. When explicit handler metadata is supplied, repository routing
-calculates deferred command and event routes by generated message full type name,
-readiness metadata, producer ID, or first-field ID. Bounded-context assembly
-registers repository dispatcher adapters internally so buses can enqueue against
-repository-owned routes without exposing registration internals. The repository
-surface does not create/find/store entities, invoke handlers, write inboxes,
-manage caches, run catch-up, or start buses/transports. Built bounded contexts
-use repository metadata to register known state types with their direct
-read-side `Stand`.
+calculates command and event routes by generated message full type name,
+readiness metadata, producer ID, or first-field ID. Built bounded contexts
+register repository dispatcher adapters internally so aggregate commands can
+load or create one aggregate, invoke one assignee, apply the produced events,
+persist history and snapshots through `AggregateStorage`, and then queue
+already-stored events for event-bus delivery without appending them again. The
+repository surface still does not expose direct entity lookup/storage APIs,
+inboxes, caches, catch-up, or transport startup. Built bounded contexts use
+repository metadata to register known state types with their direct read-side
+`Stand`.
 `Stand`, `StandOptions`, `StandRegisterOptions`, `StandReadOptions`,
 `StandReadResult`, `StandUpdateOptions`, `StandSubscribeOptions`,
 `StandUpdate`, `StandSubscription`, and `StandStateTypeError` form the first

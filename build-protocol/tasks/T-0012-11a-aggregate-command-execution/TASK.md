@@ -1,6 +1,6 @@
 # T-0012.11a: Aggregate Command Execution
 
-Status: implementation complete; coverage blocked by sandbox IPC/HTTP2 checks
+Status: review findings addressed; verification complete except sandboxed coverage rerun
 Start: `2026-07-04 21:57 WEST`
 Parent task: `T-0012.11 Missing Details And Example Readiness`
 Branch: `task/T-0012-11a-aggregate-command-execution`
@@ -96,9 +96,18 @@ the already-produced events to the existing async event-bus path.
 - Branch/worktree created from reviewed split commit `8804e93`.
 - Required task, review, runtime, test, and JVM evidence has been read.
 - Durable subtask docs/logs were created before behavior work.
-- The aggregate command-execution slice is implemented and focused repository
-  tests are green.
-- `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, and `git diff --check`
-  passed.
-- Full `pnpm test:coverage` is blocked in the sandbox by local ZeroMQ IPC
-  `Operation not permitted` and gRPC HTTP/2 `listen EPERM 127.0.0.1` failures.
+- The aggregate command-execution slice and its review findings A-G are
+  addressed in code, focused tests, docs, and durable logs.
+- Focused write-side verification passed:
+  `packages/server/test/repository/repository-routing.test.ts`,
+  `packages/server/test/repository/aggregate-storage.test.ts`,
+  `packages/server/test/bus/event-bus.test.ts`, and
+  `packages/server/test/bus/command-bus.test.ts` with 4 files and 75 tests
+  green.
+- `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, and
+  `git diff --check` passed in this worktree.
+- A fresh sandboxed `pnpm test:coverage` rerun still depends on local endpoint
+  permissions. The failing environment symptoms are ZeroMQ local IPC
+  `Operation not permitted` and HTTP/2 loopback `listen EPERM 127.0.0.1`
+  failures while `packages/server/test/services/spine-services.test.ts` starts
+  the real gRPC server.

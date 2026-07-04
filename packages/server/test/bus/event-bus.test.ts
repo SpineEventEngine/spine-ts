@@ -367,6 +367,64 @@ describe("EventBus", () => {
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-stored-dispatch" } }]);
   });
 
+  it("runs accept hooks before dispatching already stored events", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const bus = new EventBus(store, [
+      {
+        messageSchemas: () => [ProjectionStateSchema],
+        accept: (event) => {
+          observed.push(`accept:${event.id?.value ?? "missing"}`);
+          return Promise.resolve();
+        },
+        dispatch: (event) => {
+          observed.push(`dispatch:${event.id?.value ?? "missing"}`);
+          return Promise.resolve();
+        },
+      },
+    ]);
+    const event = createProjectionEvent("event-stored-accepted");
+
+    await store.append(event);
+    await eventBusAccess.postStored(bus, event);
+
+    expect(observed).toEqual(["accept:event-stored-accepted", "dispatch:event-stored-accepted"]);
+    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-stored-accepted" } }]);
+  });
+
+  it("isolates already-stored accept failures to the delivery job", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const bus = new EventBus(store, [
+      {
+        messageSchemas: () => [ProjectionStateSchema],
+        accept: (event) => {
+          observed.push(`accept:${event.id?.value ?? "missing"}`);
+          return Promise.reject(new Error("stored accept failed"));
+        },
+        dispatch: (event) => {
+          observed.push(`dispatch:${event.id?.value ?? "missing"}`);
+          return Promise.resolve();
+        },
+      },
+    ]);
+    const event = createProjectionEvent("event-stored-accept-failure");
+
+    await store.append(event);
+    await expect(eventBusAccess.postStored(bus, event)).rejects.toThrow("stored accept failed");
+
+    expect(observed).toEqual(["accept:event-stored-accept-failure"]);
+    await expect(store.read()).resolves.toMatchObject([
+      { id: { value: "event-stored-accept-failure" } },
+    ]);
+  });
+
   it("rejects malformed already stored events before dispatcher lookup", async () => {
     const store = new EventStore(
       { name: "Tasks", multitenant: false },
