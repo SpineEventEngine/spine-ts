@@ -1,6 +1,6 @@
 # T-0012: Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.11 splitting in progress
+Status: T-0012.11 split complete; first implementation slice selected
 Start: `2026-07-01 16:48 WEST`
 Baseline commit: `a9769d4`
 Branch: `task/T-0012-cleanup-replan`
@@ -140,7 +140,8 @@ escalated coverage, docs/API, proto lint/generate/clean, and
 ZeroMQ local IPC sandbox failure. Coverage was statements 94.93%, branches
 90.07%, functions 97.05%, and lines 94.96%.
 
-Current subtask: `T-0012.11 Missing Details And Example Readiness`.
+Current subtask: `T-0012.11 Missing Details And Example Readiness` (split
+complete; first selected slice is `T-0012.11a Aggregate Command Execution`).
 
 ## T-0012.2 Selection Rationale
 

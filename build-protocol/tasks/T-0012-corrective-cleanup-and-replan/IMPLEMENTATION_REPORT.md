@@ -1,6 +1,6 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.11 splitting in progress
+Status: T-0012.11 split complete; first implementation slice selected
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
@@ -224,8 +224,9 @@ Connect/Node gRPC-compatible `SpineServices` slice for `CommandService`,
 `QueryService`, and `SubscriptionService`, copied the required Spine service
 protos, and preserved explicit activation/cancellation and tenant isolation.
 All required review lanes are clean through commit `dfd1140`, with final
-clean-review bookkeeping committed as `341b69a`. The next selected subtask is
-`T-0012.11 Missing Details And Example Readiness`.
+clean-review bookkeeping committed as `341b69a`. `T-0012.11 Missing Details And
+Example Readiness` is now split. Its first selected implementation slice is
+`T-0012.11a Aggregate Command Execution`.
 
 Parent tracked-state verification after integrating `T-0012.9` passed:
 `pnpm check:node`, `pnpm typecheck`, `pnpm lint`, tracked-file Prettier,

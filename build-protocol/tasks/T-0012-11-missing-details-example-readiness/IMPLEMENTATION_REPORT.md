@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11 Missing Details And Example Readiness
 
-Status: splitting in progress
+Status: split complete; first implementation slice selected
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -8,9 +8,9 @@ Baseline commit: `3901ec4`
 
 ## Summary
 
-This task follows real gRPC service integration. It must identify and implement
-only the small missing details that are required before the to-do example can be
-built as a real app.
+This task follows real gRPC service integration. The splitter kept only the
+small missing framework details that are still required before `T-0012.12` can
+build the to-do example as a real app.
 
 ## Initial Evidence
 
@@ -21,21 +21,48 @@ built as a real app.
 - The to-do example still needs a fully runnable server-side app with real gRPC,
   query, and subscription behavior.
 
-## Skill Applicability
+## Splitting Rationale
 
-Implementation and reviewers must apply installed skills where needed:
+The split applied the simplest-complete-slice rule rather than a horizontal
+framework rebuild:
 
-- `subagent-driven-development` for splitter/worker/reviewer separation.
-- `test-driven-development` and `javascript-testing-patterns` for any behavior
-  changes.
-- `cqrs-implementation` for preserving read-side/write-side segregation.
-- `nodejs-backend-patterns` only for concrete service lifecycle or local server
-  readiness details.
-- `api-design-principles` and `typescript-advanced-types` only for public API
-  shape.
-- `verification-before-completion` before any completion claim.
+1. Start with the smallest vertical command path that turns route metadata into
+   real aggregate behavior.
+2. Add the matching read-side event path so projections and subscriptions become
+   real.
+3. Expand queries only enough to support a task-list view.
+4. Wire validation and immediate refusal semantics only because the example
+   spec explicitly requires them.
+5. Finish with the smallest black-box testing utility because `packages/testing`
+   is still a placeholder.
+
+Rejected for now as unproven blockers:
+
+- broad `Server` facade or process supervision;
+- import bus support;
+- scheduler support;
+- catch-up/recovery loops;
+- tenant index or observability work; and
+- client DSL work.
+
+## Selected First Subtask
+
+Selected: `T-0012.11a Aggregate Command Execution`
+
+Proposed branch: `task/T-0012-11a-aggregate-command-execution`
+
+Proposed worktree:
+`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11a-aggregate-command-execution`
+
+Why selected first:
+
+- current repository dispatch is still route-only;
+- every later example workflow depends on real aggregate command execution; and
+- it is the smallest slice that delivers executable value without introducing a
+  speculative runtime shell.
 
 ## Current State
 
-Task setup is in progress. Requirements splitting and implementation have not
-started yet.
+Requirements splitting is complete. The task now has a staged roadmap with five
+concrete implementation slices and one selected first slice ready for
+implementation/review.

@@ -29,4 +29,14 @@ Reviewers must verify:
 
 ## Current State
 
-Task setup is in progress. No implementation review has run yet.
+Splitter output is ready for review. No implementation review has run yet.
+
+Reviewers should confirm that the staged split stays narrow:
+
+- `T-0012.11a` handles executable aggregate command flow before any broader
+  runtime work;
+- later slices add only projection updates, projection-list queries,
+  validation/refusal wiring, and minimal black-box test support; and
+- rejected candidates such as a broad `Server` facade, import bus, scheduler,
+  catch-up, and observability remain out of scope until a concrete workflow
+  proves otherwise.

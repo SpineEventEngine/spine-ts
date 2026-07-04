@@ -1,6 +1,6 @@
 # T-0012.11: Missing Details And Example Readiness
 
-Status: splitting in progress
+Status: split complete; first implementation slice selected
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -69,7 +69,314 @@ workflow or the example app.
   tests, docs/API checks, proto checks if touched, coverage threshold check
   when implementation code changes, and `git diff --check`.
 
-## Current State
+## Splitting Outcome
 
-Task setup is in progress. The requirements-splitting sub-agent has not been
-spawned yet. No blocking human question is known.
+The splitter reviewed the current TS runtime, the example specification, the
+`T-0012.10` service slice, and curated JVM notes. The resulting roadmap keeps
+only the missing details that block a real to-do app or an already-advertised
+framework workflow.
+
+The concrete blockers are:
+
+- repository dispatch is still route-only, so commands and events do not invoke
+  entity handlers;
+- aggregate writes do not yet produce executable command-to-event-to-storage
+  behavior;
+- projection updates are not driven from delivered events into the read side;
+- `QueryService.Read` still requires ID filters, which is too small for a task
+  list view;
+- validation and business refusal paths are not wired into runtime command
+  execution; and
+- `packages/testing` is still a skeleton, so the required black-box example
+  tests do not yet have a framework fixture.
+
+Rejected from this split because they are not proven blockers now:
+
+- broad `Server` facade or process supervisor;
+- import bus support;
+- scheduler or command scheduling;
+- tenant index work;
+- event-subscription catch-up/recovery;
+- worker/process runtime fan-out;
+- observability or command-log features; and
+- client DSL work.
+
+## First Selected Subtask
+
+Selected first implementable slice: `T-0012.11a Aggregate Command Execution`.
+
+Proposed branch: `task/T-0012-11a-aggregate-command-execution`
+
+Proposed worktree:
+`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11a-aggregate-command-execution`
+
+Why first:
+
+- it is the smallest end-to-end slice that turns the current route-only
+  write-side path into real framework behavior;
+- every later example-readiness slice depends on real aggregate command
+  execution; and
+- it keeps the work JVM-familiar without introducing a new facade or a
+  speculative runtime subsystem.
+
+## Staged Subtasks
+
+### T-0012.11a Aggregate Command Execution
+
+Goal:
+
+- Turn repository-backed aggregate command routing into real execution so a
+  posted command can load or create an aggregate, run one assignee, apply the
+  resulting event(s), persist aggregate history, and hand the produced events to
+  the existing async event bus.
+
+Acceptance criteria:
+
+- A repository command dispatcher no longer stops at `routeCommand()`.
+- A built aggregate repository can execute one `@Assign(...)` or
+  `defineEntityHandlers(...).assign(...)` happy path through
+  `CommandService.Post` -> `CommandBus` -> repository -> aggregate -> stored
+  events.
+- Produced events are applied through aggregate appliers before aggregate state
+  is stored.
+- Aggregate persistence continues to use the existing `AggregateStorage` /
+  `EventStore` seams.
+- No process manager runtime, import bus, scheduler, client DSL, or broad
+  server host is added in this slice.
+
+Evidence inspected:
+
+- `build-protocol/TODO_EXAMPLE_SPEC.md`
+- `packages/server/src/repository/repository.ts`
+- `packages/server/src/context/bounded-context.ts`
+- `packages/server/src/bus/command-bus.ts`
+- `packages/server/src/bus/event-bus.ts`
+- `packages/server/test/repository/repository-routing.test.ts`
+- `packages/server/README.md`
+- `spine-jvm-docs/spine-entities-repositories-and-state.md`
+- `spine-jvm-docs/spine-routing-dispatch-and-delivery.md`
+
+Expected write scope:
+
+- `packages/server/src/repository/**`
+- `packages/server/src/context/**`
+- `packages/server/src/bus/**`
+- `packages/server/test/repository/**`
+- `packages/server/test/context/**`
+- focused docs/log updates only if public behavior changes
+
+Required verification:
+
+- focused server write-side tests covering aggregate command execution,
+  applier-backed state changes, persistence, and async bus handoff;
+- `pnpm typecheck`
+- `pnpm lint`
+- tracked-file Prettier or `pnpm format:check`
+- `pnpm docs:check` if public docs/API move
+- `pnpm test:coverage` if shared production paths expand materially
+- `git diff --check`
+
+Why it blocks `T-0012.12` or real framework workflow:
+
+- the example cannot create, rename, complete, or reopen a task until commands
+  execute real aggregate handlers instead of only proving route metadata.
+
+### T-0012.11b Projection Event Execution And Read-Side Updates
+
+Goal:
+
+- Execute projection event subscribers from the existing event bus and keep the
+  direct `Stand` in sync from those delivered events.
+
+Acceptance criteria:
+
+- Repository event dispatch no longer stops at `routeEvent()`.
+- A projection repository can consume a delivered event, update projection
+  state, and write the resulting latest state into `Stand`.
+- `SubscriptionService` keeps working over real projection updates emitted from
+  event delivery rather than manual `stand.update(...)` calls in tests.
+- The slice stays focused on domestic projection updates; no catch-up worker,
+  retry loop, or external-event broker work is introduced.
+
+Evidence inspected:
+
+- `build-protocol/TODO_EXAMPLE_SPEC.md`
+- `packages/server/src/repository/repository.ts`
+- `packages/server/src/stand/stand.ts`
+- `packages/server/src/services/spine-services.ts`
+- `packages/server/test/services/spine-services.test.ts`
+- `docs/api/README.md`
+- `spine-jvm-docs/spine-entities-repositories-and-state.md`
+- `spine-jvm-docs/spine-routing-dispatch-and-delivery.md`
+
+Expected write scope:
+
+- `packages/server/src/repository/**`
+- `packages/server/src/stand/**`
+- `packages/server/src/bus/**`
+- `packages/server/src/services/**`
+- `packages/server/test/repository/**`
+- `packages/server/test/stand/**`
+- `packages/server/test/services/**`
+- focused docs/log updates only if public behavior changes
+
+Required verification:
+
+- focused tests covering projection subscriber execution, stand updates, and
+  subscription delivery after real event handling;
+- `pnpm typecheck`
+- `pnpm lint`
+- tracked-file Prettier or `pnpm format:check`
+- `pnpm docs:check` if public docs/API move
+- `pnpm test:coverage` if shared production paths expand materially
+- `git diff --check`
+
+Why it blocks `T-0012.12` or real framework workflow:
+
+- the example’s task-list projection and live task-list updates require
+  delivered events to mutate the read side automatically.
+
+### T-0012.11c Projection List Queries
+
+Goal:
+
+- Expand the current read-side query slice from ID-only reads to the smallest
+  real projection-list query behavior needed by the to-do app.
+
+Acceptance criteria:
+
+- `QueryService.Read` no longer fails every `include_all` task-list query.
+- The implementation supports at least projection-state `include_all` reads with
+  stable versioned response packing.
+- The slice does not add speculative query DSL, paging engine, sort planner, or
+  general aggregate querying unless the smallest list-view workflow proves they
+  are required.
+
+Evidence inspected:
+
+- `build-protocol/TODO_EXAMPLE_SPEC.md`
+- `packages/server/src/services/spine-services.ts`
+- `packages/server/src/stand/stand.ts`
+- `packages/server/test/services/spine-services.test.ts`
+- `spine-jvm-docs/spine-client-api-queries-subscriptions-and-tests.md`
+
+Expected write scope:
+
+- `packages/server/src/stand/**`
+- `packages/server/src/services/**`
+- `packages/server/test/stand/**`
+- `packages/server/test/services/**`
+- focused docs/log updates only if public behavior changes
+
+Required verification:
+
+- focused tests covering `include_all` projection reads and preserved response
+  version packing;
+- `pnpm typecheck`
+- `pnpm lint`
+- tracked-file Prettier or `pnpm format:check`
+- `pnpm docs:check` if public docs/API move
+- `git diff --check`
+
+Why it blocks `T-0012.12` or real framework workflow:
+
+- the example needs a real task-list read model, and the current service only
+  supports direct ID lookup.
+
+### T-0012.11d Validation And Immediate Refusal Outcomes
+
+Goal:
+
+- Wire existing validation and small refusal semantics into runtime command
+  execution so the example can demonstrate both invalid input and business
+  refusal paths.
+
+Acceptance criteria:
+
+- Runtime command intake/execution validates command payloads before durable
+  write-side work proceeds.
+- Aggregate command handling can surface one immediate business refusal path as
+  a Spine `Ack` rejection/error outcome with stable public messages.
+- State-transition validation stays inside framework-controlled transactions.
+- This slice does not add a large error-details hierarchy or late result-stream
+  protocol.
+
+Evidence inspected:
+
+- `build-protocol/TODO_EXAMPLE_SPEC.md`
+- `build-protocol/DEVELOPER_API.md`
+- `packages/core/src/index.ts`
+- `packages/server/src/services/spine-services.ts`
+- `spine-jvm-docs/spine-client-api-queries-subscriptions-and-tests.md`
+- `spine-jvm-docs/spine-routing-dispatch-and-delivery.md`
+
+Expected write scope:
+
+- `packages/server/src/repository/**`
+- `packages/server/src/services/**`
+- `packages/server/src/entity/**`
+- `packages/core/src/**` only if runtime integration exposes a missing validation
+  seam
+- `packages/server/test/**`
+- `packages/core/test/**` only if shared validation behavior changes
+- focused docs/log updates only if public behavior changes
+
+Required verification:
+
+- focused tests covering invalid-command validation, immediate refusal
+  acknowledgements, and state-transition validation during command execution;
+- `pnpm typecheck`
+- `pnpm lint`
+- tracked-file Prettier or `pnpm format:check`
+- `pnpm docs:check` if public docs/API move
+- `pnpm test:coverage` if shared production paths expand materially
+- `git diff --check`
+
+Why it blocks `T-0012.12` or real framework workflow:
+
+- the example spec explicitly requires one validation failure path and one
+  rejection/business refusal path.
+
+### T-0012.11e Minimal Black-Box Test Fixture
+
+Goal:
+
+- Replace the testing-package skeleton with the smallest framework-owned
+  black-box fixture needed to write the example’s bounded-context tests.
+
+Acceptance criteria:
+
+- `packages/testing` exposes a minimal bounded-context fixture over built
+  contexts, not just package metadata.
+- The fixture can drive commands/events through the real framework seams and
+  inspect query/subscription outcomes needed by the to-do example.
+- The fixture stays in-process and narrow; it does not add multi-process
+  orchestration, browser tooling, or a client DSL beyond what tests need.
+
+Evidence inspected:
+
+- `build-protocol/TODO_EXAMPLE_SPEC.md`
+- `packages/testing/README.md`
+- `packages/testing/src/index.ts`
+- `spine-jvm-docs/spine-client-api-queries-subscriptions-and-tests.md`
+
+Expected write scope:
+
+- `packages/testing/**`
+- `packages/server/test/**` only for shared helpers or fixture coverage
+- focused docs/log updates only if public behavior changes
+
+Required verification:
+
+- focused tests for the new testing fixture plus one cross-package smoke test
+  against built contexts;
+- `pnpm typecheck`
+- `pnpm lint`
+- tracked-file Prettier or `pnpm format:check`
+- `pnpm docs:check` if public docs/API move
+- `git diff --check`
+
+Why it blocks `T-0012.12` or real framework workflow:
+
+- the example spec requires black-box bounded-context tests, and the current
+  testing package is still only a placeholder.
