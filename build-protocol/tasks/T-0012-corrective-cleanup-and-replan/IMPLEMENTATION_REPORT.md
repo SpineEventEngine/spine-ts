@@ -217,8 +217,14 @@ autonomous task scope.
 `T-0012.9 Stand And Entity Updates` is integrated on `main`. It added a direct
 storage-backed `Stand`, context-owned stand exposure, entity-state updates,
 in-process subscriptions, and public documentation. All required review lanes
-are clean through commit `9202b5e`. The next selected subtask is
-`T-0012.10 Real gRPC Services` is integrated. The next selected subtask is
+are clean through commit `9202b5e`.
+
+`T-0012.10 Real gRPC Services` is integrated on `main`. It added the first real
+Connect/Node gRPC-compatible `SpineServices` slice for `CommandService`,
+`QueryService`, and `SubscriptionService`, copied the required Spine service
+protos, and preserved explicit activation/cancellation and tenant isolation.
+All required review lanes are clean through commit `dfd1140`, with final
+clean-review bookkeeping committed as `341b69a`. The next selected subtask is
 `T-0012.11 Missing Details And Example Readiness`.
 
 Parent tracked-state verification after integrating `T-0012.9` passed:
@@ -230,6 +236,17 @@ statements 94.93%, branches 90.07%, functions 97.05%, and lines 94.96%.
 Docs/API checks still report only the known invalid-`origin` TypeDoc warning.
 The unrelated untracked root file `human-review-1-jul.md` remains outside the
 autonomous task scope.
+
+Parent tracked-state verification after integrating `T-0012.10` passed:
+`pnpm check:node`, `pnpm typecheck`, `pnpm lint`, tracked-file Prettier,
+escalated `pnpm test`, escalated `pnpm test:coverage`, `pnpm docs:check`,
+`pnpm proto:verify`, `pnpm proto:lint`, `pnpm proto:generate`,
+`pnpm proto:check-generated`, and `git diff --check`. Escalated coverage passed
+with 44 test files, 527 tests, statements 94.98%, branches 90.06%, functions
+97.21%, and lines 95.01%. Docs/API checks still report only the known
+invalid-`origin` TypeDoc warning. Full `pnpm format:check` was blocked only by
+the unrelated untracked root file `human-review-1-jul.md`, which remains
+outside the autonomous task scope; tracked files passed Prettier.
 
 ## First Selected Subtask
 
