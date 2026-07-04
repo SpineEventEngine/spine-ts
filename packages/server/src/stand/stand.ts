@@ -32,6 +32,14 @@ export interface StandReadOptions {
   readonly tenantId?: string;
 }
 
+/** Stored state plus metadata returned by versioned Stand reads. */
+export interface StandReadResult<Schema extends MessageSchema = MessageSchema> {
+  /** Latest entity state. */
+  readonly state: MessageShape<Schema>;
+  /** Version associated with the latest entity state when supplied. */
+  readonly version?: Version;
+}
+
 /** Tenant metadata accepted when subscribing to entity updates. */
 export interface StandSubscribeOptions {
   /** Tenant slice for multitenant stands. */
@@ -94,6 +102,7 @@ export class Stand {
   readonly #context: StorageContext;
   readonly #storageFactory: StorageFactory;
   readonly #registrations = new Map<string, Registration>();
+  readonly #versions = new Map<string, Version>();
 
   constructor(options: StandOptions) {
     this.#context = cloneStorageContext(options.context);
@@ -135,13 +144,32 @@ export class Stand {
     id: unknown,
     options: StandReadOptions = {},
   ): Promise<MessageShape<Schema> | undefined> {
+    const result = await this.readVersioned(schema, id, options);
+
+    return result?.state;
+  }
+
+  /** Read the latest state and caller-supplied version metadata for one entity ID. */
+  async readVersioned<Schema extends MessageSchema>(
+    schema: Schema,
+    id: unknown,
+    options: StandReadOptions = {},
+  ): Promise<StandReadResult<Schema> | undefined> {
     const registration = this.#registration(schema, "read");
     const tenantId = this.#tenantId(options.tenantId);
     const storage = this.#openStorage(registration, tenantId);
 
     try {
       const stored = await storage.read(id);
-      return stored === undefined ? undefined : clone(schema, stored as MessageShape<Schema>);
+      if (stored === undefined) {
+        return undefined;
+      }
+      const version = this.#versions.get(versionKey(registration.typeUrl, tenantId, id));
+
+      return Object.freeze({
+        state: clone(schema, stored as MessageShape<Schema>),
+        ...(version === undefined ? {} : { version: clone(VersionSchema, version) }),
+      });
     } finally {
       storage.close();
     }
@@ -163,6 +191,12 @@ export class Stand {
       await storage.write(stateCopy);
     } finally {
       storage.close();
+    }
+    const key = versionKey(registration.typeUrl, tenantId, id);
+    if (options.version === undefined) {
+      this.#versions.delete(key);
+    } else {
+      this.#versions.set(key, clone(VersionSchema, options.version));
     }
     this.#notify(registration, {
       id,
@@ -332,6 +366,23 @@ function readRecordField(record: Message, localName: string): unknown {
 
 function cloneValue(value: unknown): unknown {
   return typeof value === "object" && value !== null ? structuredClone(value) : value;
+}
+
+function versionKey(typeUrl: string, tenantId: string | undefined, id: unknown): string {
+  return `${typeUrl}\n${tenantId ?? ""}\n${idKey(id)}`;
+}
+
+function idKey(id: unknown): string {
+  if (
+    typeof id === "string" ||
+    typeof id === "number" ||
+    typeof id === "boolean" ||
+    typeof id === "bigint"
+  ) {
+    return `${typeof id}:${id.toString()}`;
+  }
+
+  return `json:${JSON.stringify(id)}`;
 }
 
 function cloneStorageContext(context: StorageContext): StorageContext {

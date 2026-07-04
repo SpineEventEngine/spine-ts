@@ -15,6 +15,7 @@ export {
   Stand,
   type StandOptions,
   type StandReadOptions,
+  type StandReadResult,
   type StandRegisterOptions,
   type StandSubscribeOptions,
   type StandSubscription,

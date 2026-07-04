@@ -32,6 +32,10 @@ export class CommandDispatcherRegistry {
   find(typeUrl: string): CommandDispatcher | undefined {
     return this.#byTypeUrl.get(typeUrl);
   }
+
+  acceptedTypeUrls(): readonly string[] {
+    return Object.freeze([...this.#byTypeUrl.keys()]);
+  }
 }
 
 function collectTypeUrls(dispatcher: CommandDispatcher): readonly string[] {

@@ -274,6 +274,7 @@ const expectedServerExports = [
   "Stand",
   "StandOptions",
   "StandReadOptions",
+  "StandReadResult",
   "StandRegisterOptions",
   "StandStateTypeError",
   "StandSubscribeOptions",

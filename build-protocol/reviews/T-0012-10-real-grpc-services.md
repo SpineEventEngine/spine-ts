@@ -1,11 +1,11 @@
 # Review Log: T-0012.10 Real gRPC Services
 
-Status: in progress
+Status: round 1 fixes verified
 Task log: `build-protocol/tasks/T-0012-10-real-grpc-services/TASK.md`
 Branch: `task/T-0012-10-real-grpc-services`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-10-real-grpc-services`
-Baseline commit: `63216fe`
+Baseline commit: `caec16a`
 
 ## Required Review Lanes
 
@@ -32,4 +32,20 @@ Reviewers must verify:
 
 ## Current State
 
-Task setup is in progress. No implementation review has run yet.
+Review round 1 completed with findings in performance/API/security,
+performance/reliability/security, TypeScript/API contract, style, and
+documentation lanes. The implementation was updated to:
+
+- defer subscription delivery until `Activate`;
+- clean up subscription delivery on cancel and stream finalization;
+- route commands from built command type registrations instead of
+  dispatch-probing contexts;
+- validate command/query/subscription tenancy before dispatch/read/activation;
+- sanitize public command/query error messages;
+- preserve Stand-recorded entity versions in `QueryService.Read`;
+- reject malformed or unsupported subscription topics with gRPC invalid
+  argument errors;
+- move DOM ambient typing from the shared base config to the server package; and
+- refresh user/API/architecture/task/review logs.
+
+Round 1 fixes passed the final required verification pass and await commit.

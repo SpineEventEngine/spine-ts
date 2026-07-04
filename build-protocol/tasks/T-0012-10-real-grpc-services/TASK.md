@@ -1,10 +1,10 @@
 # T-0012.10: Real gRPC Services
 
-Status: in progress
+Status: review round 1 fixes verified
 Branch: `task/T-0012-10-real-grpc-services`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-10-real-grpc-services`
-Baseline commit: `63216fe`
+Baseline commit: `caec16a`
 
 ## Objective
 
@@ -68,11 +68,13 @@ client DSL, example app code, broad service facade, or simulated transport.
 ## Current TS Evidence
 
 - `BoundedContext` exposes an owned direct `stand()`.
-- `CommandBus` already posts commands asynchronously and returns immediate
-  acknowledgement-like outcomes in the existing runtime layer.
-- `Stand` can register known state types, update/read states, and keep
-  in-process subscriptions with explicit cleanup.
-- No gRPC service runtime dependency or generated service stubs are installed.
+- `CommandBus` posts commands asynchronously and now exposes accepted command
+  message type URLs so services can route without dispatch-probing contexts.
+- `Stand` can register known state types, update/read latest states, preserve
+  caller-supplied versions for versioned reads, and keep in-process
+  subscriptions with explicit cleanup.
+- Connect v2 is the selected real Node gRPC-compatible service runtime; see
+  `D-0056` in `build-protocol/DECISION_LOG.md`.
 
 ## Acceptance Criteria
 
@@ -99,9 +101,9 @@ client DSL, example app code, broad service facade, or simulated transport.
 - `pnpm typecheck`.
 - `pnpm lint`.
 - changed-file Prettier check or full `pnpm format:check`.
-- `pnpm test`; escalate only for the known ZeroMQ local IPC sandbox failure.
-- `pnpm test:coverage`; escalate only for the known ZeroMQ local IPC sandbox
-  failure.
+- `pnpm test`; escalate only for known local loopback/ZeroMQ sandbox failures.
+- `pnpm test:coverage`; escalate only for known local loopback/ZeroMQ sandbox
+  failures.
 - `pnpm docs:check`.
 - `pnpm proto:lint`, `pnpm proto:generate`, and
   `pnpm proto:check-generated`.
@@ -117,5 +119,8 @@ client DSL, example app code, broad service facade, or simulated transport.
 
 ## Current State
 
-Task setup is in progress. No implementation worker has been spawned yet. No
-blocking human question is known.
+Implementation and review round 1 fixes are verified. Round 1 required
+activation-only subscription delivery, stream/cancel cleanup, command route
+lookup without dispatch-probing, tenant validation, sanitized public errors,
+query version preservation, contractual subscription rejection, scoped DOM
+typing, and documentation updates. No blocking human question is known.

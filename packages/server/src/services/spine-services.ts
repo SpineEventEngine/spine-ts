@@ -1,4 +1,6 @@
-import type { ConnectRouter } from "@connectrpc/connect";
+import { randomUUID } from "node:crypto";
+
+import { Code, ConnectError, type ConnectRouter } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { EmptySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
@@ -26,41 +28,21 @@ import {
   type Topic,
 } from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
 import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
+import { AckSchema, type Ack } from "@spine-ts/proto/generated/spine/core/ack_pb.js";
 import {
   ResponseSchema,
   StatusSchema,
   type Response,
   type Status,
 } from "@spine-ts/proto/generated/spine/core/response_pb.js";
-import { AckSchema, type Ack } from "@spine-ts/proto/generated/spine/core/ack_pb.js";
 
 import type { BoundedContext } from "../context/bounded-context.js";
 import type { StandSubscription, StandUpdate } from "../stand/stand.js";
 
-/** Options for registering Spine service adapters over built bounded contexts. */
-export interface SpineServicesOptions {
-  /** Contexts exposed by these service adapters. */
-  readonly contexts: readonly BoundedContext[];
-}
-
-interface StateRoute {
-  readonly context: BoundedContext;
-  readonly schema: MessageSchema;
-  readonly typeUrl: string;
-}
-
-interface SubscriptionRecord {
-  readonly subscription: Subscription;
-  readonly route: StateRoute;
-  readonly queue: SubscriptionUpdate[];
-  readonly waiters: ((update: SubscriptionUpdate | undefined) => void)[];
-  standSubscription: StandSubscription | undefined;
-  closed: boolean;
-}
-
 /** Small route registrar for the first public Spine gRPC service slice. */
 export class SpineServices {
   readonly #contexts: readonly BoundedContext[];
+  readonly #commandRoutes = new Map<string, CommandRoute>();
   readonly #stateRoutes = new Map<string, StateRoute>();
   readonly #subscriptions = new Map<string, SubscriptionRecord>();
 
@@ -69,6 +51,12 @@ export class SpineServices {
     this.#contexts = Object.freeze([...options.contexts]);
 
     for (const context of this.#contexts) {
+      for (const typeUrl of context.commandBus().acceptedCommandTypes()) {
+        if (!this.#commandRoutes.has(typeUrl)) {
+          this.#commandRoutes.set(typeUrl, { context, typeUrl });
+        }
+      }
+
       for (const repository of context.registeredRepositories()) {
         const schema = repository.stateSchema;
         const typeUrl = deriveTypeUrl(schema);
@@ -98,34 +86,48 @@ export class SpineServices {
   }
 
   async #post(command: Command): Promise<Ack> {
-    const unsupported: Error[] = [];
+    const messageId = command.id && packAny(CommandIdSchema, command.id, { validate: false });
+    const typeUrl = command.message?.typeUrl;
 
-    for (const context of this.#contexts) {
-      try {
-        await context.commandBus().post(command);
-        return create(AckSchema, {
-          messageId: command.id && packAny(CommandIdSchema, command.id, { validate: false }),
-          status: okStatus(),
-        });
-      } catch (error) {
-        if (isUnsupportedCommand(error)) {
-          unsupported.push(error);
-        } else {
-          return create(AckSchema, {
-            messageId: command.id && packAny(CommandIdSchema, command.id, { validate: false }),
-            status: errorStatus("COMMAND_POST_ERROR", errorMessage(error)),
-          });
-        }
-      }
+    if (typeUrl === undefined || typeUrl.length === 0) {
+      return create(AckSchema, {
+        messageId,
+        status: errorStatus("INVALID_COMMAND", "Command message type is required."),
+      });
     }
 
-    return create(AckSchema, {
-      messageId: command.id && packAny(CommandIdSchema, command.id, { validate: false }),
-      status: errorStatus(
-        "UNSUPPORTED_COMMAND",
-        unsupported[0]?.message ?? "No bounded context accepted the command.",
-      ),
-    });
+    const route = this.#commandRoutes.get(typeUrl);
+    if (route === undefined) {
+      return create(AckSchema, {
+        messageId,
+        status: errorStatus("UNSUPPORTED_COMMAND", "No bounded context accepted the command."),
+      });
+    }
+
+    const tenantError = tenantMismatch(
+      route.context.isMultitenant,
+      commandTenant(command),
+      "command",
+    );
+    if (tenantError !== undefined) {
+      return create(AckSchema, {
+        messageId,
+        status: errorStatus(tenantError.type, tenantError.message),
+      });
+    }
+
+    try {
+      await route.context.commandBus().post(command);
+      return create(AckSchema, {
+        messageId,
+        status: okStatus(),
+      });
+    } catch {
+      return create(AckSchema, {
+        messageId,
+        status: errorStatus("COMMAND_POST_ERROR", "Command post failed."),
+      });
+    }
   }
 
   async #read(query: Query): Promise<QueryResponse> {
@@ -149,18 +151,33 @@ export class SpineServices {
     }
 
     const tenantId = tenantValue(query.context?.tenantId);
+    const tenantError = tenantMismatch(route.context.isMultitenant, tenantId, "query");
+    if (tenantError !== undefined) {
+      return create(QueryResponseSchema, {
+        response: errorResponse(tenantError.type, tenantError.message),
+      });
+    }
+
     const messages = [];
 
-    for (const id of ids) {
-      const state = await route.context.stand().read(route.schema, id, tenantOptions(tenantId));
-      if (state !== undefined) {
-        messages.push(
-          create(EntityStateWithVersionSchema, {
-            state: packAny(route.schema, state, { validate: false }),
-            version: create(VersionSchema),
-          }),
-        );
+    try {
+      for (const id of ids) {
+        const result = await route.context
+          .stand()
+          .readVersioned(route.schema, id, tenantOptions(tenantId));
+        if (result !== undefined) {
+          messages.push(
+            create(EntityStateWithVersionSchema, {
+              state: packAny(route.schema, result.state, { validate: false }),
+              version: result.version ?? create(VersionSchema),
+            }),
+          );
+        }
       }
+    } catch {
+      return create(QueryResponseSchema, {
+        response: errorResponse("QUERY_READ_ERROR", "Query read failed."),
+      });
     }
 
     return create(QueryResponseSchema, {
@@ -170,25 +187,32 @@ export class SpineServices {
   }
 
   #subscribe(topic: Topic): Subscription {
-    const target = topic.target;
-    const route = target === undefined ? undefined : this.#stateRoutes.get(target.type);
+    const route = this.#subscriptionRoute(topic);
+    const tenantError = tenantMismatch(
+      route.context.isMultitenant,
+      topicTenant(topic),
+      "subscription",
+    );
+
+    if (tenantError !== undefined) {
+      throw new ConnectError(tenantError.message, Code.InvalidArgument);
+    }
+
     const subscription = create(SubscriptionSchema, {
-      id: create(SubscriptionIdSchema, { value: `s-${crypto.randomUUID()}` }),
+      id: create(SubscriptionIdSchema, { value: `s-${randomUUID()}` }),
       topic,
     });
+    const id = subscription.id?.value;
 
-    if (route !== undefined && subscription.id !== undefined) {
-      const record: SubscriptionRecord = {
-        subscription,
-        route,
-        queue: [],
-        waiters: [],
-        standSubscription: undefined,
-        closed: false,
-      };
-      this.#subscriptions.set(subscription.id.value, record);
-      this.#ensureActive(record);
+    if (id === undefined) {
+      throw new ConnectError("Subscription ID is required.", Code.InvalidArgument);
     }
+
+    this.#subscriptions.set(id, {
+      subscription,
+      route,
+      delivery: new SubscriptionDelivery(),
+    });
 
     return subscription;
   }
@@ -197,50 +221,148 @@ export class SpineServices {
     const id = subscription.id?.value;
     const record = id === undefined ? undefined : this.#subscriptions.get(id);
 
-    if (record === undefined) {
+    if (id === undefined || record === undefined) {
       return;
     }
 
-    this.#ensureActive(record);
+    this.#activateRecord(record);
 
     try {
-      while (!record.closed) {
-        const update = await nextSubscriptionUpdate(record);
+      while (!record.delivery.closed) {
+        const update = await record.delivery.next();
         if (update === undefined) {
           return;
         }
         yield update;
       }
     } finally {
-      closeSubscription(record);
+      this.#removeSubscription(id);
     }
   }
 
   #cancel(subscription: Subscription): Response {
     const id = subscription.id?.value;
-    const record = id === undefined ? undefined : this.#subscriptions.get(id);
 
-    if (record !== undefined) {
-      closeSubscription(record);
-      this.#subscriptions.delete(record.subscription.id?.value ?? "");
+    if (id !== undefined) {
+      this.#removeSubscription(id);
     }
 
     return okResponse();
   }
 
-  #ensureActive(record: SubscriptionRecord): void {
-    if (record.standSubscription !== undefined || record.closed) {
+  #subscriptionRoute(topic: Topic): StateRoute {
+    const target = topic.target;
+    const route = target === undefined ? undefined : this.#stateRoutes.get(target.type);
+
+    if (target === undefined || route === undefined) {
+      throw new ConnectError("Unsupported subscription target.", Code.InvalidArgument);
+    }
+
+    return route;
+  }
+
+  #activateRecord(record: SubscriptionRecord): void {
+    if (record.delivery.active) {
       return;
     }
 
-    const tenantId = tenantValue(record.subscription.topic?.context?.tenantId);
-    record.standSubscription = record.route.context.stand().subscribe(
+    const tenantId = topicTenant(record.subscription.topic);
+    const standSubscription = record.route.context.stand().subscribe(
       record.route.schema,
       (update) => {
-        pushSubscriptionUpdate(record, createEntityUpdate(record, update));
+        record.delivery.push(createEntityUpdate(record, update));
       },
       tenantOptions(tenantId),
     );
+    record.delivery.attach(standSubscription);
+  }
+
+  #removeSubscription(id: string): void {
+    const record = this.#subscriptions.get(id);
+
+    if (record !== undefined) {
+      record.delivery.close();
+      this.#subscriptions.delete(id);
+    }
+  }
+}
+
+/** Options for registering Spine service adapters over built bounded contexts. */
+export interface SpineServicesOptions {
+  /** Contexts exposed by these service adapters. */
+  readonly contexts: readonly BoundedContext[];
+}
+
+interface CommandRoute {
+  readonly context: BoundedContext;
+  readonly typeUrl: string;
+}
+
+interface StateRoute {
+  readonly context: BoundedContext;
+  readonly schema: MessageSchema;
+  readonly typeUrl: string;
+}
+
+interface SubscriptionRecord {
+  readonly subscription: Subscription;
+  readonly route: StateRoute;
+  readonly delivery: SubscriptionDelivery;
+}
+
+class SubscriptionDelivery {
+  readonly #queue: SubscriptionUpdate[] = [];
+  readonly #waiters: ((update: SubscriptionUpdate | undefined) => void)[] = [];
+  #standSubscription: StandSubscription | undefined;
+  #closed = false;
+
+  get active(): boolean {
+    return this.#standSubscription !== undefined;
+  }
+
+  get closed(): boolean {
+    return this.#closed;
+  }
+
+  attach(standSubscription: StandSubscription): void {
+    if (this.#closed) {
+      standSubscription.unsubscribe();
+      return;
+    }
+
+    this.#standSubscription = standSubscription;
+  }
+
+  push(update: SubscriptionUpdate): void {
+    const waiter = this.#waiters.shift();
+    if (waiter === undefined) {
+      this.#queue.push(update);
+    } else {
+      waiter(update);
+    }
+  }
+
+  next(): Promise<SubscriptionUpdate | undefined> {
+    const update = this.#queue.shift();
+    if (update !== undefined || this.#closed) {
+      return Promise.resolve(update);
+    }
+
+    return new Promise((resolve) => this.#waiters.push(resolve));
+  }
+
+  close(): void {
+    if (this.#closed) {
+      return;
+    }
+
+    this.#closed = true;
+    this.#standSubscription?.unsubscribe();
+    this.#standSubscription = undefined;
+
+    for (const waiter of this.#waiters.splice(0)) {
+      waiter(undefined);
+    }
   }
 }
 
@@ -270,14 +392,6 @@ function errorResponse(type: string, message: string): Response {
   return create(ResponseSchema, { status: errorStatus(type, message) });
 }
 
-function isUnsupportedCommand(error: unknown): error is Error {
-  return error instanceof Error && error.message.startsWith("No command dispatcher registered");
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
-
 function targetIds(target: Target): unknown[] {
   if (target.criterion.case !== "filters") {
     return [];
@@ -291,12 +405,47 @@ function decodeId(id: Any): unknown {
   return stringId?.value ?? id;
 }
 
+function commandTenant(command: Command): string | undefined {
+  return tenantValue(command.context?.actorContext?.tenantId);
+}
+
+function topicTenant(topic: Topic | undefined): string | undefined {
+  return tenantValue(topic?.context?.tenantId);
+}
+
 function tenantValue(
   tenantId: { kind: { case: string | undefined; value?: unknown } } | undefined,
 ): string | undefined {
   return tenantId?.kind.case === "value" && typeof tenantId.kind.value === "string"
     ? tenantId.kind.value
     : undefined;
+}
+
+function tenantMismatch(
+  multitenant: boolean,
+  tenantId: string | undefined,
+  subject: "command" | "query" | "subscription",
+): ContractError | undefined {
+  if (multitenant) {
+    return tenantId === undefined || tenantId.trim().length === 0
+      ? {
+          type: "TENANT_REQUIRED",
+          message: `Tenant is required for this ${subject}.`,
+        }
+      : undefined;
+  }
+
+  return tenantId === undefined
+    ? undefined
+    : {
+        type: "TENANT_INAPPLICABLE",
+        message: `Tenant is not applicable for this ${subject}.`,
+      };
+}
+
+interface ContractError {
+  readonly type: string;
+  readonly message: string;
 }
 
 function tenantOptions(tenantId: string | undefined): { readonly tenantId?: string } {
@@ -326,38 +475,4 @@ function createEntityUpdate(record: SubscriptionRecord, update: StandUpdate): Su
 
 function packString(value: string): Any {
   return packAny(StringValueSchema, create(StringValueSchema, { value }));
-}
-
-function pushSubscriptionUpdate(record: SubscriptionRecord, update: SubscriptionUpdate): void {
-  const waiter = record.waiters.shift();
-  if (waiter === undefined) {
-    record.queue.push(update);
-  } else {
-    waiter(update);
-  }
-}
-
-function nextSubscriptionUpdate(
-  record: SubscriptionRecord,
-): Promise<SubscriptionUpdate | undefined> {
-  const update = record.queue.shift();
-  if (update !== undefined || record.closed) {
-    return Promise.resolve(update);
-  }
-
-  return new Promise((resolve) => record.waiters.push(resolve));
-}
-
-function closeSubscription(record: SubscriptionRecord): void {
-  if (record.closed) {
-    return;
-  }
-
-  record.closed = true;
-  record.standSubscription?.unsubscribe();
-  record.standSubscription = undefined;
-
-  for (const waiter of record.waiters.splice(0)) {
-    waiter(undefined);
-  }
 }

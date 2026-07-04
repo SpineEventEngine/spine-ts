@@ -29,6 +29,10 @@ export class CommandBus {
     return dispatcher;
   }
 
+  acceptedCommandTypes(): readonly string[] {
+    return this.#registry.acceptedTypeUrls();
+  }
+
   post(command: Command): Promise<void> {
     const accepted = clone(CommandSchema, command);
 

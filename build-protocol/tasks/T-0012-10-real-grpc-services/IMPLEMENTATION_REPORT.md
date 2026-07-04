@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.10 Real gRPC Services
 
-Status: implemented
+Status: review round 1 fixes verified
 Branch: `task/T-0012-10-real-grpc-services`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-10-real-grpc-services`
@@ -16,8 +16,8 @@ server package:
 - `QueryService.Read` reads entity state through the context-owned direct
   `Stand` and returns Spine `QueryResponse` values.
 - `SubscriptionService.Subscribe`, `Activate`, and `Cancel` create opaque
-  subscription IDs, stream `Stand` entity updates, and release resources on
-  cancel/stream close.
+  subscription IDs, stream `Stand` entity updates only after activation, and
+  release resources on cancel/stream close.
 
 The public construction API is intentionally small: `SpineServices` accepts
 built contexts and registers generated service descriptors with a Connect
@@ -52,16 +52,34 @@ transport API was added to domain/runtime classes.
   - Focused service tests pass over a real HTTP/2 gRPC transport when local
     loopback binding is allowed: 1 file, 10 tests passed.
 
+## Review Round 1 Fixes
+
+- Added regression tests for activation-only subscription delivery, no replay of
+  pre-activation updates, stream finalization cleanup, command tenant
+  mismatches, query tenant errors, query version preservation, contractual
+  unsupported-subscription rejection, sanitized dispatcher failures, and command
+  routing without posting to wrong contexts.
+- RED evidence: `pnpm test packages/server/test/services/spine-services.test.ts`
+  failed against the round-1-reviewed implementation with 9 expected behavioral
+  failures covering version loss, unsanitized command errors, tenant dispatch,
+  context probing, query tenant transport errors, pre-activation delivery,
+  stream cleanup, and unsupported subscription success.
+- GREEN evidence: after the service, Stand, command endpoint, scoped TypeScript
+  config, and docs/log changes, `pnpm typecheck` passed and focused service
+  tests passed with 18 tests.
+- Connect's public types require `HeadersInit`, so `DOM` was removed from
+  `tsconfig.base.json` and scoped to `packages/server/tsconfig.json`.
+
 ## Verification
 
 - `pnpm typecheck` passed.
 - `pnpm lint` passed.
 - `pnpm format:check` passed.
 - `pnpm test packages/server/test/services/spine-services.test.ts` passed with
-  local loopback escalation: 10 tests passed.
-- `pnpm test` passed with local loopback escalation: 44 files, 513 tests passed.
-- `pnpm test:coverage` passed with local loopback escalation: 44 files, 513
-  tests passed; global branch coverage `90.31%`.
+  local loopback escalation: 18 tests passed.
+- `pnpm test` passed with local loopback escalation: 44 files, 521 tests passed.
+- `pnpm test:coverage` passed with local loopback escalation: 44 files, 521
+  tests passed; global branch coverage `90.10%`.
 - `pnpm docs:check` passed, with the existing TypeDoc invalid-origin warning.
 - `pnpm proto:lint` passed.
 - `pnpm proto:generate` passed.
@@ -77,7 +95,8 @@ transport API was added to domain/runtime classes.
   path backed by `Stand`. Broader query criteria, field masks, ordering, and
   catch-up behavior remain future work.
 - `SubscriptionService` streams direct entity-state updates from `Stand`.
-  Event subscriptions, projection catch-up, and durable subscription recovery
-  remain future work.
+  `Subscribe` only allocates an opaque ID; `Activate` attaches delivery. Event
+  subscriptions, projection catch-up, and durable subscription recovery remain
+  future work.
 - Real gRPC tests require local HTTP/2 loopback binding; sandboxed test runs
   fail with `listen EPERM` until escalated.

@@ -337,13 +337,16 @@ name validation or the builder-only build path by passing ad hoc objects.
 
 The current `Stand` slice is intentionally direct and storage-backed. It owns
 known generated state schemas, latest-state `RecordStorage`, direct
-read/update methods, and deterministic in-process subscription handles with
-explicit `unsubscribe()`. It preserves read-side/write-side segregation by
-requiring callers to record state updates directly; it does not invoke
+read/update methods, versioned reads for caller-supplied update metadata, and
+deterministic in-process subscription handles with explicit `unsubscribe()`. It
+preserves read-side/write-side segregation by requiring callers to record state
+updates directly; it does not invoke
 repository handlers, run projections, catch up from events, or provide a client
 query DSL. `SpineServices` adapts this direct read side and the context command
 bus to the first real Connect/Node `CommandService`, `QueryService`, and
-`SubscriptionService` routes.
+`SubscriptionService` routes. Service subscription delivery starts only when a
+client activates the opaque subscription ID, and stream/cancel cleanup releases
+the direct Stand handle.
 
 The following runtime pieces are still deferred to later explicit tasks:
 
@@ -353,7 +356,8 @@ The following runtime pieces are still deferred to later explicit tasks:
 - handler invocation over the deferred repository routes;
 - inbox/delivery storage, durable storage lifecycle, entity storage/cache
   catch-up, and tenant-index persistence;
-- richer query filtering and event subscriptions;
+- richer query filtering, event subscriptions, and durable subscription
+  recovery;
 - system-context pairing and broad server/gRPC lifecycle; and
 - ZeroMQ endpoint topology and transport-backed runtime execution.
 

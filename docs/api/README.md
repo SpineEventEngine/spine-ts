@@ -29,7 +29,9 @@ Server exports include `BoundedContext`, `BoundedContextBuilder`,
 `ContextSpec`, `BoundedContextName`, `TenantMode`, `BoundedContextSnapshot`,
 small immutable snapshot contracts, `CommandEndpoint`, `EventEndpoint`,
 `Stand`, direct stand option/update/subscription contracts, and
-`BoundedContextNameError` for bounded-context assembly.
+`BoundedContextNameError` for bounded-context assembly. `CommandEndpoint`
+also exposes accepted command message type URLs so service adapters can route
+without dispatch-probing unrelated contexts.
 The public entry points mirror Spine JVM's
 `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
 `ContextSpec` remains a framework-owned immutable value surfaced through
@@ -112,18 +114,22 @@ manage caches, run catch-up, or start buses/transports. Built bounded contexts
 use repository metadata to register known state types with their direct
 read-side `Stand`.
 `Stand`, `StandOptions`, `StandRegisterOptions`, `StandReadOptions`,
-`StandUpdateOptions`, `StandSubscribeOptions`, `StandUpdate`,
-`StandSubscription`, and `StandStateTypeError` form the first direct read-side
-entity-state API. A stand registers known generated state schemas, rejects
-unknown state types on read/update/subscribe, stores latest states through
-`StorageFactory`/`RecordStorage`, reads latest state by schema and entity ID,
-and delivers direct in-process update notifications. Subscription cleanup is
-explicit via `unsubscribe()`, and multitenant stands require a `tenantId` on
-read/update/subscribe while single-tenant stands reject tenant options.
+`StandReadResult`, `StandUpdateOptions`, `StandSubscribeOptions`,
+`StandUpdate`, `StandSubscription`, and `StandStateTypeError` form the first
+direct read-side entity-state API. A stand registers known generated state
+schemas, rejects unknown state types on read/update/subscribe, stores latest
+states through `StorageFactory`/`RecordStorage`, reads latest state by schema
+and entity ID, can return caller-supplied version metadata through
+`readVersioned()`, and delivers direct in-process update notifications.
+Subscription cleanup is explicit via `unsubscribe()`, and multitenant stands
+require a `tenantId` on read/update/subscribe while single-tenant stands reject
+tenant options.
 `SpineServices` adapts built-context command buses and stands to the first real
 Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
-routes. It is not a client DSL, event subscription implementation, broad server
-lifecycle, or projection catch-up loop.
+routes. `Subscribe` allocates opaque IDs, `Activate` attaches delivery, and
+`Cancel`/stream finalization release in-process handles. It is not a client DSL,
+event subscription implementation, broad server lifecycle, durable subscription
+store, or projection catch-up loop.
 `AggregateStorage`, `AggregateStorageOptions`, `AggregateSnapshot`,
 `AggregateHistory`, and `AggregateId` form the minimal aggregate persistence
 seam. It writes latest snapshots through `StorageFactory`/`RecordStorage`,

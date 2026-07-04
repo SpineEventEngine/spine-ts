@@ -82,7 +82,9 @@ the to-do application remain later slices.
   in-process subscribers.
 - A first `SpineServices` route registrar that adapts built bounded contexts to
   real Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
-  routes without adding a broad server facade or client DSL.
+  routes without adding a broad server facade or client DSL. Command routes are
+  selected from built-time bus registrations, queries preserve Stand-recorded
+  versions, and subscriptions attach delivery only after explicit activation.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.
@@ -478,6 +480,7 @@ await stand.update(TaskStateSchema, taskState, {
 });
 
 const latest = await stand.read(TaskStateSchema, taskId);
+const versioned = await stand.readVersioned(TaskStateSchema, taskId);
 const subscription = stand.subscribe(TaskStateSchema, (update) => {
   update.state;
 });
@@ -491,7 +494,9 @@ subscriptions reject unknown state schemas with `StandStateTypeError`.
 Multitenant stands require `{ tenantId }`; single-tenant stands reject tenant
 options. Direct subscriptions are in-process only and must be cleaned up by
 calling `unsubscribe()`. `SpineServices` adapts built-context stands to the
-first raw gRPC-compatible query and subscription routes, but this direct API
+first raw gRPC-compatible query and subscription routes. Service subscriptions
+allocate IDs in `Subscribe` and attach Stand delivery in `Activate`; updates
+recorded before activation are not replayed by this first slice. This direct API
 does not provide a client query DSL.
 
 ## Runtime Assembly Closure
