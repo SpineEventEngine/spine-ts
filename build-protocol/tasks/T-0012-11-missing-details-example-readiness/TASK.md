@@ -115,8 +115,8 @@ Proposed worktree:
 
 Why first:
 
-- it is the smallest end-to-end slice that turns the current route-only
-  write-side path into real framework behavior;
+- it was the smallest end-to-end slice that turned the route-only write-side
+  path into real framework behavior;
 - every later example-readiness slice depends on real aggregate command
   execution; and
 - it keeps the work JVM-familiar without introducing a new facade or a

@@ -1,7 +1,6 @@
 # Review Log: T-0012.11 Missing Details And Example Readiness
 
-Status: split complete; first implementation slice selected; splitter review
-comments addressed
+Status: split complete; T-0012.11a merged and parent-verified
 Task log:
 `build-protocol/tasks/T-0012-11-missing-details-example-readiness/TASK.md`
 Branch: `task/T-0012-11-missing-details-example-readiness`
@@ -52,8 +51,10 @@ This docs-fix pass applies those corrections.
 
 ## Current State
 
-Splitter output is reviewed. Round-1 review comments are addressed in the task,
-report, parent docs, and work logs. No implementation review has run yet.
+Splitter output is reviewed. Round-1 and round-2 split review comments were
+addressed in the task, report, parent docs, and work logs. `T-0012.11a` has
+since completed implementation review, merged into this parent branch at
+`1a7b6c8`, and passed parent verification.
 
 ## Round-2 Findings Summary
 
