@@ -1,7 +1,6 @@
 # Implementation Report: T-0012.11 Missing Details And Example Readiness
 
-Status: split complete; first implementation slice selected; splitter review
-comments addressed
+Status: split complete; T-0012.11a merged and parent-verified
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -58,13 +57,13 @@ Worktree:
 
 Why selected first:
 
-- current repository dispatch is still route-only;
+- repository dispatch was still route-only at split time;
 - every later example workflow depends on real aggregate command execution; and
 - it is the smallest slice that delivers executable value without introducing a
   speculative runtime shell.
 
-The orchestrator has now created that branch/worktree from reviewed split
-commit `8804e93`.
+The orchestrator created that branch/worktree from reviewed split commit
+`8804e93`; the slice is now merged into this parent branch at `1a7b6c8`.
 
 ## Current State
 

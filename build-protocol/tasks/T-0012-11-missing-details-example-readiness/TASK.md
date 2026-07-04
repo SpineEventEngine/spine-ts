@@ -1,6 +1,6 @@
 # T-0012.11: Missing Details And Example Readiness
 
-Status: split complete; first implementation slice selected; splitter review comments addressed
+Status: split complete; T-0012.11a merged and parent-verified
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -79,12 +79,12 @@ The splitter reviewed the current TS runtime, the example specification, the
 only the missing details that block a real to-do app or an already-advertised
 framework workflow.
 
-The concrete blockers are:
+The original concrete blockers were:
 
-- repository dispatch is still route-only, so commands and events do not invoke
-  entity handlers;
-- aggregate writes do not yet produce executable command-to-event-to-storage
-  behavior;
+- repository dispatch was route-only, so commands and events did not invoke
+  entity handlers (`T-0012.11a` resolved aggregate command execution);
+- aggregate writes did not produce executable command-to-event-to-storage
+  behavior (`T-0012.11a` resolved this for aggregate command paths);
 - projection updates are not driven from delivered events into the read side;
 - `QueryService.Read` still requires ID filters, which is too small for a task
   list view;
