@@ -5,6 +5,7 @@ import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/pr
 import { deriveTypeUrl, packCommand } from "@spine-ts/core";
 import {
   ActorContextSchema,
+  CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
   UserIdSchema,
@@ -90,12 +91,116 @@ describe("CommandBus", () => {
     );
   });
 
+  it("can retry registering a command dispatcher after schema collection fails", async () => {
+    const observed: string[] = [];
+    let attempts = 0;
+    const dispatcher: CommandDispatcher = {
+      messageSchemas: () => {
+        attempts += 1;
+        if (attempts === 1) {
+          throw new Error("command schema read failed");
+        }
+        return [ProjectionStateSchema];
+      },
+      dispatch: (command) => {
+        observed.push(`dispatch:${command.id?.uuid ?? "missing"}`);
+        return Promise.resolve();
+      },
+    };
+    const bus = new CommandBus();
+
+    expect(() => bus.register(dispatcher)).toThrow("command schema read failed");
+    expect(bus.register(dispatcher)).toBe(dispatcher);
+
+    await bus.post(createProjectionCommand("command-retry"));
+
+    expect(observed).toEqual(["dispatch:command-retry"]);
+  });
+
+  it("deduplicates repeated schemas from one command dispatcher", async () => {
+    const observed: string[] = [];
+    const dispatcher = createCommandDispatcher(
+      [ProjectionStateSchema, ProjectionStateSchema],
+      (command) => {
+        observed.push(`dispatch:${command.id?.uuid ?? "missing"}`);
+      },
+    );
+    const bus = new CommandBus([dispatcher]);
+
+    expect(bus.acceptedCommandTypes()).toEqual([deriveTypeUrl(ProjectionStateSchema)]);
+
+    await bus.post(createProjectionCommand("command-deduplicated"));
+
+    expect(observed).toEqual(["dispatch:command-deduplicated"]);
+  });
+
+  it("ignores registering the same command dispatcher twice", async () => {
+    const observed: string[] = [];
+    const dispatcher = createCommandDispatcher([ProjectionStateSchema], (command) => {
+      observed.push(`dispatch:${command.id?.uuid ?? "missing"}`);
+    });
+    const bus = new CommandBus([dispatcher]);
+
+    expect(bus.register(dispatcher)).toBe(dispatcher);
+
+    await bus.post(createProjectionCommand("command-same-dispatcher"));
+
+    expect(observed).toEqual(["dispatch:command-same-dispatcher"]);
+  });
+
+  it("does not register the same command dispatcher twice during reentrant schema collection", async () => {
+    const observed: string[] = [];
+    const bus = new CommandBus();
+    let reentered = false;
+    const dispatcher: CommandDispatcher = {
+      messageSchemas: () => {
+        if (!reentered) {
+          reentered = true;
+          bus.register(dispatcher);
+        }
+        return [ProjectionStateSchema];
+      },
+      dispatch: (command) => {
+        observed.push(`dispatch:${command.id?.uuid ?? "missing"}`);
+        return Promise.resolve();
+      },
+    };
+
+    bus.register(dispatcher);
+    await bus.post(createProjectionCommand("command-reentrant"));
+
+    expect(observed).toEqual(["dispatch:command-reentrant"]);
+  });
+
   it("rejects posting commands without a registered dispatcher", async () => {
     const bus = new CommandBus();
 
     await expect(bus.post(createProjectionCommand("command-2"))).rejects.toThrow(
       `No command dispatcher registered for "${deriveTypeUrl(ProjectionStateSchema)}".`,
     );
+  });
+
+  it("rejects commands without a message", async () => {
+    const bus = new CommandBus();
+
+    await expect(
+      bus.post(
+        create(CommandSchema, {
+          id: create(CommandIdSchema, { uuid: "command-without-message" }),
+        }),
+      ),
+    ).rejects.toThrow(/command.message.typeUrl/);
+  });
+
+  it("rejects commands with a blank message type URL", async () => {
+    const command = createProjectionCommand("command-blank-message");
+    const bus = new CommandBus();
+
+    if (command.message !== undefined) {
+      command.message.typeUrl = "";
+    }
+
+    await expect(bus.post(command)).rejects.toThrow(/command.message.typeUrl/);
   });
 
   it("rejects nested posts from active command dispatch", async () => {

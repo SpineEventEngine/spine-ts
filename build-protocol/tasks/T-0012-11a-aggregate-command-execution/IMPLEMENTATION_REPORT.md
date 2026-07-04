@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11a Aggregate Command Execution
 
-Status: implementation complete; coverage blocked by sandbox IPC/HTTP2 checks
+Status: implementation complete; ready for review
 Branch: `task/T-0012-11a-aggregate-command-execution`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11a-aggregate-command-execution`
@@ -102,3 +102,19 @@ storage seam before event-bus handoff.
   `Operation not permitted`, and `packages/server/test/services/spine-services.test.ts`
   hit repeated `listen EPERM: operation not permitted 127.0.0.1` timeouts while
   starting the real HTTP/2 gRPC server.
+- Orchestrator reran `pnpm test:coverage` with local IPC/HTTP2 permissions. All
+  528 tests passed, but branch coverage was 89.45% against the required 90%
+  gate.
+- Added focused follow-up tests for array command output, missing aggregate
+  appliers, and malformed produced events before storage.
+- Added event-bus follow-up tests for dispatching already-stored events,
+  malformed stored events, and invalid stored-event access.
+- Added bus validation follow-up tests for missing and blank command/event
+  message type URLs after full coverage still reported 89.75% branch coverage.
+- Added dispatcher-registry follow-up tests for schema collection retry,
+  repeated schema deduplication, and reentrant command dispatcher registration
+  after full coverage still reported 89.87% branch coverage.
+- Added a final same-command-dispatcher registration test after coverage still
+  reported 89.99% branch coverage.
+- Final escalated `pnpm test:coverage` passed with 44 files and 543 tests:
+  statements 94.89%, branches 90.05%, functions 97.3%, lines 94.91%.

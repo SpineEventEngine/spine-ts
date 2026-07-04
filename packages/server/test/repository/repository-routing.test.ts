@@ -9,6 +9,7 @@ import {
   CommandIdSchema,
   EventContextSchema,
   EventIdSchema,
+  EventSchema,
   UserIdSchema,
   VersionSchema,
   file_spine_options,
@@ -91,6 +92,13 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
   assignTask(command: AggregateState) {
     ExecutingTaskAggregate.assigneeCalls++;
 
+    if (command.name === "Multi") {
+      return [
+        createAggregateEvent("event-Multi-1", command.id, 0, "Multi one"),
+        createAggregateEvent("event-Multi-2", command.id, 0, "Multi two"),
+      ];
+    }
+
     return packEvent({
       id: create(EventIdSchema, { value: `event-${command.name}` }),
       context: create(EventContextSchema),
@@ -114,6 +122,29 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
       }),
     );
     this.commitTransaction();
+  }
+}
+
+class NoApplierAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
+  assignTask(command: AggregateState) {
+    return createAggregateEvent("event-no-applier", command.id, 0, command.name);
+  }
+
+  reactTask(event: AggregateState): void {
+    void event;
+  }
+}
+
+class MalformedEventAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
+  assignTask(): unknown {
+    return create(EventSchema, {
+      id: create(EventIdSchema, { value: "event-malformed" }),
+      context: create(EventContextSchema),
+    });
+  }
+
+  applyTask(event: AggregateState): void {
+    void event;
   }
 }
 
@@ -167,6 +198,70 @@ describe("repository signal routing", () => {
       events: [],
     });
     expect(observed).toEqual(["event-TaskExec"]);
+  });
+
+  it("persists array command output with sequential aggregate versions", async () => {
+    ExecutingTaskAggregate.reset();
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await context.commandBus().post(createAggregateCommand("command-multi", "task-multi", "Multi"));
+
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(eventStore.read()).resolves.toMatchObject([
+      { id: { value: "event-Multi-1" }, context: { version: { number: 1 } } },
+      { id: { value: "event-Multi-2" }, context: { version: { number: 2 } } },
+    ]);
+    await expect(storage.readHistory("task-multi")).resolves.toMatchObject({
+      snapshot: {
+        aggregateId: "task-multi",
+        version: 2n,
+        state: {
+          id: "task-multi",
+          name: "Multi two (applied)",
+          archived: true,
+        },
+      },
+      events: [],
+    });
+  });
+
+  it("rejects aggregate command output when no applier is registered", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createNoApplierRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("command-no-applier", "task-no-applier")),
+    ).rejects.toThrow(/no applier/);
+    await expect(eventStore.read()).resolves.toEqual([]);
+  });
+
+  it("rejects malformed aggregate command output before storage", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createMalformedEventRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("command-malformed", "task-malformed")),
+    ).rejects.toThrow(/event.message.typeUrl/);
+    await expect(eventStore.read()).resolves.toEqual([]);
   });
 
   it("routes commands to one aggregate ID by the first command field", async () => {
@@ -328,6 +423,51 @@ function createExecutingRepository(): Repository<typeof ExecutingTaskAggregate> 
     entityType: ExecutingTaskAggregate,
     schema: AggregateStateSchema,
     handlers,
+  });
+}
+
+function createNoApplierRepository(): Repository<typeof NoApplierAggregate> {
+  const handlers = defineEntityHandlers(NoApplierAggregate, AggregateStateSchema, (builder) => [
+    builder.assign(AggregateStateSchema, "assignTask"),
+    builder.react(AggregateStateSchema, "reactTask"),
+  ]);
+
+  return new Repository({
+    entityType: NoApplierAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createMalformedEventRepository(): Repository<typeof MalformedEventAggregate> {
+  const handlers = defineEntityHandlers(
+    MalformedEventAggregate,
+    AggregateStateSchema,
+    (builder) => [
+      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.apply(AggregateStateSchema, "applyTask"),
+    ],
+  );
+
+  return new Repository({
+    entityType: MalformedEventAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createAggregateEvent(id: string, aggregateId: string, version: number, name = "Task") {
+  return packEvent({
+    id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema, {
+      version: create(VersionSchema, { number: version }),
+    }),
+    schema: AggregateStateSchema,
+    message: create(AggregateStateSchema, {
+      id: aggregateId,
+      name,
+      archived: false,
+    }),
   });
 }
 
