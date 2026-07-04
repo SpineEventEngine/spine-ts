@@ -51,9 +51,9 @@ Rejected for now as unproven blockers:
 
 Selected: `T-0012.11a Aggregate Command Execution`
 
-Proposed branch: `task/T-0012-11a-aggregate-command-execution`
+Branch: `task/T-0012-11a-aggregate-command-execution`
 
-Proposed worktree:
+Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11a-aggregate-command-execution`
 
 Why selected first:
@@ -63,13 +63,27 @@ Why selected first:
 - it is the smallest slice that delivers executable value without introducing a
   speculative runtime shell.
 
-The split only proposes that branch/worktree. The orchestrator creates it after
-splitter review is clean. This task does not claim that `T-0012.11a` has
-already been opened.
+The orchestrator has now created that branch/worktree from reviewed split
+commit `8804e93`.
 
 ## Current State
 
 Requirements splitting is complete. The task now has a staged roadmap with five
-concrete implementation slices. `T-0012.11a Aggregate Command Execution` is the
-selected first slice, and this docs-fix pass records the round-1 review
-corrections before the orchestrator opens that slice's branch/worktree.
+concrete implementation slices.
+
+`T-0012.11a Aggregate Command Execution` is the selected first slice. Its
+branch/worktree is open from `8804e93`, and the child worktree has completed
+the aggregate command-execution review-fix and primitive-ID coverage follow-up:
+focused write-side tests, typecheck/lint/format/docs/diff verification, durable
+doc/log updates, and escalated `pnpm test:coverage` are recorded there. The
+sandboxed coverage command still depends on local IPC and loopback listener
+permissions, but the escalated coverage gate passed after the primitive-ID
+tests. A follow-up worker then closed stale docs, executable aggregate version
+typing, helper simplicity, async-assignee, snapshot-failure handoff, and
+reentrant registration cleanup findings; fresh verification passed in the child
+worktree, including escalated coverage with 45 files and 559 tests. A later
+round-2 fix awaited aggregate event appliers before append/snapshot ordering,
+replaced primitive-ID helper-shape coverage with `AggregateStorage` behavior
+coverage, updated stale deferred-work docs/logs, and passed focused verification
+plus escalated coverage with 45 files and 564 tests. Sandboxed coverage remains
+blocked only by local IPC/HTTP2 endpoint permissions.

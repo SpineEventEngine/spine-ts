@@ -268,11 +268,14 @@ subscriptions.
 This follows the JVM `Repository` identity surface (`entityClass()`,
 `idClass()`, and `entityStateType()`) plus the first context-owned lifecycle
 step. When authentic explicit handler metadata is supplied, repositories now
-calculate deferred command/event routes and bounded-context assembly registers
-internal dispatcher adapters for those routes. The TypeScript seam deliberately
-omits `create`, `find`, `store`, record conversion, handler invocation,
-entity storage/cache/catch-up, inbox/delivery, lifecycle monitors, gRPC
-server lifecycle, and transport.
+calculate command/event routes and bounded-context assembly registers internal
+dispatcher adapters for those routes. Aggregate repositories can then load or
+create one aggregate, invoke one assignee, apply the produced events, persist
+history and snapshots through `AggregateStorage`, and queue already-stored
+events for event-bus delivery without a second append. The TypeScript seam
+still omits public `create`, `find`, `store`, record conversion APIs,
+entity storage/cache/catch-up, inbox/delivery, lifecycle monitors, gRPC server
+lifecycle, and transport.
 
 `EntityTransaction` is the first server-owned draft/result commit boundary over
 one entity state. It buffers a draft state, explicit previous/draft version
@@ -358,7 +361,8 @@ The following runtime pieces are still deferred to later explicit tasks:
 - default repository construction from entity classes,
   visibility/type-supplier registration, and lifecycle callbacks over the
   repository identity seam;
-- handler invocation over the deferred repository routes;
+- projection/event handler execution, read-side catch-up, and query/subscription
+  execution over repository routes;
 - inbox/delivery storage, durable storage lifecycle, entity storage/cache
   catch-up, and tenant-index persistence;
 - richer query filtering, event subscriptions, and durable subscription

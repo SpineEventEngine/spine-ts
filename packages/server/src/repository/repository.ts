@@ -1,5 +1,13 @@
+import { clone, create } from "@bufbuild/protobuf";
 import { deriveTypeUrl, unpackAny, type MessageSchema } from "@spine-ts/core";
-import { type Command, type Event, UserIdSchema } from "@spine-ts/proto";
+import {
+  EventContextSchema,
+  EventSchema,
+  type Command,
+  type Event,
+  VersionSchema,
+} from "@spine-ts/proto";
+import type { StorageContext, StorageFactory } from "@spine-ts/storage";
 
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
@@ -26,6 +34,8 @@ import {
   type EventRegistrationReadinessLookup,
 } from "../handler/event-registration-readiness.js";
 import { handlerMetadataAccess, type EntityHandlersMetadata } from "../handler/handler-metadata.js";
+import { AggregateStorage } from "./aggregate-storage.js";
+import { PrimitiveIds } from "./primitive-id.js";
 
 type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> =
   | Aggregate<unknown, Schema, unknown>
@@ -61,6 +71,13 @@ type RepositoryHandlers<EntityType extends RepositoryEntityType> =
   EntityType["prototype"] extends infer Instance extends object
     ? EntityHandlersMetadata<Instance, RepositoryStateSchema<EntityType>>
     : never;
+
+type RepositoryHandlersOptionFor<EntityType extends RepositoryEntityType> =
+  EntityType["prototype"] extends Aggregate<unknown, DescriptorMessageSchema, infer Version>
+    ? [Version] extends [bigint]
+      ? RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[]
+      : never
+    : RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[];
 
 type IsUnion<Type, Union = Type> = Type extends unknown
   ? [Union] extends [Type]
@@ -120,8 +137,13 @@ export interface RepositoryOptions<
   readonly entityType: EntityType;
   /** Generated Protobuf-ES schema for the entity state owned by this repository identity. */
   readonly schema: RepositoryStateSchema<EntityType>;
-  /** Explicit handler metadata used to register repository command and event routing. */
-  readonly handlers?: RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[];
+  /**
+   * Explicit handler metadata used to register repository command and event routing.
+   *
+   * Aggregate repositories with handlers can be executed by built bounded contexts and therefore
+   * must use `bigint` version metadata, matching the persisted aggregate history version type.
+   */
+  readonly handlers?: RepositoryHandlersOptionFor<EntityType>;
 }
 
 /**
@@ -187,11 +209,13 @@ export class RepositoryIdentityError extends Error {
  *
  * The class records the ownership facts bounded-context registration needs for
  * duplicate and conflict checks. Context assembly uses this metadata to attach
- * a repository to one built context and open state record storage. The
- * repository itself calculates deferred command and event routes when explicit
- * handler metadata is supplied. It does not create entities, find or store
- * records, invoke handlers, manage caches, emit lifecycle events, write
- * inboxes, or start buses/transports.
+ * a repository to one built context and open state record storage. With
+ * authentic explicit aggregate handler metadata, the built context can also
+ * execute aggregate commands through repository-owned assignees and appliers,
+ * persist aggregate history and snapshots through `AggregateStorage`, and hand
+ * already-stored events to the event bus. The repository surface still does
+ * not expose direct entity lookup/storage APIs, inbox/delivery management,
+ * caches, lifecycle monitors, or transport startup.
  *
  * @typeParam EntityType - A single concrete aggregate, projection, or process-manager constructor
  * with one concrete generated state schema. Broad constructor, constructor-union, broad-schema, and
@@ -299,18 +323,23 @@ export class Repository<
     );
   }
 
-  /** Route a command to exactly one entity ID. Handler invocation is deferred. */
+  /** Route a command to exactly one entity ID without invoking the handler. */
   routeCommand(command: Command): RepositoryCommandRoute<RepositoryEntityId<EntityType>> {
     return this.#routing.routeCommand(command);
   }
 
-  /** Route an event to one or more entity IDs. Handler invocation is deferred. */
+  /** Route an event to one or more entity IDs without invoking the handler. */
   routeEvent(event: Event): RepositoryEventRoute<RepositoryEntityId<EntityType>> {
     return this.#routing.routeEvent(event);
   }
 }
 
-/** Repository handler invocation state for this storage/routing slice. */
+/**
+ * Route-only invocation marker returned by direct repository routing APIs.
+ *
+ * Built bounded contexts may execute aggregate command assignees and event appliers through their
+ * command bus; direct `routeCommand()` and `routeEvent()` calls remain routing-only.
+ */
 export type RepositoryRouteInvocation = "deferred";
 
 /** Command route calculated by a repository. */
@@ -319,7 +348,7 @@ export interface RepositoryCommandRoute<Id = unknown> {
   readonly entityId: Id;
   /** Fully qualified command message type name. */
   readonly messageFullTypeName: string;
-  /** Handler invocation is intentionally deferred to a later runtime slice. */
+  /** Direct repository route calculation does not invoke handlers. */
   readonly invocation: RepositoryRouteInvocation;
 }
 
@@ -329,12 +358,13 @@ export interface RepositoryEventRoute<Id = unknown> {
   readonly entityIds: readonly Id[];
   /** Fully qualified event message type name. */
   readonly messageFullTypeName: string;
-  /** Handler invocation is intentionally deferred to a later runtime slice. */
+  /** Direct repository route calculation does not invoke handlers. */
   readonly invocation: RepositoryRouteInvocation;
 }
 
 const repositorySnapshots = new WeakMap<RepositoryView, RepositoryIdentitySnapshot>();
 const repositoryDispatchers = new WeakMap<RepositoryView, RepositoryDispatchers>();
+const repositoryRuntimes = new WeakMap<RepositoryView, RepositoryRuntime>();
 Object.freeze(Repository);
 
 /** @internal Framework-only repository authority contract. */
@@ -343,6 +373,8 @@ export interface RepositoryAccess {
   snapshot(repository: RepositoryView): RepositoryIdentitySnapshot;
   commandDispatcher(repository: RepositoryView): CommandDispatcher | undefined;
   eventDispatcher(repository: RepositoryView): EventDispatcher | undefined;
+  bindRuntime(repository: RepositoryView, runtime: RepositoryRuntime): void;
+  clearRuntime(repository: RepositoryView): void;
 }
 
 /** @internal Framework-only repository authority used by bounded-context assembly. */
@@ -368,6 +400,14 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
   eventDispatcher(repository: RepositoryView): EventDispatcher | undefined {
     return repositoryDispatchers.get(repository)?.event;
   },
+
+  bindRuntime(repository: RepositoryView, runtime: RepositoryRuntime): void {
+    repositoryRuntimes.set(repository, Object.freeze(runtime));
+  },
+
+  clearRuntime(repository: RepositoryView): void {
+    repositoryRuntimes.delete(repository);
+  },
 });
 
 interface RepositoryDispatchers {
@@ -378,8 +418,16 @@ interface RepositoryDispatchers {
 interface RepositoryRouting<Id = unknown> {
   readonly commandSchemas: readonly MessageSchema[];
   readonly eventSchemas: readonly MessageSchema[];
+  readonly commandReadiness: CommandRegistrationReadinessLookup | undefined;
+  readonly eventReadiness: EventRegistrationReadinessLookup | undefined;
   routeCommand(command: Command): RepositoryCommandRoute<Id>;
   routeEvent(event: Event): RepositoryEventRoute<Id>;
+}
+
+interface RepositoryRuntime {
+  readonly context: StorageContext;
+  readonly storageFactory: StorageFactory;
+  readonly dispatchStored: (event: Event) => Promise<void>;
 }
 
 type RepositoryHandlersOption =
@@ -398,10 +446,8 @@ function createRepositoryDispatchers(
         ? undefined
         : Object.freeze({
             messageSchemas: () => routing.commandSchemas,
-            dispatch: (command: Command): Promise<void> => {
-              void repository.routeCommand(command);
-              return Promise.resolve();
-            },
+            dispatch: (command: Command): Promise<void> =>
+              dispatchRepositoryCommand(repository, routing, command),
           }),
     event:
       routing.eventSchemas.length === 0
@@ -422,6 +468,346 @@ function routeRepositoryEvent(
 ): Promise<void> {
   void repository.routeEvent(event);
   return Promise.resolve();
+}
+
+async function dispatchRepositoryCommand(
+  repository: RepositoryView & {
+    routeCommand(command: Command): RepositoryCommandRoute;
+  },
+  routing: RepositoryRouting,
+  command: Command,
+): Promise<void> {
+  const runtime = repositoryRuntimes.get(repository);
+
+  if (runtime === undefined || repository.entityFamily !== "aggregate") {
+    void repository.routeCommand(command);
+    return;
+  }
+
+  await new AggregateCommandExecution(repository, routing, runtime, command).run();
+}
+
+class AggregateCommandExecution {
+  readonly #repository: RepositoryView & {
+    routeCommand(command: Command): RepositoryCommandRoute;
+  };
+  readonly #routing: RepositoryRouting;
+  readonly #runtime: RepositoryRuntime;
+  readonly #command: Command;
+  readonly #storageContext: StorageContext;
+
+  constructor(
+    repository: RepositoryView & {
+      routeCommand(command: Command): RepositoryCommandRoute;
+    },
+    routing: RepositoryRouting,
+    runtime: RepositoryRuntime,
+    command: Command,
+  ) {
+    this.#repository = repository;
+    this.#routing = routing;
+    this.#runtime = runtime;
+    this.#command = command;
+    this.#storageContext = storageContextForCommand(this.#runtime.context, this.#command);
+  }
+
+  async run(): Promise<void> {
+    const route = this.#repository.routeCommand(this.#command);
+    const assignee = this.#routing.commandReadiness?.findCommandAssignee(route.messageFullTypeName);
+
+    if (assignee === undefined) {
+      return;
+    }
+
+    const loaded = await this.#loadAggregate(route.entityId);
+    const message = unpackRequired(
+      requireSignalMessage(this.#command.message, "command"),
+      assignee.handler.schema,
+      "command",
+    );
+    const produced = await invokeEntityMethod(loaded.entity, assignee.handler.methodName, message);
+    const events = this.#bindProducedEvents(
+      this.#normalizeProducedEvents(produced),
+      route.entityId,
+      loaded.version,
+    );
+
+    await this.#applyAggregateEvents(loaded.entity, events);
+
+    if (events.length === 0) {
+      return;
+    }
+
+    const committedVersion = loaded.version + BigInt(events.length);
+    await loaded.storage.appendEvents(route.entityId as never, events);
+    try {
+      await loaded.storage.writeSnapshot({
+        aggregateId: route.entityId as never,
+        state: repositoryState(loaded.entity) as never,
+        version: committedVersion,
+        lifecycle: repositoryLifecycle(loaded.entity),
+      });
+    } finally {
+      this.#dispatchStoredEvents(events);
+    }
+  }
+
+  async #loadAggregate(entityId: unknown): Promise<{
+    readonly entity: object;
+    readonly storage: AggregateStorage<DescriptorMessageSchema>;
+    readonly version: bigint;
+  }> {
+    const storage = new AggregateStorage({
+      context: this.#storageContext,
+      storageFactory: this.#runtime.storageFactory,
+      stateSchema: this.#repository.stateSchema,
+      eventSchemas: this.#routing.eventSchemas,
+    });
+    const history = await storage.readHistory(entityId as never);
+    const entity = this.#instantiateAggregate(entityId, history.snapshot);
+
+    await this.#applyAggregateEvents(entity, history.events);
+    return Object.freeze({
+      entity,
+      storage,
+      version: historyVersion(history.snapshot?.version, history.events),
+    });
+  }
+
+  #instantiateAggregate(
+    entityId: unknown,
+    snapshot:
+      | {
+          readonly state: unknown;
+          readonly version: bigint;
+          readonly lifecycle: {
+            readonly archived: boolean;
+            readonly deleted: boolean;
+          };
+        }
+      | undefined,
+  ): object {
+    const entityType = this.#repository.entityType as unknown as new (options: {
+      readonly id: unknown;
+      readonly schema: DescriptorMessageSchema;
+      readonly state: unknown;
+      readonly version: unknown;
+      readonly lifecycle?: {
+        readonly archived: boolean;
+        readonly deleted: boolean;
+      };
+    }) => object;
+
+    const options: {
+      id: unknown;
+      schema: DescriptorMessageSchema;
+      state: unknown;
+      version: unknown;
+      lifecycle?: {
+        readonly archived: boolean;
+        readonly deleted: boolean;
+      };
+    } = {
+      id: entityId,
+      schema: this.#repository.stateSchema,
+      state: snapshot?.state ?? this.#defaultState(entityId),
+      version: snapshot?.version ?? 0n,
+    };
+
+    if (snapshot !== undefined) {
+      options.lifecycle = snapshot.lifecycle;
+    }
+
+    return new entityType(options);
+  }
+
+  #defaultState(entityId: unknown): unknown {
+    return create(this.#repository.stateSchema, {
+      [this.#repository.idField.localName]: entityId,
+    });
+  }
+
+  async #applyAggregateEvents(entity: object, events: readonly Event[]): Promise<void> {
+    for (const event of events) {
+      await this.#applyAggregateEvent(entity, event);
+    }
+  }
+
+  async #applyAggregateEvent(entity: object, event: Event): Promise<void> {
+    const message = event.message;
+
+    if (message === undefined || message.typeUrl === "") {
+      throw new Error("Repository aggregate execution requires event.message.typeUrl.");
+    }
+
+    const schema = schemaForTypeUrl(this.#routing.eventSchemas, message.typeUrl, "event");
+    const application = this.#routing.eventReadiness?.findEventApplications(schema.typeName)[0];
+
+    if (application === undefined) {
+      throw new Error(`Repository aggregate execution has no applier for "${schema.typeName}".`);
+    }
+
+    await invokeEntityMethod(
+      entity,
+      application.handler.methodName,
+      unpackRequired(message, application.handler.schema, "event"),
+    );
+  }
+
+  #normalizeProducedEvents(produced: unknown): readonly Event[] {
+    if (produced === undefined) {
+      return Object.freeze([]);
+    }
+
+    if (Array.isArray(produced)) {
+      return Object.freeze(produced.map((event) => clone(EventSchema, event as Event)));
+    }
+
+    return Object.freeze([clone(EventSchema, produced as Event)]);
+  }
+
+  #bindProducedEvents(
+    events: readonly Event[],
+    entityId: unknown,
+    lastVersion: bigint,
+  ): readonly Event[] {
+    let version = lastVersion;
+
+    return Object.freeze(
+      events.map((event) => {
+        version += 1n;
+        return this.#bindProducedEvent(event, entityId, version);
+      }),
+    );
+  }
+
+  #bindProducedEvent(event: Event, entityId: unknown, version: bigint): Event {
+    const aggregateId = PrimitiveIds.read(entityId);
+
+    if (aggregateId === undefined) {
+      throw new Error("Repository aggregate execution requires primitive aggregate IDs.");
+    }
+
+    const bound = clone(EventSchema, event);
+    const context = clone(EventContextSchema, bound.context ?? create(EventContextSchema));
+
+    context.producerId = PrimitiveIds.pack(aggregateId);
+    context.version = create(VersionSchema, { number: eventVersionNumber(version) });
+    bound.context = context;
+    return bound;
+  }
+
+  #dispatchStoredEvents(events: readonly Event[]): void {
+    for (const event of events) {
+      void this.#runtime.dispatchStored(event).catch(() => undefined);
+    }
+  }
+}
+
+function historyVersion(snapshotVersion: bigint | undefined, events: readonly Event[]): bigint {
+  const lastEvent = events.at(-1);
+
+  return lastEvent === undefined ? (snapshotVersion ?? 0n) : readEventVersion(lastEvent);
+}
+
+function invokeEntityMethod(entity: object, methodName: string, message: unknown): unknown {
+  const method = (entity as Record<string, unknown>)[methodName];
+
+  if (typeof method !== "function") {
+    throw new TypeError(`Repository aggregate execution requires method "${methodName}".`);
+  }
+
+  return Reflect.apply(method, entity, [message]);
+}
+
+function unpackRequired(
+  message: NonNullable<Command["message"]>,
+  schema: MessageSchema,
+  signalKind: "command" | "event",
+): unknown {
+  const unpacked = unpackAny(message, schema);
+
+  if (unpacked === undefined) {
+    throw new Error(`Repository ${signalKind} execution requires a readable message.`);
+  }
+
+  return unpacked;
+}
+
+function requireSignalMessage(
+  message: Command["message"],
+  signalKind: "command" | "event",
+): NonNullable<Command["message"]> {
+  if (message === undefined || message.typeUrl === "") {
+    throw new Error(`Repository ${signalKind} execution requires message.typeUrl.`);
+  }
+
+  return message;
+}
+
+function repositoryState(entity: object): unknown {
+  return (entity as { readonly state: unknown }).state;
+}
+
+function repositoryLifecycle(entity: object): {
+  readonly archived: boolean;
+  readonly deleted: boolean;
+} {
+  return (
+    entity as { readonly lifecycle: { readonly archived: boolean; readonly deleted: boolean } }
+  ).lifecycle;
+}
+
+function readEventVersion(event: Event): bigint {
+  const number = event.context?.version?.number;
+
+  if (number === undefined) {
+    throw new Error("Repository aggregate execution requires readable event versions.");
+  }
+
+  return BigInt(number);
+}
+
+function eventVersionNumber(version: bigint): number {
+  if (version > 2_147_483_647n || version < -2_147_483_648n) {
+    throw new Error(
+      "Repository aggregate execution requires versions in the protobuf int32 range.",
+    );
+  }
+
+  return Number(version);
+}
+
+function storageContextForCommand(context: StorageContext, command: Command): StorageContext {
+  if (!context.multitenant) {
+    return context;
+  }
+
+  const tenantId = readCommandTenant(command);
+  return Object.freeze({
+    name: context.name,
+    multitenant: true,
+    ...(tenantId === undefined ? {} : { tenantId }),
+  });
+}
+
+function readCommandTenant(command: Command): string | undefined {
+  return tenantValue(command.context?.actorContext?.tenantId);
+}
+
+function tenantValue(
+  tenantId: NonNullable<NonNullable<Command["context"]>["actorContext"]>["tenantId"] | undefined,
+): string | undefined {
+  switch (tenantId?.kind.case) {
+    case "value":
+      return tenantId.kind.value;
+    case "domain":
+      return `domain:${tenantId.kind.value.value}`;
+    case "email":
+      return `email:${tenantId.kind.value.value}`;
+    default:
+      return undefined;
+  }
 }
 
 function createRepositoryRouting<EntityType extends RepositoryEntityType>(
@@ -451,6 +837,8 @@ function createRepositoryRouting<EntityType extends RepositoryEntityType>(
   return Object.freeze({
     commandSchemas,
     eventSchemas,
+    commandReadiness,
+    eventReadiness,
     routeCommand: (command: Command) =>
       routeCommand<RepositoryEntityId<EntityType>>(command, commandReadiness, commandSchemas),
     routeEvent: (event: Event) =>
@@ -586,15 +974,15 @@ function readFirstFieldId(
   return value;
 }
 
-function readProducerId(event: Event): string | undefined {
+function readProducerId(event: Event): string | number | boolean | undefined {
   const producerId = event.context?.producerId;
   if (producerId === undefined) {
     return undefined;
   }
 
-  const userId = unpackAny(producerId, UserIdSchema);
-  if (userId?.value !== undefined && userId.value !== "") {
-    return userId.value;
+  const unpacked = PrimitiveIds.unpack(producerId);
+  if (unpacked !== undefined) {
+    return unpacked;
   }
   throw new Error("Repository event routing requires a readable producer ID.");
 }

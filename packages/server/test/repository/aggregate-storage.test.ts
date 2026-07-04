@@ -3,6 +3,8 @@ import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
   AnySchema,
+  BoolValueSchema,
+  DoubleValueSchema,
   FieldDescriptorProto_Label,
   FieldDescriptorProto_Type,
   FileDescriptorProtoSchema,
@@ -449,6 +451,45 @@ describe("AggregateStorage", () => {
         }),
       ]),
     ).rejects.toThrow(/same aggregate ID/);
+  });
+
+  it("routes primitive producer IDs packed in wrapper messages", async () => {
+    const storage = new AggregateStorage<typeof AggregateStateSchema, string | number | boolean>({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [NumberIdEventSchema, BooleanIdEventSchema],
+    });
+
+    await storage.appendEvents(42, [
+      packEvent({
+        id: create(EventIdSchema, { value: "event-number-producer-id" }),
+        context: create(EventContextSchema, {
+          producerId: packAny(DoubleValueSchema, create(DoubleValueSchema, { value: 42 })),
+          version: create(VersionSchema, { number: 1 }),
+        }),
+        schema: NumberIdEventSchema,
+        message: create(NumberIdEventSchema, { id: 42 }),
+      }),
+    ]);
+    await storage.appendEvents(true, [
+      packEvent({
+        id: create(EventIdSchema, { value: "event-boolean-producer-id" }),
+        context: create(EventContextSchema, {
+          producerId: packAny(BoolValueSchema, create(BoolValueSchema, { value: true })),
+          version: create(VersionSchema, { number: 1 }),
+        }),
+        schema: BooleanIdEventSchema,
+        message: create(BooleanIdEventSchema, { id: true }),
+      }),
+    ]);
+
+    expect((await storage.readHistory(42)).events.map((event) => event.id?.value)).toEqual([
+      "event-number-producer-id",
+    ]);
+    expect((await storage.readHistory(true)).events.map((event) => event.id?.value)).toEqual([
+      "event-boolean-producer-id",
+    ]);
   });
 
   it("rejects contradictory producer and payload aggregate IDs", async () => {

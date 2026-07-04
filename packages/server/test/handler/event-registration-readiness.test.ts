@@ -109,6 +109,28 @@ describe("event registration readiness", () => {
     expect(Object.isFrozen(readiness.registeredEventMessageFullTypeNames())).toBe(true);
   });
 
+  it("rejects direct runtime construction without the package factory token", () => {
+    const constructor = EventRegistrationReadiness as unknown as new (
+      authenticityToken: symbol,
+      eventFullTypeNames: readonly string[],
+      subscribersByEventFullTypeName: ReadonlyMap<
+        string,
+        readonly EventRegistrationSubscriberMetadata[]
+      >,
+      reactorsByEventFullTypeName: ReadonlyMap<string, readonly EventRegistrationReactorMetadata[]>,
+      applicationsByEventFullTypeName: ReadonlyMap<
+        string,
+        readonly EventRegistrationApplicationMetadata[]
+      >,
+    ) => EventRegistrationReadiness;
+
+    expect(() => {
+      Reflect.construct(constructor, [Symbol("external"), [], new Map(), new Map(), new Map()]);
+    }).toThrow(
+      "EventRegistrationReadiness instances must be created by the package factory methods.",
+    );
+  });
+
   it("lists registered event message full type names in deterministic order", () => {
     const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.subscribe(EventSchema, "subscribeCreated"),

@@ -125,10 +125,12 @@ Why first:
 Resumed-state note:
 
 - `T-0012.11` is split complete and `T-0012.11a` is selected first.
-- The proposed `T-0012.11a` branch/worktree is planning output only in this
-  task.
-- The orchestrator creates that branch/worktree after splitter review comments
-  are resolved and the split is accepted as clean.
+- The `T-0012.11a` branch/worktree is now created from reviewed split commit
+  `8804e93`.
+- The `T-0012.11a` child worktree has completed the review-fix, coverage-fix,
+  and round-2 async-applier fix passes, updated public/API docs, and recorded
+  focused plus escalated coverage verification in the child
+  task/report/review/work logs.
 
 ## Staged Subtasks
 

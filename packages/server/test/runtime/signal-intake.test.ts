@@ -121,6 +121,17 @@ describe("signal intake results", () => {
     expect(result.failure.diagnostics).not.toHaveProperty("arbitrary");
   });
 
+  it("drops allowed diagnostic keys when their values are not scalar", () => {
+    const result = failSignalIntake("event", "MALFORMED_ENVELOPE", {
+      boundedContext: { value: "Tasks" },
+      attempt: [1],
+      retryable: () => true,
+      reason: Symbol("reason"),
+    });
+
+    expect(result.failure.diagnostics).toEqual({});
+  });
+
   it("skips accessor diagnostics without executing getters", () => {
     let getterExecuted = false;
     const diagnostics: Record<string, unknown> = {};
@@ -158,6 +169,25 @@ describe("signal intake results", () => {
     expect(
       failSignalIntake("command", "UNSUPPORTED_SIGNAL_KIND", diagnostics).failure.diagnostics,
     ).toEqual({});
+  });
+
+  it("ignores diagnostics when descriptor inspection fails", () => {
+    const original = Object.getOwnPropertyDescriptors;
+
+    Object.getOwnPropertyDescriptors = () => {
+      throw new Error("descriptors unavailable");
+    };
+
+    let result: ReturnType<typeof failSignalIntake>;
+    try {
+      result = failSignalIntake("command", "UNSUPPORTED_SIGNAL_KIND", {
+        boundedContext: "Tasks",
+      });
+    } finally {
+      Object.getOwnPropertyDescriptors = original;
+    }
+
+    expect(result.failure.diagnostics).toEqual({});
   });
 
   it("ignores proxy diagnostics without invoking proxy inspection traps", () => {

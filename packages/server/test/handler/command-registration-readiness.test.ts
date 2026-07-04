@@ -88,6 +88,20 @@ describe("command registration readiness", () => {
     expect(Object.isFrozen(readiness.registeredCommandMessageFullTypeNames())).toBe(true);
   });
 
+  it("rejects direct runtime construction without the package factory token", () => {
+    const constructor = CommandRegistrationReadiness as unknown as new (
+      authenticityToken: symbol,
+      commandFullTypeNames: readonly string[],
+      assigneesByCommandFullTypeName: ReadonlyMap<string, CommandRegistrationAssigneeMetadata>,
+    ) => CommandRegistrationReadiness;
+
+    expect(() => {
+      Reflect.construct(constructor, [Symbol("external"), [], new Map()]);
+    }).toThrow(
+      "CommandRegistrationReadiness instances must be created by the package factory methods.",
+    );
+  });
+
   it("lists registered command message full type names in deterministic order", () => {
     const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
