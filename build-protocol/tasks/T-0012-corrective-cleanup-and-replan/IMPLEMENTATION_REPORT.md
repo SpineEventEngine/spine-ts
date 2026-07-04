@@ -1,6 +1,6 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.9 integrated; T-0012.10 selected
+Status: T-0012.10 in progress
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
@@ -218,7 +218,7 @@ autonomous task scope.
 storage-backed `Stand`, context-owned stand exposure, entity-state updates,
 in-process subscriptions, and public documentation. All required review lanes
 are clean through commit `9202b5e`. The next selected subtask is
-`T-0012.10 Real gRPC Services`.
+`T-0012.10 Real gRPC Services` is in progress.
 
 Parent tracked-state verification after integrating `T-0012.9` passed:
 `pnpm check:node`, `pnpm typecheck`, `pnpm lint`, tracked-file Prettier,
