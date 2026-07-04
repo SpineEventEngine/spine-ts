@@ -45,10 +45,14 @@ export class SpineServices {
   readonly #commandRoutes = new Map<string, CommandRoute>();
   readonly #stateRoutes = new Map<string, StateRoute>();
   readonly #subscriptions = new Map<string, SubscriptionRecord>();
+  readonly #inactiveTtlMs: number;
+  readonly #queueLimit: number;
 
   /** Create service adapters over the passed built bounded contexts. */
   constructor(options: SpineServicesOptions) {
     this.#contexts = Object.freeze([...options.contexts]);
+    this.#inactiveTtlMs = positiveInteger(options.inactiveTtlMs ?? DEFAULT_INACTIVE_TTL_MS);
+    this.#queueLimit = positiveInteger(options.queueLimit ?? DEFAULT_QUEUE_LIMIT);
 
     for (const context of this.#contexts) {
       for (const typeUrl of context.commandBus().acceptedCommandTypes()) {
@@ -188,6 +192,7 @@ export class SpineServices {
 
   #subscribe(topic: Topic): Subscription {
     const route = this.#subscriptionRoute(topic);
+    validateTopic(topic);
     const tenantError = tenantMismatch(
       route.context.isMultitenant,
       topicTenant(topic),
@@ -208,11 +213,18 @@ export class SpineServices {
       throw new ConnectError("Subscription ID is required.", Code.InvalidArgument);
     }
 
-    this.#subscriptions.set(id, {
+    const record: SubscriptionRecord = {
+      id,
       subscription,
       route,
-      delivery: new SubscriptionDelivery(),
-    });
+      delivery: new SubscriptionDelivery(this.#queueLimit),
+      inactiveTimer: undefined,
+    };
+    record.inactiveTimer = setTimeout(() => {
+      this.#removeSubscription(id);
+    }, this.#inactiveTtlMs);
+    record.inactiveTimer.unref();
+    this.#subscriptions.set(id, record);
 
     return subscription;
   }
@@ -266,11 +278,15 @@ export class SpineServices {
       return;
     }
 
+    clearInactiveTimer(record);
     const tenantId = topicTenant(record.subscription.topic);
     const standSubscription = record.route.context.stand().subscribe(
       record.route.schema,
       (update) => {
         record.delivery.push(createEntityUpdate(record, update));
+        if (record.delivery.closed) {
+          this.#removeSubscription(record.id);
+        }
       },
       tenantOptions(tenantId),
     );
@@ -281,6 +297,7 @@ export class SpineServices {
     const record = this.#subscriptions.get(id);
 
     if (record !== undefined) {
+      clearInactiveTimer(record);
       record.delivery.close();
       this.#subscriptions.delete(id);
     }
@@ -291,6 +308,10 @@ export class SpineServices {
 export interface SpineServicesOptions {
   /** Contexts exposed by these service adapters. */
   readonly contexts: readonly BoundedContext[];
+  /** Milliseconds before never-activated subscriptions are discarded. Defaults to 30 seconds. */
+  readonly inactiveTtlMs?: number;
+  /** Maximum queued updates per active subscription before delivery is closed. Defaults to 100. */
+  readonly queueLimit?: number;
 }
 
 interface CommandRoute {
@@ -305,16 +326,23 @@ interface StateRoute {
 }
 
 interface SubscriptionRecord {
+  readonly id: string;
   readonly subscription: Subscription;
   readonly route: StateRoute;
   readonly delivery: SubscriptionDelivery;
+  inactiveTimer: ReturnType<typeof setTimeout> | undefined;
 }
 
 class SubscriptionDelivery {
   readonly #queue: SubscriptionUpdate[] = [];
   readonly #waiters: ((update: SubscriptionUpdate | undefined) => void)[] = [];
+  readonly #queueLimit: number;
   #standSubscription: StandSubscription | undefined;
   #closed = false;
+
+  constructor(queueLimit: number) {
+    this.#queueLimit = queueLimit;
+  }
 
   get active(): boolean {
     return this.#standSubscription !== undefined;
@@ -334,8 +362,16 @@ class SubscriptionDelivery {
   }
 
   push(update: SubscriptionUpdate): void {
+    if (this.#closed) {
+      return;
+    }
+
     const waiter = this.#waiters.shift();
     if (waiter === undefined) {
+      if (this.#queue.length >= this.#queueLimit) {
+        this.close();
+        return;
+      }
       this.#queue.push(update);
     } else {
       waiter(update);
@@ -357,6 +393,7 @@ class SubscriptionDelivery {
     }
 
     this.#closed = true;
+    this.#queue.length = 0;
     this.#standSubscription?.unsubscribe();
     this.#standSubscription = undefined;
 
@@ -398,6 +435,32 @@ function targetIds(target: Target): unknown[] {
   }
 
   return (target.criterion.value.idFilter?.id ?? []).map(decodeId);
+}
+
+const DEFAULT_INACTIVE_TTL_MS = 30_000;
+const DEFAULT_QUEUE_LIMIT = 100;
+
+function positiveInteger(value: number): number {
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
+}
+
+function clearInactiveTimer(record: SubscriptionRecord): void {
+  if (record.inactiveTimer !== undefined) {
+    clearTimeout(record.inactiveTimer);
+    record.inactiveTimer = undefined;
+  }
+}
+
+function validateTopic(topic: Topic): void {
+  if (topic.id?.value === undefined || topic.id.value.trim().length === 0) {
+    throw new ConnectError("Subscription topic ID is required.", Code.InvalidArgument);
+  }
+  if (topic.context === undefined) {
+    throw new ConnectError("Subscription topic context is required.", Code.InvalidArgument);
+  }
+  if (topic.target?.criterion.case === undefined) {
+    throw new ConnectError("Subscription topic criterion is required.", Code.InvalidArgument);
+  }
 }
 
 function decodeId(id: Any): unknown {

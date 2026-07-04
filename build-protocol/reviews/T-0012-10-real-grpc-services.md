@@ -1,6 +1,6 @@
 # Review Log: T-0012.10 Real gRPC Services
 
-Status: round 1 fixes verified
+Status: round 2 fixes verified
 Task log: `build-protocol/tasks/T-0012-10-real-grpc-services/TASK.md`
 Branch: `task/T-0012-10-real-grpc-services`
 Worktree:
@@ -48,4 +48,28 @@ documentation lanes. The implementation was updated to:
 - move DOM ambient typing from the shared base config to the server package; and
 - refresh user/API/architecture/task/review logs.
 
-Round 1 fixes passed the final required verification pass and await commit.
+Round 1 fixes passed the final required verification pass and were committed.
+
+## Round 2
+
+Review round 2 left three issues in performance/reliability, documentation,
+and TypeScript/API behavior. The implementation was updated to:
+
+- expire never-activated subscription records after a configurable inactive
+  TTL, defaulting to 30 seconds;
+- bound each active subscription update queue with a configurable queue limit,
+  defaulting to 100, and close/remove slow consumers when the limit is exceeded;
+- preserve explicit activation semantics plus deterministic cancel and iterator
+  cleanup;
+- validate `Topic.id`, `Topic.context`, and `Target.criterion` before accepting
+  a subscription topic, even when the target type is registered;
+- refresh the top service-slice summaries in the user guide, API guide, and
+  architecture overview;
+- correct the architecture guide to state that the package root exports
+  `SpineServices`; and
+- update the proto package README to mention `Ack`, `Response`, and the
+  `spine/client` command/query/subscription service contracts.
+
+Focused service tests now cover abandoned inactive subscription cleanup,
+slow-consumer queue closure, and known-target malformed topic rejection.
+Round-2 fixes passed the final required verification pass.

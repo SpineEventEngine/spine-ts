@@ -4,8 +4,9 @@ Current status: early framework guide for the descriptor registry,
 single-message validation facade, core envelope construction helpers, the first
 server entity, handler, repository, and bounded-context metadata
 layers, the first command/event bus seam, the first server runtime routing
-seam, adapter-agnostic transport contracts, and the first storage contracts
-with an in-memory adapter.
+seam, the real Connect/Node `SpineServices` route registrar for the raw Spine
+command/query/subscription services, adapter-agnostic transport contracts, and
+the first storage contracts with an in-memory adapter.
 
 This guide covers the behavior and contracts available now: Spine proto
 descriptors are exposed through curated packages, `@spine-ts/core` can derive
@@ -29,11 +30,14 @@ command/event readiness, yielding transport topics, subscriptions, and
 planner-local route descriptors without opening sockets or invoking handlers.
 The same package now also exposes a small executable `CommandBus` and
 `EventBus` over registered dispatcher objects, with event storage delegated to
-`EventStore` before event fan-out.
+`EventStore` before event fan-out. `SpineServices` registers generated Spine
+service descriptors with Connect/Node so callers can host `CommandService.Post`,
+`QueryService.Read`, and `SubscriptionService.Subscribe/Activate/Cancel` over a
+real gRPC-compatible runtime.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
 deterministic in-memory adapter for tests/development. Entity runtime dispatch,
-service hosting, transport endpoint execution, durable production storage, and
-the to-do application remain later slices.
+transport endpoint execution, durable production storage, broader server
+lifecycle, and the to-do application remain later slices.
 
 ## What Exists Now
 
@@ -85,6 +89,8 @@ the to-do application remain later slices.
   routes without adding a broad server facade or client DSL. Command routes are
   selected from built-time bus registrations, queries preserve Stand-recorded
   versions, and subscriptions attach delivery only after explicit activation.
+  Inactive subscriptions expire by default and active subscriptions use a small
+  bounded update queue for slow consumers.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.

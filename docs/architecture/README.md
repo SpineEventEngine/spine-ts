@@ -1,7 +1,9 @@
 # Architecture Notes
 
 Current status: early implementation notes through the first command/event bus,
-runtime-routing, and transport-foundation seams.
+runtime-routing, transport-foundation seams, and the real Connect/Node
+`SpineServices` route registrar for the raw Spine command/query/subscription
+services.
 
 Architecture documentation starts from the build protocol and specification documents under `build-protocol/`. This folder is reserved for implementation-era architecture notes that evolve with actual package boundaries and runtime behavior.
 
@@ -14,8 +16,9 @@ values, and custom options. This boundary is intentionally contract-only:
 
 - generated schemas are available for later metadata and validation tasks;
 - copied source provenance is verified by `proto/spine-sources.json`;
-- canonical `Command`, `Event`, `ActorContext`, `TenantId`, `UserId`,
-  `Version`, diagnostics, enrichment, and transitive time/net/UI support
+- canonical `Command`, `Event`, `Ack`, `Response`, `ActorContext`,
+  `TenantId`, `UserId`, `Version`, diagnostics, enrichment, Spine client query,
+  subscription, and service contracts, and transitive time/net/UI support
   contracts are available without hand-written TypeScript shapes; and
 - buses, transport, entity runtime behavior, and runtime metadata generation
   remain out of scope until later tasks.
@@ -345,8 +348,10 @@ repository handlers, run projections, catch up from events, or provide a client
 query DSL. `SpineServices` adapts this direct read side and the context command
 bus to the first real Connect/Node `CommandService`, `QueryService`, and
 `SubscriptionService` routes. Service subscription delivery starts only when a
-client activates the opaque subscription ID, and stream/cancel cleanup releases
-the direct Stand handle.
+client activates the opaque subscription ID, abandoned inactive subscriptions
+expire after a small configurable TTL, slow consumers are bounded by a small
+configurable update queue, and stream/cancel cleanup releases the direct Stand
+handle.
 
 The following runtime pieces are still deferred to later explicit tasks:
 
@@ -392,10 +397,11 @@ message type names/type URLs plus stable receiver-group and local route/worker
 identities, along with transport correlation keys back to topic/subscription
 arrays and planner-local worker IDs; they do not retain entity names, handler
 names, raw readiness metadata, or duplicate full transport contracts on each
-route. The package root now exports a small executable bus layer and direct
-Stand, but still does not export service, transport, delivery,
-integration-broker, handler invocation/runtime wiring, command/event intake
-validation, or `Ack` mapping as part of this closure.
+route. The package root now exports a small executable bus layer, direct Stand,
+and the `SpineServices` route registrar, but still does not export a broad
+server lifecycle, transport endpoint runner, integration broker, handler
+invocation/runtime wiring, command/event intake validation pipeline, or durable
+subscription store as part of this closure.
 
 The architectural consequence is that later work must add those collaborators
 as explicit tasks at their own seams. Command and event intake can consume the

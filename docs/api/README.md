@@ -9,7 +9,8 @@ descriptor-derived entity metadata, context-owned `Repository` registration,
 set-once transition validation, explicit handler metadata APIs, the first
 command/event bus exports, the first server runtime lifecycle/async queue
 kernel, write-side signal intake result exports, the runtime-routing planner
-seam, the first `@spine-ts/transport` contracts, and the first
+seam, the real Connect/Node `SpineServices` route registrar for the raw Spine
+command/query/subscription services, the first `@spine-ts/transport` contracts, and the first
 `@spine-ts/storage` contracts.
 
 Proto exports include message types, generated schemas, enum values and enum
@@ -127,9 +128,11 @@ tenant options.
 `SpineServices` adapts built-context command buses and stands to the first real
 Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
 routes. `Subscribe` allocates opaque IDs, `Activate` attaches delivery, and
-`Cancel`/stream finalization release in-process handles. It is not a client DSL,
-event subscription implementation, broad server lifecycle, durable subscription
-store, or projection catch-up loop.
+`Cancel`/stream finalization release in-process handles. Never-activated
+subscriptions have a configurable inactive TTL, and active delivery uses a
+configurable queue limit for slow consumers. It is not a client DSL, event
+subscription implementation, broad server lifecycle, durable subscription store,
+or projection catch-up loop.
 `AggregateStorage`, `AggregateStorageOptions`, `AggregateSnapshot`,
 `AggregateHistory`, and `AggregateId` form the minimal aggregate persistence
 seam. It writes latest snapshots through `StorageFactory`/`RecordStorage`,

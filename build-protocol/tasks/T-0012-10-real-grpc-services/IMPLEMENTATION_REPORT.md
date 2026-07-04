@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.10 Real gRPC Services
 
-Status: review round 1 fixes verified
+Status: review round 2 fixes verified
 Branch: `task/T-0012-10-real-grpc-services`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-10-real-grpc-services`
@@ -70,16 +70,32 @@ transport API was added to domain/runtime classes.
 - Connect's public types require `HeadersInit`, so `DOM` was removed from
   `tsconfig.base.json` and scoped to `packages/server/tsconfig.json`.
 
+## Review Round 2 Fixes
+
+- Added regression tests for abandoned inactive subscription cleanup,
+  slow-consumer queue overflow handling, and known-target malformed subscription
+  topics missing required `Topic`/`Target` fields.
+- RED evidence: the focused service suite failed against the round-2-reviewed
+  implementation with expected failures for inactive subscription expiry,
+  slow-consumer closure, and malformed known-target topic acceptance.
+- GREEN evidence: `SpineServices` now applies a configurable inactive
+  subscription TTL (`inactiveTtlMs`, default 30 seconds), a configurable active
+  delivery queue cap (`queueLimit`, default 100), and required topic field
+  validation. Focused service tests passed with local loopback escalation: 1
+  file, 21 tests passed.
+- Documentation was refreshed in the user guide, API guide, architecture
+  overview, proto README, work log, and review log.
+
 ## Verification
 
 - `pnpm typecheck` passed.
 - `pnpm lint` passed.
 - `pnpm format:check` passed.
 - `pnpm test packages/server/test/services/spine-services.test.ts` passed with
-  local loopback escalation: 18 tests passed.
-- `pnpm test` passed with local loopback escalation: 44 files, 521 tests passed.
-- `pnpm test:coverage` passed with local loopback escalation: 44 files, 521
-  tests passed; global branch coverage `90.10%`.
+  local loopback escalation: 21 tests passed.
+- `pnpm test` passed with local loopback escalation: 44 files, 524 tests passed.
+- `pnpm test:coverage` passed with local loopback escalation: 44 files, 524
+  tests passed; global branch coverage `90.06%`.
 - `pnpm docs:check` passed, with the existing TypeDoc invalid-origin warning.
 - `pnpm proto:lint` passed.
 - `pnpm proto:generate` passed.

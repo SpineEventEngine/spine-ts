@@ -689,6 +689,87 @@ describe("SpineServices", () => {
     await iterator.return?.();
   });
 
+  it("expires abandoned inactive subscriptions before activation", async () => {
+    const activeStandSubscriptions: string[] = [];
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: () => {
+        activeStandSubscriptions.push("open");
+        return {
+          get closed() {
+            return activeStandSubscriptions.length === 0;
+          },
+          unsubscribe: () => {
+            activeStandSubscriptions.pop();
+          },
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context, { inactiveTtlMs: 10 });
+    const subscription = await handlers.subscribe(createTopic());
+
+    await delay(25);
+    const update = await withTimeout(
+      handlers.activate(subscription)[Symbol.asyncIterator]().next(),
+      "expired subscription activation",
+    );
+
+    expect(update.done).toBe(true);
+    expect(activeStandSubscriptions).toEqual([]);
+  });
+
+  it("closes slow subscription consumers when the update queue limit is exceeded", async () => {
+    let deliverUpdate:
+      | ((update: {
+          readonly typeUrl: string;
+          readonly id: unknown;
+          readonly state: ProjectionState;
+        }) => void)
+      | undefined;
+    let unsubscribeCount = 0;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: (_schema, callback) => {
+        deliverUpdate = callback;
+        return {
+          get closed() {
+            return unsubscribeCount > 0;
+          },
+          unsubscribe: () => {
+            unsubscribeCount += 1;
+          },
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context, { queueLimit: 1 });
+    const subscription = await handlers.subscribe(createTopic());
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const first = iterator.next();
+
+    await delay(25);
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "task-one",
+      state: createState("task-one", "One"),
+    });
+    await withTimeout(first, "first slow subscription update");
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "task-two",
+      state: createState("task-two", "Two"),
+    });
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "task-three",
+      state: createState("task-three", "Three"),
+    });
+
+    const next = await withTimeout(iterator.next(), "closed slow subscription");
+
+    expect(next.done).toBe(true);
+    expect(unsubscribeCount).toBe(1);
+  });
+
   it("fails unsupported subscription topics contractually", async () => {
     const context = BoundedContext.singleTenant("Tasks").build();
     const server = await startServices(context);
@@ -700,6 +781,33 @@ describe("SpineServices", () => {
       );
 
       await expect(client.subscribe(create(TopicSchema))).rejects.toMatchObject({
+        code: Code.InvalidArgument,
+      } satisfies Partial<ConnectError>);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("fails known subscription topics with missing required fields", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const server = await startServices(context);
+
+    try {
+      const client = createClient(
+        SubscriptionService,
+        createGrpcTransport({ baseUrl: server.baseUrl }),
+      );
+      const malformed = create(TopicSchema, {
+        target: create(TargetSchema, {
+          type: deriveTypeUrl(ProjectionStateSchema),
+        }),
+      });
+
+      await expect(client.subscribe(malformed)).rejects.toMatchObject({
         code: Code.InvalidArgument,
       } satisfies Partial<ConnectError>);
     } finally {
@@ -902,14 +1010,17 @@ function createFakeContext(options: {
   } as unknown as BoundedContext;
 }
 
-function registeredSubscriptionHandlers(context: BoundedContext) {
+function registeredSubscriptionHandlers(
+  context: BoundedContext,
+  options: Omit<ConstructorParameters<typeof SpineServices>[0], "contexts"> = {},
+) {
   let handlers:
     | {
         subscribe(topic: Topic): Subscription | Promise<Subscription>;
         activate(subscription: Subscription): AsyncIterable<SubscriptionUpdate>;
       }
     | undefined;
-  const services = new SpineServices({ contexts: [context] });
+  const services = new SpineServices({ contexts: [context], ...options });
 
   services.register({
     service(schema: unknown, implementation: unknown) {
