@@ -12,13 +12,15 @@ import {
   FileDescriptorSetSchema,
   StringValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packCommand, packEvent, unpackAny } from "@spine-ts/core";
 import {
   ActorContextSchema,
   CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
   EmailAddressSchema,
+  EventContextSchema,
+  EventIdSchema,
   InternetDomainSchema,
   TenantIdSchema,
   type TenantId,
@@ -50,6 +52,7 @@ import {
   Projection,
   Repository,
   SpineServices,
+  defineEntityHandlers,
   type CommandDispatcher,
 } from "../../src/index.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
@@ -87,7 +90,19 @@ const ProjectionStateSchema = messageDesc(
   0,
 ) as GenMessage<ProjectionState>;
 
-class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {}
+class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  subscribeTask(event: ProjectionState): void {
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(ProjectionStateSchema, {
+        id: event.id,
+        name: `${event.name} (projected)`,
+        priority: event.priority + 1,
+      }),
+    );
+    this.commitTransaction();
+  }
+}
 
 describe("SpineServices", () => {
   it("posts commands through CommandService over a real gRPC transport", async () => {
@@ -697,6 +712,36 @@ describe("SpineServices", () => {
     }
   });
 
+  it("delivers subscription updates from real projection event handling", async () => {
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProjectionRepositoryWithHandlers())
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+
+    const subscription = await handlers.subscribe(createTopic());
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const nextUpdate = withTimeout(iterator.next(), "projection subscription update");
+
+    await delay(25);
+    await context.eventBus().post(createProjectionEvent("event-projected", "task-projected"));
+
+    const delivered = await nextUpdate;
+    const update = delivered.value as SubscriptionUpdate | undefined;
+
+    expect(delivered.done).toBe(false);
+    if (update?.update.case !== "entityUpdates") {
+      throw new Error("Expected entity subscription update.");
+    }
+    const state = update.update.value.update[0]?.kind;
+    if (state?.case !== "state") {
+      throw new Error("Expected entity state update.");
+    }
+    expect(unpackAny(state.value, ProjectionStateSchema)).toEqual(
+      createState("task-projected", "Task (projected)", 2),
+    );
+    await iterator.return?.();
+  });
+
   it("does not deliver pre-activation updates and tolerates unknown subscription cancellation", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
@@ -987,6 +1032,18 @@ function createFailingCommandDispatcher(): CommandDispatcher {
   };
 }
 
+function createProjectionRepositoryWithHandlers(): Repository<typeof TaskProjection> {
+  const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+    builder.subscribe(ProjectionStateSchema, "subscribeTask"),
+  ]);
+
+  return new Repository({
+    entityType: TaskProjection,
+    schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
 function createProjectionCommand(id: string, tenantId?: TenantInput) {
   return packCommand({
     id: create(CommandIdSchema, { uuid: id }),
@@ -995,6 +1052,17 @@ function createProjectionCommand(id: string, tenantId?: TenantInput) {
     }),
     schema: ProjectionStateSchema,
     message: createState("task-1", "Task"),
+  });
+}
+
+function createProjectionEvent(id: string, entityId: string) {
+  return packEvent({
+    id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema, {
+      version: create(VersionSchema, { number: 1 }),
+    }),
+    schema: ProjectionStateSchema,
+    message: createState(entityId, "Task"),
   });
 }
 
@@ -1093,11 +1161,11 @@ function tenantEmail(value: string): TenantId {
   });
 }
 
-function createState(id: string, name: string): ProjectionState {
+function createState(id: string, name: string, priority = 1): ProjectionState {
   return create(ProjectionStateSchema, {
     id,
     name,
-    priority: 1,
+    priority,
   });
 }
 

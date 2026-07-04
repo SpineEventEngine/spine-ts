@@ -35,6 +35,7 @@ import {
   Aggregate,
   AggregateStorage,
   BoundedContext,
+  Projection,
   Repository,
   RepositoryIdentityError,
   defineEntityHandlers,
@@ -243,6 +244,78 @@ class BigintVersionAggregate extends Aggregate<string, typeof AggregateStateSche
       }),
     );
     this.commitTransaction();
+  }
+}
+
+class ProjectionProducingAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  assignTask(command: AggregateState) {
+    return createProjectionEvent(`event-${command.name}`, command.id, {
+      importTenantId: "tenant-a",
+    });
+  }
+
+  applyProjection(event: ProjectionState): void {
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: event.id,
+        name: event.name,
+        archived: false,
+      }),
+    );
+    this.commitTransaction();
+  }
+}
+
+class ExecutingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  static subscriberCalls = 0;
+
+  static reset(): void {
+    this.subscriberCalls = 0;
+  }
+
+  subscribeTask(event: ProjectionState): void {
+    ExecutingTaskProjection.subscriberCalls++;
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(ProjectionStateSchema, {
+        id: event.id,
+        name: `${event.name} (projected)`,
+        priority: event.priority + 1,
+      }),
+    );
+    this.commitTransaction();
+  }
+}
+
+class PassiveTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  static subscriberCalls = 0;
+
+  static reset(): void {
+    this.subscriberCalls = 0;
+  }
+
+  subscribeTask(event: ProjectionState): void {
+    PassiveTaskProjection.subscriberCalls++;
+    void event;
+  }
+}
+
+class AccumulatingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  subscribeTask(event: ProjectionState): void {
+    this.startTransaction();
+    this.updateDraftState((draft) => {
+      draft.name = event.name;
+      draft.priority += event.priority;
+      return draft;
+    });
+    this.commitTransaction();
+  }
+}
+
+class ReactingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  reactTask(event: ProjectionState): void {
+    void event;
   }
 }
 
@@ -665,6 +738,16 @@ describe("repository signal routing", () => {
     });
   });
 
+  it("rejects multitenant aggregate command execution without tenant context", async () => {
+    const context = BoundedContext.multitenant("Tasks").add(createExecutingRepository()).build();
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("command-missing-tenant", "task-missing-tenant")),
+    ).rejects.toThrow(/tenantId/);
+  });
+
   it("rehydrates repository-executed aggregates with bigint version metadata", async () => {
     BigintVersionAggregate.reset();
     const context = BoundedContext.singleTenant("Tasks")
@@ -768,6 +851,132 @@ describe("repository signal routing", () => {
     await expect(
       context.eventBus().post(createProjectionEvent("event-3", "posted-task")),
     ).resolves.toBeUndefined();
+  });
+
+  it("executes projection event subscribers and records latest state in Stand", async () => {
+    ExecutingTaskProjection.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .build();
+
+    await context.eventBus().post(createProjectionEvent("event-projected", "task-projected"));
+
+    expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+    await expect(
+      context.stand().readVersioned(ProjectionStateSchema, "task-projected"),
+    ).resolves.toMatchObject({
+      state: {
+        id: "task-projected",
+        name: "Task (projected)",
+        priority: 2,
+      },
+      version: { number: 1 },
+    });
+  });
+
+  it("delivers Stand subscriptions after real projection event handling", async () => {
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .build();
+    const updates: ProjectionState[] = [];
+    context.stand().subscribe(ProjectionStateSchema, (update) => {
+      updates.push(update.state);
+    });
+
+    await context.eventBus().post(createProjectionEvent("event-subscribed", "task-subscribed"));
+
+    expect(updates).toEqual([
+      create(ProjectionStateSchema, {
+        id: "task-subscribed",
+        name: "Task (projected)",
+        priority: 2,
+      }),
+    ]);
+  });
+
+  it("does not write unchanged projection state after subscriber execution", async () => {
+    PassiveTaskProjection.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createPassiveProjectionRepository())
+      .build();
+
+    await context.eventBus().post(createProjectionEvent("event-passive", "task-passive"));
+
+    expect(PassiveTaskProjection.subscriberCalls).toBe(1);
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-passive"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("loads existing projection state before applying later delivered events", async () => {
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createAccumulatingProjectionRepository())
+      .build();
+
+    await context.eventBus().post(createProjectionEvent("event-accumulated-1", "task-accumulated"));
+    await context.eventBus().post(createProjectionEvent("event-accumulated-2", "task-accumulated"));
+
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-accumulated"),
+    ).resolves.toMatchObject({
+      id: "task-accumulated",
+      name: "Task",
+      priority: 2,
+    });
+  });
+
+  it("routes projection events without writing Stand when no subscriber is registered", async () => {
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createReactingProjectionRepository())
+      .build();
+
+    await context.eventBus().post(createProjectionEvent("event-reacting", "task-reacting"));
+
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-reacting"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("preserves imported tenant metadata when stored aggregate events update projections", async () => {
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createProjectionProducingRepository())
+      .add(createExecutingProjectionRepository())
+      .build();
+
+    await context
+      .commandBus()
+      .post(createAggregateCommand("command-project-tenant", "task-tenant", "Tenant", "tenant-a"));
+
+    const projected = await waitForProjectionState(context, "task-tenant", "tenant-a");
+
+    expect(projected).toMatchObject({
+      name: "Task (projected)",
+      priority: 2,
+    });
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-tenant", { tenantId: "tenant-b" }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("records projection updates without version metadata when the delivered event has none", async () => {
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .build();
+
+    await context.eventBus().post(
+      createProjectionEvent("event-without-version", "task-without-version", {
+        includeVersion: false,
+      }),
+    );
+
+    await expect(
+      context.stand().readVersioned(ProjectionStateSchema, "task-without-version"),
+    ).resolves.toMatchObject({
+      state: { name: "Task (projected)" },
+    });
+    await expect(
+      context.stand().readVersioned(ProjectionStateSchema, "task-without-version"),
+    ).resolves.not.toHaveProperty("version");
   });
 
   it("rejects contradictory producer and first-field event IDs", () => {
@@ -877,6 +1086,60 @@ function createRoutingRepository(): Repository<typeof TaskAggregate> {
   });
 }
 
+function createExecutingProjectionRepository(): Repository<typeof ExecutingTaskProjection> {
+  const handlers = defineEntityHandlers(
+    ExecutingTaskProjection,
+    ProjectionStateSchema,
+    (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+  );
+
+  return new Repository({
+    entityType: ExecutingTaskProjection,
+    schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
+function createPassiveProjectionRepository(): Repository<typeof PassiveTaskProjection> {
+  const handlers = defineEntityHandlers(PassiveTaskProjection, ProjectionStateSchema, (builder) => [
+    builder.subscribe(ProjectionStateSchema, "subscribeTask"),
+  ]);
+
+  return new Repository({
+    entityType: PassiveTaskProjection,
+    schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
+function createAccumulatingProjectionRepository(): Repository<typeof AccumulatingTaskProjection> {
+  const handlers = defineEntityHandlers(
+    AccumulatingTaskProjection,
+    ProjectionStateSchema,
+    (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+  );
+
+  return new Repository({
+    entityType: AccumulatingTaskProjection,
+    schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
+function createReactingProjectionRepository(): Repository<typeof ReactingTaskProjection> {
+  const handlers = defineEntityHandlers(
+    ReactingTaskProjection,
+    ProjectionStateSchema,
+    (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
+  );
+
+  return new Repository({
+    entityType: ReactingTaskProjection,
+    schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
 function createExecutingRepository(): Repository<typeof ExecutingTaskAggregate> {
   const handlers = defineEntityHandlers(ExecutingTaskAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
@@ -924,6 +1187,23 @@ function createBigintVersionRepository(): Repository<typeof BigintVersionAggrega
 
   return new Repository({
     entityType: BigintVersionAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createProjectionProducingRepository(): Repository<typeof ProjectionProducingAggregate> {
+  const handlers = defineEntityHandlers(
+    ProjectionProducingAggregate,
+    AggregateStateSchema,
+    (builder) => [
+      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.apply(ProjectionStateSchema, "applyProjection"),
+    ],
+  );
+
+  return new Repository({
+    entityType: ProjectionProducingAggregate,
     schema: AggregateStateSchema,
     handlers,
   });
@@ -1012,13 +1292,32 @@ function createProjectionEvent(
   options: {
     readonly producerId?: string;
     readonly producerMessage?: AggregateState;
+    readonly importTenantId?: string;
+    readonly includeVersion?: boolean;
   } = {},
 ) {
   return packEvent({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
+      ...(options.importTenantId === undefined
+        ? {}
+        : {
+            origin: {
+              case: "importContext" as const,
+              value: create(ActorContextSchema, {
+                tenantId: create(TenantIdSchema, {
+                  kind: {
+                    case: "value",
+                    value: options.importTenantId,
+                  },
+                }),
+              }),
+            },
+          }),
       producerId: projectionProducerId(options),
-      version: create(VersionSchema, { number: 1 }),
+      ...(options.includeVersion === false
+        ? {}
+        : { version: create(VersionSchema, { number: 1 }) }),
     }),
     schema: ProjectionStateSchema,
     message: create(ProjectionStateSchema, {
@@ -1068,6 +1367,24 @@ function createSignal() {
   });
 
   return { promise, resolve };
+}
+
+async function waitForProjectionState(
+  context: BoundedContext,
+  id: string,
+  tenantId?: string,
+): Promise<ProjectionState | undefined> {
+  const deadline = Date.now() + 500;
+  while (Date.now() < deadline) {
+    const state = await context
+      .stand()
+      .read(ProjectionStateSchema, id, tenantId === undefined ? {} : { tenantId });
+    if (state !== undefined) {
+      return state;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  return undefined;
 }
 
 class SnapshotFailingStorageFactory extends InMemoryStorageFactory {

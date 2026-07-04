@@ -1,6 +1,6 @@
 # Review Log: T-0012.11b Projection Event Updates
 
-Status: started; awaiting implementation
+Status: implemented; verification passed; awaiting review
 Task log: `build-protocol/tasks/T-0012-11b-projection-event-updates/TASK.md`
 Branch: `task/T-0012-11b-projection-event-updates`
 Worktree:
@@ -31,4 +31,8 @@ Reviewers must verify:
 
 ## Current State
 
-No implementation review has run yet.
+- Implementation and full verification are green.
+- Review should verify that projection execution is limited to built projection
+  repositories, updates read-side state only through framework-owned `Stand`,
+  preserves direct `routeEvent()` as route-only, and avoids catch-up, retry,
+  broker, or projection-list query scope.

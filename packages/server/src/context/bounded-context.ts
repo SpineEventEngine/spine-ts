@@ -72,6 +72,8 @@ interface RepositoryRegistration {
   readonly storageContext: StorageContext;
   /** Context storage factory. */
   readonly storageFactory: StorageFactory;
+  /** Context-owned read-side Stand used by framework repository dispatch. */
+  readonly stand: Stand;
   /** Stored-event dispatch callback into the owning context event bus. */
   readonly dispatchStored: (event: Event) => Promise<void>;
 }
@@ -224,6 +226,7 @@ export class BoundedContext {
       name: cloneName(this.#snapshot.name),
       storageContext: createStorageContext(this.#snapshot.spec),
       storageFactory: this.#storageFactory,
+      stand: this.#stand,
       dispatchStored: (event) => eventBusAccess.postStored(this.#eventBus, event),
     };
     const preparedRepositories: PreparedRepository[] = [];
@@ -670,6 +673,7 @@ function prepareRepositoryForContext(
   repositoryAccess.bindRuntime(repository, {
     context: registration.storageContext,
     storageFactory: registration.storageFactory,
+    stand: registration.stand,
     dispatchStored: registration.dispatchStored,
   });
 

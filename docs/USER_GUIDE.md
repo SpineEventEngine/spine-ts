@@ -158,9 +158,10 @@ lifecycle, and the to-do application remain later slices.
   workers, durable delivery storage, transport-backed service execution,
   durable production storage, and to-do domain runtime behavior.
 - Built bounded contexts can invoke aggregate command assignees and aggregate
-  event appliers now. Other handler/runtime execution remains deferred,
-  including projection updates, process-manager reactions, subscriber/reactor
-  delivery semantics beyond stored-event handoff, and import/catch-up flows.
+  event appliers, then deliver stored events to projection event subscribers
+  that update read-side state through `Stand`. Other handler/runtime execution
+  remains deferred, including process-manager reactions, broader
+  subscriber/reactor delivery semantics, and import/catch-up flows.
 
 ## Type Registry
 
@@ -427,13 +428,16 @@ are not public API.
 This slice still does not expose direct entity lookup/storage APIs; convert
 entity records; write inboxes; manage delivery; manage entity caches; run
 catch-up; emit lifecycle events; start buses from repositories; or use
-gRPC/transport. Direct stands can store and read latest entity states, but
-they do not invoke projections or run catch-up. When a repository is
-constructed with authentic explicit handler metadata and registered with a
-built bounded context, aggregate commands can load or create one aggregate,
-invoke one assignee, apply the produced events, persist history and snapshots
-through `AggregateStorage`, and queue already-stored events for event-bus
-delivery.
+gRPC/transport. Direct stands can store and read latest entity states;
+projection updates reach them through framework-owned repository dispatch in
+built contexts, not through a new application write-side read API. They do not
+run catch-up. When a repository is constructed with authentic explicit handler
+metadata and registered with a built bounded context, aggregate commands can
+load or create one aggregate, invoke one assignee, apply the produced events,
+persist history and snapshots through `AggregateStorage`, and queue
+already-stored events for event-bus delivery. Projection repositories can
+consume delivered domestic events, invoke matching event subscribers, and write
+changed state through `Stand`.
 
 ## Bounded Context Assembly
 

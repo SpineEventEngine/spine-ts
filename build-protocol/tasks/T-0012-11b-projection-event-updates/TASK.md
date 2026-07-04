@@ -1,6 +1,6 @@
 # T-0012.11b: Projection Event Updates
 
-Status: started; task docs created before implementation
+Status: implemented; verification passed
 Start: `2026-07-05 00:23 WEST`
 Parent task: `T-0012.11 Missing Details And Example Readiness`
 Branch: `task/T-0012-11b-projection-event-updates`
@@ -81,6 +81,12 @@ events update read-side projection state through `Stand`.
 
 ## Current State
 
-- Branch/worktree created from parent T-0012.11 commit `f38fcac`.
-- Durable task, report, review, and work-log files were created before behavior
-  changes.
+- Focused RED tests were added for projection subscriber execution, `Stand`
+  updates, and subscription delivery from real event handling.
+- Built projection repositories now execute matching event subscribers from the
+  event bus through an internal repository runtime binding and write changed
+  projection state through context-owned `Stand`.
+- Focused GREEN tests passed for the new repository and SubscriptionService
+  behavior.
+- Full verification passed. Sandboxed coverage still fails on local IPC/HTTP2
+  endpoint permissions; escalated coverage passed.

@@ -5,6 +5,8 @@ import {
   EventSchema,
   type Command,
   type Event,
+  type TenantId,
+  type Version,
   VersionSchema,
 } from "@spine-ts/proto";
 import type { StorageContext, StorageFactory } from "@spine-ts/storage";
@@ -36,6 +38,7 @@ import {
 import { handlerMetadataAccess, type EntityHandlersMetadata } from "../handler/handler-metadata.js";
 import { AggregateStorage } from "./aggregate-storage.js";
 import { PrimitiveIds } from "./primitive-id.js";
+import type { Stand } from "../stand/stand.js";
 
 type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> =
   | Aggregate<unknown, Schema, unknown>
@@ -427,6 +430,7 @@ interface RepositoryRouting<Id = unknown> {
 interface RepositoryRuntime {
   readonly context: StorageContext;
   readonly storageFactory: StorageFactory;
+  readonly stand: Stand;
   readonly dispatchStored: (event: Event) => Promise<void>;
 }
 
@@ -455,7 +459,8 @@ function createRepositoryDispatchers(
         : Object.freeze({
             messageSchemas: () => routing.eventSchemas,
             accept: (event: Event): Promise<void> => routeRepositoryEvent(repository, event),
-            dispatch: (event: Event): Promise<void> => routeRepositoryEvent(repository, event),
+            dispatch: (event: Event): Promise<void> =>
+              dispatchRepositoryEvent(repository, routing, event),
           }),
   });
 }
@@ -468,6 +473,23 @@ function routeRepositoryEvent(
 ): Promise<void> {
   void repository.routeEvent(event);
   return Promise.resolve();
+}
+
+async function dispatchRepositoryEvent(
+  repository: RepositoryView & {
+    routeEvent(event: Event): RepositoryEventRoute;
+  },
+  routing: RepositoryRouting,
+  event: Event,
+): Promise<void> {
+  const runtime = repositoryRuntimes.get(repository);
+
+  if (runtime === undefined || repository.entityFamily !== "projection") {
+    void repository.routeEvent(event);
+    return;
+  }
+
+  await new ProjectionEventExecution(repository, routing, runtime, event).run();
 }
 
 async function dispatchRepositoryCommand(
@@ -704,6 +726,93 @@ class AggregateCommandExecution {
   }
 }
 
+class ProjectionEventExecution {
+  readonly #repository: RepositoryView & {
+    routeEvent(event: Event): RepositoryEventRoute;
+  };
+  readonly #routing: RepositoryRouting;
+  readonly #runtime: RepositoryRuntime;
+  readonly #event: Event;
+
+  constructor(
+    repository: RepositoryView & {
+      routeEvent(event: Event): RepositoryEventRoute;
+    },
+    routing: RepositoryRouting,
+    runtime: RepositoryRuntime,
+    event: Event,
+  ) {
+    this.#repository = repository;
+    this.#routing = routing;
+    this.#runtime = runtime;
+    this.#event = event;
+  }
+
+  async run(): Promise<void> {
+    const route = this.#repository.routeEvent(this.#event);
+    const subscribers = this.#routing.eventReadiness?.findEventSubscribers(
+      route.messageFullTypeName,
+    );
+
+    if (subscribers === undefined || subscribers.length === 0) {
+      return;
+    }
+
+    const message = unpackRequired(
+      requireSignalMessage(this.#event.message, "event"),
+      subscribers[0]?.handler.schema ?? this.#repository.stateSchema,
+      "event",
+    );
+    const tenantOptions = standTenantOptions(this.#runtime.context, this.#event);
+
+    for (const entityId of route.entityIds) {
+      const entity = await this.#loadProjection(entityId, tenantOptions);
+
+      for (const subscriber of subscribers) {
+        await invokeEntityMethod(entity, subscriber.handler.methodName, message);
+      }
+
+      if (repositoryChanged(entity)) {
+        await this.#runtime.stand.update(
+          this.#repository.stateSchema,
+          repositoryState(entity) as never,
+          standUpdateOptions(tenantOptions.tenantId, this.#event.context?.version),
+        );
+      }
+    }
+  }
+
+  async #loadProjection(
+    entityId: unknown,
+    options: { readonly tenantId?: string },
+  ): Promise<object> {
+    const stored = await this.#runtime.stand.readVersioned(
+      this.#repository.stateSchema,
+      entityId,
+      options,
+    );
+    const entityType = this.#repository.entityType as unknown as new (options: {
+      readonly id: unknown;
+      readonly schema: DescriptorMessageSchema;
+      readonly state: unknown;
+      readonly version: unknown;
+    }) => object;
+
+    return new entityType({
+      id: entityId,
+      schema: this.#repository.stateSchema,
+      state: stored?.state ?? this.#defaultState(entityId),
+      version: projectionVersion(stored?.version),
+    });
+  }
+
+  #defaultState(entityId: unknown): unknown {
+    return create(this.#repository.stateSchema, {
+      [this.#repository.idField.localName]: entityId,
+    });
+  }
+}
+
 function historyVersion(snapshotVersion: bigint | undefined, events: readonly Event[]): bigint {
   const lastEvent = events.at(-1);
 
@@ -758,6 +867,10 @@ function repositoryLifecycle(entity: object): {
   ).lifecycle;
 }
 
+function repositoryChanged(entity: object): boolean {
+  return (entity as { readonly changed?: unknown }).changed === true;
+}
+
 function readEventVersion(event: Event): bigint {
   const number = event.context?.version?.number;
 
@@ -795,9 +908,39 @@ function readCommandTenant(command: Command): string | undefined {
   return tenantValue(command.context?.actorContext?.tenantId);
 }
 
-function tenantValue(
-  tenantId: NonNullable<NonNullable<Command["context"]>["actorContext"]>["tenantId"] | undefined,
-): string | undefined {
+function standTenantOptions(context: StorageContext, event: Event): { readonly tenantId?: string } {
+  if (!context.multitenant) {
+    return {};
+  }
+
+  const tenantId = readEventTenant(event) ?? context.tenantId;
+  return tenantId === undefined ? {} : { tenantId };
+}
+
+function readEventTenant(event: Event): string | undefined {
+  switch (event.context?.origin.case) {
+    case "importContext":
+      return tenantValue(event.context.origin.value.tenantId);
+    default:
+      return undefined;
+  }
+}
+
+function standUpdateOptions(
+  tenantId: string | undefined,
+  version: Version | undefined,
+): { readonly tenantId?: string; readonly version?: Version } {
+  return Object.freeze({
+    ...(tenantId === undefined ? {} : { tenantId }),
+    ...(version === undefined ? {} : { version }),
+  });
+}
+
+function projectionVersion(version: Version | undefined): number {
+  return version?.number ?? 0;
+}
+
+function tenantValue(tenantId: TenantId | undefined): string | undefined {
   switch (tenantId?.kind.case) {
     case "value":
       return tenantId.kind.value;

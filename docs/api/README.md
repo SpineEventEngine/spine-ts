@@ -52,10 +52,12 @@ the context `StorageFactory`; registered repositories also make their entity
 state schemas known to the context `Stand`. Repositories with authentic explicit
 handler metadata still expose route-only `routeCommand()` / `routeEvent()`
 calculations, and built contexts install internal repository dispatcher adapters
-that execute aggregate command assignees and appliers. This slice does not
-create default repositories from entity classes, invoke projection/query/process
-handlers, manage inboxes/delivery, run cache catch-up, create system contexts,
-write tenant indexes, expose a broad server lifecycle, or integrate transports.
+that execute aggregate command assignees and appliers, and execute projection
+event subscribers by writing changed projection state through the context-owned
+`Stand`. This slice does not create default repositories from entity classes,
+invoke query/process handlers, manage inboxes/delivery, run cache catch-up,
+create system contexts, write tenant indexes, expose a broad server lifecycle,
+or integrate transports.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,
