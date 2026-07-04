@@ -1,6 +1,6 @@
 # T-0012.11a: Aggregate Command Execution
 
-Status: follow-up review fixes complete; verification passed with escalated coverage
+Status: round-2 review fixes complete; verification passed with escalated coverage
 Start: `2026-07-04 21:57 WEST`
 Parent task: `T-0012.11 Missing Details And Example Readiness`
 Branch: `task/T-0012-11a-aggregate-command-execution`
