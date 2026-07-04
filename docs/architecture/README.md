@@ -318,7 +318,7 @@ surface:
   `removeEventDispatcher()` collect dispatchers for the context being built;
 - `BoundedContextBuilder.withStorageFactory(factory)` selects the
   `StorageFactory` used to create the context `EventStore` and repository state
-  storage;
+  storage, plus direct `Stand`/read-side state storage;
 - `BoundedContextBuilder.add(repository)` and `remove(repository)` maintain the
   context-owned repository registration list;
 - `BoundedContextBuilder.build()` is the only supported path for constructing a

@@ -131,6 +131,20 @@ Review-fix verification:
   passed with 43 files, 503 tests, and global branch coverage 90.07%.
 - `git diff --check` passed.
 
+### Review Round 2 Follow-Up
+
+Round 2 was documentation/API wording only. Public docs now consistently say
+that `withStorageFactory()` supplies storage for the context `EventStore`,
+repository state storage, and direct Stand/read-side state storage. The review
+log now treats the earlier external-review-lane sentence as historical
+pre-review state.
+
+Tests were skipped because only Markdown docs and durable logs changed.
+Requested verification for this follow-up is changed Markdown Prettier,
+`pnpm docs:check`, and `git diff --check`. Changed Markdown Prettier passed,
+and `pnpm docs:check` passed with the existing TypeDoc invalid-origin warning
+and 163 expected `@spine-ts/server` exports.
+
 ## Tooling Notes
 
 This fresh worktree refused `pnpm vitest` with `VERIFY_DEPS`; sandboxed

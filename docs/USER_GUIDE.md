@@ -102,9 +102,9 @@ the to-do application remain later slices.
   `BoundedContext.singleTenant(name)`, `BoundedContext.multitenant(name)`,
   immutable context names, framework-owned `ContextSpec` values from
   `builder.spec` and `context.spec`, tenant mode metadata, dispatcher
-  collection, storage-factory injection for event and repository state storage,
-  internally owned built-context command/event buses, post-only context bus
-  endpoints, and copy-safe small context snapshots.
+  collection, storage-factory injection for event, repository state, and direct
+  Stand/read-side state storage, internally owned built-context command/event
+  buses, post-only context bus endpoints, and copy-safe small context snapshots.
 - A first single-process server runtime lifecycle/queue kernel, typed
   write-side signal intake result values, and command/event
   registration-readiness metadata derived from handler metadata.
@@ -442,11 +442,11 @@ await context.eventBus().post(eventEnvelope);
 `addCommandDispatcher()` / `removeCommandDispatcher()` and
 `addEventDispatcher()` / `removeEventDispatcher()` affect only contexts built
 after the call. `withStorageFactory()` supplies the `StorageFactory` used to
-create the context `EventStore` and repository state storage; if omitted, the
-current builder uses in-memory storage. `commandBus()` and `eventBus()` expose
-only `post()`; late dispatcher registration stays on the builder and concrete
-bus classes. Event posting stores through that event store before dispatcher
-fan-out.
+create the context `EventStore`, repository state storage, and direct
+Stand/read-side state storage; if omitted, the current builder uses in-memory
+storage. `commandBus()` and `eventBus()` expose only `post()`; late dispatcher
+registration stays on the builder and concrete bus classes. Event posting
+stores through that event store before dispatcher fan-out.
 
 `add(repository)` and `remove(repository)` maintain the builder's repository
 registration list. `build()` registers the listed repositories with the built

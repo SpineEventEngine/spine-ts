@@ -53,7 +53,7 @@ Pre-review self-check:
 - Public docs describe direct Stand behavior and defer
   QueryService/SubscriptionService to later work.
 
-Full verification passed. External review lanes have not run yet.
+Full initial verification passed before external review rounds started.
 
 ## Round 1 Follow-Up
 
@@ -71,3 +71,19 @@ Focused red tests reproduced the subscriber-mutation and storage-handle issues.
 Follow-up verification passed, including focused tests, typecheck, lint,
 changed-file Prettier, docs check, full tests, coverage with branch coverage
 90.07%, and `git diff --check`.
+
+## Round 2 Follow-Up
+
+Round 2 comments were documentation/API wording only:
+
+- Public docs now consistently state that `withStorageFactory()` supplies
+  storage for the context `EventStore`, repository state storage, and direct
+  Stand/read-side state storage.
+- The stale pre-review note about external review lanes was reworded as
+  historical initial-verification state.
+
+Tests were skipped because this follow-up only changes Markdown documentation
+and durable logs. Verification is limited to changed Markdown Prettier,
+`pnpm docs:check`, and `git diff --check`. Changed Markdown Prettier passed;
+`pnpm docs:check` passed with the existing TypeDoc invalid-origin warning and
+163 expected `@spine-ts/server` exports.
