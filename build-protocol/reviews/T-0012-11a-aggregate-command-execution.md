@@ -1,6 +1,6 @@
 # Review Log: T-0012.11a Aggregate Command Execution
 
-Status: review findings addressed; ready for final verification handoff
+Status: coverage gate restored; ready for final verification handoff
 Task log: `build-protocol/tasks/T-0012-11a-aggregate-command-execution/TASK.md`
 Branch: `task/T-0012-11a-aggregate-command-execution`
 Worktree:
@@ -38,10 +38,11 @@ Reviewers must verify:
 
 ## Current State
 
-The branch/worktree contains the review-fix pass for findings A-G. Focused
-repository, aggregate-storage, event-bus, and command-bus tests are green, the
-doc/log updates are in place, and `pnpm typecheck`, `pnpm lint`,
-`pnpm format:check`, `pnpm docs:check`, and `git diff --check` passed. The
-only remaining environment-specific gap is the sandboxed `pnpm test:coverage`
-rerun, which still hits ZeroMQ local IPC `Operation not permitted` and HTTP/2
-loopback `listen EPERM 127.0.0.1` failures outside this slice.
+The branch/worktree contains the review-fix pass for findings A-G plus a focused
+coverage-fix test for primitive aggregate producer-ID helpers. Focused
+repository, aggregate-storage, event-bus, command-bus, and primitive-ID tests
+are green, the doc/log updates are in place, and escalated `pnpm test:coverage`
+passes the global gate with 45 files, 555 tests, and branch coverage at 90.03%.
+The sandboxed `pnpm test:coverage` rerun still hits ZeroMQ local IPC
+`Operation not permitted` and HTTP/2 loopback `listen EPERM 127.0.0.1` failures
+outside this slice.

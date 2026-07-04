@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11a Aggregate Command Execution
 
-Status: review findings addressed; ready for final verification handoff
+Status: coverage gate restored; ready for final verification handoff
 Branch: `task/T-0012-11a-aggregate-command-execution`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11a-aggregate-command-execution`
@@ -116,6 +116,16 @@ storage seam before event-bus handoff.
   the public docs describe built aggregate repositories as executable write-side
   components rather than route-only registration metadata.
 
+## Coverage-Fix Follow-up
+
+Full escalated coverage after the review-fix commit passed all 552 tests but
+missed the global branch gate by 0.15 percentage points, with
+`packages/server/src/repository/primitive-id.ts` called out as the clearest
+small coverage gap. The follow-up adds one focused internal repository test for
+primitive aggregate IDs, covering string/number/boolean producer-ID
+packing/unpacking, legacy `UserId` unpacking, absent producer IDs, unreadable
+producer IDs, and nonprimitive runtime values. No production helpers were added.
+
 ## Verification
 
 - `pnpm install` passed with escalation after sandbox DNS failures in the fresh
@@ -139,3 +149,11 @@ storage seam before event-bus handoff.
   `packages/server/test/services/spine-services.test.ts` hits repeated
   `listen EPERM: operation not permitted 127.0.0.1` while starting the real
   HTTP/2 gRPC server.
+- Coverage-fix focused test:
+  `pnpm test packages/server/test/repository/primitive-id.test.ts` passed with
+  1 file and 3 tests.
+- Coverage-fix sandboxed `pnpm test:coverage` still fails only on the known
+  local IPC/HTTP2 permission errors.
+- Coverage-fix escalated `pnpm test:coverage` passed with 45 files and
+  555 tests. Coverage summary: statements 94.87%, branches 90.03%, functions
+  97.34%, lines 94.89%.
