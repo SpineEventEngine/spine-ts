@@ -1,6 +1,6 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.10 integrated; T-0012.11 selected
+Status: T-0012.11 splitting in progress
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`

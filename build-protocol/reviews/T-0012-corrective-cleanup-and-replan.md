@@ -6,7 +6,7 @@ Branch: `task/T-0012-cleanup-replan`
 Baseline commit: `a9769d4`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
-Status: T-0012.10 integrated; T-0012.11 selected.
+Status: T-0012.11 splitting in progress.
 
 ## Required Review Lanes
 
