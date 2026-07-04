@@ -1,6 +1,6 @@
 # T-0012.11: Missing Details And Example Readiness
 
-Status: split complete; first implementation slice selected
+Status: split complete; first implementation slice selected; splitter review comments addressed
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -285,7 +285,7 @@ Expected write scope:
 - `packages/server/test/stand/**`
 - `packages/server/test/services/**`
 - durable task/report/review/work-log updates
-- public/API docs only if public or API behavior changes
+- relevant public/API docs
 
 Required verification:
 
@@ -296,7 +296,7 @@ Required verification:
 - `pnpm typecheck`
 - `pnpm lint`
 - tracked-file Prettier or `pnpm format:check`
-- `pnpm docs:check` if public docs/API move
+- `pnpm docs:check`
 - `pnpm test:coverage`
 - `git diff --check`
 
@@ -345,7 +345,7 @@ Expected write scope:
 - `packages/server/test/**`
 - `packages/core/test/**` only if shared validation behavior changes
 - durable task/report/review/work-log updates
-- public/API docs only if public or API behavior changes
+- relevant public/API docs
 
 Required verification:
 
@@ -354,7 +354,7 @@ Required verification:
 - `pnpm typecheck`
 - `pnpm lint`
 - tracked-file Prettier or `pnpm format:check`
-- `pnpm docs:check` if public docs/API move
+- `pnpm docs:check`
 - `pnpm test:coverage`
 - `git diff --check`
 

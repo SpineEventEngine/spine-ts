@@ -1,6 +1,6 @@
 # Review Log: T-0012.11 Missing Details And Example Readiness
 
-Status: split complete; first implementation slice selected; round-1 review
+Status: split complete; first implementation slice selected; splitter review
 comments addressed
 Task log:
 `build-protocol/tasks/T-0012-11-missing-details-example-readiness/TASK.md`
@@ -54,6 +54,19 @@ This docs-fix pass applies those corrections.
 
 Splitter output is reviewed. Round-1 review comments are addressed in the task,
 report, parent docs, and work logs. No implementation review has run yet.
+
+## Round-2 Findings Summary
+
+Round 2 only found two remaining doc gaps:
+
+- `T-0012.11c` still treated public/API docs and docs verification as optional
+  even though `QueryService.Read` changes public client behavior; and
+- `T-0012.11d` still treated public/API docs and docs verification as optional
+  even though immediate refusal and `Ack` rejection behavior is client-visible
+  API behavior.
+
+This final docs-fix pass applied the remaining status and public/API-doc
+corrections.
 
 Reviewers should confirm that the staged split stays narrow:
 
