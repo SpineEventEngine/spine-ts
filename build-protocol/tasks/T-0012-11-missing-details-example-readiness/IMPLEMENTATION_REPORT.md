@@ -70,6 +70,9 @@ already been opened.
 ## Current State
 
 Requirements splitting is complete. The task now has a staged roadmap with five
-concrete implementation slices. `T-0012.11a Aggregate Command Execution` is the
-selected first slice, and this docs-fix pass records the round-1 review
-corrections before the orchestrator opens that slice's branch/worktree.
+concrete implementation slices.
+
+`T-0012.11a Aggregate Command Execution` is the selected first slice. Its
+branch/worktree is now open from `8804e93`, and the implementation sub-agent
+has started by recording the required subtask task/report/review/work-log files
+before production code changes.

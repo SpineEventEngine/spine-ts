@@ -125,10 +125,10 @@ Why first:
 Resumed-state note:
 
 - `T-0012.11` is split complete and `T-0012.11a` is selected first.
-- The proposed `T-0012.11a` branch/worktree is planning output only in this
-  task.
-- The orchestrator creates that branch/worktree after splitter review comments
-  are resolved and the split is accepted as clean.
+- The `T-0012.11a` branch/worktree is now created from reviewed split commit
+  `8804e93`.
+- The implementation sub-agent has started the TDD pass and recorded durable
+  subtask docs/logs before behavior changes.
 
 ## Staged Subtasks
 
