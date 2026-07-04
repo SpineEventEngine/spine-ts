@@ -27,6 +27,7 @@ import type {
   DescriptorFieldMetadata,
   EntityMetadata,
 } from "../entity/entity-metadata.js";
+import { Stand } from "../stand/stand.js";
 
 /** Tenant isolation mode declared by a bounded context specification. */
 export type TenantMode = "single-tenant" | "multitenant";
@@ -121,6 +122,7 @@ let constructBoundedContext:
       snapshot: BoundedContextSnapshot,
       commandBus: CommandBus,
       eventBus: EventBus,
+      stand: Stand,
       storageFactory: StorageFactory,
       repositories: readonly RepositoryView[],
       token: FrameworkConstructionToken,
@@ -142,17 +144,27 @@ export class BoundedContext {
   readonly #registeredRepositories: RegistrationSnapshot[] = [];
   readonly #repositoryStorages = new Set<RecordStorage<unknown, Message>>();
   readonly #storageFactory: StorageFactory;
+  readonly #stand: Stand;
 
   static {
     constructBoundedContext = (
       snapshot,
       commandBus,
       eventBus,
+      stand,
       storageFactory,
       repositories,
       token,
     ): BoundedContext =>
-      new BoundedContext(snapshot, commandBus, eventBus, storageFactory, repositories, token);
+      new BoundedContext(
+        snapshot,
+        commandBus,
+        eventBus,
+        stand,
+        storageFactory,
+        repositories,
+        token,
+      );
   }
 
   /** Framework-owned constructor. Use `BoundedContext.singleTenant(name)` or `.multitenant(name)`. */
@@ -160,6 +172,7 @@ export class BoundedContext {
     snapshot: BoundedContextSnapshot,
     commandBus: CommandBus,
     eventBus: EventBus,
+    stand: Stand,
     storageFactory: StorageFactory,
     repositories: readonly RepositoryView[],
     token: FrameworkConstructionToken,
@@ -168,6 +181,7 @@ export class BoundedContext {
     this.#snapshot = cloneContextSnapshot(snapshot);
     this.#commandBus = commandBus;
     this.#eventBus = eventBus;
+    this.#stand = stand;
     this.#storageFactory = storageFactory;
     this.#commandEndpoint = Object.freeze({
       post: (command: Command) => this.#commandBus.post(command),
@@ -187,6 +201,9 @@ export class BoundedContext {
         rejectRegisteredRepository(preparedRepository.repository);
       }
       for (const preparedRepository of preparedRepositories) {
+        this.#stand.register(preparedRepository.snapshot.stateSchema, {
+          idField: preparedRepository.snapshot.idField.localName,
+        });
         preparedRepository.commit();
         this.#registeredRepositories.push(preparedRepository.snapshot);
         this.#repositoryStorages.add(preparedRepository.storage);
@@ -267,6 +284,11 @@ export class BoundedContext {
   /** Post-only event endpoint owned by this context. */
   eventBus(): EventEndpoint {
     return this.#eventEndpoint;
+  }
+
+  /** Context-owned read-side Stand for direct entity state access and in-process updates. */
+  stand(): Stand {
+    return this.#stand;
   }
 
   /** Copy-safe list of frozen snapshot-backed repository views registered with this context. */
@@ -360,7 +382,7 @@ export class BoundedContextBuilder {
     return this;
   }
 
-  /** Uses the passed storage factory for context event and repository state storage. */
+  /** Uses the passed storage factory for context event, repository state, and Stand storage. */
   withStorageFactory(storageFactory: StorageFactory): this {
     this.#storageFactory = storageFactory;
     return this;
@@ -382,10 +404,15 @@ export class BoundedContextBuilder {
         ...repositoryEventDispatchers(repositories),
         ...this.#eventDispatchers,
       ]);
+      const stand = new Stand({
+        context: createStorageContext(this.#specSnapshot),
+        storageFactory,
+      });
       return createBoundedContext(
         this.#specSnapshot,
         commandBus,
         eventBus,
+        stand,
         storageFactory,
         repositories,
       );
@@ -467,6 +494,7 @@ function createBoundedContext(
   specSnapshot: ContextSpecSnapshot,
   commandBus: CommandBus,
   eventBus: EventBus,
+  stand: Stand,
   storageFactory: StorageFactory,
   repositories: readonly RepositoryView[],
 ): BoundedContext {
@@ -482,6 +510,7 @@ function createBoundedContext(
     },
     commandBus,
     eventBus,
+    stand,
     storageFactory,
     repositories,
     frameworkConstructionToken,

@@ -34,6 +34,10 @@ import {
   type CommandEndpoint,
   type EventEndpoint,
   type TenantMode,
+  Stand,
+  StandStateTypeError,
+  type StandSubscription,
+  type StandUpdate,
   Aggregate,
   Delivery,
   type EntityVersionMetadata,
@@ -220,6 +224,8 @@ describe("@spine-ts/server", () => {
         "ShardSession",
         "ShardedWorkRegistry",
         "SingleProcessServerRuntime",
+        "Stand",
+        "StandStateTypeError",
         "TransactionalEntity",
         "TransactionalEntityScopeError",
         "React",
@@ -259,7 +265,11 @@ describe("@spine-ts/server", () => {
     expectTypeOf(
       BoundedContext.singleTenant("Exports").build().eventBus(),
     ).toEqualTypeOf<EventEndpoint>();
+    expectTypeOf(BoundedContext.singleTenant("Exports").build().stand()).toEqualTypeOf<Stand>();
+    expectTypeOf<StandSubscription>().toExtend<{ readonly closed: boolean }>();
+    expectTypeOf<StandUpdate>().toExtend<{ readonly typeUrl: string; readonly id: unknown }>();
     expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
+    expect(new StandStateTypeError("Unknown", "read")).toBeInstanceOf(StandStateTypeError);
     expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);
     expectTypeOf<SignalKind>().toEqualTypeOf<"command" | "event">();
     expectTypeOf<SignalIntakeAcceptedFor>().toEqualTypeOf<"async-work">();
@@ -409,7 +419,6 @@ describe("@spine-ts/server", () => {
       "enqueue",
       "importBus",
       "storage",
-      "stand",
       "tenantIndex",
       "integrationBroker",
       "commandService",

@@ -258,15 +258,17 @@ name, and ID-field metadata. `BoundedContextBuilder.build()` owns repository
 registration, rejects duplicate entity or state identities, opens state record
 storage through the context `StorageFactory`, and exposes registered
 repositories as frozen snapshot-backed `RepositoryView` values. Direct
-repository registration is not public API.
+repository registration is not public API. Built contexts also register
+repository state schemas with their owned direct `Stand`, so the read side can
+reject unknown state types before any future gRPC service layer exists.
 This follows the JVM `Repository` identity surface (`entityClass()`,
 `idClass()`, and `entityStateType()`) plus the first context-owned lifecycle
 step. When authentic explicit handler metadata is supplied, repositories now
 calculate deferred command/event routes and bounded-context assembly registers
 internal dispatcher adapters for those routes. The TypeScript seam deliberately
 omits `create`, `find`, `store`, record conversion, handler invocation,
-entity storage/cache/catch-up, inbox/delivery, stand registration, lifecycle
-monitors, gRPC services, and transport.
+entity storage/cache/catch-up, inbox/delivery, lifecycle monitors, gRPC
+services, and transport.
 
 `EntityTransaction` is the first server-owned draft/result commit boundary over
 one entity state. It buffers a draft state, explicit previous/draft version
@@ -316,20 +318,29 @@ surface:
   `removeEventDispatcher()` collect dispatchers for the context being built;
 - `BoundedContextBuilder.withStorageFactory(factory)` selects the
   `StorageFactory` used to create the context `EventStore` and repository state
-  storage;
+  storage, plus direct `Stand`/read-side state storage;
 - `BoundedContextBuilder.add(repository)` and `remove(repository)` maintain the
   context-owned repository registration list;
 - `BoundedContextBuilder.build()` is the only supported path for constructing a
   built `BoundedContext`; and
 - built contexts expose name, tenant mode, spec, a copy-safe small snapshot,
   frozen snapshot-backed `RepositoryView` values, and post-only `commandBus()` /
-  `eventBus()` endpoints backed by internally owned buses.
+  `eventBus()` endpoints backed by internally owned buses, plus a context-owned
+  direct `stand()`.
 
 This keeps the TypeScript API JVM-familiar without pretending that later
 runtime collaborators already exist. Application code does not subclass
 `BoundedContext` or directly instantiate shell classes. Runtime constructor
 guards also reject direct JavaScript escape hatches so callers cannot bypass
 name validation or the builder-only build path by passing ad hoc objects.
+
+The current `Stand` slice is intentionally direct and storage-backed. It owns
+known generated state schemas, latest-state `RecordStorage`, direct
+read/update methods, and deterministic in-process subscription handles with
+explicit `unsubscribe()`. It preserves read-side/write-side segregation by
+requiring callers to record state updates directly; it does not invoke
+repository handlers, run projections, catch up from events, expose gRPC
+QueryService/SubscriptionService, or provide a client query DSL.
 
 The following runtime pieces are still deferred to later explicit tasks:
 
@@ -339,7 +350,7 @@ The following runtime pieces are still deferred to later explicit tasks:
 - handler invocation over the deferred repository routes;
 - inbox/delivery storage, durable storage lifecycle, entity storage/cache
   catch-up, and tenant-index persistence;
-- stand/query/subscription execution;
+- gRPC query/subscription service execution and richer query filtering;
 - system-context pairing and server/gRPC services; and
 - ZeroMQ endpoint topology and transport-backed runtime execution.
 
@@ -374,10 +385,10 @@ message type names/type URLs plus stable receiver-group and local route/worker
 identities, along with transport correlation keys back to topic/subscription
 arrays and planner-local worker IDs; they do not retain entity names, handler
 names, raw readiness metadata, or duplicate full transport contracts on each
-route. The package root now exports a small executable bus layer, but still
-does not export service, transport, delivery, stand, integration-broker,
-handler invocation/runtime wiring, command/event intake validation, or `Ack`
-mapping as part of this closure.
+route. The package root now exports a small executable bus layer and direct
+Stand, but still does not export service, transport, delivery,
+integration-broker, handler invocation/runtime wiring, command/event intake
+validation, or `Ack` mapping as part of this closure.
 
 The architectural consequence is that later work must add those collaborators
 as explicit tasks at their own seams. Command and event intake can consume the

@@ -1,6 +1,6 @@
 # T-0012: Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.8b integrated; T-0012.9 selected
+Status: T-0012.9 integrated; T-0012.10 selected
 Start: `2026-07-01 16:48 WEST`
 Baseline commit: `a9769d4`
 Branch: `task/T-0012-cleanup-replan`
@@ -128,7 +128,12 @@ escalated coverage, docs/API, proto lint/generate/clean, and
 ZeroMQ local IPC sandbox failure. Coverage was statements 94.85%, branches
 90.02%, functions 96.95%, and lines 94.88%.
 
-Next selected subtask: `T-0012.9 Stand And Entity Updates`.
+`T-0012.9 Stand And Entity Updates` is integrated on `main`. It added the
+first direct storage-backed `Stand`, context-owned stand exposure, direct
+entity-state updates, in-process subscriptions, and documentation that keeps
+gRPC `QueryService` and `SubscriptionService` in the next task.
+
+Next selected subtask: `T-0012.10 Real gRPC Services`.
 
 ## T-0012.2 Selection Rationale
 

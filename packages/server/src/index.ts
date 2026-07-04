@@ -11,6 +11,18 @@ export {
   type TenantMode,
 } from "./context/bounded-context.js";
 
+export {
+  Stand,
+  type StandOptions,
+  type StandReadOptions,
+  type StandRegisterOptions,
+  type StandSubscribeOptions,
+  type StandSubscription,
+  StandStateTypeError,
+  type StandUpdate,
+  type StandUpdateOptions,
+} from "./stand/stand.js";
+
 export { CommandBus } from "./bus/command-bus.js";
 export type { CommandDispatcher } from "./bus/command-dispatcher.js";
 export { EventBus } from "./bus/event-bus.js";

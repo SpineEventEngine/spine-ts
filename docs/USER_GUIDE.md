@@ -76,6 +76,11 @@ the to-do application remain later slices.
   immutable fresh-copy snapshots for later checks. `BoundedContext` owns
   repository registration and opens state record storage through its storage
   factory.
+- A direct storage-backed `Stand` owned by each built `BoundedContext`.
+  Registered repositories make their entity state schemas known to the stand,
+  which can record latest states, read them by schema and ID, and notify
+  in-process subscribers. This is direct framework API, not gRPC
+  QueryService/SubscriptionService.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.
@@ -97,9 +102,9 @@ the to-do application remain later slices.
   `BoundedContext.singleTenant(name)`, `BoundedContext.multitenant(name)`,
   immutable context names, framework-owned `ContextSpec` values from
   `builder.spec` and `context.spec`, tenant mode metadata, dispatcher
-  collection, storage-factory injection for event and repository state storage,
-  internally owned built-context command/event buses, post-only context bus
-  endpoints, and copy-safe small context snapshots.
+  collection, storage-factory injection for event, repository state, and direct
+  Stand/read-side state storage, internally owned built-context command/event
+  buses, post-only context bus endpoints, and copy-safe small context snapshots.
 - A first single-process server runtime lifecycle/queue kernel, typed
   write-side signal intake result values, and command/event
   registration-readiness metadata derived from handler metadata.
@@ -140,10 +145,10 @@ the to-do application remain later slices.
 - gRPC service implementations.
 - Default repository construction from entity classes, handler invocation,
   entity runtime dispatch, system context construction, import buses,
-  query/subscription stands, tenant index
-  persistence, ZeroMQ endpoint topology, broker process supervision, retry
-  workers, durable delivery storage, transport-backed service execution,
-  durable production storage, and to-do domain runtime behavior.
+  gRPC QueryService/SubscriptionService execution, tenant index persistence,
+  ZeroMQ endpoint topology, broker process supervision, retry workers, durable
+  delivery storage, transport-backed service execution, durable production
+  storage, and to-do domain runtime behavior.
 
 ## Type Registry
 
@@ -409,8 +414,9 @@ are not public API.
 
 This slice still does not create, find, or store entities; convert entity
 records; invoke handlers; write inboxes; manage delivery; manage entity
-caches; run catch-up; emit lifecycle events; expose query stands; start buses
-from repositories; or use gRPC/transport. When a repository is constructed with
+caches; run catch-up; emit lifecycle events; start buses from repositories; or
+use gRPC/transport. Direct stands can store and read latest entity states, but
+they do not invoke projections or run catch-up. When a repository is constructed with
 authentic explicit handler metadata, it can calculate deferred command/event
 routes, and bounded contexts install internal dispatcher adapters for those
 routes.
@@ -436,11 +442,11 @@ await context.eventBus().post(eventEnvelope);
 `addCommandDispatcher()` / `removeCommandDispatcher()` and
 `addEventDispatcher()` / `removeEventDispatcher()` affect only contexts built
 after the call. `withStorageFactory()` supplies the `StorageFactory` used to
-create the context `EventStore` and repository state storage; if omitted, the
-current builder uses in-memory storage. `commandBus()` and `eventBus()` expose
-only `post()`; late dispatcher registration stays on the builder and concrete
-bus classes. Event posting stores through that event store before dispatcher
-fan-out.
+create the context `EventStore`, repository state storage, and direct
+Stand/read-side state storage; if omitted, the current builder uses in-memory
+storage. `commandBus()` and `eventBus()` expose only `post()`; late dispatcher
+registration stays on the builder and concrete bus classes. Event posting
+stores through that event store before dispatcher fan-out.
 
 `add(repository)` and `remove(repository)` maintain the builder's repository
 registration list. `build()` registers the listed repositories with the built
@@ -448,12 +454,43 @@ context and opens their state record storage through the context
 `StorageFactory`. Repeated `add(repository)` calls for the same instance are
 idempotent, duplicate entity or state identities are rejected before storage is
 opened for repositories, and `registeredRepositories()` returns a copy-safe
-list of frozen snapshot-backed `RepositoryView` values.
-This slice still does not create default repositories, register type suppliers
-with a stand, invoke handlers, write inboxes, manage delivery, emit lifecycle
-events, or start transport. Repositories with authentic explicit handler
+list of frozen snapshot-backed `RepositoryView` values. The built context also
+owns `stand()`, and repository state schemas are registered with that stand as
+known state types.
+This slice still does not create default repositories, invoke handlers, write
+inboxes, manage delivery, emit lifecycle events, or start transport.
+Repositories with authentic explicit handler
 metadata do contribute deferred route-calculating dispatcher adapters to the
 built context's buses.
+
+## Direct Stand
+
+Use `context.stand()` for the first direct read-side entity state slice. The
+stand is storage-backed by the same `StorageFactory` selected for the bounded
+context.
+
+```ts
+const stand = tasks.stand();
+
+await stand.update(TaskStateSchema, taskState, {
+  version,
+});
+
+const latest = await stand.read(TaskStateSchema, taskId);
+const subscription = stand.subscribe(TaskStateSchema, (update) => {
+  update.state;
+});
+
+subscription.unsubscribe();
+```
+
+`Stand.register(schema)` is available for direct stand instances; built bounded
+contexts call it from registered repository metadata. Reads, updates, and
+subscriptions reject unknown state schemas with `StandStateTypeError`.
+Multitenant stands require `{ tenantId }`; single-tenant stands reject tenant
+options. Direct subscriptions are in-process only and must be cleaned up by
+calling `unsubscribe()`. This API is not a gRPC QueryService or
+SubscriptionService, and it does not provide a client query DSL.
 
 ## Runtime Assembly Closure
 
@@ -518,11 +555,11 @@ metadata, or ZeroMQ details.
 
 It does not create a TypeScript `Server`, context runtime handle,
 command/event/import bus, service router, storage lifecycle, delivery engine,
-integration broker, read-side stand, transport endpoint, broker supervisor,
-retry worker, durable delivery store, or handler invocation path. Accepted
-signal intake values still mean only accepted for later asynchronous work; they
-are not `Ack` messages and do not claim validation, storage, dispatch,
-delivery, or successful handling.
+integration broker, gRPC query/subscription service execution, transport
+endpoint, broker supervisor, retry worker, durable delivery store, or handler
+invocation path. Accepted signal intake values still mean only accepted for
+later asynchronous work; they are not `Ack` messages and do not claim
+validation, storage, dispatch, delivery, or successful handling.
 
 When a caller already owns executable dispatchers, the current server package
 also exposes the first small bus seam:

@@ -133,6 +133,33 @@ describe("BoundedContext assembly", () => {
     expect(context.eventBus()).toBe(context.eventBus());
   });
 
+  it("owns a stable stand with repository state types registered", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const stand = context.stand();
+
+    expect(stand).toBe(context.stand());
+    expect(stand.stateTypes()).toEqual([deriveTypeUrl(ProjectionStateSchema)]);
+
+    await stand.update(
+      ProjectionStateSchema,
+      create(ProjectionStateSchema, {
+        id: "task-1",
+        name: "Task",
+        priority: 1,
+      }),
+    );
+
+    await expect(stand.read(ProjectionStateSchema, "task-1")).resolves.toMatchObject({
+      id: "task-1",
+      name: "Task",
+      priority: 1,
+    });
+  });
+
   it("registers command dispatchers added to the builder", async () => {
     const observed: string[] = [];
     const dispatcher = createCommandDispatcher([ProjectionStateSchema], (command) => {
@@ -520,7 +547,7 @@ describe("BoundedContext assembly", () => {
     expect(builder).toBeInstanceOf(BoundedContextBuilder);
   });
 
-  it("does not expose repository, delivery, stand, gRPC, or transport APIs on BoundedContext", () => {
+  it("does not expose repository, delivery, gRPC, or transport APIs on BoundedContext", () => {
     const context = BoundedContext.singleTenant("Tasks").build();
     const forbiddenMembers = [
       "repositories",
@@ -529,7 +556,6 @@ describe("BoundedContext assembly", () => {
       "storage",
       "storageFactory",
       "delivery",
-      "stand",
       "grpc",
       "transport",
       "importBus",

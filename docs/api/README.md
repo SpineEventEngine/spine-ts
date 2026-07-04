@@ -27,27 +27,32 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 
 Server exports include `BoundedContext`, `BoundedContextBuilder`,
 `ContextSpec`, `BoundedContextName`, `TenantMode`, `BoundedContextSnapshot`,
-small immutable snapshot contracts, `CommandEndpoint`, `EventEndpoint`, and
+small immutable snapshot contracts, `CommandEndpoint`, `EventEndpoint`,
+`Stand`, direct stand option/update/subscription contracts, and
 `BoundedContextNameError` for bounded-context assembly.
 The public entry points mirror Spine JVM's
 `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
 `ContextSpec` remains a framework-owned immutable value surfaced through
 `builder.spec` and `context.spec`; the builder collects command and event
 dispatchers; `withStorageFactory(factory)` selects the storage factory used for
-the context event store and repository state storage; and `build()` returns a
+the context event store, repository state storage, and direct read-side stand;
+and `build()` returns a
 `BoundedContext` that owns mutable `CommandBus` and `EventBus` instances
 internally while exposing post-only `CommandEndpoint` and `EventEndpoint` values
-through `commandBus()` and `eventBus()`. The shell validates
+through `commandBus()` and `eventBus()`, plus a context-owned direct `Stand`
+through `stand()`. The shell validates
 non-empty/non-blank names and records tenant mode. `builder.add(repository)` /
 `builder.remove(repository)` maintain
 the context-owned repository registration list, and `build()` registers those
 repositories with the built context after opening state record storage through
-the context `StorageFactory`. Repositories with authentic explicit handler
+the context `StorageFactory`; registered repositories also make their entity
+state schemas known to the context `Stand`. Repositories with authentic explicit handler
 metadata now calculate deferred command/event routes, and built contexts install
 internal repository dispatcher adapters. This slice does not create default
 repositories from entity classes, invoke handlers, store entity records, manage
-inboxes/delivery, run cache catch-up, create system contexts, expose stands,
-write tenant indexes, expose gRPC services, or integrate transports.
+inboxes/delivery, run cache catch-up, create system contexts, write tenant
+indexes, expose gRPC QueryService/SubscriptionService adapters, or integrate
+transports.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,
@@ -104,7 +109,20 @@ readiness metadata, producer ID, or first-field ID. Bounded-context assembly
 registers repository dispatcher adapters internally so buses can enqueue against
 repository-owned routes without exposing registration internals. The repository
 surface does not create/find/store entities, invoke handlers, write inboxes,
-manage caches, run catch-up, expose stands, or start buses/transports.
+manage caches, run catch-up, or start buses/transports. Built bounded contexts
+use repository metadata to register known state types with their direct
+read-side `Stand`.
+`Stand`, `StandOptions`, `StandRegisterOptions`, `StandReadOptions`,
+`StandUpdateOptions`, `StandSubscribeOptions`, `StandUpdate`,
+`StandSubscription`, and `StandStateTypeError` form the first direct read-side
+entity-state API. A stand registers known generated state schemas, rejects
+unknown state types on read/update/subscribe, stores latest states through
+`StorageFactory`/`RecordStorage`, reads latest state by schema and entity ID,
+and delivers direct in-process update notifications. Subscription cleanup is
+explicit via `unsubscribe()`, and multitenant stands require a `tenantId` on
+read/update/subscribe while single-tenant stands reject tenant options. This is
+not a gRPC QueryService or SubscriptionService implementation, not a client DSL,
+and not a projection catch-up loop.
 `AggregateStorage`, `AggregateStorageOptions`, `AggregateSnapshot`,
 `AggregateHistory`, and `AggregateId` form the minimal aggregate persistence
 seam. It writes latest snapshots through `StorageFactory`/`RecordStorage`,
@@ -130,8 +148,8 @@ storage-backed shard pickup / release seam backed by atomic
 `RecordStorage.compareAndSet()`.
 `InboxReadOptions.limit` is the current positive page-size control with a
 bounded default when omitted. This slice does not run worker loops,
-retry monitors, conveyor/stations, repository invocation, `Stand`, gRPC
-services, transport retries, example app work, or read-side catch-up loops.
+retry monitors, conveyor/stations, repository invocation, gRPC services,
+transport retries, example app work, or read-side catch-up loops.
 Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field
