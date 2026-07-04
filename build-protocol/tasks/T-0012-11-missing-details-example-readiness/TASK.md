@@ -24,7 +24,9 @@ workflow or the example app.
 - Tie each proposed gap to concrete framework behavior required by the example
   or by real command/query/subscription workflows.
 - Prefer small JVM-familiar concepts and names.
-- Update docs/API docs and durable logs for each accepted sub-task.
+- Update durable task/report/review/work logs for each accepted sub-task.
+- Update public/API docs for each accepted sub-task when public or API behavior
+  changes.
 
 ## Explicitly Out Of Scope
 
@@ -53,8 +55,9 @@ workflow or the example app.
 ## Acceptance Criteria
 
 - A requirements-splitting sub-agent produces a staged T-0012.11 sub-task list.
-- The first non-blocked sub-task is selected and receives its own branch and
-  worktree.
+- The first non-blocked sub-task is selected by the split and gets a proposed
+  branch/worktree. The orchestrator creates that branch/worktree only after the
+  splitter review is clean.
 - Each sub-task is small enough for a single implementation sub-agent and the
   five required reviewer lanes.
 - Any implemented gap is backed by tests and by a clear example-readiness or
@@ -119,6 +122,14 @@ Why first:
 - it keeps the work JVM-familiar without introducing a new facade or a
   speculative runtime subsystem.
 
+Resumed-state note:
+
+- `T-0012.11` is split complete and `T-0012.11a` is selected first.
+- The proposed `T-0012.11a` branch/worktree is planning output only in this
+  task.
+- The orchestrator creates that branch/worktree after splitter review comments
+  are resolved and the split is accepted as clean.
+
 ## Staged Subtasks
 
 ### T-0012.11a Aggregate Command Execution
@@ -126,17 +137,18 @@ Why first:
 Goal:
 
 - Turn repository-backed aggregate command routing into real execution so a
-  posted command can load or create an aggregate, run one assignee, apply the
-  resulting event(s), persist aggregate history, and hand the produced events to
-  the existing async event bus.
+  posted command can be acknowledged and handed to async command processing,
+  which then loads or creates an aggregate, runs one assignee, applies the
+  resulting event(s), persists aggregate history, and hands the produced events
+  to the existing async event bus.
 
 Acceptance criteria:
 
 - A repository command dispatcher no longer stops at `routeCommand()`.
 - A built aggregate repository can execute one `@Assign(...)` or
   `defineEntityHandlers(...).assign(...)` happy path through
-  `CommandService.Post` -> `CommandBus` -> repository -> aggregate -> stored
-  events.
+  `CommandService.Post` intake -> `CommandBus` async dispatch -> repository ->
+  aggregate -> stored events.
 - Produced events are applied through aggregate appliers before aggregate state
   is stored.
 - Aggregate persistence continues to use the existing `AggregateStorage` /
@@ -163,7 +175,8 @@ Expected write scope:
 - `packages/server/src/bus/**`
 - `packages/server/test/repository/**`
 - `packages/server/test/context/**`
-- focused docs/log updates only if public behavior changes
+- durable task/report/review/work-log updates
+- public/API docs only if public or API behavior changes
 
 Required verification:
 
@@ -173,7 +186,7 @@ Required verification:
 - `pnpm lint`
 - tracked-file Prettier or `pnpm format:check`
 - `pnpm docs:check` if public docs/API move
-- `pnpm test:coverage` if shared production paths expand materially
+- `pnpm test:coverage`
 - `git diff --check`
 
 Why it blocks `T-0012.12` or real framework workflow:
@@ -181,18 +194,19 @@ Why it blocks `T-0012.12` or real framework workflow:
 - the example cannot create, rename, complete, or reopen a task until commands
   execute real aggregate handlers instead of only proving route metadata.
 
-### T-0012.11b Projection Event Execution And Read-Side Updates
+### T-0012.11b Projection Event Updates
 
 Goal:
 
 - Execute projection event subscribers from the existing event bus and keep the
-  direct `Stand` in sync from those delivered events.
+  read side in sync from those delivered events.
 
 Acceptance criteria:
 
 - Repository event dispatch no longer stops at `routeEvent()`.
 - A projection repository can consume a delivered event, update projection
-  state, and write the resulting latest state into `Stand`.
+  state, and write the resulting latest state into read-side storage.
+- `Stand` remains the query/subscription facade over that read-side state.
 - `SubscriptionService` keeps working over real projection updates emitted from
   event delivery rather than manual `stand.update(...)` calls in tests.
 - The slice stays focused on domestic projection updates; no catch-up worker,
@@ -218,7 +232,8 @@ Expected write scope:
 - `packages/server/test/repository/**`
 - `packages/server/test/stand/**`
 - `packages/server/test/services/**`
-- focused docs/log updates only if public behavior changes
+- durable task/report/review/work-log updates
+- public/API docs only if public or API behavior changes
 
 Required verification:
 
@@ -228,7 +243,7 @@ Required verification:
 - `pnpm lint`
 - tracked-file Prettier or `pnpm format:check`
 - `pnpm docs:check` if public docs/API move
-- `pnpm test:coverage` if shared production paths expand materially
+- `pnpm test:coverage`
 - `git diff --check`
 
 Why it blocks `T-0012.12` or real framework workflow:
@@ -248,6 +263,9 @@ Acceptance criteria:
 - `QueryService.Read` no longer fails every `include_all` task-list query.
 - The implementation supports at least projection-state `include_all` reads with
   stable versioned response packing.
+- `include_all` projection reads preserve the tenant-boundary behavior already
+  covered by `T-0012.10`, including all `TenantId` variants already handled
+  there.
 - The slice does not add speculative query DSL, paging engine, sort planner, or
   general aggregate querying unless the smallest list-view workflow proves they
   are required.
@@ -266,16 +284,20 @@ Expected write scope:
 - `packages/server/src/services/**`
 - `packages/server/test/stand/**`
 - `packages/server/test/services/**`
-- focused docs/log updates only if public behavior changes
+- durable task/report/review/work-log updates
+- public/API docs only if public or API behavior changes
 
 Required verification:
 
 - focused tests covering `include_all` projection reads and preserved response
   version packing;
+- focused regression tests covering `include_all` tenant-boundary behavior for
+  the `TenantId` variants already handled by `T-0012.10`;
 - `pnpm typecheck`
 - `pnpm lint`
 - tracked-file Prettier or `pnpm format:check`
 - `pnpm docs:check` if public docs/API move
+- `pnpm test:coverage`
 - `git diff --check`
 
 Why it blocks `T-0012.12` or real framework workflow:
@@ -288,16 +310,18 @@ Why it blocks `T-0012.12` or real framework workflow:
 Goal:
 
 - Wire existing validation and small refusal semantics into runtime command
-  execution so the example can demonstrate both invalid input and business
-  refusal paths.
+  execution per `PROTOBUF_CONTRACT.md` so the example can demonstrate both
+  invalid input and business refusal paths.
 
 Acceptance criteria:
 
-- Runtime command intake/execution validates command payloads before durable
-  write-side work proceeds.
+- Runtime command intake/execution validates command payloads with
+  `@spine-event-engine/validation-ts` before durable write-side work proceeds.
 - Aggregate command handling can surface one immediate business refusal path as
-  a Spine `Ack` rejection/error outcome with stable public messages.
-- State-transition validation stays inside framework-controlled transactions.
+  a Spine `Ack` rejection/error outcome that preserves client-visible error
+  details rather than replacing them with custom string-only shapes.
+- State-transition validation keeps `(set_once)` semantics in the
+  transaction/runtime layer.
 - This slice does not add a large error-details hierarchy or late result-stream
   protocol.
 
@@ -305,6 +329,7 @@ Evidence inspected:
 
 - `build-protocol/TODO_EXAMPLE_SPEC.md`
 - `build-protocol/DEVELOPER_API.md`
+- `build-protocol/PROTOBUF_CONTRACT.md`
 - `packages/core/src/index.ts`
 - `packages/server/src/services/spine-services.ts`
 - `spine-jvm-docs/spine-client-api-queries-subscriptions-and-tests.md`
@@ -319,7 +344,8 @@ Expected write scope:
   seam
 - `packages/server/test/**`
 - `packages/core/test/**` only if shared validation behavior changes
-- focused docs/log updates only if public behavior changes
+- durable task/report/review/work-log updates
+- public/API docs only if public or API behavior changes
 
 Required verification:
 
@@ -329,7 +355,7 @@ Required verification:
 - `pnpm lint`
 - tracked-file Prettier or `pnpm format:check`
 - `pnpm docs:check` if public docs/API move
-- `pnpm test:coverage` if shared production paths expand materially
+- `pnpm test:coverage`
 - `git diff --check`
 
 Why it blocks `T-0012.12` or real framework workflow:
@@ -342,16 +368,19 @@ Why it blocks `T-0012.12` or real framework workflow:
 Goal:
 
 - Replace the testing-package skeleton with the smallest framework-owned
-  black-box fixture needed to write the example’s bounded-context tests.
+  black-box fixture needed to write the example's bounded-context tests.
 
 Acceptance criteria:
 
-- `packages/testing` exposes a minimal bounded-context fixture over built
-  contexts, not just package metadata.
+- `packages/testing` exposes a minimal typed OOP/generic bounded-context
+  fixture object or class over built contexts, not helper-function sprawl or
+  just package metadata.
 - The fixture can drive commands/events through the real framework seams and
   inspect query/subscription outcomes needed by the to-do example.
 - The fixture stays in-process and narrow; it does not add multi-process
   orchestration, browser tooling, or a client DSL beyond what tests need.
+- Package README and API docs are updated in this slice because it creates a
+  public testing package surface.
 
 Evidence inspected:
 
@@ -364,7 +393,8 @@ Expected write scope:
 
 - `packages/testing/**`
 - `packages/server/test/**` only for shared helpers or fixture coverage
-- focused docs/log updates only if public behavior changes
+- durable task/report/review/work-log updates
+- package README/API docs updates required
 
 Required verification:
 
@@ -373,7 +403,8 @@ Required verification:
 - `pnpm typecheck`
 - `pnpm lint`
 - tracked-file Prettier or `pnpm format:check`
-- `pnpm docs:check` if public docs/API move
+- `pnpm docs:check`
+- `pnpm test:coverage`
 - `git diff --check`
 
 Why it blocks `T-0012.12` or real framework workflow:

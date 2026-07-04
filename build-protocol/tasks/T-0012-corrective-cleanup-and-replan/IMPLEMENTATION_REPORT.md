@@ -1,6 +1,7 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.11 split complete; first implementation slice selected
+Status: T-0012.11 split complete; first implementation slice selected; splitter
+review comments addressed
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
@@ -226,7 +227,8 @@ protos, and preserved explicit activation/cancellation and tenant isolation.
 All required review lanes are clean through commit `dfd1140`, with final
 clean-review bookkeeping committed as `341b69a`. `T-0012.11 Missing Details And
 Example Readiness` is now split. Its first selected implementation slice is
-`T-0012.11a Aggregate Command Execution`.
+`T-0012.11a Aggregate Command Execution`, and this docs-fix pass records the
+review corrections before the orchestrator opens that slice's branch/worktree.
 
 Parent tracked-state verification after integrating `T-0012.9` passed:
 `pnpm check:node`, `pnpm typecheck`, `pnpm lint`, tracked-file Prettier,

@@ -6,7 +6,8 @@ Branch: `task/T-0012-cleanup-replan`
 Baseline commit: `a9769d4`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
-Status: T-0012.11 splitting in progress.
+Status: T-0012.11 split complete; first implementation slice selected; splitter
+review comments addressed.
 
 ## Required Review Lanes
 
@@ -208,8 +209,12 @@ For `T-0012.11 Missing Details And Example Readiness`, reviewers must focus on:
 - concrete framework gaps discovered by the real gRPC implementation and
   review, not speculative completeness;
 - keeping missing details small and tied to example readiness;
-- avoiding a broad `Server` facade or worker/process runtime unless directly
-  required by the next executable workflow;
+- keeping rejected broad work rejected for this stage, including broad
+  `Server` facade, system context runtime, import bus, scheduler, tenant index,
+  observability, catch-up/recovery, worker/process fan-out, and client DSL
+  work;
 - preserving the real service, bus, Stand, delivery, and storage boundaries
   already reviewed; and
 - maintaining branch coverage at or above 90%.
+
+Round-1 splitter review comments are now addressed in the leaf and parent docs.

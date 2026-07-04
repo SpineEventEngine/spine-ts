@@ -1,6 +1,7 @@
 # Implementation Report: T-0012.11 Missing Details And Example Readiness
 
-Status: split complete; first implementation slice selected
+Status: split complete; first implementation slice selected; splitter review
+comments addressed
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -41,8 +42,9 @@ Rejected for now as unproven blockers:
 - broad `Server` facade or process supervision;
 - import bus support;
 - scheduler support;
+- tenant index work;
 - catch-up/recovery loops;
-- tenant index or observability work; and
+- observability work; and
 - client DSL work.
 
 ## Selected First Subtask
@@ -61,8 +63,13 @@ Why selected first:
 - it is the smallest slice that delivers executable value without introducing a
   speculative runtime shell.
 
+The split only proposes that branch/worktree. The orchestrator creates it after
+splitter review is clean. This task does not claim that `T-0012.11a` has
+already been opened.
+
 ## Current State
 
 Requirements splitting is complete. The task now has a staged roadmap with five
-concrete implementation slices and one selected first slice ready for
-implementation/review.
+concrete implementation slices. `T-0012.11a Aggregate Command Execution` is the
+selected first slice, and this docs-fix pass records the round-1 review
+corrections before the orchestrator opens that slice's branch/worktree.
