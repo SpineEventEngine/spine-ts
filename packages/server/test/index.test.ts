@@ -224,6 +224,7 @@ describe("@spine-ts/server", () => {
         "ShardSession",
         "ShardedWorkRegistry",
         "SingleProcessServerRuntime",
+        "SpineServices",
         "Stand",
         "StandStateTypeError",
         "TransactionalEntity",

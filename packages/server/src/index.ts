@@ -23,6 +23,8 @@ export {
   type StandUpdateOptions,
 } from "./stand/stand.js";
 
+export { SpineServices, type SpineServicesOptions } from "./services/spine-services.js";
+
 export { CommandBus } from "./bus/command-bus.js";
 export type { CommandDispatcher } from "./bus/command-dispatcher.js";
 export { EventBus } from "./bus/event-bus.js";

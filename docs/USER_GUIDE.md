@@ -79,8 +79,10 @@ the to-do application remain later slices.
 - A direct storage-backed `Stand` owned by each built `BoundedContext`.
   Registered repositories make their entity state schemas known to the stand,
   which can record latest states, read them by schema and ID, and notify
-  in-process subscribers. This is direct framework API, not gRPC
-  QueryService/SubscriptionService.
+  in-process subscribers.
+- A first `SpineServices` route registrar that adapts built bounded contexts to
+  real Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
+  routes without adding a broad server facade or client DSL.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.
@@ -142,10 +144,9 @@ the to-do application remain later slices.
 - Semantic tag registration from `(is)` and `(every_is)` into handler/routing
   registries. The server metadata APIs preserve entity tags and explicit
   handler declarations now, but no runtime registry consumes them yet.
-- gRPC service implementations.
 - Default repository construction from entity classes, handler invocation,
   entity runtime dispatch, system context construction, import buses,
-  gRPC QueryService/SubscriptionService execution, tenant index persistence,
+  richer gRPC service execution, tenant index persistence,
   ZeroMQ endpoint topology, broker process supervision, retry workers, durable
   delivery storage, transport-backed service execution, durable production
   storage, and to-do domain runtime behavior.
@@ -489,8 +490,9 @@ contexts call it from registered repository metadata. Reads, updates, and
 subscriptions reject unknown state schemas with `StandStateTypeError`.
 Multitenant stands require `{ tenantId }`; single-tenant stands reject tenant
 options. Direct subscriptions are in-process only and must be cleaned up by
-calling `unsubscribe()`. This API is not a gRPC QueryService or
-SubscriptionService, and it does not provide a client query DSL.
+calling `unsubscribe()`. `SpineServices` adapts built-context stands to the
+first raw gRPC-compatible query and subscription routes, but this direct API
+does not provide a client query DSL.
 
 ## Runtime Assembly Closure
 
@@ -554,12 +556,12 @@ transport arrays. They do not retain handler names, entity names, raw readiness
 metadata, or ZeroMQ details.
 
 It does not create a TypeScript `Server`, context runtime handle,
-command/event/import bus, service router, storage lifecycle, delivery engine,
-integration broker, gRPC query/subscription service execution, transport
-endpoint, broker supervisor, retry worker, durable delivery store, or handler
-invocation path. Accepted signal intake values still mean only accepted for
-later asynchronous work; they are not `Ack` messages and do not claim
-validation, storage, dispatch, delivery, or successful handling.
+command/event/import bus, broad server lifecycle, storage lifecycle, delivery
+engine, integration broker, transport endpoint, broker supervisor, retry worker,
+durable delivery store, or handler invocation path. Accepted signal intake
+values still mean only accepted for later asynchronous work; they are not `Ack`
+messages and do not claim validation, storage, dispatch, delivery, or
+successful handling.
 
 When a caller already owns executable dispatchers, the current server package
 also exposes the first small bus seam:

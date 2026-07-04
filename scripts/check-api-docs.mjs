@@ -257,6 +257,8 @@ const expectedServerExports = [
   "ServerRuntimeStateOperation",
   "ServerRuntimeWork",
   "SingleProcessServerRuntime",
+  "SpineServices",
+  "SpineServicesOptions",
   "SignalIntakeAccepted",
   "SignalIntakeAcceptedFor",
   "SignalIntakeFailure",

@@ -260,7 +260,8 @@ storage through the context `StorageFactory`, and exposes registered
 repositories as frozen snapshot-backed `RepositoryView` values. Direct
 repository registration is not public API. Built contexts also register
 repository state schemas with their owned direct `Stand`, so the read side can
-reject unknown state types before any future gRPC service layer exists.
+reject unknown state types before service adapters execute queries or
+subscriptions.
 This follows the JVM `Repository` identity surface (`entityClass()`,
 `idClass()`, and `entityStateType()`) plus the first context-owned lifecycle
 step. When authentic explicit handler metadata is supplied, repositories now
@@ -268,7 +269,7 @@ calculate deferred command/event routes and bounded-context assembly registers
 internal dispatcher adapters for those routes. The TypeScript seam deliberately
 omits `create`, `find`, `store`, record conversion, handler invocation,
 entity storage/cache/catch-up, inbox/delivery, lifecycle monitors, gRPC
-services, and transport.
+server lifecycle, and transport.
 
 `EntityTransaction` is the first server-owned draft/result commit boundary over
 one entity state. It buffers a draft state, explicit previous/draft version
@@ -339,8 +340,10 @@ known generated state schemas, latest-state `RecordStorage`, direct
 read/update methods, and deterministic in-process subscription handles with
 explicit `unsubscribe()`. It preserves read-side/write-side segregation by
 requiring callers to record state updates directly; it does not invoke
-repository handlers, run projections, catch up from events, expose gRPC
-QueryService/SubscriptionService, or provide a client query DSL.
+repository handlers, run projections, catch up from events, or provide a client
+query DSL. `SpineServices` adapts this direct read side and the context command
+bus to the first real Connect/Node `CommandService`, `QueryService`, and
+`SubscriptionService` routes.
 
 The following runtime pieces are still deferred to later explicit tasks:
 
@@ -350,8 +353,8 @@ The following runtime pieces are still deferred to later explicit tasks:
 - handler invocation over the deferred repository routes;
 - inbox/delivery storage, durable storage lifecycle, entity storage/cache
   catch-up, and tenant-index persistence;
-- gRPC query/subscription service execution and richer query filtering;
-- system-context pairing and server/gRPC services; and
+- richer query filtering and event subscriptions;
+- system-context pairing and broad server/gRPC lifecycle; and
 - ZeroMQ endpoint topology and transport-backed runtime execution.
 
 ## Server Runtime Closure

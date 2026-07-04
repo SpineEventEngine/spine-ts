@@ -51,8 +51,7 @@ metadata now calculate deferred command/event routes, and built contexts install
 internal repository dispatcher adapters. This slice does not create default
 repositories from entity classes, invoke handlers, store entity records, manage
 inboxes/delivery, run cache catch-up, create system contexts, write tenant
-indexes, expose gRPC QueryService/SubscriptionService adapters, or integrate
-transports.
+indexes, expose a broad server lifecycle, or integrate transports.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,
@@ -120,9 +119,11 @@ unknown state types on read/update/subscribe, stores latest states through
 `StorageFactory`/`RecordStorage`, reads latest state by schema and entity ID,
 and delivers direct in-process update notifications. Subscription cleanup is
 explicit via `unsubscribe()`, and multitenant stands require a `tenantId` on
-read/update/subscribe while single-tenant stands reject tenant options. This is
-not a gRPC QueryService or SubscriptionService implementation, not a client DSL,
-and not a projection catch-up loop.
+read/update/subscribe while single-tenant stands reject tenant options.
+`SpineServices` adapts built-context command buses and stands to the first real
+Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
+routes. It is not a client DSL, event subscription implementation, broad server
+lifecycle, or projection catch-up loop.
 `AggregateStorage`, `AggregateStorageOptions`, `AggregateSnapshot`,
 `AggregateHistory`, and `AggregateId` form the minimal aggregate persistence
 seam. It writes latest snapshots through `StorageFactory`/`RecordStorage`,
@@ -148,8 +149,8 @@ storage-backed shard pickup / release seam backed by atomic
 `RecordStorage.compareAndSet()`.
 `InboxReadOptions.limit` is the current positive page-size control with a
 bounded default when omitted. This slice does not run worker loops,
-retry monitors, conveyor/stations, repository invocation, gRPC services,
-transport retries, example app work, or read-side catch-up loops.
+retry monitors, conveyor/stations, repository invocation, broad server
+lifecycle, transport retries, example app work, or read-side catch-up loops.
 Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field
@@ -279,7 +280,7 @@ are rejected with `state: "running-work"` to avoid queue self-deadlocks. This
 surface is a server-runtime kernel only; it is not a process-wide singleton,
 process supervisor, generic job framework, command/event/import bus, durable
 storage or inbox, read-side stand, repository dispatcher, integration broker,
-gRPC server, ZeroMQ transport, or worker-process runtime.
+broad gRPC server lifecycle, ZeroMQ transport, or worker-process runtime.
 The public runtime closure smoke path composes these exports with
 `BoundedContext`, `Repository`, `HandlerMetadataRegistry`,
 `CommandRegistrationReadiness`, `EventRegistrationReadiness`, and

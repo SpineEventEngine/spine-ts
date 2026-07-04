@@ -1,54 +1,83 @@
 # Implementation Report: T-0012.10 Real gRPC Services
 
-Status: in progress
+Status: implemented
 Branch: `task/T-0012-10-real-grpc-services`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-10-real-grpc-services`
-Baseline commit: `63216fe`
+Baseline commit: `caec16a`
 
 ## Summary
 
-This task starts the real public gRPC service slice after storage, buses,
-bounded context, repositories, delivery/inbox, and direct `Stand` are in place.
+Implemented the first real public gRPC-compatible service slice for the Spine TS
+server package:
 
-The implementation must stay small: service adapters over existing runtime
-objects, exact Spine protobuf contracts, no client DSL, no example app, and no
-service simulation.
+- `CommandService.Post` posts through built bounded contexts' `CommandBus`
+  instances and returns Spine `Ack` values.
+- `QueryService.Read` reads entity state through the context-owned direct
+  `Stand` and returns Spine `QueryResponse` values.
+- `SubscriptionService.Subscribe`, `Activate`, and `Cancel` create opaque
+  subscription IDs, stream `Stand` entity updates, and release resources on
+  cancel/stream close.
 
-## Initial Evidence
+The public construction API is intentionally small: `SpineServices` accepts
+built contexts and registers generated service descriptors with a Connect
+router. No broad server facade, client DSL, example app, custom protocol, or
+transport API was added to domain/runtime classes.
 
-- Parent `main` verification passed after `T-0012.9` with 43 test files, 503
-  tests, and global branch coverage 90.07%.
-- `T-0012.9` added direct storage-backed `Stand` read and subscription support
-  and intentionally deferred gRPC service adapters to this task.
-- Current package manifests do not include a gRPC or Connect service runtime.
-- The parent roadmap selects `T-0012.10 Real gRPC Services` as the next
-  non-blocked task.
+## Contract And Tooling
 
-## Skill Applicability
+- Copied the required Spine JVM service/support protobuf contracts verbatim
+  into `proto/spine/...` and recorded their upstream provenance/checksums in
+  `proto/spine-sources.json`.
+- Preserved upstream service names and message definitions. Buf lint exceptions
+  were added only for upstream JVM service naming patterns that conflict with
+  this repository's default lint rules.
+- Added `@connectrpc/connect@2.1.2` and
+  `@connectrpc/connect-node@2.1.2` for real Node gRPC-compatible routing over
+  Protobuf-ES v2 descriptors.
+- Recorded the runtime decision and rejected alternatives in
+  `build-protocol/DECISION_LOG.md` as `D-0056`.
 
-Implementation and reviewers must apply the installed skills where needed:
+## TDD Evidence
 
-- `subagent-driven-development` for worker/reviewer separation.
-- `test-driven-development` and `javascript-testing-patterns` for service
-  behavior and streaming/cancellation tests.
-- `nodejs-backend-patterns` for real Node service lifecycle concerns.
-- `cqrs-implementation` for read-side/write-side segregation.
-- `api-design-principles` and `typescript-advanced-types` for public service
-  API shape and generated Protobuf-ES types.
-- `verification-before-completion` before claiming task completion.
+- RED:
+  - Added focused real-service tests in
+    `packages/server/test/services/spine-services.test.ts`.
+  - `pnpm typecheck:build` passed.
+  - `pnpm test packages/server/test/services/spine-services.test.ts` failed as
+    expected with `TypeError: SpineServices is not a constructor`.
+- GREEN:
+  - Implemented `packages/server/src/services/spine-services.ts` and exported
+    `SpineServices`.
+  - Focused service tests pass over a real HTTP/2 gRPC transport when local
+    loopback binding is allowed: 1 file, 10 tests passed.
 
-## Planned Shape
+## Verification
 
-- Copy missing Spine service `.proto` files verbatim and generate Protobuf-ES
-  code through the existing Buf workflow.
-- Add a narrow service runtime package dependency only if required by the real
-  service implementation, recording the decision and alternatives.
-- Add semantic server source/test folders for service adapters.
-- Expose only the smallest public construction API required for tests and later
-  example wiring.
+- `pnpm typecheck` passed.
+- `pnpm lint` passed.
+- `pnpm format:check` passed.
+- `pnpm test packages/server/test/services/spine-services.test.ts` passed with
+  local loopback escalation: 10 tests passed.
+- `pnpm test` passed with local loopback escalation: 44 files, 513 tests passed.
+- `pnpm test:coverage` passed with local loopback escalation: 44 files, 513
+  tests passed; global branch coverage `90.31%`.
+- `pnpm docs:check` passed, with the existing TypeDoc invalid-origin warning.
+- `pnpm proto:lint` passed.
+- `pnpm proto:generate` passed.
+- `pnpm proto:check-generated` passed.
+- `git diff --check` passed.
 
-## Current State
+## Notes And Constraints
 
-Task setup is in progress. Implementation, review rounds, and verification have
-not started yet.
+- Local JVM source lookup under `/private/tmp/spine-research/core-jvm` found
+  placeholder directories only, so exact proto contracts were fetched from
+  upstream Spine JVM sources and checksummed instead of rewritten.
+- `QueryService.Read` intentionally supports the small ID-filtered state-read
+  path backed by `Stand`. Broader query criteria, field masks, ordering, and
+  catch-up behavior remain future work.
+- `SubscriptionService` streams direct entity-state updates from `Stand`.
+  Event subscriptions, projection catch-up, and durable subscription recovery
+  remain future work.
+- Real gRPC tests require local HTTP/2 loopback binding; sandboxed test runs
+  fail with `listen EPERM` until escalated.

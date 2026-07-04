@@ -65,7 +65,7 @@ describe("@spine-ts/proto", () => {
     ) as ProtoSourceManifest;
 
     expect(manifest.schemaVersion).toBe(1);
-    expect(manifest.sources).toHaveLength(16);
+    expect(manifest.sources).toHaveLength(25);
 
     for (const source of manifest.sources) {
       const contents = readFileSync(resolve(source.localPath));
