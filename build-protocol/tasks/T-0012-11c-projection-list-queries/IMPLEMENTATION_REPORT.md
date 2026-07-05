@@ -12,7 +12,10 @@ This slice adds the smallest read-side list query path needed by the to-do
 example: projection-state `include_all` reads through `QueryService.Read`.
 
 Review-fix follow-up from `13b1244` tightened the documentation and the direct
-stand reliability evidence without broadening the runtime surface.
+stand reliability evidence without broadening the runtime surface. This
+docs-only follow-up clarifies that the same tenant rules apply to direct stand
+list reads and `QueryService.Read` include-all projection reads as to point
+reads.
 
 ## Initial Evidence
 
@@ -39,6 +42,9 @@ Implemented the smallest storage-backed include-all path:
   `QUERY_READ_ERROR` response.
 - README and task logs were updated to document the new list-read behavior and
   the verification evidence.
+- Final doc cleanup aligned the package README, architecture notes, and user
+  guide so point reads, list reads, and `Target.include_all` summaries all
+  state the same single-tenant/multitenant tenant rules.
 
 ### RED evidence
 

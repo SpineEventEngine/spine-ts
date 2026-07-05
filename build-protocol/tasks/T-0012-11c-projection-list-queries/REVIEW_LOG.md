@@ -31,3 +31,9 @@ Status: complete
 - performance/reliability: focused stand tests now prove `readAllVersioned()`
   closes storage handles after success and rejection, and that returned
   state/version values are copy-safe across rereads.
+
+## Round 2
+
+- documentation: package, architecture, and user-guide wording now all state
+  the same tenant rules for point reads, direct list reads, and
+  `QueryService.Read` include-all projection reads.

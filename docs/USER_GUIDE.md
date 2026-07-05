@@ -84,8 +84,8 @@ broader server lifecycle, and the to-do application remain later slices.
   factory.
 - A direct storage-backed `Stand` owned by each built `BoundedContext`.
   Registered repositories make their entity state schemas known to the stand,
-  which can record latest states, read them by schema and ID, and notify
-  in-process subscribers.
+  which can record latest states, read them by schema and ID or in storage
+  order, and notify in-process subscribers.
 - A small `BoundedContext.storedEventDispatchFailures()` diagnostic snapshot
   for asynchronous already-stored event redispatch failures after aggregate
   event storage has completed.
@@ -93,7 +93,8 @@ broader server lifecycle, and the to-do application remain later slices.
   real Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
   routes without adding a broad server facade or client DSL. Command routes are
   selected from built-time bus registrations, queries preserve Stand-recorded
-  versions, and subscriptions attach delivery only after explicit activation.
+  versions for ID-filter and `Target.include_all` projection reads, and
+  subscriptions attach delivery only after explicit activation.
   Inactive subscriptions expire by default and active subscriptions use a small
   bounded update queue for slow consumers.
 - A server entity state transition validator that enforces built-in

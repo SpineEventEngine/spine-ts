@@ -355,6 +355,9 @@ the context command bus to the first real Connect/Node `CommandService`,
 `QueryService`, and `SubscriptionService` routes. Projection-state
 `QueryService.Read` calls with `Target.include_all = true` are satisfied through
 `Stand.readAllVersioned()` over the stand's `RecordStorage.query()` path.
+Direct list reads and `QueryService.Read` include-all calls follow the same
+tenant rules as point reads: single-tenant contexts reject tenant options, and
+multitenant contexts require `tenantId`.
 Service subscription delivery starts only when a client activates the opaque
 subscription ID, abandoned inactive subscriptions expire after a small
 configurable TTL, slow consumers are bounded by a small configurable update

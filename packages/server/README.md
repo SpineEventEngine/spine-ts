@@ -504,11 +504,12 @@ subscription.unsubscribe();
 Repositories registered with a built context make their state schemas known to
 that context's stand. Stand reads, updates, and subscriptions reject unknown
 state schemas with `StandStateTypeError`. Multitenant stands require
-`{ tenantId }` on read/update/subscribe; single-tenant stands reject tenant
-options. `readAllVersioned()` returns `StandReadResult` entries in deterministic
-storage query order and reuses the same caller-supplied version metadata as
-point reads. Direct subscriptions are deterministic in-process callbacks and
-must be cleaned up explicitly. `SpineServices` adapts built-context command
+`{ tenantId }` on point reads, list reads, updates, and subscriptions; single-
+tenant stands reject tenant options. `readAllVersioned()` returns
+`StandReadResult` entries in deterministic storage query order and reuses the
+same caller-supplied version metadata as point reads. Direct subscriptions are
+deterministic in-process callbacks and must be cleaned up explicitly.
+`SpineServices` adapts built-context command
 buses and stands to the first `CommandService`, `QueryService`, and
 `SubscriptionService` methods, including `QueryService.Read` support for
 projection-state ID filters and `Target.include_all` reads. Cross-context
