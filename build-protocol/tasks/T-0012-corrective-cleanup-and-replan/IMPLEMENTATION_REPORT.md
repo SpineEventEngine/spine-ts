@@ -224,10 +224,8 @@ Connect/Node gRPC-compatible `SpineServices` slice for `CommandService`,
 `QueryService`, and `SubscriptionService`, copied the required Spine service
 protos, and preserved explicit activation/cancellation and tenant isolation.
 All required review lanes are clean through commit `dfd1140`, with final
-clean-review bookkeeping committed as `341b69a`. `T-0012.11 Missing Details And
-Example Readiness` is now split. Its first selected implementation slice is
-`T-0012.11a Aggregate Command Execution`, and this docs-fix pass records the
-review corrections before the orchestrator opens that slice's branch/worktree.
+clean-review bookkeeping committed as `341b69a`. The later `T-0012.11` split
+and implementation history is recorded below.
 
 Parent tracked-state verification after integrating `T-0012.9` passed:
 `pnpm check:node`, `pnpm typecheck`, `pnpm lint`, tracked-file Prettier,
