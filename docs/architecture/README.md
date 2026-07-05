@@ -374,11 +374,12 @@ message `Command payload validation failed.`, and packed
 `spine.validation.ValidationError` details. Handler-thrown `CommandRefusalError`
 values are the one immediate business refusal path mapped to stable non-ok
 `Ack` errors. Aggregate event appliers continue to use
-`EntityTransaction.commit()` for transition validation; repository execution
-observes rejected commit results and raises
-`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
-details before events or snapshots are stored. Unexpected command-bus failures
-remain sanitized as `COMMAND_POST_ERROR`.
+`EntityTransaction.commit()` for transition validation. When the rejected
+commit comes from applying events produced by the current command, repository
+execution raises `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed
+`ValidationError` details before events or snapshots are stored. Stored-history
+replay failures remain internal and are sanitized as `COMMAND_POST_ERROR`.
+Unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
 
 The following runtime pieces are still deferred to later explicit tasks:
 

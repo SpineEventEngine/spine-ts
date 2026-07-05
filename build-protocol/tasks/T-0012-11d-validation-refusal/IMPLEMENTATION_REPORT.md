@@ -85,7 +85,7 @@ Baseline commit: `c13b19c`
 
 ## Review Summary
 
-Independent review has run through eight rounds so far. Round 1 moved payload
+Independent review has run through nine rounds so far. Round 1 moved payload
 validation to the `CommandBus`, removed an accidental public entity inspection
 hook, and filled missing public Ack docs. Round 2 moved internal validation
 errors back into their owning bus/repository layers and kept arbitrary
@@ -99,10 +99,15 @@ passed report-only verification. Round 6 resolved the final README wording
 alignment found by TypeScript/API review and passed docs/report verification.
 Round 7 resolved rejected transition rollback handling. Round 8 resolved
 aggregate replay error separation, stale-marker recovery coverage, and queued
-command-bus validation ordering coverage.
+command-bus validation ordering coverage. Round 9 protected rejected
+transition-validation details from handler mutation, moved replay errors to a
+replay-owned module, qualified public replay-failure docs, and refreshed parent
+ledger state.
 
 ### Latest Verification
 
+- `2026-07-05 09:03 WEST`: Docs-only round-10 verification passed:
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
 - `2026-07-05 08:49 WEST`: Focused mutation regression passed. Full affected
   bus/repository/service suites passed outside the sandbox with 3 files and 96
   tests. The sandboxed affected suite failed only on known loopback gRPC

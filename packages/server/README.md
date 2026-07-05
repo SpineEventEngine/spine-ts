@@ -54,10 +54,11 @@ Current slice exposes:
 validation failed.` and packed `spine.validation.ValidationError` details
   when `CommandBus` rejects an invalid accepted command payload before
   dispatcher execution, whether the dispatcher is a repository adapter or a
-  custom `addCommandDispatcher()` registration; aggregate transition-validation
-  rejections continue to surface as
-  `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
-  details;
+  custom `addCommandDispatcher()` registration; transition-validation
+  rejections while applying events produced by the current aggregate command
+  surface as `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed
+  `ValidationError` details, while stored-history replay failures remain
+  internal and sanitized as `COMMAND_POST_ERROR`;
   and
 - `AggregateStorage` for the current primitive-`AggregateId`
   snapshot/history seam, backed by `StorageFactory`, `RecordStorage`, and

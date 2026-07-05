@@ -6,7 +6,7 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-9 fixes verified; ready for round-10 independent review
+Status: round-10 docs fixes verified; ready for round-11 independent review
 
 ## Required Lanes
 
@@ -266,3 +266,21 @@ Status: round-9 fixes verified; ready for round-10 independent review
   listener permissions (`listen EPERM 127.0.0.1`). `pnpm typecheck`,
   `pnpm lint`, `pnpm docs:check`, `pnpm format:check`, and `git diff --check`
   passed.
+
+### Round 10
+
+- `2026-07-05 08:56 WEST`: Code style and documentation found the child
+  implementation report review summary still counted only eight rounds.
+- `2026-07-05 08:57 WEST`: Documentation and TypeScript/API docs found stale
+  architecture and server README wording that did not distinguish
+  current-command transition validation from internal aggregate-history replay
+  failures, and stale parent task/report status headers.
+- `2026-07-05 08:58 WEST`: Security and performance/reliability were clean.
+
+## Round-10 Fix Pass
+
+- `2026-07-05 09:00 WEST`: Orchestrator updated architecture/server README
+  replay wording, parent status headers, and the child implementation report
+  review summary.
+- `2026-07-05 09:03 WEST`: Docs-only verification passed:
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
