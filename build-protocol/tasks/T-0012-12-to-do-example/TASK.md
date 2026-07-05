@@ -1,6 +1,6 @@
 # T-0012.12: To-Do Example
 
-Status: T-0012.12d merged; T-0012.12e selected
+Status: T-0012.12e merged; T-0012.12f selected
 Start: `2026-07-05 10:53 WEST`
 End: Pending
 Baseline commit: `89868e9`
@@ -13,7 +13,8 @@ Authoring sub-agent: Requirements splitter
 review sub-agents complete and closed; `T-0012.12b` implementation and review
 sub-agents complete and closed; `T-0012.12c` implementation and review
 sub-agents complete and closed; `T-0012.12d` implementation and review
-sub-agents complete and closed; `T-0012.12e` implementation pending.
+sub-agents complete and closed; `T-0012.12e` implementation and review
+sub-agents complete and closed.
 Reviewer sub-agents:
 
 - code style/maintainability:
@@ -33,8 +34,8 @@ Reviewer sub-agents:
   `019f31c7-772a-7e42-b17c-2d7388b5c24b`
   Implementation commits: `3cc8625` merge of `T-0012.12a`; `63f8e9f` merge of
   `T-0012.12b`; `e27b033` merge of `T-0012.12c`; `6d82910` merge of
-  `T-0012.12d`
-  Final branch HEAD: `6d82910`; `T-0012.12e` pending
+  `T-0012.12d`; `064a95d` merge of `T-0012.12e`
+  Final branch HEAD: `064a95d`; `T-0012.12f` selected
 
 ## Objective
 
@@ -504,6 +505,8 @@ Verification plan:
 - `pnpm docs:check` if public docs/API move.
 - `git diff --check`
 
+- Status: complete and merged via `064a95d`.
+
 ### T-0012.12f Runnable Server And Guide
 
 Proposed branch: `task/T-0012-12f-runnable-server-guide`
@@ -588,19 +591,18 @@ Selection rationale:
 
 ## Current Selected Slice
 
-Selected next implementable slice: `T-0012.12e Task Subscriptions`.
+Selected next implementable slice: `T-0012.12f Runnable Server And Guide`.
 
-Branch: `task/T-0012-12e-task-subscriptions`
+Branch: `task/T-0012-12f-runnable-server-guide`
 
 Worktree:
-`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12e-task-subscriptions`
+`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12f-runnable-server-guide`
 
 Selection rationale:
 
-- `T-0012.12d` completed validation-failure and business-refusal behavior over
-  the normal command path.
-- The next smallest runnable behavior is real `SubscriptionService` updates
-  emitted from projection changes.
+- `T-0012.12e` completed live subscription coverage over projection changes.
+- The remaining to-do-example slice is the standalone runnable server and user
+  guide.
 - No framework gap is known before this slice. If implementation proves one,
   it must be routed through a framework-gap task before continuing dependent
   example work.

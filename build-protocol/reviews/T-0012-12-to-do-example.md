@@ -3,10 +3,10 @@
 Task log: `build-protocol/tasks/T-0012-12-to-do-example/TASK.md`
 Branch: `task/T-0012-12-to-do-example`
 Baseline commit: `89868e9`
-Reviewed commit/diff basis: `6d82910..1949929`
+Reviewed commit/diff basis: `064a95d..HEAD`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
-Status: T-0012.12d merged; T-0012.12e selected
+Status: T-0012.12e merged; T-0012.12f selected
 
 ## Required Review Lanes
 
@@ -82,7 +82,10 @@ Review focus for splitter review:
   security, and performance/reliability after closure metadata wording fixes.
 - Parent integration metadata review for `6d82910..1949929` had one
   maintainability finding: replace the stale pending reviewed-basis field.
-- Next selected slice: `T-0012.12e Task Subscriptions`.
+- `T-0012.12e Task Subscriptions`: complete and merged via `064a95d`.
+  Final clean lanes: maintainability, documentation, TypeScript/API docs,
+  security, and performance/reliability after closure evidence ordering.
+- Next selected slice: `T-0012.12f Runnable Server And Guide`.
 
 ## T-0012.12e Implementation Notes
 
@@ -96,4 +99,13 @@ Review focus for splitter review:
 - No framework gap was found during implementation; the existing
   `SubscriptionService` and fixture queue behavior already satisfied the new
   black-box assertions.
-- Local implementation review is still pending on this branch.
+- Slice review completed cleanly and the branch was merged into `main` via
+  `064a95d`.
+
+## Parent Integration Review
+
+- Parent integration docs for `T-0012.12e` are updated after merge.
+- Review package to prepare after this docs commit:
+  `064a95d..HEAD`.
+- Required lanes: maintainability, documentation, TypeScript/API docs,
+  security, and performance/reliability.

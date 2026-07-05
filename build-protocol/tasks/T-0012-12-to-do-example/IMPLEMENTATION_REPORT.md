@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12 To-Do Example
 
-Status: T-0012.12d merged; T-0012.12e selected
+Status: T-0012.12e merged; T-0012.12f selected
 Branch: `task/T-0012-12-to-do-example`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
@@ -27,8 +27,9 @@ framework details.
 The requirements-splitting sub-agent split this task into small slices and
 identified no framework gap before the first slice. `T-0012.12a Todo Proto
 Generation`, `T-0012.12b Create Task Flow`, `T-0012.12c Task Operations`, and
-`T-0012.12d Validation And Refusal` are complete and merged. The next selected
-implementation slice is `T-0012.12e Task Subscriptions`.
+`T-0012.12d Validation And Refusal`, and `T-0012.12e Task Subscriptions` are
+complete and merged. The next selected implementation slice is
+`T-0012.12f Runnable Server And Guide`.
 
 ## Current State
 
@@ -40,7 +41,8 @@ implementation slice is `T-0012.12e Task Subscriptions`.
 - `T-0012.12b Create Task Flow` is merged via `63f8e9f`.
 - `T-0012.12c Task Operations` is merged via `e27b033`.
 - `T-0012.12d Validation And Refusal` is merged via `6d82910`.
-- `T-0012.12e Task Subscriptions` is selected next.
+- `T-0012.12e Task Subscriptions` is merged via `064a95d`.
+- `T-0012.12f Runnable Server And Guide` is selected next.
 
 ## Splitter Evidence Summary
 
@@ -89,6 +91,7 @@ Important findings:
    - Adds validation-failure and business-refusal black-box coverage.
 5. `T-0012.12e Task Subscriptions`
    - Branch: `task/T-0012-12e-task-subscriptions`
+   - Complete and merged via `064a95d`.
    - Adds real subscription update tests over projection changes.
 6. `T-0012.12f Runnable Server And Guide`
    - Branch: `task/T-0012-12f-runnable-server-guide`
@@ -105,14 +108,14 @@ Gap-routing rule:
 
 ## Current Selected Subtask
 
-Selected: `T-0012.12e Task Subscriptions`
+Selected: `T-0012.12f Runnable Server And Guide`
 
 Why:
 
-- `T-0012.12d` completed validation-failure and business-refusal behavior on
-  the same aggregate/projection path.
-- The next vertical slice should add live subscription updates over projection
-  changes using real `SubscriptionService` behavior.
+- `T-0012.12e` completed live subscription updates over projection changes
+  using real `SubscriptionService` behavior.
+- The remaining example work is the standalone service host, gRPC smoke path,
+  README, and `USER_GUIDE.md`.
 - No framework gap is known before this slice.
 
 ## Verification
