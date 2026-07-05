@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12d Validation And Refusal
 
-Status: round-eleven metadata fixed; re-review pending
+Status: round-twelve metadata fixed; re-review pending
 Branch: `task/T-0012-12d-validation-refusal`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
@@ -19,7 +19,7 @@ Round-eight-metadata commit: `af96a6a`
 Round-nine-metadata commit: `d6ae65b`
 Round-ten-metadata commit: `95bf3da`
 Round-eleven-metadata commit: `1e7b884`
-Final branch HEAD: `1e7b884`
+Final branch HEAD: pending closure/integration
 
 ## Summary
 
@@ -42,6 +42,8 @@ query behavior completed by `T-0012.12c`.
   `TaskList.tasks` contents as primitive task fields.
 - Branch closure commit, if any, will be recorded after closure or
   integration, once it exists.
+- Reviewer follow-up for this pass: keep the final branch head deferred until
+  a later closure/integration commit can record the terminal SHA.
 
 ## Verification Evidence
 

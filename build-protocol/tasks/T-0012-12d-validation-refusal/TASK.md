@@ -1,6 +1,6 @@
 # T-0012.12d: Validation And Refusal
 
-Status: round-eleven metadata fixed; re-review pending
+Status: round-twelve metadata fixed; re-review pending
 Start: `2026-07-05 18:08 WEST`
 End: `2026-07-05 18:49 WEST`
 Baseline commit: `27250a0`
@@ -24,7 +24,7 @@ Round-eight-metadata commit: `af96a6a`
 Round-nine-metadata commit: `d6ae65b`
 Round-ten-metadata commit: `95bf3da`
 Round-eleven-metadata commit: `1e7b884`
-Final branch HEAD: `1e7b884`
+Final branch HEAD: pending closure/integration
 
 ## Objective
 
@@ -194,6 +194,19 @@ Out of scope:
 - Escalated `pnpm test:coverage` passed, 45 files / 647 tests, with overall
   coverage: statements 95.18%, branches 90.48%, functions 97.63%, lines
   95.2%.
+
+## Review Notes
+
+- Round-one review after implementation commit
+  `a831bd6273335c90a85f57e9772a64afe09e687d` requested changes for durable
+  metadata and rejected-command assertions.
+- Round-two review after review-fix commit `dc2d37e` requested changes for
+  full-list snapshot coverage and stale metadata.
+- Round-three-through-round-eleven metadata reviews kept advancing the
+  reviewed metadata basis through `1e7b884`.
+- Current reviewer note for this pass: keep `Final branch HEAD` deferred or
+  non-final until a later closure/integration commit can record the terminal
+  SHA.
 
 ## Restart Guidance
 

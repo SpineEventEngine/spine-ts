@@ -7,7 +7,7 @@ Reviewed commit/diff basis:
 `1e7b884`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
-Status: round-eleven metadata fixed; re-review pending
+Status: round-twelve metadata fixed; re-review pending
 
 ## Required Review Lanes
 
@@ -255,3 +255,26 @@ Metadata update:
 - Re-review basis is now `1e7b884`.
 - Branch closure commit, if any, will be recorded after closure or
   integration, once it exists.
+
+### Round 12
+
+Reviewed basis: round-eleven-metadata commit `1e7b884`.
+
+Outcome: changes requested.
+
+Findings:
+
+- `build-protocol/tasks/T-0012-12d-validation-refusal/TASK.md`,
+  `build-protocol/tasks/T-0012-12d-validation-refusal/IMPLEMENTATION_REPORT.md`,
+  and `build-protocol/work-logs/T-0012-12d.md` still used `Final branch HEAD:
+  1e7b884`, which conflicts with the deferred-final-SHA convention for this
+  task.
+
+Planned fixes:
+
+- Replace each `Final branch HEAD: 1e7b884` line with an explicitly
+  pending/non-final value such as `pending closure/integration`.
+- Preserve `1e7b884` as the latest reviewed metadata basis in the durable
+  logs.
+- Update the current-state/review-log wording to reflect this deferred-final
+  metadata fix.
