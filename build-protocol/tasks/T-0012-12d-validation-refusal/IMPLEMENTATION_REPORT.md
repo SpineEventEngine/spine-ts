@@ -60,11 +60,11 @@ query behavior completed by `T-0012.12c`.
   failed with 10 tests / 1 failure: duplicate `CompleteTask` returned Ack
   status `ok` instead of the expected refusal error.
 - GREEN `pnpm typecheck:build` passed.
-- GREEN
-  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
-  passed, 1 file / 11 tests.
 - Final `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
   passed, 1 file / 12 tests.
+- Earlier review-fix GREEN (pre-round-two history):
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed, 1 file / 11 tests.
 - Final `pnpm typecheck` passed.
 - Final `pnpm lint` passed.
 - Final changed-file Prettier check passed.
@@ -115,8 +115,9 @@ No framework gap was found. Existing `CommandService.Post`,
 
 ## Review Result
 
-Local standards/spec review found no issues. A separate reviewer sub-agent was
-not available in this session.
+Local standards/spec review found no issues. Separate reviewer sub-agents were
+not available for that initial pass; later required review lanes were completed
+and closed cleanly.
 
 Round-one review after implementation commit
 `a831bd6273335c90a85f57e9772a64afe09e687d` requested changes:

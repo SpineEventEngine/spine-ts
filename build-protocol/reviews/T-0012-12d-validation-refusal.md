@@ -310,3 +310,20 @@ Reviewed basis: restart-head-clarification commit `f04b9b6`.
 Outcome: clean.
 
 Findings: none.
+
+### Round 16
+
+Reviewed basis: closure-metadata consistency pass.
+
+Outcome: clean.
+
+Findings: none.
+
+Notes:
+
+- Reviewer-sub-agent wording now matches the initial-pass history and the
+  later closed review lanes.
+- Final closure verification is now clearly separated from the earlier
+  pre-round-two 11-test review-fix history.
+- Restart guidance stays pinned to the clean reviewed basis `f04b9b6` before
+  this closure metadata commit.

@@ -9,7 +9,8 @@ Branch: `task/T-0012-12d-validation-refusal`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
 Authoring sub-agent: main Codex implementer
-Reviewer sub-agents: unavailable in this session; local two-axis review completed
+Reviewer sub-agents: unavailable for the initial local review; later required
+review lanes were completed and closed cleanly
 Setup commit: `c264543`
 Implementation commit: `a831bd6273335c90a85f57e9772a64afe09e687d`
 Round-one reviewed branch HEAD: `a831bd6273335c90a85f57e9772a64afe09e687d`
@@ -144,11 +145,11 @@ Out of scope:
   failed with 11 tests / 1 failure after a temporary post-rejection delayed
   rename proved the new eventual invariant helper catches a projection change
   from title `Kept` to `Changed`.
-- Review-fix GREEN:
+- Earlier review-fix GREEN (pre-round-two history):
   `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
   passed after removing the temporary mutation while keeping the strengthened
   eventual assertions, 1 file / 11 tests.
-- Review-fix final verification:
+- Review-fix final verification (pre-round-two history):
   `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`,
   `pnpm typecheck`, `pnpm lint`, changed-file
   `pnpm exec prettier --check`, `pnpm docs:check`,
@@ -175,7 +176,7 @@ Out of scope:
 ## Final Verification
 
 - `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
-  passed, 1 file / 11 tests.
+  passed, 1 file / 12 tests.
 - `pnpm typecheck` passed.
 - `pnpm lint` passed.
 - `pnpm exec prettier --check` on changed task/example files passed.
@@ -183,6 +184,9 @@ Out of scope:
   source-link warning only.
 - `pnpm proto:check-generated` passed.
 - `git diff --check` passed.
+- Earlier review-fix verification (pre-round-two history) passed:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed, 1 file / 11 tests.
 - Round-two fix verification passed:
   `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
   passed, 1 file / 12 tests.
@@ -195,7 +199,7 @@ Out of scope:
 - Round-two fix `git diff --check` passed.
 - Sandboxed `pnpm test:coverage` failed because local IPC and loopback are
   restricted (`Operation not permitted` and `listen EPERM 127.0.0.1`).
-- Escalated `pnpm test:coverage` passed, 45 files / 647 tests, with overall
+- Escalated `pnpm test:coverage` passed, 45 files / 648 tests, with overall
   coverage: statements 95.18%, branches 90.48%, functions 97.63%, lines
   95.2%.
 
@@ -213,7 +217,8 @@ Out of scope:
 
 ## Restart Guidance
 
-- Resume from the actual Git branch head.
+- Resume from the clean reviewed basis `f04b9b6` before this closure metadata
+  commit.
 - Latest clean review basis before closure metadata: `f04b9b6`.
 - Task branch closure commit, if any, will be recorded after closure or
   integration, once it exists.
