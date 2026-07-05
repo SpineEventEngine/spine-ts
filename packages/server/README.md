@@ -4,7 +4,8 @@ Descriptor-derived server metadata for Spine entity schemas, explicit handler
 metadata, standard decorator metadata adapters, aggregate snapshot/event storage,
 the first command/event bus seam, and the first runtime routing plan seam over
 `@spine-ts/transport` contracts, plus the first direct storage-backed `Stand`
-slice for latest entity state reads and in-process update subscriptions.
+slice for latest entity state point/list reads and in-process update
+subscriptions.
 
 Current slice exposes:
 
@@ -31,16 +32,33 @@ Current slice exposes:
   and
 - `new Repository({ entityType, schema, handlers })` route calculation through
   `routeCommand()` and `routeEvent()` when explicit handler metadata is supplied.
-  Routes are deferred and do not invoke handlers;
+  Direct route calls only calculate routes and do not invoke handlers; built
+  contexts use the same metadata to execute aggregate command handlers and
+  projection event subscribers through the command and event buses;
   and
 - `context.stand()` / `new Stand({ context, storageFactory })` for direct
-  read-side entity state registration, latest-state updates, latest-state reads,
-  and explicit in-process subscription cleanup;
+  read-side entity state registration, latest-state updates, latest-state point
+  and list reads with caller-supplied version metadata, and explicit in-process
+  subscription cleanup;
   and
 - `new SpineServices({ contexts }).register(router)` for the first real
   Connect/Node route registration of Spine JVM `CommandService`,
   `QueryService`, and `SubscriptionService` contracts over built bounded
-  contexts;
+  contexts, including projection-state ID-filter and `Target.include_all`
+  query reads;
+  and
+- `CommandRefusalError` for the current immediate business refusal path from
+  command handlers to non-ok `CommandService.Post` `Ack` errors;
+  and
+- `COMMAND_VALIDATION_ERROR` `Ack` responses with message
+  `Command payload validation failed.` and packed `spine.validation.ValidationError` details
+  when `CommandBus` rejects an invalid accepted command payload before
+  dispatcher execution, whether the dispatcher is a repository adapter or a
+  custom `addCommandDispatcher()` registration; transition-validation
+  rejections while applying events produced by the current aggregate command
+  surface as `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed
+  `ValidationError` details, while stored-history replay failures remain
+  internal and sanitized as `COMMAND_POST_ERROR`;
   and
 - `AggregateStorage` for the current primitive-`AggregateId`
   snapshot/history seam, backed by `StorageFactory`, `RecordStorage`, and
@@ -464,22 +482,49 @@ inspection. Repository state schemas are also registered with the context-owned
 `stand()` as known state types.
 Repeated `add(repository)` calls before `build()` are idempotent.
 Registering the same repository instance with another built context is rejected.
+Aggregate command execution requires `command.id` so produced events can carry
+a contract-valid command origin; missing IDs reject before mutation or storage.
+`CommandBus` validates accepted command payloads before dispatcher callbacks,
+including custom `addCommandDispatcher()` routes. For repository-backed
+aggregate dispatchers, that still means validation happens before route
+calculation, aggregate history load, event append, snapshot write, or
+stored-event dispatch. `CommandService.Post` maps command-bus payload validation
+failures to `COMMAND_VALIDATION_ERROR` with message
+`Command payload validation failed.` and packed `spine.validation.ValidationError`
+details. If a command handler throws `CommandRefusalError`, `CommandService.Post`
+returns a non-ok `Ack` with that stable error type and message instead of
+`COMMAND_POST_ERROR`. If an event applier commits a transaction rejected by
+entity transition validation while applying events produced by the current
+command, command execution rejects with
+`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced events or
+snapshots; the validation details remain the
+`EntityTransaction`/`validateEntityStateTransition()` result. Replay failures
+from stored aggregate history remain internal and are sanitized as
+`COMMAND_POST_ERROR`. Dispatcher-thrown `ValidationException` values and other
+unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
+Aggregate command completion resolves after aggregate event storage and
+snapshot handling even though already-stored event redispatch continues
+asynchronously. If that later redispatch fails in dispatcher acceptance,
+dispatcher execution, projection subscribers, or `Stand` updates, the owning
+context records a copy-safe diagnostic snapshot through
+`storedEventDispatchFailures()`; it does not retry or run catch-up delivery.
 
 This slice deliberately does not create default repositories from entity
-classes, invoke handlers, construct system contexts, start query/subscription
-buses, write tenant indexes, expose a broad server lifecycle, or integrate
-transports.
+classes, invoke query/process handlers, construct system contexts, start
+query/subscription buses, write tenant indexes, expose a broad server
+lifecycle, or integrate transports.
 
 ## Direct Stand
 
-Use the context-owned `Stand` for direct latest-state reads and in-process
-entity update notifications:
+Use the context-owned `Stand` for direct latest-state reads, storage-order
+latest-state list reads, and in-process entity update notifications:
 
 ```ts
 const stand = tasks.stand();
 
 await stand.update(TaskStateSchema, taskState, { version });
 const latest = await stand.read(TaskStateSchema, taskId);
+const all = await stand.readAllVersioned(TaskStateSchema);
 
 const subscription = stand.subscribe(TaskStateSchema, (update) => {
   update.state;
@@ -490,12 +535,17 @@ subscription.unsubscribe();
 Repositories registered with a built context make their state schemas known to
 that context's stand. Stand reads, updates, and subscriptions reject unknown
 state schemas with `StandStateTypeError`. Multitenant stands require
-`{ tenantId }` on read/update/subscribe; single-tenant stands reject tenant
-options. Direct subscriptions are deterministic in-process callbacks and must
-be cleaned up explicitly. `SpineServices` adapts built-context command buses and
-stands to the first `CommandService`, `QueryService`, and `SubscriptionService`
-methods. Cross-context fallback, client query DSLs, event subscriptions, field
-filtering, and projection catch-up remain outside this slice.
+`{ tenantId }` on point reads, list reads, updates, and subscriptions; single-
+tenant stands reject tenant options. `readAllVersioned()` returns
+`StandReadResult` entries in deterministic storage query order and reuses the
+same caller-supplied version metadata as point reads. Direct subscriptions are
+deterministic in-process callbacks and must be cleaned up explicitly.
+`SpineServices` adapts built-context command
+buses and stands to the first `CommandService`, `QueryService`, and
+`SubscriptionService` methods, including `QueryService.Read` support for
+projection-state ID filters and `Target.include_all` reads. Cross-context
+fallback, client query DSLs, event subscriptions, field filtering, and
+projection catch-up remain outside this slice.
 
 ## Entity State Shell
 

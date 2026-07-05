@@ -173,6 +173,11 @@ const expectedTransportExports = [
   "createTransportSubscription",
   "createTransportTopic",
 ];
+const expectedTestingExports = [
+  "BoundedContextFixture",
+  "BoundedContextFixtureOptions",
+  "FixtureSubscription",
+];
 const expectedServerExports = [
   "Aggregate",
   "AggregateId",
@@ -193,6 +198,7 @@ const expectedServerExports = [
   "CommandEndpoint",
   "CommandDispatcher",
   "CommandAssignmentHandlerMetadata",
+  "CommandRefusalError",
   "CommandRuntimeRoutingPlan",
   "CommandRegistrationAssigneeMetadata",
   "CommandRegistrationReadiness",
@@ -281,9 +287,11 @@ const expectedServerExports = [
   "StandSubscription",
   "StandUpdate",
   "StandUpdateOptions",
+  "DispatchErrorSnapshot",
+  "StoredEventDispatchFailure",
+  "EntityScopeReason",
   "TransactionalEntity",
   "TransactionalEntityScopeError",
-  "TransactionalEntityScopeErrorReason",
   "TransactionalEntityScopeOperation",
   "TenantMode",
   "EntityTransaction",
@@ -344,6 +352,7 @@ const expectedServerExports = [
 const protoIndexPath = join("packages", "proto", "src", "index.ts");
 const storageIndexPath = join("packages", "storage", "src", "index.ts");
 const serverIndexPath = join("packages", "server", "src", "index.ts");
+const testingIndexPath = join("packages", "testing", "src", "index.ts");
 
 const typedocExecutable = process.platform === "win32" ? "typedoc.cmd" : "typedoc";
 const typedocBin = join("node_modules", ".bin", typedocExecutable);
@@ -377,6 +386,7 @@ const apiDocs = JSON.parse(readFileSync(jsonPath, "utf8"));
 const documentedNames = new Set();
 const serverModuleNames = collectDirectModuleNames(apiDocs, "packages/server/src");
 const storageModuleNames = collectDirectModuleNames(apiDocs, "packages/storage/src");
+const testingModuleNames = collectDirectModuleNames(apiDocs, "packages/testing/src");
 
 function collectNames(value) {
   if (Array.isArray(value)) {
@@ -649,6 +659,7 @@ const forbiddenStorageTypeDocNames = [
 ];
 const declaredServerExports = collectNamedExports(serverIndexPath);
 const declaredStorageExports = collectNamedExports(storageIndexPath);
+const declaredTestingExports = collectNamedExports(testingIndexPath);
 const missingServerExports = expectedServerExports.filter((name) => !serverModuleNames.has(name));
 const missingDeclaredServerExports = expectedServerExports.filter(
   (name) => !declaredServerExports.includes(name),
@@ -664,6 +675,15 @@ const unexpectedServerExports = declaredServerExports.filter(
 );
 const unexpectedStorageExports = declaredStorageExports.filter(
   (name) => !expectedStorageExports.includes(name),
+);
+const missingTestingExports = expectedTestingExports.filter(
+  (name) => !testingModuleNames.has(name),
+);
+const missingDeclaredTestingExports = expectedTestingExports.filter(
+  (name) => !declaredTestingExports.includes(name),
+);
+const unexpectedTestingExports = declaredTestingExports.filter(
+  (name) => !expectedTestingExports.includes(name),
 );
 
 if (missingExports.length > 0) {
@@ -731,6 +751,29 @@ if (missingTransportExports.length > 0) {
   process.exit(1);
 }
 
+if (missingTestingExports.length > 0) {
+  console.error(
+    `TypeDoc JSON is missing expected @spine-ts/testing exports: ${missingTestingExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
+if (missingDeclaredTestingExports.length > 0) {
+  console.error(
+    `@spine-ts/testing root is missing expected exports: ${missingDeclaredTestingExports.join(
+      ", ",
+    )}`,
+  );
+  process.exit(1);
+}
+
+if (unexpectedTestingExports.length > 0) {
+  console.error(
+    `@spine-ts/testing root exports changed without updating docs expectations: ${unexpectedTestingExports.join(", ")}`,
+  );
+  process.exit(1);
+}
+
 if (forbiddenMatches.length > 0) {
   console.error(
     `TypeDoc JSON exposes removed or non-public @spine-ts/server API surface: ${[
@@ -785,7 +828,8 @@ console.log(
     `${expectedCoreExports.length} expected @spine-ts/core exports`,
     `${expectedServerExports.length} expected @spine-ts/server exports`,
     `${expectedStorageExports.length} expected @spine-ts/storage exports`,
-    `${expectedTransportExports.length} expected @spine-ts/transport exports.`,
+    `${expectedTransportExports.length} expected @spine-ts/transport exports`,
+    `${expectedTestingExports.length} expected @spine-ts/testing exports.`,
   ].join(", "),
 );
 
@@ -799,20 +843,29 @@ function collectNamedExports(indexPath) {
   const names = new Set();
 
   for (const statement of source.statements) {
-    if (statement.kind !== SyntaxKind.ExportDeclaration) {
+    if (statement.kind === SyntaxKind.ExportDeclaration) {
+      const exportClause = statement.exportClause;
+
+      if (exportClause === undefined || exportClause.kind !== SyntaxKind.NamedExports) {
+        continue;
+      }
+
+      for (const element of exportClause.elements) {
+        names.add(element.name.text);
+      }
       continue;
     }
 
-    const exportClause = statement.exportClause;
-
-    if (exportClause === undefined || exportClause.kind !== SyntaxKind.NamedExports) {
-      continue;
-    }
-
-    for (const element of exportClause.elements) {
-      names.add(element.name.text);
+    if (hasExportModifier(statement) && statement.name?.kind === SyntaxKind.Identifier) {
+      names.add(statement.name.text);
     }
   }
 
   return [...names].sort();
+}
+
+function hasExportModifier(statement) {
+  return (
+    statement.modifiers?.some((modifier) => modifier.kind === SyntaxKind.ExportKeyword) ?? false
+  );
 }

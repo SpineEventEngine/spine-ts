@@ -7,6 +7,7 @@ import { packAny, packEvent } from "@spine-ts/core";
 import {
   EventContextSchema,
   EventIdSchema,
+  EventSchema,
   type Event,
   UserIdSchema,
   VersionSchema,
@@ -16,6 +17,7 @@ import { EventStore, InMemoryStorageFactory, type OnEventAccepted } from "@spine
 import { describe, expect, it } from "vitest";
 
 import { EventBus, type EventDispatcher } from "../../src/index.js";
+import { eventBusAccess } from "../../src/bus/event-bus.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -117,6 +119,37 @@ describe("EventBus", () => {
 
     await expect(bus.post(event)).resolves.toBeUndefined();
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-3" } }]);
+  });
+
+  it("rejects events without a message", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const bus = new EventBus(store);
+
+    await expect(
+      bus.post(
+        create(EventSchema, {
+          id: create(EventIdSchema, { value: "event-without-message" }),
+        }),
+      ),
+    ).rejects.toThrow(/event.message.typeUrl/);
+  });
+
+  it("rejects events with a blank message type URL", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const event = createProjectionEvent("event-blank-message");
+    const bus = new EventBus(store);
+
+    if (event.message !== undefined) {
+      event.message.typeUrl = "";
+    }
+
+    await expect(bus.post(event)).rejects.toThrow(/event.message.typeUrl/);
   });
 
   it("does not invoke dispatchers when EventStore append fails", async () => {
@@ -269,6 +302,23 @@ describe("EventBus", () => {
     expect(observed).toEqual(["dispatch:event-5"]);
   });
 
+  it("deduplicates repeated schemas from one event dispatcher", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const bus = new EventBus(store, [
+      createEventDispatcher([ProjectionStateSchema, ProjectionStateSchema], (event) => {
+        observed.push(`dispatch:${event.id?.value ?? "missing"}`);
+      }),
+    ]);
+
+    await bus.post(createProjectionEvent("event-deduplicated"));
+
+    expect(observed).toEqual(["dispatch:event-deduplicated"]);
+  });
+
   it("does not register the same event dispatcher twice during reentrant schema collection", async () => {
     const store = new EventStore(
       { name: "Tasks", multitenant: false },
@@ -295,6 +345,107 @@ describe("EventBus", () => {
     await bus.post(createProjectionEvent("event-6"));
 
     expect(observed).toEqual(["dispatch:event-6"]);
+  });
+
+  it("dispatches already stored events without appending them again", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const bus = new EventBus(store, [
+      createEventDispatcher([ProjectionStateSchema], (event) => {
+        observed.push(`dispatch:${event.id?.value ?? "missing"}`);
+      }),
+    ]);
+    const event = createProjectionEvent("event-stored-dispatch");
+
+    await store.append(event);
+    await eventBusAccess.postStored(bus, event);
+
+    expect(observed).toEqual(["dispatch:event-stored-dispatch"]);
+    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-stored-dispatch" } }]);
+  });
+
+  it("runs accept hooks before dispatching already stored events", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const bus = new EventBus(store, [
+      {
+        messageSchemas: () => [ProjectionStateSchema],
+        accept: (event) => {
+          observed.push(`accept:${event.id?.value ?? "missing"}`);
+          return Promise.resolve();
+        },
+        dispatch: (event) => {
+          observed.push(`dispatch:${event.id?.value ?? "missing"}`);
+          return Promise.resolve();
+        },
+      },
+    ]);
+    const event = createProjectionEvent("event-stored-accepted");
+
+    await store.append(event);
+    await eventBusAccess.postStored(bus, event);
+
+    expect(observed).toEqual(["accept:event-stored-accepted", "dispatch:event-stored-accepted"]);
+    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-stored-accepted" } }]);
+  });
+
+  it("isolates already-stored accept failures to the delivery job", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const bus = new EventBus(store, [
+      {
+        messageSchemas: () => [ProjectionStateSchema],
+        accept: (event) => {
+          observed.push(`accept:${event.id?.value ?? "missing"}`);
+          return Promise.reject(new Error("stored accept failed"));
+        },
+        dispatch: (event) => {
+          observed.push(`dispatch:${event.id?.value ?? "missing"}`);
+          return Promise.resolve();
+        },
+      },
+    ]);
+    const event = createProjectionEvent("event-stored-accept-failure");
+
+    await store.append(event);
+    await expect(eventBusAccess.postStored(bus, event)).rejects.toThrow("stored accept failed");
+
+    expect(observed).toEqual(["accept:event-stored-accept-failure"]);
+    await expect(store.read()).resolves.toMatchObject([
+      { id: { value: "event-stored-accept-failure" } },
+    ]);
+  });
+
+  it("rejects malformed already stored events before dispatcher lookup", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const bus = new EventBus(store);
+
+    await expect(
+      eventBusAccess.postStored(
+        bus,
+        create(EventSchema, {
+          id: create(EventIdSchema, { value: "event-stored-malformed" }),
+        }),
+      ),
+    ).rejects.toThrow(/event.message.typeUrl/);
+  });
+
+  it("rejects stored-event dispatch for non-event-bus values", () => {
+    expect(() =>
+      eventBusAccess.postStored({} as EventBus, createProjectionEvent("event-wrong-bus")),
+    ).toThrow(/EventBus instance/);
   });
 
   it("rejects nested posts from active event dispatch", async () => {

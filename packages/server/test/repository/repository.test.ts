@@ -8,6 +8,7 @@ import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-met
 
 import {
   Aggregate,
+  defineEntityHandlers,
   describeEntityMetadata,
   ProcessManager,
   Projection,
@@ -100,6 +101,34 @@ class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, numbe
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {}
 class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {}
 class RuntimeCheckedAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
+class HandlerBackedNumberAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {
+  assignTask(command: AggregateState): void {
+    void command;
+  }
+}
+class HandlerBackedBigintAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  assignTask(command: AggregateState): void {
+    void command;
+  }
+}
+class HandlerBackedNumberProjection extends Projection<
+  string,
+  typeof ProjectionStateSchema,
+  number
+> {
+  subscribeTask(event: ProjectionState): void {
+    void event;
+  }
+}
+class HandlerBackedBigintProjection extends Projection<
+  string,
+  typeof ProjectionStateSchema,
+  bigint
+> {
+  subscribeTask(event: ProjectionState): void {
+    void event;
+  }
+}
 const DomainEntityBase = {
   Aggregate,
 };
@@ -623,6 +652,48 @@ describe("repository identity", () => {
       new Repository({
         entityType: TaskAggregate,
         schema: AggregateStateSchema,
+      });
+      const numberAggregateHandlers = defineEntityHandlers(
+        HandlerBackedNumberAggregate,
+        AggregateStateSchema,
+        (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+      );
+      const bigintAggregateHandlers = defineEntityHandlers(
+        HandlerBackedBigintAggregate,
+        AggregateStateSchema,
+        (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+      );
+      const numberProjectionHandlers = defineEntityHandlers(
+        HandlerBackedNumberProjection,
+        ProjectionStateSchema,
+        (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+      );
+      const bigintProjectionHandlers = defineEntityHandlers(
+        HandlerBackedBigintProjection,
+        ProjectionStateSchema,
+        (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+      );
+      new Repository({
+        entityType: HandlerBackedBigintAggregate,
+        schema: AggregateStateSchema,
+        handlers: bigintAggregateHandlers,
+      });
+      new Repository({
+        entityType: HandlerBackedNumberAggregate,
+        schema: AggregateStateSchema,
+        // @ts-expect-error executable aggregate repositories require bigint version metadata.
+        handlers: numberAggregateHandlers,
+      });
+      new Repository({
+        entityType: HandlerBackedNumberProjection,
+        schema: ProjectionStateSchema,
+        handlers: numberProjectionHandlers,
+      });
+      new Repository({
+        entityType: HandlerBackedBigintProjection,
+        schema: ProjectionStateSchema,
+        // @ts-expect-error executable projection repositories require number version metadata.
+        handlers: bigintProjectionHandlers,
       });
       new Repository({
         entityType: TaskProjection,

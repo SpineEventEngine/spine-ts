@@ -12,17 +12,27 @@ import {
   FileDescriptorSetSchema,
   StringValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
+import {
+  ValidationException,
+  deriveTypeUrl,
+  packAny,
+  packCommand,
+  packEvent,
+  unpackAny,
+} from "@spine-ts/core";
 import {
   ActorContextSchema,
   CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
   EmailAddressSchema,
+  EventContextSchema,
+  EventIdSchema,
   InternetDomainSchema,
   TenantIdSchema,
   type TenantId,
   UserIdSchema,
+  ValidationErrorSchema,
   VersionSchema,
   file_spine_options,
 } from "@spine-ts/proto";
@@ -31,7 +41,12 @@ import {
   TargetFiltersSchema,
   TargetSchema,
 } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
-import { QueryIdSchema, QuerySchema } from "@spine-ts/proto/generated/spine/client/query_pb.js";
+import {
+  QueryIdSchema,
+  QuerySchema,
+  type Query,
+  type QueryResponse,
+} from "@spine-ts/proto/generated/spine/client/query_pb.js";
 import { QueryService } from "@spine-ts/proto/generated/spine/client/query_service_pb.js";
 import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
 import {
@@ -43,13 +58,17 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
+import type { Ack } from "@spine-ts/proto/generated/spine/core/ack_pb.js";
 import { describe, expect, it } from "vitest";
 
 import {
+  Aggregate,
   BoundedContext,
+  CommandRefusalError,
   Projection,
   Repository,
   SpineServices,
+  defineEntityHandlers,
   type CommandDispatcher,
 } from "../../src/index.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
@@ -58,6 +77,22 @@ type ProjectionState = Message<"ProjectionState"> & {
   id: string;
   name: string;
   priority: number;
+};
+
+type AggregateState = Message<"AggregateState"> & {
+  id: string;
+  name: string;
+  archived: boolean;
+};
+
+type ValidatedAggregateState = Message<"example.validation_refusal.ValidatedAggregateState"> & {
+  id: string;
+  name: string;
+};
+
+type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
+  id: string;
+  name: string;
 };
 
 type TenantInput = string | TenantId;
@@ -86,8 +121,110 @@ const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
 ) as GenMessage<ProjectionState>;
+const AggregateStateSchema = messageDesc(
+  fileEntityMetadataFixture,
+  1,
+) as GenMessage<AggregateState>;
+const fileValidationRefusalFixture = fileDesc(
+  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
+    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
+    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
+    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
+    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
+  [file_spine_options],
+);
+const ValidatedAggregateStateSchema = messageDesc(
+  fileValidationRefusalFixture,
+  0,
+) as GenMessage<ValidatedAggregateState>;
+const ValidatedTaskCommandSchema = messageDesc(
+  fileValidationRefusalFixture,
+  1,
+) as GenMessage<ValidatedTaskCommand>;
 
-class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {}
+class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  subscribeTask(event: ProjectionState): void {
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(ProjectionStateSchema, {
+        id: event.id,
+        name: `${event.name} (projected)`,
+        priority: event.priority + 1,
+      }),
+    );
+    this.commitTransaction();
+  }
+}
+
+class RefusingTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  assignTask(): never {
+    throw new CommandRefusalError("TASK_ALREADY_COMPLETED", "Task is already completed.");
+  }
+}
+
+class ValidatingTaskAggregate extends Aggregate<
+  string,
+  typeof ValidatedAggregateStateSchema,
+  bigint
+> {
+  assignTask(command: ValidatedTaskCommand) {
+    return createValidatedEvent(`event-${command.id}`, command.id, command.name);
+  }
+
+  applyTask(event: ValidatedAggregateState): void {
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(ValidatedAggregateStateSchema, {
+        id: event.id,
+        name: event.name,
+      }),
+    );
+    this.commitTransaction();
+  }
+}
+
+class TransitionViolatingTaskAggregate extends Aggregate<
+  string,
+  typeof AggregateStateSchema,
+  bigint
+> {
+  assignTask(command: AggregateState) {
+    return createAggregateEvent("event-transition-invalid", command.id, command.name);
+  }
+
+  applyTask(event: AggregateState): void {
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: `${event.id}-changed`,
+        name: event.name,
+        archived: event.archived,
+      }),
+    );
+    this.commitTransaction();
+  }
+}
+
+class RollingBackTransitionTaskAggregate extends TransitionViolatingTaskAggregate {
+  override assignTask(command: AggregateState) {
+    return createAggregateEvent("event-transition-rollback", command.id, command.name);
+  }
+
+  override applyTask(event: AggregateState): void {
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: `${event.id}-changed`,
+        name: event.name,
+        archived: event.archived,
+      }),
+    );
+    const result = this.commitTransaction();
+    if (result.status === "rejected") {
+      this.rollbackTransaction();
+    }
+  }
+}
 
 describe("SpineServices", () => {
   it("posts commands through CommandService over a real gRPC transport", async () => {
@@ -139,6 +276,27 @@ describe("SpineServices", () => {
     }
   });
 
+  it("keeps ID-filter QueryService reads working through direct handlers", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    await context.stand().update(ProjectionStateSchema, createState("task-1", "First"), {
+      version: create(VersionSchema, { number: 7 }),
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(createQuery("task-1"));
+
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(response.message).toHaveLength(1);
+    expect(unpackAny(response.message[0]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
+      createState("task-1", "First"),
+    );
+    expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
+  });
+
   it("keeps QueryService reads isolated by tenant", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
@@ -168,6 +326,124 @@ describe("SpineServices", () => {
     }
   });
 
+  it("reads all projection states through QueryService include-all queries", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    await context.stand().update(ProjectionStateSchema, createState("task-2", "Second"), {
+      version: create(VersionSchema, { number: 2 }),
+    });
+    await context.stand().update(ProjectionStateSchema, createState("task-1", "First"), {
+      version: create(VersionSchema, { number: 1 }),
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(createIncludeAllQuery());
+
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(response.message).toHaveLength(2);
+    expect(unpackAny(response.message[0]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
+      createState("task-1", "First"),
+    );
+    expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 1 }));
+    expect(unpackAny(response.message[1]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
+      createState("task-2", "Second"),
+    );
+    expect(response.message[1]?.version).toEqual(create(VersionSchema, { number: 2 }));
+  });
+
+  it("keeps QueryService include-all reads isolated by tenant", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.multitenant("Tasks").add(repository).build();
+    await context.stand().update(ProjectionStateSchema, createState("task-1", "Tenant A"), {
+      tenantId: "tenant-a",
+      version: create(VersionSchema, { number: 1 }),
+    });
+    await context.stand().update(ProjectionStateSchema, createState("task-2", "Tenant B"), {
+      tenantId: "tenant-b",
+      version: create(VersionSchema, { number: 2 }),
+    });
+    await context.stand().update(ProjectionStateSchema, createState("task-3", "Tenant B Again"), {
+      tenantId: "tenant-b",
+      version: create(VersionSchema, { number: 3 }),
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(createIncludeAllQuery("tenant-b"));
+
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(response.message).toHaveLength(2);
+    expect(unpackAny(response.message[0]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
+      createState("task-2", "Tenant B"),
+    );
+    expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 2 }));
+    expect(unpackAny(response.message[1]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
+      createState("task-3", "Tenant B Again"),
+    );
+    expect(response.message[1]?.version).toEqual(create(VersionSchema, { number: 3 }));
+  });
+
+  it("rejects include-all reads for non-projection routes", async () => {
+    const context = createFakeContext({
+      entityFamily: "aggregate",
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      readAllVersioned: () => {
+        throw new Error("include_all must not list aggregate state.");
+      },
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(createIncludeAllQuery());
+
+    expect(response.response?.status?.status.case).toBe("error");
+    expect(responseErrorMessage(response)).toBe(
+      "QueryService.Read include_all requires a projection target.",
+    );
+  });
+
+  it("rejects non-projection include-all before multitenant tenant checks", async () => {
+    const context = createFakeContext({
+      entityFamily: "aggregate",
+      isMultitenant: true,
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      readAllVersioned: () => {
+        throw new Error("include_all must not list aggregate state.");
+      },
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(createIncludeAllQuery());
+
+    expect(response.response?.status?.status.case).toBe("error");
+    expect(responseErrorMessage(response)).toBe(
+      "QueryService.Read include_all requires a projection target.",
+    );
+  });
+
+  it("rejects non-projection include-all before single-tenant tenant checks", async () => {
+    const context = createFakeContext({
+      entityFamily: "aggregate",
+      isMultitenant: false,
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      readAllVersioned: () => {
+        throw new Error("include_all must not list aggregate state.");
+      },
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(createIncludeAllQuery("tenant-a"));
+
+    expect(response.response?.status?.status.case).toBe("error");
+    expect(responseErrorMessage(response)).toBe(
+      "QueryService.Read include_all requires a projection target.",
+    );
+  });
+
   it("returns Spine error statuses for unsupported command and query targets", async () => {
     const context = BoundedContext.singleTenant("Tasks").build();
     const server = await startServices(context);
@@ -187,7 +463,7 @@ describe("SpineServices", () => {
     }
   });
 
-  it("returns error statuses for dispatcher failures and invalid query criteria", async () => {
+  it("returns error statuses for dispatcher failures", async () => {
     const dispatcher = createFailingCommandDispatcher();
     const repository = new Repository({
       entityType: TaskProjection,
@@ -202,14 +478,11 @@ describe("SpineServices", () => {
     try {
       const transport = createGrpcTransport({ baseUrl: server.baseUrl });
       const commandClient = createClient(CommandService, transport);
-      const queryClient = createClient(QueryService, transport);
 
       const ack = await commandClient.post(createProjectionCommand("command-fails"));
-      const response = await queryClient.read(createQueryWithoutIds());
 
       expect(ack.status?.status.case).toBe("error");
       expect(errorMessage(ack.status?.status)).toBe("Command post failed.");
-      expect(response.response?.status?.status.case).toBe("error");
     } finally {
       await server.close();
     }
@@ -293,6 +566,19 @@ describe("SpineServices", () => {
     }
   });
 
+  it("returns stable errors for include-all read failures", async () => {
+    const readFailureContext = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      readAllVersioned: () => Promise.reject(new Error("storage details")),
+    });
+    const handlers = registeredQueryHandlers(readFailureContext);
+
+    const response = await handlers.read(createIncludeAllQuery());
+
+    expect(response.response?.status?.status.case).toBe("error");
+    expect(responseErrorMessage(response)).toBe("Query read failed.");
+  });
+
   it("wraps non-Error dispatcher failures in sanitized Spine command errors", async () => {
     const dispatcher: CommandDispatcher = {
       messageSchemas: () => [ProjectionStateSchema],
@@ -313,6 +599,115 @@ describe("SpineServices", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("returns stable Ack errors for immediate aggregate command refusals", async () => {
+    const context = BoundedContext.singleTenant("Tasks").add(createRefusingRepository()).build();
+    const handlers = registeredCommandHandlers(context);
+
+    const ack = await handlers.post(createAggregateCommand("command-refused", "task-refused"));
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("TASK_ALREADY_COMPLETED");
+    expect(errorMessage(ack.status?.status)).toBe("Task is already completed.");
+  });
+
+  it("returns stable Ack errors with details for invalid command payloads", async () => {
+    const context = BoundedContext.singleTenant("Tasks").add(createValidatingRepository()).build();
+    const handlers = registeredCommandHandlers(context);
+
+    const ack = await handlers.post(createValidatedCommand("command-invalid", "task-invalid", ""));
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
+    expect(errorMessage(ack.status?.status)).toBe("Command payload validation failed.");
+    expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
+  });
+
+  it("returns stable Ack errors with details for invalid custom-dispatcher command payloads", async () => {
+    const dispatched: string[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher(
+        createValidatedCommandDispatcher((command) => {
+          dispatched.push(command.id?.uuid ?? "");
+        }),
+      )
+      .build();
+    const handlers = registeredCommandHandlers(context);
+
+    const ack = await handlers.post(createValidatedCommand("command-invalid", "task-invalid", ""));
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
+    expect(errorMessage(ack.status?.status)).toBe("Command payload validation failed.");
+    expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
+    expect(dispatched).toEqual([]);
+  });
+
+  it("returns stable Ack error details for incompatible command payload bytes", async () => {
+    const context = BoundedContext.singleTenant("Tasks").add(createValidatingRepository()).build();
+    const handlers = registeredCommandHandlers(context);
+    const command = createValidatedCommand("command-incompatible", "task-incompatible", "name");
+
+    if (command.message !== undefined) {
+      command.message.value = new Uint8Array([255]);
+    }
+
+    const ack = await handlers.post(command);
+    const details = validationDetails(ack.status?.status);
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
+    expect(errorMessage(ack.status?.status)).toBe("Command payload validation failed.");
+    expect(details?.constraintViolation).toHaveLength(1);
+  });
+
+  it("keeps dispatcher-thrown validation exceptions sanitized", async () => {
+    const dispatcher: CommandDispatcher = {
+      messageSchemas: () => [ProjectionStateSchema],
+      dispatch: () => Promise.reject(new ValidationException(create(ValidationErrorSchema, {}))),
+    };
+    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const handlers = registeredCommandHandlers(context);
+
+    const ack = await handlers.post(createProjectionCommand("command-dispatcher-validation"));
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("COMMAND_POST_ERROR");
+    expect(errorMessage(ack.status?.status)).toBe("Command post failed.");
+    expect(validationDetails(ack.status?.status)).toBeUndefined();
+  });
+
+  it("returns stable Ack errors with details for transition validation failures", async () => {
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createTransitionViolatingRepository())
+      .build();
+    const handlers = registeredCommandHandlers(context);
+
+    const ack = await handlers.post(
+      createAggregateCommand("command-transition-invalid", "task-transition-invalid"),
+    );
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("COMMAND_STATE_TRANSITION_VALIDATION_FAILED");
+    expect(errorMessage(ack.status?.status)).toBe("Command state transition validation failed.");
+    expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
+  });
+
+  it("returns transition validation Ack errors after rejected commit rollback", async () => {
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createRollingBackTransitionRepository())
+      .build();
+    const handlers = registeredCommandHandlers(context);
+
+    const ack = await handlers.post(
+      createAggregateCommand("command-transition-rollback", "task-transition-rollback"),
+    );
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("COMMAND_STATE_TRANSITION_VALIDATION_FAILED");
+    expect(errorMessage(ack.status?.status)).toBe("Command state transition validation failed.");
+    expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
   });
 
   it("rejects command tenant mismatches without dispatching", async () => {
@@ -650,6 +1045,41 @@ describe("SpineServices", () => {
     }
   });
 
+  it("treats include-all query tenant domain and email variants as present", async () => {
+    const capturedTenantKeys: (string | undefined)[] = [];
+    const singleTenant = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      isMultitenant: false,
+    });
+    const multitenant = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      isMultitenant: true,
+      readAllVersioned: (_schema, options) => {
+        capturedTenantKeys.push(options.tenantId);
+        return Promise.resolve([
+          {
+            state: createState("task-1", "Tenant Domain"),
+            version: create(VersionSchema, { number: 11 }),
+          },
+        ]);
+      },
+    });
+    const singleHandlers = registeredQueryHandlers(singleTenant);
+    const multiHandlers = registeredQueryHandlers(multitenant);
+
+    const inapplicable = await singleHandlers.read(
+      createIncludeAllQuery(tenantEmail("tenant@example.test")),
+    );
+    const accepted = await multiHandlers.read(
+      createIncludeAllQuery(tenantDomain("tenant.example")),
+    );
+
+    expect(inapplicable.response?.status?.status.case).toBe("error");
+    expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
+    expect(accepted.response?.status?.status.case).toBe("ok");
+    expect(capturedTenantKeys).toEqual(["domain:tenant.example"]);
+  });
+
   it("activates and cancels explicit subscriptions over a real gRPC transport", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
@@ -695,6 +1125,36 @@ describe("SpineServices", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("delivers subscription updates from real projection event handling", async () => {
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProjectionRepositoryWithHandlers())
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+
+    const subscription = await handlers.subscribe(createTopic());
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const nextUpdate = withTimeout(iterator.next(), "projection subscription update");
+
+    await delay(25);
+    await context.eventBus().post(createProjectionEvent("event-projected", "task-projected"));
+
+    const delivered = await nextUpdate;
+    const update = delivered.value as SubscriptionUpdate | undefined;
+
+    expect(delivered.done).toBe(false);
+    if (update?.update.case !== "entityUpdates") {
+      throw new Error("Expected entity subscription update.");
+    }
+    const state = update.update.value.update[0]?.kind;
+    if (state?.case !== "state") {
+      throw new Error("Expected entity state update.");
+    }
+    expect(unpackAny(state.value, ProjectionStateSchema)).toEqual(
+      createState("task-projected", "Task (projected)", 2),
+    );
+    await iterator.return?.();
   });
 
   it("does not deliver pre-activation updates and tolerates unknown subscription cancellation", async () => {
@@ -980,11 +1440,102 @@ function createCommandDispatcher(
   };
 }
 
+function createValidatedCommandDispatcher(
+  onDispatch: (command: ReturnType<typeof createValidatedCommand>) => void,
+): CommandDispatcher {
+  return {
+    messageSchemas: () => [ValidatedTaskCommandSchema],
+    dispatch: (command) => {
+      onDispatch(command);
+      return Promise.resolve();
+    },
+  };
+}
+
 function createFailingCommandDispatcher(): CommandDispatcher {
   return {
     messageSchemas: () => [ProjectionStateSchema],
     dispatch: () => Promise.reject(new Error("Dispatcher failed.")),
   };
+}
+
+function createProjectionRepositoryWithHandlers(): Repository<typeof TaskProjection> {
+  const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
+    builder.subscribe(ProjectionStateSchema, "subscribeTask"),
+  ]);
+
+  return new Repository({
+    entityType: TaskProjection,
+    schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
+function createRefusingRepository(): Repository<typeof RefusingTaskAggregate> {
+  const handlers = defineEntityHandlers(RefusingTaskAggregate, AggregateStateSchema, (builder) => [
+    builder.assign(AggregateStateSchema, "assignTask"),
+  ]);
+
+  return new Repository({
+    entityType: RefusingTaskAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate> {
+  const handlers = defineEntityHandlers(
+    ValidatingTaskAggregate,
+    ValidatedAggregateStateSchema,
+    (builder) => [
+      builder.assign(ValidatedTaskCommandSchema, "assignTask"),
+      builder.apply(ValidatedAggregateStateSchema, "applyTask"),
+    ],
+  );
+
+  return new Repository({
+    entityType: ValidatingTaskAggregate,
+    schema: ValidatedAggregateStateSchema,
+    handlers,
+  });
+}
+
+function createTransitionViolatingRepository(): Repository<
+  typeof TransitionViolatingTaskAggregate
+> {
+  const handlers = defineEntityHandlers(
+    TransitionViolatingTaskAggregate,
+    AggregateStateSchema,
+    (builder) => [
+      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.apply(AggregateStateSchema, "applyTask"),
+    ],
+  );
+
+  return new Repository({
+    entityType: TransitionViolatingTaskAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createRollingBackTransitionRepository(): Repository<
+  typeof RollingBackTransitionTaskAggregate
+> {
+  const handlers = defineEntityHandlers(
+    RollingBackTransitionTaskAggregate,
+    AggregateStateSchema,
+    (builder) => [
+      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.apply(AggregateStateSchema, "applyTask"),
+    ],
+  );
+
+  return new Repository({
+    entityType: RollingBackTransitionTaskAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
 }
 
 function createProjectionCommand(id: string, tenantId?: TenantInput) {
@@ -995,6 +1546,74 @@ function createProjectionCommand(id: string, tenantId?: TenantInput) {
     }),
     schema: ProjectionStateSchema,
     message: createState("task-1", "Task"),
+  });
+}
+
+function createAggregateCommand(id: string, aggregateId: string, name = "Task") {
+  return packCommand({
+    id: create(CommandIdSchema, { uuid: id }),
+    context: create(CommandContextSchema, {
+      actorContext: createActorContext(),
+    }),
+    schema: AggregateStateSchema,
+    message: create(AggregateStateSchema, {
+      id: aggregateId,
+      name,
+      archived: false,
+    }),
+  });
+}
+
+function createValidatedCommand(id: string, aggregateId: string, name: string) {
+  return create(CommandSchema, {
+    id: create(CommandIdSchema, { uuid: id }),
+    context: create(CommandContextSchema, {
+      actorContext: createActorContext(),
+    }),
+    message: packAny(
+      ValidatedTaskCommandSchema,
+      create(ValidatedTaskCommandSchema, {
+        id: aggregateId,
+        name,
+      }),
+      { validate: false },
+    ),
+  });
+}
+
+function createAggregateEvent(id: string, aggregateId: string, name: string) {
+  return packEvent({
+    id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema),
+    schema: AggregateStateSchema,
+    message: create(AggregateStateSchema, {
+      id: aggregateId,
+      name,
+      archived: false,
+    }),
+  });
+}
+
+function createValidatedEvent(id: string, aggregateId: string, name: string) {
+  return packEvent({
+    id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema),
+    schema: ValidatedAggregateStateSchema,
+    message: create(ValidatedAggregateStateSchema, {
+      id: aggregateId,
+      name,
+    }),
+  });
+}
+
+function createProjectionEvent(id: string, entityId: string) {
+  return packEvent({
+    id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema, {
+      version: create(VersionSchema, { number: 1 }),
+    }),
+    schema: ProjectionStateSchema,
+    message: createState(entityId, "Task"),
   });
 }
 
@@ -1027,7 +1646,7 @@ function createQueryWithIds(ids: ReturnType<typeof packAny>[], tenantId?: Tenant
   });
 }
 
-function createQueryWithoutIds() {
+function createIncludeAllQuery(tenantId?: TenantInput) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "q-empty" }),
     target: create(TargetSchema, {
@@ -1037,7 +1656,7 @@ function createQueryWithoutIds() {
         value: true,
       },
     }),
-    context: createActorContext(),
+    context: createActorContext(tenantId),
   });
 }
 
@@ -1093,11 +1712,11 @@ function tenantEmail(value: string): TenantId {
   });
 }
 
-function createState(id: string, name: string): ProjectionState {
+function createState(id: string, name: string, priority = 1): ProjectionState {
   return create(ProjectionStateSchema, {
     id,
     name,
-    priority: 1,
+    priority,
   });
 }
 
@@ -1125,6 +1744,37 @@ function errorMessage(status: unknown) {
     : undefined;
 }
 
+function errorType(status: unknown) {
+  if (
+    typeof status !== "object" ||
+    status === null ||
+    !("case" in status) ||
+    status.case !== "error"
+  ) {
+    return undefined;
+  }
+  const value = "value" in status ? status.value : undefined;
+
+  return typeof value === "object" && value !== null && "type" in value ? value.type : undefined;
+}
+
+function validationDetails(status: unknown) {
+  if (
+    typeof status !== "object" ||
+    status === null ||
+    !("case" in status) ||
+    status.case !== "error"
+  ) {
+    return undefined;
+  }
+  const value = "value" in status ? status.value : undefined;
+  if (typeof value !== "object" || value === null || !("details" in value)) {
+    return undefined;
+  }
+
+  return unpackAny(value.details as Parameters<typeof unpackAny>[0], ValidationErrorSchema);
+}
+
 function responseErrorMessage(response: unknown) {
   if (typeof response !== "object" || response === null || !("response" in response)) {
     return undefined;
@@ -1148,6 +1798,7 @@ function responseErrorMessage(response: unknown) {
 function createFakeContext(options: {
   readonly isMultitenant?: boolean;
   readonly commandTypes?: readonly string[];
+  readonly entityFamily?: "aggregate" | "projection" | "process-manager";
   readonly stateTypes?: readonly string[];
   readonly post?: (command: ReturnType<typeof createProjectionCommand>) => Promise<void>;
   readonly readVersioned?: (
@@ -1155,6 +1806,10 @@ function createFakeContext(options: {
     id: unknown,
     options: { readonly tenantId?: string },
   ) => Promise<{ readonly state: ProjectionState; readonly version?: unknown } | undefined>;
+  readonly readAllVersioned?: (
+    schema: typeof ProjectionStateSchema,
+    options: { readonly tenantId?: string },
+  ) => Promise<readonly { readonly state: ProjectionState; readonly version?: unknown }[]>;
   readonly subscribe?: (
     schema: typeof ProjectionStateSchema,
     callback: (update: {
@@ -1178,6 +1833,7 @@ function createFakeContext(options: {
     registeredRepositories: () =>
       stateTypes.map((typeUrl) =>
         Object.freeze({
+          entityFamily: options.entityFamily ?? "projection",
           stateSchema: ProjectionStateSchema,
           typeUrl,
         }),
@@ -1185,9 +1841,37 @@ function createFakeContext(options: {
     stand: () =>
       Object.freeze({
         subscribe: options.subscribe ?? (() => ({ closed: false, unsubscribe: () => undefined })),
+        readAllVersioned: options.readAllVersioned ?? (() => Promise.resolve([])),
         readVersioned: options.readVersioned ?? (() => Promise.resolve(undefined)),
       }),
   } as unknown as BoundedContext;
+}
+
+function registeredCommandHandlers(
+  context: BoundedContext,
+  options: Omit<ConstructorParameters<typeof SpineServices>[0], "contexts"> = {},
+) {
+  let handlers:
+    | {
+        post(command: ReturnType<typeof createProjectionCommand>): Promise<Ack>;
+      }
+    | undefined;
+  const services = new SpineServices({ contexts: [context], ...options });
+
+  services.register({
+    service(schema: unknown, implementation: unknown) {
+      if (schema === CommandService) {
+        handlers = implementation as typeof handlers;
+      }
+      return this;
+    },
+  } as never);
+
+  if (handlers === undefined) {
+    throw new Error("CommandService handlers were not registered.");
+  }
+
+  return handlers;
 }
 
 function registeredSubscriptionHandlers(
@@ -1213,6 +1897,33 @@ function registeredSubscriptionHandlers(
 
   if (handlers === undefined) {
     throw new Error("SubscriptionService handlers were not registered.");
+  }
+
+  return handlers;
+}
+
+function registeredQueryHandlers(
+  context: BoundedContext,
+  options: Omit<ConstructorParameters<typeof SpineServices>[0], "contexts"> = {},
+) {
+  let handlers:
+    | {
+        read(query: Query): Promise<QueryResponse>;
+      }
+    | undefined;
+  const services = new SpineServices({ contexts: [context], ...options });
+
+  services.register({
+    service(schema: unknown, implementation: unknown) {
+      if (schema === QueryService) {
+        handlers = implementation as typeof handlers;
+      }
+      return this;
+    },
+  } as never);
+
+  if (handlers === undefined) {
+    throw new Error("QueryService handlers were not registered.");
   }
 
   return handlers;

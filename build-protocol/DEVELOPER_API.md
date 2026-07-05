@@ -253,3 +253,15 @@ Every package must have:
 - examples for the major user-facing APIs;
 - architecture notes updated with each feature task;
 - compatibility notes for deviations from Spine JVM behavior.
+
+## Testing API
+
+The first public `@spine-ts/testing` surface is intentionally smaller than the
+full Spine JVM black-box test library. `BoundedContextFixture` wraps one built
+`BoundedContext` and drives generated command, event, query, and topic envelopes
+through the real in-process `CommandService`, bounded-context event endpoint,
+`QueryService`, and `SubscriptionService` seams. It returns cloned protobuf
+service messages and offers `readEventually()` for asynchronous projection
+consequences. It does not start processes, host a gRPC server, provide browser
+tooling, expose a broad fluent client DSL, or simulate command/query/subscription
+outcomes.

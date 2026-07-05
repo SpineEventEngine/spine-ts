@@ -268,11 +268,14 @@ subscriptions.
 This follows the JVM `Repository` identity surface (`entityClass()`,
 `idClass()`, and `entityStateType()`) plus the first context-owned lifecycle
 step. When authentic explicit handler metadata is supplied, repositories now
-calculate deferred command/event routes and bounded-context assembly registers
-internal dispatcher adapters for those routes. The TypeScript seam deliberately
-omits `create`, `find`, `store`, record conversion, handler invocation,
-entity storage/cache/catch-up, inbox/delivery, lifecycle monitors, gRPC
-server lifecycle, and transport.
+calculate command/event routes and bounded-context assembly registers internal
+dispatcher adapters for those routes. Aggregate repositories can then load or
+create one aggregate, invoke one assignee, apply the produced events, persist
+history and snapshots through `AggregateStorage`, and queue already-stored
+events for event-bus delivery without a second append. The TypeScript seam
+still omits public `create`, `find`, `store`, record conversion APIs,
+entity storage/cache/catch-up, inbox/delivery, lifecycle monitors, gRPC server
+lifecycle, and transport.
 
 `EntityTransaction` is the first server-owned draft/result commit boundary over
 one entity state. It buffers a draft state, explicit previous/draft version
@@ -340,25 +343,51 @@ name validation or the builder-only build path by passing ad hoc objects.
 
 The current `Stand` slice is intentionally direct and storage-backed. It owns
 known generated state schemas, latest-state `RecordStorage`, direct
-read/update methods, versioned reads for caller-supplied update metadata, and
-deterministic in-process subscription handles with explicit `unsubscribe()`. It
-preserves read-side/write-side segregation by requiring callers to record state
-updates directly; it does not invoke
-repository handlers, run projections, catch up from events, or provide a client
-query DSL. `SpineServices` adapts this direct read side and the context command
-bus to the first real Connect/Node `CommandService`, `QueryService`, and
-`SubscriptionService` routes. Service subscription delivery starts only when a
-client activates the opaque subscription ID, abandoned inactive subscriptions
-expire after a small configurable TTL, slow consumers are bounded by a small
-configurable update queue, and stream/cancel cleanup releases the direct Stand
-handle.
+read/update methods, versioned point reads, storage-order list reads through
+`Stand.readAllVersioned()`, and deterministic in-process subscription handles
+with explicit `unsubscribe()`. It preserves read-side/write-side segregation by
+remaining the query/subscription facade over read-side state. Built bounded
+contexts may update it internally when repository event dispatch invokes
+projection subscribers, but application code still does not receive a
+repository read/write-side storage API. It does not run catch-up from events or
+provide a client query DSL. `SpineServices` adapts this direct read side and
+the context command bus to the first real Connect/Node `CommandService`,
+`QueryService`, and `SubscriptionService` routes. Projection-state
+`QueryService.Read` calls with `Target.include_all = true` are satisfied through
+`Stand.readAllVersioned()` over the stand's `RecordStorage.query()` path.
+Direct list reads and `QueryService.Read` include-all calls follow the same
+tenant rules as point reads: single-tenant contexts reject tenant options, and
+multitenant contexts require `tenantId`.
+Service subscription delivery starts only when a client activates the opaque
+subscription ID, abandoned inactive subscriptions expire after a small
+configurable TTL, slow consumers are bounded by a small configurable update
+queue, and stream/cancel cleanup releases the direct Stand handle.
+
+The current command service error contract remains intentionally small.
+`CommandBus` validates each accepted command payload with the existing core
+facade before dispatcher callbacks run, including custom
+`addCommandDispatcher()` routes. For repository-backed aggregate dispatchers,
+that still means validation happens before route calculation, aggregate history
+load, event append, snapshot write, or stored-event dispatch.
+`CommandService.Post` maps invalid payloads to `COMMAND_VALIDATION_ERROR`,
+message `Command payload validation failed.`, and packed
+`spine.validation.ValidationError` details. Handler-thrown `CommandRefusalError`
+values are the one immediate business refusal path mapped to stable non-ok
+`Ack` errors. Aggregate event appliers continue to use
+`EntityTransaction.commit()` for transition validation. When the rejected
+commit comes from applying events produced by the current command, repository
+execution raises `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed
+`ValidationError` details before events or snapshots are stored. Stored-history
+replay failures remain internal and are sanitized as `COMMAND_POST_ERROR`.
+Unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
 
 The following runtime pieces are still deferred to later explicit tasks:
 
 - default repository construction from entity classes,
   visibility/type-supplier registration, and lifecycle callbacks over the
   repository identity seam;
-- handler invocation over the deferred repository routes;
+- process-manager event handler execution, read-side catch-up, and
+  query/subscription execution over repository routes;
 - inbox/delivery storage, durable storage lifecycle, entity storage/cache
   catch-up, and tenant-index persistence;
 - richer query filtering, event subscriptions, and durable subscription
@@ -398,16 +427,19 @@ identities, along with transport correlation keys back to topic/subscription
 arrays and planner-local worker IDs; they do not retain entity names, handler
 names, raw readiness metadata, or duplicate full transport contracts on each
 route. The package root now exports a small executable bus layer, direct Stand,
-and the `SpineServices` route registrar, but still does not export a broad
-server lifecycle, transport endpoint runner, integration broker, handler
-invocation/runtime wiring, command/event intake validation pipeline, or durable
-subscription store as part of this closure.
+repository-backed handler invocation through built contexts, command payload
+validation and refusal/Ack mapping through `SpineServices`, and the
+`SpineServices` route registrar. It still does not export a broad server
+lifecycle, transport endpoint runner, integration broker, event intake
+validation pipeline beyond current implemented seams, or durable subscription
+store as part of this closure.
 
-The architectural consequence is that later work must add those collaborators
-as explicit tasks at their own seams. Command and event intake can consume the
-existing readiness views and runtime-routing plan, but must still design
-validation, `Ack` mapping, filtering, storage-before-dispatch, dispatch
-outcomes, delivery, and transport integration separately.
+The architectural consequence is that later work must add the remaining
+collaborators as explicit tasks at their own seams. Event intake and broader
+transport integration can consume the existing readiness views and
+runtime-routing plan, but must still design event-side validation, filtering,
+storage-before-dispatch, dispatch outcomes, delivery, and integration behavior
+separately.
 
 ## Storage Boundary
 

@@ -10,8 +10,9 @@ set-once transition validation, explicit handler metadata APIs, the first
 command/event bus exports, the first server runtime lifecycle/async queue
 kernel, write-side signal intake result exports, the runtime-routing planner
 seam, the real Connect/Node `SpineServices` route registrar for the raw Spine
-command/query/subscription services, the first `@spine-ts/transport` contracts, and the first
-`@spine-ts/storage` contracts.
+command/query/subscription services, the first `@spine-ts/transport` contracts,
+the first `@spine-ts/storage` contracts, and the minimal `@spine-ts/testing`
+bounded-context fixture.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
@@ -29,10 +30,27 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 Server exports include `BoundedContext`, `BoundedContextBuilder`,
 `ContextSpec`, `BoundedContextName`, `TenantMode`, `BoundedContextSnapshot`,
 small immutable snapshot contracts, `CommandEndpoint`, `EventEndpoint`,
-`Stand`, direct stand option/update/subscription contracts, and
+`StoredEventDispatchFailure`, `DispatchErrorSnapshot`, `Stand`, direct stand
+read/version/list/update/subscription contracts, and
 `BoundedContextNameError` for bounded-context assembly. `CommandEndpoint`
 also exposes accepted command message type URLs so service adapters can route
 without dispatch-probing unrelated contexts.
+`CommandRefusalError` is the current public immediate-refusal error that
+command handlers can throw so `CommandService.Post` returns a stable non-ok
+`Ack` error type/message. `CommandService.Post` also returns
+`COMMAND_VALIDATION_ERROR` with message `Command payload validation failed.`
+and packed `spine.validation.ValidationError` details when `CommandBus`
+rejects an invalid accepted command payload before dispatcher callbacks,
+including custom `addCommandDispatcher()` routes. For repository-backed
+aggregate dispatchers, validation still happens before route calculation,
+aggregate history load, event append, snapshot write, or stored-event dispatch.
+Transition validation failures while applying events produced by the current
+aggregate command continue to surface as
+`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
+details. Replay failures from stored aggregate history remain internal and are
+sanitized as `COMMAND_POST_ERROR`. Dispatcher-thrown `ValidationException`
+values and other unexpected command-bus failures remain sanitized as
+`COMMAND_POST_ERROR`.
 The public entry points mirror Spine JVM's
 `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
 `ContextSpec` remains a framework-owned immutable value surfaced through
@@ -49,15 +67,23 @@ non-empty/non-blank names and records tenant mode. `builder.add(repository)` /
 the context-owned repository registration list, and `build()` registers those
 repositories with the built context after opening state record storage through
 the context `StorageFactory`; registered repositories also make their entity
-state schemas known to the context `Stand`. Repositories with authentic explicit handler
-metadata now calculate deferred command/event routes, and built contexts install
-internal repository dispatcher adapters. This slice does not create default
-repositories from entity classes, invoke handlers, store entity records, manage
-inboxes/delivery, run cache catch-up, create system contexts, write tenant
-indexes, expose a broad server lifecycle, or integrate transports.
+state schemas known to the context `Stand`. Repositories with authentic explicit
+handler metadata still expose route-only `routeCommand()` / `routeEvent()`
+calculations, and built contexts install internal repository dispatcher adapters
+that execute aggregate command assignees and appliers, and execute projection
+subscribers. Aggregate command execution requires `command.id` so produced
+events can carry a contract-valid command origin; missing IDs reject before
+mutation or storage. Aggregate command completion resolves after aggregate
+event storage and snapshot handling; later already-stored event redispatch
+failures are observable through the copy-safe `storedEventDispatchFailures()`
+diagnostic snapshot on the owning `BoundedContext`. This slice does not create
+default repositories from entity classes,
+invoke query/process handlers, manage inboxes/delivery, run cache catch-up,
+create system contexts, write tenant indexes, expose a broad server lifecycle,
+or integrate transports.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
-`TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,
+`TransactionalEntityScopeError`, `EntityScopeReason`,
 `TransactionalEntityScopeOperation`, `EntityOptions`, `EntityVersionMetadata`,
 `PlainEntityVersionMetadata`, and `EntityLifecycleFlags` for local OOP entity
 state with identity, descriptor-derived metadata, cloned Protobuf-ES state
@@ -106,14 +132,16 @@ base classes, and explicitly reparented ES classes with matching same-realm
 prototype chains are treated as metadata. It opens state record storage only
 through `BoundedContextBuilder.build()`; direct repository registration is not
 public API. When explicit handler metadata is supplied, repository routing
-calculates deferred command and event routes by generated message full type name,
-readiness metadata, producer ID, or first-field ID. Bounded-context assembly
-registers repository dispatcher adapters internally so buses can enqueue against
-repository-owned routes without exposing registration internals. The repository
-surface does not create/find/store entities, invoke handlers, write inboxes,
-manage caches, run catch-up, or start buses/transports. Built bounded contexts
-use repository metadata to register known state types with their direct
-read-side `Stand`.
+calculates command and event routes by generated message full type name,
+readiness metadata, producer ID, or first-field ID. Built bounded contexts
+register repository dispatcher adapters internally so aggregate commands can
+load or create one aggregate, invoke one assignee, apply the produced events,
+persist history and snapshots through `AggregateStorage`, and then queue
+already-stored events for event-bus delivery without appending them again. The
+repository surface still does not expose direct entity lookup/storage APIs,
+inboxes, caches, catch-up, or transport startup. Built bounded contexts use
+repository metadata to register known state types with their direct read-side
+`Stand`.
 `Stand`, `StandOptions`, `StandRegisterOptions`, `StandReadOptions`,
 `StandReadResult`, `StandUpdateOptions`, `StandSubscribeOptions`,
 `StandUpdate`, `StandSubscription`, and `StandStateTypeError` form the first
@@ -121,18 +149,32 @@ direct read-side entity-state API. A stand registers known generated state
 schemas, rejects unknown state types on read/update/subscribe, stores latest
 states through `StorageFactory`/`RecordStorage`, reads latest state by schema
 and entity ID, can return caller-supplied version metadata through
-`readVersioned()`, and delivers direct in-process update notifications.
+`readVersioned()`, can return storage-order list results through
+`readAllVersioned()`, and delivers direct in-process update notifications.
 Subscription cleanup is explicit via `unsubscribe()`, and multitenant stands
-require a `tenantId` on read/update/subscribe while single-tenant stands reject
-tenant options.
+require a `tenantId` on point reads, list reads, updates, and subscriptions
+while single-tenant stands reject tenant options.
 `SpineServices` adapts built-context command buses and stands to the first real
 Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
-routes. `Subscribe` allocates opaque IDs, `Activate` attaches delivery, and
-`Cancel`/stream finalization release in-process handles. Never-activated
-subscriptions have a configurable inactive TTL, and active delivery uses a
-configurable queue limit for slow consumers. It is not a client DSL, event
-subscription implementation, broad server lifecycle, durable subscription store,
-or projection catch-up loop.
+routes. `QueryService.Read` supports projection-state ID-filter reads and
+projection-state `Target.include_all = true` reads, packing
+`EntityStateWithVersion` replies from
+`Stand.readVersioned()` and `Stand.readAllVersioned()` respectively. `Subscribe`
+allocates opaque IDs, `Activate` attaches delivery, and `Cancel`/stream
+finalization release in-process handles. Never-activated subscriptions have a
+configurable inactive TTL, and active delivery uses a configurable queue limit
+for slow consumers. It is not a client DSL, event subscription implementation,
+broad server lifecycle, durable subscription store, or projection catch-up
+loop.
+`@spine-ts/testing` exports `BoundedContextFixture`,
+`BoundedContextFixtureOptions`, and `FixtureSubscription`. The fixture wraps one
+built `BoundedContext`, captures the in-process `SpineServices` handlers, and
+lets tests post generated `Command` envelopes, post generated `Event` envelopes,
+read generated `Query` envelopes, poll query responses for asynchronous
+projection consequences, and subscribe to generated `Topic` envelopes. It clones
+protobuf messages at its boundary and keeps command, query, and subscription
+behavior on the real framework paths. It does not expose a broad client DSL,
+start a server/process, manage browser tooling, or simulate service outcomes.
 `AggregateStorage`, `AggregateStorageOptions`, `AggregateSnapshot`,
 `AggregateHistory`, and `AggregateId` form the minimal aggregate persistence
 seam. It writes latest snapshots through `StorageFactory`/`RecordStorage`,

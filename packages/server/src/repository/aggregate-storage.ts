@@ -1,7 +1,7 @@
 import { clone, create, fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { deriveTypeUrl, unpackAny, type MessageSchema } from "@spine-ts/core";
-import { EventSchema, type Event, UserIdSchema } from "@spine-ts/proto";
+import { EventSchema, type Event } from "@spine-ts/proto";
 import {
   EventStore,
   RecordColumn,
@@ -13,6 +13,7 @@ import {
 
 import type { DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import type { EntityLifecycleFlags } from "../entity/entity.js";
+import { PrimitiveIds } from "./primitive-id.js";
 
 /**
  * Small aggregate history store over snapshots and events.
@@ -246,9 +247,9 @@ export class AggregateStorage<
   #producerId(event: Event): AggregateId | undefined {
     const producerId = event.context?.producerId;
     if (producerId !== undefined) {
-      const userId = unpackAny(producerId, UserIdSchema);
-      if (userId?.value !== undefined && userId.value !== "") {
-        return userId.value;
+      const unpacked = PrimitiveIds.unpack(producerId);
+      if (unpacked !== undefined) {
+        return unpacked;
       }
       throw new Error("Aggregate event routing requires a readable producer ID.");
     }
@@ -270,7 +271,7 @@ export class AggregateStorage<
       const firstField = schema.fields[0];
       if (unpacked !== undefined && firstField !== undefined) {
         const value = (unpacked as Record<string, unknown>)[firstField.localName];
-        return primitiveId(value);
+        return PrimitiveIds.read(value);
       }
     }
 
@@ -282,7 +283,7 @@ export class AggregateStorage<
     if (firstField === undefined) {
       return undefined;
     }
-    return primitiveId((state as Record<string, unknown>)[firstField.localName]);
+    return PrimitiveIds.read((state as Record<string, unknown>)[firstField.localName]);
   }
 
   #validateSnapshot(aggregateId: Id, state: MessageShape<Schema>, version: bigint): void {
@@ -530,7 +531,7 @@ function rejectDuplicateEventIds(events: readonly VersionedEvent[]): void {
 }
 
 function requirePrimitiveId(value: unknown): AggregateId {
-  const id = primitiveId(value);
+  const id = PrimitiveIds.read(value);
   if (id === undefined) {
     throw new Error("Aggregate IDs must be primitive values.");
   }
@@ -538,18 +539,11 @@ function requirePrimitiveId(value: unknown): AggregateId {
 }
 
 function samePrimitiveId(left: unknown, right: unknown): boolean {
-  return primitiveId(left) !== undefined && left === right;
+  return PrimitiveIds.read(left) !== undefined && left === right;
 }
 
 function sameSnapshotId(left: unknown, right: unknown): boolean {
   return samePrimitiveId(left, right);
-}
-
-function primitiveId(value: unknown): AggregateId | undefined {
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-    return value;
-  }
-  return undefined;
 }
 
 function compareVersions(left: bigint, right: bigint): number {

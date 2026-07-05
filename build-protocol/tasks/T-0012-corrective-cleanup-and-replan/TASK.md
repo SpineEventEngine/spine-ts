@@ -1,6 +1,7 @@
 # T-0012: Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.10 integrated; T-0012.11 selected
+Status: T-0012.11 split complete; first implementation slice selected; splitter
+review comments addressed
 Start: `2026-07-01 16:48 WEST`
 Baseline commit: `a9769d4`
 Branch: `task/T-0012-cleanup-replan`
@@ -140,9 +141,8 @@ escalated coverage, docs/API, proto lint/generate/clean, and
 ZeroMQ local IPC sandbox failure. Coverage was statements 94.93%, branches
 90.07%, functions 97.05%, and lines 94.96%.
 
-Current subtask: `T-0012.10 Real gRPC Services` is integrated.
-
-Next selected subtask: `T-0012.11 Missing Details And Example Readiness`.
+Current subtask: `T-0012.11 Missing Details And Example Readiness` (split
+complete; first selected slice is `T-0012.11a Aggregate Command Execution`).
 
 ## T-0012.2 Selection Rationale
 
@@ -508,18 +508,25 @@ Acceptance:
 
 ### T-0012.11 Missing Details And Example Readiness
 
-Goal: fill verified gaps before the example.
+Goal: fill only the verified framework gaps that still block the example.
 
 Scope:
 
-- Add omitted details discovered by implementation or review, such as system
-  context, import bus, scheduler, tenant index, observability, or catch-up,
-  only when they are prerequisites for a real framework workflow.
-- Update docs and TypeDoc/API docs.
+- Split the verified remaining gaps into narrow implementation slices.
+- Keep the scope to: aggregate command execution, projection event-driven
+  read-side updates, projection `include_all` list queries, validation/immediate
+  refusal wiring, and the minimal public testing fixture needed by the example.
+- Keep the rejected items rejected for this stage: broad `Server` facade,
+  system context runtime, import bus, scheduler, tenant index, observability,
+  catch-up/recovery, worker/process fan-out, and client DSL work.
+- Update durable task/report/review/work logs every time. Update public/API
+  docs only when public or API behavior changes.
 
 Acceptance:
 
 - Gaps are tied to concrete framework behavior, not speculative completeness.
+- The split proposes the first subtask branch/worktree only. The orchestrator
+  creates it after splitter review is clean.
 - Review lanes report no remaining order violations.
 
 ### T-0012.12 To-Do Example

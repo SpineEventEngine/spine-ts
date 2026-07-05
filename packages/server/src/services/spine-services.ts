@@ -6,7 +6,13 @@ import type { Any } from "@bufbuild/protobuf/wkt";
 import { EmptySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import type { MessageSchema } from "@spine-ts/core";
 import { deriveTypeUrl, packAny, unpackAny } from "@spine-ts/core";
-import { CommandIdSchema, type Command, type TenantId, VersionSchema } from "@spine-ts/proto";
+import {
+  CommandIdSchema,
+  type Command,
+  type TenantId,
+  ValidationErrorSchema,
+  VersionSchema,
+} from "@spine-ts/proto";
 import { ErrorSchema } from "@spine-ts/proto/generated/spine/base/error_pb.js";
 import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
 import type { Target } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
@@ -37,7 +43,11 @@ import {
 } from "@spine-ts/proto/generated/spine/core/response_pb.js";
 
 import type { BoundedContext } from "../context/bounded-context.js";
-import type { StandSubscription, StandUpdate } from "../stand/stand.js";
+import { CommandValidationError } from "../bus/command-errors.js";
+import type { EntityFamily } from "../entity/entity.js";
+import { TransitionValidationError } from "../repository/command-errors.js";
+import type { StandReadResult, StandSubscription, StandUpdate } from "../stand/stand.js";
+import { CommandRefusalError } from "./command-errors.js";
 
 /** Small route registrar for the first public Spine gRPC service slice. */
 export class SpineServices {
@@ -66,6 +76,7 @@ export class SpineServices {
         const typeUrl = deriveTypeUrl(schema);
         this.#stateRoutes.set(typeUrl, {
           context,
+          entityFamily: repository.entityFamily,
           schema,
           typeUrl,
         });
@@ -126,10 +137,12 @@ export class SpineServices {
         messageId,
         status: okStatus(),
       });
-    } catch {
+    } catch (error) {
+      const postError = commandPostError(error);
+
       return create(AckSchema, {
         messageId,
-        status: errorStatus("COMMAND_POST_ERROR", "Command post failed."),
+        status: errorStatus(postError.type, postError.message, postError.details),
       });
     }
   }
@@ -147,10 +160,13 @@ export class SpineServices {
       });
     }
 
-    const ids = targetIds(target);
-    if (ids.length === 0) {
+    const includeAllRequested = target.criterion.case === "includeAll" && target.criterion.value;
+    if (includeAllRequested && route.entityFamily !== "projection") {
       return create(QueryResponseSchema, {
-        response: errorResponse("INVALID_QUERY", "QueryService.Read requires an ID filter."),
+        response: errorResponse(
+          "INVALID_QUERY",
+          "QueryService.Read include_all requires a projection target.",
+        ),
       });
     }
 
@@ -162,32 +178,45 @@ export class SpineServices {
       });
     }
 
-    const messages = [];
-
     try {
+      if (includeAllRequested) {
+        const results = await route.context
+          .stand()
+          .readAllVersioned(route.schema, tenantOptions(tenantId));
+
+        return create(QueryResponseSchema, {
+          response: okResponse(),
+          message: results.map((result) => packVersionedState(route.schema, result)),
+        });
+      }
+
+      const ids = targetIds(target);
+      if (ids.length === 0) {
+        return create(QueryResponseSchema, {
+          response: errorResponse("INVALID_QUERY", "QueryService.Read requires an ID filter."),
+        });
+      }
+
+      const messages = [];
+
       for (const id of ids) {
         const result = await route.context
           .stand()
           .readVersioned(route.schema, id, tenantOptions(tenantId));
         if (result !== undefined) {
-          messages.push(
-            create(EntityStateWithVersionSchema, {
-              state: packAny(route.schema, result.state, { validate: false }),
-              version: result.version ?? create(VersionSchema),
-            }),
-          );
+          messages.push(packVersionedState(route.schema, result));
         }
       }
+
+      return create(QueryResponseSchema, {
+        response: okResponse(),
+        message: messages,
+      });
     } catch {
       return create(QueryResponseSchema, {
         response: errorResponse("QUERY_READ_ERROR", "Query read failed."),
       });
     }
-
-    return create(QueryResponseSchema, {
-      response: okResponse(),
-      message: messages,
-    });
   }
 
   #subscribe(topic: Topic): Subscription {
@@ -321,6 +350,7 @@ interface CommandRoute {
 
 interface StateRoute {
   readonly context: BoundedContext;
+  readonly entityFamily: EntityFamily;
   readonly schema: MessageSchema;
   readonly typeUrl: string;
 }
@@ -412,11 +442,15 @@ function okStatus(): Status {
   });
 }
 
-function errorStatus(type: string, message: string): Status {
+function errorStatus(type: string, message: string, details?: Any): Status {
   return create(StatusSchema, {
     status: {
       case: "error",
-      value: create(ErrorSchema, { type, message }),
+      value: create(ErrorSchema, {
+        type,
+        message,
+        ...(details === undefined ? {} : { details }),
+      }),
     },
   });
 }
@@ -468,6 +502,16 @@ function decodeId(id: Any): unknown {
   return stringId?.value ?? id;
 }
 
+function packVersionedState<Schema extends MessageSchema>(
+  schema: Schema,
+  result: StandReadResult<Schema>,
+) {
+  return create(EntityStateWithVersionSchema, {
+    state: packAny(schema, result.state, { validate: false }),
+    version: result.version ?? create(VersionSchema),
+  });
+}
+
 function commandTenant(command: Command): string | undefined {
   return tenantValue(command.context?.actorContext?.tenantId);
 }
@@ -514,6 +558,37 @@ function tenantMismatch(
 interface ContractError {
   readonly type: string;
   readonly message: string;
+  readonly details?: Any;
+}
+
+function commandPostError(error: unknown): ContractError {
+  if (error instanceof CommandRefusalError) {
+    return {
+      type: error.type,
+      message: error.clientMessage,
+    };
+  }
+
+  if (error instanceof TransitionValidationError) {
+    return {
+      type: error.type,
+      message: error.clientMessage,
+      details: packAny(ValidationErrorSchema, error.validationError, { validate: false }),
+    };
+  }
+
+  if (error instanceof CommandValidationError) {
+    return {
+      type: "COMMAND_VALIDATION_ERROR",
+      message: "Command payload validation failed.",
+      details: packAny(ValidationErrorSchema, error.validationError, { validate: false }),
+    };
+  }
+
+  return {
+    type: "COMMAND_POST_ERROR",
+    message: "Command post failed.",
+  };
 }
 
 function tenantOptions(tenantId: string | undefined): { readonly tenantId?: string } {

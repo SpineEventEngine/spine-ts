@@ -5,8 +5,9 @@ single-message validation facade, core envelope construction helpers, the first
 server entity, handler, repository, and bounded-context metadata
 layers, the first command/event bus seam, the first server runtime routing
 seam, the real Connect/Node `SpineServices` route registrar for the raw Spine
-command/query/subscription services, adapter-agnostic transport contracts, and
-the first storage contracts with an in-memory adapter.
+command/query/subscription services, adapter-agnostic transport contracts, the
+first storage contracts with an in-memory adapter, and a minimal in-process
+bounded-context testing fixture.
 
 This guide covers the behavior and contracts available now: Spine proto
 descriptors are exposed through curated packages, `@spine-ts/core` can derive
@@ -35,9 +36,11 @@ service descriptors with Connect/Node so callers can host `CommandService.Post`,
 `QueryService.Read`, and `SubscriptionService.Subscribe/Activate/Cancel` over a
 real gRPC-compatible runtime.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
-deterministic in-memory adapter for tests/development. Entity runtime dispatch,
-transport endpoint execution, durable production storage, broader server
-lifecycle, and the to-do application remain later slices.
+deterministic in-memory adapter for tests/development. Built bounded contexts
+can now execute aggregate command assignees/appliers and dispatch produced
+aggregate events to projection subscribers that update `Stand`; broader entity
+runtime dispatch, transport endpoint execution, durable production storage,
+broader server lifecycle, and the to-do application remain later slices.
 
 ## What Exists Now
 
@@ -82,15 +85,25 @@ lifecycle, and the to-do application remain later slices.
   factory.
 - A direct storage-backed `Stand` owned by each built `BoundedContext`.
   Registered repositories make their entity state schemas known to the stand,
-  which can record latest states, read them by schema and ID, and notify
-  in-process subscribers.
+  which can record latest states, read them by schema and ID or in storage
+  order, and notify in-process subscribers.
+- A small `BoundedContext.storedEventDispatchFailures()` diagnostic snapshot
+  for asynchronous already-stored event redispatch failures after aggregate
+  event storage has completed.
 - A first `SpineServices` route registrar that adapts built bounded contexts to
   real Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
   routes without adding a broad server facade or client DSL. Command routes are
   selected from built-time bus registrations, queries preserve Stand-recorded
-  versions, and subscriptions attach delivery only after explicit activation.
+  versions for ID-filter and `Target.include_all` projection reads, and
+  subscriptions attach delivery only after explicit activation.
   Inactive subscriptions expire by default and active subscriptions use a small
   bounded update queue for slow consumers.
+- A minimal `BoundedContextFixture` in `@spine-ts/testing` that wraps one built
+  bounded context and drives generated `Command`, `Event`, `Query`, and `Topic`
+  envelopes through the real in-process command, event, query, and subscription
+  seams. The fixture returns cloned `Ack`, `QueryResponse`, `Response`, and
+  `SubscriptionUpdate` messages and provides `readEventually()` for tests that
+  need to observe asynchronous projection consequences.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.
@@ -152,12 +165,18 @@ lifecycle, and the to-do application remain later slices.
 - Semantic tag registration from `(is)` and `(every_is)` into handler/routing
   registries. The server metadata APIs preserve entity tags and explicit
   handler declarations now, but no runtime registry consumes them yet.
-- Default repository construction from entity classes, handler invocation,
-  entity runtime dispatch, system context construction, import buses,
-  richer gRPC service execution, tenant index persistence,
-  ZeroMQ endpoint topology, broker process supervision, retry workers, durable
-  delivery storage, transport-backed service execution, durable production
-  storage, and to-do domain runtime behavior.
+- Default repository construction from entity classes, system context
+  construction, import buses, richer gRPC service execution, tenant index
+  persistence, ZeroMQ endpoint topology, broker process supervision, retry
+  workers, durable delivery storage, transport-backed service execution,
+  durable production storage, and to-do domain runtime behavior.
+- Built bounded contexts can invoke aggregate command assignees and aggregate
+  event appliers, then deliver stored aggregate-produced events to projection
+  event subscribers that update read-side state through `Stand`, including
+  tenant-scoped projection updates from the command tenant. Other
+  handler/runtime execution remains deferred, including process-manager
+  reactions, broader subscriber/reactor delivery semantics, and import/catch-up
+  flows.
 
 ## Type Registry
 
@@ -367,11 +386,11 @@ available:
 import { Aggregate, Projection, ProcessManager } from "@spine-ts/server";
 import { TaskProjectionSchema, TaskStateSchema, TaskWorkflowSchema } from "./generated/tasks_pb.js";
 
-class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, bigint> {}
 class TaskProjection extends Projection<string, typeof TaskProjectionSchema, number> {}
 class TaskWorkflow extends ProcessManager<string, typeof TaskWorkflowSchema, number> {}
 
-new TaskAggregate({ id, schema: TaskStateSchema, state, version: 1 }).entityFamily; // "aggregate"
+new TaskAggregate({ id, schema: TaskStateSchema, state, version: 1n }).entityFamily; // "aggregate"
 ```
 
 These classes inherit `TransactionalEntity` behavior and expose only stable
@@ -389,7 +408,7 @@ bounded context attach that repository during build:
 import { Aggregate, BoundedContext, Repository } from "@spine-ts/server";
 import { TaskStateSchema } from "./generated/tasks_pb.js";
 
-class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {}
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, bigint> {}
 
 const repository = new Repository({
   entityType: TaskAggregate,
@@ -421,14 +440,21 @@ opens a `RecordStorage` for the repository state schema using the context
 `StorageFactory`. Direct repository registration and registration status APIs
 are not public API.
 
-This slice still does not create, find, or store entities; convert entity
-records; invoke handlers; write inboxes; manage delivery; manage entity
-caches; run catch-up; emit lifecycle events; start buses from repositories; or
-use gRPC/transport. Direct stands can store and read latest entity states, but
-they do not invoke projections or run catch-up. When a repository is constructed with
-authentic explicit handler metadata, it can calculate deferred command/event
-routes, and bounded contexts install internal dispatcher adapters for those
-routes.
+This slice still does not expose direct entity lookup/storage APIs; convert
+entity records; write inboxes; manage delivery; manage entity caches; run
+catch-up; emit lifecycle events; start buses from repositories; or use
+gRPC/transport. Direct stands can store and read latest entity states;
+projection updates reach them through framework-owned repository dispatch in
+built contexts, not through a new application write-side read API. They do not
+run catch-up. When a repository is constructed with authentic explicit handler
+metadata and registered with a built bounded context, aggregate commands can
+load or create one aggregate, invoke one assignee, apply the produced events,
+persist history and snapshots through `AggregateStorage`, and queue
+already-stored events for event-bus delivery. Projection repositories can
+consume delivered domestic events, invoke matching event subscribers, and write
+changed state through `Stand`.
+Aggregate command execution requires `command.id` so produced events can carry
+a contract-valid command origin; missing IDs reject before mutation or storage.
 
 ## Bounded Context Assembly
 
@@ -466,11 +492,34 @@ opened for repositories, and `registeredRepositories()` returns a copy-safe
 list of frozen snapshot-backed `RepositoryView` values. The built context also
 owns `stand()`, and repository state schemas are registered with that stand as
 known state types.
-This slice still does not create default repositories, invoke handlers, write
-inboxes, manage delivery, emit lifecycle events, or start transport.
-Repositories with authentic explicit handler
-metadata do contribute deferred route-calculating dispatcher adapters to the
-built context's buses.
+This slice still does not create default repositories, write inboxes, manage
+delivery, emit lifecycle events, or start transport. Repositories with
+authentic explicit handler metadata do contribute dispatcher adapters to the
+built context's buses; aggregate repositories can therefore execute assignees
+and appliers, persist through `AggregateStorage`, and queue already-stored
+events for event-bus delivery. Aggregate command completion is not failed by
+later redispatch errors, but those errors are visible for diagnostics and tests
+via `context.storedEventDispatchFailures()`.
+
+`CommandBus` validates accepted command payload messages through the core
+validation facade before dispatcher callbacks run. For aggregate repositories,
+that still means validation happens before route calculation, aggregate history
+load, event append, snapshot write, or stored-event dispatch. Command handlers
+may immediately refuse one command by throwing `CommandRefusalError`; when the
+command is posted through `CommandService.Post`, the returned `Ack` carries the
+refusal type and message rather than generic `COMMAND_POST_ERROR`. Invalid
+payloads instead return `COMMAND_VALIDATION_ERROR` with message `Command
+payload validation failed.` and packed `spine.validation.ValidationError`
+details. Dispatcher-thrown `ValidationException` values and other unexpected
+command-bus failures remain sanitized as `COMMAND_POST_ERROR`. State-transition
+validation remains owned by `EntityTransaction.commit()` and
+`validateEntityStateTransition()`. If an aggregate event applier commits a
+rejected transition while applying events produced by the current command,
+command execution stops before storing produced events or snapshots and
+`CommandService.Post` returns `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with
+message `Command state transition validation failed.` plus packed
+`ValidationError` details. Replay failures from stored aggregate history remain
+internal and are sanitized as `COMMAND_POST_ERROR`.
 
 ## Direct Stand
 
@@ -487,6 +536,24 @@ await stand.update(TaskStateSchema, taskState, {
 
 const latest = await stand.read(TaskStateSchema, taskId);
 const versioned = await stand.readVersioned(TaskStateSchema, taskId);
+const allVersioned = await stand.readAllVersioned(TaskStateSchema);
+const tenantVersioned = await tenantTasks.stand().readAllVersioned(TaskStateSchema, {
+  tenantId: "tenant-a",
+});
+
+const query = create(QuerySchema, {
+  target: create(TargetSchema, {
+    type: deriveTypeUrl(TaskStateSchema),
+    criterion: { case: "includeAll", value: true },
+  }),
+  context: create(ActorContextSchema, {
+    tenantId: create(TenantIdSchema, {
+      kind: { case: "value", value: "tenant-a" },
+    }),
+  }),
+});
+
+const response = await queryClient.read(query);
 const subscription = stand.subscribe(TaskStateSchema, (update) => {
   update.state;
 });
@@ -497,13 +564,20 @@ subscription.unsubscribe();
 `Stand.register(schema)` is available for direct stand instances; built bounded
 contexts call it from registered repository metadata. Reads, updates, and
 subscriptions reject unknown state schemas with `StandStateTypeError`.
-Multitenant stands require `{ tenantId }`; single-tenant stands reject tenant
-options. Direct subscriptions are in-process only and must be cleaned up by
-calling `unsubscribe()`. `SpineServices` adapts built-context stands to the
-first raw gRPC-compatible query and subscription routes. Service subscriptions
-allocate IDs in `Subscribe` and attach Stand delivery in `Activate`; updates
-recorded before activation are not replayed by this first slice. This direct API
-does not provide a client query DSL.
+`readAllVersioned()` returns `StandReadResult` entries in deterministic
+`RecordStorage.query()` order and clones the stored state and caller-supplied
+version metadata the same way `readVersioned()` does. Multitenant stands require
+`{ tenantId }` for point reads, list reads, updates, and subscriptions; single-
+tenant stands reject tenant options. `SpineServices` adapts built-context
+stands to the first raw gRPC-compatible query and subscription routes, including
+projection-state `QueryService.Read` calls with `Target.include_all = true`.
+Include-all service reads use the same tenant-option behavior as direct stand
+reads and return `EntityStateWithVersion` values packed from
+`Stand.readAllVersioned()`. Direct subscriptions are in-process only and must be
+cleaned up by calling `unsubscribe()`. Service subscriptions allocate IDs in
+`Subscribe` and attach Stand delivery in `Activate`; updates recorded before
+activation are not replayed by this first slice. This direct API does not
+provide a client query DSL.
 
 ## Runtime Assembly Closure
 
@@ -526,7 +600,7 @@ import {
 import { CreateTaskSchema } from "./generated/task_commands_pb.js";
 import { TaskCreatedSchema, TaskStateSchema } from "./generated/tasks_pb.js";
 
-class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {
+class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, bigint> {
   create(command: unknown): void {}
   onCreated(event: unknown): void {}
 }

@@ -98,7 +98,20 @@ importers:
         specifier: workspace:*
         version: link:../proto
 
-  packages/testing: {}
+  packages/testing:
+    dependencies:
+      '@bufbuild/protobuf':
+        specifier: 2.12.1
+        version: 2.12.1
+      '@spine-ts/core':
+        specifier: workspace:*
+        version: link:../core
+      '@spine-ts/proto':
+        specifier: workspace:*
+        version: link:../proto
+      '@spine-ts/server':
+        specifier: workspace:*
+        version: link:../server
 
   packages/transport:
     dependencies:

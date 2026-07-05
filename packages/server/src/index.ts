@@ -8,6 +8,8 @@ export {
   ContextSpec,
   type ContextSpecSnapshot,
   type EventEndpoint,
+  type DispatchErrorSnapshot,
+  type StoredEventDispatchFailure,
   type TenantMode,
 } from "./context/bounded-context.js";
 
@@ -25,6 +27,7 @@ export {
 } from "./stand/stand.js";
 
 export { SpineServices, type SpineServicesOptions } from "./services/spine-services.js";
+export { CommandRefusalError } from "./services/command-errors.js";
 
 export { CommandBus } from "./bus/command-bus.js";
 export type { CommandDispatcher } from "./bus/command-dispatcher.js";
@@ -58,13 +61,13 @@ export {
   type EntityFamily,
   type EntityLifecycleFlags,
   type EntityOptions,
+  type EntityScopeReason,
   type EntityVersionMetadata,
   type PlainEntityVersionMetadata,
   ProcessManager,
   Projection,
   TransactionalEntity,
   TransactionalEntityScopeError,
-  type TransactionalEntityScopeErrorReason,
   type TransactionalEntityScopeOperation,
 } from "./entity/entity.js";
 
