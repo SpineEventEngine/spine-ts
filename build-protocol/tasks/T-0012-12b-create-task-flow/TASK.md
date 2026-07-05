@@ -10,7 +10,7 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12b-create-task-flow`
 Authoring sub-agent: `019f3241-11a3-7790-ac86-15bdb454b653` (closed after
 timeout; main orchestrator inspected and amended WIP)
-Reviewer sub-agents: rounds one through four closed; round-four fix pending
+Reviewer sub-agents: rounds one through five closed; round-five doc fix pending
 Implementation commit: `a784ea5`
 Review-fix commit: `2753627`
 Second-fix commit: `61acd94`
