@@ -6,7 +6,7 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-4 docs-only fixes verified; ready for round-5 independent review
+Status: round-5 report-only fixes verified; ready for round-6 independent review
 
 ## Required Lanes
 
@@ -143,4 +143,21 @@ Status: round-4 docs-only fixes verified; ready for round-5 independent review
   dispatcher-exception sentence, changed the implementation report round-3
   summary to past tense, and refreshed the review-log lane rollup.
 - `2026-07-05 06:04 WEST`: Docs-only verification passed:
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
+
+### Round 5
+
+- `2026-07-05 06:08 WEST`: Code style and documentation found remaining
+  implementation-report wording drift: round 4 was still described as in
+  progress, and the summary used the broader phrase "command validation
+  failures" instead of "command-bus payload validation failures."
+- `2026-07-05 06:09 WEST`: TypeScript/API docs, security, and
+  performance/reliability lanes were clean.
+
+## Round-5 Fix Pass
+
+- `2026-07-05 06:10 WEST`: Orchestrator narrowed the implementation report
+  command validation wording, recorded dispatcher-thrown `ValidationException`
+  sanitization, and changed the round-4 summary to past tense.
+- `2026-07-05 06:13 WEST`: Report-only verification passed:
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.

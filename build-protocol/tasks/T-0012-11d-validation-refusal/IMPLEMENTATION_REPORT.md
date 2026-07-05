@@ -29,9 +29,10 @@ Baseline commit: `c13b19c`
   existing `@spine-ts/core` validation facade before routing/load/durable
   write-side work.
 - `CommandService.Post` now maps one immediate business refusal path
-  (`CommandRefusalError`) to a stable non-ok Ack, maps command validation
-  failures to `COMMAND_VALIDATION_ERROR`, and maps aggregate transition
-  validation failures to
+  (`CommandRefusalError`) to a stable non-ok Ack, maps command-bus payload
+  validation failures to `COMMAND_VALIDATION_ERROR`, keeps dispatcher-thrown
+  `ValidationException`s sanitized as `COMMAND_POST_ERROR`, and maps aggregate
+  transition validation failures to
   `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with validation details.
 - Aggregate command execution now reads rejected `EntityTransaction` commits
   after event appliers and raises a command-visible transition validation error
@@ -84,7 +85,7 @@ Baseline commit: `c13b19c`
 
 ## Review Summary
 
-Independent review has run through three rounds. Round 1 moved payload
+Independent review has run through five rounds. Round 1 moved payload
 validation to the `CommandBus`, removed an accidental public entity inspection
 hook, and filled missing public Ack docs. Round 2 moved internal validation
 errors back into their owning bus/repository layers and kept arbitrary
@@ -92,4 +93,6 @@ dispatcher-thrown `ValidationException`s sanitized. Round 3 aligned docs/report
 wording with the bus-boundary behavior, mapped structural payload mismatch
 through the same command validation path, restored stable transition-validation
 metadata for direct repository/bus callers, and passed focused/static
-verification. Round 4 is currently resolving docs-only wording drift.
+verification. Round 4 resolved docs-only wording drift and passed docs-only
+verification. Round 5 is resolving the last implementation-report wording
+drift.
