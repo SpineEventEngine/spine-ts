@@ -1,6 +1,6 @@
 # Work Log: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.11 integrated; T-0012.12 selected
+Status: T-0012.12 integrated; parent integration verification pending
 
 ## Entries
 
@@ -42,6 +42,7 @@ Status: T-0012.11 integrated; T-0012.12 selected
 | `2026-07-04 21:34 WEST` | Requirements splitter | Completed `T-0012.11` roadmap split and selected the first implementation slice.              | Read `T-0012.11` task/report/review/work logs; core framework/spec/example docs; `T-0012.10` logs; relevant server source/tests; curated JVM docs under `spine-jvm-docs`; updated `T-0012.11` task/report/review/work logs plus concise parent status lines.                                                                                                                                                                                                                                                                                  | Selected five narrow slices tied to concrete blockers: aggregate command execution, projection event updates, projection list queries, validation/refusal wiring, and minimal black-box testing support. First selected slice is `T-0012.11a Aggregate Command Execution` on proposed branch `task/T-0012-11a-aggregate-command-execution`. The split proposed that branch/worktree only; the orchestrator creates it after splitter review is clean.                                |
 | `2026-07-04 21:43 WEST` | Docs-fix author       | Applied `T-0012.11` splitter review findings to parent docs/logs.                             | Updated parent `T-0012` task/report/review/work log plus `T-0012.11` leaf task/report/review/work log; narrowed the parent roadmap; synchronized statuses; clarified that the split proposes the `T-0012.11a` branch/worktree and the orchestrator opens it later; tightened durable-log, coverage, tenant-boundary, validation-contract, read-side, and public testing-fixture documentation requirements.                                                                                                                                   | Parent and leaf docs now match the split-complete/selected-first-slice state and record that round-1 splitter review comments were addressed before the first implementation slice is opened.                                                                                                                                                                                                                                                                                        |
 | `2026-07-05 10:40 WEST` | Main orchestrator     | Integrated `T-0012.11` and selected next subtask.                                             | `git merge --no-ff task/T-0012-11-missing-details-example-readiness`; `pnpm install`; main verification commands; parent roadmap logs.                                                                                                                                                                                                                                                                                                                                                                                                        | `T-0012.11` is integrated on `main` at merge commit `473a4b2`. Main verification passed: `pnpm check:node`, `pnpm typecheck`, `pnpm lint`, project-scope Prettier excluding unrelated untracked `human-review-1-jul.md`, escalated `pnpm test`, escalated `pnpm test:coverage`, `pnpm docs:check`, `pnpm proto:lint`, `pnpm proto:check-generated`, and `git diff --check`. Coverage: 45 files, 619 tests, branches 90.22%. Next selected subtask is `T-0012.12 To-Do Example`.      |
+| `2026-07-05 21:47 WEST` | Main orchestrator     | Integrated `T-0012.12` final example slice.                                                   | `git merge --no-ff task/T-0012-12f-runnable-server-guide`; parent to-do-example docs and roadmap logs.                                                                                                                                                                                                                                                                                                                                                                                                                                        | `T-0012.12f` is integrated on `main` at merge commit `ea2a4ab`. All planned `T-0012.12` to-do example slices are merged. Parent integration verification and review are next.                                                                                                                                                                                                                                                                                                        |
 
 ## Current State
 
@@ -62,7 +63,8 @@ Status: T-0012.11 integrated; T-0012.12 selected
 - `T-0012.9 Stand And Entity Updates` is integrated.
 - `T-0012.10 Real gRPC Services` is integrated.
 - `T-0012.11 Missing Details And Example Readiness` is integrated.
-- Current implementable subtask is `T-0012.12 To-Do Example`.
+- Current implementable subtask is none; `T-0012.12 To-Do Example` is
+  integrated and awaiting parent integration verification/review.
 - Parent verification passed after `T-0012.1` integration.
 - Parent verification passed after `T-0012.2` integration.
 - Parent verification passed after `T-0012.3` integration.
@@ -82,4 +84,5 @@ Status: T-0012.11 integrated; T-0012.12 selected
 - Parent tracked-state verification passed after `T-0012.9` integration.
 - Parent tracked-state verification passed after `T-0012.10` integration.
 - Parent tracked-state verification passed after `T-0012.11` integration.
+- Parent tracked-state verification after `T-0012.12` integration is pending.
 - No blocking human question is known.

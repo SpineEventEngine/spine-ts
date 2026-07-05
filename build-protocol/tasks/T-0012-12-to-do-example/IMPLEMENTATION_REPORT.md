@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12 To-Do Example
 
-Status: T-0012.12e merged; T-0012.12f selected
+Status: T-0012.12 complete; parent integration verification pending
 Branch: `task/T-0012-12-to-do-example`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
@@ -26,8 +26,8 @@ framework details.
 
 The requirements-splitting sub-agent split this task into small slices and
 identified no framework gap before the first slice. Slices `T-0012.12a` through
-`T-0012.12e` are complete and merged. The next selected implementation slice is
-`T-0012.12f Runnable Server And Guide`.
+`T-0012.12f` are complete and merged. No framework gap was found during the
+to-do example work.
 
 ## Current State
 
@@ -40,7 +40,8 @@ identified no framework gap before the first slice. Slices `T-0012.12a` through
 - `T-0012.12c Task Operations` is merged via `e27b033`.
 - `T-0012.12d Validation And Refusal` is merged via `6d82910`.
 - `T-0012.12e Task Subscriptions` is merged via `064a95d`.
-- `T-0012.12f Runnable Server And Guide` is selected next.
+- `T-0012.12f Runnable Server And Guide` is merged via `ea2a4ab`.
+- All planned `T-0012.12` slices are complete.
 
 ## Splitter Evidence Summary
 
@@ -95,6 +96,7 @@ Important findings:
    - Branch: `task/T-0012-12f-runnable-server-guide`
    - Adds the standalone service host, gRPC smoke test, README, and
      `USER_GUIDE.md` updates.
+   - Complete and merged via `ea2a4ab`.
 
 Gap-routing rule:
 
@@ -106,15 +108,15 @@ Gap-routing rule:
 
 ## Current Selected Subtask
 
-Selected: `T-0012.12f Runnable Server And Guide`
+Selected: none. `T-0012.12` is complete.
 
 Why:
 
-- `T-0012.12e` completed live subscription updates over projection changes
-  using real `SubscriptionService` behavior.
-- The remaining example work is the standalone service host, gRPC smoke path,
-  README, and `USER_GUIDE.md`.
-- No framework gap is known before this slice.
+- `T-0012.12f` completed the remaining standalone service host, gRPC smoke
+  path, README, and `USER_GUIDE.md` work.
+- The example now satisfies the planned framework usage path with in-memory
+  storage and real gRPC-compatible command, query, and subscription behavior.
+- No framework gap was found.
 
 ## Verification
 
@@ -135,3 +137,7 @@ Splitter re-review:
   `3cc8625 Merge T-0012.12a todo proto generation`.
 - `T-0012.12d` completed its implementation/review loop and was merged as
   `6d82910 Merge T-0012.12d validation refusal`.
+- `T-0012.12e` completed its implementation/review loop and was merged as
+  `064a95d Merge T-0012.12e task subscriptions`.
+- `T-0012.12f` completed its implementation/review loop and was merged as
+  `ea2a4ab Merge T-0012.12f runnable server guide`.

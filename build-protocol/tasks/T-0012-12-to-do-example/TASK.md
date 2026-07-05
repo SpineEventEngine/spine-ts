@@ -1,6 +1,6 @@
 # T-0012.12: To-Do Example
 
-Status: T-0012.12e merged; T-0012.12f selected
+Status: T-0012.12 complete; parent integration verification pending
 Start: `2026-07-05 10:53 WEST`
 End: Pending
 Baseline commit: `89868e9`
@@ -14,6 +14,7 @@ review sub-agents complete and closed; `T-0012.12b` implementation and review
 sub-agents complete and closed; `T-0012.12c` implementation and review
 sub-agents complete and closed; `T-0012.12d` implementation and review
 sub-agents complete and closed; `T-0012.12e` implementation and review
+sub-agents complete and closed; `T-0012.12f` implementation and review
 sub-agents complete and closed.
 Reviewer sub-agents:
 
@@ -35,8 +36,9 @@ Reviewer sub-agents:
 
 Implementation commits: `3cc8625` merge of `T-0012.12a`; `63f8e9f` merge of
 `T-0012.12b`; `e27b033` merge of `T-0012.12c`; `6d82910` merge of
-`T-0012.12d`; `064a95d` merge of `T-0012.12e`
-Final branch HEAD: `064a95d`; `T-0012.12f` selected
+`T-0012.12d`; `064a95d` merge of `T-0012.12e`; `ea2a4ab` merge of
+`T-0012.12f`
+Final branch HEAD: `ea2a4ab`; all planned `T-0012.12` slices merged
 
 ## Objective
 
@@ -217,6 +219,10 @@ Out of scope:
   implementation and review loop. Clean final lanes: documentation and
   maintainability after historical wording fix, TypeScript/API docs, security,
   and reliability. Merged as `3cc8625 Merge T-0012.12a todo proto generation`.
+- `2026-07-05 21:47 WEST`: `T-0012.12f Runnable Server And Guide` completed
+  its implementation and review loop. Clean final lanes: maintainability,
+  documentation, TypeScript/API docs, security, and reliability. Merged as
+  `ea2a4ab Merge T-0012.12f runnable server guide`. No framework gap was found.
 
 ## Requirements Splitter Evidence
 
@@ -550,6 +556,8 @@ Verification plan:
 - `pnpm docs:check`
 - `git diff --check`
 
+- Status: complete and merged via `ea2a4ab`.
+
 ### Framework-Gap Routing Rule
 
 No framework-gap slice is selected before `T-0012.12a` because current
@@ -592,21 +600,22 @@ Selection rationale:
 
 ## Current Selected Slice
 
-Selected next implementable slice: `T-0012.12f Runnable Server And Guide`.
+Selected next implementable slice: none. All planned `T-0012.12` slices are
+merged.
 
 Branch: `task/T-0012-12f-runnable-server-guide`
 
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12f-runnable-server-guide`
 
-Selection rationale:
+Completion rationale:
 
-- `T-0012.12e` completed live subscription coverage over projection changes.
-- The remaining to-do-example slice is the standalone runnable server and user
-  guide.
-- No framework gap is known before this slice. If implementation proves one,
-  it must be routed through a framework-gap task before continuing dependent
-  example work.
+- `T-0012.12f` completed the standalone runnable server, real gRPC-compatible
+  smoke test, README, and `USER_GUIDE.md`.
+- The to-do example now covers generated domain messages, aggregate command
+  handling, projection queries, subscriptions, validation/refusal, and a
+  runnable in-memory server app.
+- No framework gap was found while completing the example.
 
 ## Decisions
 

@@ -3,10 +3,10 @@
 Task log: `build-protocol/tasks/T-0012-12-to-do-example/TASK.md`
 Branch: `task/T-0012-12-to-do-example`
 Baseline commit: `89868e9`
-Reviewed commit/diff basis: `064a95d..4165035`
+Reviewed commit/diff basis: parent integration after `ea2a4ab`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
-Status: T-0012.12e merged; T-0012.12f selected
+Status: T-0012.12f merged; parent integration review pending
 
 ## Required Review Lanes
 
@@ -85,7 +85,10 @@ Review focus for splitter review:
 - `T-0012.12e Task Subscriptions`: complete and merged via `064a95d`.
   Final clean lanes: maintainability, documentation, TypeScript/API docs,
   security, and performance/reliability after closure evidence ordering.
-- Next selected slice: `T-0012.12f Runnable Server And Guide`.
+- `T-0012.12f Runnable Server And Guide`: complete and merged via `ea2a4ab`.
+  Final clean lanes: maintainability, documentation, TypeScript/API docs,
+  security, and performance/reliability after durable-state handoff fixes.
+- All planned `T-0012.12` slices are merged.
 
 ## T-0012.12e Implementation Notes
 
@@ -107,5 +110,10 @@ Review focus for splitter review:
 - Parent integration docs for `T-0012.12e` are updated after merge.
 - Review package: `.superpowers/sdd/review-064a95d..4165035-parent-12e-integration.diff`
 - Reviewed range: `064a95d..4165035`.
+- Required lanes: maintainability, documentation, TypeScript/API docs,
+  security, and performance/reliability.
+- Parent integration docs for `T-0012.12f` are updated after merge.
+- Review package: pending.
+- Reviewed range: `ea2a4ab..HEAD`.
 - Required lanes: maintainability, documentation, TypeScript/API docs,
   security, and performance/reliability.
