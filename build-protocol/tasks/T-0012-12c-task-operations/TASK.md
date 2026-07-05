@@ -1,8 +1,8 @@
 # T-0012.12c: Task Operations
 
-Status: opened; implementation pending
+Status: implemented; awaiting review
 Start: `2026-07-05 16:12 WEST`
-End: Pending
+End: `2026-07-05 16:21 WEST`
 Baseline commit: `fc71408`
 Task log path: `build-protocol/tasks/T-0012-12c-task-operations/TASK.md`
 Branch: `task/T-0012-12c-task-operations`
@@ -118,3 +118,32 @@ Out of scope:
 - Keep the example API narrow and direct; do not add a facade or client DSL.
 - If a framework gap is found, record it and route it through a gap slice before
   broadening `@spine-ts/server`.
+
+## Implementation Summary
+
+- Added decorated aggregate handlers for `RenameTask`, `CompleteTask`, and
+  `ReopenTask`.
+- Added aggregate appliers for `TaskRenamed`, `TaskCompleted`, and
+  `TaskReopened`.
+- Updated `TaskListProjection` subscribers for renamed, completed, and reopened
+  task rows.
+- Added focused black-box tests for each operation and a persisted
+  history/snapshot-backed rehydration sequence.
+- Updated the example README and user guide status text for the new operations.
+
+## Verification Evidence
+
+- RED: focused example test failed after tests were added first, with 4 new
+  failures and 3 existing passing tests.
+- GREEN/final focused:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed, 1 file / 7 tests.
+- `pnpm typecheck` passed.
+- `pnpm lint` passed.
+- Tracked-file Prettier check passed.
+- `pnpm docs:check` passed with the existing invalid-origin source-link warning.
+- `pnpm proto:check-generated` passed.
+- `git diff --check` passed.
+- Sandboxed `pnpm test:coverage` failed from local IPC/localhost sandbox
+  restrictions. Escalated `pnpm test:coverage` passed: 45 files / 643 tests;
+  statements 95.18%, branches 90.48%, functions 97.63%, lines 95.20%.

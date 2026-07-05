@@ -11,15 +11,25 @@ import {
   TargetFiltersSchema,
   TargetSchema,
 } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
-import { QueryIdSchema, QuerySchema } from "@spine-ts/proto/generated/spine/client/query_pb.js";
+import {
+  QueryIdSchema,
+  QuerySchema,
+  type QueryResponse,
+} from "@spine-ts/proto/generated/spine/client/query_pb.js";
 import { BoundedContextFixture } from "@spine-ts/testing";
 import { existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 
-import { CreateTaskSchema } from "../generated/spine/example/todo/v1/task_commands_pb.js";
+import {
+  CompleteTaskSchema,
+  CreateTaskSchema,
+  RenameTaskSchema,
+  ReopenTaskSchema,
+} from "../generated/spine/example/todo/v1/task_commands_pb.js";
 import { TaskIdSchema } from "../generated/spine/example/todo/v1/task_id_pb.js";
 import { TaskListSchema, type TaskList } from "../generated/spine/example/todo/v1/task_list_pb.js";
+import { type Task } from "../generated/spine/example/todo/v1/tasks_pb.js";
 
 type CreateTodoContext = (typeof import("../dist/src/index.js"))["createTodoContext"];
 
@@ -99,6 +109,101 @@ describe("@spine-ts/example-todo", () => {
       "Second",
     ]);
   });
+
+  it("renames one task through command handling and exposes the new title", async () => {
+    const fixture = new BoundedContextFixture(createTodoContext(), {
+      timeoutMs: 500,
+      intervalMs: 5,
+    });
+
+    await fixture.post(createTaskCommand("command-rename-create", "task-rename", "Original"));
+    const ack = await fixture.post(
+      createRenameCommand("command-rename-task", "task-rename", "Renamed"),
+    );
+    const response = await fixture.readEventually(
+      createTaskListQuery(),
+      (candidate) => taskTitle(candidate, "task-rename") === "Renamed",
+    );
+    const task = readTask(response, "task-rename");
+
+    expect(ack.status?.status.case).toBe("ok");
+    expect(task?.title).toBe("Renamed");
+    expect(task?.completed).toBe(false);
+    expect(readList(response, "task-rename")?.openTaskCount).toBe(1);
+  });
+
+  it("completes one task through command handling and closes the list row", async () => {
+    const fixture = new BoundedContextFixture(createTodoContext(), {
+      timeoutMs: 500,
+      intervalMs: 5,
+    });
+
+    await fixture.post(createTaskCommand("command-complete-create", "task-complete", "Open"));
+    const ack = await fixture.post(createCompleteCommand("command-complete-task", "task-complete"));
+    const response = await fixture.readEventually(
+      createTaskListQuery(),
+      (candidate) => taskCompleted(candidate, "task-complete") === true,
+    );
+    const task = readTask(response, "task-complete");
+
+    expect(ack.status?.status.case).toBe("ok");
+    expect(task?.title).toBe("Open");
+    expect(task?.completed).toBe(true);
+    expect(readList(response, "task-complete")?.openTaskCount).toBe(0);
+  });
+
+  it("reopens one task through command handling and opens the list row", async () => {
+    const fixture = new BoundedContextFixture(createTodoContext(), {
+      timeoutMs: 500,
+      intervalMs: 5,
+    });
+
+    await fixture.post(createTaskCommand("command-reopen-create", "task-reopen", "Done"));
+    await fixture.post(createCompleteCommand("command-reopen-complete", "task-reopen"));
+    const ack = await fixture.post(createReopenCommand("command-reopen-task", "task-reopen"));
+    const response = await fixture.readEventually(
+      createTaskListQuery(),
+      (candidate) => taskCompleted(candidate, "task-reopen") === false,
+    );
+    const task = readTask(response, "task-reopen");
+
+    expect(ack.status?.status.case).toBe("ok");
+    expect(task?.title).toBe("Done");
+    expect(task?.completed).toBe(false);
+    expect(readList(response, "task-reopen")?.openTaskCount).toBe(1);
+  });
+
+  it("preserves task state through persisted aggregate rehydration", async () => {
+    const fixture = new BoundedContextFixture(createTodoContext(), {
+      timeoutMs: 500,
+      intervalMs: 5,
+    });
+
+    await fixture.post(createTaskCommand("command-history-create", "task-history", "Original"));
+    await fixture.post(createCompleteCommand("command-history-complete", "task-history"));
+    await fixture.post(createRenameCommand("command-history-rename", "task-history", "Still done"));
+    const doneResponse = await fixture.readEventually(
+      createTaskListQuery(),
+      (candidate) =>
+        taskTitle(candidate, "task-history") === "Still done" &&
+        taskCompleted(candidate, "task-history") === true,
+    );
+
+    await fixture.post(createReopenCommand("command-history-reopen", "task-history"));
+    const openResponse = await fixture.readEventually(
+      createTaskListQuery(),
+      (candidate) => taskCompleted(candidate, "task-history") === false,
+    );
+    const doneTask = readTask(doneResponse, "task-history");
+    const openTask = readTask(openResponse, "task-history");
+
+    expect(doneTask?.title).toBe("Still done");
+    expect(doneTask?.completed).toBe(true);
+    expect(readList(doneResponse, "task-history")?.openTaskCount).toBe(0);
+    expect(openTask?.title).toBe("Still done");
+    expect(openTask?.completed).toBe(false);
+    expect(readList(openResponse, "task-history")?.openTaskCount).toBe(1);
+  });
 });
 
 function assertBuiltExample(): void {
@@ -120,6 +225,46 @@ function createTaskCommand(commandId: string, taskId: string, title: string) {
     message: create(CreateTaskSchema, {
       id: create(TaskIdSchema, { value: taskId }),
       title,
+    }),
+  });
+}
+
+function createRenameCommand(commandId: string, taskId: string, title: string) {
+  return packCommand({
+    id: create(CommandIdSchema, { uuid: commandId }),
+    context: create(CommandContextSchema, {
+      actorContext: createActorContext(),
+    }),
+    schema: RenameTaskSchema,
+    message: create(RenameTaskSchema, {
+      id: create(TaskIdSchema, { value: taskId }),
+      title,
+    }),
+  });
+}
+
+function createCompleteCommand(commandId: string, taskId: string) {
+  return packCommand({
+    id: create(CommandIdSchema, { uuid: commandId }),
+    context: create(CommandContextSchema, {
+      actorContext: createActorContext(),
+    }),
+    schema: CompleteTaskSchema,
+    message: create(CompleteTaskSchema, {
+      id: create(TaskIdSchema, { value: taskId }),
+    }),
+  });
+}
+
+function createReopenCommand(commandId: string, taskId: string) {
+  return packCommand({
+    id: create(CommandIdSchema, { uuid: commandId }),
+    context: create(CommandContextSchema, {
+      actorContext: createActorContext(),
+    }),
+    schema: ReopenTaskSchema,
+    message: create(ReopenTaskSchema, {
+      id: create(TaskIdSchema, { value: taskId }),
     }),
   });
 }
@@ -166,4 +311,25 @@ function createActorContext() {
 
 function unpackTaskList(state: Any | undefined): TaskList | undefined {
   return state === undefined ? undefined : unpackAny(state, TaskListSchema);
+}
+
+function readList(response: Pick<QueryResponse, "message">, taskId: string) {
+  return response.message
+    .map((message) => unpackTaskList(message.state))
+    .find((list) => list?.id === taskId);
+}
+
+function readTask(response: Pick<QueryResponse, "message">, taskId: string): Task | undefined {
+  return readList(response, taskId)?.tasks.find((task) => task.id?.value === taskId);
+}
+
+function taskTitle(response: Pick<QueryResponse, "message">, taskId: string): string | undefined {
+  return readTask(response, taskId)?.title;
+}
+
+function taskCompleted(
+  response: Pick<QueryResponse, "message">,
+  taskId: string,
+): boolean | undefined {
+  return readTask(response, taskId)?.completed;
 }
