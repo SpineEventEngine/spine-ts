@@ -83,7 +83,8 @@ projection-state list read needed by the to-do example.
 ## Current State
 
 - Implemented on branch `task/T-0012-11c-projection-list-queries` through
-  reviewed commit `4102284`.
+  reviewed commit `4102284`, then tightened in parent-review follow-up commits
+  `764b946` and `a0c6dde`.
 - `Stand.readAllVersioned()` uses `RecordStorage.query()` directly and reuses
   the point-read version cloning path.
 - `QueryService.Read` accepts projection-state `Target.include_all` queries,
