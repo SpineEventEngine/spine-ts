@@ -460,7 +460,6 @@ export abstract class TransactionalEntity<
   protected rollbackTransaction(): EntityTransactionRollbackResult<Schema, Version> {
     const result = this.#requireTransaction("rollbackTransaction").rollback();
     this.#transaction = undefined;
-    rejectedCommits.delete(this);
 
     return result;
   }

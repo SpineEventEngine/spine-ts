@@ -218,6 +218,27 @@ class TransitionViolatingAggregate extends Aggregate<string, typeof AggregateSta
   }
 }
 
+class RollingBackTransitionAggregate extends TransitionViolatingAggregate {
+  override assignTask(command: AggregateState) {
+    return createAggregateEvent("event-transition-rollback", command.id, 0, command.name);
+  }
+
+  override applyTask(event: AggregateState): void {
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: `${event.id}-changed`,
+        name: event.name,
+        archived: event.archived,
+      }),
+    );
+    const result = this.commitTransaction();
+    if (result.status === "rejected") {
+      this.rollbackTransaction();
+    }
+  }
+}
+
 class AsyncAssigneeAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   static resolveCommand: ((eventName: string) => void) | undefined;
 
@@ -874,6 +895,36 @@ describe("repository signal routing", () => {
 
     await expect(eventStore.read()).resolves.toEqual([]);
     await expect(storage.readHistory("task-transition-invalid")).resolves.toMatchObject({
+      snapshot: undefined,
+      events: [],
+    });
+  });
+
+  it("rejects rolled-back state-transition validation failures before storage", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createRollingBackTransitionRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("command-transition-rollback", "task-transition-rollback")),
+    ).rejects.toMatchObject({
+      type: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED",
+      clientMessage: "Command state transition validation failed.",
+    });
+
+    await expect(eventStore.read()).resolves.toEqual([]);
+    await expect(storage.readHistory("task-transition-rollback")).resolves.toMatchObject({
       snapshot: undefined,
       events: [],
     });
@@ -1588,6 +1639,25 @@ function createTransitionViolatingRepository(): Repository<typeof TransitionViol
 
   return new Repository({
     entityType: TransitionViolatingAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createRollingBackTransitionRepository(): Repository<
+  typeof RollingBackTransitionAggregate
+> {
+  const handlers = defineEntityHandlers(
+    RollingBackTransitionAggregate,
+    AggregateStateSchema,
+    (builder) => [
+      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.apply(AggregateStateSchema, "applyTask"),
+    ],
+  );
+
+  return new Repository({
+    entityType: RollingBackTransitionAggregate,
     schema: AggregateStateSchema,
     handlers,
   });

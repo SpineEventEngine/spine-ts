@@ -205,6 +205,27 @@ class TransitionViolatingTaskAggregate extends Aggregate<
   }
 }
 
+class RollingBackTransitionTaskAggregate extends TransitionViolatingTaskAggregate {
+  override assignTask(command: AggregateState) {
+    return createAggregateEvent("event-transition-rollback", command.id, command.name);
+  }
+
+  override applyTask(event: AggregateState): void {
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: `${event.id}-changed`,
+        name: event.name,
+        archived: event.archived,
+      }),
+    );
+    const result = this.commitTransaction();
+    if (result.status === "rejected") {
+      this.rollbackTransaction();
+    }
+  }
+}
+
 describe("SpineServices", () => {
   it("posts commands through CommandService over a real gRPC transport", async () => {
     const observed: string[] = [];
@@ -647,6 +668,22 @@ describe("SpineServices", () => {
 
     const ack = await handlers.post(
       createAggregateCommand("command-transition-invalid", "task-transition-invalid"),
+    );
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("COMMAND_STATE_TRANSITION_VALIDATION_FAILED");
+    expect(errorMessage(ack.status?.status)).toBe("Command state transition validation failed.");
+    expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
+  });
+
+  it("returns transition validation Ack errors after rejected commit rollback", async () => {
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createRollingBackTransitionRepository())
+      .build();
+    const handlers = registeredCommandHandlers(context);
+
+    const ack = await handlers.post(
+      createAggregateCommand("command-transition-rollback", "task-transition-rollback"),
     );
 
     expect(ack.status?.status.case).toBe("error");
@@ -1459,6 +1496,25 @@ function createTransitionViolatingRepository(): Repository<
 
   return new Repository({
     entityType: TransitionViolatingTaskAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createRollingBackTransitionRepository(): Repository<
+  typeof RollingBackTransitionTaskAggregate
+> {
+  const handlers = defineEntityHandlers(
+    RollingBackTransitionTaskAggregate,
+    AggregateStateSchema,
+    (builder) => [
+      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.apply(AggregateStateSchema, "applyTask"),
+    ],
+  );
+
+  return new Repository({
+    entityType: RollingBackTransitionTaskAggregate,
     schema: AggregateStateSchema,
     handlers,
   });

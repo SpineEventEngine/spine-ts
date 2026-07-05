@@ -6,7 +6,7 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-6 docs/report fixes verified; ready for round-7 independent review
+Status: round-7 rollback fixes verified; ready for round-8 independent review
 
 ## Required Lanes
 
@@ -180,3 +180,28 @@ Status: round-6 docs/report fixes verified; ready for round-7 independent review
   may throw `CommandRefusalError`.
 - `2026-07-05 06:22 WEST`: Docs/report verification passed:
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
+
+### Round 7
+
+- `2026-07-05 06:26 WEST`: Documentation and code style found
+  `IMPLEMENTATION_REPORT.md` still described round 6 as in progress.
+- `2026-07-05 06:27 WEST`: Security and TypeScript/API docs lanes were clean.
+- `2026-07-05 06:28 WEST`: Performance/reliability found a P1 correctness
+  issue: if an aggregate event applier rolled back after a rejected
+  `commitTransaction()`, `rollbackTransaction()` cleared the rejected-commit
+  marker before repository execution could raise
+  `COMMAND_STATE_TRANSITION_VALIDATION_FAILED`, allowing durable work to
+  proceed.
+
+## Round-7 Fix Pass
+
+- `2026-07-05 06:32 WEST`: Orchestrator preserved rejected-commit markers
+  across `rollbackTransaction()`, added direct repository and service
+  regressions for rejected commit rollback, and kept marker clearing on new
+  transaction start or later accepted commit.
+- `2026-07-05 06:37 WEST`: Focused rollback regressions passed with 2 files and
+  2 selected tests; full affected repository/service suites passed outside the
+  sandbox with 2 files and 80 tests. The sandboxed full affected suite failed
+  only on known loopback gRPC listener permissions (`listen EPERM 127.0.0.1`).
+  `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, `pnpm format:check`, and
+  `git diff --check` passed.
