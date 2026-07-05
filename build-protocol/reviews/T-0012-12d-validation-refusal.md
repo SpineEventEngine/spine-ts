@@ -4,10 +4,10 @@ Task log: `build-protocol/tasks/T-0012-12d-validation-refusal/TASK.md`
 Branch: `task/T-0012-12d-validation-refusal`
 Baseline commit: `27250a0`
 Reviewed commit/diff basis:
-`b75fb49`
+`ed40518`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
-Status: round-five metadata fixed; re-review pending
+Status: round-six metadata fixed; re-review pending
 
 ## Required Review Lanes
 
@@ -165,4 +165,20 @@ Findings:
 Planned fixes:
 
 - Record `b75fb49` as the round-five metadata commit and current branch head in
+  the task log, implementation report, work log, and review log.
+
+### Round 7
+
+Reviewed basis: round-six-metadata commit `ed40518`.
+
+Outcome: changes requested.
+
+Findings:
+
+- Current/final-head metadata still pointed at the previous metadata commit
+  `b75fb49` instead of the reviewed metadata commit `ed40518`.
+
+Planned fixes:
+
+- Record `ed40518` as the round-six metadata commit and current branch head in
   the task log, implementation report, work log, and review log.
