@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12b Create Task Flow
 
-Status: round-four fix committed; re-review pending
+Status: complete
 Branch: `task/T-0012-12b-create-task-flow`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12b-create-task-flow`
@@ -11,6 +11,10 @@ Baseline commit: `775aa47`
 This slice adds the first real runnable to-do workflow: create one task, persist
 the event through the aggregate path, project it to the read side, and query the
 task list through existing framework service seams.
+
+Final verification: all required review lanes reported clean in Round 7, and
+final full coverage passed 45 files / 639 tests with statements 95.18%,
+branches 90.48%, functions 97.63%, and lines 95.20%.
 
 ## Current State
 

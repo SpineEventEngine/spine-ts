@@ -1,8 +1,8 @@
 # T-0012.12b: Create Task Flow
 
-Status: status-only fix committed; final re-review pending
+Status: complete
 Start: `2026-07-05 13:23 WEST`
-End: Pending
+End: `2026-07-05 16:02 WEST`
 Baseline commit: `775aa47`
 Task log path: `build-protocol/tasks/T-0012-12b-create-task-flow/TASK.md`
 Branch: `task/T-0012-12b-create-task-flow`
@@ -10,14 +10,16 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12b-create-task-flow`
 Authoring sub-agent: `019f3241-11a3-7790-ac86-15bdb454b653` (closed after
 timeout; main orchestrator inspected and amended WIP)
-Reviewer sub-agents: rounds one through six closed; final re-review pending
+Reviewer sub-agents: rounds one through seven closed; all clean
 Implementation commit: `a784ea5`
 Review-fix commit: `2753627`
 Second-fix commit: `61acd94`
 Third-fix commit: `1dd62c8`
 Round-four-fix commit: `afe5162`
 Round-five-doc-fix commit: `e95cd02`
-Final branch HEAD: pending
+Final reviewed commit: `0c25fce`
+Final branch HEAD: completion log commit; exact self-hash is not recorded in
+this commit per `BUILD_PROTOCOL.md` self-reference guidance.
 
 ## Objective
 
