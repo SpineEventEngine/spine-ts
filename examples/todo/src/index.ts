@@ -224,21 +224,23 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
     const id = requireTaskId(event.id);
 
     this.startTransaction();
-    this.updateDraftState((state) =>
-      create(TaskListSchema, {
+    this.updateDraftState((state) => {
+      const tasks = state.tasks.map((task) =>
+        task.id?.value === id.value
+          ? create(TaskSchema, {
+              id: clone(TaskIdSchema, id),
+              title: task.title,
+              completed: true,
+            })
+          : clone(TaskSchema, task),
+      );
+
+      return create(TaskListSchema, {
         id: id.value,
-        tasks: state.tasks.map((task) =>
-          task.id?.value === id.value
-            ? create(TaskSchema, {
-                id: clone(TaskIdSchema, id),
-                title: task.title,
-                completed: true,
-              })
-            : task,
-        ),
-        openTaskCount: state.openTaskCount - (state.tasks[0]?.completed === false ? 1 : 0),
-      }),
-    );
+        tasks,
+        openTaskCount: tasks.filter((task) => !task.completed).length,
+      });
+    });
     this.commitTransaction();
   }
 
@@ -248,21 +250,23 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
     const id = requireTaskId(event.id);
 
     this.startTransaction();
-    this.updateDraftState((state) =>
-      create(TaskListSchema, {
+    this.updateDraftState((state) => {
+      const tasks = state.tasks.map((task) =>
+        task.id?.value === id.value
+          ? create(TaskSchema, {
+              id: clone(TaskIdSchema, id),
+              title: task.title,
+              completed: false,
+            })
+          : clone(TaskSchema, task),
+      );
+
+      return create(TaskListSchema, {
         id: id.value,
-        tasks: state.tasks.map((task) =>
-          task.id?.value === id.value
-            ? create(TaskSchema, {
-                id: clone(TaskIdSchema, id),
-                title: task.title,
-                completed: false,
-              })
-            : task,
-        ),
-        openTaskCount: state.openTaskCount + (state.tasks[0]?.completed === true ? 1 : 0),
-      }),
-    );
+        tasks,
+        openTaskCount: tasks.filter((task) => !task.completed).length,
+      });
+    });
     this.commitTransaction();
   }
 }

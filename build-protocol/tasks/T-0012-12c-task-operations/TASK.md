@@ -1,6 +1,6 @@
 # T-0012.12c: Task Operations
 
-Status: implemented; awaiting review
+Status: implemented; round-one fixes verified
 Start: `2026-07-05 16:12 WEST`
 End: `2026-07-05 16:21 WEST`
 Baseline commit: `fc71408`
@@ -45,8 +45,8 @@ In scope:
 - Update the task-list projection from the corresponding events.
 - Add black-box tests proving command posting and query results after rename,
   complete, and reopen operations.
-- Add coverage proving aggregate state is preserved through persisted history
-  and snapshot-backed rehydration rather than direct projection mutation.
+- Add command/projection coverage proving state remains visible across
+  multi-command operation sequences.
 - Update example docs and API docs only as needed.
 
 Out of scope:
@@ -67,15 +67,16 @@ Out of scope:
   completed, and reopened tasks.
 - Black-box tests verify command posting and query results after each
   operation.
-- Event appliers preserve aggregate state through persisted history and
-  snapshots rather than mutating projection state directly.
+- Event appliers update aggregate state for the task-operation events, and
+  black-box tests verify command/projection-visible state across multi-command
+  operation sequences.
 - No framework gap is introduced unless proven by a focused failing test and
   routed through the parent task's gap-routing rule.
 
 ## Verification Plan
 
-- Red-first focused example black-box tests for rename, complete, reopen, and
-  replayed aggregate state.
+- Red-first focused example tests for rename, complete, reopen, duplicate
+  same-ID projection counts, and multi-command state visibility.
 - Focused generated-domain compile or example test command.
 - `pnpm typecheck`
 - `pnpm lint`
@@ -127,8 +128,8 @@ Out of scope:
   `TaskReopened`.
 - Updated `TaskListProjection` subscribers for renamed, completed, and reopened
   task rows.
-- Added focused black-box tests for each operation and a persisted
-  history/snapshot-backed rehydration sequence.
+- Added focused black-box tests for each operation, duplicate same-ID projection
+  count coverage, and a multi-command command/projection state sequence.
 - Updated the example README and user guide status text for the new operations.
 
 ## Verification Evidence
@@ -138,6 +139,25 @@ Out of scope:
 - GREEN/final focused:
   `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
   passed, 1 file / 7 tests.
+- ROUND-ONE RED: focused example test failed after adding duplicate same-ID
+  projection count coverage, with 1 failure: expected duplicate completed rows
+  to set `openTaskCount` to 0, received 1.
+- ROUND-ONE GREEN/focused:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed, 1 file / 8 tests.
+- ROUND-ONE final verification:
+  `pnpm typecheck` passed.
+- ROUND-ONE final verification:
+  `pnpm lint` passed, including cleanup enforcement.
+- ROUND-ONE final verification:
+  changed-file Prettier check passed after formatting the work log.
+- ROUND-ONE final verification:
+  `pnpm docs:check` passed with the existing invalid-origin source-link
+  warning.
+- ROUND-ONE final verification:
+  `pnpm proto:check-generated` passed.
+- ROUND-ONE final verification:
+  `git diff --check` passed.
 - `pnpm typecheck` passed.
 - `pnpm lint` passed.
 - Tracked-file Prettier check passed.

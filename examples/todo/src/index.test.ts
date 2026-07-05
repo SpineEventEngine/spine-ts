@@ -27,18 +27,24 @@ import {
   RenameTaskSchema,
   ReopenTaskSchema,
 } from "../generated/spine/example/todo/v1/task_commands_pb.js";
+import {
+  TaskCompletedSchema,
+  TaskCreatedSchema,
+  TaskReopenedSchema,
+} from "../generated/spine/example/todo/v1/task_events_pb.js";
 import { TaskIdSchema } from "../generated/spine/example/todo/v1/task_id_pb.js";
 import { TaskListSchema, type TaskList } from "../generated/spine/example/todo/v1/task_list_pb.js";
 import { type Task } from "../generated/spine/example/todo/v1/tasks_pb.js";
 
-type CreateTodoContext = (typeof import("../dist/src/index.js"))["createTodoContext"];
+type TodoModule = typeof import("../dist/src/index.js");
 
-let createTodoContext: CreateTodoContext;
+let createTodoContext: TodoModule["createTodoContext"];
+let TaskListProjection: TodoModule["TaskListProjection"];
 
 describe("@spine-ts/example-todo", () => {
   beforeAll(async () => {
     assertBuiltExample();
-    ({ createTodoContext } = await import("../dist/src/index.js"));
+    ({ createTodoContext, TaskListProjection } = await import("../dist/src/index.js"));
   });
 
   it("creates one task through command handling and exposes it in the task list", async () => {
@@ -152,6 +158,46 @@ describe("@spine-ts/example-todo", () => {
     expect(readList(response, "task-complete")?.openTaskCount).toBe(0);
   });
 
+  it("counts duplicate same-id projection rows", () => {
+    const projection = new TaskListProjection({
+      id: "task-duplicate",
+      schema: TaskListSchema,
+      state: create(TaskListSchema, { id: "task-duplicate" }),
+      version: 0,
+    });
+
+    projection.onTaskCreated(
+      create(TaskCreatedSchema, {
+        id: create(TaskIdSchema, { value: "task-duplicate" }),
+        title: "First",
+      }),
+    );
+    projection.onTaskCreated(
+      create(TaskCreatedSchema, {
+        id: create(TaskIdSchema, { value: "task-duplicate" }),
+        title: "Second",
+      }),
+    );
+
+    projection.onTaskCompleted(
+      create(TaskCompletedSchema, {
+        id: create(TaskIdSchema, { value: "task-duplicate" }),
+      }),
+    );
+
+    expect(projection.state.openTaskCount).toBe(0);
+    expect(projection.state.tasks.map((task) => task.completed)).toEqual([true, true]);
+
+    projection.onTaskReopened(
+      create(TaskReopenedSchema, {
+        id: create(TaskIdSchema, { value: "task-duplicate" }),
+      }),
+    );
+
+    expect(projection.state.openTaskCount).toBe(2);
+    expect(projection.state.tasks.map((task) => task.completed)).toEqual([false, false]);
+  });
+
   it("reopens one task through command handling and opens the list row", async () => {
     const fixture = new BoundedContextFixture(createTodoContext(), {
       timeoutMs: 500,
@@ -160,6 +206,15 @@ describe("@spine-ts/example-todo", () => {
 
     await fixture.post(createTaskCommand("command-reopen-create", "task-reopen", "Done"));
     await fixture.post(createCompleteCommand("command-reopen-complete", "task-reopen"));
+    const completedResponse = await fixture.readEventually(
+      createTaskListQuery(),
+      (candidate) => taskCompleted(candidate, "task-reopen") === true,
+    );
+    const completedTask = readTask(completedResponse, "task-reopen");
+
+    expect(completedTask?.completed).toBe(true);
+    expect(readList(completedResponse, "task-reopen")?.openTaskCount).toBe(0);
+
     const ack = await fixture.post(createReopenCommand("command-reopen-task", "task-reopen"));
     const response = await fixture.readEventually(
       createTaskListQuery(),

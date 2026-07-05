@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12c Task Operations
 
-Status: implemented; awaiting review
+Status: implemented; round-one fixes verified
 Branch: `task/T-0012-12c-task-operations`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
@@ -17,8 +17,8 @@ reopen operations using the same aggregate, event, projection, and query path.
   aggregate and task-list projection.
 - Focused black-box tests cover command posting and query-visible results for
   each operation.
-- A multi-command sequence covers persisted aggregate rehydration by preserving
-  title/completed state across create, complete, rename, and reopen commands.
+- A multi-command sequence covers command/projection-visible state across
+  create, complete, rename, and reopen commands.
 
 ## Expected Implementation Shape
 
@@ -36,9 +36,28 @@ reopen operations using the same aggregate, event, projection, and query path.
   failed with 4 new failures and 3 existing passing tests. The failures showed
   operation command acks as `error` and missing rename/projection effects.
 - GREEN: after implementation, the same focused command passed with 7 tests.
+- ROUND-ONE RED: after adding duplicate same-ID projection count coverage,
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  failed with 1 failure: expected duplicate completed rows to set
+  `openTaskCount` to 0, received 1.
+- ROUND-ONE GREEN: after deriving `openTaskCount` from the updated task rows,
+  the same focused command passed, 1 file / 8 tests.
+- ROUND-ONE final verification:
+  `pnpm typecheck` passed.
+- ROUND-ONE final verification:
+  `pnpm lint` passed, including cleanup enforcement.
+- ROUND-ONE final verification:
+  changed-file Prettier check passed after formatting the work log.
+- ROUND-ONE final verification:
+  `pnpm docs:check` passed with the existing invalid-origin source-link
+  warning.
+- ROUND-ONE final verification:
+  `pnpm proto:check-generated` passed.
+- ROUND-ONE final verification:
+  `git diff --check` passed.
 - Final focused check:
   `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
-  passed, 1 file / 7 tests.
+  passed, 1 file / 8 tests.
 - `pnpm typecheck` passed.
 - `pnpm lint` passed, including cleanup enforcement.
 - `pnpm exec prettier --check` on changed files passed.
