@@ -1,6 +1,6 @@
 # T-0012.12: To-Do Example
 
-Status: split complete; first implementation slice pending
+Status: split review clean; first implementation slice selected
 Start: `2026-07-05 10:53 WEST`
 End: Pending
 Baseline commit: `89868e9`
@@ -10,9 +10,25 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
 Authoring sub-agent: Requirements splitter
 `019f31b8-0110-72c2-bea9-aeb6deea028b`; implementation sub-agent pending.
-Reviewer sub-agents: Pending
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
+Reviewer sub-agents:
+
+- code style/maintainability:
+  `019f31c3-2366-7512-ba51-9cf59bd6248d`,
+  `019f31c7-74dc-7d80-9717-56f0ca99abb0`
+- documentation:
+  `019f31c3-2409-7501-b558-448cc8020849`,
+  `019f31c7-758f-7751-a11c-6120702b3764`
+- TypeScript/API docs:
+  `019f31c3-2479-7440-9b07-eb413055e15e`,
+  `019f31c7-7620-7be3-8495-69405cf06aaa`
+- security:
+  `019f31c3-2507-7491-af84-6355ed82c43f`,
+  `019f31c7-76a6-7332-9a69-d18db922c2fc`
+- performance/reliability:
+  `019f31c3-258a-7ef0-bef3-6cec938b84ca`,
+  `019f31c7-772a-7e42-b17c-2d7388b5c24b`
+  Implementation commit: Pending branch commit
+  Final branch HEAD: Pending branch commit
 
 ## Objective
 
@@ -186,6 +202,9 @@ Out of scope:
   protocol evidence review, inspected the placeholder example and relevant
   framework seams, and recorded the staged implementation roadmap below. No
   production or example code was changed.
+- `2026-07-05 11:34 WEST`: Splitter review is clean after round 2. All five
+  review lanes have no remaining comments. All participating splitter-review
+  sub-agents were closed.
 
 ## Requirements Splitter Evidence
 
@@ -622,7 +641,17 @@ Selection rationale:
 
 ## Review Rounds
 
-- Splitter review pending.
+- Splitter round 1:
+  - code style/maintainability: finding on stale
+    `IMPLEMENTATION_REPORT.md` next-action wording.
+  - documentation: finding on missing concrete generated-clean verification
+    for `examples/todo/generated/`.
+  - TypeScript/API docs: findings on public example export TypeDoc impact and
+    generated-output TypeDoc exclusion/guarding.
+  - security: clean.
+  - performance/reliability: finding on missing explicit coverage gate.
+- Splitter round 2:
+  - all five lanes clean through commit `eb22695`.
 
 ## Integration Result
 
