@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12a Todo Proto Generation
 
-Status: implementation complete; review-fix commit pending re-review
+Status: second focused reliability fix complete; orchestrator inspection pending
 Branch: `task/T-0012-12a-todo-proto`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12a-todo-proto`
@@ -14,8 +14,12 @@ projection, service, or server runtime behavior.
 
 ## Current State
 
-- Worktree is open at the review-fix commit on top of implementation commit
-  `cbdb35c`; re-review is pending against current HEAD.
+- Worktree started this focused fix pass at HEAD `ddefd95`, the committed
+  first review-fix pass on top of implementation commit `cbdb35c`.
+- Re-review found documentation wording, maintainability cleanup, and
+  generated-root publish reliability issues. The first focused pass addressed
+  most findings but left a live-root rename gap; this second pass closes that
+  gap without committing.
 - Required task/spec/tooling inputs have been read.
 - Example-owned todo `.proto` files define `TaskId`, `Task`, `TaskList`,
   create/rename/complete/reopen commands, and corresponding events.
@@ -26,9 +30,13 @@ projection, service, or server runtime behavior.
 - Existing Buf / Protobuf-ES tooling was reused. The example package now
   declares the already-pinned `@bufbuild/protobuf` runtime dependency so
   generated imports resolve from the example workspace.
-- `pnpm proto:generate` now stages each generated root in a temporary sibling
-  directory and swaps it into place after successful Buf generation, preserving
-  live generated roots while generation runs.
+- `pnpm proto:generate` now stages every generated root in a temporary sibling
+  directory before publishing any root. Publishing backs up current generated
+  contents into stage-owned backup directories, mirrors staged files into the
+  existing generated roots, removes orphaned generated files/directories, and
+  restores touched roots from backups if any target publish fails. The live
+  generated root directories are not renamed away during normal successful
+  publishing.
 - Root `test` and `test:coverage` now run `pnpm proto:generate` first so fresh
   checkouts have ignored generated output before generated-dependent tests run.
 - The production example entry point imports a generated schema reference
@@ -89,6 +97,41 @@ permitted` and HTTP/2 `listen EPERM 127.0.0.1`; escalated rerun passed with
   regression test, typecheck, lint, format check, docs check, whitespace check,
   generated-output Git guards, sandboxed coverage, and escalated coverage all
   match the evidence above.
+- Focused re-review fix verification:
+  `pnpm proto:generate` passed; `pnpm exec vitest run scripts/proto-workflow.test.mjs --passWithNoTests`
+  passed with 1 file and 5 tests;
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed with 1 file and 2 tests; `pnpm proto:check-generated`,
+  `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm docs:check`,
+  `git diff --check`, generated-output ignore checks, and generated-output
+  tracking checks passed.
+- Focused re-review fix coverage result: sandboxed `pnpm test:coverage`
+  failed with 2 failed files, 43 passed files, 21 failed tests, 603 passed
+  tests, and 19 unhandled errors due to local endpoint restrictions:
+  ZeroMQ IPC `Operation not permitted` and HTTP/2
+  `listen EPERM: operation not permitted 127.0.0.1`. Escalated rerun was
+  requested but rejected by the environment policy.
+- `pnpm format:check` initially flagged `scripts/proto-workflow.test.mjs` and
+  pre-existing untracked
+  `build-protocol/review-packages/T-0012-12a-fix-pass.diff.md`; both were
+  formatted, and final format verification passed.
+- Second focused reliability fix red step:
+  `pnpm exec vitest run scripts/proto-workflow.test.mjs --passWithNoTests`
+  failed before implementation with 2 expected failures: the live generated
+  root was not observed present during publish, and staged symlink output was
+  accepted.
+- Second focused reliability fix verification passed:
+  `pnpm exec vitest run scripts/proto-workflow.test.mjs --passWithNoTests`
+  passed with 1 file and 6 tests; `pnpm proto:generate` passed and verified 25
+  copied Spine proto source checksums; `pnpm proto:check-generated` passed;
+  `pnpm typecheck` passed; `pnpm lint` passed; `pnpm format:check` passed; and
+  `git diff --check` passed.
+- Main orchestrator verified the second focused fix pass: generation, focused
+  proto workflow tests, focused todo smoke, generated-clean, typecheck, lint,
+  format check, docs check, whitespace check, generated-output Git guards,
+  sandboxed coverage, and escalated coverage. Escalated coverage passed with
+  45 test files, 625 tests, statements 95.06%, branches 90.22%, functions
+  97.60%, lines 95.08%.
 
 ## Generated Files Status
 

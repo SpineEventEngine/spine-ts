@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
-  renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
@@ -26,6 +26,44 @@ const generatedTargets = [
     templatePath: "examples/todo/buf.gen.yaml",
   },
 ];
+
+export function main(argv = process.argv.slice(2)) {
+  const command = argv[0];
+
+  if (command !== "lint" && command !== "generate") {
+    console.error("Usage: node scripts/proto-workflow.mjs <lint|generate>");
+    return 1;
+  }
+
+  const protoFiles = [...findProtoFiles(protoRoot), ...findProtoFiles(todoProtoRoot)];
+
+  if (protoFiles.length === 0) {
+    console.log(
+      `No .proto files found under proto; buf ${command} is deferred until proto intake.`,
+    );
+    return 0;
+  }
+
+  const verifyStatus = runCommand("proto source verification", process.execPath, [
+    join(repoRoot, "scripts/verify-proto-sources.mjs"),
+  ]);
+
+  if (verifyStatus !== 0) {
+    return verifyStatus;
+  }
+
+  if (command === "generate") {
+    const prepareStatus = prepareGeneratedOutput();
+
+    if (prepareStatus !== 0) {
+      return prepareStatus;
+    }
+
+    return generateTargets();
+  }
+
+  return runCommand("buf lint", resolveBufExecutable(), ["lint"]);
+}
 
 function runCommand(label, executable, args) {
   const result = spawnSync(executable, args, {
@@ -127,37 +165,140 @@ export function prepareGeneratedOutput(root = repoRoot) {
   return 0;
 }
 
-function replaceGeneratedRoot(generatedRoot, stagedOutputRoot, stageRoot) {
-  const backupRoot = join(stageRoot, "previous");
-  let backupCreated = false;
+function assertNoSymlinksInTree(root, displayPath) {
+  const rootStat = lstatIfPresent(root);
 
-  try {
-    if (existsSync(generatedRoot)) {
-      renameSync(generatedRoot, backupRoot);
-      backupCreated = true;
+  if (rootStat === undefined) {
+    throw new Error(`Staged generated output is missing: ${displayPath}`);
+  }
+
+  if (rootStat.isSymbolicLink()) {
+    throw new Error(`Staged generated output must not contain symlinks: ${displayPath}`);
+  }
+
+  if (!rootStat.isDirectory()) {
+    throw new Error(`Staged generated output must be a directory: ${displayPath}`);
+  }
+
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const entryPath = join(root, entry.name);
+    const entryDisplayPath = `${displayPath}/${entry.name}`;
+    const entryStat = lstatIfPresent(entryPath);
+
+    if (entryStat === undefined) {
+      continue;
     }
 
-    renameSync(stagedOutputRoot, generatedRoot);
+    if (entryStat.isSymbolicLink()) {
+      throw new Error(`Staged generated output must not contain symlinks: ${entryDisplayPath}`);
+    }
+
+    if (entryStat.isDirectory()) {
+      assertNoSymlinksInTree(entryPath, entryDisplayPath);
+    }
+  }
+}
+
+function clearDirectoryContents(directory) {
+  mkdirSync(directory, { recursive: true });
+
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    rmSync(join(directory, entry.name), { recursive: true, force: true });
+  }
+}
+
+function copyDirectoryContents(source, destination) {
+  mkdirSync(destination, { recursive: true });
+
+  for (const entry of readdirSync(source, { withFileTypes: true })) {
+    const sourcePath = join(source, entry.name);
+    const destinationPath = join(destination, entry.name);
+
+    cpSync(sourcePath, destinationPath, {
+      recursive: true,
+      dereference: false,
+      verbatimSymlinks: true,
+    });
+  }
+}
+
+function backupGeneratedRoot(generatedRoot, stageRoot) {
+  const backupRoot = join(stageRoot, "previous");
+  const hadPreviousRoot = existsSync(generatedRoot);
+
+  rmSync(backupRoot, { recursive: true, force: true });
+
+  if (hadPreviousRoot) {
+    cpSync(generatedRoot, backupRoot, {
+      recursive: true,
+      dereference: false,
+      verbatimSymlinks: true,
+    });
+  }
+
+  return {
+    backupRoot,
+    generatedRoot,
+    hadPreviousRoot,
+  };
+}
+
+function mirrorStagedOutput(generatedRoot, stagedOutputRoot) {
+  clearDirectoryContents(generatedRoot);
+  copyDirectoryContents(stagedOutputRoot, generatedRoot);
+}
+
+function removePublishedBackup(publishedRoot) {
+  rmSync(publishedRoot.backupRoot, { recursive: true, force: true });
+}
+
+function restorePublishedRoot(publishedRoot) {
+  clearDirectoryContents(publishedRoot.generatedRoot);
+
+  if (publishedRoot.hadPreviousRoot && existsSync(publishedRoot.backupRoot)) {
+    copyDirectoryContents(publishedRoot.backupRoot, publishedRoot.generatedRoot);
+  }
+}
+
+export function publishGeneratedTargets(stagedTargets, root = repoRoot, options = {}) {
+  const publishedRoots = [];
+
+  try {
+    for (const stagedTarget of stagedTargets) {
+      if (!assertGeneratedPathSafe(root, stagedTarget.target.displayPath)) {
+        throw new Error(`Generated path is not safe: ${stagedTarget.target.displayPath}`);
+      }
+
+      assertNoSymlinksInTree(
+        stagedTarget.stagedOutputRoot,
+        `${stagedTarget.target.displayPath} staging`,
+      );
+
+      const publishedRoot = backupGeneratedRoot(stagedTarget.generatedRoot, stagedTarget.stageRoot);
+
+      publishedRoots.push(publishedRoot);
+      options.afterBackup?.(publishedRoot);
+      mirrorStagedOutput(stagedTarget.generatedRoot, stagedTarget.stagedOutputRoot);
+    }
   } catch (error) {
-    if (backupCreated && !existsSync(generatedRoot)) {
-      renameSync(backupRoot, generatedRoot);
-      backupCreated = false;
+    for (const publishedRoot of publishedRoots.slice().reverse()) {
+      restorePublishedRoot(publishedRoot);
     }
 
     throw error;
   }
 
-  if (backupCreated) {
-    rmSync(backupRoot, { recursive: true, force: true });
+  for (const publishedRoot of publishedRoots) {
+    removePublishedBackup(publishedRoot);
   }
 }
 
-function generateTarget(target) {
+function createTargetStage(target) {
   const generatedRoot = join(repoRoot, target.displayPath);
   const generatedParent = dirname(generatedRoot);
 
   if (!assertGeneratedPathSafe(repoRoot, target.displayPath)) {
-    return 1;
+    return undefined;
   }
 
   mkdirSync(generatedParent, { recursive: true });
@@ -169,71 +310,58 @@ function generateTarget(target) {
     mkdirSync(stagedOutputRoot, { recursive: true });
 
     const stagedTemplatePath = writeStagedTemplate(target, stagedOutputRoot, stageRoot);
-    const generateStatus = runCommand(
-      `buf generate ${target.displayPath}`,
-      resolveBufExecutable(),
-      ["generate", "--template", stagedTemplatePath],
-    );
 
-    if (generateStatus !== 0) {
-      return generateStatus;
-    }
-
-    if (!assertGeneratedPathSafe(repoRoot, target.displayPath)) {
-      return 1;
-    }
-
-    replaceGeneratedRoot(generatedRoot, stagedOutputRoot, stageRoot);
-    return 0;
-  } finally {
+    return {
+      generatedRoot,
+      stagedOutputRoot,
+      stagedTemplatePath,
+      stageRoot,
+      target,
+    };
+  } catch (error) {
     rmSync(stageRoot, { recursive: true, force: true });
+    throw error;
   }
 }
 
-export function main(argv = process.argv.slice(2)) {
-  const command = argv[0];
+function generateTargets() {
+  const stagedTargets = [];
 
-  if (command !== "lint" && command !== "generate") {
-    console.error("Usage: node scripts/proto-workflow.mjs <lint|generate>");
-    return 1;
-  }
-
-  const protoFiles = [...findProtoFiles(protoRoot), ...findProtoFiles(todoProtoRoot)];
-
-  if (protoFiles.length === 0) {
-    console.log(
-      `No .proto files found under proto; buf ${command} is deferred until proto intake.`,
-    );
-    return 0;
-  }
-
-  const verifyStatus = runCommand("proto source verification", process.execPath, [
-    join(repoRoot, "scripts/verify-proto-sources.mjs"),
-  ]);
-
-  if (verifyStatus !== 0) {
-    return verifyStatus;
-  }
-
-  if (command === "generate") {
-    const prepareStatus = prepareGeneratedOutput();
-
-    if (prepareStatus !== 0) {
-      return prepareStatus;
-    }
-
+  try {
     for (const target of generatedTargets) {
-      const generateStatus = generateTarget(target);
+      const stagedTarget = createTargetStage(target);
+
+      if (stagedTarget === undefined) {
+        return 1;
+      }
+
+      stagedTargets.push(stagedTarget);
+
+      const generateStatus = runCommand(
+        `buf generate ${target.displayPath}`,
+        resolveBufExecutable(),
+        ["generate", "--template", stagedTarget.stagedTemplatePath],
+      );
 
       if (generateStatus !== 0) {
         return generateStatus;
       }
     }
 
+    publishGeneratedTargets(stagedTargets);
     return 0;
+  } catch (error) {
+    console.error(
+      `Failed to publish generated output: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    return 1;
+  } finally {
+    for (const stagedTarget of stagedTargets) {
+      rmSync(stagedTarget.stageRoot, { recursive: true, force: true });
+    }
   }
-
-  return runCommand("buf lint", resolveBufExecutable(), ["lint"]);
 }
 
 const isMain =

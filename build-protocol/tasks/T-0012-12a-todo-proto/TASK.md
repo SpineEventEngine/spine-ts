@@ -1,6 +1,6 @@
 # T-0012.12a: Todo Proto Generation
 
-Status: implementation complete; review-fix commit pending re-review
+Status: second focused reliability fix verified; commit pending
 Start: `2026-07-05 11:38 WEST`
 End: `2026-07-05 12:04 WEST`
 Baseline commit: `b12ef3b`
@@ -10,9 +10,11 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12a-todo-proto`
 Authoring sub-agent: Codex implementation sub-agent
 `019f31cd-b967-7341-8d79-4d95d8acfec4`
-Reviewer sub-agents: Initial review completed; re-review pending after fix commit
+Reviewer sub-agents: Re-review found documentation, maintainability, and
+reliability issues; second focused reliability fix complete
 Implementation commit: `cbdb35c`
-Review-fix commit: current HEAD; pending re-review
+Review-fix commit: current HEAD before uncommitted reliability fixes (`ddefd95`);
+second focused fix is verified and pending commit
 
 ## Objective
 
@@ -153,6 +155,28 @@ Out of scope:
   escalated coverage passed with 45 files, 621 tests, branches 90.22%.
 - `2026-07-05 12:15 WEST`: Main orchestrator committed the review-fix pass and
   amended bookkeeping; re-review is pending against current HEAD.
+- `2026-07-05 12:26 WEST`: Focused fix author began from HEAD `ddefd95`,
+  updated logs before code changes, and started the re-review fix pass for
+  documentation wording, helper ordering, publish-path regression coverage, and
+  all-targets-first generation publishing with rollback.
+- `2026-07-05 12:34 WEST`: Focused fix author completed source/docs changes
+  and required verification. All required non-coverage checks passed.
+  Sandboxed coverage failed on known local IPC/HTTP2 permissions; escalated
+  rerun was requested but rejected by the environment policy.
+- `2026-07-05 12:41 WEST`: Second focused reliability fix author replaced the
+  generated-root rename publisher with stage-owned backups plus mirror/copy
+  into the existing generated roots. Added regression coverage for live-root
+  presence during publish, missing staged output preserving the live root,
+  later target failure restoring an earlier target, orphan cleanup, and staged
+  symlink rejection.
+- `2026-07-05 12:41 WEST`: Second focused reliability fix verification passed:
+  focused proto workflow Vitest, `pnpm proto:generate`,
+  `pnpm proto:check-generated`, `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, and `git diff --check`.
+- `2026-07-05 12:49 WEST`: Main orchestrator inspected the second focused fix
+  and reran full verification. Sandboxed coverage reproduced local IPC/HTTP2
+  restrictions; escalated coverage passed with 45 files, 625 tests, branches
+  90.22%.
 
 ## Decisions
 
@@ -165,8 +189,12 @@ Out of scope:
 - Add `@bufbuild/protobuf` to `@spine-ts/example-todo` package dependencies at
   the repo-pinned version so generated Protobuf-ES runtime imports resolve from
   the example workspace.
-- Generate into temporary sibling roots and swap only after successful Buf
-  generation so live generated roots remain present while generation runs.
+- Generate all targets into temporary sibling roots before publishing any root.
+  Publish backs up current generated-root contents into stage-owned backup
+  directories, mirrors staged files into the existing generated roots, removes
+  orphaned generated files/directories, and restores touched roots from backups
+  if any target publish fails. The generated root directories themselves are
+  not renamed away during normal successful publishing.
 
 ## Human Questions And Answers
 
@@ -219,7 +247,7 @@ Out of scope:
   failed because live generated files were deleted before replacement output
   existed; `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
   failed because `generatedTaskSchemaTypeName` was not exported yet.
-- Review-fix final verification passed: `pnpm proto:generate`,
+- First review-fix final verification passed: `pnpm proto:generate`,
   `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`,
   `pnpm proto:check-generated`,
   `pnpm exec vitest run scripts/check-generated-clean.test.mjs --passWithNoTests`,
@@ -231,6 +259,46 @@ Out of scope:
   `git check-ignore -- examples/todo/generated/.cleanup-enforcement-check packages/proto/generated/.cleanup-enforcement-check`
   printed both paths; `git ls-files -- examples/todo/generated packages/proto/generated`
   returned empty output.
+- Focused re-review fix verification:
+  `pnpm proto:generate` passed and verified 25 copied Spine proto source
+  checksums.
+- `pnpm exec vitest run scripts/proto-workflow.test.mjs --passWithNoTests`
+  passed with 1 file and 6 tests, covering prepareGeneratedOutput, mirror
+  publish into existing roots, missing staged output preserving the live root,
+  later target failure rollback, orphan cleanup, and staged symlink rejection.
+- `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed with 1 file and 2 tests.
+- `pnpm proto:check-generated` passed; generated proto outputs are ignored,
+  untracked, and freshly regenerated.
+- `pnpm typecheck` passed.
+- `pnpm lint` passed.
+- `pnpm format:check` initially failed on
+  `scripts/proto-workflow.test.mjs` and pre-existing untracked
+  `build-protocol/review-packages/T-0012-12a-fix-pass.diff.md`; both were
+  formatted, and the final `pnpm format:check` passed.
+- `pnpm docs:check` passed with the existing TypeDoc invalid-origin warning.
+- `git diff --check` passed.
+- `git check-ignore -- examples/todo/generated/.cleanup-enforcement-check packages/proto/generated/.cleanup-enforcement-check`
+  printed both paths.
+- `git ls-files -- examples/todo/generated packages/proto/generated` returned
+  empty output.
+- `pnpm test:coverage` failed in the sandbox with 2 failed files and 43 passed
+  files, 21 failed tests and 604 passed tests, and 19 unhandled errors. The
+  failures were local endpoint restrictions: ZeroMQ IPC `Operation not
+permitted` and HTTP/2 `listen EPERM: operation not permitted 127.0.0.1`.
+  Escalated rerun passed with 45 files, 625 tests, statements 95.06%, branches
+  90.22%, functions 97.60%, and lines 95.08%.
+- Second focused reliability fix verification passed:
+  `pnpm exec vitest run scripts/proto-workflow.test.mjs --passWithNoTests`,
+  `pnpm proto:generate`, `pnpm proto:check-generated`, `pnpm typecheck`,
+  `pnpm lint`, `pnpm format:check`, and `git diff --check`.
+- Main orchestrator final verification passed: `pnpm proto:generate`,
+  `pnpm exec vitest run scripts/proto-workflow.test.mjs --passWithNoTests`,
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`,
+  `pnpm proto:check-generated`, `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `pnpm docs:check`, `git diff --check`,
+  generated-output Git guards, sandboxed `pnpm test:coverage` with known
+  local IPC/HTTP2 failures, and escalated `pnpm test:coverage` with 625 tests.
 
 ## Coverage Result
 
@@ -240,6 +308,12 @@ permitted` and HTTP/2 `listen EPERM 127.0.0.1` timeouts.
   95.06%, branches 90.22%, functions 97.60%, lines 95.08%.
 - Main orchestrator confirmed the same sandbox failure mode and escalated
   coverage result before committing the review-fix pass.
+- Focused re-review fix sandboxed `pnpm test:coverage` failed with ZeroMQ IPC
+  `Operation not permitted` and HTTP/2 `listen EPERM 127.0.0.1`; escalated
+  rerun was requested but rejected by the environment policy.
+- Second focused fix sandboxed `pnpm test:coverage` failed with the same local
+  endpoint restrictions; escalated rerun passed with 45 test files, 625 tests,
+  statements 95.06%, branches 90.22%, functions 97.60%, lines 95.08%.
 
 ## Documentation And Public API Impact
 
@@ -275,8 +349,12 @@ permitted` and HTTP/2 `listen EPERM 127.0.0.1` timeouts.
 - Review found stale logs, stale dependency/docs wording, non-staged proto
   generation, root test/coverage missing generation, and example build config
   excluding generated imports.
-- Uncommitted review-fix pass verified from implementation commit `cbdb35c`.
+- First review-fix pass was committed before re-review. Re-review returned
+  documentation wording, maintainability cleanup, and generated-root publish
+  reliability findings. The second focused reliability fix pass is complete
+  and awaiting orchestrator inspection.
 
 ## Integration Result
 
-Review-fix pass complete; pending orchestrator review/integration.
+Second focused reliability fix pass complete; pending orchestrator inspection,
+commit, and re-review/integration.

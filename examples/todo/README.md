@@ -1,7 +1,7 @@
 # To-Do Example
 
-Standalone server-side to-do example placeholder. The workspace exists so later
-framework slices have a stable place to add generated domain messages, server
+Standalone server-side to-do example placeholder. Generated Protobuf contracts
+and messages are present so later framework slices can use them for server
 assembly, command handling, query/subscription behavior, and black-box tests.
 
 Current status: Protobuf contracts and generation workflow exist; not runnable.
