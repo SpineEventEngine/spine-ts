@@ -1,6 +1,6 @@
 # T-0012.12b: Create Task Flow
 
-Status: third fix verified; commit pending
+Status: third fix committed; re-review pending
 Start: `2026-07-05 13:23 WEST`
 End: Pending
 Baseline commit: `775aa47`
@@ -14,7 +14,7 @@ Reviewer sub-agents: round-one closed; re-review pending
 Implementation commit: `a784ea5`
 Review-fix commit: `2753627`
 Second-fix commit: `61acd94`
-Third-fix commit: pending
+Third-fix commit: `1dd62c8`
 Final branch HEAD: pending
 
 ## Objective
