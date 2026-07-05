@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12d Validation And Refusal
 
-Status: round-six metadata fixed; re-review pending
+Status: round-seven metadata fixed; re-review pending
 Branch: `task/T-0012-12d-validation-refusal`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
@@ -14,7 +14,8 @@ Round-three-metadata commit: `7c0d191`
 Round-four-metadata commit: `443d95b`
 Round-five-metadata commit: `b75fb49`
 Round-six-metadata commit: `ed40518`
-Final branch HEAD: `ed40518`
+Round-seven-metadata commit: `cbf610f`
+Final branch HEAD: `cbf610f`
 
 ## Summary
 
