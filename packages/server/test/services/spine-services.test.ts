@@ -33,7 +33,12 @@ import {
   TargetFiltersSchema,
   TargetSchema,
 } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
-import { QueryIdSchema, QuerySchema } from "@spine-ts/proto/generated/spine/client/query_pb.js";
+import {
+  QueryIdSchema,
+  QuerySchema,
+  type Query,
+  type QueryResponse,
+} from "@spine-ts/proto/generated/spine/client/query_pb.js";
 import { QueryService } from "@spine-ts/proto/generated/spine/client/query_service_pb.js";
 import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
 import {
@@ -154,6 +159,27 @@ describe("SpineServices", () => {
     }
   });
 
+  it("keeps ID-filter QueryService reads working through direct handlers", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    await context.stand().update(ProjectionStateSchema, createState("task-1", "First"), {
+      version: create(VersionSchema, { number: 7 }),
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(createQuery("task-1"));
+
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(response.message).toHaveLength(1);
+    expect(unpackAny(response.message[0]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
+      createState("task-1", "First"),
+    );
+    expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
+  });
+
   it("keeps QueryService reads isolated by tenant", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
@@ -183,6 +209,68 @@ describe("SpineServices", () => {
     }
   });
 
+  it("reads all projection states through QueryService include-all queries", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    await context.stand().update(ProjectionStateSchema, createState("task-2", "Second"), {
+      version: create(VersionSchema, { number: 2 }),
+    });
+    await context.stand().update(ProjectionStateSchema, createState("task-1", "First"), {
+      version: create(VersionSchema, { number: 1 }),
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(createIncludeAllQuery());
+
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(response.message).toHaveLength(2);
+    expect(unpackAny(response.message[0]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
+      createState("task-1", "First"),
+    );
+    expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 1 }));
+    expect(unpackAny(response.message[1]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
+      createState("task-2", "Second"),
+    );
+    expect(response.message[1]?.version).toEqual(create(VersionSchema, { number: 2 }));
+  });
+
+  it("keeps QueryService include-all reads isolated by tenant", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.multitenant("Tasks").add(repository).build();
+    await context.stand().update(ProjectionStateSchema, createState("task-1", "Tenant A"), {
+      tenantId: "tenant-a",
+      version: create(VersionSchema, { number: 1 }),
+    });
+    await context.stand().update(ProjectionStateSchema, createState("task-2", "Tenant B"), {
+      tenantId: "tenant-b",
+      version: create(VersionSchema, { number: 2 }),
+    });
+    await context.stand().update(ProjectionStateSchema, createState("task-3", "Tenant B Again"), {
+      tenantId: "tenant-b",
+      version: create(VersionSchema, { number: 3 }),
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(createIncludeAllQuery("tenant-b"));
+
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(response.message).toHaveLength(2);
+    expect(unpackAny(response.message[0]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
+      createState("task-2", "Tenant B"),
+    );
+    expect(response.message[0]?.version).toEqual(create(VersionSchema, { number: 2 }));
+    expect(unpackAny(response.message[1]?.state ?? packMissing(), ProjectionStateSchema)).toEqual(
+      createState("task-3", "Tenant B Again"),
+    );
+    expect(response.message[1]?.version).toEqual(create(VersionSchema, { number: 3 }));
+  });
+
   it("returns Spine error statuses for unsupported command and query targets", async () => {
     const context = BoundedContext.singleTenant("Tasks").build();
     const server = await startServices(context);
@@ -202,7 +290,7 @@ describe("SpineServices", () => {
     }
   });
 
-  it("returns error statuses for dispatcher failures and invalid query criteria", async () => {
+  it("returns error statuses for dispatcher failures", async () => {
     const dispatcher = createFailingCommandDispatcher();
     const repository = new Repository({
       entityType: TaskProjection,
@@ -217,14 +305,11 @@ describe("SpineServices", () => {
     try {
       const transport = createGrpcTransport({ baseUrl: server.baseUrl });
       const commandClient = createClient(CommandService, transport);
-      const queryClient = createClient(QueryService, transport);
 
       const ack = await commandClient.post(createProjectionCommand("command-fails"));
-      const response = await queryClient.read(createQueryWithoutIds());
 
       expect(ack.status?.status.case).toBe("error");
       expect(errorMessage(ack.status?.status)).toBe("Command post failed.");
-      expect(response.response?.status?.status.case).toBe("error");
     } finally {
       await server.close();
     }
@@ -306,6 +391,19 @@ describe("SpineServices", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("returns stable errors for include-all read failures", async () => {
+    const readFailureContext = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      readAllVersioned: () => Promise.reject(new Error("storage details")),
+    });
+    const handlers = registeredQueryHandlers(readFailureContext);
+
+    const response = await handlers.read(createIncludeAllQuery());
+
+    expect(response.response?.status?.status.case).toBe("error");
+    expect(responseErrorMessage(response)).toBe("Query read failed.");
   });
 
   it("wraps non-Error dispatcher failures in sanitized Spine command errors", async () => {
@@ -663,6 +761,41 @@ describe("SpineServices", () => {
       await multiServer.close();
       await singleServer.close();
     }
+  });
+
+  it("treats include-all query tenant domain and email variants as present", async () => {
+    const capturedTenantKeys: (string | undefined)[] = [];
+    const singleTenant = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      isMultitenant: false,
+    });
+    const multitenant = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      isMultitenant: true,
+      readAllVersioned: (_schema, options) => {
+        capturedTenantKeys.push(options.tenantId);
+        return Promise.resolve([
+          {
+            state: createState("task-1", "Tenant Domain"),
+            version: create(VersionSchema, { number: 11 }),
+          },
+        ]);
+      },
+    });
+    const singleHandlers = registeredQueryHandlers(singleTenant);
+    const multiHandlers = registeredQueryHandlers(multitenant);
+
+    const inapplicable = await singleHandlers.read(
+      createIncludeAllQuery(tenantEmail("tenant@example.test")),
+    );
+    const accepted = await multiHandlers.read(
+      createIncludeAllQuery(tenantDomain("tenant.example")),
+    );
+
+    expect(inapplicable.response?.status?.status.case).toBe("error");
+    expect(responseErrorMessage(inapplicable)).toBe("Tenant is not applicable for this query.");
+    expect(accepted.response?.status?.status.case).toBe("ok");
+    expect(capturedTenantKeys).toEqual(["domain:tenant.example"]);
   });
 
   it("activates and cancels explicit subscriptions over a real gRPC transport", async () => {
@@ -1095,7 +1228,7 @@ function createQueryWithIds(ids: ReturnType<typeof packAny>[], tenantId?: Tenant
   });
 }
 
-function createQueryWithoutIds() {
+function createIncludeAllQuery(tenantId?: TenantInput) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "q-empty" }),
     target: create(TargetSchema, {
@@ -1105,7 +1238,7 @@ function createQueryWithoutIds() {
         value: true,
       },
     }),
-    context: createActorContext(),
+    context: createActorContext(tenantId),
   });
 }
 
@@ -1223,6 +1356,10 @@ function createFakeContext(options: {
     id: unknown,
     options: { readonly tenantId?: string },
   ) => Promise<{ readonly state: ProjectionState; readonly version?: unknown } | undefined>;
+  readonly readAllVersioned?: (
+    schema: typeof ProjectionStateSchema,
+    options: { readonly tenantId?: string },
+  ) => Promise<readonly { readonly state: ProjectionState; readonly version?: unknown }[]>;
   readonly subscribe?: (
     schema: typeof ProjectionStateSchema,
     callback: (update: {
@@ -1253,6 +1390,7 @@ function createFakeContext(options: {
     stand: () =>
       Object.freeze({
         subscribe: options.subscribe ?? (() => ({ closed: false, unsubscribe: () => undefined })),
+        readAllVersioned: options.readAllVersioned ?? (() => Promise.resolve([])),
         readVersioned: options.readVersioned ?? (() => Promise.resolve(undefined)),
       }),
   } as unknown as BoundedContext;
@@ -1281,6 +1419,33 @@ function registeredSubscriptionHandlers(
 
   if (handlers === undefined) {
     throw new Error("SubscriptionService handlers were not registered.");
+  }
+
+  return handlers;
+}
+
+function registeredQueryHandlers(
+  context: BoundedContext,
+  options: Omit<ConstructorParameters<typeof SpineServices>[0], "contexts"> = {},
+) {
+  let handlers:
+    | {
+        read(query: Query): Promise<QueryResponse>;
+      }
+    | undefined;
+  const services = new SpineServices({ contexts: [context], ...options });
+
+  services.register({
+    service(schema: unknown, implementation: unknown) {
+      if (schema === QueryService) {
+        handlers = implementation as typeof handlers;
+      }
+      return this;
+    },
+  } as never);
+
+  if (handlers === undefined) {
+    throw new Error("QueryService handlers were not registered.");
   }
 
   return handlers;

@@ -127,6 +127,34 @@ describe("Stand", () => {
     await expect(stand.read(ProjectionStateSchema, "missing-task")).resolves.toBeUndefined();
   });
 
+  it("reads all stored entity states with their versions in storage order", async () => {
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    stand.register(ProjectionStateSchema);
+
+    await stand.update(ProjectionStateSchema, createState("task-2", "Second"), {
+      version: create(VersionSchema, { number: 2 }),
+    });
+    await stand.update(ProjectionStateSchema, createState("task-1", "First"), {
+      version: create(VersionSchema, { number: 1 }),
+    });
+
+    const results = await stand.readAllVersioned(ProjectionStateSchema);
+
+    expect(results).toEqual([
+      {
+        state: createState("task-1", "First"),
+        version: create(VersionSchema, { number: 1 }),
+      },
+      {
+        state: createState("task-2", "Second"),
+        version: create(VersionSchema, { number: 2 }),
+      },
+    ]);
+  });
+
   it("rejects updates whose registered ID field is absent from the state", async () => {
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },

@@ -1,12 +1,18 @@
 import { randomUUID } from "node:crypto";
 
 import { Code, ConnectError, type ConnectRouter } from "@connectrpc/connect";
-import { create } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { EmptySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import type { MessageSchema } from "@spine-ts/core";
 import { deriveTypeUrl, packAny, unpackAny } from "@spine-ts/core";
-import { CommandIdSchema, type Command, type TenantId, VersionSchema } from "@spine-ts/proto";
+import {
+  CommandIdSchema,
+  type Command,
+  type TenantId,
+  type Version,
+  VersionSchema,
+} from "@spine-ts/proto";
 import { ErrorSchema } from "@spine-ts/proto/generated/spine/base/error_pb.js";
 import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
 import type { Target } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
@@ -147,13 +153,6 @@ export class SpineServices {
       });
     }
 
-    const ids = targetIds(target);
-    if (ids.length === 0) {
-      return create(QueryResponseSchema, {
-        response: errorResponse("INVALID_QUERY", "QueryService.Read requires an ID filter."),
-      });
-    }
-
     const tenantId = tenantValue(query.context?.tenantId);
     const tenantError = tenantMismatch(route.context.isMultitenant, tenantId, "query");
     if (tenantError !== undefined) {
@@ -162,32 +161,45 @@ export class SpineServices {
       });
     }
 
-    const messages = [];
-
     try {
+      if (target.criterion.case === "includeAll" && target.criterion.value) {
+        const results = await route.context
+          .stand()
+          .readAllVersioned(route.schema, tenantOptions(tenantId));
+
+        return create(QueryResponseSchema, {
+          response: okResponse(),
+          message: results.map((result) => packVersionedState(route.schema, result)),
+        });
+      }
+
+      const ids = targetIds(target);
+      if (ids.length === 0) {
+        return create(QueryResponseSchema, {
+          response: errorResponse("INVALID_QUERY", "QueryService.Read requires an ID filter."),
+        });
+      }
+
+      const messages = [];
+
       for (const id of ids) {
         const result = await route.context
           .stand()
           .readVersioned(route.schema, id, tenantOptions(tenantId));
         if (result !== undefined) {
-          messages.push(
-            create(EntityStateWithVersionSchema, {
-              state: packAny(route.schema, result.state, { validate: false }),
-              version: result.version ?? create(VersionSchema),
-            }),
-          );
+          messages.push(packVersionedState(route.schema, result));
         }
       }
+
+      return create(QueryResponseSchema, {
+        response: okResponse(),
+        message: messages,
+      });
     } catch {
       return create(QueryResponseSchema, {
         response: errorResponse("QUERY_READ_ERROR", "Query read failed."),
       });
     }
-
-    return create(QueryResponseSchema, {
-      response: okResponse(),
-      message: messages,
-    });
   }
 
   #subscribe(topic: Topic): Subscription {
@@ -466,6 +478,16 @@ function validateTopic(topic: Topic): void {
 function decodeId(id: Any): unknown {
   const stringId = unpackAny(id, StringValueSchema);
   return stringId?.value ?? id;
+}
+
+function packVersionedState(
+  schema: MessageSchema,
+  result: { readonly state: Message; readonly version?: Version },
+) {
+  return create(EntityStateWithVersionSchema, {
+    state: packAny(schema, result.state, { validate: false }),
+    version: result.version ?? create(VersionSchema),
+  });
 }
 
 function commandTenant(command: Command): string | undefined {
