@@ -85,13 +85,16 @@ The original concrete blockers were:
   entity handlers (`T-0012.11a` resolved aggregate command execution);
 - aggregate writes did not produce executable command-to-event-to-storage
   behavior (`T-0012.11a` resolved this for aggregate command paths);
-- projection updates are not driven from delivered events into the read side;
-- `QueryService.Read` still requires ID filters, which is too small for a task
-  list view;
-- validation and business refusal paths are not wired into runtime command
-  execution; and
-- `packages/testing` is still a skeleton, so the required black-box example
-  tests do not yet have a framework fixture.
+- projection updates were not driven from delivered events into the read side
+  (`T-0012.11b` resolved projection event updates);
+- `QueryService.Read` still required ID filters, which was too small for a task
+  list view (`T-0012.11c` resolved projection list queries);
+- validation and business refusal paths were not wired into runtime command
+  execution (`T-0012.11d` resolved validation and immediate refusal outcomes);
+  and
+- `packages/testing` was still a skeleton, so the required black-box example
+  tests did not yet have a framework fixture (`T-0012.11e` resolved the minimal
+  black-box test fixture).
 
 Rejected from this split because they are not proven blockers now:
 
@@ -165,6 +168,14 @@ Resumed-state note:
   `git diff --check`, and escalated `pnpm test:coverage` with 45 files, 610
   tests, and branch coverage 90.09%. Sandboxed affected service tests and
   coverage remain blocked only by local endpoint and IPC permissions.
+- `T-0012.11e Minimal Black-Box Test Fixture` is merged into this parent branch
+  at `c9ed81d`. Parent verification passed: focused fixture tests with 1 file
+  and 10 tests, `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`,
+  `pnpm format:check`, `git diff --check`, and escalated `pnpm test:coverage`
+  with 45 files, 619 tests, and branch coverage 90.22%. Commit `6cdd760`
+  corrected stale child-ledger merge status after parent review. Final
+  re-review passed cleanly in all required lanes, so this task is ready for
+  main integration before opening `T-0012.12`.
 
 ## Staged Subtasks
 
