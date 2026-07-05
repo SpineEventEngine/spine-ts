@@ -6,12 +6,14 @@ import {
   CommandContextSchema,
   CommandIdSchema,
   UserIdSchema,
+  ValidationErrorSchema,
 } from "@spine-ts/proto";
 import {
   TargetFiltersSchema,
   TargetSchema,
 } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
 import {
+  EntityStateWithVersionSchema,
   QueryIdSchema,
   QuerySchema,
   type QueryResponse,
@@ -34,7 +36,7 @@ import {
 } from "../generated/spine/example/todo/v1/task_events_pb.js";
 import { TaskIdSchema } from "../generated/spine/example/todo/v1/task_id_pb.js";
 import { TaskListSchema, type TaskList } from "../generated/spine/example/todo/v1/task_list_pb.js";
-import { type Task } from "../generated/spine/example/todo/v1/tasks_pb.js";
+import { TaskSchema, type Task } from "../generated/spine/example/todo/v1/tasks_pb.js";
 
 type TodoModule = typeof import("../dist/src/index.js");
 
@@ -138,6 +140,36 @@ describe("@spine-ts/example-todo", () => {
     expect(readList(response, "task-rename")?.openTaskCount).toBe(1);
   });
 
+  it("rejects invalid rename payloads with validation details without changing the task list", async () => {
+    const fixture = new BoundedContextFixture(createTodoContext(), {
+      timeoutMs: 500,
+      intervalMs: 5,
+    });
+
+    await fixture.post(createTaskCommand("command-invalid-rename-create", "task-invalid", "Kept"));
+    const originalResponse = await fixture.readEventually(
+      createTaskListQuery(),
+      (candidate) => taskTitle(candidate, "task-invalid") === "Kept",
+    );
+
+    const ack = await fixture.post(
+      createRenameCommand("command-invalid-rename", "task-invalid", "", { validate: false }),
+    );
+    const response = await expectTaskListEventuallyUnchanged(
+      fixture,
+      originalResponse,
+      "task-invalid",
+    );
+    const details = validationDetails(ack.status?.status);
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
+    expect(errorMessage(ack.status?.status)).toBe("Command payload validation failed.");
+    expect(details?.constraintViolation.length).toBeGreaterThan(0);
+    expect(readTask(response, "task-invalid")).toEqual(readTask(originalResponse, "task-invalid"));
+    expect(readList(response, "task-invalid")?.openTaskCount).toBe(1);
+  });
+
   it("completes one task through command handling and closes the list row", async () => {
     const fixture = new BoundedContextFixture(createTodoContext(), {
       timeoutMs: 500,
@@ -156,6 +188,58 @@ describe("@spine-ts/example-todo", () => {
     expect(task?.title).toBe("Open");
     expect(task?.completed).toBe(true);
     expect(readList(response, "task-complete")?.openTaskCount).toBe(0);
+  });
+
+  it("refuses completing an already completed task without changing the task list", async () => {
+    const fixture = new BoundedContextFixture(createTodoContext(), {
+      timeoutMs: 500,
+      intervalMs: 5,
+    });
+
+    await fixture.post(createTaskCommand("command-refuse-create", "task-refuse", "One-shot"));
+    await fixture.post(createCompleteCommand("command-refuse-complete", "task-refuse"));
+    const completedResponse = await fixture.readEventually(
+      createTaskListQuery(),
+      (candidate) => taskCompleted(candidate, "task-refuse") === true,
+    );
+
+    const ack = await fixture.post(
+      createCompleteCommand("command-refuse-complete-again", "task-refuse"),
+    );
+    const response = await expectTaskListEventuallyUnchanged(
+      fixture,
+      completedResponse,
+      "task-refuse",
+    );
+    const task = readTask(response, "task-refuse");
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("TASK_ALREADY_DONE");
+    expect(errorMessage(ack.status?.status)).toBe("Task is already done.");
+    expect(task).toEqual(readTask(completedResponse, "task-refuse"));
+    expect(readList(response, "task-refuse")?.openTaskCount).toBe(0);
+  });
+
+  it("refuses reopening an open task without changing the task list", async () => {
+    const fixture = new BoundedContextFixture(createTodoContext(), {
+      timeoutMs: 500,
+      intervalMs: 5,
+    });
+
+    await fixture.post(createTaskCommand("command-refuse-reopen-create", "task-open", "Open"));
+    const openResponse = await fixture.readEventually(
+      createTaskListQuery(),
+      (candidate) => taskCompleted(candidate, "task-open") === false,
+    );
+
+    const ack = await fixture.post(createReopenCommand("command-refuse-reopen", "task-open"));
+    const response = await expectTaskListEventuallyUnchanged(fixture, openResponse, "task-open");
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("TASK_NOT_DONE");
+    expect(errorMessage(ack.status?.status)).toBe("Task is not done.");
+    expect(readTask(response, "task-open")).toEqual(readTask(openResponse, "task-open"));
+    expect(readList(response, "task-open")?.openTaskCount).toBe(1);
   });
 
   it("counts duplicate same-id projection rows", () => {
@@ -196,6 +280,35 @@ describe("@spine-ts/example-todo", () => {
 
     expect(projection.state.openTaskCount).toBe(2);
     expect(projection.state.tasks.map((task) => task.completed)).toEqual([false, false]);
+  });
+
+  it("detects changed task-list snapshots when an extra task row appears", () => {
+    const expected = createTaskListResponse("task-snapshot", [
+      create(TaskSchema, {
+        id: create(TaskIdSchema, { value: "task-snapshot" }),
+        title: "First",
+        completed: false,
+      }),
+    ]);
+    const actual = createTaskListResponse("task-snapshot", [
+      create(TaskSchema, {
+        id: create(TaskIdSchema, { value: "task-snapshot" }),
+        title: "First",
+        completed: false,
+      }),
+      create(TaskSchema, {
+        id: create(TaskIdSchema, { value: "task-extra" }),
+        title: "Extra",
+        completed: true,
+      }),
+    ]);
+
+    expect(
+      sameTaskListSnapshot(
+        taskListSnapshot(actual, "task-snapshot"),
+        taskListSnapshot(expected, "task-snapshot"),
+      ),
+    ).toBe(false);
   });
 
   it("reopens one task through command handling and opens the list row", async () => {
@@ -284,7 +397,12 @@ function createTaskCommand(commandId: string, taskId: string, title: string) {
   });
 }
 
-function createRenameCommand(commandId: string, taskId: string, title: string) {
+function createRenameCommand(
+  commandId: string,
+  taskId: string,
+  title: string,
+  options: { readonly validate?: boolean } = {},
+) {
   return packCommand({
     id: create(CommandIdSchema, { uuid: commandId }),
     context: create(CommandContextSchema, {
@@ -295,6 +413,7 @@ function createRenameCommand(commandId: string, taskId: string, title: string) {
       id: create(TaskIdSchema, { value: taskId }),
       title,
     }),
+    ...options,
   });
 }
 
@@ -378,6 +497,75 @@ function readTask(response: Pick<QueryResponse, "message">, taskId: string): Tas
   return readList(response, taskId)?.tasks.find((task) => task.id?.value === taskId);
 }
 
+function createTaskListResponse(id: string, tasks: Task[]): Pick<QueryResponse, "message"> {
+  return {
+    message: [
+      create(EntityStateWithVersionSchema, {
+        state: packAny(
+          TaskListSchema,
+          create(TaskListSchema, {
+            id,
+            openTaskCount: tasks.filter((task) => !task.completed).length,
+            tasks,
+          }),
+        ),
+      }),
+    ],
+  };
+}
+
+async function expectTaskListEventuallyUnchanged(
+  fixture: BoundedContextFixture,
+  expected: QueryResponse,
+  taskId: string,
+): Promise<QueryResponse> {
+  const expectedSnapshot = taskListSnapshot(expected, taskId);
+  const response = await fixture.readEventually(
+    createTaskListQuery(),
+    (candidate) => !sameTaskListSnapshot(taskListSnapshot(candidate, taskId), expectedSnapshot),
+  );
+
+  expect(taskListSnapshot(response, taskId)).toEqual(expectedSnapshot);
+
+  return response;
+}
+
+function taskListSnapshot(response: Pick<QueryResponse, "message">, taskId: string) {
+  const list = readList(response, taskId);
+
+  return {
+    id: list?.id,
+    openTaskCount: list?.openTaskCount,
+    tasks:
+      list?.tasks.map((task) => ({
+        id: task.id?.value,
+        title: task.title,
+        completed: task.completed,
+      })) ?? [],
+  };
+}
+
+function sameTaskListSnapshot(
+  actual: ReturnType<typeof taskListSnapshot>,
+  expected: ReturnType<typeof taskListSnapshot>,
+) {
+  return (
+    actual.id === expected.id &&
+    actual.openTaskCount === expected.openTaskCount &&
+    actual.tasks.length === expected.tasks.length &&
+    actual.tasks.every((task, index) => {
+      const expectedTask = expected.tasks[index];
+
+      return (
+        expectedTask !== undefined &&
+        task.id === expectedTask.id &&
+        task.title === expectedTask.title &&
+        task.completed === expectedTask.completed
+      );
+    })
+  );
+}
+
 function taskTitle(response: Pick<QueryResponse, "message">, taskId: string): string | undefined {
   return readTask(response, taskId)?.title;
 }
@@ -387,4 +575,51 @@ function taskCompleted(
   taskId: string,
 ): boolean | undefined {
   return readTask(response, taskId)?.completed;
+}
+
+function errorMessage(status: unknown) {
+  if (
+    typeof status !== "object" ||
+    status === null ||
+    !("case" in status) ||
+    status.case !== "error"
+  ) {
+    return undefined;
+  }
+  const value = "value" in status ? status.value : undefined;
+
+  return typeof value === "object" && value !== null && "message" in value
+    ? value.message
+    : undefined;
+}
+
+function errorType(status: unknown) {
+  if (
+    typeof status !== "object" ||
+    status === null ||
+    !("case" in status) ||
+    status.case !== "error"
+  ) {
+    return undefined;
+  }
+  const value = "value" in status ? status.value : undefined;
+
+  return typeof value === "object" && value !== null && "type" in value ? value.type : undefined;
+}
+
+function validationDetails(status: unknown) {
+  if (
+    typeof status !== "object" ||
+    status === null ||
+    !("case" in status) ||
+    status.case !== "error"
+  ) {
+    return undefined;
+  }
+  const value = "value" in status ? status.value : undefined;
+  if (typeof value !== "object" || value === null || !("details" in value)) {
+    return undefined;
+  }
+
+  return unpackAny(value.details as Parameters<typeof unpackAny>[0], ValidationErrorSchema);
 }
