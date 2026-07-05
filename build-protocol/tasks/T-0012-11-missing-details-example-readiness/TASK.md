@@ -1,6 +1,6 @@
 # T-0012.11: Missing Details And Example Readiness
 
-Status: T-0012.11a, T-0012.11b, and T-0012.11c merged and parent-verified; T-0012.11d round-17 documentation/status fix verified
+Status: T-0012.11a, T-0012.11b, and T-0012.11c merged and parent-verified; T-0012.11d round-18 report consistency fix verified
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -159,9 +159,9 @@ Resumed-state note:
   (45 files, 592 tests; branches 90.03%). Sandboxed coverage remains blocked
   only by local endpoint permissions.
 - `T-0012.11d Validation And Immediate Refusal Outcomes` is implemented in its
-  child branch. Round-17 architecture documentation and status rollup fixes
-  have been applied and verified; docs/API, formatting, and whitespace checks
-  passed for that docs-only pass.
+  child branch. Round-18 report consistency and status alignment fixes have
+  been applied and verified; docs/API, formatting, and whitespace checks passed
+  for those docs-only passes.
 
 ## Staged Subtasks
 

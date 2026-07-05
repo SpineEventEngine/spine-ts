@@ -89,7 +89,8 @@ Baseline commit: `c13b19c`
 
 ## Review Summary
 
-Review history is current through the round-17 documentation/status fixes.
+Review history is current through the round-18 report consistency fix and
+follow-up parent status alignment.
 Round 1 moved payload validation to the `CommandBus`, removed an accidental public
 entity inspection hook, and filled missing public Ack docs. Round 2 moved
 internal validation errors back into their owning bus/repository layers and
@@ -120,10 +121,17 @@ durable-log/status verification and header alignment. Round 17 aligned
 architecture documentation with implemented command validation/refusal/Ack
 seams while preserving deferred server lifecycle, event intake, broker, and
 subscription-store scope, then aligned parent current-state summaries with that
-documentation/status fix.
+documentation/status fix. Round 18 updated this report so its review summary
+and latest verification include the round-17 architecture/status fixes, then
+aligned parent status headers and current-state bodies with the round-18 report
+consistency state.
 
 ### Latest Verification
 
+- `2026-07-05 11:05 WEST`: Round-18 status follow-up verification passed:
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
+- `2026-07-05 11:00 WEST`: Round-18 report-consistency verification passed:
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
 - `2026-07-05 10:50 WEST`: Round-17 parent-status verification passed:
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
 - `2026-07-05 10:45 WEST`: Round-17 documentation/status verification passed:
