@@ -29,7 +29,8 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 Server exports include `BoundedContext`, `BoundedContextBuilder`,
 `ContextSpec`, `BoundedContextName`, `TenantMode`, `BoundedContextSnapshot`,
 small immutable snapshot contracts, `CommandEndpoint`, `EventEndpoint`,
-`Stand`, direct stand option/update/subscription contracts, and
+`StoredEventDispatchFailure`, `DispatchErrorSnapshot`, `Stand`, direct stand
+option/update/subscription contracts, and
 `BoundedContextNameError` for bounded-context assembly. `CommandEndpoint`
 also exposes accepted command message type URLs so service adapters can route
 without dispatch-probing unrelated contexts.
@@ -52,10 +53,17 @@ the context `StorageFactory`; registered repositories also make their entity
 state schemas known to the context `Stand`. Repositories with authentic explicit
 handler metadata still expose route-only `routeCommand()` / `routeEvent()`
 calculations, and built contexts install internal repository dispatcher adapters
-that execute aggregate command assignees and appliers. This slice does not
-create default repositories from entity classes, invoke projection/query/process
-handlers, manage inboxes/delivery, run cache catch-up, create system contexts,
-write tenant indexes, expose a broad server lifecycle, or integrate transports.
+that execute aggregate command assignees and appliers, and execute projection
+subscribers. Aggregate command execution requires `command.id` so produced
+events can carry a contract-valid command origin; missing IDs reject before
+mutation or storage. Aggregate command completion resolves after aggregate
+event storage and snapshot handling; later already-stored event redispatch
+failures are observable through the copy-safe `storedEventDispatchFailures()`
+diagnostic snapshot on the owning `BoundedContext`. This slice does not create
+default repositories from entity classes,
+invoke query/process handlers, manage inboxes/delivery, run cache catch-up,
+create system contexts, write tenant indexes, expose a broad server lifecycle,
+or integrate transports.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,

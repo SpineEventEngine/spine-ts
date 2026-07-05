@@ -31,7 +31,9 @@ Current slice exposes:
   and
 - `new Repository({ entityType, schema, handlers })` route calculation through
   `routeCommand()` and `routeEvent()` when explicit handler metadata is supplied.
-  Routes are deferred and do not invoke handlers;
+  Direct route calls only calculate routes and do not invoke handlers; built
+  contexts use the same metadata to execute aggregate command handlers and
+  projection event subscribers through the command and event buses;
   and
 - `context.stand()` / `new Stand({ context, storageFactory })` for direct
   read-side entity state registration, latest-state updates, latest-state reads,
@@ -464,11 +466,19 @@ inspection. Repository state schemas are also registered with the context-owned
 `stand()` as known state types.
 Repeated `add(repository)` calls before `build()` are idempotent.
 Registering the same repository instance with another built context is rejected.
+Aggregate command execution requires `command.id` so produced events can carry
+a contract-valid command origin; missing IDs reject before mutation or storage.
+Aggregate command completion resolves after aggregate event storage and
+snapshot handling even though already-stored event redispatch continues
+asynchronously. If that later redispatch fails in dispatcher acceptance,
+dispatcher execution, projection subscribers, or `Stand` updates, the owning
+context records a copy-safe diagnostic snapshot through
+`storedEventDispatchFailures()`; it does not retry or run catch-up delivery.
 
 This slice deliberately does not create default repositories from entity
-classes, invoke handlers, construct system contexts, start query/subscription
-buses, write tenant indexes, expose a broad server lifecycle, or integrate
-transports.
+classes, invoke query/process handlers, construct system contexts, start
+query/subscription buses, write tenant indexes, expose a broad server
+lifecycle, or integrate transports.
 
 ## Direct Stand
 

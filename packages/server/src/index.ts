@@ -8,6 +8,8 @@ export {
   ContextSpec,
   type ContextSpecSnapshot,
   type EventEndpoint,
+  type DispatchErrorSnapshot,
+  type StoredEventDispatchFailure,
   type TenantMode,
 } from "./context/bounded-context.js";
 

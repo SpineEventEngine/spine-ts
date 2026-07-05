@@ -111,6 +111,24 @@ class HandlerBackedBigintAggregate extends Aggregate<string, typeof AggregateSta
     void command;
   }
 }
+class HandlerBackedNumberProjection extends Projection<
+  string,
+  typeof ProjectionStateSchema,
+  number
+> {
+  subscribeTask(event: ProjectionState): void {
+    void event;
+  }
+}
+class HandlerBackedBigintProjection extends Projection<
+  string,
+  typeof ProjectionStateSchema,
+  bigint
+> {
+  subscribeTask(event: ProjectionState): void {
+    void event;
+  }
+}
 const DomainEntityBase = {
   Aggregate,
 };
@@ -645,6 +663,16 @@ describe("repository identity", () => {
         AggregateStateSchema,
         (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
       );
+      const numberProjectionHandlers = defineEntityHandlers(
+        HandlerBackedNumberProjection,
+        ProjectionStateSchema,
+        (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+      );
+      const bigintProjectionHandlers = defineEntityHandlers(
+        HandlerBackedBigintProjection,
+        ProjectionStateSchema,
+        (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+      );
       new Repository({
         entityType: HandlerBackedBigintAggregate,
         schema: AggregateStateSchema,
@@ -655,6 +683,17 @@ describe("repository identity", () => {
         schema: AggregateStateSchema,
         // @ts-expect-error executable aggregate repositories require bigint version metadata.
         handlers: numberAggregateHandlers,
+      });
+      new Repository({
+        entityType: HandlerBackedNumberProjection,
+        schema: ProjectionStateSchema,
+        handlers: numberProjectionHandlers,
+      });
+      new Repository({
+        entityType: HandlerBackedBigintProjection,
+        schema: ProjectionStateSchema,
+        // @ts-expect-error executable projection repositories require number version metadata.
+        handlers: bigintProjectionHandlers,
       });
       new Repository({
         entityType: TaskProjection,

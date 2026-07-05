@@ -281,6 +281,8 @@ const expectedServerExports = [
   "StandSubscription",
   "StandUpdate",
   "StandUpdateOptions",
+  "DispatchErrorSnapshot",
+  "StoredEventDispatchFailure",
   "TransactionalEntity",
   "TransactionalEntityScopeError",
   "TransactionalEntityScopeErrorReason",

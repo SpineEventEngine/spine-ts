@@ -35,9 +35,11 @@ service descriptors with Connect/Node so callers can host `CommandService.Post`,
 `QueryService.Read`, and `SubscriptionService.Subscribe/Activate/Cancel` over a
 real gRPC-compatible runtime.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
-deterministic in-memory adapter for tests/development. Entity runtime dispatch,
-transport endpoint execution, durable production storage, broader server
-lifecycle, and the to-do application remain later slices.
+deterministic in-memory adapter for tests/development. Built bounded contexts
+can now execute aggregate command assignees/appliers and dispatch produced
+aggregate events to projection subscribers that update `Stand`; broader entity
+runtime dispatch, transport endpoint execution, durable production storage,
+broader server lifecycle, and the to-do application remain later slices.
 
 ## What Exists Now
 
@@ -84,6 +86,9 @@ lifecycle, and the to-do application remain later slices.
   Registered repositories make their entity state schemas known to the stand,
   which can record latest states, read them by schema and ID, and notify
   in-process subscribers.
+- A small `BoundedContext.storedEventDispatchFailures()` diagnostic snapshot
+  for asynchronous already-stored event redispatch failures after aggregate
+  event storage has completed.
 - A first `SpineServices` route registrar that adapts built bounded contexts to
   real Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
   routes without adding a broad server facade or client DSL. Command routes are
@@ -158,9 +163,12 @@ lifecycle, and the to-do application remain later slices.
   workers, durable delivery storage, transport-backed service execution,
   durable production storage, and to-do domain runtime behavior.
 - Built bounded contexts can invoke aggregate command assignees and aggregate
-  event appliers now. Other handler/runtime execution remains deferred,
-  including projection updates, process-manager reactions, subscriber/reactor
-  delivery semantics beyond stored-event handoff, and import/catch-up flows.
+  event appliers, then deliver stored aggregate-produced events to projection
+  event subscribers that update read-side state through `Stand`, including
+  tenant-scoped projection updates from the command tenant. Other
+  handler/runtime execution remains deferred, including process-manager
+  reactions, broader subscriber/reactor delivery semantics, and import/catch-up
+  flows.
 
 ## Type Registry
 
@@ -427,13 +435,18 @@ are not public API.
 This slice still does not expose direct entity lookup/storage APIs; convert
 entity records; write inboxes; manage delivery; manage entity caches; run
 catch-up; emit lifecycle events; start buses from repositories; or use
-gRPC/transport. Direct stands can store and read latest entity states, but
-they do not invoke projections or run catch-up. When a repository is
-constructed with authentic explicit handler metadata and registered with a
-built bounded context, aggregate commands can load or create one aggregate,
-invoke one assignee, apply the produced events, persist history and snapshots
-through `AggregateStorage`, and queue already-stored events for event-bus
-delivery.
+gRPC/transport. Direct stands can store and read latest entity states;
+projection updates reach them through framework-owned repository dispatch in
+built contexts, not through a new application write-side read API. They do not
+run catch-up. When a repository is constructed with authentic explicit handler
+metadata and registered with a built bounded context, aggregate commands can
+load or create one aggregate, invoke one assignee, apply the produced events,
+persist history and snapshots through `AggregateStorage`, and queue
+already-stored events for event-bus delivery. Projection repositories can
+consume delivered domestic events, invoke matching event subscribers, and write
+changed state through `Stand`.
+Aggregate command execution requires `command.id` so produced events can carry
+a contract-valid command origin; missing IDs reject before mutation or storage.
 
 ## Bounded Context Assembly
 
@@ -476,7 +489,9 @@ delivery, emit lifecycle events, or start transport. Repositories with
 authentic explicit handler metadata do contribute dispatcher adapters to the
 built context's buses; aggregate repositories can therefore execute assignees
 and appliers, persist through `AggregateStorage`, and queue already-stored
-events for event-bus delivery.
+events for event-bus delivery. Aggregate command completion is not failed by
+later redispatch errors, but those errors are visible for diagnostics and tests
+via `context.storedEventDispatchFailures()`.
 
 ## Direct Stand
 
