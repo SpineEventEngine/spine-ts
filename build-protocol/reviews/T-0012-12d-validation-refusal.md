@@ -266,9 +266,9 @@ Findings:
 
 - `build-protocol/tasks/T-0012-12d-validation-refusal/TASK.md`,
   `build-protocol/tasks/T-0012-12d-validation-refusal/IMPLEMENTATION_REPORT.md`,
-  and `build-protocol/work-logs/T-0012-12d.md` still used `Final branch HEAD:
-  1e7b884`, which conflicts with the deferred-final-SHA convention for this
-  task.
+  and `build-protocol/work-logs/T-0012-12d.md` still used a final-branch-head
+  value of `1e7b884`, which conflicts with the deferred-final-SHA convention
+  for this task.
 
 Planned fixes:
 
