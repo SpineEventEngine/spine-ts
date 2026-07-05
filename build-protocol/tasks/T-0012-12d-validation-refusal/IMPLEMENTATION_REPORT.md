@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12d Validation And Refusal
 
-Status: review-fix ready for re-review
+Status: round-two fix ready for re-review
 Branch: `task/T-0012-12d-validation-refusal`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
@@ -8,7 +8,7 @@ Baseline commit: `27250a0`
 Setup commit: `c264543`
 Implementation commit: `a831bd6273335c90a85f57e9772a64afe09e687d`
 Round-one reviewed branch HEAD: `a831bd6273335c90a85f57e9772a64afe09e687d`
-Review-fix commit: this commit
+Review-fix commit: `dc2d37e`
 
 ## Summary
 
@@ -27,6 +27,8 @@ query behavior completed by `T-0012.12c`.
 - Round-one review-fix strengthens the rejected-command tests with a black-box
   eventual unchanged-state helper for invalid validation and both business
   refusal paths.
+- Round-two review-fix strengthens that helper to snapshot the full relevant
+  `TaskList.tasks` contents as primitive task fields.
 
 ## Verification Evidence
 
@@ -70,6 +72,21 @@ query behavior completed by `T-0012.12c`.
   `pnpm exec prettier --check`, `pnpm docs:check`,
   `pnpm proto:check-generated`, and `git diff --check`. `pnpm docs:check`
   reported the existing invalid `origin` TypeDoc source-link warning only.
+- Round-two fix RED
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  failed with 12 tests / 1 failure because the old task-list snapshot returned
+  `true` for unchanged list id/open count/first task plus an extra completed
+  task row.
+- Round-two fix GREEN
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed after comparing every primitive task row in the snapshot helper, 1
+  file / 12 tests.
+- Round-two fix final verification passed:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`,
+  `pnpm typecheck`, `pnpm lint`, changed-file
+  `pnpm exec prettier --check`, `pnpm docs:check`,
+  `pnpm proto:check-generated`, and `git diff --check`. `pnpm docs:check`
+  reported the existing invalid `origin` TypeDoc source-link warning only.
 
 ## Framework Gap
 
@@ -94,3 +111,17 @@ Round-one review after implementation commit
 Planned fixes: add a small eventual unchanged-state test helper, route all
 three rejected-command paths through it, update durable logs, run focused and
 repository checks, commit the fix, and send the branch back for re-review.
+
+Round-two review after review-fix commit `dc2d37e` requested changes:
+
+- Snapshot and compare the full relevant `TaskList.tasks` contents so
+  unchanged-state polling catches extra or duplicate task rows when the list id,
+  open count, and first matching task stay unchanged.
+- Replace remaining durable metadata placeholders in the task, implementation
+  report, and work log with explicit `dc2d37e`, and remove the stale
+  current-state instruction to commit the already-created review fix.
+
+Planned round-two fixes: add a focused helper-level RED test for an extra task
+row with unchanged count/first task, update `taskListSnapshot` to normalize all
+tasks to primitive fields, record the round-two review findings in durable logs,
+run required verification, and commit the fix.

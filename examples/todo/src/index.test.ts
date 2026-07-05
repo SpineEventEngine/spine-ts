@@ -13,6 +13,7 @@ import {
   TargetSchema,
 } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
 import {
+  EntityStateWithVersionSchema,
   QueryIdSchema,
   QuerySchema,
   type QueryResponse,
@@ -35,7 +36,7 @@ import {
 } from "../generated/spine/example/todo/v1/task_events_pb.js";
 import { TaskIdSchema } from "../generated/spine/example/todo/v1/task_id_pb.js";
 import { TaskListSchema, type TaskList } from "../generated/spine/example/todo/v1/task_list_pb.js";
-import { type Task } from "../generated/spine/example/todo/v1/tasks_pb.js";
+import { TaskSchema, type Task } from "../generated/spine/example/todo/v1/tasks_pb.js";
 
 type TodoModule = typeof import("../dist/src/index.js");
 
@@ -281,6 +282,35 @@ describe("@spine-ts/example-todo", () => {
     expect(projection.state.tasks.map((task) => task.completed)).toEqual([false, false]);
   });
 
+  it("detects changed task-list snapshots when an extra task row appears", () => {
+    const expected = createTaskListResponse("task-snapshot", [
+      create(TaskSchema, {
+        id: create(TaskIdSchema, { value: "task-snapshot" }),
+        title: "First",
+        completed: false,
+      }),
+    ]);
+    const actual = createTaskListResponse("task-snapshot", [
+      create(TaskSchema, {
+        id: create(TaskIdSchema, { value: "task-snapshot" }),
+        title: "First",
+        completed: false,
+      }),
+      create(TaskSchema, {
+        id: create(TaskIdSchema, { value: "task-extra" }),
+        title: "Extra",
+        completed: true,
+      }),
+    ]);
+
+    expect(
+      sameTaskListSnapshot(
+        taskListSnapshot(actual, "task-snapshot"),
+        taskListSnapshot(expected, "task-snapshot"),
+      ),
+    ).toBe(false);
+  });
+
   it("reopens one task through command handling and opens the list row", async () => {
     const fixture = new BoundedContextFixture(createTodoContext(), {
       timeoutMs: 500,
@@ -467,6 +497,23 @@ function readTask(response: Pick<QueryResponse, "message">, taskId: string): Tas
   return readList(response, taskId)?.tasks.find((task) => task.id?.value === taskId);
 }
 
+function createTaskListResponse(id: string, tasks: Task[]): Pick<QueryResponse, "message"> {
+  return {
+    message: [
+      create(EntityStateWithVersionSchema, {
+        state: packAny(
+          TaskListSchema,
+          create(TaskListSchema, {
+            id,
+            openTaskCount: tasks.filter((task) => !task.completed).length,
+            tasks,
+          }),
+        ),
+      }),
+    ],
+  };
+}
+
 async function expectTaskListEventuallyUnchanged(
   fixture: BoundedContextFixture,
   expected: QueryResponse,
@@ -485,19 +532,16 @@ async function expectTaskListEventuallyUnchanged(
 
 function taskListSnapshot(response: Pick<QueryResponse, "message">, taskId: string) {
   const list = readList(response, taskId);
-  const task = readTask(response, taskId);
 
   return {
     id: list?.id,
     openTaskCount: list?.openTaskCount,
-    task:
-      task === undefined
-        ? undefined
-        : {
-            id: task.id?.value,
-            title: task.title,
-            completed: task.completed,
-          },
+    tasks:
+      list?.tasks.map((task) => ({
+        id: task.id?.value,
+        title: task.title,
+        completed: task.completed,
+      })) ?? [],
   };
 }
 
@@ -508,9 +552,17 @@ function sameTaskListSnapshot(
   return (
     actual.id === expected.id &&
     actual.openTaskCount === expected.openTaskCount &&
-    actual.task?.id === expected.task?.id &&
-    actual.task?.title === expected.task?.title &&
-    actual.task?.completed === expected.task?.completed
+    actual.tasks.length === expected.tasks.length &&
+    actual.tasks.every((task, index) => {
+      const expectedTask = expected.tasks[index];
+
+      return (
+        expectedTask !== undefined &&
+        task.id === expectedTask.id &&
+        task.title === expectedTask.title &&
+        task.completed === expectedTask.completed
+      );
+    })
   );
 }
 

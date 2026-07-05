@@ -1,6 +1,6 @@
 # T-0012.12d: Validation And Refusal
 
-Status: review-fix ready for re-review
+Status: round-two fix ready for re-review
 Start: `2026-07-05 18:08 WEST`
 End: `2026-07-05 18:49 WEST`
 Baseline commit: `27250a0`
@@ -13,8 +13,8 @@ Reviewer sub-agents: unavailable in this session; local two-axis review complete
 Setup commit: `c264543`
 Implementation commit: `a831bd6273335c90a85f57e9772a64afe09e687d`
 Round-one reviewed branch HEAD: `a831bd6273335c90a85f57e9772a64afe09e687d`
-Review-fix commit: this commit
-Final branch HEAD: this commit
+Review-fix commit: `dc2d37e`
+Final branch HEAD before round-two fix: `dc2d37e`
 
 ## Objective
 
@@ -109,6 +109,10 @@ Out of scope:
   and open-reopen refusal tests only read state immediately after the rejected
   `Ack`. The review-fix strengthens those paths with a black-box eventual
   unchanged-state assertion.
+- Round-two review found the eventual unchanged-state helper only compared the
+  list id, open count, and first matching task, so it could miss extra task rows
+  when those fields stayed unchanged. The round-two fix snapshots the full
+  relevant `TaskList.tasks` contents as primitive task fields.
 
 ## Red/Green Evidence
 
@@ -137,6 +141,22 @@ Out of scope:
   `pnpm proto:check-generated`, and `git diff --check` passed.
   `pnpm docs:check` reported the existing invalid `origin` TypeDoc source-link
   warning only.
+- Round-two fix RED:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  failed with 12 tests / 1 failure because the old snapshot comparison returned
+  `true` for a task list with unchanged id/open count/first task and an extra
+  completed task row.
+- Round-two fix GREEN:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed after the snapshot helper began comparing every primitive task row, 1
+  file / 12 tests.
+- Round-two fix final verification:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`,
+  `pnpm typecheck`, `pnpm lint`, changed-file
+  `pnpm exec prettier --check`, `pnpm docs:check`,
+  `pnpm proto:check-generated`, and `git diff --check` passed.
+  `pnpm docs:check` reported the existing invalid `origin` TypeDoc source-link
+  warning only.
 
 ## Final Verification
 
@@ -149,6 +169,16 @@ Out of scope:
   source-link warning only.
 - `pnpm proto:check-generated` passed.
 - `git diff --check` passed.
+- Round-two fix verification passed:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed, 1 file / 12 tests.
+- Round-two fix `pnpm typecheck` passed.
+- Round-two fix `pnpm lint` passed.
+- Round-two fix changed-file Prettier check passed.
+- Round-two fix `pnpm docs:check` passed with the existing invalid `origin`
+  TypeDoc source-link warning only.
+- Round-two fix `pnpm proto:check-generated` passed.
+- Round-two fix `git diff --check` passed.
 - Sandboxed `pnpm test:coverage` failed because local IPC and loopback are
   restricted (`Operation not permitted` and `listen EPERM 127.0.0.1`).
 - Escalated `pnpm test:coverage` passed, 45 files / 647 tests, with overall
@@ -170,6 +200,11 @@ Out of scope:
   task-list snapshot after rejected commands, record implementation commit
   `a831bd6273335c90a85f57e9772a64afe09e687d`, and route the branch back to
   review/re-review after the fix commit.
+- Round-two review result: changes requested for full-list snapshot coverage and
+  durable metadata cleanup. Planned fixes are to add a focused failing helper
+  test, snapshot all relevant task rows, record `dc2d37e` explicitly as the
+  prior review-fix/final-head state, and run the required verification suite
+  before committing.
 
 ## Skill Applicability Check
 
