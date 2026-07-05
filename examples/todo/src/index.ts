@@ -336,7 +336,7 @@ export async function startTodoServer(options: TodoServerOptions = {}): Promise<
   return {
     host: boundHost,
     port: address.port,
-    baseUrl: `http://${boundHost}:${address.port.toString()}`,
+    baseUrl: `http://${formatHostForUrl(boundHost)}:${address.port.toString()}`,
     close: () => closeServer(server, sessions),
   };
 }
@@ -379,6 +379,10 @@ function listen(server: http2.Http2Server, host: string, port: number): Promise<
     server.once("listening", onListening);
     server.listen(port, host);
   });
+}
+
+function formatHostForUrl(host: string): string {
+  return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
 }
 
 function closeServer(

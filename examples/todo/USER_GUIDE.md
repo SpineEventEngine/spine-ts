@@ -114,7 +114,10 @@ const response = await queries.read(
     }),
   }),
 );
-const lists = response.message.map((row) => unpackAny(row.state, TaskListSchema));
+const lists = response.message
+  .map((row) => row.state)
+  .filter((state) => state !== undefined)
+  .map((state) => unpackAny(state, TaskListSchema));
 console.log(lists);
 ```
 

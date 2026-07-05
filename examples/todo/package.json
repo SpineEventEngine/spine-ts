@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "In-process to-do example for Spine TS.",
+  "description": "Runnable server-side to-do example for Spine TS.",
   "scripts": {
     "start": "node dist/src/index.js"
   },

@@ -1,16 +1,17 @@
 # T-0012.12f: Runnable Server And Guide
 
-Status: final verification passed; ready for merge
+Status: review-fix verified; ready for re-review
 Start: `2026-07-05 20:59 WEST`
-End: `2026-07-05 20:56 WEST`
+End: Pending
 Baseline commit: `230452d`
 Setup commit: `21c3c27`
+Implementation commit: `995e842`
 Task log path: `build-protocol/tasks/T-0012-12f-runnable-server-guide/TASK.md`
 Branch: `task/T-0012-12f-runnable-server-guide`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12f-runnable-server-guide`
-Authoring sub-agent: pending
-Reviewer sub-agents: pending
+Authoring sub-agent: `019f33cd-dfd0-7c73-bb58-60b7e5045c5d` (closed)
+Reviewer sub-agents: round 1 complete and closed; review-fix pending
 
 ## Objective
 
@@ -106,8 +107,9 @@ Out of scope:
 - Example-owned `startTodoServer()` and package `start` script are implemented.
 - Focused real-client smoke coverage passed with escalation after the sandbox
   denied loopback binding.
-- Final verification passed. No framework gap was found and no `packages/server`
-  changes were needed.
+- Round 1 review found test cleanup, IPv6 URL formatting, package description,
+  guide-snippet typing, and durable metadata fixes. Review-fix edits are in
+  progress.
 
 ## Setup Verification
 
@@ -136,3 +138,29 @@ Out of scope:
   `EPERM` failures. Escalated `pnpm test:coverage` passed, 45 files / 651
   tests, with 95.18% statements, 90.48% branches, 97.63% functions, and 95.2%
   lines.
+
+## Round 1 Review Findings
+
+- Maintainability and reliability: guarantee `server.close()` even if client or
+  subscription setup fails in the standalone smoke test.
+- Maintainability: avoid leaving an unobserved `nextUpdate` promise if command
+  or query assertions fail.
+- Maintainability: update the example package description to reflect the
+  runnable server.
+- Reliability: bracket IPv6 listener hosts in `baseUrl`.
+- Documentation: fix non-chronological task/work-log timestamps and stale
+  pending sub-agent metadata.
+- TypeScript/API docs: guard undefined query row states in the user-guide
+  snippet before calling `unpackAny()`.
+
+## Round 1 Review-Fix Verification
+
+- Changed-file Prettier write/check passed.
+- `git diff --check` passed.
+- `pnpm typecheck` passed.
+- Sandboxed focused Vitest failed with expected `listen EPERM` on
+  `127.0.0.1`; escalated focused Vitest passed, 1 file / 15 tests.
+- `pnpm lint` passed.
+- `pnpm docs:check` passed with the existing invalid-origin TypeDoc warning.
+- `pnpm proto:check-generated` passed.
+- Next review package starts after implementation commit `995e842`.

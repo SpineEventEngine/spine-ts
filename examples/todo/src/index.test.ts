@@ -64,40 +64,47 @@ describe("@spine-ts/example-todo", () => {
 
   it("runs as a standalone gRPC-compatible server for command, query, and subscription clients", async () => {
     const server = await startTodoServer({ host: "127.0.0.1", port: 0 });
-    const transport = createGrpcTransport({ baseUrl: server.baseUrl });
-    const commands = createClient(CommandService, transport);
-    const queries = createClient(QueryService, transport);
-    const subscriptions = createClient(SubscriptionService, transport);
-    const subscription = await subscriptions.subscribe(createTaskListTopic());
-    const updates: AsyncIterable<SubscriptionUpdate> = subscriptions.activate(subscription);
-    const iterator = updates[Symbol.asyncIterator]();
-    const nextUpdate = withTimeout(iterator.next(), "standalone server subscription update", 500);
 
     try {
-      await delay(25);
-      const ack = await commands.post(
-        createTaskCommand("command-standalone-create", "task-standalone", "Standalone"),
-      );
-      const response = await readRemoteEventually(
-        queries,
-        createTaskListQuery(),
-        (candidate) => taskTitle(candidate, "task-standalone") === "Standalone",
-      );
-      const delivered = await nextUpdate;
-      if (delivered.done === true) {
-        throw new Error("Expected standalone server subscription update.");
-      }
-      const update = unpackSubscribedTaskList(delivered.value);
+      const transport = createGrpcTransport({ baseUrl: server.baseUrl });
+      const commands = createClient(CommandService, transport);
+      const queries = createClient(QueryService, transport);
+      const subscriptions = createClient(SubscriptionService, transport);
+      const subscription = await subscriptions.subscribe(createTaskListTopic());
+      const updates: AsyncIterable<SubscriptionUpdate> = subscriptions.activate(subscription);
+      const iterator = updates[Symbol.asyncIterator]();
+      let nextUpdate: Promise<IteratorResult<SubscriptionUpdate>> | undefined;
 
-      expect(server.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
-      expect(ack.status?.status.case).toBe("ok");
-      expect(response.response?.status?.status.case).toBe("ok");
-      expect(readTask(response, "task-standalone")?.completed).toBe(false);
-      expect(update.subscription.id).toEqual(subscription.id);
-      expect(update.list.tasks[0]?.title).toBe("Standalone");
+      try {
+        await delay(25);
+        nextUpdate = withTimeout(iterator.next(), "standalone server subscription update", 500);
+        const ack = await commands.post(
+          createTaskCommand("command-standalone-create", "task-standalone", "Standalone"),
+        );
+        const response = await readRemoteEventually(
+          queries,
+          createTaskListQuery(),
+          (candidate) => taskTitle(candidate, "task-standalone") === "Standalone",
+        );
+        const delivered = await nextUpdate;
+        nextUpdate = undefined;
+        if (delivered.done === true) {
+          throw new Error("Expected standalone server subscription update.");
+        }
+        const update = unpackSubscribedTaskList(delivered.value);
+
+        expect(server.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
+        expect(ack.status?.status.case).toBe("ok");
+        expect(response.response?.status?.status.case).toBe("ok");
+        expect(readTask(response, "task-standalone")?.completed).toBe(false);
+        expect(update.subscription.id).toEqual(subscription.id);
+        expect(update.list.tasks[0]?.title).toBe("Standalone");
+      } finally {
+        await nextUpdate?.catch(() => undefined);
+        await subscriptions.cancel(subscription);
+        await iterator.return?.();
+      }
     } finally {
-      await subscriptions.cancel(subscription);
-      await iterator.return?.();
       await server.close();
     }
   });
