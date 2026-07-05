@@ -1,6 +1,6 @@
 # T-0012.12c: Task Operations
 
-Status: round-eleven status comments addressed; re-review current HEAD
+Status: final verification complete; closure-log review pending
 Start: `2026-07-05 16:12 WEST`
 End: `2026-07-05 16:21 WEST`
 Baseline commit: `fc71408`
@@ -9,7 +9,7 @@ Branch: `task/T-0012-12c-task-operations`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
 Authoring sub-agent: `019f32d6-a303-7480-b4b9-d30a3da75ea1`
-Reviewer sub-agents: rounds one through eleven closed; re-review current HEAD
+Reviewer sub-agents: rounds one through twelve closed; closure-log review pending
 Implementation commit: `8ab4b5c`
 Review-fix commit: `3ee5c1a`
 Metadata-fix commit: `b6495bb`
@@ -20,6 +20,7 @@ Round-seven-status commit: `05bceb5`
 Round-eight-status commit: `85909a7`
 Round-nine-status commit: `f4d48e2`
 Round-ten-status commit: `c098f0c`
+Round-eleven-status commit: `67f6625`
 Final branch HEAD: pending
 
 ## Objective
@@ -175,4 +176,22 @@ Out of scope:
 - `git diff --check` passed.
 - Sandboxed `pnpm test:coverage` failed from local IPC/localhost sandbox
   restrictions. Escalated `pnpm test:coverage` passed: 45 files / 643 tests;
+  statements 95.18%, branches 90.48%, functions 97.63%, lines 95.20%.
+- FINAL focused check:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed, 1 file / 8 tests.
+- FINAL `pnpm typecheck` passed after a sequential rerun. The first parallel
+  attempt raced with `pnpm lint` because both commands regenerate Protobuf
+  output.
+- FINAL `pnpm lint` passed after a sequential rerun. The first parallel attempt
+  raced with `pnpm typecheck` during Protobuf output replacement.
+- FINAL targeted Prettier check passed on the changed example and protocol
+  files.
+- FINAL `pnpm docs:check` passed with the existing invalid-origin source-link
+  warning.
+- FINAL `pnpm proto:check-generated` passed.
+- FINAL `git diff --check` passed.
+- FINAL sandboxed `pnpm test:coverage` failed from local IPC/localhost sandbox
+  restrictions (`Operation not permitted`, `listen EPERM 127.0.0.1`) and
+  timeout fallout. Escalated `pnpm test:coverage` passed: 45 files / 644 tests;
   statements 95.18%, branches 90.48%, functions 97.63%, lines 95.20%.

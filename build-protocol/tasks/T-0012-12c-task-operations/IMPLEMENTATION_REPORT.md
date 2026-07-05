@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12c Task Operations
 
-Status: implemented; round-one fixes verified
+Status: final verification complete; closure-log review pending
 Branch: `task/T-0012-12c-task-operations`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
@@ -68,4 +68,22 @@ reopen operations using the same aggregate, event, projection, and query path.
 - Sandboxed `pnpm test:coverage` failed from local IPC/localhost sandbox
   restrictions (`Operation not permitted`, `listen EPERM 127.0.0.1`) and
   timeout fallout. Escalated `pnpm test:coverage` passed: 45 files / 643 tests;
+  statements 95.18%, branches 90.48%, functions 97.63%, lines 95.20%.
+- Final focused check:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed, 1 file / 8 tests.
+- Final `pnpm typecheck` passed after a sequential rerun. The first parallel
+  attempt raced with `pnpm lint` because both commands regenerate Protobuf
+  output.
+- Final `pnpm lint` passed after a sequential rerun. The first parallel attempt
+  raced with `pnpm typecheck` during Protobuf output replacement.
+- Final targeted Prettier check passed on the changed example and protocol
+  files.
+- Final `pnpm docs:check` passed with the existing invalid-origin source-link
+  warning.
+- Final `pnpm proto:check-generated` passed.
+- Final `git diff --check` passed.
+- Final sandboxed `pnpm test:coverage` failed from local IPC/localhost sandbox
+  restrictions (`Operation not permitted`, `listen EPERM 127.0.0.1`) and
+  timeout fallout. Escalated `pnpm test:coverage` passed: 45 files / 644 tests;
   statements 95.18%, branches 90.48%, functions 97.63%, lines 95.20%.
