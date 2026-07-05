@@ -404,3 +404,11 @@ Status: round-16 current-summary/status fixes verified; ready for follow-up revi
   summaries directly to include round-15 durable-log/status verification,
   aligned child status headers with this pass, and recorded the fix in child
   durable logs. Docs, format, and whitespace verification passed.
+
+## Round-16 Parent Header Follow-Up
+
+- `2026-07-05 10:35 WEST`: Orchestrator spot-check found parent top status
+  headers still stopped at round 15. Implementation worker aligned those
+  headers with the round-16 current-summary/status fix and recorded the
+  correction in child and parent work logs. Docs, format, and whitespace
+  verification passed.
