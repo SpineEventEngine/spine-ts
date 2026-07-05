@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12e Task Subscriptions
 
-Status: metadata cleanup committed; ready for review
+Status: recovery-pointer docs fix committed; ready for review
 Branch: `task/T-0012-12e-task-subscriptions`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12e-task-subscriptions`

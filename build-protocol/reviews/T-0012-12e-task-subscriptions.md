@@ -10,7 +10,7 @@ Latest reviewed package: `.superpowers/sdd/review-e266478..815ebbe.diff`
 Review recovery rule: review branch-tip changes after the latest reviewed basis.
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12e-task-subscriptions`
-Status: metadata cleanup committed; ready for review
+Status: recovery-pointer docs fix committed; ready for review
 
 ## Required Review Lanes
 

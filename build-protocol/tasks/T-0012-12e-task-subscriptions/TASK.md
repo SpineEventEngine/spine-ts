@@ -1,6 +1,6 @@
 # T-0012.12e: Task Subscriptions
 
-Status: metadata cleanup committed; ready for review
+Status: recovery-pointer docs fix committed; ready for review
 Start: `2026-07-05 20:32 WEST`
 End: Pending
 Baseline commit: `a8c8f07`
