@@ -1,6 +1,6 @@
 # T-0012.11c: Projection List Queries
 
-Status: in progress
+Status: complete
 Start: `2026-07-05 03:04 WEST`
 Parent task: `T-0012.11 Missing Details And Example Readiness`
 Branch: `task/T-0012-11c-projection-list-queries`
@@ -82,9 +82,14 @@ projection-state list read needed by the to-do example.
 
 ## Current State
 
-- Task branch and worktree are created from parent commit `8caec30`.
-- Initial evidence shows `QueryService.Read` rejects queries without ID
-  filters, while `Stand` only exposes point reads.
-- `RecordStorage.query()` already provides a simple deterministic all-record
-  read; the intended implementation should use that directly instead of
-  inventing a query engine.
+- Implemented on branch `task/T-0012-11c-projection-list-queries` through
+  reviewed commit `4102284`.
+- `Stand.readAllVersioned()` uses `RecordStorage.query()` directly and reuses
+  the point-read version cloning path.
+- `QueryService.Read` accepts projection-state `Target.include_all` queries,
+  preserves tenant validation, and packs versioned responses in the same shape
+  as ID-filter reads.
+- Required review lanes have no remaining comments.
+- Final verification passed: focused stand and service tests, `pnpm typecheck`,
+  `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, `git diff --check`, and
+  escalated `pnpm test:coverage` with 45 files and 589 tests.

@@ -90,6 +90,19 @@ Implemented the smallest storage-backed include-all path:
     - `pnpm format:check` ✅
     - `pnpm docs:check` ✅
     - `git diff --check` ✅
+  - Final verification after docs re-review:
+    - `pnpm exec vitest run packages/server/test/stand/stand.test.ts -t "reads all stored entity states with their versions in storage order|returns copy-safe list read results for state and version|closes the storage handle after successful list reads|closes the storage handle when list reads reject"` ✅
+    - `pnpm exec vitest run packages/server/test/services/spine-services.test.ts -t "keeps ID-filter QueryService reads working through direct handlers|reads all projection states through QueryService include-all queries|keeps QueryService include-all reads isolated by tenant|returns stable errors for include-all read failures|treats include-all query tenant domain and email variants as present"` ✅
+    - `pnpm typecheck` ✅
+    - `pnpm lint` ✅
+    - `pnpm format:check` ✅
+    - `pnpm docs:check` ✅
+    - `git diff --check` ✅
+    - sandboxed `pnpm test:coverage` failed only on local endpoint permissions
+      (`Operation not permitted` for ZeroMQ IPC and
+      `listen EPERM: operation not permitted 127.0.0.1` for gRPC tests)
+    - escalated `pnpm test:coverage` ✅ with 45 files and 589 tests;
+      statements 94.97%, branches 90.01%, functions 97.51%, lines 94.99%
 
 Sandbox notes:
 
@@ -112,3 +125,7 @@ Review-fix pass: updated the public docs to describe direct list reads,
 tenant-option behavior; added focused stand tests for list-read handle cleanup
 and copy-safe state/version results; and tightened `packVersionedState()` so
 the schema/result generic relation stays intact.
+
+Final review status: code style/maintainability, documentation,
+TypeScript/API docs, security, and performance/reliability lanes reported no
+remaining comments.
