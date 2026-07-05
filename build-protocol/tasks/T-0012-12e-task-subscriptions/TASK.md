@@ -1,6 +1,6 @@
 # T-0012.12e: Task Subscriptions
 
-Status: review-fix edits complete; local verification passed; committed; pending review
+Status: review-fix edits complete; metadata-only header fix pending commit; previous review-fix committed; pending review after the next commit
 Start: `2026-07-05 20:32 WEST`
 End: Pending
 Baseline commit: `a8c8f07`
@@ -10,9 +10,11 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12e-task-subscriptions`
 Authoring sub-agent: pending
 Reviewer sub-agents: pending
-Setup commit: pending commit
-Implementation commit: pending
-Final branch HEAD: pending
+Setup commit: `a8c8f07`
+Implementation commit: `c06fef8`
+First review-fix commit: `eeee46b`
+Metadata-fix commit: pending commit
+Current branch HEAD: `eeee46b` (pre-metadata-fix commit)
 
 ## Objective
 

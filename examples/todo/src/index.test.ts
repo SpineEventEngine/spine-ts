@@ -314,14 +314,23 @@ describe("@spine-ts/example-todo", () => {
     });
     const subscription = await fixture.subscribe(createTaskListTopic());
 
-    await fixture.post(createTaskCommand("command-cancel-subscribe", "task-cancel", "Cancel"));
-    expect(unpackSubscribedTaskList(await subscription.next()).list.id).toBe("task-cancel");
+    try {
+      await fixture.post(createTaskCommand("command-cancel-subscribe", "task-cancel", "Cancel"));
+      expect(
+        unpackSubscribedTaskList(
+          await withTimeout(subscription.next(), "subscription update for cancel", 250),
+        ).list.id,
+      ).toBe("task-cancel");
 
-    const cancel = await subscription.cancel();
+      const cancel = await subscription.cancel();
 
-    expect(cancel.status?.status.case).toBe("ok");
-    await expect(subscription.next()).resolves.toBeUndefined();
-    await expect(subscription.close()).resolves.toBeUndefined();
+      expect(cancel.status?.status.case).toBe("ok");
+      await expect(
+        withTimeout(subscription.next(), "subscription cancellation after cancel", 250),
+      ).resolves.toBeUndefined();
+    } finally {
+      await subscription.close();
+    }
   });
 
   it("counts duplicate same-id projection rows", () => {
