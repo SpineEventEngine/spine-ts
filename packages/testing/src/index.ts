@@ -61,6 +61,7 @@ interface SubscriptionHandlers {
 
 const defaultTimeoutMs = 500;
 const defaultIntervalMs = 5;
+const defaultQueueLimit = 100;
 
 /** Minimal in-process black-box fixture over one built bounded context. */
 export class BoundedContextFixture<Context extends BoundedContext = BoundedContext> {
@@ -70,12 +71,14 @@ export class BoundedContextFixture<Context extends BoundedContext = BoundedConte
   readonly #subscriptions: SubscriptionHandlers;
   readonly #timeoutMs: number;
   readonly #intervalMs: number;
+  readonly #queueLimit: number;
 
   /** Create a fixture over a built bounded context. */
   constructor(context: Context, options: BoundedContextFixtureOptions = {}) {
     this.#context = context;
     this.#timeoutMs = positiveInteger(options.timeoutMs ?? defaultTimeoutMs);
     this.#intervalMs = positiveInteger(options.intervalMs ?? defaultIntervalMs);
+    this.#queueLimit = positiveInteger(options.queueLimit ?? defaultQueueLimit);
     const handlers = captureHandlers(context, options);
     this.#commands = handlers.commands;
     this.#queries = handlers.queries;
@@ -123,7 +126,7 @@ export class BoundedContextFixture<Context extends BoundedContext = BoundedConte
     const copy = clone(SubscriptionSchema, subscription);
     const updates = this.#subscriptions.activate(copy);
 
-    return new ActiveFixtureSubscription(copy, updates, this.#subscriptions);
+    return new ActiveFixtureSubscription(copy, updates, this.#subscriptions, this.#queueLimit);
   }
 }
 
@@ -133,16 +136,19 @@ class ActiveFixtureSubscription implements FixtureSubscription {
   readonly #subscription: Subscription;
   readonly #queue: SubscriptionUpdate[] = [];
   readonly #waiters: OnSubscriptionUpdate[] = [];
+  readonly #queueLimit: number;
   #closed = false;
 
   constructor(
     subscription: Subscription,
     updates: AsyncIterable<SubscriptionUpdate>,
     handlers: SubscriptionHandlers,
+    queueLimit: number,
   ) {
     this.#subscription = clone(SubscriptionSchema, subscription);
     this.#iterator = updates[Symbol.asyncIterator]();
     this.#handlers = handlers;
+    this.#queueLimit = queueLimit;
     void this.#pump();
   }
 
@@ -151,12 +157,13 @@ class ActiveFixtureSubscription implements FixtureSubscription {
   }
 
   async next(): Promise<SubscriptionUpdate | undefined> {
+    if (this.#closed) {
+      return undefined;
+    }
+
     const queued = this.#queue.shift();
     if (queued !== undefined) {
       return clone(SubscriptionUpdateSchema, queued);
-    }
-    if (this.#closed) {
-      return undefined;
     }
 
     return this.#nextQueued();
@@ -194,6 +201,10 @@ class ActiveFixtureSubscription implements FixtureSubscription {
     const copy = clone(SubscriptionUpdateSchema, update);
     const waiter = this.#waiters.shift();
     if (waiter === undefined) {
+      if (this.#queue.length >= this.#queueLimit) {
+        void this.cancel();
+        return;
+      }
       this.#queue.push(copy);
     } else {
       waiter(copy);
@@ -209,6 +220,7 @@ class ActiveFixtureSubscription implements FixtureSubscription {
       return;
     }
     this.#closed = true;
+    this.#queue.splice(0);
     for (const waiter of this.#waiters.splice(0)) {
       waiter(undefined);
     }

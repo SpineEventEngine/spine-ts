@@ -81,3 +81,9 @@ Baseline commit: `6b5dd07`
   tests, `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, and
   `git diff --check`. `pnpm format:check` reported Prettier drift in touched
   test and log files; those files were formatted before the final rerun.
+- `2026-07-05 09:50 WEST`: Follow-up re-review found two remaining durable-doc
+  rollup issues and one subscription queue lifecycle issue. The fixture now
+  clears queued updates when closed, checks closed state before returning queued
+  updates, closes the handle when fixture-local queued updates reach
+  `queueLimit`, and adds focused regressions for post-cancel and overflow
+  reads.

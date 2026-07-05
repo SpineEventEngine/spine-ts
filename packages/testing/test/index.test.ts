@@ -192,6 +192,32 @@ describe("BoundedContextFixture", () => {
     await expect(subscription.close()).resolves.toBeUndefined();
   });
 
+  it("drops queued updates after cancellation", async () => {
+    const fixture = new BoundedContextFixture(createTaskContext());
+    const subscription = await fixture.subscribe(createTaskTopic());
+
+    await fixture.post(createTaskCommand("command-cancel-queued", "task-cancel-queued", "Cancel"));
+    await waitForQueuedUpdate();
+
+    const cancel = await subscription.cancel();
+
+    expect(cancel.status?.status.case).toBe("ok");
+    await expect(subscription.next()).resolves.toBeUndefined();
+  });
+
+  it("closes subscriptions when fixture-local queued updates reach the limit", async () => {
+    const fixture = new BoundedContextFixture(createTaskContext(), {
+      queueLimit: 1,
+    });
+    const subscription = await fixture.subscribe(createTaskTopic());
+
+    await fixture.post(createTaskCommand("command-overflow-1", "task-overflow-1", "Overflow"));
+    await fixture.post(createTaskCommand("command-overflow-2", "task-overflow-2", "Overflow"));
+    await waitForQueuedUpdate();
+
+    await expect(subscription.next()).resolves.toBeUndefined();
+  });
+
   it("returns cloned query responses so fixture callers cannot mutate stored state", async () => {
     const fixture = new BoundedContextFixture(createTaskContext());
 
@@ -334,4 +360,8 @@ function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [fil
 
 function missingAny() {
   return packAny(StringValueSchema, create(StringValueSchema, { value: "missing" }));
+}
+
+function waitForQueuedUpdate(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }

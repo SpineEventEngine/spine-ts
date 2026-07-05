@@ -10,11 +10,11 @@ Status: implemented and verified
 
 ## Required Lanes
 
-- code style/maintainability: round-1 findings under fix
-- documentation: round-1 findings under fix
+- code style/maintainability: round-1 findings verified; awaiting re-review
+- documentation: round-1 findings verified; awaiting re-review
 - TypeScript/API docs: round 1 clean
-- security: round-1 findings under fix
-- performance/reliability: round-1 findings under fix
+- security: round-1 findings verified; awaiting re-review
+- performance/reliability: round-1 findings verified; awaiting re-review
 
 ## Review Focus
 
@@ -70,3 +70,9 @@ pending` wording after commit `67e2586` and impossible timestamp ordering in
   `pnpm lint`, `pnpm docs:check`, and `git diff --check` passed for the fix.
   The touched test and log files were formatted after `pnpm format:check`
   reported Prettier drift.
+- `2026-07-05 09:50 WEST`: Follow-up re-review found the fixture queue still
+  returned queued updates after cancellation and could grow without honoring
+  `queueLimit`. The fixture now checks closed state before returning queued
+  updates, clears queued updates when closed, closes on queue overflow, and adds
+  focused regressions for both paths. Parent status wording and lane rollups
+  were also aligned after review found stale live status text.
