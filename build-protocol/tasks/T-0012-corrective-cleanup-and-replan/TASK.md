@@ -140,9 +140,6 @@ escalated coverage, docs/API, proto lint/generate/clean, and
 ZeroMQ local IPC sandbox failure. Coverage was statements 94.93%, branches
 90.07%, functions 97.05%, and lines 94.96%.
 
-Current subtask: `T-0012.11 Missing Details And Example Readiness` (split
-complete; first selected slice is `T-0012.11a Aggregate Command Execution`).
-
 `T-0012.11 Missing Details And Example Readiness` is integrated on `main` at
 merge commit `473a4b2`. It completed aggregate command execution, projection
 event updates, projection list queries, validation/refusal wiring, and the

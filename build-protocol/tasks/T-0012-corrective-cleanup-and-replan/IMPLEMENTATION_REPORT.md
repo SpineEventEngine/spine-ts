@@ -1,7 +1,6 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.11 split complete; first implementation slice selected; splitter
-review comments addressed
+Status: T-0012.11 integrated; T-0012.12 selected
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
@@ -254,9 +253,10 @@ outside the autonomous task scope; tracked files passed Prettier.
 `T-0012.11 Missing Details And Example Readiness` is integrated on `main` at
 merge commit `473a4b2`. It added the five example-readiness slices selected by
 the splitter: aggregate command execution, projection event updates, projection
-list queries, validation/refusal wiring, and the minimal black-box fixture. All
-required review lanes are clean through commit `c1cf077`. The next selected
-subtask is `T-0012.12 To-Do Example`.
+list queries, validation/refusal wiring, and the minimal black-box fixture. The
+task branch was reviewed through commit `c1cf077` before main integration. This
+roadmap update records the main merge and is under its own review. The next
+selected subtask is `T-0012.12 To-Do Example`.
 
 Parent tracked-state verification after integrating `T-0012.11` passed:
 `pnpm check:node`, `pnpm typecheck`, `pnpm lint`, project-scope Prettier

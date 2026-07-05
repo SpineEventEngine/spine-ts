@@ -1,7 +1,6 @@
 # Work Log: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.11 split complete; first implementation slice selected; splitter
-review comments addressed
+Status: T-0012.11 integrated; T-0012.12 selected
 
 ## Entries
 
@@ -62,6 +61,7 @@ review comments addressed
 - `T-0012.8b Integration Coverage Fix` is integrated.
 - `T-0012.9 Stand And Entity Updates` is integrated.
 - `T-0012.10 Real gRPC Services` is integrated.
+- `T-0012.11 Missing Details And Example Readiness` is integrated.
 - Current implementable subtask is `T-0012.12 To-Do Example`.
 - Parent verification passed after `T-0012.1` integration.
 - Parent verification passed after `T-0012.2` integration.
