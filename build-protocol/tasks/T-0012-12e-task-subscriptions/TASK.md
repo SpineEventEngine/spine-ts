@@ -16,8 +16,10 @@ First review-fix commit: `eeee46b`
 Second review-fix commit: `7eb9315`
 Metadata cleanup commit: `2a778c6`
 Metadata stamp commit: `d664526`
-Latest completed review-fix basis: `7eb9315..d664526`
-Latest review package: `.superpowers/sdd/review-7eb9315..d664526.diff`
+Immutable-ref docs fix commit: `e266478`
+Previous review package: `.superpowers/sdd/review-7eb9315..d664526.diff`
+Latest completed review-fix basis: `d664526..e266478`
+Latest review package: `.superpowers/sdd/review-d664526..e266478.diff`
 
 ## Objective
 

@@ -3,8 +3,10 @@
 Task log: `build-protocol/tasks/T-0012-12e-task-subscriptions/TASK.md`
 Branch: `task/T-0012-12e-task-subscriptions`
 Baseline commit: `4bebdeb`
-Reviewed commit/diff basis: `7eb9315..d664526`
-Review package: `.superpowers/sdd/review-7eb9315..d664526.diff`
+Previous reviewed commit/diff basis: `7eb9315..d664526`
+Previous review package: `.superpowers/sdd/review-7eb9315..d664526.diff`
+Latest reviewed commit/diff basis: `d664526..e266478`
+Latest review package: `.superpowers/sdd/review-d664526..e266478.diff`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12e-task-subscriptions`
 Status: metadata cleanup committed; ready for review
@@ -81,3 +83,18 @@ Outcome:
   local `withTimeout()` helper.
 - The task, report, review, and work-log headers no longer describe the cleanup
   as pending.
+
+Round 4 findings:
+
+- Documentation and reliability: the durable metadata recorded
+  `7eb9315..d664526` as the latest review package even after `e266478` became
+  the current completed docs-only fix.
+- Reliability: the current-state entry still named the metadata cleanup as the
+  last completed step instead of the immutable-ref docs fix.
+
+Planned fixes:
+
+- keep `7eb9315..d664526` as the previous review package;
+- record `d664526..e266478` and
+  `.superpowers/sdd/review-d664526..e266478.diff` as the latest review package;
+- update the current-state entry to name `e266478` as the last completed step.
