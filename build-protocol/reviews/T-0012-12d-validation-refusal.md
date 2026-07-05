@@ -4,10 +4,10 @@ Task log: `build-protocol/tasks/T-0012-12d-validation-refusal/TASK.md`
 Branch: `task/T-0012-12d-validation-refusal`
 Baseline commit: `27250a0`
 Reviewed commit/diff basis:
-`ec3e9d2`
+`7c0d191`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
-Status: round-two metadata fixed; re-review pending
+Status: round-three metadata fixed; re-review pending
 
 ## Required Review Lanes
 
@@ -115,3 +115,22 @@ Planned fixes:
 - Record `ec3e9d2` as the round-two fix and final branch head in task,
   implementation report, and work-log metadata.
 - Correct round-two work-log timestamps so the log remains chronological.
+
+### Round 4
+
+Reviewed basis: round-three-metadata commit `7c0d191`.
+
+Outcome: changes requested.
+
+Findings:
+
+- Current/final-head metadata still pointed at the pre-metadata commit
+  `ec3e9d2` instead of the reviewed metadata commit `7c0d191`.
+- Work-log current state still named the `ec3e9d2` round-two fix as the last
+  completed step, omitting the metadata correction under review.
+
+Planned fixes:
+
+- Record `7c0d191` as the round-three metadata commit and current branch head.
+- Update the work-log current state to resume from this metadata correction
+  before the next re-review.
