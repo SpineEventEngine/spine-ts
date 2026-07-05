@@ -103,7 +103,7 @@ passed: focused stand/service tests, `pnpm typecheck`, `pnpm lint`,
 remains blocked only by local endpoint permissions.
 
 `T-0012.11d Validation And Immediate Refusal Outcomes` is implemented in its
-child branch. Round-15 durable-log/status fixes refreshed the lane,
-implementation-report, parent current-state, and status-header rollups after
-the round-12 reliability, round-13 docs, and round-14 docs/status fixes.
-Docs/API, formatting, and whitespace checks passed for those docs-only passes.
+child branch. Round-16 current-summary/status fixes refreshed the child
+implementation report, parent current-state bodies, parent top headers, and
+child durable logs after the round-15 durable-log/status fixes. Docs/API,
+formatting, and whitespace checks passed for those docs-only passes.

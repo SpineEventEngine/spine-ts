@@ -6,15 +6,15 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-16 current-summary/status fixes verified; ready for follow-up review
+Status: round-17 documentation/status fixes verified; ready for follow-up review
 
 ## Required Lanes
 
-- code style/maintainability: formatting passed through round 15
-- documentation: docs check passed through round 15
+- code style/maintainability: formatting passed through round 17
+- documentation: docs check passed through round 17
 - TypeScript/API docs: typecheck passed through round 12; docs check passed
-  through round 15, including round-13 README Markdown and round-14/15 status
-  rollup fixes
+  through round 17, including round-13 README Markdown, round-14/16/17 docs
+  updates, and round-15/16 status rollup fixes
 - security: round-11 incompatible-payload detail fix verified; earlier
   dispatcher-thrown validation detail sanitization remains verified
 - performance/reliability: round-12 rejected-commit marker lifetime fix
@@ -412,3 +412,18 @@ Status: round-16 current-summary/status fixes verified; ready for follow-up revi
   headers with the round-16 current-summary/status fix and recorded the
   correction in child and parent work logs. Docs, format, and whitespace
   verification passed.
+
+### Round 17
+
+- `2026-07-05 10:40 WEST`: Documentation review found the architecture docs
+  still claimed command intake validation, handler invocation/runtime wiring,
+  and Ack mapping were absent, and found current rollups still stopped at round
+  15 despite round-16 summary/header fixes.
+
+## Round-17 Fix Pass
+
+- `2026-07-05 10:45 WEST`: Implementation worker updated the architecture docs
+  to reflect current command validation/refusal/Ack seams while preserving
+  deferred server lifecycle, event intake, broker, and subscription-store
+  scope; refreshed the cited rollups through round 16; and recorded this pass
+  in child durable logs. Docs, format, and whitespace verification passed.
