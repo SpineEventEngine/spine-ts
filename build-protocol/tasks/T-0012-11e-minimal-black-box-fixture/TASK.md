@@ -1,6 +1,6 @@
 # T-0012.11e: Minimal Black-Box Test Fixture
 
-Status: opened
+Status: implemented and verified
 Branch: `task/T-0012-11e-minimal-black-box-fixture`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11e-minimal-black-box-fixture`

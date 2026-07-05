@@ -5,8 +5,9 @@ single-message validation facade, core envelope construction helpers, the first
 server entity, handler, repository, and bounded-context metadata
 layers, the first command/event bus seam, the first server runtime routing
 seam, the real Connect/Node `SpineServices` route registrar for the raw Spine
-command/query/subscription services, adapter-agnostic transport contracts, and
-the first storage contracts with an in-memory adapter.
+command/query/subscription services, adapter-agnostic transport contracts, the
+first storage contracts with an in-memory adapter, and a minimal in-process
+bounded-context testing fixture.
 
 This guide covers the behavior and contracts available now: Spine proto
 descriptors are exposed through curated packages, `@spine-ts/core` can derive
@@ -97,6 +98,12 @@ broader server lifecycle, and the to-do application remain later slices.
   subscriptions attach delivery only after explicit activation.
   Inactive subscriptions expire by default and active subscriptions use a small
   bounded update queue for slow consumers.
+- A minimal `BoundedContextFixture` in `@spine-ts/testing` that wraps one built
+  bounded context and drives generated `Command`, `Event`, `Query`, and `Topic`
+  envelopes through the real in-process command, event, query, and subscription
+  seams. The fixture returns cloned `Ack`, `QueryResponse`, `Response`, and
+  `SubscriptionUpdate` messages and provides `readEventually()` for tests that
+  need to observe asynchronous projection consequences.
 - A server entity state transition validator that enforces built-in
   `(set_once)` checks by comparing previous and proposed entity state through
   the core transition validation facade.
