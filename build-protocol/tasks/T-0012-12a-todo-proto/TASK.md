@@ -159,7 +159,7 @@ Out of scope:
   verification. Sandboxed coverage reproduced local IPC/HTTP2 restrictions;
   escalated coverage passed with 45 files, 621 tests, branches 90.22%.
 - `2026-07-05 12:15 WEST`: Main orchestrator committed the review-fix pass and
-  amended bookkeeping; re-review is pending against current HEAD.
+  amended bookkeeping; re-review was pending against `ddefd95`.
 - `2026-07-05 12:26 WEST`: Focused fix author began from HEAD `ddefd95`,
   updated logs before code changes, and started the re-review fix pass for
   documentation wording, helper ordering, publish-path regression coverage, and
