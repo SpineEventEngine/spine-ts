@@ -79,7 +79,7 @@ pending` wording after commit `67e2586` and impossible timestamp ordering in
 - `2026-07-05 09:55 WEST`: Follow-up security re-review found a queued update
   could still be read while `cancel()` was awaiting service cancellation. The
   fixture now marks the handle closed before awaiting service cancellation, and
-  a focused regression covers in-flight cancellation. Verification is pending.
+  a focused regression covers in-flight cancellation.
 - `2026-07-05 09:59 WEST`: Focused fixture tests passed with 1 file and 10
   tests. `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, `pnpm format:check`,
   and `git diff --check` passed for the latest fix.
