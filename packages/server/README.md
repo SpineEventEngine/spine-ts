@@ -4,7 +4,8 @@ Descriptor-derived server metadata for Spine entity schemas, explicit handler
 metadata, standard decorator metadata adapters, aggregate snapshot/event storage,
 the first command/event bus seam, and the first runtime routing plan seam over
 `@spine-ts/transport` contracts, plus the first direct storage-backed `Stand`
-slice for latest entity state reads and in-process update subscriptions.
+slice for latest entity state point/list reads and in-process update
+subscriptions.
 
 Current slice exposes:
 
@@ -36,13 +37,15 @@ Current slice exposes:
   projection event subscribers through the command and event buses;
   and
 - `context.stand()` / `new Stand({ context, storageFactory })` for direct
-  read-side entity state registration, latest-state updates, latest-state reads,
-  and explicit in-process subscription cleanup;
+  read-side entity state registration, latest-state updates, latest-state point
+  and list reads with caller-supplied version metadata, and explicit in-process
+  subscription cleanup;
   and
 - `new SpineServices({ contexts }).register(router)` for the first real
   Connect/Node route registration of Spine JVM `CommandService`,
   `QueryService`, and `SubscriptionService` contracts over built bounded
-  contexts;
+  contexts, including projection-state ID-filter and `Target.include_all`
+  query reads;
   and
 - `AggregateStorage` for the current primitive-`AggregateId`
   snapshot/history seam, backed by `StorageFactory`, `RecordStorage`, and
@@ -482,14 +485,15 @@ lifecycle, or integrate transports.
 
 ## Direct Stand
 
-Use the context-owned `Stand` for direct latest-state reads and in-process
-entity update notifications:
+Use the context-owned `Stand` for direct latest-state reads, storage-order
+latest-state list reads, and in-process entity update notifications:
 
 ```ts
 const stand = tasks.stand();
 
 await stand.update(TaskStateSchema, taskState, { version });
 const latest = await stand.read(TaskStateSchema, taskId);
+const all = await stand.readAllVersioned(TaskStateSchema);
 
 const subscription = stand.subscribe(TaskStateSchema, (update) => {
   update.state;
@@ -500,12 +504,17 @@ subscription.unsubscribe();
 Repositories registered with a built context make their state schemas known to
 that context's stand. Stand reads, updates, and subscriptions reject unknown
 state schemas with `StandStateTypeError`. Multitenant stands require
-`{ tenantId }` on read/update/subscribe; single-tenant stands reject tenant
-options. Direct subscriptions are deterministic in-process callbacks and must
-be cleaned up explicitly. `SpineServices` adapts built-context command buses and
-stands to the first `CommandService`, `QueryService`, and `SubscriptionService`
-methods. Cross-context fallback, client query DSLs, event subscriptions, field
-filtering, and projection catch-up remain outside this slice.
+`{ tenantId }` on point reads, list reads, updates, and subscriptions; single-
+tenant stands reject tenant options. `readAllVersioned()` returns
+`StandReadResult` entries in deterministic storage query order and reuses the
+same caller-supplied version metadata as point reads. Direct subscriptions are
+deterministic in-process callbacks and must be cleaned up explicitly.
+`SpineServices` adapts built-context command
+buses and stands to the first `CommandService`, `QueryService`, and
+`SubscriptionService` methods, including `QueryService.Read` support for
+projection-state ID filters and `Target.include_all` reads. Cross-context
+fallback, client query DSLs, event subscriptions, field filtering, and
+projection catch-up remain outside this slice.
 
 ## Entity State Shell
 
