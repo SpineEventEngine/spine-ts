@@ -1,6 +1,6 @@
 # T-0012.11b: Projection Event Updates
 
-Status: review fixes implemented; verification passed
+Status: round-2 review fixes implemented; verification passed
 Start: `2026-07-05 00:23 WEST`
 Parent task: `T-0012.11 Missing Details And Example Readiness`
 Branch: `task/T-0012-11b-projection-event-updates`
@@ -96,3 +96,13 @@ events update read-side projection state through `Stand`.
   wording. Focused red/green verification, typecheck, lint, format, docs,
   diff, and escalated coverage all passed. Sandboxed coverage still fails on
   local IPC/HTTP2 endpoint permissions only.
+- Round-2 review fixes add an observable
+  `BoundedContext.storedEventDispatchFailures()` diagnostic channel for
+  asynchronous already-stored event redispatch failures after aggregate event
+  storage. Command completion still resolves after storage/snapshot handling;
+  redispatch failures from dispatcher acceptance/dispatch, projection
+  subscribers, or `Stand` updates are recorded for tests and diagnostics
+  without adding retry, catch-up, or delivery-worker scope.
+- Final round-2 verification passed. Sandboxed `pnpm test:coverage` still fails
+  only on known local IPC/HTTP2 endpoint permissions; escalated coverage passed
+  with 45 files and 576 tests.

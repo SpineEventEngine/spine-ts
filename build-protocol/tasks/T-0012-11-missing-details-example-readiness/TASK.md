@@ -1,6 +1,6 @@
 # T-0012.11: Missing Details And Example Readiness
 
-Status: split complete; T-0012.11a merged and parent-verified
+Status: split complete; T-0012.11a merged and parent-verified; T-0012.11b round-2 fixes verified
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -137,6 +137,13 @@ Resumed-state note:
   `git diff --check HEAD^..HEAD`, and escalated `pnpm test:coverage` (45 files,
   564 tests; statements 94.85%, branches 90.03%, functions 97.33%, lines
   94.87%).
+- `T-0012.11b` is active in its child worktree. Initial implementation,
+  round-1 review fixes, and round-2 reliability/docs fixes are verified.
+  The round-2 pass adds observable
+  `BoundedContext.storedEventDispatchFailures()` diagnostics for asynchronous
+  already-stored event redispatch failures while keeping aggregate command
+  completion resolved after storage/snapshot handling and avoiding
+  retry/catch-up/delivery scope.
 
 ## Staged Subtasks
 
@@ -258,6 +265,15 @@ Why it blocks `T-0012.12` or real framework workflow:
 
 - the example’s task-list projection and live task-list updates require
   delivered events to mutate the read side automatically.
+
+Current state:
+
+- `T-0012.11b` implementation and round-1 review fixes passed focused and full
+  verification in the child worktree.
+- Round-2 review fixes are verified for stored-event redispatch failure
+  diagnostics and stale parent status text. Escalated coverage passed with 45
+  files and 576 tests; sandboxed coverage remains blocked only by local
+  endpoint permissions.
 
 ### T-0012.11c Projection List Queries
 

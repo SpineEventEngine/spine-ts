@@ -351,6 +351,15 @@ class MissingSubscriberMethodProjection extends Projection<
   }
 }
 
+class ThrowingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  static failure = new Error("projection subscriber failed");
+
+  subscribeTask(event: ProjectionState): void {
+    void event;
+    throw ThrowingTaskProjection.failure;
+  }
+}
+
 describe("repository signal routing", () => {
   it("executes aggregate commands through a built bounded-context command bus", async () => {
     ExecutingTaskAggregate.reset();
@@ -589,11 +598,16 @@ describe("repository signal routing", () => {
 
   it("resolves aggregate command execution after commit when stored-event dispatch later throws", async () => {
     const factory = new InMemoryStorageFactory();
+    const dispatchAttempted = createSignal();
+    const dispatchFailure = new Error("dispatch failed after commit");
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingRepository())
       .addEventDispatcher({
         messageSchemas: () => [AggregateStateSchema],
-        dispatch: () => Promise.reject(new Error("dispatch failed after commit")),
+        dispatch: () => {
+          dispatchAttempted.resolve();
+          return Promise.reject(dispatchFailure);
+        },
       })
       .withStorageFactory(factory)
       .build();
@@ -618,6 +632,13 @@ describe("repository signal routing", () => {
         version: 1n,
       },
       events: [],
+    });
+    await dispatchAttempted.promise;
+
+    const [failure] = await waitForStoredEventDispatchFailures(context, 1);
+    expect(failure).toMatchObject({
+      event: { id: { value: "event-Task" } },
+      error: dispatchFailure,
     });
   });
 
@@ -1033,6 +1054,27 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("records stored-event projection subscriber failures without rejecting aggregate commands", async () => {
+    const subscriberFailure = new Error("projection subscriber failed after commit");
+    ThrowingTaskProjection.failure = subscriberFailure;
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProjectionProducingRepository())
+      .add(createThrowingProjectionRepository())
+      .build();
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("command-project-fails", "task-project-fails", "Projected")),
+    ).resolves.toBeUndefined();
+
+    const [failure] = await waitForStoredEventDispatchFailures(context, 1);
+    expect(failure).toMatchObject({
+      event: { id: { value: "event-Projected" } },
+      error: subscriberFailure,
+    });
+  });
+
   it("records projection updates without version metadata when the delivered event has none", async () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingProjectionRepository())
@@ -1347,6 +1389,20 @@ function createMissingSubscriberMethodProjectionRepository(): Repository<
   });
 }
 
+function createThrowingProjectionRepository(): Repository<typeof ThrowingTaskProjection> {
+  const handlers = defineEntityHandlers(
+    ThrowingTaskProjection,
+    ProjectionStateSchema,
+    (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+  );
+
+  return new Repository({
+    entityType: ThrowingTaskProjection,
+    schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
 function createNoApplierRepository(): Repository<typeof NoApplierAggregate> {
   const handlers = defineEntityHandlers(NoApplierAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
@@ -1523,6 +1579,21 @@ async function waitForProjectionState(
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   return undefined;
+}
+
+async function waitForStoredEventDispatchFailures(
+  context: BoundedContext,
+  count: number,
+): Promise<ReturnType<BoundedContext["storedEventDispatchFailures"]>> {
+  const deadline = Date.now() + 500;
+  while (Date.now() < deadline) {
+    const failures = context.storedEventDispatchFailures();
+    if (failures.length >= count) {
+      return failures;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  return context.storedEventDispatchFailures();
 }
 
 class SnapshotFailingStorageFactory extends InMemoryStorageFactory {

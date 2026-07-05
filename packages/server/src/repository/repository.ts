@@ -442,6 +442,7 @@ interface RepositoryRuntime {
   readonly storageFactory: StorageFactory;
   readonly stand: Stand;
   readonly dispatchStored: (event: Event) => Promise<void>;
+  readonly recordStoredDispatchFailure: (event: Event, error: unknown) => void;
 }
 
 type RepositoryHandlersOption =
@@ -752,7 +753,9 @@ class AggregateCommandExecution {
 
   #dispatchStoredEvents(events: readonly Event[]): void {
     for (const event of events) {
-      void this.#runtime.dispatchStored(event).catch(() => undefined);
+      void this.#runtime.dispatchStored(event).catch((error: unknown) => {
+        this.#runtime.recordStoredDispatchFailure(event, error);
+      });
     }
   }
 }

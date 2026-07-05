@@ -464,6 +464,12 @@ inspection. Repository state schemas are also registered with the context-owned
 `stand()` as known state types.
 Repeated `add(repository)` calls before `build()` are idempotent.
 Registering the same repository instance with another built context is rejected.
+Aggregate command completion resolves after aggregate event storage and
+snapshot handling even though already-stored event redispatch continues
+asynchronously. If that later redispatch fails in dispatcher acceptance,
+dispatcher execution, projection subscribers, or `Stand` updates, the owning
+context records a copy-safe diagnostic snapshot through
+`storedEventDispatchFailures()`; it does not retry or run catch-up delivery.
 
 This slice deliberately does not create default repositories from entity
 classes, invoke handlers, construct system contexts, start query/subscription

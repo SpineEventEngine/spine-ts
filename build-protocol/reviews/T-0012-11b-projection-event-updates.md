@@ -1,6 +1,6 @@
 # Review Log: T-0012.11b Projection Event Updates
 
-Status: round-1 review fixes implemented; verification passed
+Status: round-2 review fixes implemented; verification passed
 Task log: `build-protocol/tasks/T-0012-11b-projection-event-updates/TASK.md`
 Branch: `task/T-0012-11b-projection-event-updates`
 Worktree:
@@ -42,3 +42,14 @@ Reviewers must verify:
   red/green verification, typecheck, lint, format, docs, diff, and escalated
   coverage passed. Sandboxed coverage still fails on local IPC/HTTP2 endpoint
   permissions only.
+- Round-2 review fixes addressed the reliability gap where
+  fire-and-forget already-stored event redispatch failures were swallowed. The
+  owning `BoundedContext` now exposes copy-safe
+  `storedEventDispatchFailures()` diagnostics while preserving post-storage
+  command completion semantics and avoiding retry/catch-up/delivery scope.
+- Round-2 documentation fixes synchronize the parent `T-0012.11`
+  task/report/review statuses and current-state text with the parent work log.
+- Round-2 final verification passed: focused tests, `pnpm typecheck`,
+  `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, `git diff --check`,
+  and escalated `pnpm test:coverage` with 45 files and 576 tests. Sandboxed
+  coverage still fails only on known local IPC/HTTP2 endpoint permissions.

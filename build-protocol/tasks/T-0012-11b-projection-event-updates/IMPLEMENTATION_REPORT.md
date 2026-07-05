@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11b Projection Event Updates
 
-Status: implemented; verification passed
+Status: round-2 review fixes implemented; verification passed
 Branch: `task/T-0012-11b-projection-event-updates`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11b-projection-event-updates`
@@ -63,6 +63,21 @@ that updates `Stand` after a projection subscriber mutates projection state.
 - Public docs and durable task/report/work logs were updated for the review
   fixes and for the all-matching-subscribers implementation shape.
 
+## Round-2 Review Fixes
+
+- `BoundedContext` now records asynchronous already-stored event redispatch
+  failures in a copy-safe `storedEventDispatchFailures()` diagnostic snapshot.
+- Aggregate command completion still resolves after aggregate event storage and
+  snapshot handling. The later fire-and-forget redispatch job no longer
+  discards failures silently; dispatcher acceptance/dispatch failures,
+  projection subscriber failures, and `Stand` update failures are visible to
+  tests and diagnostics.
+- The change deliberately does not add retry, catch-up, inbox, or delivery
+  worker behavior.
+- Parent `T-0012.11` task/report/review status text is being synchronized with
+  the already-updated parent work log so durable docs no longer stop at
+  `T-0012.11a`.
+
 ## Verification
 
 - RED:
@@ -108,3 +123,19 @@ that updates `Stand` after a projection subscriber mutates projection state.
   `listen EPERM 127.0.0.1` for service tests). Escalated `pnpm test:coverage`
   passed with 45 files and 575 tests; coverage summary: statements 95%,
   branches 90.09%, functions 97.48%, lines 95.02%.
+- Round-2 focused RED:
+  `pnpm test packages/server/test/repository/repository-routing.test.ts -t "resolves aggregate command execution after commit when stored-event dispatch later throws"`
+  failed as expected before the fix because
+  `context.storedEventDispatchFailures` did not exist.
+- Round-2 focused GREEN:
+  `pnpm test packages/server/test/repository/repository-routing.test.ts -t "stored-event|stored event|after commit when stored-event dispatch later throws|records stored-event projection subscriber failures"`
+  passed with 1 file and 3 selected tests after the diagnostic channel was
+  wired.
+- Round-2 final verification passed: focused tests, `pnpm typecheck`,
+  `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, and `git diff --check`.
+- Sandboxed `pnpm test:coverage` still failed only on known local IPC/HTTP2
+  permissions (`Operation not permitted` for ZeroMQ IPC and
+  `listen EPERM 127.0.0.1` for service tests), with 555 tests passing before
+  the permission failures. Escalated `pnpm test:coverage` passed with 45 files
+  and 576 tests; coverage summary: statements 95.01%, branches 90.09%,
+  functions 97.49%, lines 95.03%.

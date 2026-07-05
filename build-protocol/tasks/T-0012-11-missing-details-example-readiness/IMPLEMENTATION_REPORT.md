@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11 Missing Details And Example Readiness
 
-Status: split complete; T-0012.11a merged and parent-verified
+Status: split complete; T-0012.11a merged and parent-verified; T-0012.11b round-2 fixes verified
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -79,3 +79,14 @@ tests (5 files, 62 tests), `pnpm docs:check`, `pnpm typecheck`, `pnpm lint`,
 564 tests; statements 94.85%, branches 90.03%, functions 97.33%, lines
 94.87%). Sandboxed coverage remains blocked only by local IPC/HTTP2 endpoint
 permissions.
+
+`T-0012.11b Projection Event Updates` is active in the child worktree. Its
+initial implementation and round-1 review fixes passed focused and full
+verification. The round-2 review-fix pass is verified and records
+asynchronous already-stored event redispatch failures through
+`BoundedContext.storedEventDispatchFailures()` without changing aggregate
+command completion after storage/snapshot handling or adding retry/catch-up
+delivery behavior. Parent task/report/review status text now matches the
+parent work log instead of stopping at `T-0012.11a`. Escalated coverage passed
+with 45 files and 576 tests; sandboxed coverage remains blocked only by local
+endpoint permissions.

@@ -86,6 +86,9 @@ broader server lifecycle, and the to-do application remain later slices.
   Registered repositories make their entity state schemas known to the stand,
   which can record latest states, read them by schema and ID, and notify
   in-process subscribers.
+- A small `BoundedContext.storedEventDispatchFailures()` diagnostic snapshot
+  for asynchronous already-stored event redispatch failures after aggregate
+  event storage has completed.
 - A first `SpineServices` route registrar that adapts built bounded contexts to
   real Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
   routes without adding a broad server facade or client DSL. Command routes are
@@ -484,7 +487,9 @@ delivery, emit lifecycle events, or start transport. Repositories with
 authentic explicit handler metadata do contribute dispatcher adapters to the
 built context's buses; aggregate repositories can therefore execute assignees
 and appliers, persist through `AggregateStorage`, and queue already-stored
-events for event-bus delivery.
+events for event-bus delivery. Aggregate command completion is not failed by
+later redispatch errors, but those errors are visible for diagnostics and tests
+via `context.storedEventDispatchFailures()`.
 
 ## Direct Stand
 

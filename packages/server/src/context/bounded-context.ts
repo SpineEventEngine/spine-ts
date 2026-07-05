@@ -1,5 +1,5 @@
-import type { Command, Event } from "@spine-ts/proto";
-import type { Message } from "@bufbuild/protobuf";
+import { clone, type Message } from "@bufbuild/protobuf";
+import { EventSchema, type Command, type Event } from "@spine-ts/proto";
 import {
   EventStore,
   InMemoryStorageFactory,
@@ -76,6 +76,8 @@ interface RepositoryRegistration {
   readonly stand: Stand;
   /** Stored-event dispatch callback into the owning context event bus. */
   readonly dispatchStored: (event: Event) => Promise<void>;
+  /** Records post-commit stored-event dispatch failures for diagnostics. */
+  readonly recordStoredEventDispatchFailure: (event: Event, error: unknown) => void;
 }
 
 interface RegistrationSnapshot {
@@ -101,6 +103,14 @@ export interface CommandEndpoint {
 export interface EventEndpoint {
   /** Posts an event into the context-owned event bus. */
   post(event: Event): Promise<void>;
+}
+
+/** Observable failure from asynchronous already-stored event dispatch. */
+export interface StoredEventDispatchFailure {
+  /** Stored event whose post-commit dispatch failed. */
+  readonly event: Event;
+  /** Failure thrown by dispatcher acceptance, dispatch, subscriber execution, or Stand update. */
+  readonly error: unknown;
 }
 
 /** Error thrown when a bounded context name cannot be accepted. */
@@ -149,6 +159,7 @@ export class BoundedContext {
   readonly #commandEndpoint: CommandEndpoint;
   readonly #eventEndpoint: EventEndpoint;
   readonly #registeredRepositories: RegistrationSnapshot[] = [];
+  readonly #storedEventDispatchFailures: StoredEventDispatchFailure[] = [];
   readonly #repositoryStorages = new Set<RecordStorage<unknown, Message>>();
   readonly #storageFactory: StorageFactory;
   readonly #stand: Stand;
@@ -228,6 +239,9 @@ export class BoundedContext {
       storageFactory: this.#storageFactory,
       stand: this.#stand,
       dispatchStored: (event) => eventBusAccess.postStored(this.#eventBus, event),
+      recordStoredEventDispatchFailure: (event, error) => {
+        this.#recordStoredEventDispatchFailure(event, error);
+      },
     };
     const preparedRepositories: PreparedRepository[] = [];
     try {
@@ -304,6 +318,20 @@ export class BoundedContext {
   /** Copy-safe list of frozen snapshot-backed repository views registered with this context. */
   registeredRepositories(): readonly RepositoryView[] {
     return this.#registeredRepositories.map((snapshot) => createRepositoryView(snapshot));
+  }
+
+  /** Copy-safe diagnostics for asynchronous already-stored event dispatch failures. */
+  storedEventDispatchFailures(): readonly StoredEventDispatchFailure[] {
+    return this.#storedEventDispatchFailures.map(cloneDispatchFailure);
+  }
+
+  #recordStoredEventDispatchFailure(event: Event, error: unknown): void {
+    this.#storedEventDispatchFailures.push(
+      Object.freeze({
+        event: clone(EventSchema, event),
+        error,
+      }),
+    );
   }
 }
 
@@ -675,6 +703,7 @@ function prepareRepositoryForContext(
     storageFactory: registration.storageFactory,
     stand: registration.stand,
     dispatchStored: registration.dispatchStored,
+    recordStoredDispatchFailure: registration.recordStoredEventDispatchFailure,
   });
 
   return {
@@ -746,6 +775,13 @@ function createRepositoryView(snapshot: RegistrationSnapshot): RepositoryView {
     stateFullTypeName: snapshot.stateFullTypeName,
     idField: snapshot.idField,
     snapshot: snapshot.snapshot,
+  });
+}
+
+function cloneDispatchFailure(failure: StoredEventDispatchFailure): StoredEventDispatchFailure {
+  return Object.freeze({
+    event: clone(EventSchema, failure.event),
+    error: failure.error,
   });
 }
 
