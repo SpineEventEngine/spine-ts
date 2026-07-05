@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11 Missing Details And Example Readiness
 
-Status: T-0012.11a, T-0012.11b, T-0012.11c, and T-0012.11d merged and parent-verified
+Status: T-0012.11a through T-0012.11e merged and parent-verified
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -112,3 +112,13 @@ bus/repository/service tests outside the sandbox with 3 files and 99 tests;
 `git diff --check`, and escalated `pnpm test:coverage` with 45 files, 610
 tests, and branch coverage 90.09%. Sandboxed affected service tests and
 coverage remain blocked only by local endpoint and IPC permissions.
+
+`T-0012.11e Minimal Black-Box Test Fixture` is merged into this parent branch
+at `c9ed81d`. It replaces the testing-package skeleton with a small
+`BoundedContextFixture` over built bounded contexts, drives command/query/
+subscription behavior through real in-process framework seams, and keeps the
+fixture API narrow. Parent verification passed after the merge: focused fixture
+tests (1 file, 10 tests), `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`,
+`pnpm format:check`, `git diff --check`, and escalated `pnpm test:coverage`
+with 45 files, 619 tests, and branch coverage 90.22%. Sandboxed coverage
+remains blocked only by local endpoint and IPC permissions.

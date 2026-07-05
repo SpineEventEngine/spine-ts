@@ -1,6 +1,6 @@
 # Review Log: T-0012.11 Missing Details And Example Readiness
 
-Status: T-0012.11a, T-0012.11b, T-0012.11c, and T-0012.11d merged and parent-verified
+Status: T-0012.11a through T-0012.11e merged and parent-verified
 Task log:
 `build-protocol/tasks/T-0012-11-missing-details-example-readiness/TASK.md`
 Branch: `task/T-0012-11-missing-details-example-readiness`
@@ -72,8 +72,9 @@ verification passed after merge.
 
 `T-0012.11d Validation And Immediate Refusal Outcomes` is merged into this
 parent branch at `9174df8`. Final child review and parent verification passed.
-The next implementation slice is
-`T-0012.11e Minimal Black-Box Test Fixture`.
+
+`T-0012.11e Minimal Black-Box Test Fixture` is merged into this parent branch
+at `c9ed81d`. Final child review and parent verification passed.
 
 Parent integration style review then found one important scope issue: the
 include-all `QueryService.Read` path was attached to every state route instead
