@@ -1,6 +1,6 @@
 # Review Log: T-0012.11b Projection Event Updates
 
-Status: final round-6 review and verification passed; ready to merge
+Status: merged into parent branch at cb46983 and parent-verified
 Task log: `build-protocol/tasks/T-0012-11b-projection-event-updates/TASK.md`
 Branch: `task/T-0012-11b-projection-event-updates`
 Worktree:
