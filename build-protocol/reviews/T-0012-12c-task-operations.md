@@ -8,10 +8,11 @@ commit `3ee5c1a`; metadata-fix commit `b6495bb`; status-fix commit `6fea638`
 ; restart-guidance-fix commit `7ed30a3`; post-restart-status commit `2cb0cf8`
 ; round-seven-status commit `05bceb5`; round-eight-status commit `85909a7`;
 round-nine-status commit `f4d48e2`; round-ten-status commit `c098f0c`;
-round-eleven-status commit `67f6625`; closure-verification commit `166680e`
+round-eleven-status commit `67f6625`; closure-verification commit `166680e`;
+closure-guidance commit `3717ea9`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
-Status: closure restart-guidance fixed; re-review pending
+Status: closure-guidance metadata fixed; re-review pending
 
 ## Required Review Lanes
 
@@ -295,3 +296,23 @@ Planned fix:
 
 - Record `166680e` as the committed closure verification and point current state
   to review of this restart-guidance correction before merge.
+
+### Round 14 - `3717ea9`
+
+| Lane                       | Agent                                  | Result   |
+| -------------------------- | -------------------------------------- | -------- |
+| code style/maintainability | `019f3317-6e17-75b2-b01e-6c55442cef4b` | Clean    |
+| documentation              | `019f3317-6ea2-7120-b625-c37ac0f8441f` | Clean    |
+| TypeScript/API docs        | `019f3317-6f35-7af1-82ee-fbc7ab852939` | Clean    |
+| security                   | `019f3317-6fc0-7af2-b0a5-2e46de932155` | Clean    |
+| performance/reliability    | `019f3317-7043-7bc3-add0-f541aae39835` | Comments |
+
+Findings:
+
+- `3717ea9` was not recorded in the restart metadata, leaving interruption
+  recovery to infer what the current correction meant from HEAD.
+
+Planned fix:
+
+- Record `3717ea9` as the closure-guidance commit in task, review, and work-log
+  metadata before re-review and merge.
