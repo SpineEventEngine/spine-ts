@@ -94,5 +94,6 @@ wording with the bus-boundary behavior, mapped structural payload mismatch
 through the same command validation path, restored stable transition-validation
 metadata for direct repository/bus callers, and passed focused/static
 verification. Round 4 resolved docs-only wording drift and passed docs-only
-verification. Round 5 is resolving the last implementation-report wording
-drift.
+verification. Round 5 resolved the last implementation-report wording drift and
+passed report-only verification. Round 6 is resolving the final README wording
+alignment found by TypeScript/API review.

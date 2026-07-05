@@ -6,7 +6,7 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-5 report-only fixes verified; ready for round-6 independent review
+Status: round-6 docs/report fixes verified; ready for round-7 independent review
 
 ## Required Lanes
 
@@ -160,4 +160,23 @@ Status: round-5 report-only fixes verified; ready for round-6 independent review
   command validation wording, recorded dispatcher-thrown `ValidationException`
   sanitization, and changed the round-4 summary to past tense.
 - `2026-07-05 06:13 WEST`: Report-only verification passed:
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
+
+### Round 6
+
+- `2026-07-05 06:17 WEST`: Code style and documentation found the
+  implementation report still described round 5 as in progress.
+- `2026-07-05 06:18 WEST`: TypeScript/API docs found
+  `packages/server/README.md` narrowed `CommandRefusalError` to aggregate
+  command handlers even though service mapping accepts any command handler
+  throwing it.
+- `2026-07-05 06:19 WEST`: Security and performance/reliability lanes were
+  clean.
+
+## Round-6 Fix Pass
+
+- `2026-07-05 06:20 WEST`: Orchestrator changed the report round-5 summary to
+  past tense and changed `packages/server/README.md` to say any command handler
+  may throw `CommandRefusalError`.
+- `2026-07-05 06:22 WEST`: Docs/report verification passed:
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.

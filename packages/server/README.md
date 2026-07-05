@@ -490,12 +490,12 @@ calculation, aggregate history load, event append, snapshot write, or
 stored-event dispatch. `CommandService.Post` maps command-bus payload validation
 failures to `COMMAND_VALIDATION_ERROR` with message
 `Command payload validation failed.` and packed `spine.validation.ValidationError`
-details. If an aggregate command handler throws `CommandRefusalError`,
-`CommandService.Post` returns a non-ok `Ack` with that stable error type and
-message instead of `COMMAND_POST_ERROR`. If an event applier commits a
-transaction rejected by entity transition validation, command execution rejects
-with `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced events
-or snapshots; the validation details remain the
+details. If a command handler throws `CommandRefusalError`, `CommandService.Post`
+returns a non-ok `Ack` with that stable error type and message instead of
+`COMMAND_POST_ERROR`. If an event applier commits a transaction rejected by
+entity transition validation, command execution rejects with
+`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced events or
+snapshots; the validation details remain the
 `EntityTransaction`/`validateEntityStateTransition()` result. Dispatcher-thrown
 `ValidationException` values and other unexpected command-bus failures remain
 sanitized as `COMMAND_POST_ERROR`.
