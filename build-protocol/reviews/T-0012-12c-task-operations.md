@@ -6,10 +6,10 @@ Baseline commit: `fc71408`
 Reviewed commit/diff basis: implementation commit `8ab4b5c`; review-fix
 commit `3ee5c1a`; metadata-fix commit `b6495bb`; status-fix commit `6fea638`
 ; restart-guidance-fix commit `7ed30a3`; post-restart-status commit `2cb0cf8`
-; round-seven-status commit `05bceb5`
+; round-seven-status commit `05bceb5`; round-eight-status commit `85909a7`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
-Status: round-seven-status committed; re-review pending
+Status: round-eight-status committed; re-review pending
 
 ## Required Review Lanes
 
@@ -195,3 +195,22 @@ Findings:
 Planned fix:
 
 - Record `05bceb5` and point current state to re-review/task closure.
+
+### Round 9 - `85909a7`
+
+| Lane                       | Agent                                  | Result   |
+| -------------------------- | -------------------------------------- | -------- |
+| code style/maintainability | `019f3305-2f53-74b1-8477-cf4204dec8a4` | Comments |
+| documentation              | `019f3305-2fcd-73d1-b62a-9e0f0721e32c` | Comments |
+| TypeScript/API docs        | `019f3305-3037-7192-afef-7dd9065731de` | Clean    |
+| security                   | `019f3305-30bd-7f80-a758-61cff32524f0` | Clean    |
+| performance/reliability    | `019f3305-3196-7b50-a0b6-b4fc2b970e62` | Comments |
+
+Findings:
+
+- Task, review, and work-log status fields still described the pre-`85909a7`
+  state.
+
+Planned fix:
+
+- Record `85909a7` and point current state to re-review/task closure.
