@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12 To-Do Example
 
-Status: T-0012.12 complete; parent integration review pending
+Status: all planned slices merged and verified; parent integration review pending
 Branch: `task/T-0012-12-to-do-example`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
@@ -154,8 +154,12 @@ Parent integration verification after `T-0012.12f`:
   - `pnpm lint`
   - `pnpm docs:check` with the existing invalid-origin TypeDoc warning only
   - `pnpm proto:check-generated`
-  - targeted Prettier check
+  - targeted
+    `pnpm exec prettier --check build-protocol/tasks/T-0012-12-to-do-example/TASK.md build-protocol/tasks/T-0012-12-to-do-example/IMPLEMENTATION_REPORT.md build-protocol/work-logs/T-0012-12.md build-protocol/reviews/T-0012-12-to-do-example.md build-protocol/work-logs/T-0012-cleanup.md examples/todo/src/index.ts examples/todo/src/index.test.ts examples/todo/README.md examples/todo/USER_GUIDE.md examples/todo/package.json examples/todo/tsconfig.json`
   - `git diff --check HEAD`
   - escalated `pnpm test`, 45 files / 651 tests
   - escalated `pnpm test:coverage`, 45 files / 651 tests, with 95.18%
     statements, 90.48% branches, 97.63% functions, and 95.2% lines
+- Operational caveat: do not parallelize verification commands that invoke
+  `pnpm proto:generate` until generated-output publishing is made
+  concurrency-safe.

@@ -3,10 +3,10 @@
 Task log: `build-protocol/tasks/T-0012-12-to-do-example/TASK.md`
 Branch: `task/T-0012-12-to-do-example`
 Baseline commit: `89868e9`
-Reviewed commit/diff basis: parent integration after `ea2a4ab`
+Reviewed commit/diff basis: `ea2a4ab..1d49445`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
-Status: T-0012.12f merged and verified; parent integration review pending
+Status: parent integration review round 1 comments addressed; re-review pending
 
 ## Required Review Lanes
 
@@ -113,11 +113,31 @@ Review focus for splitter review:
 - Required lanes: maintainability, documentation, TypeScript/API docs,
   security, and performance/reliability.
 - Parent integration docs for `T-0012.12f` are updated after merge.
-- Review package: pending.
-- Reviewed range: `ea2a4ab..HEAD` after parent verification commit.
+- Review package: `.superpowers/sdd/review-ea2a4ab..1d49445.diff`.
+- Reviewed range: `ea2a4ab..1d49445`.
 - Required lanes: maintainability, documentation, TypeScript/API docs,
   security, and performance/reliability.
 - Parent integration verification passed after a sequential rerun. A first
   parallel static-check attempt failed because concurrent `proto:generate`
   commands raced shared generated-output publishing and left `.generated-*`
   scratch directories, which were removed before the passing rerun.
+- Round 1 review results:
+  - code style/maintainability:
+    `019f33fa-7133-7580-983d-b83518d66ebb` (metadata comments, closed)
+  - documentation:
+    `019f33fa-8db1-7020-a2db-85aa170e3e21` (metadata comments, closed)
+  - TypeScript/API docs:
+    `019f33fa-afc3-7412-978d-3cf6064b0e92` (clean, closed)
+  - security:
+    `019f33fa-c9e5-7190-869a-d528869a07c3` (clean, closed)
+  - performance/reliability:
+    `019f33fa-e2e8-73b0-ae93-a3a45072fe76` (metadata comments, closed)
+- Round 1 findings addressed in the next metadata fix:
+  - avoid marking `T-0012.12` complete before parent integration review is
+    clean;
+  - pin the parent review package and exact reviewed range;
+  - move the `T-0012.12e` implementation entry before later `20:25 WEST`
+    entries;
+  - record the exact targeted Prettier command;
+  - preserve the operational caveat that proto-generating verification commands
+    must run sequentially until generated-output publishing is concurrency-safe.

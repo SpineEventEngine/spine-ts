@@ -1,6 +1,6 @@
 # T-0012.12: To-Do Example
 
-Status: T-0012.12 complete; parent integration review pending
+Status: all planned slices merged and verified; parent integration review pending
 Start: `2026-07-05 10:53 WEST`
 End: Pending
 Baseline commit: `89868e9`
@@ -228,10 +228,13 @@ Out of scope:
   concurrent `proto:generate` runs and left generated scratch folders; those
   scratch folders were removed, then verification was rerun sequentially.
   Passing commands: `pnpm check:node`, `pnpm typecheck`, `pnpm lint`,
-  `pnpm docs:check`, `pnpm proto:check-generated`, targeted Prettier,
-  `git diff --check HEAD`, escalated `pnpm test`, and escalated
+  `pnpm docs:check`, `pnpm proto:check-generated`, targeted
+  `pnpm exec prettier --check` over changed parent/example docs and to-do
+  example files, `git diff --check HEAD`, escalated `pnpm test`, and escalated
   `pnpm test:coverage` (45 files / 651 tests, 95.18% statements, 90.48%
-  branches, 97.63% functions, 95.2% lines).
+  branches, 97.63% functions, 95.2% lines). Future verification must not
+  parallelize commands that invoke `pnpm proto:generate` until generation is
+  made concurrency-safe.
 
 ## Requirements Splitter Evidence
 
