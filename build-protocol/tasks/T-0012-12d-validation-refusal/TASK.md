@@ -28,7 +28,8 @@ Round-eleven-metadata commit: `1e7b884`
 Deferred-final-head commit: `ddd180c`
 Review-log-reflow commit: `af4f76c`
 Restart-head-clarification commit: `f04b9b6`
-Latest clean review basis: `f04b9b6`
+Historical-check-label commit: `ecad758`
+Latest clean review basis: `ecad758`
 Final branch HEAD: pending closure/integration
 
 ## Objective
@@ -217,9 +218,9 @@ Out of scope:
 
 ## Restart Guidance
 
-- Resume from the clean reviewed basis `f04b9b6` before this closure metadata
+- Resume from the clean reviewed basis `ecad758` before this closure metadata
   commit.
-- Latest clean review basis before closure metadata: `f04b9b6`.
+- Latest clean review basis before closure metadata: `ecad758`.
 - Task branch closure commit, if any, will be recorded after closure or
   integration, once it exists.
 

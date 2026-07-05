@@ -4,7 +4,7 @@ Task log: `build-protocol/tasks/T-0012-12d-validation-refusal/TASK.md`
 Branch: `task/T-0012-12d-validation-refusal`
 Baseline commit: `27250a0`
 Reviewed commit/diff basis:
-`f04b9b6`
+`ecad758`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
 Status: verified; ready for branch closure
@@ -336,3 +336,11 @@ Planned fixes:
 
 - Rename that historical implementation-report bullet to
   `Review-fix pre-round-two verification passed`.
+
+### Round 17
+
+Reviewed basis: historical-check-label commit `ecad758`.
+
+Outcome: clean.
+
+Findings: none.

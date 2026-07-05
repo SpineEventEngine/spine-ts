@@ -22,7 +22,8 @@ Round-eleven-metadata commit: `1e7b884`
 Deferred-final-head commit: `ddd180c`
 Review-log-reflow commit: `af4f76c`
 Restart-head-clarification commit: `f04b9b6`
-Latest clean review basis: `f04b9b6`
+Historical-check-label commit: `ecad758`
+Latest clean review basis: `ecad758`
 Final branch HEAD: pending closure/integration
 
 ## Summary
