@@ -179,7 +179,7 @@ describe("@spine-ts/example-todo", () => {
       expect(reopened.list.tasks[0]?.completed).toBe(false);
       expect(reopened.list.openTaskCount).toBe(1);
     } finally {
-      await subscription.close();
+      await withTimeout(subscription.close(), "subscription cleanup", 250);
     }
   });
 
@@ -325,11 +325,9 @@ describe("@spine-ts/example-todo", () => {
       const cancel = await subscription.cancel();
 
       expect(cancel.status?.status.case).toBe("ok");
-      await expect(
-        withTimeout(subscription.next(), "subscription cancellation after cancel", 250),
-      ).resolves.toBeUndefined();
+      await expect(nextSubscriptionUpdate(subscription, "cancel")).resolves.toBeUndefined();
     } finally {
-      await subscription.close();
+      await withTimeout(subscription.close(), "subscription cancellation cleanup", 250);
     }
   });
 

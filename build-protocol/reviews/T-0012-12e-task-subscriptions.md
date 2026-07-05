@@ -3,10 +3,10 @@
 Task log: `build-protocol/tasks/T-0012-12e-task-subscriptions/TASK.md`
 Branch: `task/T-0012-12e-task-subscriptions`
 Baseline commit: `4bebdeb`
-Reviewed commit/diff basis: pending
+Reviewed commit/diff basis: `eeee46b..7eb9315`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12e-task-subscriptions`
-Status: review-fix complete; verification passed; committed; ready for re-review
+Status: second review-fix committed; metadata cleanup in progress
 
 ## Required Review Lanes
 
@@ -53,3 +53,20 @@ Outcome:
   instead of deferred subscription coverage.
 - The review-fix logs note that `expectTaskListEventuallyUnchanged` was left
   untouched because it predates this slice.
+
+Round 2 findings:
+
+- Documentation: task/report/work-log headers still described setup,
+  implementation, and metadata commits as pending even after `7eb9315` landed.
+- TypeScript/API docs: reviewers reported `withTimeout()` as missing. The
+  helper is present locally; the actionable issue is to keep the helper visible
+  and continue verifying with `pnpm typecheck`.
+- Reliability: cancellation-path `subscription.next()` was bounded, but
+  `subscription.close()` in cleanup was not.
+
+Planned fixes:
+
+- record `7eb9315` as the second review-fix commit and latest completed
+  review-fix basis;
+- bound subscription cleanup calls with the same local timeout helper;
+- re-run focused tests and full verification before committing.
