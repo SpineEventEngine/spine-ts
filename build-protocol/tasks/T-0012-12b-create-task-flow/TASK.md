@@ -13,7 +13,7 @@ timeout; main orchestrator inspected and amended WIP)
 Reviewer sub-agents: round-one closed; re-review pending
 Implementation commit: `a784ea5`
 Review-fix commit: `2753627`
-Second-fix commit: `91ed083`
+Second-fix commit: `61acd94`
 Final branch HEAD: pending
 
 ## Objective
@@ -124,7 +124,7 @@ Out of scope:
   (45 files / 637 tests; statements 95.15%, branches 90.41%, functions 97.63%,
   lines 95.17%). A parallel lint attempt failed only because concurrent
   `proto:generate` raced another check; serial lint passed.
-- `2026-07-05 15:20 WEST`: Second-fix commit `91ed083` created.
+- `2026-07-05 15:20 WEST`: Second-fix commit `61acd94` created.
 
 ## Decisions
 
