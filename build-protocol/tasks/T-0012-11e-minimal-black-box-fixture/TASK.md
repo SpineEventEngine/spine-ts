@@ -1,6 +1,6 @@
 # T-0012.11e: Minimal Black-Box Test Fixture
 
-Status: review complete; ready to merge
+Status: merged into parent at `c9ed81d` and parent-verified
 Branch: `task/T-0012-11e-minimal-black-box-fixture`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11e-minimal-black-box-fixture`

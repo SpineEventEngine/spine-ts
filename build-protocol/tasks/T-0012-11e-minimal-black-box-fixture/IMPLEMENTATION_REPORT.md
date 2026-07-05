@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11e Minimal Black-Box Test Fixture
 
-Status: review complete; ready to merge
+Status: merged into parent at `c9ed81d` and parent-verified
 Branch: `task/T-0012-11e-minimal-black-box-fixture`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11e-minimal-black-box-fixture`
@@ -97,5 +97,11 @@ Baseline commit: `6b5dd07`
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
 - `2026-07-05 10:09 WEST`: Final re-review passed in all required lanes:
   code style/maintainability, documentation, TypeScript/API docs, security, and
-  performance/reliability. The child branch is ready to merge into the parent
-  `T-0012.11` worktree.
+  performance/reliability.
+- `2026-07-05 10:19 WEST`: Parent merge commit `c9ed81d` integrated this slice
+  into `task/T-0012-11-missing-details-example-readiness`. Parent verification
+  passed focused fixture tests with 1 file and 10 tests, `pnpm typecheck`,
+  `pnpm lint`, `pnpm docs:check`, `pnpm format:check`, `git diff --check`, and
+  escalated `pnpm test:coverage` with 45 files, 619 tests, and branch coverage
+  90.22%. Sandboxed coverage remains blocked only by local endpoint and IPC
+  permissions.

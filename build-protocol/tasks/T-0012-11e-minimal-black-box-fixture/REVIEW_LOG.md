@@ -6,7 +6,7 @@ Branch: `task/T-0012-11e-minimal-black-box-fixture`
 Baseline commit: `6b5dd07`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11e-minimal-black-box-fixture`
-Status: review complete; ready to merge
+Status: merged into parent at `c9ed81d` and parent-verified
 
 ## Required Lanes
 
@@ -85,4 +85,8 @@ pending` wording after commit `67e2586` and impossible timestamp ordering in
   and `git diff --check` passed for the latest fix.
 - `2026-07-05 10:09 WEST`: Final re-review passed cleanly in all required
   lanes after the task, implementation report, review log, child work log, and
-  parent work log status text was aligned. The child branch is ready to merge.
+  parent work log status text was aligned.
+- `2026-07-05 10:19 WEST`: Parent merge commit `c9ed81d` integrated this slice.
+  Parent verification passed focused fixture tests, static/docs/format/
+  whitespace checks, and escalated coverage with 45 files, 619 tests, and
+  branch coverage 90.22%.
