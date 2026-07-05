@@ -129,3 +129,28 @@ Planned fixes:
   route IDs.
 - Inline the one-use event route ID wrapper and use target-specific error
   messages.
+
+### Round 4 - `1dd62c8` and `9aa525b`
+
+| Lane                       | Agent                                  | Result   |
+| -------------------------- | -------------------------------------- | -------- |
+| code style/maintainability | `019f32b6-b824-7c62-99be-455cee2c04c4` | Comments |
+| documentation              | `019f32b6-b8d0-7303-a1e8-492a4125c18d` | Comments |
+| TypeScript/API docs        | `019f32b6-b961-7431-93c1-1d9a5dd1d49f` | Comments |
+| security                   | `019f32b6-ba06-7002-84a9-a8a3666e094b` | Clean    |
+| performance/reliability    | `019f32b6-ba8f-7913-9ad0-4ab05f2f7e4e` | Clean    |
+
+Findings:
+
+- Maintainability: `targetMessageTypeName()` is a one-use helper around a
+  simple descriptor branch.
+- Documentation: the task header still said only round-one reviewers were
+  closed.
+- TypeScript/API: local descriptor fixtures used raw `label: 1` values instead
+  of the generated `FieldDescriptorProto_Label.OPTIONAL` enum.
+
+Planned fixes:
+
+- Inline the target message type branch inside `readRouteId()`.
+- Update the task header reviewer status for all completed rounds.
+- Use the generated descriptor label enum in local route test descriptors.

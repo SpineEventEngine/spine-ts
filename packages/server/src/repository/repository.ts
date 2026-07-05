@@ -1239,9 +1239,9 @@ function readRouteId(
   targetIdField: DescriptorFieldMetadata,
   signalKind: "command" | "event",
 ): RoutableId {
-  const messageTypeName = targetMessageTypeName(targetIdField);
-  if (messageTypeName !== undefined) {
-    return readMessageRouteId(value, messageTypeName, signalKind);
+  const descriptor = targetIdField.descriptor;
+  if (descriptor.fieldKind === "message") {
+    return readMessageRouteId(value, descriptor.message.typeName, signalKind);
   }
   return readPrimitiveRouteId(value, signalKind);
 }
@@ -1263,11 +1263,6 @@ function readMessageRouteId(
     id,
     value: id.value,
   });
-}
-
-function targetMessageTypeName(targetIdField: DescriptorFieldMetadata): string | undefined {
-  const descriptor = targetIdField.descriptor;
-  return descriptor.fieldKind === "message" ? descriptor.message.typeName : undefined;
 }
 
 function readPrimitiveRouteId(value: unknown, signalKind: "command" | "event"): RoutableId {

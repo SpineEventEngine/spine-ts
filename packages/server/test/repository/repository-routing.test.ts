@@ -4,6 +4,7 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
   BoolValueSchema,
   DoubleValueSchema,
+  FieldDescriptorProto_Label,
   FieldDescriptorProto_Type,
   FileDescriptorProtoSchema,
   FileDescriptorSetSchema,
@@ -177,7 +178,7 @@ const fileNumberRouteFixture = fileDesc(
               {
                 name: "id",
                 number: 1,
-                label: 1,
+                label: FieldDescriptorProto_Label.OPTIONAL,
                 type: FieldDescriptorProto_Type.DOUBLE,
                 jsonName: "id",
               },
@@ -203,7 +204,7 @@ const fileWrongIdRouteFixture = fileDesc(
               {
                 name: "id",
                 number: 1,
-                label: 1,
+                label: FieldDescriptorProto_Label.OPTIONAL,
                 type: FieldDescriptorProto_Type.MESSAGE,
                 typeName: ".spine.core.UserId",
                 jsonName: "id",
