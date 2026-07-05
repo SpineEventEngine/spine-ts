@@ -6,17 +6,16 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: pre-review implementation verified; first independent review received;
-review-fix pass underway
+Status: round-2 fixes verified; ready for round-3 independent review
 
 ## Required Lanes
 
 - code style/maintainability: local lint and formatting passed
 - documentation: docs check passed
 - TypeScript/API docs: typecheck and docs check passed
-- security: pending independent review
-- performance/reliability: focused behavior tests and coverage passed; sandbox
-  coverage blocked by local endpoint permissions only
+- security: round-2 finding fixed and verified
+- performance/reliability: round-2 review clean; focused behavior tests and
+  coverage passed; sandbox coverage blocked by local endpoint permissions only
 
 ## Findings
 
@@ -72,3 +71,32 @@ review-fix pass underway
   gates after the naming cleanup. Focused bus/repository/service regressions
   passed with 2 files and 3 selected tests, `pnpm typecheck`, `pnpm lint`,
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check` all passed.
+
+### Round 2
+
+- `2026-07-05 05:32 WEST`: Documentation and TypeScript/API lanes found stale
+  `packages/server/README.md` wording that still described repository-local
+  payload validation and omitted `COMMAND_VALIDATION_ERROR` details for invalid
+  payloads.
+- `2026-07-05 05:33 WEST`: Code style/maintainability found repository code
+  importing transition-validation errors from the service package, crossing the
+  write-side/service boundary.
+- `2026-07-05 05:35 WEST`: Performance/reliability was clean.
+- `2026-07-05 05:35 WEST`: Security found that mapping every
+  `ValidationException` to detailed `COMMAND_VALIDATION_ERROR` could expose
+  dispatcher-internal validation details. Only command-bus payload validation
+  and transition validation should produce structured `ValidationError`
+  details in `Ack`.
+
+## Round-2 Fix Pass
+
+- `2026-07-05 05:38 WEST`: Orchestrator moved command-bus payload validation
+  and repository transition validation errors into their owning layers, kept
+  `CommandRefusalError` as the service/public handler-facing error, changed
+  `CommandService.Post` to expose validation details only for those internal
+  boundary errors, added a regression for dispatcher-thrown
+  `ValidationException` sanitization, and updated `packages/server/README.md`.
+- `2026-07-05 05:42 WEST`: Focused bus/service regressions passed with 2 files
+  and 4 selected tests. `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`,
+  `pnpm format:check`, and `git diff --check` all passed after the second fix
+  pass.

@@ -4,7 +4,7 @@ import { Code, ConnectError, type ConnectRouter } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { EmptySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
-import { ValidationException, type MessageSchema } from "@spine-ts/core";
+import type { MessageSchema } from "@spine-ts/core";
 import { deriveTypeUrl, packAny, unpackAny } from "@spine-ts/core";
 import {
   CommandIdSchema,
@@ -43,9 +43,11 @@ import {
 } from "@spine-ts/proto/generated/spine/core/response_pb.js";
 
 import type { BoundedContext } from "../context/bounded-context.js";
+import { CommandValidationError } from "../bus/command-errors.js";
 import type { EntityFamily } from "../entity/entity.js";
+import { TransitionValidationError } from "../repository/command-errors.js";
 import type { StandReadResult, StandSubscription, StandUpdate } from "../stand/stand.js";
-import { CommandRefusalError, TransitionValidationError } from "./command-errors.js";
+import { CommandRefusalError } from "./command-errors.js";
 
 /** Small route registrar for the first public Spine gRPC service slice. */
 export class SpineServices {
@@ -569,17 +571,17 @@ function commandPostError(error: unknown): ContractError {
 
   if (error instanceof TransitionValidationError) {
     return {
-      type: error.type,
-      message: error.clientMessage,
+      type: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED",
+      message: "Command state transition validation failed.",
       details: packAny(ValidationErrorSchema, error.validationError, { validate: false }),
     };
   }
 
-  if (error instanceof ValidationException) {
+  if (error instanceof CommandValidationError) {
     return {
       type: "COMMAND_VALIDATION_ERROR",
       message: "Command payload validation failed.",
-      details: packAny(ValidationErrorSchema, error.asMessage(), { validate: false }),
+      details: packAny(ValidationErrorSchema, error.validationError, { validate: false }),
     };
   }
 

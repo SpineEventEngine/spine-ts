@@ -44,7 +44,7 @@ import { handlerMetadataAccess, type EntityHandlersMetadata } from "../handler/h
 import { AggregateStorage } from "./aggregate-storage.js";
 import { PrimitiveIds } from "./primitive-id.js";
 import type { Stand } from "../stand/stand.js";
-import { TransitionValidationError } from "../services/command-errors.js";
+import { TransitionValidationError } from "./command-errors.js";
 
 type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> =
   | Aggregate<unknown, Schema, unknown>

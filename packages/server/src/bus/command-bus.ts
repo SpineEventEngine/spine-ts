@@ -1,8 +1,9 @@
 import { clone } from "@bufbuild/protobuf";
-import { checkValid, unpackAny } from "@spine-ts/core";
+import { ValidationException, checkValid, unpackAny } from "@spine-ts/core";
 import { CommandSchema, type Command } from "@spine-ts/proto";
 
 import { SingleProcessServerRuntime } from "../runtime/runtime.js";
+import { CommandValidationError } from "./command-errors.js";
 import { CommandDispatcherRegistry } from "./command-dispatcher-registry.js";
 import type { CommandDispatcher } from "./command-dispatcher.js";
 
@@ -60,7 +61,14 @@ export class CommandBus {
       throw new Error(`Command payload did not match registered schema for "${typeUrl}".`);
     }
 
-    checkValid(registration.schema, message);
+    try {
+      checkValid(registration.schema, message);
+    } catch (error) {
+      if (error instanceof ValidationException) {
+        throw new CommandValidationError(error.asMessage());
+      }
+      throw error;
+    }
 
     await registration.dispatcher.dispatch(clone(CommandSchema, command));
   }

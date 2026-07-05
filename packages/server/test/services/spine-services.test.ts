@@ -12,7 +12,14 @@ import {
   FileDescriptorSetSchema,
   StringValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packAny, packCommand, packEvent, unpackAny } from "@spine-ts/core";
+import {
+  ValidationException,
+  deriveTypeUrl,
+  packAny,
+  packCommand,
+  packEvent,
+  unpackAny,
+} from "@spine-ts/core";
 import {
   ActorContextSchema,
   CommandSchema,
@@ -614,6 +621,22 @@ describe("SpineServices", () => {
     expect(errorMessage(ack.status?.status)).toBe("Command payload validation failed.");
     expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
     expect(dispatched).toEqual([]);
+  });
+
+  it("keeps dispatcher-thrown validation exceptions sanitized", async () => {
+    const dispatcher: CommandDispatcher = {
+      messageSchemas: () => [ProjectionStateSchema],
+      dispatch: () => Promise.reject(new ValidationException(create(ValidationErrorSchema, {}))),
+    };
+    const context = BoundedContext.singleTenant("Tasks").addCommandDispatcher(dispatcher).build();
+    const handlers = registeredCommandHandlers(context);
+
+    const ack = await handlers.post(createProjectionCommand("command-dispatcher-validation"));
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("COMMAND_POST_ERROR");
+    expect(errorMessage(ack.status?.status)).toBe("Command post failed.");
+    expect(validationDetails(ack.status?.status)).toBeUndefined();
   });
 
   it("returns stable Ack errors with details for transition validation failures", async () => {

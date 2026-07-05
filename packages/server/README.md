@@ -483,14 +483,19 @@ Repeated `add(repository)` calls before `build()` are idempotent.
 Registering the same repository instance with another built context is rejected.
 Aggregate command execution requires `command.id` so produced events can carry
 a contract-valid command origin; missing IDs reject before mutation or storage.
-Repository aggregate execution validates the unpacked command payload before
-route calculation, aggregate history load, event append, snapshot write, or
-stored-event dispatch. If an aggregate command handler throws
-`CommandRefusalError`, `CommandService.Post` returns a non-ok `Ack` with that
-stable error type and message instead of `COMMAND_POST_ERROR`. If an event
-applier commits a transaction rejected by entity transition validation, command
-execution rejects with `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before
-storing produced events or snapshots; the validation details remain the
+`CommandBus` validates accepted command payloads before dispatcher callbacks,
+including custom `addCommandDispatcher()` routes. For repository-backed
+aggregate dispatchers, that still means validation happens before route
+calculation, aggregate history load, event append, snapshot write, or
+stored-event dispatch. `CommandService.Post` maps command-bus payload validation
+failures to `COMMAND_VALIDATION_ERROR` with message
+`Command payload validation failed.` and packed `spine.validation.ValidationError`
+details. If an aggregate command handler throws `CommandRefusalError`,
+`CommandService.Post` returns a non-ok `Ack` with that stable error type and
+message instead of `COMMAND_POST_ERROR`. If an event applier commits a
+transaction rejected by entity transition validation, command execution rejects
+with `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced events
+or snapshots; the validation details remain the
 `EntityTransaction`/`validateEntityStateTransition()` result.
 Aggregate command completion resolves after aggregate event storage and
 snapshot handling even though already-stored event redispatch continues

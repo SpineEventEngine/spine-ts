@@ -2,7 +2,7 @@ import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { ValidationException, deriveTypeUrl, packAny, packCommand } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packCommand } from "@spine-ts/core";
 import {
   ActorContextSchema,
   CommandSchema,
@@ -15,6 +15,7 @@ import { describe, expect, it } from "vitest";
 import { fromBinary, toBinary } from "@bufbuild/protobuf";
 
 import { CommandBus, type CommandDispatcher } from "../../src/index.js";
+import { CommandValidationError } from "../../src/bus/command-errors.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -229,7 +230,7 @@ describe("CommandBus", () => {
 
     await expect(
       bus.post(createValidatedCommand("command-invalid", "task-invalid", "")),
-    ).rejects.toBeInstanceOf(ValidationException);
+    ).rejects.toBeInstanceOf(CommandValidationError);
 
     expect(observed).toEqual([]);
   });
