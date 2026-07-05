@@ -3,6 +3,8 @@ dist
 coverage
 docs/api/reference
 packages/proto/src/generated
+packages/*/generated
+examples/*/generated
 pnpm-lock.yaml
 build-protocol/CODE_QUALITY.md
 build-protocol/DEVELOPER_API.md

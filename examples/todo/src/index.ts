@@ -1,5 +1,5 @@
 /**
- * Static package metadata for the to-do example while the domain is pending.
+ * Static package metadata for the to-do example while runtime work is pending.
  */
 export interface ExampleSkeleton {
   /** Current implementation state for this example boundary. */

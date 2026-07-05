@@ -1,0 +1,38 @@
+syntax = "proto3";
+
+package spine.example.todo.v1;
+
+import "spine/example/todo/v1/task_id.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.example.todo";
+
+message CreateTask {
+  TaskId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+  string title = 2 [(required) = true];
+}
+
+message RenameTask {
+  TaskId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+  string title = 2 [(required) = true];
+}
+
+message CompleteTask {
+  TaskId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+}
+
+message ReopenTask {
+  TaskId id = 1 [
+    (required) = true,
+    (validate) = true
+  ];
+}

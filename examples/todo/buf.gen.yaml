@@ -1,9 +1,10 @@
 version: v2
 plugins:
   - local: protoc-gen-es
-    out: packages/proto/generated
+    out: examples/todo/generated
+    include_imports: true
     opt:
       - target=ts
       - import_extension=js
 inputs:
-  - directory: proto
+  - directory: examples/todo/proto

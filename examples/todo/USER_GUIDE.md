@@ -1,10 +1,13 @@
 # To-Do Example User Guide
 
-Current status: bootstrap placeholder; the example is not runnable yet.
+Current status: Protobuf contracts and generation workflow exist; the example
+is not runnable yet.
 
-This guide will eventually explain how to generate Protobuf-ES code, start the
-to-do server, post commands, query state, subscribe to updates, run tests, and
-understand which framework features the example demonstrates.
+T-0012.12a added the to-do Protobuf contract and generated-schema workflow. The
+final guide rewrite remains deferred to T-0012.12f, including how to generate
+Protobuf-ES code, start the to-do server, post commands, query state, subscribe
+to updates, run tests, and understand which framework features the example
+demonstrates.
 
 T-0011 does not implement the to-do domain or a runnable server. It does make
 future example implementation less speculative by adding these framework seams:
@@ -19,7 +22,6 @@ future example implementation less speculative by adding these framework seams:
 - The ZeroMQ foundation is still adapter-private local IPC only; it proves
   same-host `ipc://` smoke behavior but does not define production endpoints.
 
-The example still needs later tasks for generated to-do Protobuf contracts,
-domain entities, repositories, handler invocation, runtime dispatch,
-transport-backed service hosting, durable delivery, query/subscription
-execution, server startup, and black-box tests.
+The example still needs later tasks for domain entities, repositories, handler
+invocation, runtime dispatch, transport-backed service hosting, durable
+delivery, query/subscription execution, server startup, and black-box tests.

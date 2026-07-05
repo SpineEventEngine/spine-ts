@@ -6,13 +6,16 @@
   "description": "Placeholder to-do example for Spine TS.",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
+      "types": "./dist/src/index.d.ts",
+      "default": "./dist/src/index.js"
     }
   },
   "files": [
     "dist",
     "README.md",
     "USER_GUIDE.md"
-  ]
+  ],
+  "dependencies": {
+    "@bufbuild/protobuf": "2.12.1"
+  }
 }
