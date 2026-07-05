@@ -6,15 +6,17 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-18 report consistency fix verified; ready for follow-up review
+Status: round-19 Required Lanes rollup fix verified; ready for follow-up review
 
 ## Required Lanes
 
-- code style/maintainability: formatting passed through round 17
-- documentation: docs check passed through round 17
+- code style/maintainability: formatting passed through round 18
+  report/status fixes
+- documentation: docs check passed through round 18 report/status fixes
 - TypeScript/API docs: typecheck passed through round 12; docs check passed
-  through round 17, including round-13 README Markdown, round-14/16/17 docs
-  updates, and round-15/16 status rollup fixes
+  through round 18, including round-13 README Markdown, round-14/16/17 docs
+  updates, round-15/16 status rollup fixes, and round-18 report/status
+  consistency fixes
 - security: round-11 incompatible-payload detail fix verified; earlier
   dispatcher-thrown validation detail sanitization remains verified
 - performance/reliability: round-12 rejected-commit marker lifetime fix
@@ -457,3 +459,16 @@ Status: round-18 report consistency fix verified; ready for follow-up review
   consistency state forward. Implementation worker aligned those summaries and
   recorded the correction in child and parent work logs. Docs, format, and
   whitespace verification passed.
+
+### Round 19
+
+- `2026-07-05 11:10 WEST`: Documentation review found the Required Lanes
+  rollup still stopped at round 17 for formatting/docs/API docs even though
+  round-18 report/status fixes were verified elsewhere.
+
+## Round-19 Fix Pass
+
+- `2026-07-05 11:15 WEST`: Implementation worker updated the Required Lanes
+  rollup to carry round-18 formatting/docs/API-docs verification forward and
+  recorded the pass in child durable logs. Docs, format, and whitespace
+  verification passed.
