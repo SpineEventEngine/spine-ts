@@ -89,8 +89,8 @@ Baseline commit: `c13b19c`
 
 ## Review Summary
 
-Review history is current through the round-18 report consistency fix and
-follow-up parent status alignment.
+Review history is current through the latest docs/status rollup verification
+recorded in the review and work logs.
 Round 1 moved payload validation to the `CommandBus`, removed an accidental public
 entity inspection hook, and filled missing public Ack docs. Round 2 moved
 internal validation errors back into their owning bus/repository layers and
@@ -128,6 +128,8 @@ consistency state.
 
 ### Latest Verification
 
+- Latest docs/status rollup wording verification passed:
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
 - `2026-07-05 11:05 WEST`: Round-18 status follow-up verification passed:
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
 - `2026-07-05 11:00 WEST`: Round-18 report-consistency verification passed:

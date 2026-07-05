@@ -6,16 +6,16 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-20 status/API-doc rollup fix verified; ready for follow-up review
+Status: latest docs/status rollup fix verified; ready for follow-up review
 
 ## Required Lanes
 
-- code style/maintainability: formatting passed through round 19 rollup fixes
-- documentation: docs check passed through round 19 rollup fixes
-- TypeScript/API docs: typecheck passed through round 12; docs/API checks
-  passed through round 19 docs-only verification, including round-13 README
-  Markdown, round-14/16/17 docs updates, round-15/16 status rollup fixes, and
-  round-18/19 report/status rollup fixes
+- code style/maintainability: formatting is current through the latest
+  docs-only verification recorded in this review log
+- documentation: docs check is current through the latest docs-only
+  verification recorded in this review log
+- TypeScript/API docs: typecheck passed through round 12; docs/API checks are
+  current through the latest docs-only verification recorded in this review log
 - security: round-11 incompatible-payload detail fix verified; earlier
   dispatcher-thrown validation detail sanitization remains verified
 - performance/reliability: round-12 rejected-commit marker lifetime fix
@@ -493,3 +493,11 @@ Status: round-20 status/API-doc rollup fix verified; ready for follow-up review
   recorded the round-20 status/API-doc rollup fix. Implementation worker
   aligned the parent summaries and recorded the correction in child and parent
   work logs. Docs, format, and whitespace verification passed.
+
+## Stable Rollup Wording Pass
+
+- `2026-07-05 11:35 WEST`: Orchestrator spot-check found the live Required
+  Lanes rollup still used exact round counters while child status had advanced
+  again. Implementation worker replaced fragile current-state counters with
+  stable latest-verification wording while preserving historical round entries.
+  Docs, format, and whitespace verification passed.
