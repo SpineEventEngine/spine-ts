@@ -1,28 +1,44 @@
 # To-Do Example
 
-Small server-side to-do example for Spine TS.
+Standalone server-side to-do example for Spine TS.
 
-Current status: runnable in-process task operations with validation, business
-refusal, and live task-list subscriptions. The example defines generated
-Protobuf-ES messages, a decorated task aggregate, task-list projection rows,
-and `createTodoContext()` for a single-tenant `Tasks` bounded context using the
-framework's default in-memory storage.
+The example defines generated Protobuf-ES messages, a decorated `TaskAggregate`,
+`TaskListProjection` read-side rows, and a single-tenant `Tasks` bounded
+context. It can run in-process for tests or as a real Connect/Node
+gRPC-compatible HTTP/2 server backed by the framework's default in-memory
+storage.
 
-Implemented in this slice:
+## Run
 
-- post `CreateTask` through the real `CommandService` seam;
-- post `RenameTask`, `CompleteTask`, and `ReopenTask` through the same seam;
-- handle the command with `TaskAggregate`;
-- produce and apply task-created, task-renamed, task-completed, and
-  task-reopened events;
-- update `TaskListProjection` rows from event delivery;
-- query visible `TaskList` projection rows through `QueryService`.
-- subscribe to `TaskListProjection` rows through the real
-  `SubscriptionService` seam and receive projection-driven updates after
-  create, rename, complete, and reopen commands;
-- reject invalid command payloads through `CommandService.Post` with
-  `COMMAND_VALIDATION_ERROR` and packed Spine validation details;
-- refuse already-done completion and not-done reopen commands with stable
-  Ack error names, without writing projection state.
+Generate protobuf output and build the workspace first:
 
-Still deferred: standalone server startup and the final end-to-end user guide.
+```bash
+pnpm typecheck:build
+```
+
+Start the standalone server:
+
+```bash
+pnpm --filter @spine-ts/example-todo start
+```
+
+The server listens on `http://127.0.0.1:8080` and exposes the copied Spine
+`CommandService`, `QueryService`, and `SubscriptionService` contracts through
+existing `SpineServices` adapters. Each process keeps its own in-memory state;
+restart the process to clear tasks.
+
+## What It Demonstrates
+
+- `CreateTask`, `RenameTask`, `CompleteTask`, and `ReopenTask` commands posted
+  through `CommandService.Post`.
+- Decorated aggregate command handlers and event appliers.
+- Projection subscribers that update `TaskList` rows from delivered events.
+- `QueryService.Read` for all task-list rows or a task-list row by projection
+  ID.
+- `SubscriptionService.Subscribe` and `Activate` for live `TaskList` projection
+  updates.
+- Validation failure acknowledgements with packed Spine validation details.
+- Business refusal acknowledgements for completing an already completed task or
+  reopening an open task.
+
+See [USER_GUIDE.md](USER_GUIDE.md) for client snippets and the full workflow.

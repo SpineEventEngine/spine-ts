@@ -1,9 +1,10 @@
 # T-0012.12f: Runnable Server And Guide
 
-Status: setup verified; ready for implementation
+Status: final verification passed; ready for merge
 Start: `2026-07-05 20:59 WEST`
-End: Pending
+End: `2026-07-05 20:56 WEST`
 Baseline commit: `230452d`
+Setup commit: `21c3c27`
 Task log path: `build-protocol/tasks/T-0012-12f-runnable-server-guide/TASK.md`
 Branch: `task/T-0012-12f-runnable-server-guide`
 Worktree:
@@ -99,7 +100,14 @@ Out of scope:
 - Task branch/worktree created.
 - Durable setup logs created before implementation.
 - Setup verification passed after escalated install.
-- Next step: commit setup logs and spawn the implementation sub-agent.
+- Implementation resumed in the task worktree. Required inputs have been read,
+  and the planned implementation remains example-owned startup code plus a
+  real-client smoke test over existing `SpineServices`.
+- Example-owned `startTodoServer()` and package `start` script are implemented.
+- Focused real-client smoke coverage passed with escalation after the sandbox
+  denied loopback binding.
+- Final verification passed. No framework gap was found and no `packages/server`
+  changes were needed.
 
 ## Setup Verification
 
@@ -113,3 +121,18 @@ Out of scope:
 - Focused
   `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
   then passed, 1 file / 14 tests.
+
+## Final Verification
+
+- `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed with escalation, 1 file / 15 tests.
+- `pnpm typecheck` passed.
+- `pnpm lint` passed, including cleanup enforcement.
+- Changed-file Prettier check passed.
+- `pnpm docs:check` passed with the existing invalid-origin TypeDoc warning.
+- `pnpm proto:check-generated` passed.
+- `git diff --check` passed.
+- Sandboxed `pnpm test:coverage` failed with expected local listener/ZeroMQ
+  `EPERM` failures. Escalated `pnpm test:coverage` passed, 45 files / 651
+  tests, with 95.18% statements, 90.48% branches, 97.63% functions, and 95.2%
+  lines.
