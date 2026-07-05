@@ -11,7 +11,14 @@ export default defineConfig({
       provider: "v8",
       reporter: ["text", "lcov"],
       include: ["packages/*/src/**/*.ts", "examples/*/src/**/*.ts"],
-      exclude: ["**/*.test.ts", "packages/*/generated/**", "examples/*/generated/**"],
+      exclude: [
+        "**/*.test.ts",
+        "packages/*/generated/**",
+        "examples/*/generated/**",
+        // Vitest cannot execute raw TypeScript standard decorators here; the
+        // example test covers this source through its `tsc` output.
+        "examples/todo/src/index.ts",
+      ],
       thresholds: {
         branches: 90,
         functions: 90,

@@ -740,17 +740,14 @@ class AggregateCommandExecution {
   }
 
   #bindProducedEvent(event: Event, entityId: unknown, version: bigint): Event {
-    const aggregateId = PrimitiveIds.read(entityId);
-
-    if (aggregateId === undefined) {
-      throw new Error("Repository aggregate execution requires primitive aggregate IDs.");
-    }
-
     const bound = clone(EventSchema, event);
     const context = clone(EventContextSchema, bound.context ?? create(EventContextSchema));
     const commandId = requireCommandId(this.#command);
+    const aggregateId = PrimitiveIds.read(entityId);
 
-    context.producerId = PrimitiveIds.pack(aggregateId);
+    if (aggregateId !== undefined) {
+      context.producerId = PrimitiveIds.pack(aggregateId);
+    }
     context.version = create(VersionSchema, { number: eventVersionNumber(version) });
     if (this.#command.context !== undefined) {
       context.origin = {
@@ -1202,7 +1199,7 @@ function readEventEntityId(
   schema: MessageSchema,
 ): unknown {
   const producerId = readProducerId(event);
-  const fieldId = readFirstFieldId(message, schema, "event");
+  const fieldId = readEventFieldId(message, schema);
 
   if (producerId !== undefined && producerId !== fieldId) {
     throw new Error(
@@ -1211,6 +1208,23 @@ function readEventEntityId(
   }
 
   return producerId ?? fieldId;
+}
+
+function readEventFieldId(message: NonNullable<Event["message"]>, schema: MessageSchema): unknown {
+  return routableEventId(readFirstFieldId(message, schema, "event"));
+}
+
+function routableEventId(value: unknown): unknown {
+  if (typeof value !== "object" || value === null || !Object.hasOwn(value, "value")) {
+    return value;
+  }
+
+  const id = (value as { readonly value?: unknown }).value;
+  if (typeof id === "string" || typeof id === "number" || typeof id === "boolean") {
+    return id;
+  }
+
+  return value;
 }
 
 function createRepositorySnapshot<EntityType extends RepositoryEntityType>(

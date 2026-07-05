@@ -50,6 +50,19 @@ importers:
       '@bufbuild/protobuf':
         specifier: 2.12.1
         version: 2.12.1
+      '@spine-ts/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@spine-ts/proto':
+        specifier: workspace:*
+        version: link:../../packages/proto
+      '@spine-ts/server':
+        specifier: workspace:*
+        version: link:../../packages/server
+    devDependencies:
+      '@spine-ts/testing':
+        specifier: workspace:*
+        version: link:../../packages/testing
 
   packages/core:
     dependencies:

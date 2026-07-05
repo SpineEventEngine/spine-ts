@@ -25,6 +25,7 @@ import {
   VersionSchema,
   file_spine_options,
 } from "@spine-ts/proto";
+import type { UserId } from "@spine-ts/proto/generated/spine/core/user_id_pb.js";
 import {
   EventStore,
   InMemoryStorageFactory,
@@ -515,6 +516,12 @@ class AccumulatingTaskProjection extends Projection<string, typeof ProjectionSta
 
 class ReactingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   reactTask(event: ProjectionState): void {
+    void event;
+  }
+}
+
+class UserIdProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  subscribeUser(event: UserId): void {
     void event;
   }
 }
@@ -1310,6 +1317,26 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("routes message-valued event IDs by their primitive value field", () => {
+    const repository = createUserIdProjectionRepository();
+    const route = repository.routeEvent(
+      packEvent({
+        id: create(EventIdSchema, { value: "event-user-id" }),
+        context: create(EventContextSchema, {
+          version: create(VersionSchema, { number: 1 }),
+        }),
+        schema: UserIdSchema,
+        message: create(UserIdSchema, { value: "user-id-task" }),
+      }),
+    );
+
+    expect(route).toMatchObject({
+      entityIds: ["user-id-task"],
+      messageFullTypeName: UserIdSchema.typeName,
+      invocation: "deferred",
+    });
+  });
+
   it("executes projection event subscribers and records latest state in Stand", async () => {
     ExecutingTaskProjection.reset();
     const context = BoundedContext.singleTenant("Tasks")
@@ -1775,6 +1802,18 @@ function createExecutingProjectionRepository(): Repository<typeof ExecutingTaskP
 
   return new Repository({
     entityType: ExecutingTaskProjection,
+    schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
+function createUserIdProjectionRepository(): Repository<typeof UserIdProjection> {
+  const handlers = defineEntityHandlers(UserIdProjection, ProjectionStateSchema, (builder) => [
+    builder.subscribe(UserIdSchema, "subscribeUser"),
+  ]);
+
+  return new Repository({
+    entityType: UserIdProjection,
     schema: ProjectionStateSchema,
     handlers,
   });
