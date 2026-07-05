@@ -3,10 +3,10 @@
 Task log: `build-protocol/tasks/T-0012-12-to-do-example/TASK.md`
 Branch: `task/T-0012-12-to-do-example`
 Baseline commit: `89868e9`
-Reviewed commit/diff basis: latest round `1d49445..2030181`
+Reviewed commit/diff basis: latest branch commit (`HEAD~1..HEAD`)
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
-Status: parent integration review round 1 comments addressed; re-review pending
+Status: parent integration metadata correction pending re-review
 
 ## Required Review Lanes
 
@@ -164,3 +164,22 @@ Review focus for splitter review:
     branch HEAD;
   - point the primary task log to the exact Prettier evidence recorded in the
     report and work log.
+- Round 3 re-review package:
+  `.superpowers/sdd/review-2030181..5708972.diff`.
+- Round 3 reviewed range: `2030181..5708972`.
+- Round 3 status:
+  - code style/maintainability:
+    `019f3402-6b27-7b81-8a00-8326adcb217c` (metadata comments, closed)
+  - documentation:
+    `019f3402-922f-7f11-b016-c00de2ecaf0c` (metadata comments, closed)
+  - TypeScript/API docs:
+    `019f3402-b55c-77b3-994f-60382b7385d6` (clean, closed)
+  - security:
+    `019f3402-cf8e-7721-946f-a39206a5cd73` (metadata comments, closed)
+  - performance/reliability:
+    `019f3402-ecdb-7f92-88f5-c7e5817d29f7` (metadata comments, closed)
+- Round 3 findings addressed in the latest metadata fix:
+  - record the active re-review package and range;
+  - update the work-log current state to point at the latest correction;
+  - avoid exact pending-package metadata for the current correction by using
+    `HEAD~1..HEAD` until the correction is accepted.
