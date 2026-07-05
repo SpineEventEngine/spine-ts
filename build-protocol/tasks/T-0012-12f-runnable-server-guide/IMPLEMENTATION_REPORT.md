@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12f Runnable Server And Guide
 
-Status: task review clean; final verification pending
+Status: complete; ready to merge
 Branch: `task/T-0012-12f-runnable-server-guide`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12f-runnable-server-guide`
@@ -80,7 +80,8 @@ function`.
     passed, 1 file / 15 tests.
 - FINAL:
   - `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
-    passed with escalation, 1 file / 15 tests.
+    passed with escalation, 1 file / 15 tests. Final rerun after the clean
+    review loop also passed, 1 file / 15 tests.
   - `pnpm typecheck` passed.
   - `pnpm lint` passed, including cleanup enforcement.
   - Changed-file Prettier check passed.
@@ -90,7 +91,8 @@ function`.
   - Sandboxed `pnpm test:coverage` failed with expected local listener/ZeroMQ
     `EPERM` failures. Escalated `pnpm test:coverage` passed, 45 files / 651
     tests, with 95.18% statements, 90.48% branches, 97.63% functions, and
-    95.2% lines.
+    95.2% lines. Final rerun after the clean review loop passed with the same
+    45 files, 651 tests, and coverage percentages.
 
 ## Round 1 Review Fixes
 
@@ -153,3 +155,17 @@ Verification:
 - Changed-log Prettier check passed before commit.
 - `git diff --check` passed before commit.
 - Five-lane re-review of `1dc0969..fe46d2a` was clean.
+
+## Final Task Verification
+
+- `pnpm typecheck` passed.
+- `pnpm lint` passed.
+- `pnpm docs:check` passed with the existing invalid-origin TypeDoc warning.
+- `pnpm proto:check-generated` passed.
+- Changed-file Prettier check passed.
+- `git diff --check HEAD` passed.
+- Escalated
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed, 1 file / 15 tests.
+- Escalated `pnpm test:coverage` passed, 45 files / 651 tests, with 95.18%
+  statements, 90.48% branches, 97.63% functions, and 95.2% lines.

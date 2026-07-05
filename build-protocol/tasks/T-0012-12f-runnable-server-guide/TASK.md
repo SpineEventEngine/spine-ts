@@ -1,6 +1,6 @@
 # T-0012.12f: Runnable Server And Guide
 
-Status: task review clean; final verification pending
+Status: complete; ready to merge
 Start: `2026-07-05 20:59 WEST`
 End: Pending
 Baseline commit: `230452d`
@@ -124,6 +124,7 @@ Out of scope:
   branch commit records the fix: future metadata-correction reviews should use
   `HEAD~1..HEAD` until the correction is accepted.
 - Round 5 re-review of `1dc0969..fe46d2a` was clean across all five lanes.
+- Final task-branch verification passed after the clean review loop.
 
 ## Setup Verification
 
@@ -141,7 +142,8 @@ Out of scope:
 ## Final Verification
 
 - `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
-  passed with escalation, 1 file / 15 tests.
+  passed with escalation, 1 file / 15 tests. Final rerun after the clean
+  review loop also passed, 1 file / 15 tests.
 - `pnpm typecheck` passed.
 - `pnpm lint` passed, including cleanup enforcement.
 - Changed-file Prettier check passed.
@@ -151,7 +153,8 @@ Out of scope:
 - Sandboxed `pnpm test:coverage` failed with expected local listener/ZeroMQ
   `EPERM` failures. Escalated `pnpm test:coverage` passed, 45 files / 651
   tests, with 95.18% statements, 90.48% branches, 97.63% functions, and 95.2%
-  lines.
+  lines. Final rerun after the clean review loop passed with the same 45 files,
+  651 tests, and coverage percentages.
 
 ## Round 1 Review Findings
 
