@@ -1006,9 +1006,9 @@ append, but it does not dispatch them to subscribers, manage delivery attempts,
 or implement retry/bus behavior.
 
 Aggregate snapshot/history storage is available through `AggregateStorage`,
-using primitive `AggregateId` values for this slice. Delivery records, tenant
-indexes, diagnostics, repository storage policy, and read-side projection stores
-are deferred.
+using finite primitive or single-field Protobuf message `AggregateId` values for
+this slice. Delivery records, tenant indexes, diagnostics, repository storage
+policy, and read-side projection stores are deferred.
 
 ## First Commands
 

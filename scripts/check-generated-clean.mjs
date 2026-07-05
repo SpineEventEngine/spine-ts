@@ -6,7 +6,18 @@ import { fileURLToPath } from "node:url";
 import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.mjs";
 
 const defaultRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const generatedPath = "packages/proto/generated";
+const generatedTargets = [
+  {
+    displayPath: "packages/proto/generated",
+    includeImports: false,
+    inputDirectory: "proto",
+  },
+  {
+    displayPath: "examples/todo/generated",
+    includeImports: true,
+    inputDirectory: "examples/todo/proto",
+  },
+];
 
 function parseArgs(argv) {
   const args = {
@@ -161,10 +172,11 @@ function compareGeneratedOutput(currentRoot, expectedRoot) {
   return { missing, unexpected, changed };
 }
 
-function createExpectedGeneratedRoot(repoRoot) {
+function createExpectedRoot(repoRoot, target) {
   const tempRoot = mkdtempSync(join(tmpdir(), "spine-proto-generated-"));
   const outputRoot = join(tempRoot, "generated");
   const templatePath = join(tempRoot, "buf.gen.yaml");
+  const includeImports = target.includeImports ? ["    include_imports: true"] : [];
 
   writeFileSync(
     templatePath,
@@ -173,17 +185,17 @@ function createExpectedGeneratedRoot(repoRoot) {
       "plugins:",
       "  - local: protoc-gen-es",
       `    out: ${outputRoot}`,
+      ...includeImports,
       "    opt:",
       "      - target=ts",
       "      - import_extension=js",
+      "inputs:",
+      `  - directory: ${target.inputDirectory}`,
       "",
     ].join("\n"),
   );
 
-  runCommand(repoRoot, "proto source verification", process.execPath, [
-    join(repoRoot, "scripts/verify-proto-sources.mjs"),
-  ]);
-  runCommand(repoRoot, "clean proto generation", resolveBufExecutable(repoRoot), [
+  runCommand(repoRoot, `clean ${target.displayPath} generation`, resolveBufExecutable(repoRoot), [
     "generate",
     "--template",
     templatePath,
@@ -206,93 +218,118 @@ function printGeneratedDiff(diff) {
 
 function main() {
   const { repoRoot, expectedGeneratedRoot } = parseArgs(process.argv.slice(2));
-  const trackedResult = runCommand(repoRoot, "tracked generated output check", "git", [
-    "ls-files",
-    "--",
-    generatedPath,
-  ]);
-  const ignoredResult = spawnSync(
-    "git",
-    ["check-ignore", "--quiet", "--", `${generatedPath}/.cleanup-enforcement-check`],
-    {
-      cwd: repoRoot,
-      encoding: "utf8",
-    },
-  );
-
-  if (ignoredResult.error !== undefined) {
-    throw new Error(`Failed to check generated output ignore rule: ${ignoredResult.error.message}`);
-  }
-
-  if (ignoredResult.signal !== null) {
-    throw new Error(`Generated output ignore check terminated by signal ${ignoredResult.signal}.`);
-  }
-
-  const trackedFiles = trackedResult.stdout.trim();
-  const generatedDirectory = resolve(repoRoot, generatedPath);
-  const generatedSafetyFailures = assertGeneratedDirectorySafe(
-    repoRoot,
-    generatedDirectory,
-    generatedPath,
-  );
-  const generatedDirectoryNotIgnored = ignoredResult.status !== 0;
-  const tempGeneration =
-    expectedGeneratedRoot === undefined ? createExpectedGeneratedRoot(repoRoot) : undefined;
-  const expectedRoot = expectedGeneratedRoot ?? tempGeneration.outputRoot;
-  const expectedSafetyFailures = assertGeneratedDirectorySafe(
-    repoRoot,
-    expectedRoot,
-    expectedRoot,
-    {
-      checkAncestors: false,
-    },
-  );
+  const targets =
+    expectedGeneratedRoot === undefined
+      ? generatedTargets
+      : [
+          {
+            ...generatedTargets[0],
+            expectedGeneratedRoot,
+          },
+        ];
+  const tempGenerations = [];
 
   try {
-    if (
-      trackedFiles.length > 0 ||
-      generatedSafetyFailures.length > 0 ||
-      expectedSafetyFailures.length > 0 ||
-      generatedDirectoryNotIgnored
-    ) {
-      console.error("Generated proto output is not clean.");
+    for (const target of targets) {
+      const trackedResult = runCommand(repoRoot, "tracked generated output check", "git", [
+        "ls-files",
+        "--",
+        target.displayPath,
+      ]);
+      const ignoredResult = spawnSync(
+        "git",
+        ["check-ignore", "--quiet", "--", `${target.displayPath}/.cleanup-enforcement-check`],
+        {
+          cwd: repoRoot,
+          encoding: "utf8",
+        },
+      );
 
-      if (trackedFiles.length > 0) {
-        console.error(`Tracked generated files:\n${trackedFiles}`);
-      }
-
-      for (const failure of generatedSafetyFailures) {
-        console.error(
-          failure.startsWith("symlink directory")
-            ? `Generated directory must not be a symlink: ${generatedPath}`
-            : failure.startsWith("symlink ancestor")
-              ? `Generated path ancestor must not be a symlink: ${failure.replace("symlink ancestor: ", "")}`
-              : `Generated output is unsafe: ${failure}`,
+      if (ignoredResult.error !== undefined) {
+        throw new Error(
+          `Failed to check generated output ignore rule: ${ignoredResult.error.message}`,
         );
       }
 
-      for (const failure of expectedSafetyFailures) {
-        console.error(`Expected generated output is unsafe: ${failure}`);
+      if (ignoredResult.signal !== null) {
+        throw new Error(
+          `Generated output ignore check terminated by signal ${ignoredResult.signal}.`,
+        );
       }
 
-      if (generatedDirectoryNotIgnored) {
-        console.error(`Generated directory is not ignored by Git: ${generatedPath}`);
+      const trackedFiles = trackedResult.stdout.trim();
+      const generatedDirectory = resolve(repoRoot, target.displayPath);
+      const generatedSafetyFailures = assertGeneratedDirectorySafe(
+        repoRoot,
+        generatedDirectory,
+        target.displayPath,
+      );
+      const generatedDirectoryNotIgnored = ignoredResult.status !== 0;
+      const tempGeneration =
+        target.expectedGeneratedRoot === undefined
+          ? createExpectedRoot(repoRoot, target)
+          : undefined;
+      const expectedRoot = target.expectedGeneratedRoot ?? tempGeneration.outputRoot;
+
+      if (tempGeneration !== undefined) {
+        tempGenerations.push(tempGeneration);
       }
 
-      process.exit(1);
+      const expectedSafetyFailures = assertGeneratedDirectorySafe(
+        repoRoot,
+        expectedRoot,
+        expectedRoot,
+        {
+          checkAncestors: false,
+        },
+      );
+
+      if (
+        trackedFiles.length > 0 ||
+        generatedSafetyFailures.length > 0 ||
+        expectedSafetyFailures.length > 0 ||
+        generatedDirectoryNotIgnored
+      ) {
+        console.error(`Generated proto output is not clean: ${target.displayPath}`);
+
+        if (trackedFiles.length > 0) {
+          console.error(`Tracked generated files:\n${trackedFiles}`);
+        }
+
+        for (const failure of generatedSafetyFailures) {
+          console.error(
+            failure.startsWith("symlink directory")
+              ? `Generated directory must not be a symlink: ${target.displayPath}`
+              : failure.startsWith("symlink ancestor")
+                ? `Generated path ancestor must not be a symlink: ${failure.replace("symlink ancestor: ", "")}`
+                : `Generated output is unsafe: ${failure}`,
+          );
+        }
+
+        for (const failure of expectedSafetyFailures) {
+          console.error(`Expected generated output is unsafe: ${failure}`);
+        }
+
+        if (generatedDirectoryNotIgnored) {
+          console.error(`Generated directory is not ignored by Git: ${target.displayPath}`);
+        }
+
+        process.exit(1);
+      }
+
+      const diff = compareGeneratedOutput(generatedDirectory, expectedRoot);
+
+      if (diff.missing.length > 0 || diff.changed.length > 0 || diff.unexpected.length > 0) {
+        console.error("Generated proto output is stale.");
+        console.error(`Generated root: ${target.displayPath}`);
+        printGeneratedDiff(diff);
+        process.exit(1);
+      }
     }
 
-    const diff = compareGeneratedOutput(generatedDirectory, expectedRoot);
-
-    if (diff.missing.length > 0 || diff.changed.length > 0 || diff.unexpected.length > 0) {
-      console.error("Generated proto output is stale.");
-      printGeneratedDiff(diff);
-      process.exit(1);
-    }
-
-    console.log("Generated proto output is ignored, untracked, and freshly regenerated.");
+    console.log("Generated proto outputs are ignored, untracked, and freshly regenerated.");
   } finally {
-    if (tempGeneration !== undefined) {
+    for (const tempGeneration of tempGenerations) {
       rmSync(tempGeneration.tempRoot, { recursive: true, force: true });
     }
   }

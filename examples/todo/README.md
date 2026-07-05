@@ -1,20 +1,19 @@
 # To-Do Example
 
-Standalone server-side to-do example placeholder. The workspace exists so later
-framework slices have a stable place to add generated domain messages, server
-assembly, command handling, query/subscription behavior, and black-box tests.
+Small server-side to-do example for Spine TS.
 
-Current status: not runnable.
+Current status: runnable in-process create-task vertical slice. The example
+defines generated Protobuf-ES messages, a decorated task aggregate, task-list
+projection rows, and `createTodoContext()` for a single-tenant `Tasks` bounded
+context using the framework's default in-memory storage.
 
-The example domain, Protobuf files, server startup, command handling, queries,
-subscriptions, validation behavior, and black-box tests are still deferred until
-the framework runtime exists. T-0011 adds useful seams for that future work:
-adapter-agnostic transport topics/subscriptions, broker/worker lifecycle
-contracts, delivery/retry boundary data, and
-`createServerRuntimeRoutingPlan()` for deriving command/event routing metadata
-from bounded-context handler readiness.
+Implemented in this slice:
 
-Those seams are not an executable to-do application. There is still no to-do
-server process, ZeroMQ endpoint layout, service host, handler dispatch,
-repository runtime registration, durable delivery worker, query stand,
-subscription stream, or production storage adapter in this example.
+- post `CreateTask` through the real `CommandService` seam;
+- handle the command with `TaskAggregate`;
+- produce and apply `TaskCreated`;
+- update `TaskListProjection` rows from event delivery;
+- query visible `TaskList` projection rows through `QueryService`.
+
+Still deferred: rename, complete, reopen, validation/refusal examples,
+subscriptions, standalone server startup, and the final end-to-end user guide.

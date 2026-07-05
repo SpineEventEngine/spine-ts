@@ -176,14 +176,14 @@ protobuf messages at its boundary and keeps command, query, and subscription
 behavior on the real framework paths. It does not expose a broad client DSL,
 start a server/process, manage browser tooling, or simulate service outcomes.
 `AggregateStorage`, `AggregateStorageOptions`, `AggregateSnapshot`,
-`AggregateHistory`, and `AggregateId` form the minimal aggregate persistence
-seam. It writes latest snapshots through `StorageFactory`/`RecordStorage`,
-appends events through the storage event store, and reads aggregate history as
-an optional snapshot plus events after the snapshot version. It validates
-primitive aggregate IDs, route consistency, and aggregate version order before
-storage. It does not implement handler invocation, delivery, catch-up,
-read-side indexing, subscriptions, system events, or aggregate repository
-caching.
+`AggregateHistory`, `AggregateId`, `PrimitiveId`, and `MessageId` form the
+minimal aggregate persistence seam. It writes latest snapshots through
+`StorageFactory`/`RecordStorage`, appends events through the storage event store,
+and reads aggregate history as an optional snapshot plus events after the
+snapshot version. It validates finite primitive or single-field Protobuf message
+aggregate IDs, route consistency, and aggregate version order before storage. It
+does not implement handler invocation, delivery, catch-up, read-side indexing,
+subscriptions, system events, or aggregate repository caching.
 Delivery exports include `Delivery`, `DeliveryOptions`,
 `DeliveryStorageCorruptionError`, `Inbox`, `InboxId`, `InboxMessage`,
 `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,

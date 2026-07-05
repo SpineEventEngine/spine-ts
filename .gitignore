@@ -4,6 +4,7 @@ dist/
 coverage/
 docs/api/reference/
 packages/*/generated/
+examples/*/generated/
 .pnpm-store/
 .eslintcache
 .turbo/

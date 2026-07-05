@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+package spine.example.todo.v1;
+
+import "spine/example/todo/v1/tasks.proto";
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.example.todo";
+
+message TaskList {
+  option (entity).kind = PROJECTION;
+  option (entity).visibility = FULL;
+
+  string id = 1 [
+    (required) = true,
+    (set_once) = true
+  ];
+  repeated Task tasks = 2 [(validate) = true];
+  int32 open_task_count = 3 [(column) = true];
+}

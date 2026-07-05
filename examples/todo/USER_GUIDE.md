@@ -1,25 +1,19 @@
 # To-Do Example User Guide
 
-Current status: bootstrap placeholder; the example is not runnable yet.
+Current status: the in-process create-task flow is runnable in tests.
 
-This guide will eventually explain how to generate Protobuf-ES code, start the
-to-do server, post commands, query state, subscribe to updates, run tests, and
-understand which framework features the example demonstrates.
+Run the focused example test after generated code and build output exist:
 
-T-0011 does not implement the to-do domain or a runnable server. It does make
-future example implementation less speculative by adding these framework seams:
+```bash
+pnpm typecheck:build
+pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests
+```
 
-- `@spine-ts/server` can derive command/event readiness from handler metadata
-  and feed `createServerRuntimeRoutingPlan()`.
-- `createServerRuntimeRoutingPlan()` emits immutable command/event transport
-  topics, subscriptions, worker registrations, and explicit deferred
-  query/subscription/system seams.
-- `@spine-ts/transport` owns adapter-agnostic topics, logical subscriptions,
-  broker/worker lifecycle snapshots, and delivery/retry boundary data.
-- The ZeroMQ foundation is still adapter-private local IPC only; it proves
-  same-host `ipc://` smoke behavior but does not define production endpoints.
+The test builds a `Tasks` bounded context with `createTodoContext()`, posts
+`CreateTask` commands through `BoundedContextFixture.post()`, waits for
+`TaskListProjection` rows, and reads the resulting task-list rows through the
+real `QueryService` seam.
 
-The example still needs later tasks for generated to-do Protobuf contracts,
-domain entities, repositories, handler invocation, runtime dispatch,
-transport-backed service hosting, durable delivery, query/subscription
-execution, server startup, and black-box tests.
+This slice does not start a standalone server or provide client commands yet.
+Rename, complete, reopen, validation/refusal, subscriptions, and the final
+walkthrough remain deferred to later to-do example tasks.

@@ -62,6 +62,8 @@ type BooleanIdEvent = Message<"BooleanIdEvent"> & {
   id: boolean;
 };
 
+type EmptyState = Message<"EmptyState">;
+
 function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
   const descriptorSet = fromBinary(
     FileDescriptorSetSchema,
@@ -119,6 +121,9 @@ const fileRoutingFixture = fileDesc(
             name: "BooleanIdEvent",
             field: [field("id", 1, FieldDescriptorProto_Type.BOOL)],
           },
+          {
+            name: "EmptyState",
+          },
         ],
       }),
     ),
@@ -128,6 +133,7 @@ const NestedIdSchema = messageDesc(fileRoutingFixture, 0) as GenMessage<NestedId
 const ObjectIdEventSchema = messageDesc(fileRoutingFixture, 1) as GenMessage<ObjectIdEvent>;
 const NumberIdEventSchema = messageDesc(fileRoutingFixture, 2) as GenMessage<NumberIdEvent>;
 const BooleanIdEventSchema = messageDesc(fileRoutingFixture, 3) as GenMessage<BooleanIdEvent>;
+const EmptyStateSchema = messageDesc(fileRoutingFixture, 4) as GenMessage<EmptyState>;
 
 describe("AggregateStorage", () => {
   it("loads the latest snapshot plus events after the snapshot version", async () => {
@@ -198,6 +204,24 @@ describe("AggregateStorage", () => {
 
     expect(history.snapshot).toBeUndefined();
     expect(history.events.map((event) => event.id?.value)).toEqual(["event-5", "event-6"]);
+  });
+
+  it("accepts omitted event schemas when producer IDs route the events", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+    });
+
+    await storage.appendEvents("task-default-event-schemas", [
+      createAggregateEvent("event-default-event-schemas", "task-default-event-schemas", 1),
+    ]);
+
+    expect(
+      (await storage.readHistory("task-default-event-schemas")).events.map(
+        (event) => event.id?.value,
+      ),
+    ).toEqual(["event-default-event-schemas"]);
   });
 
   it("shares snapshots across aggregate stores opened from the same factory", async () => {
@@ -402,13 +426,39 @@ describe("AggregateStorage", () => {
     ).rejects.toThrow(/same aggregate ID/);
   });
 
-  it("routes first-field primitive IDs and rejects message-valued IDs", async () => {
-    const storage = new AggregateStorage<typeof AggregateStateSchema, string | number | boolean>({
+  it("rejects first-field routing through schemas without ID fields", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [EmptyStateSchema],
+    });
+
+    await expect(
+      storage.appendEvents("task-empty-event", [
+        packEvent({
+          id: create(EventIdSchema, { value: "event-empty-message" }),
+          context: create(EventContextSchema, {
+            version: create(VersionSchema, { number: 1 }),
+          }),
+          schema: EmptyStateSchema,
+          message: create(EmptyStateSchema),
+        }),
+      ]),
+    ).rejects.toThrow(/same aggregate ID/);
+  });
+
+  it("routes first-field primitive and message IDs", async () => {
+    const storage = new AggregateStorage<
+      typeof AggregateStateSchema,
+      string | number | boolean | NestedId
+    >({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
       stateSchema: AggregateStateSchema,
       eventSchemas: [ObjectIdEventSchema, NumberIdEventSchema, BooleanIdEventSchema],
     });
+    const nestedId = create(NestedIdSchema, { value: "task-10" });
 
     await storage.appendEvents(42, [
       packEvent({
@@ -430,6 +480,18 @@ describe("AggregateStorage", () => {
         message: create(BooleanIdEventSchema, { id: true }),
       }),
     ]);
+    await storage.appendEvents(nestedId, [
+      packEvent({
+        id: create(EventIdSchema, { value: "event-object-id" }),
+        context: create(EventContextSchema, {
+          version: create(VersionSchema, { number: 1 }),
+        }),
+        schema: ObjectIdEventSchema,
+        message: create(ObjectIdEventSchema, {
+          id: create(NestedIdSchema, { value: "task-10" }),
+        }),
+      }),
+    ]);
 
     expect((await storage.readHistory(42)).events.map((event) => event.id?.value)).toEqual([
       "event-number-id",
@@ -437,20 +499,102 @@ describe("AggregateStorage", () => {
     expect((await storage.readHistory(true)).events.map((event) => event.id?.value)).toEqual([
       "event-boolean-id",
     ]);
+    expect((await storage.readHistory(nestedId)).events.map((event) => event.id?.value)).toEqual([
+      "event-object-id",
+    ]);
+    expect(
+      (await storage.readHistory(create(NestedIdSchema, { value: "other-task" }))).events,
+    ).toEqual([]);
     await expect(
-      storage.appendEvents("task-10", [
+      storage.appendEvents(nestedId, [
         packEvent({
-          id: create(EventIdSchema, { value: "event-object-id" }),
+          id: create(EventIdSchema, { value: "event-object-mismatch" }),
           context: create(EventContextSchema, {
-            version: create(VersionSchema, { number: 1 }),
+            version: create(VersionSchema, { number: 2 }),
           }),
           schema: ObjectIdEventSchema,
           message: create(ObjectIdEventSchema, {
-            id: create(NestedIdSchema, { value: "task-10" }),
+            id: create(NestedIdSchema, { value: "other-task" }),
           }),
         }),
       ]),
     ).rejects.toThrow(/same aggregate ID/);
+  });
+
+  it("rejects non-finite numeric aggregate IDs", async () => {
+    const storage = new AggregateStorage<typeof AggregateStateSchema, number>({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [NumberIdEventSchema],
+    });
+
+    await expect(storage.readHistory(Number.NaN)).rejects.toThrow(/finite primitive/);
+    await expect(
+      storage.appendEvents(Number.POSITIVE_INFINITY, [
+        packEvent({
+          id: create(EventIdSchema, { value: "event-infinite-id" }),
+          context: create(EventContextSchema, {
+            version: create(VersionSchema, { number: 1 }),
+          }),
+          schema: NumberIdEventSchema,
+          message: create(NumberIdEventSchema, { id: 1 }),
+        }),
+      ]),
+    ).rejects.toThrow(/finite primitive/);
+  });
+
+  it("rejects message IDs with fields beyond the primitive value", async () => {
+    const storage = new AggregateStorage<typeof AggregateStateSchema, NestedId>({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [ObjectIdEventSchema],
+    });
+    const id = Object.assign(create(NestedIdSchema, { value: "task-extra-id" }), {
+      namespace: "Tasks",
+    });
+
+    await expect(storage.readHistory(id)).rejects.toThrow(/single-field message IDs/);
+  });
+
+  it("stores normalized message snapshot IDs without caller serialization", async () => {
+    const storage = new AggregateStorage<typeof ObjectIdEventSchema, NestedId>({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: ObjectIdEventSchema,
+      eventSchemas: [ObjectIdEventSchema],
+    });
+    const id = create(NestedIdSchema, { value: "task-json-id" });
+    Object.defineProperty(id, "toJSON", {
+      value() {
+        throw new Error("message ID toJSON must not run");
+      },
+    });
+
+    await storage.writeSnapshot({
+      aggregateId: id,
+      state: create(ObjectIdEventSchema, {
+        id: create(NestedIdSchema, { value: "task-json-id" }),
+      }),
+      version: 1n,
+      lifecycle: {
+        archived: false,
+        deleted: false,
+      },
+    });
+
+    await expect(
+      storage.readHistory(create(NestedIdSchema, { value: "task-json-id" })),
+    ).resolves.toMatchObject({
+      snapshot: {
+        aggregateId: {
+          $typeName: NestedIdSchema.typeName,
+          value: "task-json-id",
+        },
+        version: 1n,
+      },
+    });
   });
 
   it("routes primitive producer IDs packed in wrapper messages", async () => {
@@ -586,6 +730,50 @@ describe("AggregateStorage", () => {
     ).rejects.toThrow(/positive/);
   });
 
+  it("rejects snapshots for state schemas without ID fields", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: EmptyStateSchema,
+    });
+
+    await expect(
+      storage.writeSnapshot({
+        aggregateId: "task-empty-state",
+        state: create(EmptyStateSchema),
+        version: 1n,
+        lifecycle: {
+          archived: false,
+          deleted: false,
+        },
+      }),
+    ).rejects.toThrow(/unexpected state ID/);
+  });
+
+  it("rejects unreadable snapshot IDs before formatting diagnostics", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+    });
+
+    await expect(
+      storage.writeSnapshot({
+        aggregateId: { value: "task-unreadable" } as never,
+        state: create(AggregateStateSchema, {
+          id: "task-unreadable",
+          name: "changed",
+          archived: false,
+        }),
+        version: 0n,
+        lifecycle: {
+          archived: false,
+          deleted: false,
+        },
+      }),
+    ).rejects.toThrow(/single-field message IDs/);
+  });
+
   it("rejects mismatched snapshot state IDs before writing", async () => {
     const storage = new AggregateStorage({
       context: { name: "Tasks", multitenant: false },
@@ -674,6 +862,27 @@ describe("AggregateStorage", () => {
     ).rejects.toThrow(/non-empty event\.id\.value/);
   });
 
+  it("rejects missing event IDs before appending", async () => {
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(
+      storage.appendEvents("task-missing-event-id", [
+        create(EventSchema, {
+          context: create(EventContextSchema, {
+            version: create(VersionSchema, { number: 1 }),
+          }),
+          message: createAggregateEvent("event-message-with-id", "task-missing-event-id", 1)
+            .message,
+        }),
+      ]),
+    ).rejects.toThrow(/readable event ID/);
+  });
+
   it("rejects duplicate event IDs already present in stored aggregate history", async () => {
     const storage = new AggregateStorage({
       context: { name: "Tasks", multitenant: false },
@@ -695,7 +904,7 @@ describe("AggregateStorage", () => {
     ).rejects.toThrow(/duplicate event IDs/);
   });
 
-  it("rejects nonprimitive read-history IDs before storage access", async () => {
+  it("rejects unreadable read-history IDs before storage access", async () => {
     const storage = new AggregateStorage({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -704,7 +913,7 @@ describe("AggregateStorage", () => {
     });
 
     await expect(storage.readHistory({ value: "task-object" } as never)).rejects.toThrow(
-      /primitive values/,
+      /single-field message IDs/,
     );
   });
 

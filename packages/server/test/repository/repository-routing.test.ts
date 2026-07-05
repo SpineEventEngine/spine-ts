@@ -4,6 +4,8 @@ import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
   BoolValueSchema,
   DoubleValueSchema,
+  FieldDescriptorProto_Label,
+  FieldDescriptorProto_Type,
   FileDescriptorProtoSchema,
   FileDescriptorSetSchema,
   StringValueSchema,
@@ -25,6 +27,7 @@ import {
   VersionSchema,
   file_spine_options,
 } from "@spine-ts/proto";
+import type { UserId } from "@spine-ts/proto/generated/spine/core/user_id_pb.js";
 import {
   EventStore,
   InMemoryStorageFactory,
@@ -67,6 +70,29 @@ type ValidatedAggregateState = Message<"example.validation_refusal.ValidatedAggr
 type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
   id: string;
   name: string;
+};
+
+type TaskId = Message<"spine.example.todo.v1.TaskId"> & {
+  value: string;
+};
+
+type Task = Message<"spine.example.todo.v1.Task"> & {
+  id?: TaskId;
+  title: string;
+  completed: boolean;
+};
+
+type TaskCreated = Message<"spine.example.todo.v1.TaskCreated"> & {
+  id?: TaskId;
+  title: string;
+};
+
+type NumberRouteEvent = Message<"spine_ts.test.NumberRouteEvent"> & {
+  id: number;
+};
+
+type WrongIdRouteEvent = Message<"spine_ts.test.WrongIdRouteEvent"> & {
+  id?: UserId;
 };
 
 function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
@@ -113,6 +139,95 @@ const ValidatedTaskCommandSchema = messageDesc(
   fileValidationRefusalFixture,
   1,
 ) as GenMessage<ValidatedTaskCommand>;
+const fileTaskIdFixture = fileDesc(
+  "CiNzcGluZS9leGFtcGxlL3RvZG8vdjEvdGFza19pZC5wcm90bxIVc3BpbmUuZXhhbXBsZS50b2Rv" +
+    "LnYxIh0KBlRhc2tJZBITCgV2YWx1ZRgBIAEoCUIEoIUkAUIbqo0kF3R5cGUuc3BpbmUuZXhhbXBs" +
+    "ZS50b2RvYgZwcm90bzM",
+  [file_spine_options],
+);
+const fileTaskFixture = fileDesc(
+  "CiFzcGluZS9leGFtcGxlL3RvZG8vdjEvdGFza3MucHJvdG8SFXNwaW5lLmV4YW1wbGUudG9kby52" +
+    "MSJvCgRUYXNrEjcKAmlkGAEgASgLMh0uc3BpbmUuZXhhbXBsZS50b2RvLnYxLlRhc2tJZEIMoIUk" +
+    "AeiFJAGAhiQBEhMKBXRpdGxlGAIgASgJQgSghSQBEhEKCWNvbXBsZXRlZBgDIAEoCDoG+ookAggB" +
+    "QhuqjSQXdHlwZS5zcGluZS5leGFtcGxlLnRvZG9iBnByb3RvMw",
+  [fileTaskIdFixture, file_spine_options],
+);
+const fileTaskEventsFixture = fileDesc(
+  "CidzcGluZS9leGFtcGxlL3RvZG8vdjEvdGFza19ldmVudHMucHJvdG8SFXNwaW5lLmV4YW1wbGUu" +
+    "dG9kby52MSJXCgtUYXNrQ3JlYXRlZBIzCgJpZBgBIAEoCzIdLnNwaW5lLmV4YW1wbGUudG9kby52" +
+    "MS5UYXNrSWRCCKCFJAHohSQBEhMKBXRpdGxlGAIgASgJQgSghSQBIlcKC1Rhc2tSZW5hbWVkEjMK" +
+    "AmlkGAEgASgLMh0uc3BpbmUuZXhhbXBsZS50b2RvLnYxLlRhc2tJZEIIoIUkAeiFJAESEwoFdGl0" +
+    "bGUYAiABKAlCBKCFJAEiRAoNVGFza0NvbXBsZXRlZBIzCgJpZBgBIAEoCzIdLnNwaW5lLmV4YW1w" +
+    "bGUudG9kby52MS5UYXNrSWRCCKCFJAHohSQBIkMKDFRhc2tSZW9wZW5lZBIzCgJpZBgBIAEoCzId" +
+    "LnNwaW5lLmV4YW1wbGUudG9kby52MS5UYXNrSWRCCKCFJAHohSQBQhuqjSQXdHlwZS5zcGluZS5l" +
+    "eGFtcGxlLnRvZG9iBnByb3RvMw",
+  [fileTaskIdFixture, file_spine_options],
+);
+const fileNumberRouteFixture = fileDesc(
+  Buffer.from(
+    toBinary(
+      FileDescriptorProtoSchema,
+      create(FileDescriptorProtoSchema, {
+        name: "spine_ts/test/number_route.proto",
+        package: "spine_ts.test",
+        syntax: "proto3",
+        messageType: [
+          {
+            name: "NumberRouteEvent",
+            field: [
+              {
+                name: "id",
+                number: 1,
+                label: FieldDescriptorProto_Label.OPTIONAL,
+                type: FieldDescriptorProto_Type.DOUBLE,
+                jsonName: "id",
+              },
+            ],
+          },
+        ],
+      }),
+    ),
+  ).toString("base64"),
+);
+const fileWrongIdRouteFixture = fileDesc(
+  Buffer.from(
+    toBinary(
+      FileDescriptorProtoSchema,
+      create(FileDescriptorProtoSchema, {
+        name: "spine_ts/test/wrong_id_route.proto",
+        package: "spine_ts.test",
+        syntax: "proto3",
+        messageType: [
+          {
+            name: "WrongIdRouteEvent",
+            field: [
+              {
+                name: "id",
+                number: 1,
+                label: FieldDescriptorProto_Label.OPTIONAL,
+                type: FieldDescriptorProto_Type.MESSAGE,
+                typeName: ".spine.core.UserId",
+                jsonName: "id",
+              },
+            ],
+          },
+        ],
+      }),
+    ),
+  ).toString("base64"),
+  [UserIdSchema.file],
+);
+const TaskIdSchema = messageDesc(fileTaskIdFixture, 0) as GenMessage<TaskId>;
+const TaskSchema = messageDesc(fileTaskFixture, 0) as GenMessage<Task>;
+const TaskCreatedSchema = messageDesc(fileTaskEventsFixture, 0) as GenMessage<TaskCreated>;
+const NumberRouteEventSchema = messageDesc(
+  fileNumberRouteFixture,
+  0,
+) as GenMessage<NumberRouteEvent>;
+const WrongIdRouteEventSchema = messageDesc(
+  fileWrongIdRouteFixture,
+  0,
+) as GenMessage<WrongIdRouteEvent>;
 
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: AggregateState): void {
@@ -515,6 +630,28 @@ class AccumulatingTaskProjection extends Projection<string, typeof ProjectionSta
 
 class ReactingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   reactTask(event: ProjectionState): void {
+    void event;
+  }
+}
+
+class UserIdProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  subscribeUser(event: UserId): void {
+    void event;
+  }
+}
+
+class NonFiniteRouteProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  subscribeNumber(event: NumberRouteEvent): void {
+    void event;
+  }
+}
+
+class MessageIdTaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
+  applyTaskCreated(event: TaskCreated): void {
+    void event;
+  }
+
+  applyWrongId(event: WrongIdRouteEvent): void {
     void event;
   }
 }
@@ -1310,6 +1447,70 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("routes message-valued event IDs by their primitive value field", () => {
+    const repository = createUserIdProjectionRepository();
+    const route = repository.routeEvent(
+      packEvent({
+        id: create(EventIdSchema, { value: "event-user-id" }),
+        context: create(EventContextSchema, {
+          version: create(VersionSchema, { number: 1 }),
+        }),
+        schema: UserIdSchema,
+        message: create(UserIdSchema, { value: "user-id-task" }),
+      }),
+    );
+
+    expect(route).toMatchObject({
+      entityIds: ["user-id-task"],
+      messageFullTypeName: UserIdSchema.typeName,
+      invocation: "deferred",
+    });
+  });
+
+  it("routes message-valued event IDs as messages when the entity ID field is a message", () => {
+    const repository = createMessageIdTaskRepository();
+    const taskId = create(TaskIdSchema, { value: "message-id-task" });
+    const route = repository.routeEvent(
+      packEvent({
+        id: create(EventIdSchema, { value: "event-message-id-task" }),
+        context: create(EventContextSchema, {
+          version: create(VersionSchema, { number: 1 }),
+        }),
+        schema: TaskCreatedSchema,
+        message: create(TaskCreatedSchema, {
+          id: taskId,
+          title: "Message ID task",
+        }),
+      }),
+    );
+
+    expect(route).toMatchObject({
+      entityIds: [taskId],
+      messageFullTypeName: TaskCreatedSchema.typeName,
+      invocation: "deferred",
+    });
+    expectTypeOf(route.entityIds).toEqualTypeOf<readonly TaskId[]>();
+  });
+
+  it("rejects message-valued event IDs with the wrong message type", () => {
+    const repository = createMessageIdTaskRepository();
+
+    expect(() =>
+      repository.routeEvent(
+        packEvent({
+          id: create(EventIdSchema, { value: "event-wrong-message-id-type" }),
+          context: create(EventContextSchema, {
+            version: create(VersionSchema, { number: 1 }),
+          }),
+          schema: WrongIdRouteEventSchema,
+          message: create(WrongIdRouteEventSchema, {
+            id: create(UserIdSchema, { value: "message-id-task" }),
+          }),
+        }),
+      ),
+    ).toThrow(/TaskId/);
+  });
+
   it("executes projection event subscribers and records latest state in Stand", async () => {
     ExecutingTaskProjection.reset();
     const context = BoundedContext.singleTenant("Tasks")
@@ -1661,6 +1862,35 @@ describe("repository signal routing", () => {
     ).toThrow(/readable producer ID/);
   });
 
+  it("rejects non-finite producer IDs", () => {
+    const repository = createRoutingRepository();
+
+    expect(() =>
+      repository.routeEvent(
+        createProjectionEvent("event-non-finite-producer", "first-field-task", {
+          producerNumber: Number.NaN,
+        }),
+      ),
+    ).toThrow(/finite producer ID/);
+  });
+
+  it("rejects non-finite first-field event IDs", () => {
+    const repository = createNonFiniteRouteRepository();
+
+    expect(() =>
+      repository.routeEvent(
+        packEvent({
+          id: create(EventIdSchema, { value: "event-non-finite-field" }),
+          context: create(EventContextSchema, {
+            version: create(VersionSchema, { number: 1 }),
+          }),
+          schema: NumberRouteEventSchema,
+          message: create(NumberRouteEventSchema, { id: Number.POSITIVE_INFINITY }),
+        }),
+      ),
+    ).toThrow(/finite primitive or single-field message ID/);
+  });
+
   it("rejects invalid repository events before context event storage", async () => {
     const factory = new InMemoryStorageFactory();
     const repository = createRoutingRepository();
@@ -1776,6 +2006,45 @@ function createExecutingProjectionRepository(): Repository<typeof ExecutingTaskP
   return new Repository({
     entityType: ExecutingTaskProjection,
     schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
+function createUserIdProjectionRepository(): Repository<typeof UserIdProjection> {
+  const handlers = defineEntityHandlers(UserIdProjection, ProjectionStateSchema, (builder) => [
+    builder.subscribe(UserIdSchema, "subscribeUser"),
+  ]);
+
+  return new Repository({
+    entityType: UserIdProjection,
+    schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
+function createNonFiniteRouteRepository(): Repository<typeof NonFiniteRouteProjection> {
+  const handlers = defineEntityHandlers(
+    NonFiniteRouteProjection,
+    ProjectionStateSchema,
+    (builder) => [builder.subscribe(NumberRouteEventSchema, "subscribeNumber")],
+  );
+
+  return new Repository({
+    entityType: NonFiniteRouteProjection,
+    schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
+function createMessageIdTaskRepository(): Repository<typeof MessageIdTaskAggregate> {
+  const handlers = defineEntityHandlers(MessageIdTaskAggregate, TaskSchema, (builder) => [
+    builder.apply(TaskCreatedSchema, "applyTaskCreated"),
+    builder.apply(WrongIdRouteEventSchema, "applyWrongId"),
+  ]);
+
+  return new Repository({
+    entityType: MessageIdTaskAggregate,
+    schema: TaskSchema,
     handlers,
   });
 }
@@ -2191,6 +2460,7 @@ function createProjectionEvent(
   entityId: string,
   options: {
     readonly producerId?: string;
+    readonly producerNumber?: number;
     readonly producerMessage?: AggregateState;
     readonly importTenantId?: string;
     readonly pastMessageTenantId?: string;
@@ -2257,10 +2527,14 @@ function createTenantId(value: string) {
 
 function projectionProducerId(options: {
   readonly producerId?: string;
+  readonly producerNumber?: number;
   readonly producerMessage?: AggregateState;
 }) {
   if (options.producerMessage !== undefined) {
     return packAny(AggregateStateSchema, options.producerMessage);
+  }
+  if (options.producerNumber !== undefined) {
+    return packAny(DoubleValueSchema, create(DoubleValueSchema, { value: options.producerNumber }));
   }
   if (options.producerId !== undefined) {
     return packAny(UserIdSchema, create(UserIdSchema, { value: options.producerId }));

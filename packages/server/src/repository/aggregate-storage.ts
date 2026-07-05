@@ -13,7 +13,7 @@ import {
 
 import type { DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import type { EntityLifecycleFlags } from "../entity/entity.js";
-import { PrimitiveIds } from "./primitive-id.js";
+import { MessageIds, PrimitiveIds, type MessageId, type PrimitiveId } from "./primitive-id.js";
 
 /**
  * Small aggregate history store over snapshots and events.
@@ -47,7 +47,7 @@ export class AggregateStorage<
   async appendEvents(aggregateId: Id, events: Iterable<Event>): Promise<void> {
     const context = snapshotStorageContext(this.#context);
     const batch = Object.freeze([...events].map((event) => clone(EventSchema, event)));
-    const key = aggregateLockKey(context, requirePrimitiveId(aggregateId));
+    const key = aggregateLockKey(context, requireAggregateId(aggregateId));
 
     await AggregateStorageLocks.withLock(this.#storageFactory, key, () =>
       this.#appendEventBatch(context, aggregateId, batch),
@@ -95,7 +95,7 @@ export class AggregateStorage<
 
   #acceptEventRoute(event: Event, aggregateId: Id): void {
     const eventAggregateId = this.#eventAggregateId(event);
-    if (eventAggregateId === undefined || !samePrimitiveId(eventAggregateId, aggregateId)) {
+    if (eventAggregateId === undefined || !sameAggregateId(eventAggregateId, aggregateId)) {
       throw new Error("Aggregate events must all route to the same aggregate ID before append.");
     }
   }
@@ -110,13 +110,14 @@ export class AggregateStorage<
 
   /** Store or replace the latest snapshot for one aggregate. */
   async writeSnapshot(snapshot: AggregateSnapshot<Schema, Id>): Promise<void> {
-    this.#validateSnapshot(snapshot.aggregateId, snapshot.state, snapshot.version);
+    const aggregateId = requireAggregateId(snapshot.aggregateId);
+    this.#validateSnapshot(aggregateId, snapshot.state, snapshot.version);
     const storage = this.#snapshotStorage(snapshotStorageContext(this.#context));
 
     try {
       await storage.write(
         createSnapshotRecord({
-          aggregateId: snapshot.aggregateId,
+          aggregateId,
           stateTypeUrl: this.#stateTypeUrl,
           state: toBinary(this.#stateSchema, snapshot.state, { writeUnknownFields: false }),
           version: snapshot.version,
@@ -131,7 +132,7 @@ export class AggregateStorage<
 
   /** Read latest snapshot and the events after it for one aggregate. */
   async readHistory(aggregateId: Id): Promise<AggregateHistory<Schema, Id>> {
-    requirePrimitiveId(aggregateId);
+    requireAggregateId(aggregateId);
     const context = snapshotStorageContext(this.#context);
     const snapshot = await this.#readSnapshot(context, aggregateId);
     const snapshotVersion = snapshot?.version ?? -1n;
@@ -163,16 +164,18 @@ export class AggregateStorage<
 
     const payload = readSnapshotRecord(record);
     if (!sameSnapshotId(payload.aggregateId, aggregateId)) {
-      throw new Error(`Aggregate snapshot for "${String(aggregateId)}" has an unexpected ID.`);
+      throw new Error(
+        `Aggregate snapshot for "${formatAggregateId(aggregateId)}" has an unexpected ID.`,
+      );
     }
     if (payload.stateTypeUrl !== this.#stateTypeUrl) {
       throw new Error(
-        `Aggregate snapshot for "${String(aggregateId)}" has an unexpected state type.`,
+        `Aggregate snapshot for "${formatAggregateId(aggregateId)}" has an unexpected state type.`,
       );
     }
     if (payload.version <= 0n) {
       throw new Error(
-        `Aggregate snapshot for "${String(aggregateId)}" must have a positive version.`,
+        `Aggregate snapshot for "${formatAggregateId(aggregateId)}" must have a positive version.`,
       );
     }
 
@@ -194,14 +197,14 @@ export class AggregateStorage<
     context: StorageContext,
     aggregateId: Id,
   ): Promise<readonly VersionedEvent[]> {
-    const expectedId = requirePrimitiveId(aggregateId);
+    const expectedId = requireAggregateId(aggregateId);
     const events: VersionedEvent[] = [];
     const eventStore = this.#eventStore(context);
 
     try {
       for (const event of await eventStore.read()) {
         const eventAggregateId = this.#eventAggregateId(event);
-        if (eventAggregateId === undefined || !samePrimitiveId(eventAggregateId, expectedId)) {
+        if (eventAggregateId === undefined || !sameAggregateId(eventAggregateId, expectedId)) {
           continue;
         }
 
@@ -234,7 +237,7 @@ export class AggregateStorage<
     if (
       producerId !== undefined &&
       payloadId !== undefined &&
-      !samePrimitiveId(producerId, payloadId)
+      !sameAggregateId(producerId, payloadId)
     ) {
       throw new Error(
         "Aggregate event producer ID and payload ID must identify the same aggregate ID.",
@@ -271,7 +274,7 @@ export class AggregateStorage<
       const firstField = schema.fields[0];
       if (unpacked !== undefined && firstField !== undefined) {
         const value = (unpacked as Record<string, unknown>)[firstField.localName];
-        return PrimitiveIds.read(value);
+        return readAggregateId(value);
       }
     }
 
@@ -283,20 +286,20 @@ export class AggregateStorage<
     if (firstField === undefined) {
       return undefined;
     }
-    return PrimitiveIds.read((state as Record<string, unknown>)[firstField.localName]);
+    return readAggregateId((state as Record<string, unknown>)[firstField.localName]);
   }
 
-  #validateSnapshot(aggregateId: Id, state: MessageShape<Schema>, version: bigint): void {
+  #validateSnapshot(aggregateId: AggregateId, state: MessageShape<Schema>, version: bigint): void {
     if (version <= 0n) {
       throw new Error(
-        `Aggregate snapshot for "${String(aggregateId)}" must have a positive version.`,
+        `Aggregate snapshot for "${formatAggregateId(aggregateId)}" must have a positive version.`,
       );
     }
 
     const stateId = this.#stateId(state);
-    if (!samePrimitiveId(stateId, aggregateId)) {
+    if (!sameAggregateId(stateId, aggregateId)) {
       throw new Error(
-        `Aggregate snapshot for "${String(aggregateId)}" has an unexpected state ID.`,
+        `Aggregate snapshot for "${formatAggregateId(aggregateId)}" has an unexpected state ID.`,
       );
     }
   }
@@ -365,8 +368,8 @@ interface VersionedEvent {
   readonly version: bigint;
 }
 
-/** Primitive aggregate identifier supported by the current aggregate storage seam. */
-export type AggregateId = string | number | boolean;
+/** Aggregate identifier supported by aggregate history storage. */
+export type AggregateId = PrimitiveId | MessageId;
 
 const snapshotRecordTypeUrl = "type.spine-ts.dev/internal/AggregateSnapshotRecord";
 
@@ -435,10 +438,7 @@ function aggregateLockKey(context: StorageContext, aggregateId: AggregateId): st
     name: context.name,
     multitenant: context.multitenant,
     tenantId: context.multitenant ? context.tenantId : "",
-    aggregateId: {
-      type: typeof aggregateId,
-      value: String(aggregateId),
-    },
+    aggregateId: aggregateIdKey(aggregateId),
   });
 }
 
@@ -530,20 +530,51 @@ function rejectDuplicateEventIds(events: readonly VersionedEvent[]): void {
   }
 }
 
-function requirePrimitiveId(value: unknown): AggregateId {
-  const id = PrimitiveIds.read(value);
+function readAggregateId(value: unknown): AggregateId | undefined {
+  const primitive = PrimitiveIds.readFinite(value);
+  if (primitive !== undefined) {
+    return primitive;
+  }
+  return MessageIds.read(value);
+}
+
+function requireAggregateId(value: unknown): AggregateId {
+  const id = readAggregateId(value);
   if (id === undefined) {
-    throw new Error("Aggregate IDs must be primitive values.");
+    throw new Error("Aggregate IDs must be finite primitive values or single-field message IDs.");
   }
   return id;
 }
 
-function samePrimitiveId(left: unknown, right: unknown): boolean {
-  return PrimitiveIds.read(left) !== undefined && left === right;
+function sameAggregateId(left: unknown, right: unknown): boolean {
+  const leftId = readAggregateId(left);
+  const rightId = readAggregateId(right);
+
+  return (
+    leftId !== undefined &&
+    rightId !== undefined &&
+    aggregateIdKey(leftId) === aggregateIdKey(rightId)
+  );
+}
+
+function aggregateIdKey(id: AggregateId): string {
+  if (typeof id === "object") {
+    return MessageIds.key(id);
+  }
+
+  return JSON.stringify({
+    type: typeof id,
+    value: id,
+  });
+}
+
+function formatAggregateId(id: unknown): string {
+  const aggregateId = readAggregateId(id);
+  return aggregateId === undefined ? String(id) : aggregateIdKey(aggregateId);
 }
 
 function sameSnapshotId(left: unknown, right: unknown): boolean {
-  return samePrimitiveId(left, right);
+  return sameAggregateId(left, right);
 }
 
 function compareVersions(left: bigint, right: bigint): number {

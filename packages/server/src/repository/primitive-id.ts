@@ -13,7 +13,19 @@ export type PrimitiveId = string | number | boolean;
 export interface PrimitiveIdCodec {
   pack(id: PrimitiveId): Any;
   read(value: unknown): PrimitiveId | undefined;
+  readFinite(value: unknown): PrimitiveId | undefined;
   unpack(id: Any | undefined): PrimitiveId | undefined;
+}
+
+export interface MessageId {
+  readonly $typeName: string;
+  readonly value: PrimitiveId;
+}
+
+export interface MessageIdCodec {
+  read(value: unknown): MessageId | undefined;
+  readValue(value: unknown): PrimitiveId | undefined;
+  key(id: MessageId): string;
 }
 
 export const PrimitiveIds: PrimitiveIdCodec = Object.freeze({
@@ -29,11 +41,13 @@ export const PrimitiveIds: PrimitiveIdCodec = Object.freeze({
   },
 
   read(value: unknown): PrimitiveId | undefined {
-    if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
-      return value;
-    }
+    return readPrimitive(value);
+  },
 
-    return undefined;
+  readFinite(value: unknown): PrimitiveId | undefined {
+    const id = readPrimitive(value);
+
+    return typeof id === "number" && !Number.isFinite(id) ? undefined : id;
   },
 
   unpack(id: Any | undefined): PrimitiveId | undefined {
@@ -49,3 +63,60 @@ export const PrimitiveIds: PrimitiveIdCodec = Object.freeze({
     );
   },
 });
+
+export const MessageIds: MessageIdCodec = Object.freeze({
+  read(value: unknown): MessageId | undefined {
+    return readMessageId(value);
+  },
+
+  readValue(value: unknown): PrimitiveId | undefined {
+    return readMessageId(value)?.value;
+  },
+
+  key(id: MessageId): string {
+    return JSON.stringify({
+      type: "message",
+      typeName: id.$typeName,
+      value: {
+        type: typeof id.value,
+        value: id.value,
+      },
+    });
+  },
+});
+
+function readPrimitive(value: unknown): PrimitiveId | undefined {
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") {
+    return value;
+  }
+
+  return undefined;
+}
+
+function isMessageIdObject(value: unknown): value is MessageId {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return false;
+  }
+
+  const keys = Object.keys(value);
+  return (
+    keys.length === 2 &&
+    keys.includes("$typeName") &&
+    keys.includes("value") &&
+    typeof (value as { readonly $typeName?: unknown }).$typeName === "string"
+  );
+}
+
+function readMessageId(value: unknown): MessageId | undefined {
+  if (!isMessageIdObject(value)) {
+    return undefined;
+  }
+
+  const id = PrimitiveIds.readFinite(value.value);
+  return id === undefined
+    ? undefined
+    : {
+        $typeName: value.$typeName,
+        value: id,
+      };
+}
