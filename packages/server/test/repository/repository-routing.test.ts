@@ -11,6 +11,7 @@ import {
 import { packAny, packCommand, packEvent, unpackAny } from "@spine-ts/core";
 import {
   ActorContextSchema,
+  CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
   type Event as SpineEvent,
@@ -640,7 +641,7 @@ describe("repository signal routing", () => {
     });
     await dispatchAttempted.promise;
 
-    const [failure] = await waitForStoredEventDispatchFailures(context, 1);
+    const [failure] = await waitForFailures(context, 1);
     expect(failure).toMatchObject({
       event: { id: { value: "event-Task" } },
       error: { name: "Error", message: "dispatch failed after commit" },
@@ -1047,6 +1048,29 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("uses command tenant for projection updates when aggregate commands have no id", async () => {
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createProjectionProducingRepository())
+      .add(createExecutingProjectionRepository())
+      .build();
+
+    await context
+      .commandBus()
+      .post(createAggregateCommandWithoutId("task-no-id-tenant", "NoIdTenant", "tenant-a"));
+
+    const projected = await waitForProjectionState(context, "task-no-id-tenant", "tenant-a");
+
+    expect(projected).toMatchObject({
+      name: "Task (projected)",
+      priority: 2,
+    });
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-no-id-tenant", {
+        tenantId: "tenant-b",
+      }),
+    ).resolves.toBeUndefined();
+  });
+
   it("uses command tenant metadata when stored aggregate events update projections", async () => {
     const context = BoundedContext.multitenant("Tasks")
       .add(createCommandTenantProjectionProducingRepository())
@@ -1104,7 +1128,7 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("command-project-fails", "task-project-fails", "Projected")),
     ).resolves.toBeUndefined();
 
-    const [failure] = await waitForStoredEventDispatchFailures(context, 1);
+    const [failure] = await waitForFailures(context, 1);
     expect(failure).toMatchObject({
       event: { id: { value: "event-Projected" } },
       error: { name: "Error", message: "projection subscriber failed after commit" },
@@ -1130,7 +1154,7 @@ describe("repository signal routing", () => {
         .post(createAggregateCommand("command-non-error-dispatch", "task-non-error-dispatch")),
     ).resolves.toBeUndefined();
 
-    const [failure] = await waitForStoredEventDispatchFailures(context, 1);
+    const [failure] = await waitForFailures(context, 1);
 
     expect(failure).toMatchObject({
       event: { id: { value: "event-Task" } },
@@ -1164,7 +1188,7 @@ describe("repository signal routing", () => {
         );
     }
 
-    await waitForStoredEventDispatchFailure(context, (failures) =>
+    await waitForFailure(context, (failures) =>
       failures.some((failure) => failure.event.id?.value === "event-B11"),
     );
     const failures = context.storedEventDispatchFailures();
@@ -1596,6 +1620,34 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task", 
   });
 }
 
+function createAggregateCommandWithoutId(aggregateId: string, name = "Task", tenantId?: string) {
+  return create(CommandSchema, {
+    context: create(CommandContextSchema, {
+      actorContext: create(ActorContextSchema, {
+        ...(tenantId === undefined
+          ? {}
+          : {
+              tenantId: create(TenantIdSchema, {
+                kind: {
+                  case: "value",
+                  value: tenantId,
+                },
+              }),
+            }),
+        actor: create(UserIdSchema, { value: "user-1" }),
+      }),
+    }),
+    message: packAny(
+      AggregateStateSchema,
+      create(AggregateStateSchema, {
+        id: aggregateId,
+        name,
+        archived: false,
+      }),
+    ),
+  });
+}
+
 function createProjectionEvent(
   id: string,
   entityId: string,
@@ -1720,7 +1772,7 @@ async function waitForProjectionState(
   return undefined;
 }
 
-async function waitForStoredEventDispatchFailures(
+async function waitForFailures(
   context: BoundedContext,
   count: number,
 ): Promise<ReturnType<BoundedContext["storedEventDispatchFailures"]>> {
@@ -1735,7 +1787,7 @@ async function waitForStoredEventDispatchFailures(
   return context.storedEventDispatchFailures();
 }
 
-async function waitForStoredEventDispatchFailure(
+async function waitForFailure(
   context: BoundedContext,
   predicate: (failures: ReturnType<BoundedContext["storedEventDispatchFailures"]>) => boolean,
 ): Promise<ReturnType<BoundedContext["storedEventDispatchFailures"]>> {

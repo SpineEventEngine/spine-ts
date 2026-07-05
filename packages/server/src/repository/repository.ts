@@ -728,14 +728,18 @@ class AggregateCommandExecution {
 
     context.producerId = PrimitiveIds.pack(aggregateId);
     context.version = create(VersionSchema, { number: eventVersionNumber(version) });
-    if (this.#command.context !== undefined && this.#command.id !== undefined) {
+    if (this.#command.context !== undefined) {
       context.origin = {
         case: "pastMessage",
         value: create(OriginSchema, {
-          message: create(MessageIdSchema, {
-            id: packAny(CommandIdSchema, this.#command.id),
-            typeUrl: this.#command.message?.typeUrl ?? "",
-          }),
+          ...(this.#command.id === undefined
+            ? {}
+            : {
+                message: create(MessageIdSchema, {
+                  id: packAny(CommandIdSchema, this.#command.id),
+                  typeUrl: this.#command.message?.typeUrl ?? "",
+                }),
+              }),
           ...(this.#command.context.actorContext === undefined
             ? {}
             : { actorContext: clone(ActorContextSchema, this.#command.context.actorContext) }),

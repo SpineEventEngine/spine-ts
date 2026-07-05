@@ -31,7 +31,9 @@ Current slice exposes:
   and
 - `new Repository({ entityType, schema, handlers })` route calculation through
   `routeCommand()` and `routeEvent()` when explicit handler metadata is supplied.
-  Routes are deferred and do not invoke handlers;
+  Direct route calls only calculate routes and do not invoke handlers; built
+  contexts use the same metadata to execute aggregate command handlers and
+  projection event subscribers through the command and event buses;
   and
 - `context.stand()` / `new Stand({ context, storageFactory })` for direct
   read-side entity state registration, latest-state updates, latest-state reads,

@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11b Projection Event Updates
 
-Status: round-3 review fixes implemented; verification passed
+Status: round-4 review fixes implemented; verification passed
 Branch: `task/T-0012-11b-projection-event-updates`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11b-projection-event-updates`
@@ -98,7 +98,12 @@ that updates `Stand` after a projection subscriber mutates projection state.
 ## Verification
 
 - RED:
-  `pnpm vitest run packages/server/test/repository/repository-routing.test.ts packages/server/test/services/spine-services.test.ts -t "projection event|real projection event"`
+  ```sh
+  pnpm vitest run \
+    packages/server/test/repository/repository-routing.test.ts \
+    packages/server/test/services/spine-services.test.ts \
+    -t "projection event|real projection event"
+  ```
   failed as expected: projection subscriber call count stayed `0`, Stand
   subscription updates were empty, and the SubscriptionService handler timed
   out waiting for a projection update.
@@ -125,14 +130,19 @@ that updates `Stand` after a projection subscriber mutates projection state.
 - Escalated `pnpm test:coverage` passed: 45 files, 573 tests; statements
   94.97%, branches 90.14%, functions 97.48%, lines 94.99%.
 - Round-1 review-fix RED:
-  `pnpm vitest run packages/server/test/repository/repository-routing.test.ts packages/server/test/repository/repository.test.ts -t "command tenant metadata|missing projection subscriber|constrains entity constructor"`
+  ```sh
+  pnpm vitest run \
+    packages/server/test/repository/repository-routing.test.ts \
+    packages/server/test/repository/repository.test.ts \
+    -t "command tenant metadata|missing projection subscriber|constrains entity constructor"
+  ```
   failed as expected before the fix: the command-tenant projection state was
   absent, the missing-method diagnostic still said aggregate execution, and
   the projection version type `@ts-expect-error` was unused.
 - Round-1 review-fix GREEN: the same focused command passed with 2 files, 3
   tests after the fix; `pnpm typecheck` also passed.
 - Round-1 review-fix final verification passed:
-  `pnpm vitest run packages/server/test/repository/repository-routing.test.ts packages/server/test/repository/repository.test.ts -t "command tenant metadata|missing projection subscriber|constrains entity constructor"`,
+  the same focused `pnpm vitest run` command,
   `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, and
   `git diff --check`.
 - Sandboxed `pnpm test:coverage` still failed only on known local IPC/HTTP2
@@ -141,13 +151,12 @@ that updates `Stand` after a projection subscriber mutates projection state.
   passed with 45 files and 575 tests; coverage summary: statements 95%,
   branches 90.09%, functions 97.48%, lines 95.02%.
 - Round-2 focused RED:
-  `pnpm test packages/server/test/repository/repository-routing.test.ts -t "resolves aggregate command execution after commit when stored-event dispatch later throws"`
-  failed as expected before the fix because
+  a focused `pnpm test` selection for post-commit stored-event dispatch
+  failures failed as expected before the fix because
   `context.storedEventDispatchFailures` did not exist.
 - Round-2 focused GREEN:
-  `pnpm test packages/server/test/repository/repository-routing.test.ts -t "stored-event|stored event|after commit when stored-event dispatch later throws|records stored-event projection subscriber failures"`
-  passed with 1 file and 3 selected tests after the diagnostic channel was
-  wired.
+  a focused `pnpm test` selection for stored-event dispatch diagnostics passed
+  with 1 file and 3 selected tests after the diagnostic channel was wired.
 - Round-2 final verification passed: focused tests, `pnpm typecheck`,
   `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, and `git diff --check`.
 - Sandboxed `pnpm test:coverage` still failed only on known local IPC/HTTP2
@@ -167,3 +176,26 @@ that updates `Stand` after a projection subscriber mutates projection state.
   tests passing, with 2 files and 21 tests failed due to those permissions.
 - Escalated `pnpm test:coverage` passed with 45 files and 579 tests; coverage
   summary: statements 94.97%, branches 90.04%, functions 97.5%, lines 94.99%.
+- Round-4 review fixes:
+  aggregate-produced events now bind command context as origin even when a
+  multitenant command has no id, the regression covers tenant-a/no-id versus
+  tenant-b origin, the README route/execution bullet is current, old command
+  lines are reflowed, and dispatch-failure wait helpers are shorter.
+- Round-4 focused repository verification passed:
+  a focused `pnpm test` selection for command tenant routing and diagnostics
+  passed with 1 file and 9 selected tests.
+
+- Round-4 final verification passed:
+  - `pnpm test packages/server/test/repository/repository-routing.test.ts`
+    passed with 1 file and 38 tests.
+  - `pnpm typecheck` passed.
+  - `pnpm lint` passed.
+  - `pnpm format:check` passed after Prettier normalized this report.
+  - `pnpm docs:check` passed with the existing invalid-origin source-link
+    warning from TypeDoc.
+  - `git diff --check` passed.
+  - Sandboxed `pnpm test:coverage` failed only on local endpoint permissions:
+    ZeroMQ IPC reported `Operation not permitted`, and gRPC service tests
+    reported `listen EPERM 127.0.0.1`.
+  - Escalated `pnpm test:coverage` passed with 45 files and 580 tests; coverage
+    summary: statements 94.97%, branches 90.04%, functions 97.5%, lines 94.99%.

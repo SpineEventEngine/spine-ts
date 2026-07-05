@@ -1,6 +1,6 @@
 # Review Log: T-0012.11b Projection Event Updates
 
-Status: round-3 review fixes implemented; verification passed
+Status: round-4 review fixes implemented; verification passed
 Task log: `build-protocol/tasks/T-0012-11b-projection-event-updates/TASK.md`
 Branch: `task/T-0012-11b-projection-event-updates`
 Worktree:
@@ -62,3 +62,13 @@ Reviewers must verify:
   `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, `git diff --check`, and
   escalated `pnpm test:coverage` with 45 files and 579 tests. Sandboxed
   coverage still fails only on local IPC/listen permissions.
+- Round-4 review fixes addressed the residual no-id command security finding
+  and stale docs/style findings. Aggregate-produced events now bind command
+  context as origin even when the command has no id, so projection dispatch
+  uses the command tenant instead of mutable handler-provided event origin
+  tenants. Focused repository verification for command tenant routing and
+  dispatch diagnostics passed. Final verification passed: focused/full
+  repository routing tests, `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `pnpm docs:check`, `git diff --check`, and escalated
+  `pnpm test:coverage` with 45 files and 580 tests. Sandboxed coverage still
+  fails only on local IPC/listen permissions.
