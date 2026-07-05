@@ -108,7 +108,8 @@ Gap-routing rule:
 
 ## Current Selected Subtask
 
-Selected: none. `T-0012.12` is complete.
+Selected: none. All planned `T-0012.12` slices are merged and verified;
+parent integration re-review is pending.
 
 Why:
 

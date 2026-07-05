@@ -38,7 +38,7 @@ Implementation commits: `3cc8625` merge of `T-0012.12a`; `63f8e9f` merge of
 `T-0012.12b`; `e27b033` merge of `T-0012.12c`; `6d82910` merge of
 `T-0012.12d`; `064a95d` merge of `T-0012.12e`; `ea2a4ab` merge of
 `T-0012.12f`
-Final branch HEAD: `ea2a4ab`; all planned `T-0012.12` slices merged
+Final implementation merge: `ea2a4ab`; all planned `T-0012.12` slices merged
 
 ## Objective
 
@@ -230,7 +230,8 @@ Out of scope:
   Passing commands: `pnpm check:node`, `pnpm typecheck`, `pnpm lint`,
   `pnpm docs:check`, `pnpm proto:check-generated`, targeted
   `pnpm exec prettier --check` over changed parent/example docs and to-do
-  example files, `git diff --check HEAD`, escalated `pnpm test`, and escalated
+  example files (exact paths recorded in the implementation report and work
+  log), `git diff --check HEAD`, escalated `pnpm test`, and escalated
   `pnpm test:coverage` (45 files / 651 tests, 95.18% statements, 90.48%
   branches, 97.63% functions, 95.2% lines). Future verification must not
   parallelize commands that invoke `pnpm proto:generate` until generation is

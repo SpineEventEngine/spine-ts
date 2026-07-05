@@ -3,7 +3,7 @@
 Task log: `build-protocol/tasks/T-0012-12-to-do-example/TASK.md`
 Branch: `task/T-0012-12-to-do-example`
 Baseline commit: `89868e9`
-Reviewed commit/diff basis: `ea2a4ab..1d49445`
+Reviewed commit/diff basis: latest round `1d49445..2030181`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
 Status: parent integration review round 1 comments addressed; re-review pending
@@ -141,3 +141,26 @@ Review focus for splitter review:
   - record the exact targeted Prettier command;
   - preserve the operational caveat that proto-generating verification commands
     must run sequentially until generated-output publishing is concurrency-safe.
+- Round 2 re-review package:
+  `.superpowers/sdd/review-1d49445..2030181.diff`.
+- Round 2 reviewed range: `1d49445..2030181`.
+- Round 2 status:
+  - code style/maintainability:
+    `019f33fe-739a-7612-ba80-1a912d15be63` (metadata comments, closed)
+  - documentation:
+    `019f33fe-941c-7da2-ba46-dc9f9e997ba8` (metadata comments, closed)
+  - TypeScript/API docs:
+    `019f33fe-af89-7a50-88b5-c3b94305f3a4` (clean, closed)
+  - security:
+    `019f33fe-d001-7521-96b4-bee6af35af3d` (clean, closed)
+  - performance/reliability:
+    `019f33fe-ee99-7681-b65e-e165056abd6b` (metadata comments, closed)
+- Round 2 findings addressed in the next metadata fix:
+  - remove the remaining premature complete wording in the implementation
+    report;
+  - record the active re-review package and range;
+  - update the work-log next step to re-reviewing the metadata fix;
+  - clarify that `ea2a4ab` is the final implementation merge, not the latest
+    branch HEAD;
+  - point the primary task log to the exact Prettier evidence recorded in the
+    report and work log.
