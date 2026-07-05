@@ -87,9 +87,10 @@ projection-state list read needed by the to-do example.
 - `Stand.readAllVersioned()` uses `RecordStorage.query()` directly and reuses
   the point-read version cloning path.
 - `QueryService.Read` accepts projection-state `Target.include_all` queries,
-  preserves tenant validation, and packs versioned responses in the same shape
-  as ID-filter reads.
+  preserves tenant validation for projection routes, rejects non-projection
+  include-all targets with `INVALID_QUERY` before tenant validation or storage
+  access, and packs versioned responses in the same shape as ID-filter reads.
 - Required review lanes have no remaining comments.
 - Final verification passed: focused stand and service tests, `pnpm typecheck`,
   `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, `git diff --check`, and
-  escalated `pnpm test:coverage` with 45 files and 589 tests.
+  escalated `pnpm test:coverage` with 45 files and 592 tests.

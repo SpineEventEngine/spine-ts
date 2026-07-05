@@ -93,12 +93,14 @@ blocked only by local endpoint permissions.
 `T-0012.11c Projection List Queries` is merged into this parent branch at
 `413c5f7`. It adds direct Stand list reads, `QueryService.Read`
 projection-state `Target.include_all` support, tenant-boundary coverage, public
-docs/API updates, and focused list-read reliability tests. Parent verification
-passed after the merge: focused stand/service tests (2 files, 9 selected tests),
-`pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm docs:check`,
-`git diff --check HEAD^..HEAD`, and escalated `pnpm test:coverage` (45 files,
-589 tests; branches 90.01%). Sandboxed coverage remains blocked only by local
-endpoint permissions.
+docs/API updates, and focused list-read reliability tests. Parent review found
+include-all had been accepted for all state routes; follow-up commits `764b946`
+and `a0c6dde` now reject non-projection include-all targets with
+`INVALID_QUERY` before tenant validation or storage access. Parent verification
+passed: focused stand/service tests, `pnpm typecheck`, `pnpm lint`,
+`pnpm format:check`, `pnpm docs:check`, `git diff --check`, and escalated
+`pnpm test:coverage` (45 files, 592 tests; branches 90.03%). Sandboxed coverage
+remains blocked only by local endpoint permissions.
 
 `T-0012.11d Validation And Immediate Refusal Outcomes` is the next
 implementation slice.

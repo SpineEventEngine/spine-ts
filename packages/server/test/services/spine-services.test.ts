@@ -289,7 +289,7 @@ describe("SpineServices", () => {
     );
   });
 
-  it("rejects include-all reads for non-projection routes before multitenant tenant validation", async () => {
+  it("rejects non-projection include-all before multitenant tenant checks", async () => {
     const context = createFakeContext({
       entityFamily: "aggregate",
       isMultitenant: true,
@@ -308,7 +308,7 @@ describe("SpineServices", () => {
     );
   });
 
-  it("rejects include-all reads for non-projection routes before single-tenant tenant validation", async () => {
+  it("rejects non-projection include-all before single-tenant tenant checks", async () => {
     const context = createFakeContext({
       entityFamily: "aggregate",
       isMultitenant: false,

@@ -149,12 +149,15 @@ Resumed-state note:
 - `T-0012.11c` is merged into this parent branch at `413c5f7`. It adds direct
   `Stand.readAllVersioned()` list reads over `RecordStorage.query()`, supports
   projection-state `Target.include_all` queries through `QueryService.Read`,
-  preserves tenant validation, and documents the public/API behavior. Parent
-  verification passed after the merge: focused stand/service tests (2 files, 9
-  selected tests), `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
-  `pnpm docs:check`, `git diff --check HEAD^..HEAD`, and escalated
-  `pnpm test:coverage` (45 files, 589 tests; branches 90.01%). Sandboxed
-  coverage remains blocked only by local endpoint permissions.
+  preserves tenant validation for projection routes, and documents the
+  public/API behavior. Parent review found include-all had been accepted for
+  all state routes; follow-up commits `764b946` and `a0c6dde` now reject
+  non-projection include-all targets with `INVALID_QUERY` before tenant
+  validation or storage access. Parent verification passed: focused
+  stand/service tests, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
+  `pnpm docs:check`, `git diff --check`, and escalated `pnpm test:coverage`
+  (45 files, 592 tests; branches 90.03%). Sandboxed coverage remains blocked
+  only by local endpoint permissions.
 - The next selected implementation slice is
   `T-0012.11d Validation And Immediate Refusal Outcomes`.
 
