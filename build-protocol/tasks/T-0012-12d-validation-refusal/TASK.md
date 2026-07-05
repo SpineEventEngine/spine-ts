@@ -1,6 +1,6 @@
 # T-0012.12d: Validation And Refusal
 
-Status: round-ten metadata fixed; re-review pending
+Status: round-eleven metadata fixed; re-review pending
 Start: `2026-07-05 18:08 WEST`
 End: `2026-07-05 18:49 WEST`
 Baseline commit: `27250a0`
@@ -23,7 +23,8 @@ Round-seven-metadata commit: `cbf610f`
 Round-eight-metadata commit: `af96a6a`
 Round-nine-metadata commit: `d6ae65b`
 Round-ten-metadata commit: `95bf3da`
-Final branch HEAD: `95bf3da`
+Round-eleven-metadata commit: `1e7b884`
+Final branch HEAD: `1e7b884`
 
 ## Objective
 
@@ -193,6 +194,13 @@ Out of scope:
 - Escalated `pnpm test:coverage` passed, 45 files / 647 tests, with overall
   coverage: statements 95.18%, branches 90.48%, functions 97.63%, lines
   95.2%.
+
+## Restart Guidance
+
+- Resume from git HEAD `1e7b884` and the latest reviewed metadata basis
+  `1e7b884`.
+- Task branch closure commit, if any, will be recorded after closure or
+  integration, once it exists.
 
 ## Review Notes
 

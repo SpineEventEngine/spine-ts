@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12d Validation And Refusal
 
-Status: round-ten metadata fixed; re-review pending
+Status: round-eleven metadata fixed; re-review pending
 Branch: `task/T-0012-12d-validation-refusal`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
@@ -18,7 +18,8 @@ Round-seven-metadata commit: `cbf610f`
 Round-eight-metadata commit: `af96a6a`
 Round-nine-metadata commit: `d6ae65b`
 Round-ten-metadata commit: `95bf3da`
-Final branch HEAD: `95bf3da`
+Round-eleven-metadata commit: `1e7b884`
+Final branch HEAD: `1e7b884`
 
 ## Summary
 
@@ -39,6 +40,8 @@ query behavior completed by `T-0012.12c`.
   refusal paths.
 - Round-two review-fix strengthens that helper to snapshot the full relevant
   `TaskList.tasks` contents as primitive task fields.
+- Branch closure commit, if any, will be recorded after closure or
+  integration, once it exists.
 
 ## Verification Evidence
 

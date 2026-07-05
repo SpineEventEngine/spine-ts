@@ -4,10 +4,10 @@ Task log: `build-protocol/tasks/T-0012-12d-validation-refusal/TASK.md`
 Branch: `task/T-0012-12d-validation-refusal`
 Baseline commit: `27250a0`
 Reviewed commit/diff basis:
-`95bf3da`
+`1e7b884`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
-Status: round-ten metadata fixed; re-review pending
+Status: round-eleven metadata fixed; re-review pending
 
 ## Required Review Lanes
 
@@ -249,3 +249,9 @@ Planned fixes:
 
 - Record `95bf3da` as the round-ten metadata commit and current branch head in
   the task log, implementation report, work log, and review log.
+
+Metadata update:
+
+- Re-review basis is now `1e7b884`.
+- Branch closure commit, if any, will be recorded after closure or
+  integration, once it exists.
