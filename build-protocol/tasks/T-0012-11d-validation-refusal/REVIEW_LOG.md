@@ -6,7 +6,7 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-15 durable-log/status fixes verified; ready for follow-up review
+Status: round-16 current-summary/status fixes verified; ready for follow-up review
 
 ## Required Lanes
 
@@ -390,3 +390,17 @@ Status: round-15 durable-log/status fixes verified; ready for follow-up review
   headers with the round-15 durable-log/status fix and recorded the correction
   in child and parent work logs. Docs, format, and whitespace verification
   passed.
+
+### Round 16
+
+- `2026-07-05 10:25 WEST`: Documentation review found current-summary drift:
+  the child implementation report and parent current-state bodies still stopped
+  at the round-14 docs/status follow-up instead of the round-15
+  durable-log/status fixes and header alignment.
+
+## Round-16 Fix Pass
+
+- `2026-07-05 10:30 WEST`: Implementation worker updated the cited current
+  summaries directly to include round-15 durable-log/status verification,
+  aligned child status headers with this pass, and recorded the fix in child
+  durable logs. Docs, format, and whitespace verification passed.

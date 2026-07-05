@@ -89,8 +89,8 @@ Baseline commit: `c13b19c`
 
 ## Review Summary
 
-Review history is current through the round-14 docs/status follow-up. Round 1
-moved payload validation to the `CommandBus`, removed an accidental public
+Review history is current through the round-15 durable-log/status fixes. Round
+1 moved payload validation to the `CommandBus`, removed an accidental public
 entity inspection hook, and filled missing public Ack docs. Round 2 moved
 internal validation errors back into their owning bus/repository layers and
 kept arbitrary dispatcher-thrown `ValidationException`s sanitized. Round 3
@@ -111,11 +111,17 @@ status summaries. Round 11 added sanitized incompatible-payload validation
 details. Round 12 preserves rejected-commit markers across rollback followed by
 a fresh transaction until an accepted commit clears them. Round 13 refreshed the
 review-log lane rollup and fixed README Markdown continuation. Round 14 updated
-the report/parent durable status to include the round-13 handoff and then
-aligned the child task status with the round-14 review-log status.
+the report/parent durable status to include the round-13 handoff and aligned
+the child task status with the round-14 review-log status. Round 15 updated the
+lane, report, parent current-state, and status-header rollups to include the
+round-14 docs/status verification and child task status follow-up.
 
 ### Latest Verification
 
+- `2026-07-05 10:20 WEST`: Round-15 header-alignment verification passed:
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
+- `2026-07-05 10:15 WEST`: Round-15 durable-log/status verification passed:
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
 - `2026-07-05 10:05 WEST`: Round-14 status follow-up verification passed:
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
 - `2026-07-05 10:00 WEST`: Round-14 docs/status verification passed:

@@ -159,8 +159,9 @@ Resumed-state note:
   (45 files, 592 tests; branches 90.03%). Sandboxed coverage remains blocked
   only by local endpoint permissions.
 - `T-0012.11d Validation And Immediate Refusal Outcomes` is implemented in its
-  child branch. Round-14 docs/status follow-up has been applied and verified;
-  docs/API, formatting, and whitespace checks passed for that pass.
+  child branch. Round-15 durable-log/status fixes and header alignment have
+  been applied and verified; docs/API, formatting, and whitespace checks passed
+  for those docs-only passes.
 
 ## Staged Subtasks
 
