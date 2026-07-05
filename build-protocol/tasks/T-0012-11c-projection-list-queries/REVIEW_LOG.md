@@ -47,3 +47,12 @@ Status: complete
 - Final documentation re-review after `4102284`: clean.
 - All participating sub-agents were closed by the orchestrator after their
   reports were received.
+
+## Parent Integration Review
+
+- code style/maintainability: found that `QueryService.Read` accepted
+  `include_all` for every registered state route, while this slice only
+  promised projection-state list reads.
+- fix: the parent branch now carries repository `entityFamily` on the service
+  route and returns `INVALID_QUERY` for non-projection include-all targets
+  before reading from `Stand`.

@@ -71,6 +71,12 @@ permissions.
 verification passed after merge. The next implementation slice is
 `T-0012.11d Validation And Immediate Refusal Outcomes`.
 
+Parent integration style review then found one important scope issue: the
+include-all `QueryService.Read` path was attached to every state route instead
+of projection routes only. The accepted fix is to carry `entityFamily` into
+the service route and reject non-projection `include_all` targets with
+`INVALID_QUERY` before reaching `Stand.readAllVersioned()`.
+
 ## Round-2 Findings Summary
 
 Round 2 only found two remaining doc gaps:

@@ -37,6 +37,7 @@ import {
 } from "@spine-ts/proto/generated/spine/core/response_pb.js";
 
 import type { BoundedContext } from "../context/bounded-context.js";
+import type { EntityFamily } from "../entity/entity.js";
 import type { StandReadResult, StandSubscription, StandUpdate } from "../stand/stand.js";
 
 /** Small route registrar for the first public Spine gRPC service slice. */
@@ -66,6 +67,7 @@ export class SpineServices {
         const typeUrl = deriveTypeUrl(schema);
         this.#stateRoutes.set(typeUrl, {
           context,
+          entityFamily: repository.entityFamily,
           schema,
           typeUrl,
         });
@@ -157,6 +159,15 @@ export class SpineServices {
 
     try {
       if (target.criterion.case === "includeAll" && target.criterion.value) {
+        if (route.entityFamily !== "projection") {
+          return create(QueryResponseSchema, {
+            response: errorResponse(
+              "INVALID_QUERY",
+              "QueryService.Read include_all requires a projection target.",
+            ),
+          });
+        }
+
         const results = await route.context
           .stand()
           .readAllVersioned(route.schema, tenantOptions(tenantId));
@@ -327,6 +338,7 @@ interface CommandRoute {
 
 interface StateRoute {
   readonly context: BoundedContext;
+  readonly entityFamily: EntityFamily;
   readonly schema: MessageSchema;
   readonly typeUrl: string;
 }

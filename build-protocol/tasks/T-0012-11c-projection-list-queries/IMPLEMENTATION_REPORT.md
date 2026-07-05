@@ -34,9 +34,10 @@ Implemented the smallest storage-backed include-all path:
   as point reads, calls `RecordStorage.query()`, and reuses the existing
   version lookup/cloning behavior for each returned state.
 - `SpineServices.#read()` now accepts `Target.include_all = true` for
-  projection-state queries, validates tenant constraints before execution, and
-  packs each result as `EntityStateWithVersion` with the same `Any` + `Version`
-  shape used by ID-filter reads.
+  projection-state queries, rejects non-projection include-all targets,
+  validates tenant constraints before execution, and packs each result as
+  `EntityStateWithVersion` with the same `Any` + `Version` shape used by
+  ID-filter reads.
 - ID-filter reads continue through the existing `readVersioned()` path.
 - Include-all read failures return the existing sanitized
   `QUERY_READ_ERROR` response.

@@ -271,6 +271,24 @@ describe("SpineServices", () => {
     expect(response.message[1]?.version).toEqual(create(VersionSchema, { number: 3 }));
   });
 
+  it("rejects include-all reads for non-projection routes", async () => {
+    const context = createFakeContext({
+      entityFamily: "aggregate",
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      readAllVersioned: () => {
+        throw new Error("include_all must not list aggregate state.");
+      },
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(createIncludeAllQuery());
+
+    expect(response.response?.status?.status.case).toBe("error");
+    expect(responseErrorMessage(response)).toBe(
+      "QueryService.Read include_all requires a projection target.",
+    );
+  });
+
   it("returns Spine error statuses for unsupported command and query targets", async () => {
     const context = BoundedContext.singleTenant("Tasks").build();
     const server = await startServices(context);
@@ -1349,6 +1367,7 @@ function responseErrorMessage(response: unknown) {
 function createFakeContext(options: {
   readonly isMultitenant?: boolean;
   readonly commandTypes?: readonly string[];
+  readonly entityFamily?: "aggregate" | "projection" | "process-manager";
   readonly stateTypes?: readonly string[];
   readonly post?: (command: ReturnType<typeof createProjectionCommand>) => Promise<void>;
   readonly readVersioned?: (
@@ -1383,6 +1402,7 @@ function createFakeContext(options: {
     registeredRepositories: () =>
       stateTypes.map((typeUrl) =>
         Object.freeze({
+          entityFamily: options.entityFamily ?? "projection",
           stateSchema: ProjectionStateSchema,
           typeUrl,
         }),
