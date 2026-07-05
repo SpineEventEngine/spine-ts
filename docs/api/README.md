@@ -59,8 +59,8 @@ events can carry a contract-valid command origin; missing IDs reject before
 mutation or storage. Aggregate command completion resolves after aggregate
 event storage and snapshot handling; later already-stored event redispatch
 failures are observable through the copy-safe `storedEventDispatchFailures()`
-diagnostic snapshot on the owning `BoundedContext`. This slice does not create default
-repositories from entity classes,
+diagnostic snapshot on the owning `BoundedContext`. This slice does not create
+default repositories from entity classes,
 invoke query/process handlers, manage inboxes/delivery, run cache catch-up,
 create system contexts, write tenant indexes, expose a broad server lifecycle,
 or integrate transports.
