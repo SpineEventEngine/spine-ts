@@ -6,15 +6,15 @@ Branch: `task/T-0012-11e-minimal-black-box-fixture`
 Baseline commit: `6b5dd07`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11e-minimal-black-box-fixture`
-Status: implemented and verified
+Status: implemented; latest fix verified and awaiting re-review
 
 ## Required Lanes
 
-- code style/maintainability: round-1 findings verified; awaiting re-review
-- documentation: round-1 findings verified; awaiting re-review
+- code style/maintainability: latest status-rollup finding verified; awaiting re-review
+- documentation: latest status-rollup finding verified; awaiting re-review
 - TypeScript/API docs: round 1 clean
-- security: round-1 findings verified; awaiting re-review
-- performance/reliability: round-1 findings verified; awaiting re-review
+- security: latest cancel-window finding verified; awaiting re-review
+- performance/reliability: queue-limit fix clean; awaiting final re-review
 
 ## Review Focus
 
@@ -76,3 +76,10 @@ pending` wording after commit `67e2586` and impossible timestamp ordering in
   updates, clears queued updates when closed, closes on queue overflow, and adds
   focused regressions for both paths. Parent status wording and lane rollups
   were also aligned after review found stale live status text.
+- `2026-07-05 09:55 WEST`: Follow-up security re-review found a queued update
+  could still be read while `cancel()` was awaiting service cancellation. The
+  fixture now marks the handle closed before awaiting service cancellation, and
+  a focused regression covers in-flight cancellation. Verification is pending.
+- `2026-07-05 09:59 WEST`: Focused fixture tests passed with 1 file and 10
+  tests. `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, `pnpm format:check`,
+  and `git diff --check` passed for the latest fix.

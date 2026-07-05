@@ -87,3 +87,11 @@ Baseline commit: `6b5dd07`
   updates, closes the handle when fixture-local queued updates reach
   `queueLimit`, and adds focused regressions for post-cancel and overflow
   reads.
+- `2026-07-05 09:55 WEST`: Follow-up security re-review found a cancellation
+  window in which queued updates could still be read while `cancel()` awaited
+  service cancellation. The fixture now marks the handle closed before awaiting
+  service cancellation, and a focused regression covers that in-flight
+  cancellation path.
+- `2026-07-05 09:59 WEST`: Latest fix verification passed: focused fixture
+  tests with 1 file and 10 tests, `pnpm typecheck`, `pnpm lint`,
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.

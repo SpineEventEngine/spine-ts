@@ -205,6 +205,25 @@ describe("BoundedContextFixture", () => {
     await expect(subscription.next()).resolves.toBeUndefined();
   });
 
+  it("makes reads inert while cancellation is in flight", async () => {
+    const fixture = new BoundedContextFixture(createTaskContext());
+    const subscription = await fixture.subscribe(createTaskTopic());
+
+    await fixture.post(createTaskCommand("command-canceling", "task-canceling", "Canceling"));
+    await waitForQueuedUpdate();
+
+    const canceling = subscription.cancel();
+
+    await expect(subscription.next()).resolves.toBeUndefined();
+    await expect(canceling).resolves.toMatchObject({
+      status: {
+        status: {
+          case: "ok",
+        },
+      },
+    });
+  });
+
   it("closes subscriptions when fixture-local queued updates reach the limit", async () => {
     const fixture = new BoundedContextFixture(createTaskContext(), {
       queueLimit: 1,

@@ -170,9 +170,9 @@ class ActiveFixtureSubscription implements FixtureSubscription {
   }
 
   async cancel(): Promise<Response> {
+    this.#finish();
     const response = await this.#handlers.cancel(clone(SubscriptionSchema, this.#subscription));
     await this.#iterator.return?.();
-    this.#finish();
 
     return clone(ResponseSchema, response);
   }
