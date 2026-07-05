@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12a Todo Proto Generation
 
-Status: implementation complete; pending review
+Status: implementation complete; review-fix commit pending re-review
 Branch: `task/T-0012-12a-todo-proto`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12a-todo-proto`
@@ -14,7 +14,8 @@ projection, service, or server runtime behavior.
 
 ## Current State
 
-- Worktree is open from handoff commit `b12ef3b`.
+- Worktree is open at the review-fix commit on top of implementation commit
+  `cbdb35c`; re-review is pending against current HEAD.
 - Required task/spec/tooling inputs have been read.
 - Example-owned todo `.proto` files define `TaskId`, `Task`, `TaskList`,
   create/rename/complete/reopen commands, and corresponding events.
@@ -25,6 +26,13 @@ projection, service, or server runtime behavior.
 - Existing Buf / Protobuf-ES tooling was reused. The example package now
   declares the already-pinned `@bufbuild/protobuf` runtime dependency so
   generated imports resolve from the example workspace.
+- `pnpm proto:generate` now stages each generated root in a temporary sibling
+  directory and swaps it into place after successful Buf generation, preserving
+  live generated roots while generation runs.
+- Root `test` and `test:coverage` now run `pnpm proto:generate` first so fresh
+  checkouts have ignored generated output before generated-dependent tests run.
+- The production example entry point imports a generated schema reference
+  directly, and the example build emits a viable `dist/src/index.js` export.
 
 ## Files Changed
 
@@ -33,6 +41,7 @@ projection, service, or server runtime behavior.
 - Updated Buf generation/check scripts and generated-output excludes.
 - Updated example package metadata and smoke test.
 - Updated task/report/work logs.
+- Updated placeholder README/user-guide status wording.
 
 ## Verification
 
@@ -55,7 +64,7 @@ projection, service, or server runtime behavior.
 - `pnpm format:check`: passed.
 - `pnpm test:coverage`: sandboxed run failed with ZeroMQ IPC `Operation not
 permitted` and HTTP/2 `listen EPERM 127.0.0.1`; escalated rerun passed with
-  45 test files, 620 tests, statements 95.06%, branches 90.22%, functions
+  45 test files, 621 tests, statements 95.06%, branches 90.22%, functions
   97.60%, lines 95.08%.
 - `git diff --check`: passed.
 - Main orchestrator reran generation-dependent checks sequentially before
@@ -66,11 +75,29 @@ permitted` and HTTP/2 `listen EPERM 127.0.0.1`; escalated rerun passed with
   test, `git diff --check`, sandboxed `pnpm test:coverage` with known
   local-endpoint failure, and escalated `pnpm test:coverage` with branch
   coverage 90.22%.
+- Review-fix verification passed: `pnpm proto:generate`, focused example
+  smoke, `pnpm proto:check-generated`, generated-clean unit test,
+  `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm docs:check`,
+  `git diff --check`, and the proto-workflow regression test.
+- Review-fix coverage result: sandboxed `pnpm test:coverage` failed with
+  ZeroMQ IPC `Operation not permitted` and HTTP/2
+  `listen EPERM 127.0.0.1`; escalated `pnpm test:coverage` passed with 45 test
+  files, 621 tests, statements 95.06%, branches 90.22%, functions 97.60%,
+  lines 95.08%.
+- Main orchestrator reran the same review-fix verification after interruption:
+  generation, focused todo smoke, generated-clean checks, proto workflow
+  regression test, typecheck, lint, format check, docs check, whitespace check,
+  generated-output Git guards, sandboxed coverage, and escalated coverage all
+  match the evidence above.
 
 ## Generated Files Status
 
-- `examples/todo/generated/` exists only as ignored generated output.
-- `git ls-files -- examples/todo/generated` returned no tracked files.
+- `examples/todo/generated/` and `packages/proto/generated/` exist only as
+  ignored generated output.
+- `git check-ignore -- examples/todo/generated/.cleanup-enforcement-check packages/proto/generated/.cleanup-enforcement-check`
+  printed both paths.
+- `git ls-files -- examples/todo/generated packages/proto/generated` returned
+  no tracked files.
 - Generated TypeScript was not committed.
 
 ## Reviewer Risks

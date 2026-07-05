@@ -1,8 +1,8 @@
 # T-0012.12a: Todo Proto Generation
 
-Status: implementation complete; pending review
+Status: implementation complete; review-fix commit pending re-review
 Start: `2026-07-05 11:38 WEST`
-End: Pending
+End: `2026-07-05 12:04 WEST`
 Baseline commit: `b12ef3b`
 Task log path: `build-protocol/tasks/T-0012-12a-todo-proto/TASK.md`
 Branch: `task/T-0012-12a-todo-proto`
@@ -10,9 +10,9 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12a-todo-proto`
 Authoring sub-agent: Codex implementation sub-agent
 `019f31cd-b967-7341-8d79-4d95d8acfec4`
-Reviewer sub-agents: Pending
-Implementation commit: Uncommitted implementation diff; do not commit per handoff.
-Final branch HEAD: `b12ef3b`
+Reviewer sub-agents: Initial review completed; re-review pending after fix commit
+Implementation commit: `cbdb35c`
+Review-fix commit: current HEAD; pending re-review
 
 ## Objective
 
@@ -134,18 +134,30 @@ Out of scope:
   branch commit `07d06a2` and opened this task log before implementation.
 - `2026-07-05 11:39 WEST`: Implementation sub-agent began from handoff commit
   `b12ef3b`, read required task/spec/tooling inputs, selected the existing
-  Buf / Protobuf-ES workflow with no new dependencies, and added a failing
+  Buf / Protobuf-ES workflow with no new tooling dependency, and added a failing
   smoke test for direct generated schema import.
 - `2026-07-05 11:39 WEST`: Added todo proto contracts, generation workflow,
   generated-clean coverage for the example output root, generated-output
   exclusions, and direct generated schema smoke coverage.
 - `2026-07-05 11:48 WEST`: Main orchestrator reran verification sequentially
   to avoid generation/read races and confirmed the implementation evidence.
+- `2026-07-05 11:58 WEST`: Review-fix sub-agent began from implementation
+  commit `cbdb35c`; fixes are intentionally uncommitted per handoff.
+- `2026-07-05 12:04 WEST`: Review-fix sub-agent completed the required
+  verification pass and left fixes uncommitted for orchestrator inspection.
+- `2026-07-05 12:10 WEST`: Main orchestrator resumed after interruption,
+  inspected the uncommitted review-fix diff, and corrected stale handoff
+  bookkeeping before fresh verification.
+- `2026-07-05 12:14 WEST`: Main orchestrator completed fresh review-fix
+  verification. Sandboxed coverage reproduced local IPC/HTTP2 restrictions;
+  escalated coverage passed with 45 files, 621 tests, branches 90.22%.
+- `2026-07-05 12:15 WEST`: Main orchestrator committed the review-fix pass and
+  amended bookkeeping; re-review is pending against current HEAD.
 
 ## Decisions
 
-- Reuse the existing Buf / Protobuf-ES toolchain. No new third-party dependency
-  is selected.
+- Reuse the existing Buf / Protobuf-ES toolchain. No new tooling dependency is
+  selected.
 - No Spine JVM server-source inspection is needed for this slice because it
   does not touch `@spine-ts/server` runtime/API code.
 - Extend the existing generated-clean script to cover multiple generated roots
@@ -153,6 +165,8 @@ Out of scope:
 - Add `@bufbuild/protobuf` to `@spine-ts/example-todo` package dependencies at
   the repo-pinned version so generated Protobuf-ES runtime imports resolve from
   the example workspace.
+- Generate into temporary sibling roots and swap only after successful Buf
+  generation so live generated roots remain present while generation runs.
 
 ## Human Questions And Answers
 
@@ -163,12 +177,15 @@ Out of scope:
 
 - `examples/todo/proto/spine/example/todo/v1/*.proto`
 - `examples/todo/buf.gen.yaml`
-- `examples/todo/src/index.test.ts`
-- `examples/todo/package.json`
+- `examples/todo/src/index.ts`, `examples/todo/src/index.test.ts`
+- `examples/todo/package.json`, `examples/todo/tsconfig.json`
+- `examples/todo/README.md`, `examples/todo/USER_GUIDE.md`
+- root `package.json`
 - `buf.yaml`, `buf.gen.yaml`, `.gitignore`, `.prettierignore`,
   `eslint.config.mjs`, `typedoc.json`, `vitest.config.ts`, `pnpm-lock.yaml`
-- `scripts/proto-workflow.mjs`, `scripts/check-generated-clean.mjs`
-- T-0012.12a task/report/work logs
+- `scripts/proto-workflow.mjs`, `scripts/proto-workflow.test.mjs`,
+  `scripts/check-generated-clean.mjs`
+- T-0012.12a task/report/review/work logs
 
 ## Tests Run
 
@@ -197,39 +214,56 @@ Out of scope:
 - `pnpm test:coverage`: sandboxed run failed on known local IPC/HTTP2 binding
   restrictions; escalated rerun passed.
 - `git diff --check`: passed.
+- Review-fix red steps:
+  `pnpm exec vitest run scripts/proto-workflow.test.mjs --passWithNoTests`
+  failed because live generated files were deleted before replacement output
+  existed; `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  failed because `generatedTaskSchemaTypeName` was not exported yet.
+- Review-fix final verification passed: `pnpm proto:generate`,
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`,
+  `pnpm proto:check-generated`,
+  `pnpm exec vitest run scripts/check-generated-clean.test.mjs --passWithNoTests`,
+  `pnpm exec vitest run scripts/proto-workflow.test.mjs --passWithNoTests`,
+  `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm docs:check`,
+  `git diff --check`, ignored/generated tracking checks, sandboxed
+  `pnpm test:coverage`, and escalated `pnpm test:coverage`.
+- Review-fix generated-output Git checks passed:
+  `git check-ignore -- examples/todo/generated/.cleanup-enforcement-check packages/proto/generated/.cleanup-enforcement-check`
+  printed both paths; `git ls-files -- examples/todo/generated packages/proto/generated`
+  returned empty output.
 
 ## Coverage Result
 
 - Sandboxed `pnpm test:coverage` failed with ZeroMQ IPC `Operation not
 permitted` and HTTP/2 `listen EPERM 127.0.0.1` timeouts.
-- Escalated `pnpm test:coverage` passed: 45 test files, 620 tests, statements
+- Escalated `pnpm test:coverage` passed: 45 test files, 621 tests, statements
   95.06%, branches 90.22%, functions 97.60%, lines 95.08%.
 - Main orchestrator confirmed the same sandbox failure mode and escalated
-  coverage result before commit.
+  coverage result before committing the review-fix pass.
 
 ## Documentation And Public API Impact
 
 | Area                             | Impact                                                                                         |
 | -------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Package README impact            | Pending; mention generation only if scripts/user workflow change.                              |
+| Package README impact            | Corrected status: proto contracts/generation exist; runnable app remains deferred.             |
 | TypeDoc/API docs impact          | `examples/todo/generated/**` is excluded; `examples/todo/src/index.ts` remains an entry point. |
 | Public API additions/removals    | Generated schemas are importable from ignored output; no generated facade added.               |
 | Framework `USER_GUIDE.md` impact | N/A unless framework generation workflow changes.                                              |
-| Example `USER_GUIDE.md` impact   | Pending; final guide slice owns full rewrite.                                                  |
+| Example `USER_GUIDE.md` impact   | Corrected status only; final guide rewrite remains T-0012.12f.                                 |
 | API examples                     | Pending later implementation slices.                                                           |
 | Compatibility notes              | Record any generation-tooling caveat.                                                          |
 
 ## Security Impact
 
-| Area                    | Impact                                                                                        |
-| ----------------------- | --------------------------------------------------------------------------------------------- |
-| Dependencies            | No new dependencies planned.                                                                  |
-| Secrets and credentials | No secrets used.                                                                              |
-| IPC                     | N/A.                                                                                          |
-| Validation              | Add schema validation options for required user-supplied fields.                              |
-| Tenant boundaries       | N/A for schema-generation slice.                                                              |
-| `Any`/deserialization   | Generated messages will later be packed/unpacked through existing registry/service contracts. |
-| Logging                 | N/A.                                                                                          |
+| Area                    | Impact                                                                                                                                                    |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dependencies            | No new tooling dependency; `@spine-ts/example-todo` declares already-pinned `@bufbuild/protobuf@2.12.1` so generated Protobuf-ES runtime imports resolve. |
+| Secrets and credentials | No secrets used.                                                                                                                                          |
+| IPC                     | N/A.                                                                                                                                                      |
+| Validation              | Add schema validation options for required user-supplied fields.                                                                                          |
+| Tenant boundaries       | N/A for schema-generation slice.                                                                                                                          |
+| `Any`/deserialization   | Generated messages will later be packed/unpacked through existing registry/service contracts.                                                             |
+| Logging                 | N/A.                                                                                                                                                      |
 
 ## Verification
 
@@ -238,8 +272,11 @@ permitted` and HTTP/2 `listen EPERM 127.0.0.1` timeouts.
 
 ## Review Rounds
 
-Pending implementation.
+- Review found stale logs, stale dependency/docs wording, non-staged proto
+  generation, root test/coverage missing generation, and example build config
+  excluding generated imports.
+- Uncommitted review-fix pass verified from implementation commit `cbdb35c`.
 
 ## Integration Result
 
-Pending.
+Review-fix pass complete; pending orchestrator review/integration.

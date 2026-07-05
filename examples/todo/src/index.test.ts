@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { TaskSchema } from "../generated/spine/example/todo/v1/tasks_pb.js";
-import { exampleSkeleton } from "./index.js";
+import { exampleSkeleton, generatedTaskSchemaTypeName } from "./index.js";
 
 describe("@spine-ts/example-todo", () => {
   it("exports skeleton metadata", () => {
@@ -13,5 +13,6 @@ describe("@spine-ts/example-todo", () => {
 
   it("imports generated task schemas directly", () => {
     expect(TaskSchema.typeName).toBe("spine.example.todo.v1.Task");
+    expect(generatedTaskSchemaTypeName).toBe("spine.example.todo.v1.Task");
   });
 });
