@@ -1,6 +1,6 @@
 # T-0012.12c: Task Operations
 
-Status: status-fix committed; re-review pending
+Status: restart-guidance fix committed; re-review pending
 Start: `2026-07-05 16:12 WEST`
 End: `2026-07-05 16:21 WEST`
 Baseline commit: `fc71408`
@@ -14,6 +14,7 @@ Implementation commit: `8ab4b5c`
 Review-fix commit: `3ee5c1a`
 Metadata-fix commit: `b6495bb`
 Status-fix commit: `6fea638`
+Restart-guidance-fix commit: `7ed30a3`
 Final branch HEAD: pending
 
 ## Objective

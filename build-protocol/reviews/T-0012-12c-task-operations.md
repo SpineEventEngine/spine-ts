@@ -5,9 +5,10 @@ Branch: `task/T-0012-12c-task-operations`
 Baseline commit: `fc71408`
 Reviewed commit/diff basis: implementation commit `8ab4b5c`; review-fix
 commit `3ee5c1a`; metadata-fix commit `b6495bb`; status-fix commit `6fea638`
+; restart-guidance-fix commit `7ed30a3`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
-Status: status-fix committed; re-review pending
+Status: restart-guidance fix committed; re-review pending
 
 ## Required Review Lanes
 
@@ -134,3 +135,23 @@ Planned fix:
 
 - Update work-log restart guidance to point at round-five re-review/task
   closure.
+
+### Round 6 - `7ed30a3`
+
+| Lane                       | Agent                                  | Result   |
+| -------------------------- | -------------------------------------- | -------- |
+| code style/maintainability | `019f32fc-4ae3-7322-b228-0ce18a7030ab` | Clean    |
+| documentation              | `019f32fc-4b7d-7ea1-b800-590c75888a41` | Comments |
+| TypeScript/API docs        | `019f32fc-4bf6-7300-a446-c0c8678261a9` | Clean    |
+| security                   | `019f32fc-4c7a-7fd3-bade-dbf9153ee12b` | Clean    |
+| performance/reliability    | `019f32fc-4d4d-7161-b2af-286108182f96` | Comments |
+
+Findings:
+
+- Review/work-log status still described the restart-guidance fix as pending
+  after `7ed30a3`.
+
+Planned fix:
+
+- Record `7ed30a3` as the restart-guidance fix and point current state to
+  re-review/task closure.
