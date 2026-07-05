@@ -6,7 +6,7 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: latest docs/status rollup fix verified; ready for follow-up review
+Status: merged into parent branch and parent-verified
 
 ## Required Lanes
 
@@ -501,3 +501,11 @@ Status: latest docs/status rollup fix verified; ready for follow-up review
   again. Implementation worker replaced fragile current-state counters with
   stable latest-verification wording while preserving historical round entries.
   Docs, format, and whitespace verification passed.
+
+## Parent Merge Review
+
+- `2026-07-05 11:50 WEST`: Parent merge review found the child task and review
+  headers still said `ready for follow-up review` after the parent branch had
+  merged and verified `T-0012.11d`. The orchestrator updated those live headers
+  to the merged-and-parent-verified state and recorded the fix in parent and
+  child durable logs.
