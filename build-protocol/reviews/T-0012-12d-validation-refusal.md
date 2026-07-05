@@ -329,8 +329,8 @@ Notes:
   later closed review lanes.
 - Final closure verification is now clearly separated from the earlier
   pre-round-two 11-test review-fix history.
-- Restart guidance stays pinned to the clean reviewed basis `f04b9b6` before
-  this closure metadata commit.
+- At that point, restart guidance was pinned to `f04b9b6`. Round 17 advanced
+  the current clean reviewed basis to `ecad758`.
 
 Planned fixes:
 

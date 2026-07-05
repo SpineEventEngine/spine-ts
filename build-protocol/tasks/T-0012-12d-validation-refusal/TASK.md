@@ -213,8 +213,8 @@ Out of scope:
   full-list snapshot coverage and stale metadata.
 - Round-three-through-round-eleven metadata reviews kept advancing the
   reviewed metadata basis through `1e7b884`.
-- Later review rounds accepted the deferred-final-head convention and advanced
-  the latest clean review basis to `f04b9b6`.
+- Later review rounds accepted the deferred-final-head convention, first at
+  `f04b9b6` and then at the latest clean review basis `ecad758`.
 
 ## Restart Guidance
 
