@@ -5,8 +5,9 @@ import { dirname, join, resolve } from "node:path";
 import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.mjs";
 
 const protoRoot = fileURLToPath(new URL("../proto", import.meta.url));
+const todoProtoRoot = fileURLToPath(new URL("../examples/todo/proto", import.meta.url));
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-const generatedPath = "packages/proto/generated";
+const generatedPaths = ["packages/proto/generated", "examples/todo/generated"];
 
 function runCommand(label, executable, args) {
   const result = spawnSync(executable, args, {
@@ -47,29 +48,32 @@ function findProtoFiles(directory) {
 }
 
 export function cleanGeneratedOutput(root = repoRoot) {
-  const generatedRoot = join(root, generatedPath);
-  const ancestorFailures = findSymlinkedAncestors(root, generatedPath);
+  for (const generatedPath of generatedPaths) {
+    const generatedRoot = join(root, generatedPath);
+    const ancestorFailures = findSymlinkedAncestors(root, generatedPath);
 
-  if (ancestorFailures.length > 0) {
-    for (const failure of ancestorFailures) {
-      console.error(`Generated path ancestor must not be a symlink: ${failure}`);
-    }
+    if (ancestorFailures.length > 0) {
+      for (const failure of ancestorFailures) {
+        console.error(`Generated path ancestor must not be a symlink: ${failure}`);
+      }
 
-    return 1;
-  }
-
-  const generatedStat = lstatIfPresent(generatedRoot);
-
-  if (generatedStat !== undefined) {
-    if (generatedStat.isSymbolicLink()) {
-      console.error(`Generated directory must not be a symlink: ${generatedPath}`);
       return 1;
     }
 
-    rmSync(generatedRoot, { recursive: true });
+    const generatedStat = lstatIfPresent(generatedRoot);
+
+    if (generatedStat !== undefined) {
+      if (generatedStat.isSymbolicLink()) {
+        console.error(`Generated directory must not be a symlink: ${generatedPath}`);
+        return 1;
+      }
+
+      rmSync(generatedRoot, { recursive: true });
+    }
+
+    mkdirSync(generatedRoot, { recursive: true });
   }
 
-  mkdirSync(generatedRoot, { recursive: true });
   return 0;
 }
 
@@ -81,7 +85,7 @@ export function main(argv = process.argv.slice(2)) {
     return 1;
   }
 
-  const protoFiles = findProtoFiles(protoRoot);
+  const protoFiles = [...findProtoFiles(protoRoot), ...findProtoFiles(todoProtoRoot)];
 
   if (protoFiles.length === 0) {
     console.log(
@@ -98,17 +102,31 @@ export function main(argv = process.argv.slice(2)) {
     return verifyStatus;
   }
 
-  const bufArgs = command === "lint" ? ["lint"] : ["generate"];
-
   if (command === "generate") {
     const cleanStatus = cleanGeneratedOutput();
 
     if (cleanStatus !== 0) {
       return cleanStatus;
     }
+
+    const packageStatus = runCommand("buf generate framework proto", resolveBufExecutable(), [
+      "generate",
+      "--template",
+      "buf.gen.yaml",
+    ]);
+
+    if (packageStatus !== 0) {
+      return packageStatus;
+    }
+
+    return runCommand("buf generate todo proto", resolveBufExecutable(), [
+      "generate",
+      "--template",
+      "examples/todo/buf.gen.yaml",
+    ]);
   }
 
-  return runCommand(`buf ${command}`, resolveBufExecutable(), bufArgs);
+  return runCommand("buf lint", resolveBufExecutable(), ["lint"]);
 }
 
 const isMain =

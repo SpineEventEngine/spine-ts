@@ -1,17 +1,18 @@
 # T-0012.12a: Todo Proto Generation
 
-Status: implementation pending
+Status: implementation complete; pending review
 Start: `2026-07-05 11:38 WEST`
 End: Pending
-Baseline commit: `07d06a2`
+Baseline commit: `b12ef3b`
 Task log path: `build-protocol/tasks/T-0012-12a-todo-proto/TASK.md`
 Branch: `task/T-0012-12a-todo-proto`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12a-todo-proto`
-Authoring sub-agent: Pending
+Authoring sub-agent: Codex implementation sub-agent
+`019f31cd-b967-7341-8d79-4d95d8acfec4`
 Reviewer sub-agents: Pending
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
+Implementation commit: Uncommitted implementation diff; do not commit per handoff.
+Final branch HEAD: `b12ef3b`
 
 ## Objective
 
@@ -131,6 +132,15 @@ Out of scope:
 
 - `2026-07-05 11:38 WEST`: Created subtask worktree from reviewed parent
   branch commit `07d06a2` and opened this task log before implementation.
+- `2026-07-05 11:39 WEST`: Implementation sub-agent began from handoff commit
+  `b12ef3b`, read required task/spec/tooling inputs, selected the existing
+  Buf / Protobuf-ES workflow with no new dependencies, and added a failing
+  smoke test for direct generated schema import.
+- `2026-07-05 11:39 WEST`: Added todo proto contracts, generation workflow,
+  generated-clean coverage for the example output root, generated-output
+  exclusions, and direct generated schema smoke coverage.
+- `2026-07-05 11:48 WEST`: Main orchestrator reran verification sequentially
+  to avoid generation/read races and confirmed the implementation evidence.
 
 ## Decisions
 
@@ -138,6 +148,11 @@ Out of scope:
   is selected.
 - No Spine JVM server-source inspection is needed for this slice because it
   does not touch `@spine-ts/server` runtime/API code.
+- Extend the existing generated-clean script to cover multiple generated roots
+  instead of creating a separate example-only checker.
+- Add `@bufbuild/protobuf` to `@spine-ts/example-todo` package dependencies at
+  the repo-pinned version so generated Protobuf-ES runtime imports resolve from
+  the example workspace.
 
 ## Human Questions And Answers
 
@@ -146,27 +161,63 @@ Out of scope:
 
 ## Files Changed
 
-- Pending implementation.
+- `examples/todo/proto/spine/example/todo/v1/*.proto`
+- `examples/todo/buf.gen.yaml`
+- `examples/todo/src/index.test.ts`
+- `examples/todo/package.json`
+- `buf.yaml`, `buf.gen.yaml`, `.gitignore`, `.prettierignore`,
+  `eslint.config.mjs`, `typedoc.json`, `vitest.config.ts`, `pnpm-lock.yaml`
+- `scripts/proto-workflow.mjs`, `scripts/check-generated-clean.mjs`
+- T-0012.12a task/report/work logs
 
 ## Tests Run
 
-- Pending implementation.
+- `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  failed as the intended TDD red step because
+  `../generated/spine/example/todo/v1/tasks_pb.js` does not exist yet.
+- `pnpm proto:generate`: passed.
+- `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`:
+  passed with 2 tests.
+- `pnpm proto:lint`: passed.
+- `git check-ignore -- examples/todo/generated/.cleanup-enforcement-check`:
+  passed; path is ignored.
+- `git ls-files -- examples/todo/generated`: passed; output was empty.
+- `pnpm proto:check-generated`: passed for package and todo generated roots.
+- `pnpm exec vitest run scripts/check-generated-clean.test.mjs --passWithNoTests`:
+  passed with 3 tests.
+- Main orchestrator reran `pnpm proto:generate`, the focused example smoke
+  test, `pnpm proto:check-generated`, `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `pnpm docs:check`, `git diff --check`, and
+  `pnpm exec vitest run scripts/check-generated-clean.test.mjs --passWithNoTests`;
+  all passed in sequential order.
+- `pnpm typecheck`: passed.
+- `pnpm lint`: passed.
+- `pnpm docs:check`: passed with the existing TypeDoc invalid-origin warning.
+- `pnpm format:check`: passed.
+- `pnpm test:coverage`: sandboxed run failed on known local IPC/HTTP2 binding
+  restrictions; escalated rerun passed.
+- `git diff --check`: passed.
 
 ## Coverage Result
 
-- Pending implementation.
+- Sandboxed `pnpm test:coverage` failed with ZeroMQ IPC `Operation not
+permitted` and HTTP/2 `listen EPERM 127.0.0.1` timeouts.
+- Escalated `pnpm test:coverage` passed: 45 test files, 620 tests, statements
+  95.06%, branches 90.22%, functions 97.60%, lines 95.08%.
+- Main orchestrator confirmed the same sandbox failure mode and escalated
+  coverage result before commit.
 
 ## Documentation And Public API Impact
 
-| Area                             | Impact                                                                                    |
-| -------------------------------- | ----------------------------------------------------------------------------------------- |
-| Package README impact            | Pending; mention generation only if scripts/user workflow change.                         |
-| TypeDoc/API docs impact          | Required: keep generated files out of TypeDoc while documenting example exports.          |
-| Public API additions/removals    | Generated schemas are not committed public source; source exports pending implementation. |
-| Framework `USER_GUIDE.md` impact | N/A unless framework generation workflow changes.                                         |
-| Example `USER_GUIDE.md` impact   | Pending; final guide slice owns full rewrite.                                             |
-| API examples                     | Pending later implementation slices.                                                      |
-| Compatibility notes              | Record any generation-tooling caveat.                                                     |
+| Area                             | Impact                                                                                         |
+| -------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Package README impact            | Pending; mention generation only if scripts/user workflow change.                              |
+| TypeDoc/API docs impact          | `examples/todo/generated/**` is excluded; `examples/todo/src/index.ts` remains an entry point. |
+| Public API additions/removals    | Generated schemas are importable from ignored output; no generated facade added.               |
+| Framework `USER_GUIDE.md` impact | N/A unless framework generation workflow changes.                                              |
+| Example `USER_GUIDE.md` impact   | Pending; final guide slice owns full rewrite.                                                  |
+| API examples                     | Pending later implementation slices.                                                           |
+| Compatibility notes              | Record any generation-tooling caveat.                                                          |
 
 ## Security Impact
 
@@ -182,7 +233,8 @@ Out of scope:
 
 ## Verification
 
-Pending implementation.
+- Fresh verification completed and recorded in `Tests Run` and
+  `Coverage Result`.
 
 ## Review Rounds
 

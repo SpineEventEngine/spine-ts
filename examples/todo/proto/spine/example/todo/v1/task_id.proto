@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package spine.example.todo.v1;
+
+import "spine/options.proto";
+
+option (type_url_prefix) = "type.spine.example.todo";
+
+message TaskId {
+  string value = 1 [(required) = true];
+}

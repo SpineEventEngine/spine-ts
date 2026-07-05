@@ -11,7 +11,13 @@
   ],
   "out": "docs/api/reference",
   "readme": "docs/api/README.md",
-  "exclude": ["**/dist/**", "**/coverage/**", "**/*.test.ts", "packages/*/generated/**"],
+  "exclude": [
+    "**/dist/**",
+    "**/coverage/**",
+    "**/*.test.ts",
+    "packages/*/generated/**",
+    "examples/*/generated/**"
+  ],
   "cleanOutputDir": true,
   "includeVersion": true
 }

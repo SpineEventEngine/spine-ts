@@ -14,5 +14,8 @@
     "dist",
     "README.md",
     "USER_GUIDE.md"
-  ]
+  ],
+  "dependencies": {
+    "@bufbuild/protobuf": "2.12.1"
+  }
 }
