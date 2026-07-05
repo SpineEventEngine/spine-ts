@@ -1,8 +1,8 @@
 # T-0012.12: To-Do Example
 
-Status: all planned slices merged and verified; parent integration review pending
+Status: complete
 Start: `2026-07-05 10:53 WEST`
-End: Pending
+End: `2026-07-05 22:05 WEST`
 Baseline commit: `89868e9`
 Task log path: `build-protocol/tasks/T-0012-12-to-do-example/TASK.md`
 Branch: `task/T-0012-12-to-do-example`
@@ -39,6 +39,7 @@ Implementation commits: `3cc8625` merge of `T-0012.12a`; `63f8e9f` merge of
 `T-0012.12d`; `064a95d` merge of `T-0012.12e`; `ea2a4ab` merge of
 `T-0012.12f`
 Final implementation merge: `ea2a4ab`; all planned `T-0012.12` slices merged
+Final parent review fix: `d00b189`
 
 ## Objective
 
@@ -97,8 +98,8 @@ Skills passed to sub-agents/reviewers:
 | Recipient                 | Skills/Instructions Passed                                                                                                                                                                                                                | Notes                                                                                                           |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | Requirements splitter     | `subagent-driven-development`, `epic-breakdown-advisor`, `codebase-design`, `domain-modeling`, `cqrs-implementation`, `projection-patterns`, `nodejs-backend-patterns`, `javascript-testing-patterns`; project protocol overrides skills. | Splitter must produce small implementation slices, identify any framework gaps, and record skill applicability. |
-| Implementation sub-agents | Pending implementation.                                                                                                                                                                                                                   | Each implementer receives the applicable slice skills and exact write scope.                                    |
-| Reviewers                 | Pending review.                                                                                                                                                                                                                           | Each reviewer receives the required lane plus review/verification skill references.                             |
+| Implementation sub-agents | Complete and closed for all planned slices.                                                                                                                                                                                               | Each implementer received the applicable slice skills and exact write scope.                                    |
+| Reviewers                 | Complete and closed for all planned slices and parent review.                                                                                                                                                                             | Each reviewer received the required lane plus review/verification skill references.                             |
 
 Skipped relevant-looking skills:
 
@@ -236,6 +237,10 @@ Out of scope:
   branches, 97.63% functions, 95.2% lines). Future verification must not
   parallelize commands that invoke `pnpm proto:generate` until generation is
   made concurrency-safe.
+- `2026-07-05 22:05 WEST`: Parent integration re-review passed clean across all
+  five required lanes after the metadata handoff fixes. Final clean package:
+  `.superpowers/sdd/review-a410407..d00b189.diff`. All participating parent
+  reviewers were closed. `T-0012.12` is complete.
 
 ## Requirements Splitter Evidence
 
@@ -616,9 +621,9 @@ Selection rationale:
 Selected next implementable slice: none. All planned `T-0012.12` slices are
 merged.
 
-Branch: `task/T-0012-12f-runnable-server-guide`
+Last completed slice branch: `task/T-0012-12f-runnable-server-guide`
 
-Worktree:
+Last completed slice worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12f-runnable-server-guide`
 
 Completion rationale:
@@ -663,27 +668,27 @@ Completion rationale:
 
 ## Documentation And Public API Impact
 
-| Area                             | Impact                                                                                                                            |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| Package README impact            | Example README must be updated from placeholder to runnable app guide.                                                            |
-| TypeDoc/API docs impact          | Pending implementation; required for public example exports and for public framework API changes.                                 |
-| Public API additions/removals    | Pending implementation; avoid framework API changes unless a framework gap is proven; document public example exports in TypeDoc. |
-| Framework `USER_GUIDE.md` impact | Pending implementation; required if example reveals missing framework guidance.                                                   |
-| Example `USER_GUIDE.md` impact   | Required; the guide must explain generation, startup, command posting, querying, subscriptions, tests, and demonstrated features. |
-| API examples                     | Required through runnable example code and guide snippets.                                                                        |
-| Compatibility notes              | Pending implementation.                                                                                                           |
+| Area                             | Impact                                                                                                                        |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Package README impact            | Complete; the placeholder README was replaced with a runnable app guide.                                                      |
+| TypeDoc/API docs impact          | Complete; public example exports are documented and final TypeScript/API-docs review is clean.                                |
+| Public API additions/removals    | Complete; no framework API gap was found, and public example exports are documented.                                          |
+| Framework `USER_GUIDE.md` impact | Not triggered; the example exposed no missing framework guidance requiring a framework guide change.                          |
+| Example `USER_GUIDE.md` impact   | Complete; the guide explains generation, startup, command posting, querying, subscriptions, tests, and demonstrated features. |
+| API examples                     | Complete through runnable example code and guide snippets.                                                                    |
+| Compatibility notes              | Complete; no additional compatibility note was required beyond the recorded in-memory/example scope.                          |
 
 ## Security Impact
 
-| Area                    | Impact                                                                                                                   |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| Dependencies            | Pending implementation; avoid new dependencies unless justified.                                                         |
-| Secrets and credentials | Example must not use secrets or committed credentials.                                                                   |
-| IPC                     | Pending implementation; if local multi-process/transport is exercised, keep ZeroMQ hidden behind transport abstractions. |
-| Validation              | Required: demonstrate validation failure through framework validation.                                                   |
-| Tenant boundaries       | Required: preserve tenant handling in command/query/subscription tests.                                                  |
-| `Any`/deserialization   | Required: pack/unpack generated Protobuf messages through existing framework contracts.                                  |
-| Logging                 | Example logs must not expose sensitive payloads or invent audit infrastructure.                                          |
+| Area                    | Impact                                                                                                                  |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Dependencies            | Complete; example runtime dependencies are direct package dependencies and recorded in the example package manifest.    |
+| Secrets and credentials | Complete; the example uses no secrets or committed credentials.                                                         |
+| IPC                     | Not triggered; the runnable example uses in-memory storage and real Connect/Node services, not local multi-process IPC. |
+| Validation              | Complete; tests demonstrate validation failure through framework validation.                                            |
+| Tenant boundaries       | Complete; command/query/subscription tests preserve tenant handling.                                                    |
+| `Any`/deserialization   | Complete; tests pack/unpack generated Protobuf messages through existing framework contracts.                           |
+| Logging                 | Example logs must not expose sensitive payloads or invent audit infrastructure.                                         |
 
 ## Verification
 

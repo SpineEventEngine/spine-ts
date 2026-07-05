@@ -1,6 +1,6 @@
 # Implementation Report: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.11 integrated; T-0012.12 selected
+Status: complete
 Branch: `task/T-0012-cleanup-replan`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
@@ -26,8 +26,8 @@ and selected the first implementable cleanup subtask.
 `T-0012.3 Delete Or Shrink Abandoned Runtime Abstractions` is integrated on
 this parent branch. `T-0012.4 Storage Factory And Record Storage Reset` is
 integrated on this parent branch. `T-0012.5 CommandBus, EventBus, And Handler
-Registration` is integrated on this parent branch. The next selected subtask is
-`T-0012.6 BoundedContext Assembly`.
+Registration` is integrated on this parent branch. The next historical subtask
+was `T-0012.6 BoundedContext Assembly`; current roadmap state is complete.
 
 `T-0012.4` replaced the broad `StorageAdapter` surface with a JVM-like
 `StorageFactory` / `RecordStorage` seam, added declarative `RecordSpec` and
@@ -201,8 +201,8 @@ branch coverage, below the 90% threshold.
 `T-0012.8b Integration Coverage Fix` is integrated on `main`. It added focused
 delivery coverage tests, kept production code untouched, passed all required
 review lanes, and recovered global branch coverage to 90.02% under escalated
-`pnpm test:coverage`. The next selected subtask is `T-0012.9 Stand And Entity
-Updates`.
+`pnpm test:coverage`. The next historical subtask was
+`T-0012.9 Stand And Entity Updates`; current roadmap state is complete.
 
 Parent tracked-state verification after integrating `T-0012.8b` passed:
 `pnpm check:node`, `pnpm typecheck`, `pnpm lint`, tracked-file Prettier,
@@ -253,8 +253,7 @@ merge commit `473a4b2`. It added the five example-readiness slices selected by
 the splitter: aggregate command execution, projection event updates, projection
 list queries, validation/refusal wiring, and the minimal black-box fixture. The
 task branch was reviewed through commit `c1cf077` before main integration. This
-roadmap update records the main merge and is under its own review. The next
-selected subtask is `T-0012.12 To-Do Example`.
+historical roadmap update recorded the main merge before `T-0012.12` work.
 
 Parent tracked-state verification after integrating `T-0012.11` passed:
 `pnpm check:node`, `pnpm typecheck`, `pnpm lint`, project-scope Prettier
@@ -265,6 +264,17 @@ Escalated coverage passed with 45 test files, 619 tests, statements 95.06%,
 branches 90.22%, functions 97.6%, and lines 95.08%. Docs/API checks still
 report only the known invalid-`origin` TypeDoc warning. Non-escalated tests and
 coverage still hit known local HTTP/2/ZeroMQ sandbox failures.
+
+`T-0012.12 To-Do Example` is complete on `main` at final implementation merge
+`ea2a4ab`, with parent review fixes through `d00b189`. It delivered the
+runnable to-do app with generated domain protos, decorated aggregate handlers,
+projection queries, subscriptions, validation/refusal tests, real Connect/Node
+gRPC services, and example README/`USER_GUIDE.md` updates. Parent verification
+passed sequentially after the proto-generation race cleanup: 45 test files /
+651 tests, coverage 95.18% statements, 90.48% branches, 97.63% functions, and
+95.2% lines. Final parent review package
+`.superpowers/sdd/review-a410407..d00b189.diff` was clean across all five
+required lanes. The corrective roadmap has no remaining selected subtask.
 
 ## First Selected Subtask
 

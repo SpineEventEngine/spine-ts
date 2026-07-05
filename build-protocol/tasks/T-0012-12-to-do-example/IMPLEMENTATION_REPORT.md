@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12 To-Do Example
 
-Status: all planned slices merged and verified; parent integration review pending
+Status: complete
 Branch: `task/T-0012-12-to-do-example`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
@@ -42,6 +42,7 @@ to-do example work.
 - `T-0012.12e Task Subscriptions` is merged via `064a95d`.
 - `T-0012.12f Runnable Server And Guide` is merged via `ea2a4ab`.
 - All planned `T-0012.12` slices are complete.
+- Parent integration review is clean through final metadata fix `d00b189`.
 
 ## Splitter Evidence Summary
 
@@ -108,8 +109,8 @@ Gap-routing rule:
 
 ## Current Selected Subtask
 
-Selected: none. All planned `T-0012.12` slices are merged and verified;
-parent integration re-review is pending.
+Selected: none. All planned `T-0012.12` slices are merged, verified, and
+reviewed clean.
 
 Why:
 
@@ -164,3 +165,14 @@ Parent integration verification after `T-0012.12f`:
 - Operational caveat: do not parallelize verification commands that invoke
   `pnpm proto:generate` until generated-output publishing is made
   concurrency-safe.
+
+Parent integration review:
+
+- Round 1 found metadata comments in maintainability, documentation, and
+  performance/reliability; TypeScript/API docs and security were clean.
+- Follow-up metadata-fix rounds converged on a stable handoff rule: review the
+  latest branch correction with `HEAD~1..HEAD` until accepted.
+- Final clean package: `.superpowers/sdd/review-a410407..d00b189.diff`.
+- Final clean lanes: maintainability, documentation, TypeScript/API docs,
+  security, and performance/reliability.
+- All participating parent-review sub-agents were closed after reporting.

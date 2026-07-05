@@ -6,7 +6,7 @@ Branch: `task/T-0012-cleanup-replan`
 Baseline commit: `a9769d4`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-cleanup-replan`
-Status: T-0012.11 integrated; T-0012.12 selected.
+Status: complete.
 
 ## Required Review Lanes
 
@@ -223,10 +223,10 @@ Round-1 splitter review comments are now addressed in the leaf and parent docs.
 `T-0012.11 Missing Details And Example Readiness` is integrated on `main`. All
 five implementation slices are complete and parent-verified. The task branch
 was reviewed through `c1cf077` before main integration, and main verification
-after merge passed. This roadmap update records the main merge and is under its
-own review. The next selected task is `T-0012.12 To-Do Example`.
+after merge passed. This historical roadmap update recorded the main merge
+before `T-0012.12 To-Do Example` was implemented and completed.
 
-## Next Review Focus After T-0012.11
+## Historical Review Focus After T-0012.11
 
 For `T-0012.12 To-Do Example`, reviewers must focus on:
 

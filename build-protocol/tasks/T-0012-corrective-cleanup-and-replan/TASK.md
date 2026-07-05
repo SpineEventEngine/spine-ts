@@ -1,6 +1,6 @@
 # T-0012: Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.11 integrated; T-0012.12 selected
+Status: complete
 Start: `2026-07-01 16:48 WEST`
 Baseline commit: `a9769d4`
 Branch: `task/T-0012-cleanup-replan`
@@ -144,7 +144,18 @@ ZeroMQ local IPC sandbox failure. Coverage was statements 94.93%, branches
 merge commit `473a4b2`. It completed aggregate command execution, projection
 event updates, projection list queries, validation/refusal wiring, and the
 minimal black-box fixture. Main verification passed with 45 test files, 619
-tests, and branch coverage 90.22%. Current subtask: `T-0012.12 To-Do Example`.
+tests, and branch coverage 90.22%.
+
+`T-0012.12 To-Do Example` is complete on `main`. It replaced the placeholder
+example with a runnable server-side app using generated Protobuf-ES domain
+messages, decorated aggregate handlers, projection queries, subscriptions,
+validation, refusal behavior, in-memory storage, real Connect/Node gRPC
+services, black-box tests, README updates, and `USER_GUIDE.md`. Parent
+integration verification passed with 45 test files / 651 tests and coverage
+above the 90% target. Final parent integration review package
+`.superpowers/sdd/review-a410407..d00b189.diff` was clean across all five
+required lanes. No current implementable subtask remains in the corrective
+roadmap.
 
 ## T-0012.2 Selection Rationale
 

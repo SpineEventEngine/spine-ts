@@ -3,10 +3,10 @@
 Task log: `build-protocol/tasks/T-0012-12-to-do-example/TASK.md`
 Branch: `task/T-0012-12-to-do-example`
 Baseline commit: `89868e9`
-Reviewed commit/diff basis: latest branch commit (`HEAD~1..HEAD`)
+Reviewed commit/diff basis: latest clean round `a410407..d00b189`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
-Status: parent integration metadata correction pending re-review
+Status: clean
 
 ## Required Review Lanes
 
@@ -183,3 +183,31 @@ Review focus for splitter review:
   - update the work-log current state to point at the latest correction;
   - avoid exact pending-package metadata for the current correction by using
     `HEAD~1..HEAD` until the correction is accepted.
+- Round 4 re-review package:
+  `.superpowers/sdd/review-5708972..05e0aeb.diff`.
+- Round 4 reviewed range: `5708972..05e0aeb`.
+- Round 4 status:
+  - code style/maintainability: metadata comment
+  - documentation: clean
+  - TypeScript/API docs: clean
+  - security: clean
+  - performance/reliability: clean
+- Round 4 finding addressed in final metadata fix `d00b189`:
+  - clarify that the prior handoff row was historical, while the latest
+    accepted package is the final clean round.
+- Round 5 final review package:
+  `.superpowers/sdd/review-a410407..d00b189.diff`.
+- Round 5 reviewed range: `a410407..d00b189`.
+- Round 5 status:
+  - code style/maintainability:
+    `019f340a-bcd9-7ef1-8d41-8434f3900331` (clean, closed)
+  - documentation:
+    `019f340a-d877-74c2-af81-8ffb16c713e8` (clean, closed)
+  - TypeScript/API docs:
+    `019f340a-f117-7710-9222-e9ac366b7cae` (clean, closed)
+  - security:
+    `019f340b-1293-70f0-8dfc-f4e78f8571d1` (clean, closed)
+  - performance/reliability:
+    `019f340b-2de4-7680-8b1a-e5aa93094e66` (clean, closed)
+- Outcome: parent integration review is clean. All planned `T-0012.12` slices
+  and parent metadata fixes are complete.
