@@ -6,17 +6,19 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-12 fixes verified; ready for round-13 independent review
+Status: round-13 docs fixes verified; ready for round-14 independent review
 
 ## Required Lanes
 
-- code style/maintainability: local lint and formatting passed
-- documentation: docs check passed
-- TypeScript/API docs: typecheck and docs check passed
-- security: round-2 finding fixed and verified
-- performance/reliability: round-7 rollback finding fixed and verified;
-  round-8 replay/ordering follow-ups fixed and verified; sandbox coverage
-  blocked by local endpoint permissions only
+- code style/maintainability: formatting passed through round 13
+- documentation: docs check passed through round 13
+- TypeScript/API docs: typecheck and docs check passed through round 12;
+  round-13 README Markdown continuation fixed and docs check passed
+- security: round-11 incompatible-payload detail fix verified; earlier
+  dispatcher-thrown validation detail sanitization remains verified
+- performance/reliability: round-12 rejected-commit marker lifetime fix
+  verified; earlier rollback and replay/ordering fixes remain verified;
+  historical sandbox coverage gaps were limited to local endpoint permissions
 
 ## Findings
 
@@ -329,3 +331,18 @@ Status: round-12 fixes verified; ready for round-13 independent review
   selected tests. Full affected repository-routing suite passed with 46 tests.
   `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, `pnpm format:check`, and
   `git diff --check` passed. No service/network test was blocked in this pass.
+
+### Round 13
+
+- `2026-07-05 09:45 WEST`: Documentation review found the lane rollup at the
+  top of this log was stale and did not mention the round-11 security fix or
+  round-12 rejected-commit marker lifetime fix.
+- `2026-07-05 09:46 WEST`: Documentation review found the
+  `COMMAND_VALIDATION_ERROR` bullet in `packages/server/README.md` had a
+  broken Markdown continuation for `validation failed.`.
+
+## Round-13 Fix Pass
+
+- `2026-07-05 09:50 WEST`: Implementation worker refreshed the lane rollup,
+  fixed the README bullet continuation, and updated child durable logs. Docs,
+  format, and whitespace verification passed.

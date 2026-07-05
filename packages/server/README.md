@@ -50,8 +50,8 @@ Current slice exposes:
 - `CommandRefusalError` for the current immediate business refusal path from
   command handlers to non-ok `CommandService.Post` `Ack` errors;
   and
-- `COMMAND_VALIDATION_ERROR` `Ack` responses with message `Command payload
-validation failed.` and packed `spine.validation.ValidationError` details
+- `COMMAND_VALIDATION_ERROR` `Ack` responses with message
+  `Command payload validation failed.` and packed `spine.validation.ValidationError` details
   when `CommandBus` rejects an invalid accepted command payload before
   dispatcher execution, whether the dispatcher is a repository adapter or a
   custom `addCommandDispatcher()` registration; transition-validation
