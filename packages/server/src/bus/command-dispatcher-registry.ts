@@ -1,35 +1,43 @@
-import { deriveTypeUrl } from "@spine-ts/core";
+import { deriveTypeUrl, type MessageSchema } from "@spine-ts/core";
 
 import type { CommandDispatcher } from "./command-dispatcher.js";
+
+interface RegisteredCommandDispatcher {
+  readonly dispatcher: CommandDispatcher;
+  readonly schema: MessageSchema;
+}
 
 /** Internal unicast registry keyed by canonical Spine command type URL. */
 export class CommandDispatcherRegistry {
   readonly #dispatchers = new Set<CommandDispatcher>();
-  readonly #byTypeUrl = new Map<string, CommandDispatcher>();
+  readonly #byTypeUrl = new Map<string, RegisteredCommandDispatcher>();
 
   register(dispatcher: CommandDispatcher): void {
     if (this.#dispatchers.has(dispatcher)) {
       return;
     }
 
-    const typeUrls = collectTypeUrls(dispatcher);
+    const registrations = collectRegistrations(dispatcher);
 
-    for (const typeUrl of typeUrls) {
-      const registered = this.#byTypeUrl.get(typeUrl);
+    for (const registration of registrations) {
+      const registered = this.#byTypeUrl.get(registration.typeUrl);
 
-      if (registered !== undefined && registered !== dispatcher) {
-        throw new Error(`Duplicate command dispatcher for "${typeUrl}".`);
+      if (registered !== undefined && registered.dispatcher !== dispatcher) {
+        throw new Error(`Duplicate command dispatcher for "${registration.typeUrl}".`);
       }
     }
 
     this.#dispatchers.add(dispatcher);
 
-    for (const typeUrl of typeUrls) {
-      this.#byTypeUrl.set(typeUrl, dispatcher);
+    for (const registration of registrations) {
+      this.#byTypeUrl.set(registration.typeUrl, {
+        dispatcher,
+        schema: registration.schema,
+      });
     }
   }
 
-  find(typeUrl: string): CommandDispatcher | undefined {
+  find(typeUrl: string): RegisteredCommandDispatcher | undefined {
     return this.#byTypeUrl.get(typeUrl);
   }
 
@@ -38,8 +46,10 @@ export class CommandDispatcherRegistry {
   }
 }
 
-function collectTypeUrls(dispatcher: CommandDispatcher): readonly string[] {
-  const typeUrls: string[] = [];
+function collectRegistrations(
+  dispatcher: CommandDispatcher,
+): readonly { readonly typeUrl: string; readonly schema: MessageSchema }[] {
+  const registrations: { typeUrl: string; schema: MessageSchema }[] = [];
   const seen = new Set<string>();
 
   for (const schema of dispatcher.messageSchemas()) {
@@ -47,9 +57,9 @@ function collectTypeUrls(dispatcher: CommandDispatcher): readonly string[] {
 
     if (!seen.has(typeUrl)) {
       seen.add(typeUrl);
-      typeUrls.push(typeUrl);
+      registrations.push({ typeUrl, schema });
     }
   }
 
-  return Object.freeze(typeUrls);
+  return Object.freeze(registrations);
 }

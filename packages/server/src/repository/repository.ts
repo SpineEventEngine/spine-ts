@@ -1,5 +1,5 @@
 import { clone, create } from "@bufbuild/protobuf";
-import { checkValid, deriveTypeUrl, packAny, unpackAny, type MessageSchema } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, unpackAny, type MessageSchema } from "@spine-ts/core";
 import {
   ActorContextSchema,
   CommandIdSchema,
@@ -44,7 +44,7 @@ import { handlerMetadataAccess, type EntityHandlersMetadata } from "../handler/h
 import { AggregateStorage } from "./aggregate-storage.js";
 import { PrimitiveIds } from "./primitive-id.js";
 import type { Stand } from "../stand/stand.js";
-import { CommandStateTransitionValidationError } from "../services/command-errors.js";
+import { TransitionValidationError } from "../services/command-errors.js";
 
 type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> =
   | Aggregate<unknown, Schema, unknown>
@@ -561,8 +561,6 @@ class AggregateCommandExecution {
     );
     const message = unpackRequired(commandMessage, commandSchema, "command");
 
-    checkValid(commandSchema, message as never);
-
     const route = this.#repository.routeCommand(this.#command);
     const assignee = this.#routing.commandReadiness?.findCommandAssignee(route.messageFullTypeName);
 
@@ -701,7 +699,7 @@ class AggregateCommandExecution {
     const rejectedCommit = transactionalEntityAccess.rejectedCommit(entity);
 
     if (rejectedCommit !== undefined) {
-      throw new CommandStateTransitionValidationError(rejectedCommit.validation.error);
+      throw new TransitionValidationError(rejectedCommit.validation.error);
     }
   }
 

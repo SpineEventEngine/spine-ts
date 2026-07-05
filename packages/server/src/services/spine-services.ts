@@ -45,7 +45,7 @@ import {
 import type { BoundedContext } from "../context/bounded-context.js";
 import type { EntityFamily } from "../entity/entity.js";
 import type { StandReadResult, StandSubscription, StandUpdate } from "../stand/stand.js";
-import { CommandRefusalError, CommandStateTransitionValidationError } from "./command-errors.js";
+import { CommandRefusalError, TransitionValidationError } from "./command-errors.js";
 
 /** Small route registrar for the first public Spine gRPC service slice. */
 export class SpineServices {
@@ -567,7 +567,7 @@ function commandPostError(error: unknown): ContractError {
     };
   }
 
-  if (error instanceof CommandStateTransitionValidationError) {
+  if (error instanceof TransitionValidationError) {
     return {
       type: error.type,
       message: error.clientMessage,

@@ -19,7 +19,7 @@ export class CommandRefusalError extends Error {
 }
 
 /** Error raised when aggregate command execution rejects a state transition. */
-export class CommandStateTransitionValidationError extends Error {
+export class TransitionValidationError extends Error {
   /** Stable client-visible error type returned in `Ack.status.error.type`. */
   readonly type = "COMMAND_STATE_TRANSITION_VALIDATION_FAILED";
 
@@ -32,7 +32,7 @@ export class CommandStateTransitionValidationError extends Error {
   /** Create a stable command error from transaction validation details. */
   constructor(validationError: ValidationError) {
     super("Command state transition validation failed.");
-    this.name = "CommandStateTransitionValidationError";
+    this.name = "TransitionValidationError";
     this.validationError = validationError;
     Object.setPrototypeOf(this, new.target.prototype);
   }

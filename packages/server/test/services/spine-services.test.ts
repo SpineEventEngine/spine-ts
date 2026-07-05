@@ -596,6 +596,26 @@ describe("SpineServices", () => {
     expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
   });
 
+  it("returns stable Ack errors with details for invalid custom-dispatcher command payloads", async () => {
+    const dispatched: string[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .addCommandDispatcher(
+        createValidatedCommandDispatcher((command) => {
+          dispatched.push(command.id?.uuid ?? "");
+        }),
+      )
+      .build();
+    const handlers = registeredCommandHandlers(context);
+
+    const ack = await handlers.post(createValidatedCommand("command-invalid", "task-invalid", ""));
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
+    expect(errorMessage(ack.status?.status)).toBe("Command payload validation failed.");
+    expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
+    expect(dispatched).toEqual([]);
+  });
+
   it("returns stable Ack errors with details for transition validation failures", async () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createTransitionViolatingRepository())
@@ -1335,6 +1355,18 @@ function createCommandDispatcher(
 ): CommandDispatcher {
   return {
     messageSchemas: () => [ProjectionStateSchema],
+    dispatch: (command) => {
+      onDispatch(command);
+      return Promise.resolve();
+    },
+  };
+}
+
+function createValidatedCommandDispatcher(
+  onDispatch: (command: ReturnType<typeof createValidatedCommand>) => void,
+): CommandDispatcher {
+  return {
+    messageSchemas: () => [ValidatedTaskCommandSchema],
     dispatch: (command) => {
       onDispatch(command);
       return Promise.resolve();

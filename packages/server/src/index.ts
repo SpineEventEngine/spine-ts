@@ -61,13 +61,13 @@ export {
   type EntityFamily,
   type EntityLifecycleFlags,
   type EntityOptions,
+  type EntityScopeReason,
   type EntityVersionMetadata,
   type PlainEntityVersionMetadata,
   ProcessManager,
   Projection,
   TransactionalEntity,
   TransactionalEntityScopeError,
-  type TransactionalEntityScopeErrorReason,
   type TransactionalEntityScopeOperation,
 } from "./entity/entity.js";
 

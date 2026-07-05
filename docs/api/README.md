@@ -36,7 +36,13 @@ also exposes accepted command message type URLs so service adapters can route
 without dispatch-probing unrelated contexts.
 `CommandRefusalError` is the current public immediate-refusal error that
 command handlers can throw so `CommandService.Post` returns a stable non-ok
-`Ack` error type/message.
+`Ack` error type/message. `CommandService.Post` also returns
+`COMMAND_VALIDATION_ERROR` with message `Command payload validation failed.`
+and packed `spine.validation.ValidationError` details when `CommandBus`
+rejects an invalid accepted command payload before dispatch. Transition
+validation failures from repository aggregate appliers continue to surface as
+`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
+details.
 The public entry points mirror Spine JVM's
 `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
 `ContextSpec` remains a framework-owned immutable value surfaced through
@@ -69,7 +75,7 @@ create system contexts, write tenant indexes, expose a broad server lifecycle,
 or integrate transports.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
-`TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,
+`TransactionalEntityScopeError`, `EntityScopeReason`,
 `TransactionalEntityScopeOperation`, `EntityOptions`, `EntityVersionMetadata`,
 `PlainEntityVersionMetadata`, and `EntityLifecycleFlags` for local OOP entity
 state with identity, descriptor-derived metadata, cloned Protobuf-ES state
