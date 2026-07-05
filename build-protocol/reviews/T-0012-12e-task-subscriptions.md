@@ -3,7 +3,8 @@
 Task log: `build-protocol/tasks/T-0012-12e-task-subscriptions/TASK.md`
 Branch: `task/T-0012-12e-task-subscriptions`
 Baseline commit: `4bebdeb`
-Reviewed commit/diff basis: `7eb9315..HEAD` at review request
+Reviewed commit/diff basis: `7eb9315..d664526`
+Review package: `.superpowers/sdd/review-7eb9315..d664526.diff`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12e-task-subscriptions`
 Status: metadata cleanup committed; ready for review

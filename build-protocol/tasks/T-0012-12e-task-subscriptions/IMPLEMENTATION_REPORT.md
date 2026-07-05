@@ -10,8 +10,9 @@ Implementation commit: `c06fef8`
 First review-fix commit: `eeee46b`
 Second review-fix commit: `7eb9315`
 Metadata cleanup commit: `2a778c6`
-Metadata stamp commit: this commit
-Latest completed review-fix basis: review package ending at branch HEAD
+Metadata stamp commit: `d664526`
+Latest completed review-fix basis: `7eb9315..d664526`
+Latest review package: `.superpowers/sdd/review-7eb9315..d664526.diff`
 
 ## Summary
 
