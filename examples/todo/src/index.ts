@@ -1,7 +1,5 @@
-import { TaskSchema } from "../generated/spine/example/todo/v1/tasks_pb.js";
-
 /**
- * Static package metadata for the to-do example while the domain is pending.
+ * Static package metadata for the to-do example while runtime work is pending.
  */
 export interface ExampleSkeleton {
   /** Current implementation state for this example boundary. */
@@ -15,9 +13,3 @@ export const exampleSkeleton: ExampleSkeleton = {
   implementationStatus: "skeleton",
   packageName: "@spine-ts/example-todo",
 };
-
-/**
- * Minimal generated schema reference proving production example sources can
- * import the ignored Protobuf-ES output directly.
- */
-export const generatedTaskSchemaTypeName: string = TaskSchema.typeName;

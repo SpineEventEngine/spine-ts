@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12a Todo Proto Generation
 
-Status: second focused reliability fix complete; orchestrator inspection pending
+Status: final-review fix in progress after committed reliability fix
 Branch: `task/T-0012-12a-todo-proto`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12a-todo-proto`
@@ -14,12 +14,18 @@ projection, service, or server runtime behavior.
 
 ## Current State
 
-- Worktree started this focused fix pass at HEAD `ddefd95`, the committed
-  first review-fix pass on top of implementation commit `cbdb35c`.
+- Worktree started the now-committed reliability fix history at HEAD `ddefd95`,
+  the committed first review-fix pass on top of implementation commit
+  `cbdb35c`.
 - Re-review found documentation wording, maintainability cleanup, and
-  generated-root publish reliability issues. The first focused pass addressed
-  most findings but left a live-root rename gap; this second pass closes that
-  gap without committing.
+  generated-root publish reliability issues. The second focused reliability
+  pass closed that gap and was committed as
+  `56f0b8d Stabilize todo proto generation publishing`.
+- Final re-review after `56f0b8d` found stale post-commit log wording and a
+  public generated-schema facade. This small final-review fix updates durable
+  state and removes that facade while keeping the direct generated import proof
+  in the test. Required final-review fix verification passed, and the main
+  orchestrator reran the verification subset at `2026-07-05 13:02 WEST`.
 - Required task/spec/tooling inputs have been read.
 - Example-owned todo `.proto` files define `TaskId`, `Task`, `TaskList`,
   create/rename/complete/reopen commands, and corresponding events.
@@ -39,8 +45,8 @@ projection, service, or server runtime behavior.
   publishing.
 - Root `test` and `test:coverage` now run `pnpm proto:generate` first so fresh
   checkouts have ignored generated output before generated-dependent tests run.
-- The production example entry point imports a generated schema reference
-  directly, and the example build emits a viable `dist/src/index.js` export.
+- The production example entry point exports only skeleton metadata; the smoke
+  test imports generated `TaskSchema` directly from ignored generated output.
 
 ## Files Changed
 
@@ -132,6 +138,12 @@ permitted` and HTTP/2 `listen EPERM 127.0.0.1`; escalated rerun passed with
   sandboxed coverage, and escalated coverage. Escalated coverage passed with
   45 test files, 625 tests, statements 95.06%, branches 90.22%, functions
   97.60%, lines 95.08%.
+- Final-review fix verification passed:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed with 1 file and 2 tests; `pnpm typecheck` passed; `pnpm lint`
+  passed; final `pnpm format:check` passed after formatting only
+  `build-protocol/work-logs/T-0012-12a.md`; `pnpm docs:check` passed with the
+  existing TypeDoc invalid-origin warning; `git diff --check` passed.
 
 ## Generated Files Status
 

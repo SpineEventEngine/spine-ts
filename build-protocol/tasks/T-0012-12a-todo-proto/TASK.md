@@ -1,6 +1,6 @@
 # T-0012.12a: Todo Proto Generation
 
-Status: second focused reliability fix verified; commit pending
+Status: final-review fix in progress after committed reliability fix
 Start: `2026-07-05 11:38 WEST`
 End: `2026-07-05 12:04 WEST`
 Baseline commit: `b12ef3b`
@@ -13,8 +13,9 @@ Authoring sub-agent: Codex implementation sub-agent
 Reviewer sub-agents: Re-review found documentation, maintainability, and
 reliability issues; second focused reliability fix complete
 Implementation commit: `cbdb35c`
-Review-fix commit: current HEAD before uncommitted reliability fixes (`ddefd95`);
-second focused fix is verified and pending commit
+Review-fix commit: `ddefd95`
+Second focused reliability fix commit:
+`56f0b8d Stabilize todo proto generation publishing`
 
 ## Objective
 
@@ -177,6 +178,19 @@ Out of scope:
   and reran full verification. Sandboxed coverage reproduced local IPC/HTTP2
   restrictions; escalated coverage passed with 45 files, 625 tests, branches
   90.22%.
+- `2026-07-05 13:02 WEST`: Main orchestrator inspected and verified the
+  final-review fix. Focused todo Vitest, `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `pnpm docs:check`, and `git diff --check` passed.
+- `2026-07-05 12:56 WEST`: Final-review fix author began from committed HEAD
+  `56f0b8d Stabilize todo proto generation publishing`, updated durable logs
+  before source/test edits, and removed the public generated schema facade from
+  `examples/todo/src/index.ts` while keeping the direct generated schema import
+  proof in `examples/todo/src/index.test.ts`.
+- `2026-07-05 12:58 WEST`: Final-review fix author completed required
+  verification. Focused todo Vitest, `pnpm typecheck`, `pnpm lint`, final
+  `pnpm format:check`, `pnpm docs:check`, and `git diff --check` passed.
+  Initial `pnpm format:check` flagged only work-log markdown wrapping; the work
+  log was formatted and the final format check passed.
 
 ## Decisions
 
@@ -299,6 +313,11 @@ permitted` and HTTP/2 `listen EPERM: operation not permitted 127.0.0.1`.
   `pnpm format:check`, `pnpm docs:check`, `git diff --check`,
   generated-output Git guards, sandboxed `pnpm test:coverage` with known
   local IPC/HTTP2 failures, and escalated `pnpm test:coverage` with 625 tests.
+- Final-review fix verification passed:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed with 1 file and 2 tests; `pnpm typecheck` passed; `pnpm lint`
+  passed; final `pnpm format:check` passed; `pnpm docs:check` passed with the
+  existing TypeDoc invalid-origin warning; `git diff --check` passed.
 
 ## Coverage Result
 
@@ -351,10 +370,13 @@ permitted` and HTTP/2 `listen EPERM 127.0.0.1` timeouts.
   excluding generated imports.
 - First review-fix pass was committed before re-review. Re-review returned
   documentation wording, maintainability cleanup, and generated-root publish
-  reliability findings. The second focused reliability fix pass is complete
-  and awaiting orchestrator inspection.
+  reliability findings. The second focused reliability fix pass was committed
+  as `56f0b8d Stabilize todo proto generation publishing` and verified before
+  final re-review. Final re-review found stale post-commit log wording and a
+  public generated-schema facade; this small final-review fix is verified and
+  pending commit.
 
 ## Integration Result
 
-Second focused reliability fix pass complete; pending orchestrator inspection,
-commit, and re-review/integration.
+Committed state at `56f0b8d` is verified. This small final-review fix is
+implemented and verified; remaining work is commit and final re-review.

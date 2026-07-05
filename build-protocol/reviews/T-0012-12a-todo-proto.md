@@ -3,11 +3,11 @@
 Task log: `build-protocol/tasks/T-0012-12a-todo-proto/TASK.md`
 Branch: `task/T-0012-12a-todo-proto`
 Baseline commit: `07d06a2`
-Reviewed commit/diff basis: implementation commit `cbdb35c`; current HEAD
-pending re-review
+Reviewed commit/diff basis: implementation commit `cbdb35c`; committed
+reliability fix `56f0b8d Stabilize todo proto generation publishing`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12a-todo-proto`
-Status: second focused reliability fix complete; orchestrator inspection pending
+Status: final-review fix in progress after committed reliability fix
 
 ## Required Review Lanes
 
@@ -30,8 +30,7 @@ Status: second focused reliability fix complete; orchestrator inspection pending
 - Main orchestrator reran verification after interruption. All non-sandbox
   checks passed; sandboxed coverage reproduced local IPC/HTTP2 restrictions;
   escalated coverage passed with 45 files, 621 tests, branches 90.22%.
-- Review-fix pass committed at current HEAD; required re-review lanes are
-  pending.
+- Review-fix pass committed as `ddefd95`; re-review lanes followed.
 - Re-review round received clean security and TypeScript/API docs results.
   Documentation found stale README/task wording. Maintainability found helper
   order, test naming, work-log readability, and coverage-count wording issues.
@@ -51,7 +50,8 @@ Status: second focused reliability fix complete; orchestrator inspection pending
   non-coverage checks passed. Sandboxed `pnpm test:coverage` failed only on
   local IPC/HTTP2 permissions (`Operation not permitted` and
   `listen EPERM 127.0.0.1`); escalated rerun was requested but rejected by the
-  environment policy, so orchestrator rerun remains pending.
+  environment policy. A later orchestrator rerun verified the subsequent
+  second focused reliability fix before commit.
 - Second focused reliability fix pass completed at `2026-07-05 12:41 WEST`.
   The publisher now backs up generated-root contents into stage-owned backup
   directories and mirrors staged files into the existing roots instead of
@@ -66,3 +66,23 @@ Status: second focused reliability fix complete; orchestrator inspection pending
   IPC/HTTP2 permission failures; escalated coverage passed with 45 files,
   625 tests, statements 95.06%, branches 90.22%, functions 97.60%, and lines
   95.08%.
+- Final re-review after commit found clean reliability and security lanes.
+  Documentation and maintainability found stale post-commit log status wording.
+  TypeScript/API docs found that `generatedTaskSchemaTypeName` is an exported
+  generated-schema facade and must be removed from public API. A small focused
+  fix pass is required before final re-review.
+- Final-review fix pass began at `2026-07-05 12:56 WEST` from committed HEAD
+  `56f0b8d Stabilize todo proto generation publishing`. Durable logs were
+  updated before source/test edits; `examples/todo/src/index.ts` no longer
+  exports a generated-schema facade, and the direct generated import proof
+  remains in `examples/todo/src/index.test.ts`.
+- Final-review fix verification completed at `2026-07-05 12:58 WEST`.
+  Focused todo Vitest, `pnpm typecheck`, `pnpm lint`, final
+  `pnpm format:check`, `pnpm docs:check`, and `git diff --check` passed.
+- Main orchestrator inspected the final-review fix and tightened the
+  `exampleSkeleton` TypeDoc wording so it refers to pending runtime work, not a
+  pending domain contract.
+- Main orchestrator verified the final-review fix at `2026-07-05 13:02 WEST`.
+  Focused todo Vitest, `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
+  `pnpm docs:check`, and `git diff --check` passed. TypeDoc emitted only the
+  known invalid-origin warning.
