@@ -154,7 +154,11 @@ describe("@spine-ts/example-todo", () => {
     const ack = await fixture.post(
       createRenameCommand("command-invalid-rename", "task-invalid", "", { validate: false }),
     );
-    const response = await fixture.read(createTaskListQuery());
+    const response = await expectTaskListEventuallyUnchanged(
+      fixture,
+      originalResponse,
+      "task-invalid",
+    );
     const details = validationDetails(ack.status?.status);
 
     expect(ack.status?.status.case).toBe("error");
@@ -201,7 +205,11 @@ describe("@spine-ts/example-todo", () => {
     const ack = await fixture.post(
       createCompleteCommand("command-refuse-complete-again", "task-refuse"),
     );
-    const response = await fixture.read(createTaskListQuery());
+    const response = await expectTaskListEventuallyUnchanged(
+      fixture,
+      completedResponse,
+      "task-refuse",
+    );
     const task = readTask(response, "task-refuse");
 
     expect(ack.status?.status.case).toBe("error");
@@ -224,7 +232,7 @@ describe("@spine-ts/example-todo", () => {
     );
 
     const ack = await fixture.post(createReopenCommand("command-refuse-reopen", "task-open"));
-    const response = await fixture.read(createTaskListQuery());
+    const response = await expectTaskListEventuallyUnchanged(fixture, openResponse, "task-open");
 
     expect(ack.status?.status.case).toBe("error");
     expect(errorType(ack.status?.status)).toBe("TASK_NOT_DONE");
@@ -457,6 +465,53 @@ function readList(response: Pick<QueryResponse, "message">, taskId: string) {
 
 function readTask(response: Pick<QueryResponse, "message">, taskId: string): Task | undefined {
   return readList(response, taskId)?.tasks.find((task) => task.id?.value === taskId);
+}
+
+async function expectTaskListEventuallyUnchanged(
+  fixture: BoundedContextFixture,
+  expected: QueryResponse,
+  taskId: string,
+): Promise<QueryResponse> {
+  const expectedSnapshot = taskListSnapshot(expected, taskId);
+  const response = await fixture.readEventually(
+    createTaskListQuery(),
+    (candidate) => !sameTaskListSnapshot(taskListSnapshot(candidate, taskId), expectedSnapshot),
+  );
+
+  expect(taskListSnapshot(response, taskId)).toEqual(expectedSnapshot);
+
+  return response;
+}
+
+function taskListSnapshot(response: Pick<QueryResponse, "message">, taskId: string) {
+  const list = readList(response, taskId);
+  const task = readTask(response, taskId);
+
+  return {
+    id: list?.id,
+    openTaskCount: list?.openTaskCount,
+    task:
+      task === undefined
+        ? undefined
+        : {
+            id: task.id?.value,
+            title: task.title,
+            completed: task.completed,
+          },
+  };
+}
+
+function sameTaskListSnapshot(
+  actual: ReturnType<typeof taskListSnapshot>,
+  expected: ReturnType<typeof taskListSnapshot>,
+) {
+  return (
+    actual.id === expected.id &&
+    actual.openTaskCount === expected.openTaskCount &&
+    actual.task?.id === expected.task?.id &&
+    actual.task?.title === expected.task?.title &&
+    actual.task?.completed === expected.task?.completed
+  );
 }
 
 function taskTitle(response: Pick<QueryResponse, "message">, taskId: string): string | undefined {

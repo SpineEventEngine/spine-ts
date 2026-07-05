@@ -1,6 +1,6 @@
 # T-0012.12d: Validation And Refusal
 
-Status: complete; commit pending
+Status: review-fix ready for re-review
 Start: `2026-07-05 18:08 WEST`
 End: `2026-07-05 18:49 WEST`
 Baseline commit: `27250a0`
@@ -11,8 +11,10 @@ Worktree:
 Authoring sub-agent: main Codex implementer
 Reviewer sub-agents: unavailable in this session; local two-axis review completed
 Setup commit: `c264543`
-Implementation commit: current branch HEAD after final commit
-Final branch HEAD: current branch HEAD after final commit
+Implementation commit: `a831bd6273335c90a85f57e9772a64afe09e687d`
+Round-one reviewed branch HEAD: `a831bd6273335c90a85f57e9772a64afe09e687d`
+Review-fix commit: this commit
+Final branch HEAD: this commit
 
 ## Objective
 
@@ -103,6 +105,10 @@ Out of scope:
   hierarchy was added.
 - The tests read through `QueryService` after each rejected command and assert
   the task-list projection state remains unchanged.
+- Round-one review found the invalid validation, duplicate-complete refusal,
+  and open-reopen refusal tests only read state immediately after the rejected
+  `Ack`. The review-fix strengthens those paths with a black-box eventual
+  unchanged-state assertion.
 
 ## Red/Green Evidence
 
@@ -115,6 +121,22 @@ Out of scope:
 - GREEN:
   `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
   passed, 1 file / 11 tests.
+- Review-fix RED:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  failed with 11 tests / 1 failure after a temporary post-rejection delayed
+  rename proved the new eventual invariant helper catches a projection change
+  from title `Kept` to `Changed`.
+- Review-fix GREEN:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed after removing the temporary mutation while keeping the strengthened
+  eventual assertions, 1 file / 11 tests.
+- Review-fix final verification:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`,
+  `pnpm typecheck`, `pnpm lint`, changed-file
+  `pnpm exec prettier --check`, `pnpm docs:check`,
+  `pnpm proto:check-generated`, and `git diff --check` passed.
+  `pnpm docs:check` reported the existing invalid `origin` TypeDoc source-link
+  warning only.
 
 ## Final Verification
 
@@ -143,6 +165,11 @@ Out of scope:
   refusal uses `CommandRefusalError`, and tests assert unchanged read-side
   projection state after both validation failure and business refusal.
 - Framework gap found: none.
+- Round-one review result: changes requested for eventual negative assertions
+  and stale durable-log metadata. Planned fixes are to poll for any divergent
+  task-list snapshot after rejected commands, record implementation commit
+  `a831bd6273335c90a85f57e9772a64afe09e687d`, and route the branch back to
+  review/re-review after the fix commit.
 
 ## Skill Applicability Check
 
