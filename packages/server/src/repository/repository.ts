@@ -44,7 +44,7 @@ import { handlerMetadataAccess, type EntityHandlersMetadata } from "../handler/h
 import { AggregateStorage } from "./aggregate-storage.js";
 import { PrimitiveIds } from "./primitive-id.js";
 import type { Stand } from "../stand/stand.js";
-import { TransitionValidationError } from "./command-errors.js";
+import { ReplayError, TransitionValidationError } from "./command-errors.js";
 
 type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> =
   | Aggregate<unknown, Schema, unknown>
@@ -453,6 +453,7 @@ interface RepositoryRuntime {
 
 type RepositoryHandlersOption =
   EntityHandlersMetadata | readonly EntityHandlersMetadata[] | undefined;
+type ApplyMode = "command" | "replay";
 
 function createRepositoryDispatchers(
   repository: RepositoryView & {
@@ -576,7 +577,7 @@ class AggregateCommandExecution {
       loaded.version,
     );
 
-    await this.#applyAggregateEvents(loaded.entity, events);
+    await this.#applyAggregateEvents(loaded.entity, events, "command");
 
     if (events.length === 0) {
       return;
@@ -610,7 +611,7 @@ class AggregateCommandExecution {
     const history = await storage.readHistory(entityId as never);
     const entity = this.#instantiateAggregate(entityId, history.snapshot);
 
-    await this.#applyAggregateEvents(entity, history.events);
+    await this.#applyAggregateEvents(entity, history.events, "replay");
     return Object.freeze({
       entity,
       storage,
@@ -671,13 +672,17 @@ class AggregateCommandExecution {
     });
   }
 
-  async #applyAggregateEvents(entity: object, events: readonly Event[]): Promise<void> {
+  async #applyAggregateEvents(
+    entity: object,
+    events: readonly Event[],
+    mode: ApplyMode,
+  ): Promise<void> {
     for (const event of events) {
-      await this.#applyAggregateEvent(entity, event);
+      await this.#applyAggregateEvent(entity, event, mode);
     }
   }
 
-  async #applyAggregateEvent(entity: object, event: Event): Promise<void> {
+  async #applyAggregateEvent(entity: object, event: Event, mode: ApplyMode): Promise<void> {
     const message = event.message;
 
     if (message === undefined || message.typeUrl === "") {
@@ -699,6 +704,9 @@ class AggregateCommandExecution {
     const rejectedCommit = transactionalEntityAccess.rejectedCommit(entity);
 
     if (rejectedCommit !== undefined) {
+      if (mode === "replay") {
+        throw new ReplayError(rejectedCommit.validation.error);
+      }
       throw new TransitionValidationError(rejectedCommit.validation.error);
     }
   }

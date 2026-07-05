@@ -252,6 +252,44 @@ describe("CommandBus", () => {
     expect(observed).toEqual([]);
   });
 
+  it("keeps validation queued behind earlier command dispatch", async () => {
+    const gate = createSignal();
+    const observed: string[] = [];
+    const dispatcher: CommandDispatcher = {
+      messageSchemas: () => [ProjectionStateSchema, ValidatedTaskCommandSchema],
+      dispatch: async (command) => {
+        observed.push(command.id?.uuid ?? "missing");
+        if (command.id?.uuid === "command-blocking") {
+          await gate.promise;
+        }
+      },
+    };
+    const bus = new CommandBus([dispatcher]);
+
+    const first = bus.post(createProjectionCommand("command-blocking"));
+    const second = bus.post(createValidatedCommand("command-queued-invalid", "task-invalid", ""));
+    let secondSettled = false;
+    void second.then(
+      () => {
+        secondSettled = true;
+      },
+      () => {
+        secondSettled = true;
+      },
+    );
+
+    await waitUntil(() => observed.includes("command-blocking"));
+    await waitForRuntimeTurn();
+
+    expect(secondSettled).toBe(false);
+    expect(observed).toEqual(["command-blocking"]);
+
+    gate.resolve();
+    await first;
+    await expect(second).rejects.toBeInstanceOf(CommandValidationError);
+    expect(observed).toEqual(["command-blocking"]);
+  });
+
   it("rejects nested posts from active command dispatch", async () => {
     const observed: string[] = [];
     const context: { bus?: CommandBus } = {};
@@ -324,4 +362,31 @@ function createValidatedCommand(id: string, aggregateId: string, name: string) {
       { validate: false },
     ),
   });
+}
+
+function createSignal() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((fulfill) => {
+    resolve = () => {
+      fulfill();
+    };
+  });
+
+  return { promise, resolve };
+}
+
+async function waitForRuntimeTurn(): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+async function waitUntil(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 500;
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return;
+    }
+    await waitForRuntimeTurn();
+  }
 }

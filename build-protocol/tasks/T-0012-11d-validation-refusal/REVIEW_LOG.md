@@ -6,7 +6,7 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-7 rollback fixes verified; ready for round-8 independent review
+Status: round-8 reliability fixes verified; ready for round-9 independent review
 
 ## Required Lanes
 
@@ -14,8 +14,9 @@ Status: round-7 rollback fixes verified; ready for round-8 independent review
 - documentation: docs check passed
 - TypeScript/API docs: typecheck and docs check passed
 - security: round-2 finding fixed and verified
-- performance/reliability: round-3 finding fixed and verified; round-4 review
-  clean; sandbox coverage blocked by local endpoint permissions only
+- performance/reliability: round-7 rollback finding fixed and verified;
+  round-8 replay/ordering follow-ups fixed and verified; sandbox coverage
+  blocked by local endpoint permissions only
 
 ## Findings
 
@@ -202,6 +203,36 @@ Status: round-7 rollback fixes verified; ready for round-8 independent review
 - `2026-07-05 06:37 WEST`: Focused rollback regressions passed with 2 files and
   2 selected tests; full affected repository/service suites passed outside the
   sandbox with 2 files and 80 tests. The sandboxed full affected suite failed
+  only on known loopback gRPC listener permissions (`listen EPERM 127.0.0.1`).
+  `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, `pnpm format:check`, and
+  `git diff --check` passed.
+
+### Round 8
+
+- `2026-07-05 07:04 WEST`: Code style and documentation found stale
+  implementation-report wording that still described earlier review rounds as
+  current.
+- `2026-07-05 07:05 WEST`: TypeScript/API docs noted that removing the older
+  `TransactionalEntityScopeErrorReason` name is source-breaking. This is
+  intentionally not reverted because the user explicitly approved aggressive
+  cleanup for this framework draft and the active hard naming rule forbids
+  identifiers with more than four semantic components.
+- `2026-07-05 07:06 WEST`: Security was clean.
+- `2026-07-05 07:07 WEST`: Performance/reliability found that aggregate
+  rehydration replay reused the command-time transition-validation error path,
+  that stale rejected-commit marker clearing needed direct coverage, and that
+  command-bus validation ordering needed a queued invalid-command regression.
+
+## Round-8 Fix Pass
+
+- `2026-07-05 07:12 WEST`: Orchestrator split aggregate replay failures from
+  command-time transition validation with an internal `ReplayError`, added a
+  regression for invalid stored history, added a successful fresh-transaction
+  recovery regression, and added a command-bus ordering regression proving
+  invalid queued commands wait behind active dispatch.
+- `2026-07-05 07:34 WEST`: Focused bus/repository regressions passed with 3
+  selected tests. Full affected bus/repository/service suites passed outside
+  the sandbox with 3 files and 95 tests. The sandboxed affected suite failed
   only on known loopback gRPC listener permissions (`listen EPERM 127.0.0.1`).
   `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, `pnpm format:check`, and
   `git diff --check` passed.
