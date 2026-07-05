@@ -5,10 +5,10 @@ Branch: `task/T-0012-12c-task-operations`
 Baseline commit: `fc71408`
 Reviewed commit/diff basis: implementation commit `8ab4b5c`; review-fix
 commit `3ee5c1a`; metadata-fix commit `b6495bb`; status-fix commit `6fea638`
-; restart-guidance-fix commit `7ed30a3`
+; restart-guidance-fix commit `7ed30a3`; post-restart-status commit `2cb0cf8`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
-Status: restart-guidance fix committed; re-review pending
+Status: post-restart-status committed; re-review pending
 
 ## Required Review Lanes
 
@@ -155,3 +155,23 @@ Planned fix:
 
 - Record `7ed30a3` as the restart-guidance fix and point current state to
   re-review/task closure.
+
+### Round 7 - `2cb0cf8`
+
+| Lane                       | Agent                                  | Result   |
+| -------------------------- | -------------------------------------- | -------- |
+| code style/maintainability | `019f32ff-213b-7602-88ce-dd720710edcf` | Comments |
+| documentation              | `019f32ff-21d5-7023-ac19-3e0dfb030d8d` | Comments |
+| TypeScript/API docs        | `019f32ff-2249-75d1-9579-59489cf772b3` | Clean    |
+| security                   | `019f32ff-22ea-7a70-9fe0-8884b14f1433` | Clean    |
+| performance/reliability    | `019f32ff-2363-7062-be80-c73261c5bc33` | Comments |
+
+Findings:
+
+- Task, review, and work-log status fields still described the pre-`2cb0cf8`
+  state.
+
+Planned fix:
+
+- Record `2cb0cf8` and point current state to round-seven re-review/task
+  closure.
