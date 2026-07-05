@@ -251,6 +251,23 @@ invalid-`origin` TypeDoc warning. Full `pnpm format:check` was blocked only by
 the unrelated untracked root file `human-review-1-jul.md`, which remains
 outside the autonomous task scope; tracked files passed Prettier.
 
+`T-0012.11 Missing Details And Example Readiness` is integrated on `main` at
+merge commit `473a4b2`. It added the five example-readiness slices selected by
+the splitter: aggregate command execution, projection event updates, projection
+list queries, validation/refusal wiring, and the minimal black-box fixture. All
+required review lanes are clean through commit `c1cf077`. The next selected
+subtask is `T-0012.12 To-Do Example`.
+
+Parent tracked-state verification after integrating `T-0012.11` passed:
+`pnpm check:node`, `pnpm typecheck`, `pnpm lint`, project-scope Prettier
+excluding only unrelated untracked `human-review-1-jul.md`, escalated
+`pnpm test`, escalated `pnpm test:coverage`, `pnpm docs:check`,
+`pnpm proto:lint`, `pnpm proto:check-generated`, and `git diff --check`.
+Escalated coverage passed with 45 test files, 619 tests, statements 95.06%,
+branches 90.22%, functions 97.6%, and lines 95.08%. Docs/API checks still
+report only the known invalid-`origin` TypeDoc warning. Non-escalated tests and
+coverage still hit known local HTTP/2/ZeroMQ sandbox failures.
+
 ## First Selected Subtask
 
 Selected: `T-0012.1 Cleanup Enforcement Baseline`.

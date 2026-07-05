@@ -1,7 +1,6 @@
 # T-0012: Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.11 split complete; first implementation slice selected; splitter
-review comments addressed
+Status: T-0012.11 integrated; T-0012.12 selected
 Start: `2026-07-01 16:48 WEST`
 Baseline commit: `a9769d4`
 Branch: `task/T-0012-cleanup-replan`
@@ -143,6 +142,12 @@ ZeroMQ local IPC sandbox failure. Coverage was statements 94.93%, branches
 
 Current subtask: `T-0012.11 Missing Details And Example Readiness` (split
 complete; first selected slice is `T-0012.11a Aggregate Command Execution`).
+
+`T-0012.11 Missing Details And Example Readiness` is integrated on `main` at
+merge commit `473a4b2`. It completed aggregate command execution, projection
+event updates, projection list queries, validation/refusal wiring, and the
+minimal black-box fixture. Main verification passed with 45 test files, 619
+tests, and branch coverage 90.22%. Current subtask: `T-0012.12 To-Do Example`.
 
 ## T-0012.2 Selection Rationale
 

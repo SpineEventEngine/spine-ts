@@ -218,3 +218,23 @@ For `T-0012.11 Missing Details And Example Readiness`, reviewers must focus on:
 - maintaining branch coverage at or above 90%.
 
 Round-1 splitter review comments are now addressed in the leaf and parent docs.
+
+## T-0012.11 Review Status
+
+`T-0012.11 Missing Details And Example Readiness` is integrated on `main`. All
+five implementation slices are complete and parent-verified. Final review lanes
+are clean through `c1cf077`, and main verification after merge passed. The next
+selected task is `T-0012.12 To-Do Example`.
+
+## Next Review Focus After T-0012.11
+
+For `T-0012.12 To-Do Example`, reviewers must focus on:
+
+- a real server-side to-do bounded context using the framework APIs rather than
+  simulated command/query/subscription behavior;
+- real gRPC command, query, and subscription flows;
+- in-memory storage is acceptable for the example, but framework storage APIs
+  must remain backend-neutral;
+- missing framework behavior discovered by the example must be split and
+  implemented in the framework before the example continues; and
+- the example must have its own `USER_GUIDE.md`.
