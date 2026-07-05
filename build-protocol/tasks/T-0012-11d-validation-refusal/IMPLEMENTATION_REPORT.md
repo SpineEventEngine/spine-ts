@@ -37,6 +37,10 @@ Baseline commit: `c13b19c`
 - Aggregate command execution now reads rejected `EntityTransaction` commits
   after event appliers and raises a command-visible transition validation error
   before event append, snapshot write, or dispatch.
+- Round 12 tightened rejected-commit marker lifetime: starting a new
+  transaction no longer clears an earlier rejected commit, so rollback followed
+  by a fresh transaction without an accepted commit cannot mask transition
+  validation failure. Accepted commits remain the marker-clearing recovery path.
 
 ## Verification
 
@@ -85,7 +89,7 @@ Baseline commit: `c13b19c`
 
 ## Review Summary
 
-Independent review has run through ten rounds so far. Round 1 moved payload
+Independent review has run through twelve rounds so far. Round 1 moved payload
 validation to the `CommandBus`, removed an accidental public entity inspection
 hook, and filled missing public Ack docs. Round 2 moved internal validation
 errors back into their owning bus/repository layers and kept arbitrary
@@ -103,10 +107,16 @@ command-bus validation ordering coverage. Round 9 protected rejected
 transition-validation details from handler mutation, moved replay errors to a
 replay-owned module, qualified public replay-failure docs, and refreshed parent
 ledger state. Round 10 aligned remaining replay-failure documentation and
-status summaries.
+status summaries. Round 11 added sanitized incompatible-payload validation
+details. Round 12 preserves rejected-commit markers across rollback followed by
+a fresh transaction until an accepted commit clears them.
 
 ### Latest Verification
 
+- `2026-07-05 09:38 WEST`: Focused restarted-marker regressions passed with 3
+  selected tests. Full affected repository-routing suite passed with 46 tests.
+  `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, `pnpm format:check`, and
+  `git diff --check` passed. No service/network test was blocked in this pass.
 - `2026-07-05 09:20 WEST`: Focused incompatible-payload service regression
   passed. Full affected bus/repository/service suites passed outside the
   sandbox with 3 files and 97 tests. The sandboxed affected suite failed only

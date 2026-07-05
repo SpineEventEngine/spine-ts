@@ -317,7 +317,6 @@ export abstract class TransactionalEntity<
       throw new TransactionalEntityScopeError("duplicate", "startTransaction");
     }
 
-    rejectedCommits.delete(this);
     const previousVersion = this.version;
     this.#transaction = new EntityTransaction({
       schema: this.schema,

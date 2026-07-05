@@ -239,6 +239,28 @@ class RollingBackTransitionAggregate extends TransitionViolatingAggregate {
   }
 }
 
+class RestartingTransitionAggregate extends TransitionViolatingAggregate {
+  override assignTask(command: AggregateState) {
+    return createAggregateEvent("event-transition-restart", command.id, 0, command.name);
+  }
+
+  override applyTask(event: AggregateState): void {
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: `${event.id}-changed`,
+        name: event.name,
+        archived: event.archived,
+      }),
+    );
+    const result = this.commitTransaction();
+    if (result.status === "rejected") {
+      this.rollbackTransaction();
+      this.startTransaction();
+    }
+  }
+}
+
 class MutatingRejectedAggregate extends TransitionViolatingAggregate {
   override assignTask(command: AggregateState) {
     return createAggregateEvent("event-transition-mutated", command.id, 0, command.name);
@@ -983,6 +1005,36 @@ describe("repository signal routing", () => {
     });
   });
 
+  it("rejects restarted transition failures before storage", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createRestartingTransitionRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("command-transition-restart", "task-transition-restart")),
+    ).rejects.toMatchObject({
+      type: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED",
+      clientMessage: "Command state transition validation failed.",
+    });
+
+    await expect(eventStore.read()).resolves.toEqual([]);
+    await expect(storage.readHistory("task-transition-restart")).resolves.toMatchObject({
+      snapshot: undefined,
+      events: [],
+    });
+  });
+
   it("protects transition validation details from handler mutation", async () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createMutatingRejectedRepository())
@@ -1036,6 +1088,37 @@ describe("repository signal routing", () => {
       type: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED",
     });
     await expect(eventStore.read()).resolves.toHaveLength(1);
+  });
+
+  it("reports restarted replay failures as aggregate replay failure", async () => {
+    const factory = new InMemoryStorageFactory();
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createRestartingTransitionRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await storage.appendEvents("task-replay-restart", [
+      createAggregateEvent("event-replay-restart", "task-replay-restart", 1, "BrokenHistory"),
+    ]);
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("command-after-restart-history", "task-replay-restart")),
+    ).rejects.toMatchObject({ name: "ReplayError" });
+
+    await expect(eventStore.read()).resolves.toHaveLength(1);
+    await expect(storage.readHistory("task-replay-restart")).resolves.toMatchObject({
+      snapshot: undefined,
+      events: [{ id: { value: "event-replay-restart" } }],
+    });
   });
 
   it("clears rejected transition markers when a fresh transaction succeeds", async () => {
@@ -1798,6 +1881,23 @@ function createRollingBackTransitionRepository(): Repository<
 
   return new Repository({
     entityType: RollingBackTransitionAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createRestartingTransitionRepository(): Repository<typeof RestartingTransitionAggregate> {
+  const handlers = defineEntityHandlers(
+    RestartingTransitionAggregate,
+    AggregateStateSchema,
+    (builder) => [
+      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.apply(AggregateStateSchema, "applyTask"),
+    ],
+  );
+
+  return new Repository({
+    entityType: RestartingTransitionAggregate,
     schema: AggregateStateSchema,
     handlers,
   });

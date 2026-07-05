@@ -6,7 +6,7 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-11 fixes verified; ready for round-12 independent review
+Status: round-12 fixes verified; ready for round-13 independent review
 
 ## Required Lanes
 
@@ -306,3 +306,26 @@ Status: round-11 fixes verified; ready for round-12 independent review
   on known loopback gRPC listener permissions (`listen EPERM 127.0.0.1`).
   `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, `pnpm format:check`, and
   `git diff --check` passed.
+
+### Round 12
+
+- `2026-07-05 09:24 WEST`: Performance/reliability found that
+  `startTransaction()` cleared `rejectedCommits` before any recovery commit
+  succeeded. An applier could reject a transition, roll it back, start a new
+  transaction, and return without an accepted commit, causing repository
+  execution to miss the rejected marker and proceed to durability.
+- `2026-07-05 09:25 WEST`: Documentation, code style, TypeScript/API docs, and
+  security had no additional code findings for this pass beyond durable-log
+  status updates.
+
+## Round-12 Fix Pass
+
+- `2026-07-05 09:28 WEST`: Implementation worker stopped
+  `startTransaction()` from clearing rejected-commit markers. Accepted commits
+  still clear the marker. Added repository-routing regressions for command-time
+  and aggregate-replay paths where a rejected commit is rolled back and followed
+  by a new transaction with no accepted commit.
+- `2026-07-05 09:38 WEST`: Focused restarted-marker regressions passed with 3
+  selected tests. Full affected repository-routing suite passed with 46 tests.
+  `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, `pnpm format:check`, and
+  `git diff --check` passed. No service/network test was blocked in this pass.

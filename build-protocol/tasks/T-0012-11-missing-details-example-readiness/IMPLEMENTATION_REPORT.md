@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11 Missing Details And Example Readiness
 
-Status: T-0012.11a, T-0012.11b, and T-0012.11c merged and parent-verified; T-0012.11d round-10 verified
+Status: T-0012.11a, T-0012.11b, and T-0012.11c merged and parent-verified; T-0012.11d round-12 verified
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -103,6 +103,7 @@ passed: focused stand/service tests, `pnpm typecheck`, `pnpm lint`,
 remains blocked only by local endpoint permissions.
 
 `T-0012.11d Validation And Immediate Refusal Outcomes` is implemented in its
-child branch. Round-9 review found parent-ledger wording, replay-error
-placement, rejected-validation cloning, and public-doc precision follow-ups;
-the child branch has applied and verified those fixes.
+child branch. Round-12 review found a rejected-commit marker lifetime issue
+when an applier rejects, rolls back, starts a fresh transaction, and returns
+without an accepted commit. The child branch has applied the reliability fix
+and verified it.
