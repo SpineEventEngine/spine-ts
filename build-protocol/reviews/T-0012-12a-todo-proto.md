@@ -4,10 +4,10 @@ Task log: `build-protocol/tasks/T-0012-12a-todo-proto/TASK.md`
 Branch: `task/T-0012-12a-todo-proto`
 Baseline commit: `07d06a2`
 Reviewed commit/diff basis: implementation commit `cbdb35c`; committed
-reliability fix `56f0b8d Stabilize todo proto generation publishing`
+final-review fix `33aa420 Remove todo generated schema facade`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12a-todo-proto`
-Status: final-review fix in progress after committed reliability fix
+Status: final-review fix committed; final re-review in progress
 
 ## Required Review Lanes
 

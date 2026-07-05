@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12a Todo Proto Generation
 
-Status: final-review fix in progress after committed reliability fix
+Status: final-review fix committed; final re-review in progress
 Branch: `task/T-0012-12a-todo-proto`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12a-todo-proto`
@@ -26,6 +26,9 @@ projection, service, or server runtime behavior.
   state and removes that facade while keeping the direct generated import proof
   in the test. Required final-review fix verification passed, and the main
   orchestrator reran the verification subset at `2026-07-05 13:02 WEST`.
+- The final-review fix was committed as
+  `33aa420 Remove todo generated schema facade`; final re-review is in
+  progress.
 - Required task/spec/tooling inputs have been read.
 - Example-owned todo `.proto` files define `TaskId`, `Task`, `TaskList`,
   create/rename/complete/reopen commands, and corresponding events.
