@@ -1,6 +1,6 @@
 # T-0012.11b: Projection Event Updates
 
-Status: round-5 review fixes implemented; verification passed
+Status: final round-6 review and verification passed; ready to merge
 Start: `2026-07-05 00:23 WEST`
 Parent task: `T-0012.11 Missing Details And Example Readiness`
 Branch: `task/T-0012-11b-projection-event-updates`
