@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11 Missing Details And Example Readiness
 
-Status: T-0012.11a, T-0012.11b, and T-0012.11c merged and parent-verified; T-0012.11d latest docs/status rollup fix verified
+Status: T-0012.11a, T-0012.11b, T-0012.11c, and T-0012.11d merged and parent-verified
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -102,7 +102,13 @@ passed: focused stand/service tests, `pnpm typecheck`, `pnpm lint`,
 `pnpm test:coverage` (45 files, 592 tests; branches 90.03%). Sandboxed coverage
 remains blocked only by local endpoint permissions.
 
-`T-0012.11d Validation And Immediate Refusal Outcomes` is implemented in its
-child branch. Latest docs/status rollup fixes now carry the child
-formatting/docs/API-docs verification state into the parent summaries. Docs/API,
-formatting, and whitespace checks passed for those docs-only passes.
+`T-0012.11d Validation And Immediate Refusal Outcomes` is merged into this
+parent branch at `9174df8`. It adds command-bus payload validation before
+dispatcher callbacks, stable immediate refusal and validation `Ack` mappings,
+and runtime transition-validation enforcement that blocks invalid aggregate
+events before durable writes. Parent verification passed affected
+bus/repository/service tests outside the sandbox with 3 files and 99 tests;
+`pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, `pnpm format:check`,
+`git diff --check`, and escalated `pnpm test:coverage` with 45 files, 610
+tests, and branch coverage 90.09%. Sandboxed affected service tests and
+coverage remain blocked only by local endpoint and IPC permissions.
