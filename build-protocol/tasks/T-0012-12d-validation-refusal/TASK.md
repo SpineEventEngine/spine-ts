@@ -1,6 +1,6 @@
 # T-0012.12d: Validation And Refusal
 
-Status: round-twelve metadata fixed; re-review pending
+Status: verified; ready for branch closure
 Start: `2026-07-05 18:08 WEST`
 End: `2026-07-05 18:49 WEST`
 Baseline commit: `27250a0`
@@ -24,6 +24,10 @@ Round-eight-metadata commit: `af96a6a`
 Round-nine-metadata commit: `d6ae65b`
 Round-ten-metadata commit: `95bf3da`
 Round-eleven-metadata commit: `1e7b884`
+Deferred-final-head commit: `ddd180c`
+Review-log-reflow commit: `af4f76c`
+Restart-head-clarification commit: `f04b9b6`
+Latest clean review basis: `f04b9b6`
 Final branch HEAD: pending closure/integration
 
 ## Objective
@@ -204,14 +208,13 @@ Out of scope:
   full-list snapshot coverage and stale metadata.
 - Round-three-through-round-eleven metadata reviews kept advancing the
   reviewed metadata basis through `1e7b884`.
-- Current reviewer note for this pass: keep `Final branch HEAD` deferred or
-  non-final until a later closure/integration commit can record the terminal
-  SHA.
+- Later review rounds accepted the deferred-final-head convention and advanced
+  the latest clean review basis to `f04b9b6`.
 
 ## Restart Guidance
 
-- Resume from git HEAD `1e7b884` and the latest reviewed metadata basis
-  `1e7b884`.
+- Resume from the actual Git branch head.
+- Latest clean review basis before closure metadata: `f04b9b6`.
 - Task branch closure commit, if any, will be recorded after closure or
   integration, once it exists.
 

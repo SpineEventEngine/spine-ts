@@ -4,10 +4,10 @@ Task log: `build-protocol/tasks/T-0012-12d-validation-refusal/TASK.md`
 Branch: `task/T-0012-12d-validation-refusal`
 Baseline commit: `27250a0`
 Reviewed commit/diff basis:
-`1e7b884`
+`f04b9b6`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
-Status: round-twelve metadata fixed; re-review pending
+Status: verified; ready for branch closure
 
 ## Required Review Lanes
 
@@ -278,3 +278,35 @@ Planned fixes:
   logs.
 - Update the current-state/review-log wording to reflect this deferred-final
   metadata fix.
+
+### Round 13
+
+Reviewed basis: deferred-final-head commit `ddd180c`.
+
+Outcome: clean.
+
+Findings: none.
+
+### Round 14
+
+Reviewed basis: review-log-reflow commit `af4f76c`.
+
+Outcome: changes requested.
+
+Findings:
+
+- `build-protocol/work-logs/T-0012-12d.md` still pinned restart guidance to
+  `git HEAD 1e7b884` while also calling `1e7b884` the latest reviewed basis.
+
+Planned fixes:
+
+- Update Current State to resume from the actual Git branch head and keep
+  `1e7b884` only as the latest reviewed basis.
+
+### Round 15
+
+Reviewed basis: restart-head-clarification commit `f04b9b6`.
+
+Outcome: clean.
+
+Findings: none.

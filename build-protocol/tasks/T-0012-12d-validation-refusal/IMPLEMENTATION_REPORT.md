@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12d Validation And Refusal
 
-Status: round-twelve metadata fixed; re-review pending
+Status: verified; ready for branch closure
 Branch: `task/T-0012-12d-validation-refusal`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
@@ -19,6 +19,10 @@ Round-eight-metadata commit: `af96a6a`
 Round-nine-metadata commit: `d6ae65b`
 Round-ten-metadata commit: `95bf3da`
 Round-eleven-metadata commit: `1e7b884`
+Deferred-final-head commit: `ddd180c`
+Review-log-reflow commit: `af4f76c`
+Restart-head-clarification commit: `f04b9b6`
+Latest clean review basis: `f04b9b6`
 Final branch HEAD: pending closure/integration
 
 ## Summary
@@ -60,7 +64,7 @@ query behavior completed by `T-0012.12c`.
   `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
   passed, 1 file / 11 tests.
 - Final `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
-  passed, 1 file / 11 tests.
+  passed, 1 file / 12 tests.
 - Final `pnpm typecheck` passed.
 - Final `pnpm lint` passed.
 - Final changed-file Prettier check passed.
@@ -68,10 +72,10 @@ query behavior completed by `T-0012.12c`.
   TypeDoc source-link warning.
 - Final `pnpm proto:check-generated` passed.
 - Final `git diff --check` passed.
-- Sandboxed `pnpm test:coverage` failed on sandboxed local IPC/loopback
-  permissions. Escalated `pnpm test:coverage` passed, 45 files / 647 tests,
-  overall coverage 95.18% statements, 90.48% branches, 97.63% functions, and
-  95.2% lines.
+- Sandboxed `pnpm test:coverage` failed because local networking and IPC were
+  denied with `listen EPERM 127.0.0.1` and ZeroMQ `Operation not permitted`.
+- Escalated `pnpm test:coverage` passed, 45 files / 648 tests, with 95.18%
+  statements, 90.48% branches, 97.63% functions, and 95.2% lines.
 - Review-fix RED
   `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
   failed with 11 tests / 1 failure after a temporary post-rejection delayed
