@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12 To-Do Example
 
-Status: split review clean; first implementation slice selected
+Status: T-0012.12a merged; T-0012.12b selected
 Branch: `task/T-0012-12-to-do-example`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
@@ -24,11 +24,10 @@ framework details.
 
 ## Splitting Outcome
 
-The requirements-splitting sub-agent split this task into small slices,
-identified no framework gap before the first slice, and selected
-`T-0012.12a Todo Proto Generation` as the first non-blocked implementation
-slice. The next action is independent splitter review, then the selected
-implementation slice.
+The requirements-splitting sub-agent split this task into small slices and
+identified no framework gap before the first slice. `T-0012.12a Todo Proto
+Generation` is complete and merged. The next selected implementation slice is
+`T-0012.12b Create Task Flow`.
 
 ## Current State
 
@@ -36,7 +35,8 @@ implementation slice.
 - Durable task/report/review/work logs were created before implementation.
 - Requirements splitting is complete.
 - Splitter review is clean through commit `eb22695`.
-- No production or example code implementation has started.
+- `T-0012.12a Todo Proto Generation` is merged via `3cc8625`.
+- `T-0012.12b Create Task Flow` is selected next.
 
 ## Splitter Evidence Summary
 
@@ -65,7 +65,7 @@ Important findings:
    - Branch: `task/T-0012-12a-todo-proto`
    - Worktree:
      `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12a-todo-proto`
-   - Selected first.
+   - Complete and merged via `3cc8625`.
    - Adds example-local domain protos, generation to ignored
      `examples/todo/generated/`, and build/test integration without runtime
      framework behavior.
@@ -96,17 +96,17 @@ Gap-routing rule:
   `spine-jvm-docs/` notes and corresponding Spine JVM `core-jvm/server` source
   or record why only notes were available.
 
-## First Selected Subtask
+## Current Selected Subtask
 
-Selected: `T-0012.12a Todo Proto Generation`
+Selected: `T-0012.12b Create Task Flow`
 
 Why:
 
-- The example cannot compile real domain code without generated Protobuf-ES
-  schemas.
-- The generated-output ignore/regeneration policy must be correct before any
-  generated imports appear in source or tests.
-- This slice is implementable now and does not require framework changes.
+- `T-0012.12a` added the generated Protobuf-ES domain schemas and generated
+  output guardrails.
+- The next vertical slice should prove one real create command through the
+  framework command, aggregate, event, projection, and query path.
+- No framework gap is known before this slice.
 
 ## Verification
 
@@ -123,3 +123,5 @@ Splitter re-review:
   TypeScript/API docs, and performance/reliability; security was clean.
 - Commit `eb22695` addressed the findings.
 - Round 2 was clean in all five required lanes.
+- `T-0012.12a` completed its implementation/review loop and was merged as
+  `3cc8625 Merge T-0012.12a todo proto generation`.

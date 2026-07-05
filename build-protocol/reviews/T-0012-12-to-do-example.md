@@ -6,7 +6,7 @@ Baseline commit: `89868e9`
 Reviewed commit/diff basis: Pending
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
-Status: split review clean; first implementation slice selected
+Status: T-0012.12a merged; T-0012.12b selected
 
 ## Required Review Lanes
 
@@ -72,4 +72,7 @@ Review focus for splitter review:
 
 ## Implementation Review Rounds
 
-Pending implementation slices.
+- `T-0012.12a Todo Proto Generation`: complete and merged via `3cc8625`.
+  Final clean lanes: documentation and maintainability after historical
+  wording fix, TypeScript/API docs, security, and performance/reliability.
+- Next selected slice: `T-0012.12b Create Task Flow`.

@@ -1,6 +1,6 @@
 # T-0012.12: To-Do Example
 
-Status: split review clean; first implementation slice selected
+Status: T-0012.12a merged; T-0012.12b selected
 Start: `2026-07-05 10:53 WEST`
 End: Pending
 Baseline commit: `89868e9`
@@ -9,7 +9,8 @@ Branch: `task/T-0012-12-to-do-example`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
 Authoring sub-agent: Requirements splitter
-`019f31b8-0110-72c2-bea9-aeb6deea028b`; implementation sub-agent pending.
+`019f31b8-0110-72c2-bea9-aeb6deea028b`; `T-0012.12a` implementation and
+review sub-agents complete and closed; `T-0012.12b` implementation pending.
 Reviewer sub-agents:
 
 - code style/maintainability:
@@ -27,8 +28,8 @@ Reviewer sub-agents:
 - performance/reliability:
   `019f31c3-258a-7ef0-bef3-6cec938b84ca`,
   `019f31c7-772a-7e42-b17c-2d7388b5c24b`
-  Implementation commit: Pending branch commit
-  Final branch HEAD: Pending branch commit
+  Implementation commit: `3cc8625` merge of `T-0012.12a`
+  Final branch HEAD: `3cc8625`; `T-0012.12b` pending
 
 ## Objective
 
@@ -205,6 +206,10 @@ Out of scope:
 - `2026-07-05 11:34 WEST`: Splitter review is clean after round 2. All five
   review lanes have no remaining comments. All participating splitter-review
   sub-agents were closed.
+- `2026-07-05 13:12 WEST`: `T-0012.12a Todo Proto Generation` completed its
+  implementation and review loop. Clean final lanes: documentation and
+  maintainability after historical wording fix, TypeScript/API docs, security,
+  and reliability. Merged as `3cc8625 Merge T-0012.12a todo proto generation`.
 
 ## Requirements Splitter Evidence
 
@@ -341,6 +346,7 @@ Why first:
 - It is the first non-blocked implementable slice. Every real example class,
   command envelope, query, and black-box test depends on generated domain
   schemas.
+- Status: complete and merged via `3cc8625`.
 
 ### T-0012.12b Create Task Flow
 
@@ -551,9 +557,9 @@ JVM server-source/docs guardrail before code changes:
 - document inspected paths and implementation impact in the gap task log;
 - prefer the smallest JVM-familiar server contract and defer broader behavior.
 
-## First Selected Slice
+## Completed Slice
 
-Selected first implementable slice: `T-0012.12a Todo Proto Generation`.
+Completed first implementable slice: `T-0012.12a Todo Proto Generation`.
 
 Branch: `task/T-0012-12a-todo-proto`
 
@@ -567,6 +573,26 @@ Selection rationale:
   Protobuf-ES domain code exists and is ignored/regenerated correctly.
 - This slice is self-contained, does not require framework changes, and sets
   up the generated-code guardrail required by the to-do spec.
+
+## Current Selected Slice
+
+Selected next implementable slice: `T-0012.12b Create Task Flow`.
+
+Branch: `task/T-0012-12b-create-task-flow`
+
+Worktree:
+`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12b-create-task-flow`
+
+Selection rationale:
+
+- `T-0012.12a` added the required to-do Protobuf contracts and ignored
+  generated-schema workflow.
+- The smallest runnable behavior now is one create command through real
+  aggregate handling, event production, projection update, and query
+  visibility.
+- No framework gap is known before this slice. If implementation proves one,
+  it must be routed through a framework-gap task before continuing dependent
+  example work.
 
 ## Decisions
 
