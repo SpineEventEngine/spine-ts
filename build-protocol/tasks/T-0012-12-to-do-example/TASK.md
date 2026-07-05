@@ -32,10 +32,11 @@ Reviewer sub-agents:
 - performance/reliability:
   `019f31c3-258a-7ef0-bef3-6cec938b84ca`,
   `019f31c7-772a-7e42-b17c-2d7388b5c24b`
-  Implementation commits: `3cc8625` merge of `T-0012.12a`; `63f8e9f` merge of
-  `T-0012.12b`; `e27b033` merge of `T-0012.12c`; `6d82910` merge of
-  `T-0012.12d`; `064a95d` merge of `T-0012.12e`
-  Final branch HEAD: `064a95d`; `T-0012.12f` selected
+
+Implementation commits: `3cc8625` merge of `T-0012.12a`; `63f8e9f` merge of
+`T-0012.12b`; `e27b033` merge of `T-0012.12c`; `6d82910` merge of
+`T-0012.12d`; `064a95d` merge of `T-0012.12e`
+Final branch HEAD: `064a95d`; `T-0012.12f` selected
 
 ## Objective
 

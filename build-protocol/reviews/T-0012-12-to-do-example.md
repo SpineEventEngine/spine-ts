@@ -3,7 +3,7 @@
 Task log: `build-protocol/tasks/T-0012-12-to-do-example/TASK.md`
 Branch: `task/T-0012-12-to-do-example`
 Baseline commit: `89868e9`
-Reviewed commit/diff basis: `064a95d..HEAD`
+Reviewed commit/diff basis: `064a95d..4165035`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
 Status: T-0012.12e merged; T-0012.12f selected
@@ -105,7 +105,7 @@ Review focus for splitter review:
 ## Parent Integration Review
 
 - Parent integration docs for `T-0012.12e` are updated after merge.
-- Review package to prepare after this docs commit:
-  `064a95d..HEAD`.
+- Review package: `.superpowers/sdd/review-064a95d..4165035-parent-12e-integration.diff`
+- Reviewed range: `064a95d..4165035`.
 - Required lanes: maintainability, documentation, TypeScript/API docs,
   security, and performance/reliability.

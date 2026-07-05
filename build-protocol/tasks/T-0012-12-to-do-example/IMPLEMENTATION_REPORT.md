@@ -25,10 +25,8 @@ framework details.
 ## Splitting Outcome
 
 The requirements-splitting sub-agent split this task into small slices and
-identified no framework gap before the first slice. `T-0012.12a Todo Proto
-Generation`, `T-0012.12b Create Task Flow`, `T-0012.12c Task Operations`, and
-`T-0012.12d Validation And Refusal`, and `T-0012.12e Task Subscriptions` are
-complete and merged. The next selected implementation slice is
+identified no framework gap before the first slice. Slices `T-0012.12a` through
+`T-0012.12e` are complete and merged. The next selected implementation slice is
 `T-0012.12f Runnable Server And Guide`.
 
 ## Current State
