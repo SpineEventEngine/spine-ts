@@ -128,6 +128,13 @@ consistency state.
 
 ### Latest Verification
 
+- Parent merge verification passed after merge `9174df8`: affected
+  bus/repository/service tests passed outside the sandbox with 3 files and 99
+  tests; `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`,
+  `pnpm format:check`, `git diff --check`, and escalated
+  `pnpm test:coverage` passed with 45 files, 610 tests, and branch coverage
+  90.09%. Sandboxed affected service tests and coverage remained blocked only
+  by local endpoint and IPC permissions.
 - Latest docs/status rollup wording verification passed:
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
 - `2026-07-05 11:05 WEST`: Round-18 status follow-up verification passed:

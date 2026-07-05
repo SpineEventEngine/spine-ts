@@ -68,8 +68,12 @@ permissions.
 
 `T-0012.11c Projection List Queries` is merged into this parent branch at
 `413c5f7`. Final child review lanes reported no remaining comments, and parent
-verification passed after merge. The next implementation slice is
-`T-0012.11d Validation And Immediate Refusal Outcomes`.
+verification passed after merge.
+
+`T-0012.11d Validation And Immediate Refusal Outcomes` is merged into this
+parent branch at `9174df8`. Final child review and parent verification passed.
+The next implementation slice is
+`T-0012.11e Minimal Black-Box Test Fixture`.
 
 Parent integration style review then found one important scope issue: the
 include-all `QueryService.Read` path was attached to every state route instead
