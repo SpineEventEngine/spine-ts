@@ -427,3 +427,11 @@ Status: round-17 documentation/status fixes verified; ready for follow-up review
   deferred server lifecycle, event intake, broker, and subscription-store
   scope; refreshed the cited rollups through round 16; and recorded this pass
   in child durable logs. Docs, format, and whitespace verification passed.
+
+## Round-17 Parent Status Follow-Up
+
+- `2026-07-05 10:50 WEST`: Orchestrator spot-check found parent top status
+  headers and current-state bodies still stopped at round 16. Implementation
+  worker aligned those parent summaries with the round-17 documentation/status
+  fix and recorded the correction in child and parent work logs. Docs, format,
+  and whitespace verification passed.
