@@ -571,8 +571,8 @@ function commandPostError(error: unknown): ContractError {
 
   if (error instanceof TransitionValidationError) {
     return {
-      type: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED",
-      message: "Command state transition validation failed.",
+      type: error.type,
+      message: error.clientMessage,
       details: packAny(ValidationErrorSchema, error.validationError, { validate: false }),
     };
   }

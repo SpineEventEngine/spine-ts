@@ -2,6 +2,12 @@ import type { ValidationError } from "@spine-ts/proto";
 
 /** Error raised when aggregate command execution rejects a state transition. */
 export class TransitionValidationError extends Error {
+  /** Stable client-visible error type returned in `Ack.status.error.type`. */
+  readonly type = "COMMAND_STATE_TRANSITION_VALIDATION_FAILED";
+
+  /** Stable client-visible error message returned in `Ack.status.error.message`. */
+  readonly clientMessage = "Command state transition validation failed.";
+
   /** Structured transition validation details from the entity transaction boundary. */
   readonly validationError: ValidationError;
 

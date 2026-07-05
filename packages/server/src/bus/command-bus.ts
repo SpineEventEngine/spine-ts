@@ -58,7 +58,7 @@ export class CommandBus {
     const message = unpackAny(packed, registration.schema);
 
     if (message === undefined) {
-      throw new Error(`Command payload did not match registered schema for "${typeUrl}".`);
+      throw CommandValidationError.invalidPayload();
     }
 
     try {

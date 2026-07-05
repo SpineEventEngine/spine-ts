@@ -1,4 +1,5 @@
-import type { ValidationError } from "@spine-ts/proto";
+import { create } from "@bufbuild/protobuf";
+import { ValidationErrorSchema, type ValidationError } from "@spine-ts/proto";
 
 /** Error raised when a command envelope payload fails command-bus validation. */
 export class CommandValidationError extends Error {
@@ -11,5 +12,10 @@ export class CommandValidationError extends Error {
     this.name = "CommandValidationError";
     this.validationError = validationError;
     Object.setPrototypeOf(this, new.target.prototype);
+  }
+
+  /** Create a validation error for payloads that cannot be unpacked as the registered type. */
+  static invalidPayload(): CommandValidationError {
+    return new CommandValidationError(create(ValidationErrorSchema));
   }
 }

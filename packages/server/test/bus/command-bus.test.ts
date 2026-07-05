@@ -235,6 +235,23 @@ describe("CommandBus", () => {
     expect(observed).toEqual([]);
   });
 
+  it("rejects incompatible command payload bytes before a custom dispatcher runs", async () => {
+    const observed: string[] = [];
+    const dispatcher = createValidatedCommandDispatcher((command) => {
+      observed.push(command.id?.uuid ?? "missing");
+    });
+    const command = createValidatedCommand("command-incompatible", "task-incompatible", "name");
+    const bus = new CommandBus([dispatcher]);
+
+    if (command.message !== undefined) {
+      command.message.value = new Uint8Array([255]);
+    }
+
+    await expect(bus.post(command)).rejects.toBeInstanceOf(CommandValidationError);
+
+    expect(observed).toEqual([]);
+  });
+
   it("rejects nested posts from active command dispatch", async () => {
     const observed: string[] = [];
     const context: { bus?: CommandBus } = {};

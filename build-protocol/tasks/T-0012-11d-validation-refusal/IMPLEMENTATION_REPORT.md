@@ -84,5 +84,11 @@ Baseline commit: `c13b19c`
 
 ## Review Summary
 
-No independent review lanes have run yet. Local implementation verification is
-green.
+Independent review has run through three rounds. Round 1 moved payload
+validation to the `CommandBus`, removed an accidental public entity inspection
+hook, and filled missing public Ack docs. Round 2 moved internal validation
+errors back into their owning bus/repository layers and kept arbitrary
+dispatcher-thrown `ValidationException`s sanitized. Round 3 is being fixed now:
+docs/report wording is being aligned with the bus-boundary behavior, structural
+payload mismatch is being mapped through the same command validation path, and
+direct repository/bus callers retain stable transition-validation metadata.

@@ -39,10 +39,13 @@ command handlers can throw so `CommandService.Post` returns a stable non-ok
 `Ack` error type/message. `CommandService.Post` also returns
 `COMMAND_VALIDATION_ERROR` with message `Command payload validation failed.`
 and packed `spine.validation.ValidationError` details when `CommandBus`
-rejects an invalid accepted command payload before dispatch. Transition
-validation failures from repository aggregate appliers continue to surface as
-`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
-details.
+rejects an invalid accepted command payload before dispatcher callbacks,
+including custom `addCommandDispatcher()` routes. For repository-backed
+aggregate dispatchers, validation still happens before route calculation,
+aggregate history load, event append, snapshot write, or stored-event dispatch.
+Transition validation failures from repository aggregate appliers continue to
+surface as `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed
+`ValidationError` details.
 The public entry points mirror Spine JVM's
 `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
 `ContextSpec` remains a framework-owned immutable value surfaced through

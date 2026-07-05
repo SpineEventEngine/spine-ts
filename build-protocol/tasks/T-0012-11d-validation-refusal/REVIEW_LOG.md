@@ -6,7 +6,7 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-2 fixes verified; ready for round-3 independent review
+Status: round-3 fixes verified; ready for round-4 independent review
 
 ## Required Lanes
 
@@ -100,3 +100,29 @@ Status: round-2 fixes verified; ready for round-3 independent review
   and 4 selected tests. `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`,
   `pnpm format:check`, and `git diff --check` all passed after the second fix
   pass.
+
+### Round 3
+
+- `2026-07-05 05:45 WEST`: Documentation found that `docs/api/README.md` and
+  `docs/architecture/README.md` still underspecified the command-bus validation
+  boundary, and `IMPLEMENTATION_REPORT.md` still claimed independent review had
+  not run.
+- `2026-07-05 05:46 WEST`: Security and TypeScript/API docs lanes were clean.
+- `2026-07-05 05:47 WEST`: Code style/maintainability found accepted commands
+  with incompatible payload bytes under a registered type URL still mapped to
+  generic `COMMAND_POST_ERROR` instead of `COMMAND_VALIDATION_ERROR`.
+- `2026-07-05 05:48 WEST`: Performance/reliability found that moving
+  `TransitionValidationError` out of services dropped stable direct-caller
+  `type` and `clientMessage` fields.
+
+## Round-3 Fix Pass
+
+- `2026-07-05 05:51 WEST`: Orchestrator restored stable metadata on
+  repository transition validation errors, mapped structural command payload
+  mismatch through `CommandValidationError`, added a command-bus regression for
+  incompatible payload bytes, aligned API/architecture docs with the fuller
+  bus-boundary wording, and updated the implementation report review summary.
+- `2026-07-05 05:54 WEST`: Affected bus/repository/service regressions passed
+  with 3 files and 6 selected tests. `pnpm typecheck`, `pnpm lint`,
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check` all passed
+  after the third fix pass.
