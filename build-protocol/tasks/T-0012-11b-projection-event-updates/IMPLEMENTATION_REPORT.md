@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11b Projection Event Updates
 
-Status: round-4 review fixes implemented; verification passed
+Status: round-5 review fixes implemented; verification passed
 Branch: `task/T-0012-11b-projection-event-updates`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11b-projection-event-updates`
@@ -95,6 +95,21 @@ that updates `Stand` after a projection subscriber mutates projection state.
   expectations now describe projection subscriber execution and the bounded
   diagnostic error snapshot.
 
+## Round-4 And Round-5 Review Fixes
+
+- Round 4 attempted to address the residual ID-less command tenant gap by
+  binding command context as aggregate-produced event origin even when the
+  command had no id.
+- Round 5 found that shape was not protobuf-contract-safe because
+  `Origin.message` is required by the Spine proto contract.
+- Aggregate command execution now rejects missing `command.id` before aggregate
+  events are bound, applied, or stored. This avoids constructing an invalid
+  `Origin`.
+- The no-id tenant regression now expects rejection and verifies that neither
+  tenant-a nor tenant-b receives a projection write. Command-with-ID tenant
+  overwrite tests remain in place.
+- Round 5 also shortens the newly introduced repository-routing helper names.
+
 ## Verification
 
 - RED:
@@ -177,10 +192,9 @@ that updates `Stand` after a projection subscriber mutates projection state.
 - Escalated `pnpm test:coverage` passed with 45 files and 579 tests; coverage
   summary: statements 94.97%, branches 90.04%, functions 97.5%, lines 94.99%.
 - Round-4 review fixes:
-  aggregate-produced events now bind command context as origin even when a
-  multitenant command has no id, the regression covers tenant-a/no-id versus
-  tenant-b origin, the README route/execution bullet is current, old command
-  lines are reflowed, and dispatch-failure wait helpers are shorter.
+  aggregate-produced events bound command context as origin even when a
+  multitenant command had no id. Round 5 supersedes that behavior because it
+  could construct a `pastMessage` origin without required `Origin.message`.
 - Round-4 focused repository verification passed:
   a focused `pnpm test` selection for command tenant routing and diagnostics
   passed with 1 file and 9 selected tests.
@@ -199,3 +213,21 @@ that updates `Stand` after a projection subscriber mutates projection state.
     reported `listen EPERM 127.0.0.1`.
   - Escalated `pnpm test:coverage` passed with 45 files and 580 tests; coverage
     summary: statements 94.97%, branches 90.04%, functions 97.5%, lines 94.99%.
+- Round-5 focused repository verification passed:
+  `pnpm test packages/server/test/repository/repository-routing.test.ts -t`
+  covered the no-id rejection and command-with-ID tenant-origin tests with 1
+  file and 4 selected tests.
+- Round-5 final verification passed:
+  - `pnpm test packages/server/test/repository/repository-routing.test.ts`
+    passed with 1 file and 38 tests.
+  - `pnpm typecheck` passed.
+  - `pnpm lint` passed.
+  - `pnpm format:check` passed after Prettier normalized the focused test file.
+  - `pnpm docs:check` passed with the existing invalid-origin source-link
+    warning from TypeDoc.
+  - `git diff --check` passed.
+  - Sandboxed `pnpm test:coverage` failed only on local endpoint permissions:
+    ZeroMQ IPC reported `Operation not permitted`, and gRPC service tests
+    reported `listen EPERM 127.0.0.1`.
+  - Escalated `pnpm test:coverage` passed with 45 files and 580 tests; coverage
+    summary: statements 94.97%, branches 90.04%, functions 97.5%, lines 95%.

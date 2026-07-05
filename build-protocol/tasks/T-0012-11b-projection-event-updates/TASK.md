@@ -1,6 +1,6 @@
 # T-0012.11b: Projection Event Updates
 
-Status: round-4 review fixes implemented; verification passed
+Status: round-5 review fixes implemented; verification passed
 Start: `2026-07-05 00:23 WEST`
 Parent task: `T-0012.11 Missing Details And Example Readiness`
 Branch: `task/T-0012-11b-projection-event-updates`
@@ -116,11 +116,14 @@ events update read-side projection state through `Stand`.
 - Round-3 verification passed. Sandboxed `pnpm test:coverage` still fails only
   on local IPC/listen permissions; escalated coverage passed with 45 files and
   579 tests, including 90.04% branch coverage.
-- Round-4 review fixes close the residual no-id command tenant routing gap.
-  Aggregate-produced events now bind command context as origin even when the
-  command has no id, so handler-supplied import/past-message tenants cannot
-  route projection updates to another tenant. The pass also updates stale
-  route/execution docs, reflows old report command lines, and shortens local
-  dispatch-failure wait helper names. Final verification passed. Sandboxed
-  `pnpm test:coverage` still fails only on local IPC/listen permissions;
-  escalated coverage passed with 45 files and 580 tests.
+- Round-4 review fixes attempted to close the residual no-id command tenant
+  routing gap by binding command context even when the command had no id. Round
+  5 found that shape was not protobuf-contract-safe because `Origin.message` is
+  required.
+- Round-5 review fixes reject aggregate command execution when `command.id` is
+  missing before aggregate events are bound, applied, or stored. The no-id
+  tenant regression now expects rejection and no projection write in tenant-a or
+  tenant-b. Command-with-ID tenant overwrite tests remain in place. Final
+  verification passed. Sandboxed `pnpm test:coverage` still fails only on local
+  IPC/listen permissions; escalated coverage passed with 45 files and 580
+  tests.

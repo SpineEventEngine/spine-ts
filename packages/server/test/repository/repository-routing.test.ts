@@ -1048,22 +1048,22 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("uses command tenant for projection updates when aggregate commands have no id", async () => {
+  it("rejects aggregate commands without ids before tenant projection updates", async () => {
     const context = BoundedContext.multitenant("Tasks")
       .add(createProjectionProducingRepository())
       .add(createExecutingProjectionRepository())
       .build();
 
-    await context
-      .commandBus()
-      .post(createAggregateCommandWithoutId("task-no-id-tenant", "NoIdTenant", "tenant-a"));
-
-    const projected = await waitForProjectionState(context, "task-no-id-tenant", "tenant-a");
-
-    expect(projected).toMatchObject({
-      name: "Task (projected)",
-      priority: 2,
-    });
+    await expect(
+      context
+        .commandBus()
+        .post(createIdlessAggregateCommand("task-no-id-tenant", "NoIdTenant", "tenant-a")),
+    ).rejects.toThrow(/requires command\.id/);
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-no-id-tenant", {
+        tenantId: "tenant-a",
+      }),
+    ).resolves.toBeUndefined();
     await expect(
       context.stand().read(ProjectionStateSchema, "task-no-id-tenant", {
         tenantId: "tenant-b",
@@ -1073,7 +1073,7 @@ describe("repository signal routing", () => {
 
   it("uses command tenant metadata when stored aggregate events update projections", async () => {
     const context = BoundedContext.multitenant("Tasks")
-      .add(createCommandTenantProjectionProducingRepository())
+      .add(createTenantProjectionRepo())
       .add(createExecutingProjectionRepository())
       .build();
     const updates: ProjectionState[] = [];
@@ -1330,9 +1330,7 @@ describe("repository signal routing", () => {
   });
 
   it("reports missing projection subscriber methods with neutral repository execution wording", async () => {
-    const context = BoundedContext.singleTenant("Tasks")
-      .add(createMissingSubscriberMethodProjectionRepository())
-      .build();
+    const context = BoundedContext.singleTenant("Tasks").add(createMissingSubscriberRepo()).build();
     const descriptor = Object.getOwnPropertyDescriptor(
       MissingSubscriberMethodProjection.prototype,
       "missingSubscriber",
@@ -1494,7 +1492,7 @@ function createProjectionProducingRepository(): Repository<typeof ProjectionProd
   });
 }
 
-function createCommandTenantProjectionProducingRepository(): Repository<
+function createTenantProjectionRepo(): Repository<
   typeof CommandTenantProjectionProducingAggregate
 > {
   const handlers = defineEntityHandlers(
@@ -1513,9 +1511,7 @@ function createCommandTenantProjectionProducingRepository(): Repository<
   });
 }
 
-function createMissingSubscriberMethodProjectionRepository(): Repository<
-  typeof MissingSubscriberMethodProjection
-> {
+function createMissingSubscriberRepo(): Repository<typeof MissingSubscriberMethodProjection> {
   const handlers = defineEntityHandlers(
     MissingSubscriberMethodProjection,
     ProjectionStateSchema,
@@ -1620,7 +1616,7 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task", 
   });
 }
 
-function createAggregateCommandWithoutId(aggregateId: string, name = "Task", tenantId?: string) {
+function createIdlessAggregateCommand(aggregateId: string, name = "Task", tenantId?: string) {
   return create(CommandSchema, {
     context: create(CommandContextSchema, {
       actorContext: create(ActorContextSchema, {

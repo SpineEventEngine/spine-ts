@@ -1,6 +1,6 @@
 # Review Log: T-0012.11b Projection Event Updates
 
-Status: round-4 review fixes implemented; verification passed
+Status: round-5 review fixes implemented; verification passed
 Task log: `build-protocol/tasks/T-0012-11b-projection-event-updates/TASK.md`
 Branch: `task/T-0012-11b-projection-event-updates`
 Worktree:
@@ -62,13 +62,15 @@ Reviewers must verify:
   `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, `git diff --check`, and
   escalated `pnpm test:coverage` with 45 files and 579 tests. Sandboxed
   coverage still fails only on local IPC/listen permissions.
-- Round-4 review fixes addressed the residual no-id command security finding
-  and stale docs/style findings. Aggregate-produced events now bind command
-  context as origin even when the command has no id, so projection dispatch
-  uses the command tenant instead of mutable handler-provided event origin
-  tenants. Focused repository verification for command tenant routing and
-  dispatch diagnostics passed. Final verification passed: focused/full
-  repository routing tests, `pnpm typecheck`, `pnpm lint`,
-  `pnpm format:check`, `pnpm docs:check`, `git diff --check`, and escalated
-  `pnpm test:coverage` with 45 files and 580 tests. Sandboxed coverage still
-  fails only on local IPC/listen permissions.
+- Round-4 review fixes attempted to address the residual no-id command security
+  finding by binding command context as origin even when the command had no id.
+  Round 5 found that was not contract-safe because Spine proto requires
+  `Origin.message`.
+- Round-5 review fixes reject aggregate command execution when `command.id` is
+  missing before events are bound, applied, or stored. The no-id tenant
+  regression expects rejection and no projection write in tenant-a or tenant-b.
+  Command-with-ID tenant overwrite coverage remains in place. Final
+  verification passed: focused/full repository routing tests, `pnpm typecheck`,
+  `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, `git diff --check`, and
+  escalated `pnpm test:coverage` with 45 files and 580 tests. Sandboxed
+  coverage still fails only on local IPC/listen permissions.

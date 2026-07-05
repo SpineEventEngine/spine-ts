@@ -1,6 +1,6 @@
 # T-0012.11: Missing Details And Example Readiness
 
-Status: split complete; T-0012.11a merged and parent-verified; T-0012.11b round-4 fixes verified
+Status: split complete; T-0012.11a merged and parent-verified; T-0012.11b round-5 fixes verified
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -139,17 +139,21 @@ Resumed-state note:
   94.87%).
 - `T-0012.11b` is active in its child worktree. Initial implementation,
   round-1 review fixes, round-2 reliability/docs fixes, and round-3
-  security/diagnostics/docs fixes are verified. Round-4 review fixes are also
-  verified for the residual no-id command tenant routing gap and stale
-  docs/style findings. The round-2 pass adds
-  observable
-  `BoundedContext.storedEventDispatchFailures()` diagnostics for asynchronous
-  already-stored event redispatch failures while keeping aggregate command
-  completion resolved after storage/snapshot handling and avoiding
+  security/diagnostics/docs fixes are verified. The round-2 pass adds
+  observable `BoundedContext.storedEventDispatchFailures()` diagnostics for
+  asynchronous already-stored event redispatch failures while keeping aggregate
+  command completion resolved after storage/snapshot handling and avoiding
   retry/catch-up/delivery scope. The round-3 pass binds aggregate-produced
   event origin to the command tenant and makes diagnostics bounded and
-  snapshot-only. The round-4 pass extends command-origin binding to commands
-  that carry tenant context without a command id.
+  snapshot-only. Round 4 attempted to support ID-less aggregate commands by
+  binding command context without a command message ID, but round 5 found that
+  was not protobuf-contract-safe because `Origin.message` is required. The
+  round-5 resolution rejects aggregate command execution when `command.id` is
+  missing before events are bound, applied, or stored; the no-id tenant
+  regression now expects rejection and no tenant-a or tenant-b projection write.
+  Round-5 child verification passed, including escalated coverage with 45 files
+  and 580 tests; sandboxed coverage remains blocked only by local endpoint
+  permissions.
 
 ## Staged Subtasks
 

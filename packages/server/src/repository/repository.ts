@@ -547,6 +547,8 @@ class AggregateCommandExecution {
   }
 
   async run(): Promise<void> {
+    void requireCommandId(this.#command);
+
     const route = this.#repository.routeCommand(this.#command);
     const assignee = this.#routing.commandReadiness?.findCommandAssignee(route.messageFullTypeName);
 
@@ -725,6 +727,7 @@ class AggregateCommandExecution {
 
     const bound = clone(EventSchema, event);
     const context = clone(EventContextSchema, bound.context ?? create(EventContextSchema));
+    const commandId = requireCommandId(this.#command);
 
     context.producerId = PrimitiveIds.pack(aggregateId);
     context.version = create(VersionSchema, { number: eventVersionNumber(version) });
@@ -732,14 +735,10 @@ class AggregateCommandExecution {
       context.origin = {
         case: "pastMessage",
         value: create(OriginSchema, {
-          ...(this.#command.id === undefined
-            ? {}
-            : {
-                message: create(MessageIdSchema, {
-                  id: packAny(CommandIdSchema, this.#command.id),
-                  typeUrl: this.#command.message?.typeUrl ?? "",
-                }),
-              }),
+          message: create(MessageIdSchema, {
+            id: packAny(CommandIdSchema, commandId),
+            typeUrl: this.#command.message?.typeUrl ?? "",
+          }),
           ...(this.#command.context.actorContext === undefined
             ? {}
             : { actorContext: clone(ActorContextSchema, this.#command.context.actorContext) }),
@@ -925,6 +924,14 @@ function eventVersionNumber(version: bigint): number {
   }
 
   return Number(version);
+}
+
+function requireCommandId(command: Command): NonNullable<Command["id"]> {
+  if (command.id === undefined) {
+    throw new Error("Repository aggregate execution requires command.id to bind event origins.");
+  }
+
+  return command.id;
 }
 
 function storageContextForCommand(context: StorageContext, command: Command): StorageContext {

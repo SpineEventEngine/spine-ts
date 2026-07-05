@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11 Missing Details And Example Readiness
 
-Status: split complete; T-0012.11a merged and parent-verified; T-0012.11b round-4 fixes verified
+Status: split complete; T-0012.11a merged and parent-verified; T-0012.11b round-5 fixes verified
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -81,13 +81,17 @@ tests (5 files, 62 tests), `pnpm docs:check`, `pnpm typecheck`, `pnpm lint`,
 permissions.
 
 `T-0012.11b Projection Event Updates` is active in the child worktree. Its
-initial implementation and review-fix rounds 1 through 4 passed focused and
-full verification. Round-4 fixed the residual no-id command tenant routing gap
-and stale docs/style findings. The round-2 pass
-records asynchronous already-stored event redispatch failures through
-`BoundedContext.storedEventDispatchFailures()` without changing aggregate
-command completion after storage/snapshot handling or adding retry/catch-up
-delivery behavior. The round-3 pass binds aggregate-produced event origin to
-the command tenant, stores bounded frozen diagnostic error snapshots, and fixes
-public/API docs. The round-4 pass extends command-origin binding to commands
-that carry tenant context without a command id.
+initial implementation and review-fix rounds 1 through 3 passed focused and
+full verification. The round-2 pass records asynchronous already-stored event
+redispatch failures through `BoundedContext.storedEventDispatchFailures()`
+without changing aggregate command completion after storage/snapshot handling
+or adding retry/catch-up delivery behavior. The round-3 pass binds
+aggregate-produced event origin to the command tenant, stores bounded frozen
+diagnostic error snapshots, and fixes public/API docs. Round 4 attempted to
+close the ID-less command tenant gap by binding command context without a
+command message ID. Round 5 replaces that with the contract-safe behavior:
+aggregate command execution rejects missing `command.id` before events are
+bound, applied, or stored, and the no-id tenant regression expects no tenant-a
+or tenant-b projection write. Round-5 verification passed, including escalated
+coverage with 45 files and 580 tests; sandboxed coverage remains blocked only
+by local endpoint permissions.
