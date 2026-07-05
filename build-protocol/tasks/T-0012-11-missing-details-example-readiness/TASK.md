@@ -1,6 +1,6 @@
 # T-0012.11: Missing Details And Example Readiness
 
-Status: T-0012.11a through T-0012.11e merged and parent-verified
+Status: review complete; ready for main integration
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`

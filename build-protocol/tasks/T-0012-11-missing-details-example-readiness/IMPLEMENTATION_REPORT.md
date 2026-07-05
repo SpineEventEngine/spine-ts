@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11 Missing Details And Example Readiness
 
-Status: T-0012.11a through T-0012.11e merged and parent-verified
+Status: review complete; ready for main integration
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -122,3 +122,9 @@ tests (1 file, 10 tests), `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`,
 `pnpm format:check`, `git diff --check`, and escalated `pnpm test:coverage`
 with 45 files, 619 tests, and branch coverage 90.22%. Sandboxed coverage
 remains blocked only by local endpoint and IPC permissions.
+
+Parent integration review after the `T-0012.11e` merge found only stale
+post-merge status text in the child `T-0012.11e` ledgers. Commit `6cdd760`
+records the merged-and-parent-verified state in those ledgers. Final re-review
+passed cleanly in all required lanes, so this parent task is ready for
+integration into `main`.

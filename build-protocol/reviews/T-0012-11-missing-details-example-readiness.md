@@ -1,6 +1,6 @@
 # Review Log: T-0012.11 Missing Details And Example Readiness
 
-Status: T-0012.11a through T-0012.11e merged and parent-verified
+Status: review complete; ready for main integration
 Task log:
 `build-protocol/tasks/T-0012-11-missing-details-example-readiness/TASK.md`
 Branch: `task/T-0012-11-missing-details-example-readiness`
@@ -107,3 +107,12 @@ Reviewers should confirm that the staged split stays narrow:
 - rejected candidates such as a broad `Server` facade, import bus, scheduler,
   catch-up, and observability remain out of scope until a concrete workflow
   proves otherwise.
+
+## Final Parent Review
+
+Parent integration review after the `T-0012.11e` merge found only stale child
+ledger status text. Commit `6cdd760` updated the `T-0012.11e` task, report,
+review log, and work log to record parent merge commit `c9ed81d` and parent
+verification evidence. Final re-review of that fix passed cleanly in all
+required lanes: code style/maintainability, documentation, TypeScript/API docs,
+security, and performance/reliability.
