@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11d Validation And Immediate Refusal Outcomes
 
-Status: implemented and verified
+Status: merged into parent branch and parent-verified
 Branch: `task/T-0012-11d-validation-refusal`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
