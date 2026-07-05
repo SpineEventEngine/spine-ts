@@ -3,11 +3,11 @@
 Task log: `build-protocol/tasks/T-0012-12f-runnable-server-guide/TASK.md`
 Branch: `task/T-0012-12f-runnable-server-guide`
 Baseline commit: `230452d`
-Last completed review basis: `995e842..9872e7d`
-Current pending review basis: `9872e7d..21470bc`
+Last completed review basis with comments: `21470bc..1dc0969`
+Current review target: latest branch commit (`HEAD~1..HEAD`)
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12f-runnable-server-guide`
-Status: round 3 metadata follow-up re-review in progress
+Status: latest metadata correction pending re-review
 
 ## Required Review Lanes
 
@@ -131,3 +131,43 @@ Planned fixes:
 - Apply this metadata-only correction, verify formatting and diff hygiene,
   commit the follow-up, and send the new metadata diff back to all five review
   lanes.
+
+Outcome:
+
+- Correction was committed as `1dc0969`.
+- Verification passed: changed-log Prettier check and `git diff --check`.
+- Re-review package: `.superpowers/sdd/review-21470bc..1dc0969.diff`.
+
+### Round 4
+
+Reviewed package:
+`.superpowers/sdd/review-21470bc..1dc0969.diff`
+
+Reviewers:
+
+- code style/maintainability:
+  `019f33eb-bd72-7eb3-834d-0e258c105ae9` (metadata comments, closed)
+- documentation:
+  `019f33eb-de5a-7ee3-9919-6772f320da32` (metadata comments, closed)
+- TypeScript/API docs:
+  `019f33eb-f78c-79b1-9031-b6f29cf74fd9` (clean, closed)
+- security:
+  `019f33ec-12fa-7251-9876-1717b7765f66` (clean, closed)
+- performance/reliability:
+  `019f33ec-2f8a-71c2-8bf7-462facfc811d` (metadata comments, closed)
+
+Findings:
+
+- Durable current-state metadata still pointed at the previous package instead
+  of the package under review.
+- Verification evidence was recorded for `21470bc`, not for the latest
+  correction.
+- Exact pending-package metadata can become stale while producing the next
+  metadata correction.
+
+Outcome:
+
+- The latest branch commit records the round 4 findings and switches the
+  current review target to `HEAD~1..HEAD` for the newest metadata correction.
+- Verification passed before commit: changed-log Prettier check and
+  `git diff --check`.

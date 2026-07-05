@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12f Runnable Server And Guide
 
-Status: round 2 metadata follow-up committed; re-review in progress
+Status: latest metadata correction committed; review latest commit
 Branch: `task/T-0012-12f-runnable-server-guide`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12f-runnable-server-guide`
@@ -9,6 +9,7 @@ Setup commit: `21c3c27`
 Implementation commit: `995e842`
 Review-fix commit: `9872e7d`
 Metadata follow-up commit: `21470bc`
+Metadata state correction commit: latest branch commit
 
 ## Summary
 
@@ -130,3 +131,23 @@ Verification:
 - `git diff --check` passed.
 - Re-review package:
   `.superpowers/sdd/review-9872e7d..21470bc.diff`.
+
+## Round 3 And 4 Metadata Corrections
+
+Addressed in `1dc0969`:
+
+- Recorded the `21470bc` metadata follow-up as committed and packaged.
+- Added verification evidence for the `21470bc` metadata follow-up.
+
+Addressed in the latest branch commit:
+
+- Avoided exact pending-package metadata for the current correction, because
+  the exact hash is only stable after commit.
+- Recorded that the next review target for the latest correction is
+  `HEAD~1..HEAD`.
+- Recorded round 4 comments against `21470bc..1dc0969`.
+
+Verification:
+
+- Changed-log Prettier check passed before commit.
+- `git diff --check` passed before commit.

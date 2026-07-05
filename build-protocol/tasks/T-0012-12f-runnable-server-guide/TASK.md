@@ -1,6 +1,6 @@
 # T-0012.12f: Runnable Server And Guide
 
-Status: round 2 metadata follow-up committed; re-review in progress
+Status: latest metadata correction committed; review latest commit
 Start: `2026-07-05 20:59 WEST`
 End: Pending
 Baseline commit: `230452d`
@@ -8,13 +8,14 @@ Setup commit: `21c3c27`
 Implementation commit: `995e842`
 Review-fix commit: `9872e7d`
 Metadata follow-up commit: `21470bc`
+Metadata state correction commit: latest branch commit
 Task log path: `build-protocol/tasks/T-0012-12f-runnable-server-guide/TASK.md`
 Branch: `task/T-0012-12f-runnable-server-guide`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12f-runnable-server-guide`
 Authoring sub-agent: `019f33cd-dfd0-7c73-bb58-60b7e5045c5d` (closed)
-Reviewer sub-agents: round 1 complete and closed; round 2 found
-metadata-only follow-up comments; round 3 in progress
+Reviewer sub-agents: round 1 complete and closed; round 2 and round 3 found
+metadata-only follow-up comments; round 4 found current-state comments
 
 ## Objective
 
@@ -117,6 +118,12 @@ Out of scope:
   API, security, or reliability gaps were reported in that round.
 - Metadata follow-up commit `21470bc` records the round 2 findings and the
   current re-review basis.
+- Round 3 re-review of `9872e7d..21470bc` found metadata-only current-state
+  comments. Correction commit `1dc0969` addressed those comments.
+- Round 4 re-review of `21470bc..1dc0969` found that exact pending-package
+  metadata is too easy to stale while producing follow-up commits. The latest
+  branch commit records the fix: future metadata-correction reviews should use
+  `HEAD~1..HEAD` until the correction is accepted.
 
 ## Setup Verification
 
@@ -187,3 +194,19 @@ Out of scope:
 - Review package: `.superpowers/sdd/review-9872e7d..21470bc.diff`.
 - Changed-log Prettier check passed.
 - `git diff --check` passed.
+
+## Round 3 Re-Review Findings
+
+- Security: clean.
+- TypeScript/API docs: clean.
+- Documentation, maintainability, and performance/reliability: update durable
+  state so it no longer points at `9872e7d..21470bc` after the follow-up commit
+  already exists.
+
+## Latest Metadata Correction Verification
+
+- Correction commit before this one: `1dc0969`.
+- Current correction: latest branch commit.
+- Review target for this correction: `HEAD~1..HEAD`.
+- Changed-log Prettier check passed before commit.
+- `git diff --check` passed before commit.
