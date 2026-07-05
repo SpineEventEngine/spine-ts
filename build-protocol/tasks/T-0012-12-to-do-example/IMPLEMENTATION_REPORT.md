@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12 To-Do Example
 
-Status: T-0012.12a merged; T-0012.12b selected
+Status: T-0012.12b merged; T-0012.12c selected
 Branch: `task/T-0012-12-to-do-example`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
@@ -26,8 +26,8 @@ framework details.
 
 The requirements-splitting sub-agent split this task into small slices and
 identified no framework gap before the first slice. `T-0012.12a Todo Proto
-Generation` is complete and merged. The next selected implementation slice is
-`T-0012.12b Create Task Flow`.
+Generation` and `T-0012.12b Create Task Flow` are complete and merged. The next
+selected implementation slice is `T-0012.12c Task Operations`.
 
 ## Current State
 
@@ -36,7 +36,8 @@ Generation` is complete and merged. The next selected implementation slice is
 - Requirements splitting is complete.
 - Splitter review is clean through commit `eb22695`.
 - `T-0012.12a Todo Proto Generation` is merged via `3cc8625`.
-- `T-0012.12b Create Task Flow` is selected next.
+- `T-0012.12b Create Task Flow` is merged via `63f8e9f`.
+- `T-0012.12c Task Operations` is selected next.
 
 ## Splitter Evidence Summary
 
@@ -71,6 +72,7 @@ Important findings:
      framework behavior.
 2. `T-0012.12b Create Task Flow`
    - Branch: `task/T-0012-12b-create-task-flow`
+   - Complete and merged via `63f8e9f`.
    - Adds the first vertical command -> aggregate -> event -> projection ->
      query path with decorated handlers and black-box tests.
 3. `T-0012.12c Task Operations`
@@ -98,14 +100,14 @@ Gap-routing rule:
 
 ## Current Selected Subtask
 
-Selected: `T-0012.12b Create Task Flow`
+Selected: `T-0012.12c Task Operations`
 
 Why:
 
-- `T-0012.12a` added the generated Protobuf-ES domain schemas and generated
-  output guardrails.
-- The next vertical slice should prove one real create command through the
-  framework command, aggregate, event, projection, and query path.
+- `T-0012.12b` proved one real create command through the framework command,
+  aggregate, event, projection, and query path.
+- The next vertical slice should add the remaining normal to-do operations on
+  the same path.
 - No framework gap is known before this slice.
 
 ## Verification

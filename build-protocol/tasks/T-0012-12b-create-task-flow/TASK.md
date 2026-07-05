@@ -18,8 +18,8 @@ Third-fix commit: `1dd62c8`
 Round-four-fix commit: `afe5162`
 Round-five-doc-fix commit: `e95cd02`
 Final reviewed commit: `0c25fce`
-Final branch HEAD: completion log commit; exact self-hash is not recorded in
-this commit per `BUILD_PROTOCOL.md` self-reference guidance.
+Final branch HEAD: `48a3635`
+Integration result: merged to `main` as `63f8e9f`.
 
 ## Objective
 
