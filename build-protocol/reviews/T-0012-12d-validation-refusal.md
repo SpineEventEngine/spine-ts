@@ -315,9 +315,13 @@ Findings: none.
 
 Reviewed basis: closure-metadata consistency pass.
 
-Outcome: clean.
+Outcome: changes requested.
 
-Findings: none.
+Findings:
+
+- `IMPLEMENTATION_REPORT.md` still called the historical review-fix check
+  `final verification`, while other docs correctly treated it as
+  pre-round-two history.
 
 Notes:
 
@@ -327,3 +331,8 @@ Notes:
   pre-round-two 11-test review-fix history.
 - Restart guidance stays pinned to the clean reviewed basis `f04b9b6` before
   this closure metadata commit.
+
+Planned fixes:
+
+- Rename that historical implementation-report bullet to
+  `Review-fix pre-round-two verification passed`.

@@ -85,7 +85,7 @@ query behavior completed by `T-0012.12c`.
   `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
   passed after removing the temporary mutation while keeping the strengthened
   eventual assertions, 1 file / 11 tests.
-- Review-fix final verification passed:
+- Review-fix pre-round-two verification passed:
   `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`,
   `pnpm typecheck`, `pnpm lint`, changed-file
   `pnpm exec prettier --check`, `pnpm docs:check`,
