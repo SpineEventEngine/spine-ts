@@ -6,14 +6,15 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-14 docs/status fixes verified; ready for follow-up review
+Status: round-15 durable-log/status fixes verified; ready for follow-up review
 
 ## Required Lanes
 
-- code style/maintainability: formatting passed through round 13
-- documentation: docs check passed through round 13
-- TypeScript/API docs: typecheck and docs check passed through round 12;
-  round-13 README Markdown continuation fixed and docs check passed
+- code style/maintainability: formatting passed through round 15
+- documentation: docs check passed through round 15
+- TypeScript/API docs: typecheck passed through round 12; docs check passed
+  through round 15, including round-13 README Markdown and round-14/15 status
+  rollup fixes
 - security: round-11 incompatible-payload detail fix verified; earlier
   dispatcher-thrown validation detail sanitization remains verified
 - performance/reliability: round-12 rejected-commit marker lifetime fix
@@ -367,3 +368,17 @@ Status: round-14 docs/status fixes verified; ready for follow-up review
   header still pointed to round 13. Implementation worker aligned
   `TASK.md` with this review log's round-14 status and recorded the correction
   in the child durable logs. Docs, format, and whitespace verification passed.
+
+### Round 15
+
+- `2026-07-05 10:10 WEST`: Documentation review found remaining rollup drift:
+  this lane summary still stopped at rounds 12/13, the child implementation
+  report stopped at the round-13 handoff, and parent current-state bodies still
+  described only the round-12 reliability fix.
+
+## Round-15 Fix Pass
+
+- `2026-07-05 10:15 WEST`: Implementation worker updated the cited rollups
+  directly to include round-14 docs/status verification and the follow-up child
+  status alignment, then recorded this pass in the child durable logs. Docs,
+  format, and whitespace verification passed.

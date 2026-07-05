@@ -89,13 +89,13 @@ Baseline commit: `c13b19c`
 
 ## Review Summary
 
-Review history through the round-13 handoff is recorded here. Round 1 moved
-payload validation to the `CommandBus`, removed an accidental public entity
-inspection hook, and filled missing public Ack docs. Round 2 moved internal
-validation errors back into their owning bus/repository layers and kept
-arbitrary dispatcher-thrown `ValidationException`s sanitized. Round 3 aligned
-docs/report wording with the bus-boundary behavior, mapped structural payload
-mismatch through the same command validation path, restored stable
+Review history is current through the round-14 docs/status follow-up. Round 1
+moved payload validation to the `CommandBus`, removed an accidental public
+entity inspection hook, and filled missing public Ack docs. Round 2 moved
+internal validation errors back into their owning bus/repository layers and
+kept arbitrary dispatcher-thrown `ValidationException`s sanitized. Round 3
+aligned docs/report wording with the bus-boundary behavior, mapped structural
+payload mismatch through the same command validation path, restored stable
 transition-validation metadata for direct repository/bus callers, and passed
 focused/static verification. Round 4 resolved docs-only wording drift and
 passed docs-only verification. Round 5 resolved the last implementation-report
@@ -110,12 +110,16 @@ ledger state. Round 10 aligned remaining replay-failure documentation and
 status summaries. Round 11 added sanitized incompatible-payload validation
 details. Round 12 preserves rejected-commit markers across rollback followed by
 a fresh transaction until an accepted commit clears them. Round 13 refreshed the
-review-log lane rollup, fixed README Markdown continuation, and left the branch
-ready for round-14 review. Later docs-only status follow-ups are tracked in
-`REVIEW_LOG.md` and the work log.
+review-log lane rollup and fixed README Markdown continuation. Round 14 updated
+the report/parent durable status to include the round-13 handoff and then
+aligned the child task status with the round-14 review-log status.
 
 ### Latest Verification
 
+- `2026-07-05 10:05 WEST`: Round-14 status follow-up verification passed:
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
+- `2026-07-05 10:00 WEST`: Round-14 docs/status verification passed:
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
 - `2026-07-05 09:50 WEST`: Round-13 docs-only verification passed:
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
 - `2026-07-05 09:38 WEST`: Focused restarted-marker regressions passed with 3

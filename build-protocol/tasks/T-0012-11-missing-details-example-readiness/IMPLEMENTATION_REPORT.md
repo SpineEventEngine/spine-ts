@@ -103,7 +103,7 @@ passed: focused stand/service tests, `pnpm typecheck`, `pnpm lint`,
 remains blocked only by local endpoint permissions.
 
 `T-0012.11d Validation And Immediate Refusal Outcomes` is implemented in its
-child branch. Round-12 review found a rejected-commit marker lifetime issue
-when an applier rejects, rolls back, starts a fresh transaction, and returns
-without an accepted commit. The child branch has applied the reliability fix
-and verified it.
+child branch. Round-14 docs/status follow-up refreshed the child
+implementation-report handoff, parent durable status headers, and child task
+status header after the round-12 reliability and round-13 docs fixes. Docs/API,
+formatting, and whitespace checks passed for those docs-only passes.
