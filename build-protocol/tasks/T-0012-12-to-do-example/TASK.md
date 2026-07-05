@@ -1,6 +1,6 @@
 # T-0012.12: To-Do Example
 
-Status: T-0012.12c merged; T-0012.12d selected
+Status: T-0012.12d merged; T-0012.12e selected
 Start: `2026-07-05 10:53 WEST`
 End: Pending
 Baseline commit: `89868e9`
@@ -12,7 +12,8 @@ Authoring sub-agent: Requirements splitter
 `019f31b8-0110-72c2-bea9-aeb6deea028b`; `T-0012.12a` implementation and
 review sub-agents complete and closed; `T-0012.12b` implementation and review
 sub-agents complete and closed; `T-0012.12c` implementation and review
-sub-agents complete and closed; `T-0012.12d` implementation pending.
+sub-agents complete and closed; `T-0012.12d` implementation and review
+sub-agents complete and closed; `T-0012.12e` implementation pending.
 Reviewer sub-agents:
 
 - code style/maintainability:
@@ -31,8 +32,9 @@ Reviewer sub-agents:
   `019f31c3-258a-7ef0-bef3-6cec938b84ca`,
   `019f31c7-772a-7e42-b17c-2d7388b5c24b`
   Implementation commits: `3cc8625` merge of `T-0012.12a`; `63f8e9f` merge of
-  `T-0012.12b`; `e27b033` merge of `T-0012.12c`
-  Final branch HEAD: `e27b033`; `T-0012.12d` pending
+  `T-0012.12b`; `e27b033` merge of `T-0012.12c`; `6d82910` merge of
+  `T-0012.12d`
+  Final branch HEAD: `6d82910`; `T-0012.12e` pending
 
 ## Objective
 
@@ -468,6 +470,8 @@ Verification plan:
 - `pnpm docs:check` if public docs/API move.
 - `git diff --check`
 
+- Status: complete and merged via `6d82910`.
+
 ### T-0012.12e Task Subscriptions
 
 Proposed branch: `task/T-0012-12e-task-subscriptions`
@@ -584,19 +588,19 @@ Selection rationale:
 
 ## Current Selected Slice
 
-Selected next implementable slice: `T-0012.12d Validation And Refusal`.
+Selected next implementable slice: `T-0012.12e Task Subscriptions`.
 
-Branch: `task/T-0012-12d-validation-refusal`
+Branch: `task/T-0012-12e-task-subscriptions`
 
 Worktree:
-`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
+`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12e-task-subscriptions`
 
 Selection rationale:
 
-- `T-0012.12c` completed the normal create, rename, complete, and reopen
-  command path.
-- The next smallest runnable behavior is the required invalid-command and
-  business-refusal path over the same aggregate and projection.
+- `T-0012.12d` completed validation-failure and business-refusal behavior over
+  the normal command path.
+- The next smallest runnable behavior is real `SubscriptionService` updates
+  emitted from projection changes.
 - No framework gap is known before this slice. If implementation proves one,
   it must be routed through a framework-gap task before continuing dependent
   example work.

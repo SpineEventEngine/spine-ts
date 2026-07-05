@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12 To-Do Example
 
-Status: T-0012.12c merged; T-0012.12d selected
+Status: T-0012.12d merged; T-0012.12e selected
 Branch: `task/T-0012-12-to-do-example`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
@@ -26,9 +26,9 @@ framework details.
 
 The requirements-splitting sub-agent split this task into small slices and
 identified no framework gap before the first slice. `T-0012.12a Todo Proto
-Generation` and `T-0012.12b Create Task Flow` are complete and merged. The next
-completed slice is `T-0012.12c Task Operations`; the next selected
-implementation slice is `T-0012.12d Validation And Refusal`.
+Generation`, `T-0012.12b Create Task Flow`, `T-0012.12c Task Operations`, and
+`T-0012.12d Validation And Refusal` are complete and merged. The next selected
+implementation slice is `T-0012.12e Task Subscriptions`.
 
 ## Current State
 
@@ -39,7 +39,8 @@ implementation slice is `T-0012.12d Validation And Refusal`.
 - `T-0012.12a Todo Proto Generation` is merged via `3cc8625`.
 - `T-0012.12b Create Task Flow` is merged via `63f8e9f`.
 - `T-0012.12c Task Operations` is merged via `e27b033`.
-- `T-0012.12d Validation And Refusal` is selected next.
+- `T-0012.12d Validation And Refusal` is merged via `6d82910`.
+- `T-0012.12e Task Subscriptions` is selected next.
 
 ## Splitter Evidence Summary
 
@@ -84,6 +85,7 @@ Important findings:
      behavior.
 4. `T-0012.12d Validation And Refusal`
    - Branch: `task/T-0012-12d-validation-refusal`
+   - Complete and merged via `6d82910`.
    - Adds validation-failure and business-refusal black-box coverage.
 5. `T-0012.12e Task Subscriptions`
    - Branch: `task/T-0012-12e-task-subscriptions`
@@ -103,14 +105,14 @@ Gap-routing rule:
 
 ## Current Selected Subtask
 
-Selected: `T-0012.12d Validation And Refusal`
+Selected: `T-0012.12e Task Subscriptions`
 
 Why:
 
-- `T-0012.12c` completed the normal create, rename, complete, and reopen command
-  path.
-- The next vertical slice should add the invalid-command and business-refusal
-  paths on the same aggregate/projection behavior.
+- `T-0012.12d` completed validation-failure and business-refusal behavior on
+  the same aggregate/projection path.
+- The next vertical slice should add live subscription updates over projection
+  changes using real `SubscriptionService` behavior.
 - No framework gap is known before this slice.
 
 ## Verification
@@ -130,3 +132,5 @@ Splitter re-review:
 - Round 2 was clean in all five required lanes.
 - `T-0012.12a` completed its implementation/review loop and was merged as
   `3cc8625 Merge T-0012.12a todo proto generation`.
+- `T-0012.12d` completed its implementation/review loop and was merged as
+  `6d82910 Merge T-0012.12d validation refusal`.
