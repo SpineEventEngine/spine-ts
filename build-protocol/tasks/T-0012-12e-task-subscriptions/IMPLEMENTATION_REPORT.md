@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12e Task Subscriptions
 
-Status: second review-fix committed; metadata cleanup in progress
+Status: metadata cleanup committed; ready for review
 Branch: `task/T-0012-12e-task-subscriptions`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12e-task-subscriptions`
@@ -9,8 +9,9 @@ Setup commit: `a8c8f07`
 Implementation commit: `c06fef8`
 First review-fix commit: `eeee46b`
 Second review-fix commit: `7eb9315`
-Current metadata cleanup commit: pending
-Latest completed review-fix basis: `7eb9315`
+Metadata cleanup commit: `2a778c6`
+Metadata stamp commit: this commit
+Latest completed review-fix basis: review package ending at branch HEAD
 
 ## Summary
 

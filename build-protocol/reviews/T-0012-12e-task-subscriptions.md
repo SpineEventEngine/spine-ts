@@ -3,10 +3,10 @@
 Task log: `build-protocol/tasks/T-0012-12e-task-subscriptions/TASK.md`
 Branch: `task/T-0012-12e-task-subscriptions`
 Baseline commit: `4bebdeb`
-Reviewed commit/diff basis: `eeee46b..7eb9315`
+Reviewed commit/diff basis: `7eb9315..HEAD` at review request
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12e-task-subscriptions`
-Status: second review-fix committed; metadata cleanup in progress
+Status: metadata cleanup committed; ready for review
 
 ## Required Review Lanes
 
@@ -70,3 +70,13 @@ Planned fixes:
   review-fix basis;
 - bound subscription cleanup calls with the same local timeout helper;
 - re-run focused tests and full verification before committing.
+
+Outcome:
+
+- The cancellation test now uses the local `nextSubscriptionUpdate()` helper
+  after `cancel()`, which keeps the `subscription.next()` await bounded and
+  typed.
+- Both subscription cleanup paths now call `subscription.close()` through the
+  local `withTimeout()` helper.
+- The task, report, review, and work-log headers no longer describe the cleanup
+  as pending.

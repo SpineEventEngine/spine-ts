@@ -1,6 +1,6 @@
 # T-0012.12e: Task Subscriptions
 
-Status: second review-fix committed; metadata cleanup in progress
+Status: metadata cleanup committed; ready for review
 Start: `2026-07-05 20:32 WEST`
 End: Pending
 Baseline commit: `a8c8f07`
@@ -8,14 +8,15 @@ Task log path: `build-protocol/tasks/T-0012-12e-task-subscriptions/TASK.md`
 Branch: `task/T-0012-12e-task-subscriptions`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12e-task-subscriptions`
-Authoring sub-agent: pending
-Reviewer sub-agents: pending
+Authoring sub-agent: `019f3392-5f1e-7f20-8c27-910c8df9fccd` (closed)
+Reviewer sub-agents: rounds 1-2 closed; round 3 pending
 Setup commit: `a8c8f07`
 Implementation commit: `c06fef8`
 First review-fix commit: `eeee46b`
 Second review-fix commit: `7eb9315`
-Current metadata cleanup commit: pending
-Latest completed review-fix basis: `7eb9315`
+Metadata cleanup commit: `2a778c6`
+Metadata stamp commit: this commit
+Latest completed review-fix basis: review package ending at branch HEAD
 
 ## Objective
 
