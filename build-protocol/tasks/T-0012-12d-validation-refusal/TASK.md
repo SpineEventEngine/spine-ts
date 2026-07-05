@@ -1,6 +1,6 @@
 # T-0012.12d: Validation And Refusal
 
-Status: opened; implementation pending
+Status: setup baseline verified; implementation pending
 Start: `2026-07-05 18:08 WEST`
 End: Pending
 Baseline commit: `27250a0`
@@ -10,6 +10,7 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
 Authoring sub-agent: pending
 Reviewer sub-agents: pending
+Setup commit: `c264543`
 Implementation commit: pending
 Final branch HEAD: pending
 
@@ -82,6 +83,12 @@ Out of scope:
 - `pnpm proto:check-generated`
 - `git diff --check`
 - Full coverage before marking complete.
+
+## Baseline Evidence
+
+- `pnpm typecheck` passed in the task worktree.
+- `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed, 1 file / 8 tests.
 
 ## Skill Applicability Check
 
