@@ -83,3 +83,17 @@ Review focus for splitter review:
 - Parent integration metadata review for `6d82910..1949929` had one
   maintainability finding: replace the stale pending reviewed-basis field.
 - Next selected slice: `T-0012.12e Task Subscriptions`.
+
+## T-0012.12e Implementation Notes
+
+- Scope implemented in the slice branch
+  `task/T-0012-12e-task-subscriptions`.
+- Example coverage now subscribes to `TaskListSchema` via
+  `BoundedContextFixture.subscribe()` and asserts projection-driven updates
+  after create, rename, complete, and reopen commands.
+- Cancellation coverage confirms `cancel()` closes the handle and later
+  `next()` reads resolve `undefined`.
+- No framework gap was found during implementation; the existing
+  `SubscriptionService` and fixture queue behavior already satisfied the new
+  black-box assertions.
+- Local implementation review is still pending on this branch.

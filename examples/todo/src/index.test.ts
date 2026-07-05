@@ -18,6 +18,11 @@ import {
   QuerySchema,
   type QueryResponse,
 } from "@spine-ts/proto/generated/spine/client/query_pb.js";
+import {
+  TopicIdSchema,
+  TopicSchema,
+  type SubscriptionUpdate,
+} from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
 import { BoundedContextFixture } from "@spine-ts/testing";
 import { existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -116,6 +121,56 @@ describe("@spine-ts/example-todo", () => {
       "First",
       "Second",
     ]);
+  });
+
+  it("subscribes to task-list updates and receives projection-driven changes", async () => {
+    const fixture = new BoundedContextFixture(createTodoContext(), {
+      timeoutMs: 500,
+      intervalMs: 5,
+    });
+    const subscription = await fixture.subscribe(createTaskListTopic());
+
+    await fixture.post(createTaskCommand("command-subscribe-create", "task-live", "First"));
+    const created = unpackSubscribedTaskList(await subscription.next());
+
+    expect(created.response.status?.status.case).toBe("ok");
+    expect(created.subscription.id).toEqual(subscription.subscription.id);
+    expect(created.list).toEqual(
+      create(TaskListSchema, {
+        id: "task-live",
+        tasks: [
+          {
+            id: create(TaskIdSchema, { value: "task-live" }),
+            title: "First",
+            completed: false,
+          },
+        ],
+        openTaskCount: 1,
+      }),
+    );
+
+    await fixture.post(createRenameCommand("command-subscribe-rename", "task-live", "Renamed"));
+    const renamed = unpackSubscribedTaskList(await subscription.next());
+
+    expect(renamed.list.tasks[0]?.title).toBe("Renamed");
+    expect(renamed.list.tasks[0]?.completed).toBe(false);
+    expect(renamed.list.openTaskCount).toBe(1);
+
+    await fixture.post(createCompleteCommand("command-subscribe-complete", "task-live"));
+    const completed = unpackSubscribedTaskList(await subscription.next());
+
+    expect(completed.list.tasks[0]?.title).toBe("Renamed");
+    expect(completed.list.tasks[0]?.completed).toBe(true);
+    expect(completed.list.openTaskCount).toBe(0);
+
+    await fixture.post(createReopenCommand("command-subscribe-reopen", "task-live"));
+    const reopened = unpackSubscribedTaskList(await subscription.next());
+
+    expect(reopened.list.tasks[0]?.title).toBe("Renamed");
+    expect(reopened.list.tasks[0]?.completed).toBe(false);
+    expect(reopened.list.openTaskCount).toBe(1);
+
+    await subscription.close();
   });
 
   it("renames one task through command handling and exposes the new title", async () => {
@@ -240,6 +295,23 @@ describe("@spine-ts/example-todo", () => {
     expect(errorMessage(ack.status?.status)).toBe("Task is not done.");
     expect(readTask(response, "task-open")).toEqual(readTask(openResponse, "task-open"));
     expect(readList(response, "task-open")?.openTaskCount).toBe(1);
+  });
+
+  it("cancels task-list subscriptions and makes later reads inert", async () => {
+    const fixture = new BoundedContextFixture(createTodoContext(), {
+      timeoutMs: 500,
+      intervalMs: 5,
+    });
+    const subscription = await fixture.subscribe(createTaskListTopic());
+
+    await fixture.post(createTaskCommand("command-cancel-subscribe", "task-cancel", "Cancel"));
+    expect(unpackSubscribedTaskList(await subscription.next()).list.id).toBe("task-cancel");
+
+    const cancel = await subscription.cancel();
+
+    expect(cancel.status?.status.case).toBe("ok");
+    await expect(subscription.next()).resolves.toBeUndefined();
+    await expect(subscription.close()).resolves.toBeUndefined();
   });
 
   it("counts duplicate same-id projection rows", () => {
@@ -477,6 +549,20 @@ function createTaskListIdQuery() {
   });
 }
 
+function createTaskListTopic() {
+  return create(TopicSchema, {
+    id: create(TopicIdSchema, { value: "topic-task-list" }),
+    target: create(TargetSchema, {
+      type: deriveTypeUrl(TaskListSchema),
+      criterion: {
+        case: "includeAll",
+        value: true,
+      },
+    }),
+    context: createActorContext(),
+  });
+}
+
 function createActorContext() {
   return create(ActorContextSchema, {
     actor: create(UserIdSchema, { value: "todo-user" }),
@@ -485,6 +571,26 @@ function createActorContext() {
 
 function unpackTaskList(state: Any | undefined): TaskList | undefined {
   return state === undefined ? undefined : unpackAny(state, TaskListSchema);
+}
+
+function unpackSubscribedTaskList(update: SubscriptionUpdate | undefined) {
+  const entityUpdate =
+    update?.update.case === "entityUpdates" ? update.update.value.update[0] : undefined;
+  const list =
+    entityUpdate?.kind.case === "state" ? unpackTaskList(entityUpdate.kind.value) : undefined;
+
+  if (update?.subscription === undefined || update.response === undefined) {
+    throw new Error("Expected a subscription update.");
+  }
+  if (list === undefined) {
+    throw new Error("Expected a task-list projection update.");
+  }
+
+  return {
+    response: update.response,
+    subscription: update.subscription,
+    list,
+  };
 }
 
 function readList(response: Pick<QueryResponse, "message">, taskId: string) {

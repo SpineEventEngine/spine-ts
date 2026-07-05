@@ -17,10 +17,12 @@ Implemented in this slice:
   task-reopened events;
 - update `TaskListProjection` rows from event delivery;
 - query visible `TaskList` projection rows through `QueryService`.
+- subscribe to `TaskListProjection` rows through the real
+  `SubscriptionService` seam and receive projection-driven updates after
+  create, rename, complete, and reopen commands;
 - reject invalid command payloads through `CommandService.Post` with
   `COMMAND_VALIDATION_ERROR` and packed Spine validation details;
 - refuse already-done completion and not-done reopen commands with stable
   Ack error names, without writing projection state.
 
-Still deferred: subscriptions, standalone server startup, and the final
-end-to-end user guide.
+Still deferred: standalone server startup and the final end-to-end user guide.

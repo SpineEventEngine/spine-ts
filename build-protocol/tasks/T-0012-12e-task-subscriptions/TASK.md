@@ -1,9 +1,9 @@
 # T-0012.12e: Task Subscriptions
 
-Status: setup baseline verified; implementation pending
+Status: implementation and local verification complete; pending review/merge
 Start: `2026-07-05 20:32 WEST`
 End: Pending
-Baseline commit: `4bebdeb`
+Baseline commit: `a8c8f07`
 Task log path: `build-protocol/tasks/T-0012-12e-task-subscriptions/TASK.md`
 Branch: `task/T-0012-12e-task-subscriptions`
 Worktree:
@@ -84,6 +84,39 @@ Out of scope:
 - Keep subscription testing black-box from the example developer perspective.
 - Route any proven framework gap through a focused framework-gap slice before
   continuing dependent example work.
+
+## Implementation Notes
+
+- Added black-box subscription coverage in
+  `examples/todo/src/index.test.ts` using
+  `BoundedContextFixture.subscribe(createTaskListTopic())`.
+- The example now demonstrates task-list subscription updates for create,
+  rename, complete, and reopen commands by unpacking real
+  `SubscriptionUpdate.entityUpdates` payloads.
+- Cancellation coverage uses the existing fixture subscription handle and
+  confirms `next()` becomes inert after `cancel()`.
+- No framework changes were required. The existing `SubscriptionService`
+  behavior already emitted projection-driven updates with the expected shape.
+
+## Verification Evidence
+
+- RED:
+  - Added the new example subscription tests first, then ran
+    `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`.
+  - The first full run passed immediately with 14/14 tests because the
+    framework behavior already existed; this slice needed example-level proof
+    and docs rather than production code changes.
+- GREEN:
+  - `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+    passed after the test/doc updates.
+- GREEN:
+  - `pnpm typecheck` passed.
+  - `pnpm lint` passed.
+  - `pnpm exec prettier --check examples/todo/src/index.test.ts examples/todo/README.md examples/todo/USER_GUIDE.md build-protocol/tasks/T-0012-12e-task-subscriptions/TASK.md build-protocol/tasks/T-0012-12e-task-subscriptions/IMPLEMENTATION_REPORT.md build-protocol/reviews/T-0012-12-to-do-example.md build-protocol/work-logs/T-0012-12.md`
+    passed.
+  - `pnpm docs:check` passed.
+  - `pnpm proto:check-generated` passed.
+  - `git diff --check` passed.
 
 ## Setup Baseline
 
