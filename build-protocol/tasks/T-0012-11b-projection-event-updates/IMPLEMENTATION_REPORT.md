@@ -12,7 +12,7 @@ This slice follows the merged aggregate command-execution path. The target is
 the smallest read-side event path:
 
 - delivered events reach repository event dispatchers through the event bus;
-- projection repositories invoke one matching event subscriber;
+- projection repositories invoke all matching event subscribers;
 - projection state is updated and written through `Stand`; and
 - stand subscriptions and gRPC subscriptions can observe those real projection
   updates.
@@ -49,6 +49,20 @@ that updates `Stand` after a projection subscriber mutates projection state.
   catch-up worker, retry loop, broker, or projection-list query expansion was
   added.
 
+## Round-1 Review Fixes
+
+- Aggregate-produced events now preserve the command context as event origin
+  when the event does not already carry origin metadata, so multitenant
+  projection dispatch can derive the command tenant for tenant-scoped `Stand`
+  reads, writes, and subscriptions.
+- Handler-backed executable projection repositories now require `number`
+  projection version metadata at the public repository type boundary, matching
+  the runtime rehydration contract.
+- The shared entity method-invocation diagnostic now uses neutral repository
+  entity execution wording instead of aggregate-only wording.
+- Public docs and durable task/report/work logs were updated for the review
+  fixes and for the all-matching-subscribers implementation shape.
+
 ## Verification
 
 - RED:
@@ -78,3 +92,19 @@ that updates `Stand` after a projection subscriber mutates projection state.
   service tests).
 - Escalated `pnpm test:coverage` passed: 45 files, 573 tests; statements
   94.97%, branches 90.14%, functions 97.48%, lines 94.99%.
+- Round-1 review-fix RED:
+  `pnpm vitest run packages/server/test/repository/repository-routing.test.ts packages/server/test/repository/repository.test.ts -t "command tenant metadata|missing projection subscriber|constrains entity constructor"`
+  failed as expected before the fix: the command-tenant projection state was
+  absent, the missing-method diagnostic still said aggregate execution, and
+  the projection version type `@ts-expect-error` was unused.
+- Round-1 review-fix GREEN: the same focused command passed with 2 files, 3
+  tests after the fix; `pnpm typecheck` also passed.
+- Round-1 review-fix final verification passed:
+  `pnpm vitest run packages/server/test/repository/repository-routing.test.ts packages/server/test/repository/repository.test.ts -t "command tenant metadata|missing projection subscriber|constrains entity constructor"`,
+  `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, and
+  `git diff --check`.
+- Sandboxed `pnpm test:coverage` still failed only on known local IPC/HTTP2
+  permissions (`Operation not permitted` for ZeroMQ IPC and
+  `listen EPERM 127.0.0.1` for service tests). Escalated `pnpm test:coverage`
+  passed with 45 files and 575 tests; coverage summary: statements 95%,
+  branches 90.09%, functions 97.48%, lines 95.02%.

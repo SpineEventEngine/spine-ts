@@ -1,10 +1,14 @@
 import { clone, create } from "@bufbuild/protobuf";
-import { deriveTypeUrl, unpackAny, type MessageSchema } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, unpackAny, type MessageSchema } from "@spine-ts/core";
 import {
+  ActorContextSchema,
+  CommandIdSchema,
   EventContextSchema,
   EventSchema,
   type Command,
   type Event,
+  MessageIdSchema,
+  OriginSchema,
   type TenantId,
   type Version,
   VersionSchema,
@@ -80,7 +84,11 @@ type RepositoryHandlersOptionFor<EntityType extends RepositoryEntityType> =
     ? [Version] extends [bigint]
       ? RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[]
       : never
-    : RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[];
+    : EntityType["prototype"] extends Projection<unknown, DescriptorMessageSchema, infer Version>
+      ? [Version] extends [number]
+        ? RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[]
+        : never
+      : RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[];
 
 type IsUnion<Type, Union = Type> = Type extends unknown
   ? [Union] extends [Type]
@@ -145,6 +153,8 @@ export interface RepositoryOptions<
    *
    * Aggregate repositories with handlers can be executed by built bounded contexts and therefore
    * must use `bigint` version metadata, matching the persisted aggregate history version type.
+   * Projection repositories with handlers can be executed by built bounded contexts and therefore
+   * must use `number` version metadata, matching the protobuf event version carried into Stand.
    */
   readonly handlers?: RepositoryHandlersOptionFor<EntityType>;
 }
@@ -715,6 +725,27 @@ class AggregateCommandExecution {
 
     context.producerId = PrimitiveIds.pack(aggregateId);
     context.version = create(VersionSchema, { number: eventVersionNumber(version) });
+    if (
+      context.origin.case === undefined &&
+      this.#command.context !== undefined &&
+      this.#command.id !== undefined
+    ) {
+      context.origin = {
+        case: "pastMessage",
+        value: create(OriginSchema, {
+          message: create(MessageIdSchema, {
+            id: packAny(CommandIdSchema, this.#command.id),
+            typeUrl: this.#command.message?.typeUrl ?? "",
+          }),
+          ...(this.#command.context.actorContext === undefined
+            ? {}
+            : { actorContext: clone(ActorContextSchema, this.#command.context.actorContext) }),
+          ...(this.#command.context.origin === undefined
+            ? {}
+            : { grandOrigin: clone(OriginSchema, this.#command.context.origin) }),
+        }),
+      };
+    }
     bound.context = context;
     return bound;
   }
@@ -823,7 +854,7 @@ function invokeEntityMethod(entity: object, methodName: string, message: unknown
   const method = (entity as Record<string, unknown>)[methodName];
 
   if (typeof method !== "function") {
-    throw new TypeError(`Repository aggregate execution requires method "${methodName}".`);
+    throw new TypeError(`Repository entity execution requires method "${methodName}".`);
   }
 
   return Reflect.apply(method, entity, [message]);
@@ -921,6 +952,8 @@ function readEventTenant(event: Event): string | undefined {
   switch (event.context?.origin.case) {
     case "importContext":
       return tenantValue(event.context.origin.value.tenantId);
+    case "pastMessage":
+      return tenantValue(event.context.origin.value.actorContext?.tenantId);
     default:
       return undefined;
   }

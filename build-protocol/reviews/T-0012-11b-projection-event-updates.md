@@ -1,6 +1,6 @@
 # Review Log: T-0012.11b Projection Event Updates
 
-Status: implemented; verification passed; awaiting review
+Status: round-1 review fixes implemented; verification passed
 Task log: `build-protocol/tasks/T-0012-11b-projection-event-updates/TASK.md`
 Branch: `task/T-0012-11b-projection-event-updates`
 Worktree:
@@ -36,3 +36,9 @@ Reviewers must verify:
   repositories, updates read-side state only through framework-owned `Stand`,
   preserves direct `routeEvent()` as route-only, and avoids catch-up, retry,
   broker, or projection-list query scope.
+- Round-1 review fixes addressed the command-tenant propagation bug for
+  aggregate-produced projection events, the handler-backed projection version
+  type boundary, and the aggregate-only shared invocation diagnostic. Focused
+  red/green verification, typecheck, lint, format, docs, diff, and escalated
+  coverage passed. Sandboxed coverage still fails on local IPC/HTTP2 endpoint
+  permissions only.

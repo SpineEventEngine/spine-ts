@@ -267,6 +267,28 @@ class ProjectionProducingAggregate extends Aggregate<string, typeof AggregateSta
   }
 }
 
+class CommandTenantProjectionProducingAggregate extends Aggregate<
+  string,
+  typeof AggregateStateSchema,
+  bigint
+> {
+  assignTask(command: AggregateState) {
+    return createProjectionEvent(`event-${command.name}`, command.id);
+  }
+
+  applyProjection(event: ProjectionState): void {
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: event.id,
+        name: event.name,
+        archived: false,
+      }),
+    );
+    this.commitTransaction();
+  }
+}
+
 class ExecutingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   static subscriberCalls = 0;
 
@@ -315,6 +337,16 @@ class AccumulatingTaskProjection extends Projection<string, typeof ProjectionSta
 
 class ReactingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   reactTask(event: ProjectionState): void {
+    void event;
+  }
+}
+
+class MissingSubscriberMethodProjection extends Projection<
+  string,
+  typeof ProjectionStateSchema,
+  number
+> {
+  missingSubscriber(event: ProjectionState): void {
     void event;
   }
 }
@@ -958,6 +990,49 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("uses command tenant metadata when stored aggregate events update projections", async () => {
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createCommandTenantProjectionProducingRepository())
+      .add(createExecutingProjectionRepository())
+      .build();
+    const updates: ProjectionState[] = [];
+    context.stand().subscribe(
+      ProjectionStateSchema,
+      (update) => {
+        updates.push(update.state);
+      },
+      { tenantId: "tenant-a" },
+    );
+
+    await context
+      .commandBus()
+      .post(
+        createAggregateCommand(
+          "command-project-command-tenant",
+          "task-command-tenant",
+          "Tenant",
+          "tenant-a",
+        ),
+      );
+
+    const projected = await waitForProjectionState(context, "task-command-tenant", "tenant-a");
+
+    expect(projected).toMatchObject({
+      name: "Task (projected)",
+      priority: 2,
+    });
+    expect(updates).toEqual([
+      create(ProjectionStateSchema, {
+        id: "task-command-tenant",
+        name: "Task (projected)",
+        priority: 2,
+      }),
+    ]);
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-command-tenant", { tenantId: "tenant-b" }),
+    ).resolves.toBeUndefined();
+  });
+
   it("records projection updates without version metadata when the delivered event has none", async () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingProjectionRepository())
@@ -1070,6 +1145,34 @@ describe("repository signal routing", () => {
           handlers: fabricated,
         }),
     ).toThrow(RepositoryIdentityError);
+  });
+
+  it("reports missing projection subscriber methods with neutral repository execution wording", async () => {
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createMissingSubscriberMethodProjectionRepository())
+      .build();
+    const descriptor = Object.getOwnPropertyDescriptor(
+      MissingSubscriberMethodProjection.prototype,
+      "missingSubscriber",
+    );
+    delete (MissingSubscriberMethodProjection.prototype as { missingSubscriber?: unknown })
+      .missingSubscriber;
+
+    try {
+      await expect(
+        context
+          .eventBus()
+          .post(createProjectionEvent("event-missing-method", "task-missing-method")),
+      ).rejects.toThrow('Repository entity execution requires method "missingSubscriber".');
+    } finally {
+      if (descriptor !== undefined) {
+        Object.defineProperty(
+          MissingSubscriberMethodProjection.prototype,
+          "missingSubscriber",
+          descriptor,
+        );
+      }
+    }
   });
 });
 
@@ -1205,6 +1308,41 @@ function createProjectionProducingRepository(): Repository<typeof ProjectionProd
   return new Repository({
     entityType: ProjectionProducingAggregate,
     schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createCommandTenantProjectionProducingRepository(): Repository<
+  typeof CommandTenantProjectionProducingAggregate
+> {
+  const handlers = defineEntityHandlers(
+    CommandTenantProjectionProducingAggregate,
+    AggregateStateSchema,
+    (builder) => [
+      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.apply(ProjectionStateSchema, "applyProjection"),
+    ],
+  );
+
+  return new Repository({
+    entityType: CommandTenantProjectionProducingAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createMissingSubscriberMethodProjectionRepository(): Repository<
+  typeof MissingSubscriberMethodProjection
+> {
+  const handlers = defineEntityHandlers(
+    MissingSubscriberMethodProjection,
+    ProjectionStateSchema,
+    (builder) => [builder.subscribe(ProjectionStateSchema, "missingSubscriber")],
+  );
+
+  return new Repository({
+    entityType: MissingSubscriberMethodProjection,
+    schema: ProjectionStateSchema,
     handlers,
   });
 }

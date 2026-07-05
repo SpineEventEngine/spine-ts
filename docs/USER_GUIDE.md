@@ -35,9 +35,11 @@ service descriptors with Connect/Node so callers can host `CommandService.Post`,
 `QueryService.Read`, and `SubscriptionService.Subscribe/Activate/Cancel` over a
 real gRPC-compatible runtime.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
-deterministic in-memory adapter for tests/development. Entity runtime dispatch,
-transport endpoint execution, durable production storage, broader server
-lifecycle, and the to-do application remain later slices.
+deterministic in-memory adapter for tests/development. Built bounded contexts
+can now execute aggregate command assignees/appliers and dispatch produced
+aggregate events to projection subscribers that update `Stand`; broader entity
+runtime dispatch, transport endpoint execution, durable production storage,
+broader server lifecycle, and the to-do application remain later slices.
 
 ## What Exists Now
 
@@ -158,10 +160,12 @@ lifecycle, and the to-do application remain later slices.
   workers, durable delivery storage, transport-backed service execution,
   durable production storage, and to-do domain runtime behavior.
 - Built bounded contexts can invoke aggregate command assignees and aggregate
-  event appliers, then deliver stored events to projection event subscribers
-  that update read-side state through `Stand`. Other handler/runtime execution
-  remains deferred, including process-manager reactions, broader
-  subscriber/reactor delivery semantics, and import/catch-up flows.
+  event appliers, then deliver stored aggregate-produced events to projection
+  event subscribers that update read-side state through `Stand`, including
+  tenant-scoped projection updates from the command tenant. Other
+  handler/runtime execution remains deferred, including process-manager
+  reactions, broader subscriber/reactor delivery semantics, and import/catch-up
+  flows.
 
 ## Type Registry
 

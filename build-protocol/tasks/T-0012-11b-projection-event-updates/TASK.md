@@ -1,6 +1,6 @@
 # T-0012.11b: Projection Event Updates
 
-Status: implemented; verification passed
+Status: review fixes implemented; verification passed
 Start: `2026-07-05 00:23 WEST`
 Parent task: `T-0012.11 Missing Details And Example Readiness`
 Branch: `task/T-0012-11b-projection-event-updates`
@@ -90,3 +90,9 @@ events update read-side projection state through `Stand`.
   behavior.
 - Full verification passed. Sandboxed coverage still fails on local IPC/HTTP2
   endpoint permissions; escalated coverage passed.
+- Round-1 review fixes are implemented for command-tenant propagation into
+  aggregate-produced projection events, handler-backed projection version type
+  constraints, neutral shared entity invocation diagnostics, and stale docs/log
+  wording. Focused red/green verification, typecheck, lint, format, docs,
+  diff, and escalated coverage all passed. Sandboxed coverage still fails on
+  local IPC/HTTP2 endpoint permissions only.
