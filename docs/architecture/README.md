@@ -363,6 +363,16 @@ subscription ID, abandoned inactive subscriptions expire after a small
 configurable TTL, slow consumers are bounded by a small configurable update
 queue, and stream/cancel cleanup releases the direct Stand handle.
 
+The current command service error contract remains intentionally small.
+Repository aggregate execution validates command payloads with the existing
+core facade before route calculation or durable aggregate work. Handler-thrown
+`CommandRefusalError` values are the one immediate business refusal path mapped
+to stable non-ok `Ack` errors. Aggregate event appliers continue to use
+`EntityTransaction.commit()` for transition validation; repository execution
+observes rejected commit results and raises a stable command error before
+events or snapshots are stored. Unexpected command-bus failures remain
+sanitized as `COMMAND_POST_ERROR`.
+
 The following runtime pieces are still deferred to later explicit tasks:
 
 - default repository construction from entity classes,

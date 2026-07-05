@@ -97,9 +97,9 @@ const inheritedSemanticNameExceptionOccurrences = new Set(
       "packages/server/src/entity/entity-transition-validation.ts",
       431,
     ],
-    ["NonPlainEntityVersionMetadata", "packages/server/src/entity/entity.ts", 75],
-    ["nonPlainVersionMetadataError", "packages/server/src/entity/entity.ts", 790],
-    ["PlainEntityVersionMetadataAtDepth", "packages/server/src/entity/entity.ts", 102],
+    ["NonPlainEntityVersionMetadata", "packages/server/src/entity/entity.ts", 76],
+    ["nonPlainVersionMetadataError", "packages/server/src/entity/entity.ts", 828],
+    ["PlainEntityVersionMetadataAtDepth", "packages/server/src/entity/entity.ts", 103],
     [
       "reactorsByEventFullTypeName",
       "packages/server/src/handler/event-registration-readiness.ts",
@@ -136,7 +136,7 @@ const inheritedSemanticNameExceptionOccurrences = new Set(
       145,
     ],
     ["topicByEventFullTypeName", "packages/server/src/runtime/runtime-routing.ts", 265],
-    ["TransactionalEntityScopeErrorReason", "packages/server/src/entity/entity.ts", 26],
+    ["TransactionalEntityScopeErrorReason", "packages/server/src/entity/entity.ts", 27],
     ["ZeroMqAdapterConfigInput", "packages/transport/src/zeromq/adapter-config.ts", 9],
   ].map(([name, file, line]) => `${name}|${file}|${line}`),
 );

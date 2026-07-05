@@ -9,6 +9,7 @@ import {
   EntityTransaction,
   type EntityTransactionCommitResult,
   type EntityTransactionLifecycleFlags,
+  type EntityTransactionRejectedCommit,
   type EntityTransactionRollbackResult,
   type EntityTransactionUpdater,
   type EntityTransactionVersionMetadata,
@@ -291,6 +292,7 @@ export abstract class TransactionalEntity<
   Version = EntityVersionMetadata,
 > extends Entity<Id, Schema, Version> {
   #transaction: EntityTransaction<Schema, Version> | undefined;
+  #lastRejectedCommit: EntityTransactionRejectedCommit<Schema, Version> | undefined;
   #stateChanged = false;
 
   /** Whether accepted transaction state changes or lifecycle flag changes are visible. */
@@ -313,6 +315,7 @@ export abstract class TransactionalEntity<
       throw new TransactionalEntityScopeError("duplicate", "startTransaction");
     }
 
+    this.#lastRejectedCommit = undefined;
     const previousVersion = this.version;
     this.#transaction = new EntityTransaction({
       schema: this.schema,
@@ -441,6 +444,9 @@ export abstract class TransactionalEntity<
       this.replaceVersionMetadata(result.version.committed as EntityVersionMetadataInput<Version>);
       this.replaceLifecycleFlags(result.lifecycle);
       this.#transaction = undefined;
+      this.#lastRejectedCommit = undefined;
+    } else {
+      this.#lastRejectedCommit = result;
     }
 
     return cloneCommitResult(result);
@@ -454,8 +460,23 @@ export abstract class TransactionalEntity<
   protected rollbackTransaction(): EntityTransactionRollbackResult<Schema, Version> {
     const result = this.#requireTransaction("rollbackTransaction").rollback();
     this.#transaction = undefined;
+    this.#lastRejectedCommit = undefined;
 
     return result;
+  }
+
+  /** @internal Return a copy of the last rejected transaction commit, if any. */
+  static rejectedCommitSnapshot(
+    entity: object,
+  ): EntityTransactionRejectedCommit<DescriptorMessageSchema> | undefined {
+    if (!(entity instanceof TransactionalEntity)) {
+      return undefined;
+    }
+
+    const rejected = entity.#lastRejectedCommit;
+    return rejected === undefined
+      ? undefined
+      : (cloneCommitResult(rejected) as EntityTransactionRejectedCommit<DescriptorMessageSchema>);
   }
 
   #requireTransaction(
@@ -469,6 +490,23 @@ export abstract class TransactionalEntity<
     return transaction;
   }
 }
+
+/** @internal Framework-only transactional entity inspection used by repository execution. */
+export interface TransactionalEntityAccess {
+  /** Return the last rejected transaction commit for this entity, if any. */
+  rejectedCommit(
+    entity: object,
+  ): EntityTransactionRejectedCommit<DescriptorMessageSchema> | undefined;
+}
+
+/** @internal Framework-only transactional entity inspection used by repository execution. */
+export const transactionalEntityAccess: TransactionalEntityAccess = Object.freeze({
+  rejectedCommit(
+    entity: object,
+  ): EntityTransactionRejectedCommit<DescriptorMessageSchema> | undefined {
+    return TransactionalEntity.rejectedCommitSnapshot(entity);
+  },
+});
 
 /**
  * Abstract aggregate family marker over the common transactional entity shell.

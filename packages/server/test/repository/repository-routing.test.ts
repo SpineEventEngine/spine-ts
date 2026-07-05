@@ -59,6 +59,16 @@ type AggregateState = Message<"AggregateState"> & {
   archived: boolean;
 };
 
+type ValidatedAggregateState = Message<"example.validation_refusal.ValidatedAggregateState"> & {
+  id: string;
+  name: string;
+};
+
+type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
+  id: string;
+  name: string;
+};
+
 function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
   const descriptorSet = fromBinary(
     FileDescriptorSetSchema,
@@ -87,6 +97,22 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
+const fileValidationRefusalFixture = fileDesc(
+  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
+    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
+    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
+    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
+    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
+  [file_spine_options],
+);
+const ValidatedAggregateStateSchema = messageDesc(
+  fileValidationRefusalFixture,
+  0,
+) as GenMessage<ValidatedAggregateState>;
+const ValidatedTaskCommandSchema = messageDesc(
+  fileValidationRefusalFixture,
+  1,
+) as GenMessage<ValidatedTaskCommand>;
 
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: AggregateState): void {
@@ -137,6 +163,55 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
         id: event.id,
         name: `${event.name} (applied)`,
         archived: true,
+      }),
+    );
+    this.commitTransaction();
+  }
+}
+
+class ValidatingTaskAggregate extends Aggregate<
+  string,
+  typeof ValidatedAggregateStateSchema,
+  bigint
+> {
+  static assigneeCalls = 0;
+  static applierCalls = 0;
+
+  static reset(): void {
+    this.assigneeCalls = 0;
+    this.applierCalls = 0;
+  }
+
+  assignTask(command: ValidatedTaskCommand) {
+    ValidatingTaskAggregate.assigneeCalls++;
+    return createValidatedEvent(`event-${command.id}`, command.id, command.name);
+  }
+
+  applyTask(event: ValidatedAggregateState): void {
+    ValidatingTaskAggregate.applierCalls++;
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(ValidatedAggregateStateSchema, {
+        id: event.id,
+        name: event.name,
+      }),
+    );
+    this.commitTransaction();
+  }
+}
+
+class TransitionViolatingAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  assignTask(command: AggregateState) {
+    return createAggregateEvent("event-transition-invalid", command.id, 0, command.name);
+  }
+
+  applyTask(event: AggregateState): void {
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: `${event.id}-changed`,
+        name: event.name,
+        archived: event.archived,
       }),
     );
     this.commitTransaction();
@@ -755,6 +830,53 @@ describe("repository signal routing", () => {
       context.commandBus().post(createAggregateCommand("command-malformed", "task-malformed")),
     ).rejects.toThrow(/event.message.typeUrl/);
     await expect(eventStore.read()).resolves.toEqual([]);
+  });
+
+  it("rejects invalid aggregate command payloads before durable aggregate work", async () => {
+    ValidatingTaskAggregate.reset();
+    const factory = new ObservingStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createValidatingRepository())
+      .withStorageFactory(factory)
+      .build();
+
+    await expect(
+      context.commandBus().post(createValidatedCommand("command-invalid", "task-invalid", "")),
+    ).rejects.toThrow(/validation/i);
+
+    expect(ValidatingTaskAggregate.assigneeCalls).toBe(0);
+    expect(ValidatingTaskAggregate.applierCalls).toBe(0);
+    expect(factory.operations).toEqual([]);
+  });
+
+  it("rejects state-transition validation failures before storing aggregate output", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createTransitionViolatingRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("command-transition-invalid", "task-transition-invalid")),
+    ).rejects.toMatchObject({
+      type: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED",
+      clientMessage: "Command state transition validation failed.",
+    });
+
+    await expect(eventStore.read()).resolves.toEqual([]);
+    await expect(storage.readHistory("task-transition-invalid")).resolves.toMatchObject({
+      snapshot: undefined,
+      events: [],
+    });
   });
 
   it("keeps stored aggregate history tenant-scoped for multitenant command execution", async () => {
@@ -1437,6 +1559,40 @@ function createExecutingRepository(): Repository<typeof ExecutingTaskAggregate> 
   });
 }
 
+function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate> {
+  const handlers = defineEntityHandlers(
+    ValidatingTaskAggregate,
+    ValidatedAggregateStateSchema,
+    (builder) => [
+      builder.assign(ValidatedTaskCommandSchema, "assignTask"),
+      builder.apply(ValidatedAggregateStateSchema, "applyTask"),
+    ],
+  );
+
+  return new Repository({
+    entityType: ValidatingTaskAggregate,
+    schema: ValidatedAggregateStateSchema,
+    handlers,
+  });
+}
+
+function createTransitionViolatingRepository(): Repository<typeof TransitionViolatingAggregate> {
+  const handlers = defineEntityHandlers(
+    TransitionViolatingAggregate,
+    AggregateStateSchema,
+    (builder) => [
+      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.apply(AggregateStateSchema, "applyTask"),
+    ],
+  );
+
+  return new Repository({
+    entityType: TransitionViolatingAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
 function createAsyncAssigneeRepository(): Repository<typeof AsyncAssigneeAggregate> {
   const handlers = defineEntityHandlers(AsyncAssigneeAggregate, AggregateStateSchema, (builder) => [
     builder.assign(AggregateStateSchema, "assignTask"),
@@ -1617,6 +1773,35 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task", 
   });
 }
 
+function createValidatedCommand(id: string, aggregateId: string, name: string, tenantId?: string) {
+  return create(CommandSchema, {
+    id: create(CommandIdSchema, { uuid: id }),
+    context: create(CommandContextSchema, {
+      actorContext: create(ActorContextSchema, {
+        ...(tenantId === undefined
+          ? {}
+          : {
+              tenantId: create(TenantIdSchema, {
+                kind: {
+                  case: "value",
+                  value: tenantId,
+                },
+              }),
+            }),
+        actor: create(UserIdSchema, { value: "user-1" }),
+      }),
+    }),
+    message: packAny(
+      ValidatedTaskCommandSchema,
+      create(ValidatedTaskCommandSchema, {
+        id: aggregateId,
+        name,
+      }),
+      { validate: false },
+    ),
+  });
+}
+
 function createIdlessAggregateCommand(aggregateId: string, name = "Task", tenantId?: string) {
   return create(CommandSchema, {
     context: create(CommandContextSchema, {
@@ -1642,6 +1827,18 @@ function createIdlessAggregateCommand(aggregateId: string, name = "Task", tenant
         archived: false,
       }),
     ),
+  });
+}
+
+function createValidatedEvent(id: string, aggregateId: string, name: string): SpineEvent {
+  return packEvent({
+    id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema),
+    schema: ValidatedAggregateStateSchema,
+    message: create(ValidatedAggregateStateSchema, {
+      id: aggregateId,
+      name,
+    }),
   });
 }
 
@@ -1828,6 +2025,69 @@ class ReentrantRegistrationStorageFactory extends InMemoryStorageFactory {
     const storage = super.onCreateRecordStorage(context, recordSpec);
     this.onCreate();
     return storage;
+  }
+}
+
+class ObservingStorageFactory extends InMemoryStorageFactory {
+  readonly operations: string[] = [];
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new ObservingRecordStorage(
+      context,
+      recordSpec,
+      super.onCreateRecordStorage(context, recordSpec),
+      this.operations,
+    );
+  }
+}
+
+class ObservingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    private readonly delegate: RecordStorage<I, R>,
+    private readonly operations: string[],
+  ) {
+    super(context, recordSpec);
+  }
+
+  protected deleteRecord(id: I): Promise<boolean> {
+    this.operations.push("delete");
+    return this.delegate.delete(id);
+  }
+
+  protected queryRecordEntries(query: Parameters<RecordStorage<I, R>["queryEntries"]>[0]) {
+    this.operations.push("query");
+    return this.delegate.queryEntries(query);
+  }
+
+  protected readRecord(id: I): Promise<R | undefined> {
+    this.operations.push("read");
+    return this.delegate.read(id);
+  }
+
+  protected compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    this.operations.push("compareAndSet");
+    return this.delegate.compareAndSet(id, expected?.record, next?.record);
+  }
+
+  protected writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    this.operations.push("writeAll");
+    return this.delegate.writeAll(records.map((record) => record.record));
+  }
+
+  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    this.operations.push("write");
+    return this.delegate.write(record.record);
   }
 }
 

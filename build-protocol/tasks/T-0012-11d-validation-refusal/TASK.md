@@ -4,7 +4,7 @@ Status: active
 Branch: `task/T-0012-11d-validation-refusal`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Baseline commit: `47777d3`
+Baseline commit: `c13b19c`
 
 ## Goal
 

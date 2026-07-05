@@ -1,5 +1,5 @@
 import { clone, create } from "@bufbuild/protobuf";
-import { deriveTypeUrl, packAny, unpackAny, type MessageSchema } from "@spine-ts/core";
+import { checkValid, deriveTypeUrl, packAny, unpackAny, type MessageSchema } from "@spine-ts/core";
 import {
   ActorContextSchema,
   CommandIdSchema,
@@ -23,6 +23,7 @@ import {
   ProcessManager,
   Projection,
   type EntityFamily,
+  transactionalEntityAccess,
 } from "../entity/entity.js";
 import {
   describeEntityMetadata,
@@ -43,6 +44,7 @@ import { handlerMetadataAccess, type EntityHandlersMetadata } from "../handler/h
 import { AggregateStorage } from "./aggregate-storage.js";
 import { PrimitiveIds } from "./primitive-id.js";
 import type { Stand } from "../stand/stand.js";
+import { CommandStateTransitionValidationError } from "../services/command-errors.js";
 
 type RepositoryEntityInstance<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> =
   | Aggregate<unknown, Schema, unknown>
@@ -551,6 +553,16 @@ class AggregateCommandExecution {
   async run(): Promise<void> {
     void requireCommandId(this.#command);
 
+    const commandMessage = requireSignalMessage(this.#command.message, "command");
+    const commandSchema = schemaForTypeUrl(
+      this.#routing.commandSchemas,
+      commandMessage.typeUrl,
+      "command",
+    );
+    const message = unpackRequired(commandMessage, commandSchema, "command");
+
+    checkValid(commandSchema, message as never);
+
     const route = this.#repository.routeCommand(this.#command);
     const assignee = this.#routing.commandReadiness?.findCommandAssignee(route.messageFullTypeName);
 
@@ -559,11 +571,6 @@ class AggregateCommandExecution {
     }
 
     const loaded = await this.#loadAggregate(route.entityId);
-    const message = unpackRequired(
-      requireSignalMessage(this.#command.message, "command"),
-      assignee.handler.schema,
-      "command",
-    );
     const produced = await invokeEntityMethod(loaded.entity, assignee.handler.methodName, message);
     const events = this.#bindProducedEvents(
       this.#normalizeProducedEvents(produced),
@@ -691,6 +698,11 @@ class AggregateCommandExecution {
       application.handler.methodName,
       unpackRequired(message, application.handler.schema, "event"),
     );
+    const rejectedCommit = transactionalEntityAccess.rejectedCommit(entity);
+
+    if (rejectedCommit !== undefined) {
+      throw new CommandStateTransitionValidationError(rejectedCommit.validation.error);
+    }
   }
 
   #normalizeProducedEvents(produced: unknown): readonly Event[] {

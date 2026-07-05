@@ -1,10 +1,10 @@
 # Implementation Report: T-0012.11d Validation And Immediate Refusal Outcomes
 
-Status: active
+Status: implemented and verified
 Branch: `task/T-0012-11d-validation-refusal`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Baseline commit: `47777d3`
+Baseline commit: `c13b19c`
 
 ## Initial Evidence
 
@@ -19,13 +19,70 @@ Baseline commit: `47777d3`
 
 ## Implementation Notes
 
-Implementation has not started yet. The first coding pass must add focused RED
-tests before production changes.
+- `2026-07-05 04:36 WEST`: Confirmed the child branch starts from `c13b19c`.
+  The task docs still named the previous parent commit `47777d3`, so this pass
+  corrected the child durable baseline before code changes.
+- First TDD target: prove aggregate command execution rejects invalid command
+  payloads before aggregate history load, event append, snapshot write, or
+  stored-event dispatch.
+- Runtime aggregate command execution now validates command payloads with the
+  existing `@spine-ts/core` validation facade before routing/load/durable
+  write-side work.
+- `CommandService.Post` now maps one immediate business refusal path
+  (`CommandRefusalError`) to a stable non-ok Ack, maps command validation
+  failures to `COMMAND_VALIDATION_ERROR`, and maps aggregate transition
+  validation failures to
+  `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with validation details.
+- Aggregate command execution now reads rejected `EntityTransaction` commits
+  after event appliers and raises a command-visible transition validation error
+  before event append, snapshot write, or dispatch.
 
 ## Verification
 
-No T-0012.11d verification has run yet.
+### RED
+
+- `pnpm vitest run packages/server/test/repository/repository-routing.test.ts -t "rejects invalid aggregate command payloads before durable aggregate work"`:
+  failed as expected. The invalid command resolved `undefined` instead of
+  rejecting, proving aggregate command execution did not validate the payload
+  before invoking the existing path.
+- `pnpm vitest run packages/server/test/services/spine-services.test.ts -t "returns stable Ack errors for immediate aggregate command refusals"`:
+  failed as expected. The aggregate handler refusal was reported as
+  `COMMAND_POST_ERROR` instead of the handler's stable `TASK_ALREADY_COMPLETED`
+  error type.
+- `pnpm vitest run packages/server/test/repository/repository-routing.test.ts -t "rejects state-transition validation failures before storing aggregate output"`:
+  failed as expected. The command resolved `undefined` instead of rejecting,
+  proving rejected entity transaction commits were not yet wired into aggregate
+  command execution.
+
+### GREEN
+
+- `pnpm vitest run packages/server/test/repository/repository-routing.test.ts -t "rejects invalid aggregate command payloads before durable aggregate work"`:
+  passed with 1 test and 38 skipped.
+- `pnpm vitest run packages/server/test/services/spine-services.test.ts -t "returns stable Ack errors for immediate aggregate command refusals"`:
+  passed with 1 test and 33 skipped.
+- `pnpm vitest run packages/server/test/repository/repository-routing.test.ts -t "rejects state-transition validation failures before storing aggregate output"`:
+  passed with 1 test and 39 skipped.
+- `pnpm vitest run packages/server/test/services/spine-services.test.ts -t "returns stable Ack errors"`:
+  passed with 3 Ack outcome tests and 33 skipped.
+- `pnpm vitest run packages/server/test/repository/repository-routing.test.ts packages/server/test/services/spine-services.test.ts -t "rejects invalid aggregate command payloads before durable aggregate work|returns stable Ack errors|rejects state-transition validation failures before storing aggregate output"`:
+  passed with 2 files, 5 tests, and 71 skipped.
+
+### Final Verification
+
+- `pnpm typecheck`: passed.
+- `pnpm lint`: passed.
+- `pnpm format:check`: passed.
+- `pnpm docs:check`: passed. TypeDoc warned only that git remote `origin` is
+  not valid, so generated source links will be broken.
+- `git diff --check`: passed.
+- Sandboxed `pnpm test:coverage`: failed because the sandbox blocks local
+  listeners/IPC. Exact failures included `listen EPERM: operation not permitted
+127.0.0.1` in real gRPC service tests and ZeroMQ local IPC smoke tests with
+  `Operation not permitted`.
+- Escalated `pnpm test:coverage`: passed with 45 files and 597 tests. Coverage
+  summary: statements 95%, branches 90.05%, functions 97.53%, lines 95.02%.
 
 ## Review Summary
 
-No review lanes have run yet.
+No independent review lanes have run yet. Local implementation verification is
+green.

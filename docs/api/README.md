@@ -34,6 +34,9 @@ read/version/list/update/subscription contracts, and
 `BoundedContextNameError` for bounded-context assembly. `CommandEndpoint`
 also exposes accepted command message type URLs so service adapters can route
 without dispatch-probing unrelated contexts.
+`CommandRefusalError` is the current public immediate-refusal error that
+command handlers can throw so `CommandService.Post` returns a stable non-ok
+`Ack` error type/message.
 The public entry points mirror Spine JVM's
 `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
 `ContextSpec` remains a framework-owned immutable value surfaced through

@@ -25,6 +25,7 @@ import {
   TenantIdSchema,
   type TenantId,
   UserIdSchema,
+  ValidationErrorSchema,
   VersionSchema,
   file_spine_options,
 } from "@spine-ts/proto";
@@ -50,10 +51,13 @@ import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
+import type { Ack } from "@spine-ts/proto/generated/spine/core/ack_pb.js";
 import { describe, expect, it } from "vitest";
 
 import {
+  Aggregate,
   BoundedContext,
+  CommandRefusalError,
   Projection,
   Repository,
   SpineServices,
@@ -66,6 +70,22 @@ type ProjectionState = Message<"ProjectionState"> & {
   id: string;
   name: string;
   priority: number;
+};
+
+type AggregateState = Message<"AggregateState"> & {
+  id: string;
+  name: string;
+  archived: boolean;
+};
+
+type ValidatedAggregateState = Message<"example.validation_refusal.ValidatedAggregateState"> & {
+  id: string;
+  name: string;
+};
+
+type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
+  id: string;
+  name: string;
 };
 
 type TenantInput = string | TenantId;
@@ -94,6 +114,26 @@ const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
 ) as GenMessage<ProjectionState>;
+const AggregateStateSchema = messageDesc(
+  fileEntityMetadataFixture,
+  1,
+) as GenMessage<AggregateState>;
+const fileValidationRefusalFixture = fileDesc(
+  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
+    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
+    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
+    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
+    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
+  [file_spine_options],
+);
+const ValidatedAggregateStateSchema = messageDesc(
+  fileValidationRefusalFixture,
+  0,
+) as GenMessage<ValidatedAggregateState>;
+const ValidatedTaskCommandSchema = messageDesc(
+  fileValidationRefusalFixture,
+  1,
+) as GenMessage<ValidatedTaskCommand>;
 
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   subscribeTask(event: ProjectionState): void {
@@ -103,6 +143,55 @@ class TaskProjection extends Projection<string, typeof ProjectionStateSchema, nu
         id: event.id,
         name: `${event.name} (projected)`,
         priority: event.priority + 1,
+      }),
+    );
+    this.commitTransaction();
+  }
+}
+
+class RefusingTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  assignTask(): never {
+    throw new CommandRefusalError("TASK_ALREADY_COMPLETED", "Task is already completed.");
+  }
+}
+
+class ValidatingTaskAggregate extends Aggregate<
+  string,
+  typeof ValidatedAggregateStateSchema,
+  bigint
+> {
+  assignTask(command: ValidatedTaskCommand) {
+    return createValidatedEvent(`event-${command.id}`, command.id, command.name);
+  }
+
+  applyTask(event: ValidatedAggregateState): void {
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(ValidatedAggregateStateSchema, {
+        id: event.id,
+        name: event.name,
+      }),
+    );
+    this.commitTransaction();
+  }
+}
+
+class TransitionViolatingTaskAggregate extends Aggregate<
+  string,
+  typeof AggregateStateSchema,
+  bigint
+> {
+  assignTask(command: AggregateState) {
+    return createAggregateEvent("event-transition-invalid", command.id, command.name);
+  }
+
+  applyTask(event: AggregateState): void {
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: `${event.id}-changed`,
+        name: event.name,
+        archived: event.archived,
       }),
     );
     this.commitTransaction();
@@ -482,6 +571,45 @@ describe("SpineServices", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("returns stable Ack errors for immediate aggregate command refusals", async () => {
+    const context = BoundedContext.singleTenant("Tasks").add(createRefusingRepository()).build();
+    const handlers = registeredCommandHandlers(context);
+
+    const ack = await handlers.post(createAggregateCommand("command-refused", "task-refused"));
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("TASK_ALREADY_COMPLETED");
+    expect(errorMessage(ack.status?.status)).toBe("Task is already completed.");
+  });
+
+  it("returns stable Ack errors with details for invalid command payloads", async () => {
+    const context = BoundedContext.singleTenant("Tasks").add(createValidatingRepository()).build();
+    const handlers = registeredCommandHandlers(context);
+
+    const ack = await handlers.post(createValidatedCommand("command-invalid", "task-invalid", ""));
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
+    expect(errorMessage(ack.status?.status)).toBe("Command payload validation failed.");
+    expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
+  });
+
+  it("returns stable Ack errors with details for transition validation failures", async () => {
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createTransitionViolatingRepository())
+      .build();
+    const handlers = registeredCommandHandlers(context);
+
+    const ack = await handlers.post(
+      createAggregateCommand("command-transition-invalid", "task-transition-invalid"),
+    );
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("COMMAND_STATE_TRANSITION_VALIDATION_FAILED");
+    expect(errorMessage(ack.status?.status)).toBe("Command state transition validation failed.");
+    expect(validationDetails(ack.status?.status)?.constraintViolation.length).toBeGreaterThan(0);
   });
 
   it("rejects command tenant mismatches without dispatching", async () => {
@@ -1233,6 +1361,54 @@ function createProjectionRepositoryWithHandlers(): Repository<typeof TaskProject
   });
 }
 
+function createRefusingRepository(): Repository<typeof RefusingTaskAggregate> {
+  const handlers = defineEntityHandlers(RefusingTaskAggregate, AggregateStateSchema, (builder) => [
+    builder.assign(AggregateStateSchema, "assignTask"),
+  ]);
+
+  return new Repository({
+    entityType: RefusingTaskAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate> {
+  const handlers = defineEntityHandlers(
+    ValidatingTaskAggregate,
+    ValidatedAggregateStateSchema,
+    (builder) => [
+      builder.assign(ValidatedTaskCommandSchema, "assignTask"),
+      builder.apply(ValidatedAggregateStateSchema, "applyTask"),
+    ],
+  );
+
+  return new Repository({
+    entityType: ValidatingTaskAggregate,
+    schema: ValidatedAggregateStateSchema,
+    handlers,
+  });
+}
+
+function createTransitionViolatingRepository(): Repository<
+  typeof TransitionViolatingTaskAggregate
+> {
+  const handlers = defineEntityHandlers(
+    TransitionViolatingTaskAggregate,
+    AggregateStateSchema,
+    (builder) => [
+      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.apply(AggregateStateSchema, "applyTask"),
+    ],
+  );
+
+  return new Repository({
+    entityType: TransitionViolatingTaskAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
 function createProjectionCommand(id: string, tenantId?: TenantInput) {
   return packCommand({
     id: create(CommandIdSchema, { uuid: id }),
@@ -1241,6 +1417,63 @@ function createProjectionCommand(id: string, tenantId?: TenantInput) {
     }),
     schema: ProjectionStateSchema,
     message: createState("task-1", "Task"),
+  });
+}
+
+function createAggregateCommand(id: string, aggregateId: string, name = "Task") {
+  return packCommand({
+    id: create(CommandIdSchema, { uuid: id }),
+    context: create(CommandContextSchema, {
+      actorContext: createActorContext(),
+    }),
+    schema: AggregateStateSchema,
+    message: create(AggregateStateSchema, {
+      id: aggregateId,
+      name,
+      archived: false,
+    }),
+  });
+}
+
+function createValidatedCommand(id: string, aggregateId: string, name: string) {
+  return create(CommandSchema, {
+    id: create(CommandIdSchema, { uuid: id }),
+    context: create(CommandContextSchema, {
+      actorContext: createActorContext(),
+    }),
+    message: packAny(
+      ValidatedTaskCommandSchema,
+      create(ValidatedTaskCommandSchema, {
+        id: aggregateId,
+        name,
+      }),
+      { validate: false },
+    ),
+  });
+}
+
+function createAggregateEvent(id: string, aggregateId: string, name: string) {
+  return packEvent({
+    id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema),
+    schema: AggregateStateSchema,
+    message: create(AggregateStateSchema, {
+      id: aggregateId,
+      name,
+      archived: false,
+    }),
+  });
+}
+
+function createValidatedEvent(id: string, aggregateId: string, name: string) {
+  return packEvent({
+    id: create(EventIdSchema, { value: id }),
+    context: create(EventContextSchema),
+    schema: ValidatedAggregateStateSchema,
+    message: create(ValidatedAggregateStateSchema, {
+      id: aggregateId,
+      name,
+    }),
   });
 }
 
@@ -1382,6 +1615,37 @@ function errorMessage(status: unknown) {
     : undefined;
 }
 
+function errorType(status: unknown) {
+  if (
+    typeof status !== "object" ||
+    status === null ||
+    !("case" in status) ||
+    status.case !== "error"
+  ) {
+    return undefined;
+  }
+  const value = "value" in status ? status.value : undefined;
+
+  return typeof value === "object" && value !== null && "type" in value ? value.type : undefined;
+}
+
+function validationDetails(status: unknown) {
+  if (
+    typeof status !== "object" ||
+    status === null ||
+    !("case" in status) ||
+    status.case !== "error"
+  ) {
+    return undefined;
+  }
+  const value = "value" in status ? status.value : undefined;
+  if (typeof value !== "object" || value === null || !("details" in value)) {
+    return undefined;
+  }
+
+  return unpackAny(value.details as Parameters<typeof unpackAny>[0], ValidationErrorSchema);
+}
+
 function responseErrorMessage(response: unknown) {
   if (typeof response !== "object" || response === null || !("response" in response)) {
     return undefined;
@@ -1452,6 +1716,33 @@ function createFakeContext(options: {
         readVersioned: options.readVersioned ?? (() => Promise.resolve(undefined)),
       }),
   } as unknown as BoundedContext;
+}
+
+function registeredCommandHandlers(
+  context: BoundedContext,
+  options: Omit<ConstructorParameters<typeof SpineServices>[0], "contexts"> = {},
+) {
+  let handlers:
+    | {
+        post(command: ReturnType<typeof createProjectionCommand>): Promise<Ack>;
+      }
+    | undefined;
+  const services = new SpineServices({ contexts: [context], ...options });
+
+  services.register({
+    service(schema: unknown, implementation: unknown) {
+      if (schema === CommandService) {
+        handlers = implementation as typeof handlers;
+      }
+      return this;
+    },
+  } as never);
+
+  if (handlers === undefined) {
+    throw new Error("CommandService handlers were not registered.");
+  }
+
+  return handlers;
 }
 
 function registeredSubscriptionHandlers(

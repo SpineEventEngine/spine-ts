@@ -27,6 +27,7 @@ export {
 } from "./stand/stand.js";
 
 export { SpineServices, type SpineServicesOptions } from "./services/spine-services.js";
+export { CommandRefusalError } from "./services/command-errors.js";
 
 export { CommandBus } from "./bus/command-bus.js";
 export type { CommandDispatcher } from "./bus/command-dispatcher.js";

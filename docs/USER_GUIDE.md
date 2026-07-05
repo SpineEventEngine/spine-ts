@@ -494,6 +494,17 @@ events for event-bus delivery. Aggregate command completion is not failed by
 later redispatch errors, but those errors are visible for diagnostics and tests
 via `context.storedEventDispatchFailures()`.
 
+Repository aggregate execution validates command payload messages through the
+core validation facade before route calculation, aggregate history load, event
+append, snapshot write, or stored-event dispatch. Command handlers may
+immediately refuse one command by throwing `CommandRefusalError`; when the
+command is posted through `CommandService.Post`, the returned `Ack` carries the
+refusal type and message rather than generic `COMMAND_POST_ERROR`.
+State-transition validation remains owned by `EntityTransaction.commit()` and
+`validateEntityStateTransition()`. If an aggregate event applier commits a
+rejected transition, command execution stops before storing produced events or
+snapshots and surfaces `COMMAND_STATE_TRANSITION_VALIDATION_FAILED`.
+
 ## Direct Stand
 
 Use `context.stand()` for the first direct read-side entity state slice. The

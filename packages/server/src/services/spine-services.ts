@@ -4,9 +4,15 @@ import { Code, ConnectError, type ConnectRouter } from "@connectrpc/connect";
 import { create } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { EmptySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
-import type { MessageSchema } from "@spine-ts/core";
+import { ValidationException, type MessageSchema } from "@spine-ts/core";
 import { deriveTypeUrl, packAny, unpackAny } from "@spine-ts/core";
-import { CommandIdSchema, type Command, type TenantId, VersionSchema } from "@spine-ts/proto";
+import {
+  CommandIdSchema,
+  type Command,
+  type TenantId,
+  ValidationErrorSchema,
+  VersionSchema,
+} from "@spine-ts/proto";
 import { ErrorSchema } from "@spine-ts/proto/generated/spine/base/error_pb.js";
 import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
 import type { Target } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
@@ -39,6 +45,7 @@ import {
 import type { BoundedContext } from "../context/bounded-context.js";
 import type { EntityFamily } from "../entity/entity.js";
 import type { StandReadResult, StandSubscription, StandUpdate } from "../stand/stand.js";
+import { CommandRefusalError, CommandStateTransitionValidationError } from "./command-errors.js";
 
 /** Small route registrar for the first public Spine gRPC service slice. */
 export class SpineServices {
@@ -128,10 +135,12 @@ export class SpineServices {
         messageId,
         status: okStatus(),
       });
-    } catch {
+    } catch (error) {
+      const postError = commandPostError(error);
+
       return create(AckSchema, {
         messageId,
-        status: errorStatus("COMMAND_POST_ERROR", "Command post failed."),
+        status: errorStatus(postError.type, postError.message, postError.details),
       });
     }
   }
@@ -431,11 +440,15 @@ function okStatus(): Status {
   });
 }
 
-function errorStatus(type: string, message: string): Status {
+function errorStatus(type: string, message: string, details?: Any): Status {
   return create(StatusSchema, {
     status: {
       case: "error",
-      value: create(ErrorSchema, { type, message }),
+      value: create(ErrorSchema, {
+        type,
+        message,
+        ...(details === undefined ? {} : { details }),
+      }),
     },
   });
 }
@@ -543,6 +556,37 @@ function tenantMismatch(
 interface ContractError {
   readonly type: string;
   readonly message: string;
+  readonly details?: Any;
+}
+
+function commandPostError(error: unknown): ContractError {
+  if (error instanceof CommandRefusalError) {
+    return {
+      type: error.type,
+      message: error.clientMessage,
+    };
+  }
+
+  if (error instanceof CommandStateTransitionValidationError) {
+    return {
+      type: error.type,
+      message: error.clientMessage,
+      details: packAny(ValidationErrorSchema, error.validationError, { validate: false }),
+    };
+  }
+
+  if (error instanceof ValidationException) {
+    return {
+      type: "COMMAND_VALIDATION_ERROR",
+      message: "Command payload validation failed.",
+      details: packAny(ValidationErrorSchema, error.asMessage(), { validate: false }),
+    };
+  }
+
+  return {
+    type: "COMMAND_POST_ERROR",
+    message: "Command post failed.",
+  };
 }
 
 function tenantOptions(tenantId: string | undefined): { readonly tenantId?: string } {
