@@ -4,10 +4,10 @@ Task log: `build-protocol/tasks/T-0012-12b-create-task-flow/TASK.md`
 Branch: `task/T-0012-12b-create-task-flow`
 Baseline commit: `775aa47`
 Reviewed commit/diff basis: implementation commit `a784ea5`; review-fix commit
-`2753627`; second-fix commit `61acd94`
+`2753627`; second-fix commit `61acd94`; third-fix commit pending
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12b-create-task-flow`
-Status: second fix committed; affected-lane re-review pending
+Status: third fix verified; commit pending
 
 ## Required Review Lanes
 
@@ -95,3 +95,37 @@ Planned fixes:
 - Export `PrimitiveId` and `MessageId` from `@spine-ts/server` and update the
   API export guard.
 - Refresh durable task/review/work logs after the second fix pass.
+
+### Round 3 - `61acd94` and `74b03ca`
+
+| Lane                       | Agent                                  | Result   |
+| -------------------------- | -------------------------------------- | -------- |
+| code style/maintainability | `019f32a9-710c-7f02-a627-ce158977d2bf` | Comments |
+| documentation              | `019f32a9-995c-72d3-b3b3-393f265c0e1c` | Clean    |
+| TypeScript/API docs        | `019f32a9-be0a-7e82-87ad-cf87a90ad54b` | Clean    |
+| security                   | `019f32a9-e378-7342-a248-ca706871772c` | Comments |
+| performance/reliability    | `019f32aa-07ca-7831-bdf5-2fefb0f2ddc9` | Comments |
+
+Findings:
+
+- Security: tests covered non-finite producer IDs but not non-finite first-field
+  IDs.
+- Maintainability: server repository tests imported ignored generated example
+  files from `examples/todo/generated`.
+- Maintainability: `readEventFieldId()` was a one-use wrapper around route ID
+  normalization.
+- Maintainability: message-target route errors said primitives were accepted
+  even though message-ID routes require message IDs.
+- Reliability: message-target route normalization accepted any single-field
+  message ID without checking that its `$typeName` matched the repository state
+  ID field.
+
+Planned fixes:
+
+- Add local test descriptors for message-ID and non-finite route scenarios.
+- Reject message IDs whose `$typeName` differs from the repository state's ID
+  field message type.
+- Add regression coverage for wrong message-ID type and non-finite first-field
+  route IDs.
+- Inline the one-use event route ID wrapper and use target-specific error
+  messages.

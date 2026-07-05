@@ -1216,7 +1216,7 @@ function readEventEntityId(
   targetIdField: DescriptorFieldMetadata,
 ): unknown {
   const producerId = readProducerId(event);
-  const fieldId = readEventFieldId(message, schema, targetIdField);
+  const fieldId = readRouteId(readFirstFieldId(message, schema, "event"), targetIdField, "event");
 
   if (producerId !== undefined && producerId !== fieldId.value) {
     throw new Error(
@@ -1229,14 +1229,6 @@ function readEventEntityId(
     : producerId;
 }
 
-function readEventFieldId(
-  message: NonNullable<Event["message"]>,
-  schema: MessageSchema,
-  targetIdField: DescriptorFieldMetadata,
-): RoutableId {
-  return readRouteId(readFirstFieldId(message, schema, "event"), targetIdField, "event");
-}
-
 interface RoutableId {
   readonly id: unknown;
   readonly value: string | number | boolean;
@@ -1247,24 +1239,35 @@ function readRouteId(
   targetIdField: DescriptorFieldMetadata,
   signalKind: "command" | "event",
 ): RoutableId {
-  if (targetIdField.descriptor.fieldKind === "message") {
-    return readMessageRouteId(value, signalKind);
+  const messageTypeName = targetMessageTypeName(targetIdField);
+  if (messageTypeName !== undefined) {
+    return readMessageRouteId(value, messageTypeName, signalKind);
   }
   return readPrimitiveRouteId(value, signalKind);
 }
 
-function readMessageRouteId(value: unknown, signalKind: "command" | "event"): RoutableId {
+function readMessageRouteId(
+  value: unknown,
+  targetTypeName: string,
+  signalKind: "command" | "event",
+): RoutableId {
   const id = MessageIds.read(value);
   if (id === undefined) {
-    throw new Error(
-      `Repository ${signalKind} routing requires a finite primitive or single-field message ID.`,
-    );
+    throw new Error(`Repository ${signalKind} routing requires a single-field message ID.`);
+  }
+  if (id.$typeName !== targetTypeName) {
+    throw new Error(`Repository ${signalKind} routing requires a "${targetTypeName}" ID.`);
   }
 
   return Object.freeze({
     id,
     value: id.value,
   });
+}
+
+function targetMessageTypeName(targetIdField: DescriptorFieldMetadata): string | undefined {
+  const descriptor = targetIdField.descriptor;
+  return descriptor.fieldKind === "message" ? descriptor.message.typeName : undefined;
 }
 
 function readPrimitiveRouteId(value: unknown, signalKind: "command" | "event"): RoutableId {

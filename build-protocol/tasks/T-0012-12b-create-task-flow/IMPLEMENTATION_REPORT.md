@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12b Create Task Flow
 
-Status: second fix committed; affected-lane re-review pending
+Status: third fix verified; commit pending
 Branch: `task/T-0012-12b-create-task-flow`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12b-create-task-flow`
@@ -141,3 +141,19 @@ updated.
   `pnpm exec vitest run --coverage --passWithNoTests --testTimeout=120000 --maxWorkers=1`:
   passed 45 files / 637 tests. Coverage: statements 95.15%, branches 90.41%,
   functions 97.63%, lines 95.17%.
+
+## Third-Fix Verification
+
+- `pnpm exec vitest run packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts examples/todo/src/index.test.ts --passWithNoTests`:
+  passed 3 files / 91 tests.
+- `pnpm typecheck`: passed.
+- `pnpm lint`: passed.
+- `pnpm format:check`: passed.
+- `pnpm docs:check`: passed with only the known invalid-origin source-link
+  warning.
+- `pnpm proto:check-generated`: passed.
+- `git diff --check`: passed.
+- Escalated
+  `pnpm exec vitest run --coverage --passWithNoTests --testTimeout=120000 --maxWorkers=1`:
+  passed 45 files / 639 tests. Coverage: statements 95.18%, branches 90.49%,
+  functions 97.63%, lines 95.20%.

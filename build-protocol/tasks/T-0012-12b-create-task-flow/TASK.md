@@ -1,6 +1,6 @@
 # T-0012.12b: Create Task Flow
 
-Status: second fix committed; affected-lane re-review pending
+Status: third fix verified; commit pending
 Start: `2026-07-05 13:23 WEST`
 End: Pending
 Baseline commit: `775aa47`
@@ -14,6 +14,7 @@ Reviewer sub-agents: round-one closed; re-review pending
 Implementation commit: `a784ea5`
 Review-fix commit: `2753627`
 Second-fix commit: `61acd94`
+Third-fix commit: pending
 Final branch HEAD: pending
 
 ## Objective
@@ -125,6 +126,15 @@ Out of scope:
   lines 95.17%). A parallel lint attempt failed only because concurrent
   `proto:generate` raced another check; serial lint passed.
 - `2026-07-05 15:20 WEST`: Second-fix commit `61acd94` created.
+- `2026-07-05 15:32 WEST`: Round-three re-review found missing non-finite
+  first-field route coverage, cross-package generated example imports in a
+  server test, one redundant event route helper, imprecise message-target error
+  text, and missing `$typeName` matching for message-target repository routes.
+  Third-fix verification passed: focused storage/routing/example tests (3 files
+  / 91 tests), `pnpm typecheck`, serial `pnpm lint`, `pnpm format:check`,
+  `pnpm docs:check`, `pnpm proto:check-generated`, `git diff --check`, and
+  escalated coverage (45 files / 639 tests; statements 95.18%, branches 90.49%,
+  functions 97.63%, lines 95.20%).
 
 ## Decisions
 
