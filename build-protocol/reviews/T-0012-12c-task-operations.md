@@ -4,10 +4,10 @@ Task log: `build-protocol/tasks/T-0012-12c-task-operations/TASK.md`
 Branch: `task/T-0012-12c-task-operations`
 Baseline commit: `fc71408`
 Reviewed commit/diff basis: implementation commit `8ab4b5c`; review-fix
-commit `3ee5c1a`; metadata-fix commit `b6495bb`
+commit `3ee5c1a`; metadata-fix commit `b6495bb`; status-fix commit `6fea638`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
-Status: metadata-fix committed; re-review pending
+Status: status-fix committed; re-review pending
 
 ## Required Review Lanes
 
@@ -94,3 +94,23 @@ Planned fix:
 
 - Record `b6495bb` as the metadata-fix commit and update current state to the
   post-metadata-fix re-review state.
+
+### Round 4 - `6fea638`
+
+| Lane                       | Agent                                  | Result   |
+| -------------------------- | -------------------------------------- | -------- |
+| code style/maintainability | `019f32f7-082c-7df1-b6cc-d4d57805d6bb` | Comments |
+| documentation              | `019f32f7-089e-7a42-bcd4-e1c178fc89e2` | Comments |
+| TypeScript/API docs        | `019f32f7-093d-7493-890a-21396a7aa44c` | Clean    |
+| security                   | `019f32f7-09e1-75c0-b9e0-4e28a4bff277` | Clean    |
+| performance/reliability    | `019f32f7-0a59-75c0-93c1-e6f28fc288c1` | Comments |
+
+Findings:
+
+- Task, review, and work-log status fields still described the pre-`6fea638`
+  state.
+
+Planned fix:
+
+- Record `6fea638` as the status-fix commit and update current state to the
+  post-status-fix re-review state.
