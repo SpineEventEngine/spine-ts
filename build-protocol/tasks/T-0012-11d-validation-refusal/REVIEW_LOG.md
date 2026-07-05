@@ -6,7 +6,7 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-17 documentation/status fixes verified; ready for follow-up review
+Status: round-18 report consistency fix verified; ready for follow-up review
 
 ## Required Lanes
 
@@ -435,3 +435,17 @@ Status: round-17 documentation/status fixes verified; ready for follow-up review
   worker aligned those parent summaries with the round-17 documentation/status
   fix and recorded the correction in child and parent work logs. Docs, format,
   and whitespace verification passed.
+
+### Round 18
+
+- `2026-07-05 10:55 WEST`: Documentation review found the child
+  implementation report still stopped at round 16 in its review summary and
+  latest verification even though the round-17 documentation/status fixes were
+  verified elsewhere.
+
+## Round-18 Fix Pass
+
+- `2026-07-05 11:00 WEST`: Implementation worker updated the child
+  implementation report to include round-17 architecture/status documentation
+  fixes and verification, then recorded this report-consistency pass in child
+  durable logs. Docs, format, and whitespace verification passed.

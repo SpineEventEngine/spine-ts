@@ -1,6 +1,6 @@
 # T-0012.11d: Validation And Immediate Refusal Outcomes
 
-Status: round-17 documentation/status fixes verified; ready for follow-up review
+Status: round-18 report consistency fix verified; ready for follow-up review
 Branch: `task/T-0012-11d-validation-refusal`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`

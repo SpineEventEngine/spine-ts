@@ -89,7 +89,7 @@ Baseline commit: `c13b19c`
 
 ## Review Summary
 
-Review history is current through the round-16 current-summary/status fixes.
+Review history is current through the round-17 documentation/status fixes.
 Round 1 moved payload validation to the `CommandBus`, removed an accidental public
 entity inspection hook, and filled missing public Ack docs. Round 2 moved
 internal validation errors back into their owning bus/repository layers and
@@ -116,10 +116,18 @@ the child task status with the round-14 review-log status. Round 15 updated the
 lane, report, parent current-state, and status-header rollups to include the
 round-14 docs/status verification and child task status follow-up. Round 16
 updated current summaries and parent headers to include round-15
-durable-log/status verification and header alignment.
+durable-log/status verification and header alignment. Round 17 aligned
+architecture documentation with implemented command validation/refusal/Ack
+seams while preserving deferred server lifecycle, event intake, broker, and
+subscription-store scope, then aligned parent current-state summaries with that
+documentation/status fix.
 
 ### Latest Verification
 
+- `2026-07-05 10:50 WEST`: Round-17 parent-status verification passed:
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
+- `2026-07-05 10:45 WEST`: Round-17 documentation/status verification passed:
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
 - `2026-07-05 10:35 WEST`: Round-16 parent-header verification passed:
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
 - `2026-07-05 10:30 WEST`: Round-16 current-summary verification passed:
