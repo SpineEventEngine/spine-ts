@@ -9,10 +9,10 @@ pnpm typecheck:build
 pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests
 ```
 
-The test builds a `Tasks` bounded context with `createTodoContext()`, posts one
-`CreateTask` command through `BoundedContextFixture.post()`, waits for
-`TaskListProjection`, and reads the resulting task list through the real
-`QueryService` seam.
+The test builds a `Tasks` bounded context with `createTodoContext()`, posts
+`CreateTask` commands through `BoundedContextFixture.post()`, waits for
+`TaskListProjection` rows, and reads the resulting task-list rows through the
+real `QueryService` seam.
 
 This slice does not start a standalone server or provide client commands yet.
 Rename, complete, reopen, validation/refusal, subscriptions, and the final

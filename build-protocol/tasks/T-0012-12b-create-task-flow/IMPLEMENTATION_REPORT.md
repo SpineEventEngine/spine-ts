@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12b Create Task Flow
 
-Status: implementation verified; review pending
+Status: round-one review fixes in progress
 Branch: `task/T-0012-12b-create-task-flow`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12b-create-task-flow`
@@ -18,11 +18,12 @@ task list through existing framework service seams.
   `@Apply(TaskCreatedSchema)` and materializes those decorators through
   `materializeDecoratedEntityHandlers()`.
 - `TaskListProjection` subscribes to `TaskCreated` and writes one visible
-  task-list projection for the created task.
+  task-list projection row for each created task.
 - `createTodoContext()` assembles a single-tenant `Tasks` bounded context with
   direct repositories and the framework's default in-memory storage.
-- Aggregate storage/routing now accepts message-valued aggregate IDs so the
-  generated `TaskId` contract can be used directly.
+- Aggregate storage/routing now accepts finite primitive or single-field
+  message-valued aggregate IDs so the generated `TaskId` contract can be used
+  directly.
 - Generated output remains ignored and untracked.
 
 ## Sub-Agent Note
@@ -71,10 +72,41 @@ updated.
 
 - Keep the example small; do not introduce a broad client DSL or server facade.
 - Review the message-ID aggregate storage change carefully. It is intentionally
-  narrow, but it changes a formerly primitive-only internal assumption.
+  restricted to finite primitives and single-field message IDs, but it changes
+  a formerly primitive-only internal assumption.
 - Raw Vitest imports of decorated source fail before `tsc` lowering. The focused
   example test uses built output and the user guide records `pnpm typecheck:build`
   as the prerequisite.
 - `vitest.config.ts` excludes only `examples/todo/src/index.ts` from V8 coverage
   because the current Vitest transform path cannot execute raw standard
   decorators. The focused example test covers the compiled `tsc` output.
+
+## Round-One Review Fix Plan
+
+- Narrow aggregate IDs to finite primitive values or single-field generated
+  message IDs.
+- Preserve message `$typeName` in aggregate ID storage keys and repository event
+  routing.
+- Add negative coverage for non-finite numeric IDs and extra-field message IDs.
+- Make the focused example test fail clearly when `examples/todo/dist` is stale
+  or absent.
+- Document that this slice exposes per-task `TaskList` projection rows.
+- Suppress generated TypeDoc `@generated` tag warnings while keeping default
+  TypeDoc tag handling.
+
+## Review-Fix Verification
+
+- `pnpm typecheck:build`: passed.
+- `pnpm exec vitest run packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts examples/todo/src/index.test.ts --passWithNoTests`:
+  passed 3 files / 86 tests.
+- `pnpm typecheck`: passed.
+- `pnpm lint`: passed.
+- `pnpm format:check`: passed after applying Prettier to review-fix edits.
+- `pnpm docs:check`: passed with only the known invalid-origin source-link
+  warning; generated `@generated` tag warnings are gone.
+- `pnpm proto:check-generated`: passed.
+- `git diff --check`: passed.
+- Escalated
+  `pnpm exec vitest run --coverage --passWithNoTests --testTimeout=120000 --maxWorkers=1`:
+  passed 45 files / 634 tests. Coverage: statements 95.19%, branches 90.52%,
+  functions 97.63%, lines 95.21%.

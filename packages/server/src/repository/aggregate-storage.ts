@@ -1,11 +1,4 @@
-import {
-  clone,
-  create,
-  fromBinary,
-  toBinary,
-  type Message,
-  type MessageShape,
-} from "@bufbuild/protobuf";
+import { clone, create, fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { deriveTypeUrl, unpackAny, type MessageSchema } from "@spine-ts/core";
 import { EventSchema, type Event } from "@spine-ts/proto";
@@ -20,7 +13,7 @@ import {
 
 import type { DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import type { EntityLifecycleFlags } from "../entity/entity.js";
-import { PrimitiveIds } from "./primitive-id.js";
+import { MessageIds, PrimitiveIds, type MessageId, type PrimitiveId } from "./primitive-id.js";
 
 /**
  * Small aggregate history store over snapshots and events.
@@ -375,7 +368,7 @@ interface VersionedEvent {
 }
 
 /** Aggregate identifier supported by aggregate history storage. */
-export type AggregateId = string | number | boolean | Message;
+export type AggregateId = PrimitiveId | MessageId;
 
 const snapshotRecordTypeUrl = "type.spine-ts.dev/internal/AggregateSnapshotRecord";
 
@@ -537,25 +530,17 @@ function rejectDuplicateEventIds(events: readonly VersionedEvent[]): void {
 }
 
 function readAggregateId(value: unknown): AggregateId | undefined {
-  const primitive = PrimitiveIds.read(value);
+  const primitive = PrimitiveIds.readFinite(value);
   if (primitive !== undefined) {
     return primitive;
   }
-  if (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    typeof (value as { readonly $typeName?: unknown }).$typeName === "string"
-  ) {
-    return value as Message;
-  }
-  return undefined;
+  return MessageIds.read(value);
 }
 
 function requireAggregateId(value: unknown): AggregateId {
   const id = readAggregateId(value);
   if (id === undefined) {
-    throw new Error("Aggregate IDs must be primitive or message values.");
+    throw new Error("Aggregate IDs must be finite primitive values or single-field message IDs.");
   }
   return id;
 }
@@ -572,6 +557,10 @@ function sameAggregateId(left: unknown, right: unknown): boolean {
 }
 
 function aggregateIdKey(id: AggregateId): string {
+  if (typeof id === "object") {
+    return MessageIds.key(id);
+  }
+
   return JSON.stringify({
     type: typeof id,
     value: id,

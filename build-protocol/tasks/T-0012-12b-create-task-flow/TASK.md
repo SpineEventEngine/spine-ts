@@ -1,6 +1,6 @@
 # T-0012.12b: Create Task Flow
 
-Status: implementation verified; review pending
+Status: round-one review fixes in progress
 Start: `2026-07-05 13:23 WEST`
 End: Pending
 Baseline commit: `775aa47`
@@ -10,8 +10,8 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12b-create-task-flow`
 Authoring sub-agent: `019f3241-11a3-7790-ac86-15bdb454b653` (closed after
 timeout; main orchestrator inspected and amended WIP)
-Reviewer sub-agents: pending
-Implementation commit: pending
+Reviewer sub-agents: round-one closed; re-review pending
+Implementation commit: `a784ea5`
 Final branch HEAD: pending
 
 ## Objective
@@ -99,6 +99,17 @@ Out of scope:
 - `2026-07-05 14:06 WEST`: Main orchestrator kept the narrow example slice,
   amended rough edges, and added aggregate-storage coverage for message-valued
   aggregate IDs.
+- `2026-07-05 14:42 WEST`: Implementation commit `a784ea5` was created and
+  reviewed by the required five lanes.
+- `2026-07-05 15:01 WEST`: Round-one findings were accepted into a review-fix
+  pass. The fix pass narrows aggregate ID support, refreshes public docs/logs,
+  and makes the example's built-output test dependency explicit.
+- `2026-07-05 15:04 WEST`: Review-fix verification passed: focused storage,
+  routing, and example tests (3 files / 86 tests), `pnpm typecheck`,
+  `pnpm lint`, `pnpm format:check`, `pnpm docs:check`,
+  `pnpm proto:check-generated`, `git diff --check`, and escalated coverage
+  (45 files / 634 tests; statements 95.19%, branches 90.52%, functions 97.63%,
+  lines 95.21%).
 
 ## Decisions
 
@@ -106,7 +117,8 @@ Out of scope:
 - The todo contract's `TaskId` is a Protobuf message. Existing aggregate
   command execution/storage only accepted primitive aggregate IDs, which
   blocked the real create flow. This slice includes the smallest internal
-  framework adjustment and focused storage regression coverage for message IDs.
+  framework adjustment and focused storage regression coverage for finite
+  primitive IDs and single-field Protobuf message IDs.
 - No broad client DSL, server facade, or production storage API is added.
 
 ## Human Questions And Answers

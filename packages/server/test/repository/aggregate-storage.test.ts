@@ -521,6 +521,43 @@ describe("AggregateStorage", () => {
     ).rejects.toThrow(/same aggregate ID/);
   });
 
+  it("rejects non-finite numeric aggregate IDs", async () => {
+    const storage = new AggregateStorage<typeof AggregateStateSchema, number>({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [NumberIdEventSchema],
+    });
+
+    await expect(storage.readHistory(Number.NaN)).rejects.toThrow(/finite primitive/);
+    await expect(
+      storage.appendEvents(Number.POSITIVE_INFINITY, [
+        packEvent({
+          id: create(EventIdSchema, { value: "event-infinite-id" }),
+          context: create(EventContextSchema, {
+            version: create(VersionSchema, { number: 1 }),
+          }),
+          schema: NumberIdEventSchema,
+          message: create(NumberIdEventSchema, { id: 1 }),
+        }),
+      ]),
+    ).rejects.toThrow(/finite primitive/);
+  });
+
+  it("rejects message IDs with fields beyond the primitive value", async () => {
+    const storage = new AggregateStorage<typeof AggregateStateSchema, NestedId>({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [ObjectIdEventSchema],
+    });
+    const id = Object.assign(create(NestedIdSchema, { value: "task-extra-id" }), {
+      namespace: "Tasks",
+    });
+
+    await expect(storage.readHistory(id)).rejects.toThrow(/single-field message IDs/);
+  });
+
   it("routes primitive producer IDs packed in wrapper messages", async () => {
     const storage = new AggregateStorage<typeof AggregateStateSchema, string | number | boolean>({
       context: { name: "Tasks", multitenant: false },
@@ -837,7 +874,7 @@ describe("AggregateStorage", () => {
     });
 
     await expect(storage.readHistory({ value: "task-object" } as never)).rejects.toThrow(
-      /primitive or message values/,
+      /single-field message IDs/,
     );
   });
 

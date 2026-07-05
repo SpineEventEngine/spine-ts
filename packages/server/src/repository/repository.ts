@@ -42,7 +42,7 @@ import {
 } from "../handler/event-registration-readiness.js";
 import { handlerMetadataAccess, type EntityHandlersMetadata } from "../handler/handler-metadata.js";
 import { AggregateStorage } from "./aggregate-storage.js";
-import { PrimitiveIds } from "./primitive-id.js";
+import { MessageIds, PrimitiveIds } from "./primitive-id.js";
 import type { Stand } from "../stand/stand.js";
 import { TransitionValidationError } from "./command-errors.js";
 import { ReplayError } from "./replay-error.js";
@@ -1215,16 +1215,7 @@ function readEventFieldId(message: NonNullable<Event["message"]>, schema: Messag
 }
 
 function routableEventId(value: unknown): unknown {
-  if (typeof value !== "object" || value === null || !Object.hasOwn(value, "value")) {
-    return value;
-  }
-
-  const id = (value as { readonly value?: unknown }).value;
-  if (typeof id === "string" || typeof id === "number" || typeof id === "boolean") {
-    return id;
-  }
-
-  return value;
+  return MessageIds.readValue(value) ?? value;
 }
 
 function createRepositorySnapshot<EntityType extends RepositoryEntityType>(
