@@ -149,6 +149,16 @@ export class SpineServices {
       });
     }
 
+    const includeAllRequested = target.criterion.case === "includeAll" && target.criterion.value;
+    if (includeAllRequested && route.entityFamily !== "projection") {
+      return create(QueryResponseSchema, {
+        response: errorResponse(
+          "INVALID_QUERY",
+          "QueryService.Read include_all requires a projection target.",
+        ),
+      });
+    }
+
     const tenantId = tenantValue(query.context?.tenantId);
     const tenantError = tenantMismatch(route.context.isMultitenant, tenantId, "query");
     if (tenantError !== undefined) {
@@ -158,16 +168,7 @@ export class SpineServices {
     }
 
     try {
-      if (target.criterion.case === "includeAll" && target.criterion.value) {
-        if (route.entityFamily !== "projection") {
-          return create(QueryResponseSchema, {
-            response: errorResponse(
-              "INVALID_QUERY",
-              "QueryService.Read include_all requires a projection target.",
-            ),
-          });
-        }
-
+      if (includeAllRequested) {
         const results = await route.context
           .stand()
           .readAllVersioned(route.schema, tenantOptions(tenantId));

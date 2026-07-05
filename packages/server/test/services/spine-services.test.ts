@@ -289,6 +289,44 @@ describe("SpineServices", () => {
     );
   });
 
+  it("rejects include-all reads for non-projection routes before multitenant tenant validation", async () => {
+    const context = createFakeContext({
+      entityFamily: "aggregate",
+      isMultitenant: true,
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      readAllVersioned: () => {
+        throw new Error("include_all must not list aggregate state.");
+      },
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(createIncludeAllQuery());
+
+    expect(response.response?.status?.status.case).toBe("error");
+    expect(responseErrorMessage(response)).toBe(
+      "QueryService.Read include_all requires a projection target.",
+    );
+  });
+
+  it("rejects include-all reads for non-projection routes before single-tenant tenant validation", async () => {
+    const context = createFakeContext({
+      entityFamily: "aggregate",
+      isMultitenant: false,
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      readAllVersioned: () => {
+        throw new Error("include_all must not list aggregate state.");
+      },
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(createIncludeAllQuery("tenant-a"));
+
+    expect(response.response?.status?.status.case).toBe("error");
+    expect(responseErrorMessage(response)).toBe(
+      "QueryService.Read include_all requires a projection target.",
+    );
+  });
+
   it("returns Spine error statuses for unsupported command and query targets", async () => {
     const context = BoundedContext.singleTenant("Tasks").build();
     const server = await startServices(context);

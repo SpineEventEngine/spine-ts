@@ -140,7 +140,8 @@ while single-tenant stands reject tenant options.
 `SpineServices` adapts built-context command buses and stands to the first real
 Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
 routes. `QueryService.Read` supports projection-state ID-filter reads and
-`Target.include_all = true`, packing `EntityStateWithVersion` replies from
+projection-state `Target.include_all = true` reads, packing
+`EntityStateWithVersion` replies from
 `Stand.readVersioned()` and `Stand.readAllVersioned()` respectively. `Subscribe`
 allocates opaque IDs, `Activate` attaches delivery, and `Cancel`/stream
 finalization release in-process handles. Never-activated subscriptions have a

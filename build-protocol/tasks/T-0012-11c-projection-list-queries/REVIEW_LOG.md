@@ -56,3 +56,15 @@ Status: complete
 - fix: the parent branch now carries repository `entityFamily` on the service
   route and returns `INVALID_QUERY` for non-projection include-all targets
   before reading from `Stand`.
+- follow-up TypeScript/API: found that tenant validation still ran before the
+  non-projection include-all guard, so multitenant reads without tenant returned
+  `TENANT_REQUIRED` and single-tenant reads with tenant returned
+  `TENANT_INAPPLICABLE`.
+- follow-up fix: `SpineServices.#read()` now computes include-all intent after
+  route lookup and rejects non-projection include-all targets before
+  `tenantMismatch()`, with focused regressions covering both tenant modes.
+- follow-up documentation: API docs now say `QueryService.Read` supports
+  projection-state ID-filter reads and projection-state
+  `Target.include_all = true` reads. The generated API reference directory is
+  ignored in this worktree, so there was no tracked generated reference to
+  update.

@@ -17,6 +17,10 @@ docs-only follow-up clarifies that the same tenant rules apply to direct stand
 list reads and `QueryService.Read` include-all projection reads as to point
 reads.
 
+Parent-integration follow-up from `764b946` keeps the non-projection
+`include_all` rejection ahead of tenant validation, so unsupported include-all
+query targets always return the projection-target `INVALID_QUERY` response.
+
 ## Initial Evidence
 
 - `QueryService.Read` currently requires an ID filter and returns
@@ -104,6 +108,14 @@ Implemented the smallest storage-backed include-all path:
       `listen EPERM: operation not permitted 127.0.0.1` for gRPC tests)
     - escalated `pnpm test:coverage` ✅ with 45 files and 589 tests;
       statements 94.97%, branches 90.01%, functions 97.51%, lines 94.99%
+  - Parent-integration review-fix verification from `764b946`:
+    - RED `pnpm exec vitest run packages/server/test/services/spine-services.test.ts -t "rejects include-all reads for non-projection routes|keeps QueryService include-all reads isolated by tenant|reads all projection states through QueryService include-all queries"` failed in the new non-projection multitenant and single-tenant precedence cases because tenant validation returned `TENANT_REQUIRED` / `TENANT_INAPPLICABLE`.
+    - GREEN `pnpm exec vitest run packages/server/test/services/spine-services.test.ts -t "rejects include-all reads for non-projection routes|keeps QueryService include-all reads isolated by tenant|reads all projection states through QueryService include-all queries"` ✅ with 5 selected tests, including `rejects include-all reads for non-projection routes`.
+    - Parent integration verification evidence also covered `pnpm typecheck`,
+      `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, `git diff --check`,
+      sandboxed coverage blocked only by local endpoint permissions, and
+      escalated `pnpm test:coverage` ✅ with 45 files and 592 tests; branches
+      90.03%.
 
 Sandbox notes:
 
@@ -126,6 +138,11 @@ Review-fix pass: updated the public docs to describe direct list reads,
 tenant-option behavior; added focused stand tests for list-read handle cleanup
 and copy-safe state/version results; and tightened `packVersionedState()` so
 the schema/result generic relation stays intact.
+
+Parent-integration follow-up: added focused service regressions proving
+non-projection `include_all` reads return the projection-target `INVALID_QUERY`
+before tenant validation for both multitenant and single-tenant routes, then
+moved that inline service guard ahead of `tenantMismatch()`.
 
 Final review status: code style/maintainability, documentation,
 TypeScript/API docs, security, and performance/reliability lanes reported no

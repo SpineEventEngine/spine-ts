@@ -75,7 +75,10 @@ Parent integration style review then found one important scope issue: the
 include-all `QueryService.Read` path was attached to every state route instead
 of projection routes only. The accepted fix is to carry `entityFamily` into
 the service route and reject non-projection `include_all` targets with
-`INVALID_QUERY` before reaching `Stand.readAllVersioned()`.
+`INVALID_QUERY` before tenant validation or `Stand.readAllVersioned()`. A
+follow-up regression pass covers both multitenant non-projection reads without
+tenant and single-tenant non-projection reads with tenant, so tenant errors
+cannot preempt the projection-target query error.
 
 ## Round-2 Findings Summary
 
