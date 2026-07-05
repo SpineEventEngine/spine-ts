@@ -7,10 +7,10 @@ Reviewed commit/diff basis: implementation commit `8ab4b5c`; review-fix
 commit `3ee5c1a`; metadata-fix commit `b6495bb`; status-fix commit `6fea638`
 ; restart-guidance-fix commit `7ed30a3`; post-restart-status commit `2cb0cf8`
 ; round-seven-status commit `05bceb5`; round-eight-status commit `85909a7`;
-round-nine-status commit `f4d48e2`
+round-nine-status commit `f4d48e2`; round-ten-status commit `c098f0c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
-Status: round-nine-status committed; re-review pending
+Status: round-eleven status comments addressed; re-review current HEAD
 
 ## Required Review Lanes
 
@@ -234,3 +234,25 @@ Findings:
 Planned fix:
 
 - Record `f4d48e2` and point current state to re-review/task closure.
+
+### Round 11 - `c098f0c`
+
+| Lane                       | Agent                                  | Result   |
+| -------------------------- | -------------------------------------- | -------- |
+| code style/maintainability | `019f3309-feed-7002-9d54-cd39902aa7d2` | Clean    |
+| documentation              | `019f3309-ff8c-7081-a8f1-5736d04e3395` | Comments |
+| TypeScript/API docs        | `019f330a-0048-7c82-b693-9d7c7931590b` | Clean    |
+| security                   | `019f330a-00e6-7453-97cf-748f92cf2329` | Clean    |
+| performance/reliability    | `019f330a-017e-7531-92bc-70eafc2e3fe0` | Comments |
+
+Findings:
+
+- Task, review, and work-log status fields still described the pre-`c098f0c`
+  state.
+- Work-log restart guidance still said to commit the round-ten status update
+  even though `c098f0c` was already that committed update.
+
+Planned fix:
+
+- Record `c098f0c`, close out round-eleven reviewer tracking, and point current
+  state to re-review of the current HEAD.
