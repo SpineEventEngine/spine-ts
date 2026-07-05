@@ -4,10 +4,11 @@ Task log: `build-protocol/tasks/T-0012-12b-create-task-flow/TASK.md`
 Branch: `task/T-0012-12b-create-task-flow`
 Baseline commit: `775aa47`
 Reviewed commit/diff basis: implementation commit `a784ea5`; review-fix commit
-`2753627`; second-fix commit `61acd94`; third-fix commit `1dd62c8`
+`2753627`; second-fix commit `61acd94`; third-fix commit `1dd62c8`;
+round-four-fix commit `afe5162`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12b-create-task-flow`
-Status: third fix committed; re-review pending
+Status: round-four fix committed; re-review pending
 
 ## Required Review Lanes
 
