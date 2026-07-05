@@ -6,7 +6,7 @@ Baseline commit: `89868e9`
 Reviewed commit/diff basis: parent integration after `ea2a4ab`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
-Status: T-0012.12f merged; parent integration review pending
+Status: T-0012.12f merged and verified; parent integration review pending
 
 ## Required Review Lanes
 
@@ -114,6 +114,10 @@ Review focus for splitter review:
   security, and performance/reliability.
 - Parent integration docs for `T-0012.12f` are updated after merge.
 - Review package: pending.
-- Reviewed range: `ea2a4ab..HEAD`.
+- Reviewed range: `ea2a4ab..HEAD` after parent verification commit.
 - Required lanes: maintainability, documentation, TypeScript/API docs,
   security, and performance/reliability.
+- Parent integration verification passed after a sequential rerun. A first
+  parallel static-check attempt failed because concurrent `proto:generate`
+  commands raced shared generated-output publishing and left `.generated-*`
+  scratch directories, which were removed before the passing rerun.

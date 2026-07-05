@@ -1,6 +1,6 @@
 # Work Log: T-0012 Corrective Cleanup And Roadmap Reset
 
-Status: T-0012.12 integrated; parent integration verification pending
+Status: T-0012.12 integrated; parent integration review pending
 
 ## Entries
 
@@ -43,6 +43,7 @@ Status: T-0012.12 integrated; parent integration verification pending
 | `2026-07-04 21:43 WEST` | Docs-fix author       | Applied `T-0012.11` splitter review findings to parent docs/logs.                             | Updated parent `T-0012` task/report/review/work log plus `T-0012.11` leaf task/report/review/work log; narrowed the parent roadmap; synchronized statuses; clarified that the split proposes the `T-0012.11a` branch/worktree and the orchestrator opens it later; tightened durable-log, coverage, tenant-boundary, validation-contract, read-side, and public testing-fixture documentation requirements.                                                                                                                                   | Parent and leaf docs now match the split-complete/selected-first-slice state and record that round-1 splitter review comments were addressed before the first implementation slice is opened.                                                                                                                                                                                                                                                                                        |
 | `2026-07-05 10:40 WEST` | Main orchestrator     | Integrated `T-0012.11` and selected next subtask.                                             | `git merge --no-ff task/T-0012-11-missing-details-example-readiness`; `pnpm install`; main verification commands; parent roadmap logs.                                                                                                                                                                                                                                                                                                                                                                                                        | `T-0012.11` is integrated on `main` at merge commit `473a4b2`. Main verification passed: `pnpm check:node`, `pnpm typecheck`, `pnpm lint`, project-scope Prettier excluding unrelated untracked `human-review-1-jul.md`, escalated `pnpm test`, escalated `pnpm test:coverage`, `pnpm docs:check`, `pnpm proto:lint`, `pnpm proto:check-generated`, and `git diff --check`. Coverage: 45 files, 619 tests, branches 90.22%. Next selected subtask is `T-0012.12 To-Do Example`.      |
 | `2026-07-05 21:47 WEST` | Main orchestrator     | Integrated `T-0012.12` final example slice.                                                   | `git merge --no-ff task/T-0012-12f-runnable-server-guide`; parent to-do-example docs and roadmap logs.                                                                                                                                                                                                                                                                                                                                                                                                                                        | `T-0012.12f` is integrated on `main` at merge commit `ea2a4ab`. All planned `T-0012.12` to-do example slices are merged. Parent integration verification and review are next.                                                                                                                                                                                                                                                                                                        |
+| `2026-07-05 21:50 WEST` | Main orchestrator     | Verified `T-0012.12` parent integration.                                                      | Sequential verification after cleanup of `.generated-*` scratch folders left by a failed parallel `proto:generate` race: `pnpm check:node`, `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, `pnpm proto:check-generated`, targeted Prettier, `git diff --check HEAD`, escalated `pnpm test`, and escalated `pnpm test:coverage`.                                                                                                                                                                                                            | Verification passed on `main`: 45 test files / 651 tests; coverage 95.18% statements, 90.48% branches, 97.63% functions, 95.2% lines. Parent integration review is next.                                                                                                                                                                                                                                                                                                             |
 
 ## Current State
 
@@ -64,7 +65,7 @@ Status: T-0012.12 integrated; parent integration verification pending
 - `T-0012.10 Real gRPC Services` is integrated.
 - `T-0012.11 Missing Details And Example Readiness` is integrated.
 - Current implementable subtask is none; `T-0012.12 To-Do Example` is
-  integrated and awaiting parent integration verification/review.
+  integrated and verified, awaiting parent integration review.
 - Parent verification passed after `T-0012.1` integration.
 - Parent verification passed after `T-0012.2` integration.
 - Parent verification passed after `T-0012.3` integration.
@@ -84,5 +85,5 @@ Status: T-0012.12 integrated; parent integration verification pending
 - Parent tracked-state verification passed after `T-0012.9` integration.
 - Parent tracked-state verification passed after `T-0012.10` integration.
 - Parent tracked-state verification passed after `T-0012.11` integration.
-- Parent tracked-state verification after `T-0012.12` integration is pending.
+- Parent tracked-state verification passed after `T-0012.12` integration.
 - No blocking human question is known.

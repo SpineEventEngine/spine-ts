@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12 To-Do Example
 
-Status: T-0012.12 complete; parent integration verification pending
+Status: T-0012.12 complete; parent integration review pending
 Branch: `task/T-0012-12-to-do-example`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
@@ -141,3 +141,21 @@ Splitter re-review:
   `064a95d Merge T-0012.12e task subscriptions`.
 - `T-0012.12f` completed its implementation/review loop and was merged as
   `ea2a4ab Merge T-0012.12f runnable server guide`.
+
+Parent integration verification after `T-0012.12f`:
+
+- Initial parallel static-check attempt failed because concurrent commands each
+  invoked `pnpm proto:generate`, racing the shared generated-output publisher
+  and leaving `.generated-*` scratch directories.
+- Scratch directories created by the failed verification attempt were removed.
+- Sequential rerun passed:
+  - `pnpm check:node`
+  - `pnpm typecheck`
+  - `pnpm lint`
+  - `pnpm docs:check` with the existing invalid-origin TypeDoc warning only
+  - `pnpm proto:check-generated`
+  - targeted Prettier check
+  - `git diff --check HEAD`
+  - escalated `pnpm test`, 45 files / 651 tests
+  - escalated `pnpm test:coverage`, 45 files / 651 tests, with 95.18%
+    statements, 90.48% branches, 97.63% functions, and 95.2% lines

@@ -1,6 +1,6 @@
 # T-0012.12: To-Do Example
 
-Status: T-0012.12 complete; parent integration verification pending
+Status: T-0012.12 complete; parent integration review pending
 Start: `2026-07-05 10:53 WEST`
 End: Pending
 Baseline commit: `89868e9`
@@ -223,6 +223,15 @@ Out of scope:
   its implementation and review loop. Clean final lanes: maintainability,
   documentation, TypeScript/API docs, security, and reliability. Merged as
   `ea2a4ab Merge T-0012.12f runnable server guide`. No framework gap was found.
+- `2026-07-05 21:50 WEST`: Parent integration verification passed after
+  `T-0012.12f` merge and parent docs update. The first parallel attempt raced
+  concurrent `proto:generate` runs and left generated scratch folders; those
+  scratch folders were removed, then verification was rerun sequentially.
+  Passing commands: `pnpm check:node`, `pnpm typecheck`, `pnpm lint`,
+  `pnpm docs:check`, `pnpm proto:check-generated`, targeted Prettier,
+  `git diff --check HEAD`, escalated `pnpm test`, and escalated
+  `pnpm test:coverage` (45 files / 651 tests, 95.18% statements, 90.48%
+  branches, 97.63% functions, 95.2% lines).
 
 ## Requirements Splitter Evidence
 
