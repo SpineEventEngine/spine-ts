@@ -1,6 +1,6 @@
 # T-0012.12b: Create Task Flow
 
-Status: round-four fix committed; re-review pending
+Status: status-only fix committed; final re-review pending
 Start: `2026-07-05 13:23 WEST`
 End: Pending
 Baseline commit: `775aa47`
@@ -10,12 +10,13 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12b-create-task-flow`
 Authoring sub-agent: `019f3241-11a3-7790-ac86-15bdb454b653` (closed after
 timeout; main orchestrator inspected and amended WIP)
-Reviewer sub-agents: rounds one through five closed; round-five doc fix pending
+Reviewer sub-agents: rounds one through six closed; final re-review pending
 Implementation commit: `a784ea5`
 Review-fix commit: `2753627`
 Second-fix commit: `61acd94`
 Third-fix commit: `1dd62c8`
 Round-four-fix commit: `afe5162`
+Round-five-doc-fix commit: `e95cd02`
 Final branch HEAD: pending
 
 ## Objective
