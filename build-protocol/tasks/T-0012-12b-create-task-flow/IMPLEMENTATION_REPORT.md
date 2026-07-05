@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12b Create Task Flow
 
-Status: round-one review fixes in progress
+Status: second fix committed; affected-lane re-review pending
 Branch: `task/T-0012-12b-create-task-flow`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12b-create-task-flow`
@@ -110,3 +110,34 @@ updated.
   `pnpm exec vitest run --coverage --passWithNoTests --testTimeout=120000 --maxWorkers=1`:
   passed 45 files / 634 tests. Coverage: statements 95.19%, branches 90.52%,
   functions 97.63%, lines 95.21%.
+
+## Round-Two Review Fix Plan
+
+- Normalize snapshot aggregate IDs before persistence so snapshot record JSON
+  encoding never sees caller-provided ID objects.
+- Route repository IDs according to the repository state's ID field: scalar
+  state IDs receive finite primitives, message state IDs receive normalized
+  single-field message IDs.
+- Reject non-finite producer IDs and first-field route IDs before Stand/storage.
+- Export `PrimitiveId` and `MessageId` from `@spine-ts/server` and update the
+  API docs guard.
+- Refresh stale task/review/work status after the committed `2753627` fix pass.
+
+## Second-Fix Verification
+
+- `pnpm exec vitest run packages/server/test/repository/aggregate-storage.test.ts packages/server/test/repository/repository-routing.test.ts examples/todo/src/index.test.ts --passWithNoTests`:
+  passed 3 files / 89 tests.
+- `pnpm typecheck`: passed.
+- `pnpm lint`: passed on serial rerun. A parallel run with `pnpm typecheck`
+  failed only because concurrent `proto:generate` raced in a temporary generated
+  directory.
+- `pnpm format:check`: passed after applying Prettier to the new test/log
+  edits.
+- `pnpm docs:check`: passed with only the known invalid-origin source-link
+  warning; API docs now expect 171 `@spine-ts/server` exports.
+- `pnpm proto:check-generated`: passed.
+- `git diff --check`: passed.
+- Escalated
+  `pnpm exec vitest run --coverage --passWithNoTests --testTimeout=120000 --maxWorkers=1`:
+  passed 45 files / 637 tests. Coverage: statements 95.15%, branches 90.41%,
+  functions 97.63%, lines 95.17%.

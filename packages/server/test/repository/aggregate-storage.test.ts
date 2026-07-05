@@ -558,6 +558,45 @@ describe("AggregateStorage", () => {
     await expect(storage.readHistory(id)).rejects.toThrow(/single-field message IDs/);
   });
 
+  it("stores normalized message snapshot IDs without caller serialization", async () => {
+    const storage = new AggregateStorage<typeof ObjectIdEventSchema, NestedId>({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      stateSchema: ObjectIdEventSchema,
+      eventSchemas: [ObjectIdEventSchema],
+    });
+    const id = create(NestedIdSchema, { value: "task-json-id" });
+    Object.defineProperty(id, "toJSON", {
+      value() {
+        throw new Error("message ID toJSON must not run");
+      },
+    });
+
+    await storage.writeSnapshot({
+      aggregateId: id,
+      state: create(ObjectIdEventSchema, {
+        id: create(NestedIdSchema, { value: "task-json-id" }),
+      }),
+      version: 1n,
+      lifecycle: {
+        archived: false,
+        deleted: false,
+      },
+    });
+
+    await expect(
+      storage.readHistory(create(NestedIdSchema, { value: "task-json-id" })),
+    ).resolves.toMatchObject({
+      snapshot: {
+        aggregateId: {
+          $typeName: NestedIdSchema.typeName,
+          value: "task-json-id",
+        },
+        version: 1n,
+      },
+    });
+  });
+
   it("routes primitive producer IDs packed in wrapper messages", async () => {
     const storage = new AggregateStorage<typeof AggregateStateSchema, string | number | boolean>({
       context: { name: "Tasks", multitenant: false },
@@ -732,7 +771,7 @@ describe("AggregateStorage", () => {
           deleted: false,
         },
       }),
-    ).rejects.toThrow(/positive/);
+    ).rejects.toThrow(/single-field message IDs/);
   });
 
   it("rejects mismatched snapshot state IDs before writing", async () => {

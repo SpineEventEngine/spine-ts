@@ -1046,9 +1046,19 @@ function createRepositoryRouting<EntityType extends RepositoryEntityType>(
     commandReadiness,
     eventReadiness,
     routeCommand: (command: Command) =>
-      routeCommand<RepositoryEntityId<EntityType>>(command, commandReadiness, commandSchemas),
+      routeCommand<RepositoryEntityId<EntityType>>(
+        command,
+        commandReadiness,
+        commandSchemas,
+        metadata.idField,
+      ),
     routeEvent: (event: Event) =>
-      routeEvent<RepositoryEntityId<EntityType>>(event, eventReadiness, eventSchemas),
+      routeEvent<RepositoryEntityId<EntityType>>(
+        event,
+        eventReadiness,
+        eventSchemas,
+        metadata.idField,
+      ),
   });
 }
 
@@ -1101,6 +1111,7 @@ function routeCommand<Id>(
   command: Command,
   readiness: CommandRegistrationReadinessLookup | undefined,
   schemas: readonly MessageSchema[],
+  targetIdField: DescriptorFieldMetadata,
 ): RepositoryCommandRoute<Id> {
   const message = command.message;
   if (message === undefined || message.typeUrl === "") {
@@ -1114,7 +1125,8 @@ function routeCommand<Id>(
   }
 
   return Object.freeze({
-    entityId: readFirstFieldId(message, schema, "command") as Id,
+    entityId: readRouteId(readFirstFieldId(message, schema, "command"), targetIdField, "command")
+      .id as Id,
     messageFullTypeName: schema.typeName,
     invocation: "deferred",
   });
@@ -1124,6 +1136,7 @@ function routeEvent<Id>(
   event: Event,
   readiness: EventRegistrationReadinessLookup | undefined,
   schemas: readonly MessageSchema[],
+  targetIdField: DescriptorFieldMetadata,
 ): RepositoryEventRoute<Id> {
   const message = event.message;
   if (message === undefined || message.typeUrl === "") {
@@ -1140,7 +1153,7 @@ function routeEvent<Id>(
   }
 
   return Object.freeze({
-    entityIds: Object.freeze([readEventEntityId(event, message, schema) as Id]),
+    entityIds: Object.freeze([readEventEntityId(event, message, schema, targetIdField) as Id]),
     messageFullTypeName: schema.typeName,
     invocation: "deferred",
   });
@@ -1187,8 +1200,11 @@ function readProducerId(event: Event): string | number | boolean | undefined {
   }
 
   const unpacked = PrimitiveIds.unpack(producerId);
-  if (unpacked !== undefined) {
+  if (PrimitiveIds.readFinite(unpacked) !== undefined) {
     return unpacked;
+  }
+  if (unpacked !== undefined) {
+    throw new Error("Repository event routing requires a finite producer ID.");
   }
   throw new Error("Repository event routing requires a readable producer ID.");
 }
@@ -1197,25 +1213,73 @@ function readEventEntityId(
   event: Event,
   message: NonNullable<Event["message"]>,
   schema: MessageSchema,
+  targetIdField: DescriptorFieldMetadata,
 ): unknown {
   const producerId = readProducerId(event);
-  const fieldId = readEventFieldId(message, schema);
+  const fieldId = readEventFieldId(message, schema, targetIdField);
 
-  if (producerId !== undefined && producerId !== fieldId) {
+  if (producerId !== undefined && producerId !== fieldId.value) {
     throw new Error(
       "Repository event routing requires producer ID and first field to identify the same entity.",
     );
   }
 
-  return producerId ?? fieldId;
+  return producerId === undefined || targetIdField.descriptor.fieldKind === "message"
+    ? fieldId.id
+    : producerId;
 }
 
-function readEventFieldId(message: NonNullable<Event["message"]>, schema: MessageSchema): unknown {
-  return routableEventId(readFirstFieldId(message, schema, "event"));
+function readEventFieldId(
+  message: NonNullable<Event["message"]>,
+  schema: MessageSchema,
+  targetIdField: DescriptorFieldMetadata,
+): RoutableId {
+  return readRouteId(readFirstFieldId(message, schema, "event"), targetIdField, "event");
 }
 
-function routableEventId(value: unknown): unknown {
-  return MessageIds.readValue(value) ?? value;
+interface RoutableId {
+  readonly id: unknown;
+  readonly value: string | number | boolean;
+}
+
+function readRouteId(
+  value: unknown,
+  targetIdField: DescriptorFieldMetadata,
+  signalKind: "command" | "event",
+): RoutableId {
+  if (targetIdField.descriptor.fieldKind === "message") {
+    return readMessageRouteId(value, signalKind);
+  }
+  return readPrimitiveRouteId(value, signalKind);
+}
+
+function readMessageRouteId(value: unknown, signalKind: "command" | "event"): RoutableId {
+  const id = MessageIds.read(value);
+  if (id === undefined) {
+    throw new Error(
+      `Repository ${signalKind} routing requires a finite primitive or single-field message ID.`,
+    );
+  }
+
+  return Object.freeze({
+    id,
+    value: id.value,
+  });
+}
+
+function readPrimitiveRouteId(value: unknown, signalKind: "command" | "event"): RoutableId {
+  const messageValue = MessageIds.readValue(value);
+  const id = PrimitiveIds.readFinite(messageValue ?? value);
+  if (id === undefined) {
+    throw new Error(
+      `Repository ${signalKind} routing requires a finite primitive or single-field message ID.`,
+    );
+  }
+
+  return Object.freeze({
+    id,
+    value: id,
+  });
 }
 
 function createRepositorySnapshot<EntityType extends RepositoryEntityType>(

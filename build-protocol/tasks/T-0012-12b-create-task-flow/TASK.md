@@ -1,6 +1,6 @@
 # T-0012.12b: Create Task Flow
 
-Status: round-one review fixes in progress
+Status: second fix committed; affected-lane re-review pending
 Start: `2026-07-05 13:23 WEST`
 End: Pending
 Baseline commit: `775aa47`
@@ -12,6 +12,8 @@ Authoring sub-agent: `019f3241-11a3-7790-ac86-15bdb454b653` (closed after
 timeout; main orchestrator inspected and amended WIP)
 Reviewer sub-agents: round-one closed; re-review pending
 Implementation commit: `a784ea5`
+Review-fix commit: `2753627`
+Second-fix commit: `91ed083`
 Final branch HEAD: pending
 
 ## Objective
@@ -110,6 +112,19 @@ Out of scope:
   `pnpm proto:check-generated`, `git diff --check`, and escalated coverage
   (45 files / 634 tests; statements 95.19%, branches 90.52%, functions 97.63%,
   lines 95.21%).
+- `2026-07-05 15:17 WEST`: Round-two re-review of `2753627` found stale
+  post-commit docs/log status, a message-ID repository route type/runtime
+  mismatch, missing package-root exports for `PrimitiveId`/`MessageId`, snapshot
+  ID persistence before normalization, and non-finite repository route IDs. A
+  second fix pass is in progress.
+- `2026-07-05 15:20 WEST`: Second-fix verification passed: focused storage,
+  routing, and example tests (3 files / 89 tests), `pnpm typecheck`, serial
+  `pnpm lint`, `pnpm format:check`, `pnpm docs:check`,
+  `pnpm proto:check-generated`, `git diff --check`, and escalated coverage
+  (45 files / 637 tests; statements 95.15%, branches 90.41%, functions 97.63%,
+  lines 95.17%). A parallel lint attempt failed only because concurrent
+  `proto:generate` raced another check; serial lint passed.
+- `2026-07-05 15:20 WEST`: Second-fix commit `91ed083` created.
 
 ## Decisions
 

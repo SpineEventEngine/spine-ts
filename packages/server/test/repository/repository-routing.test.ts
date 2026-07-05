@@ -27,6 +27,15 @@ import {
 } from "@spine-ts/proto";
 import type { UserId } from "@spine-ts/proto/generated/spine/core/user_id_pb.js";
 import {
+  TaskCreatedSchema,
+  type TaskCreated,
+} from "../../../../examples/todo/generated/spine/example/todo/v1/task_events_pb.js";
+import {
+  TaskIdSchema,
+  type TaskId,
+} from "../../../../examples/todo/generated/spine/example/todo/v1/task_id_pb.js";
+import { TaskSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/tasks_pb.js";
+import {
   EventStore,
   InMemoryStorageFactory,
   RecordStorage,
@@ -522,6 +531,12 @@ class ReactingTaskProjection extends Projection<string, typeof ProjectionStateSc
 
 class UserIdProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   subscribeUser(event: UserId): void {
+    void event;
+  }
+}
+
+class MessageIdTaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
+  applyTaskCreated(event: TaskCreated): void {
     void event;
   }
 }
@@ -1337,6 +1352,31 @@ describe("repository signal routing", () => {
     });
   });
 
+  it("routes message-valued event IDs as messages when the entity ID field is a message", () => {
+    const repository = createMessageIdTaskRepository();
+    const taskId = create(TaskIdSchema, { value: "message-id-task" });
+    const route = repository.routeEvent(
+      packEvent({
+        id: create(EventIdSchema, { value: "event-message-id-task" }),
+        context: create(EventContextSchema, {
+          version: create(VersionSchema, { number: 1 }),
+        }),
+        schema: TaskCreatedSchema,
+        message: create(TaskCreatedSchema, {
+          id: taskId,
+          title: "Message ID task",
+        }),
+      }),
+    );
+
+    expect(route).toMatchObject({
+      entityIds: [taskId],
+      messageFullTypeName: TaskCreatedSchema.typeName,
+      invocation: "deferred",
+    });
+    expectTypeOf(route.entityIds).toEqualTypeOf<readonly TaskId[]>();
+  });
+
   it("executes projection event subscribers and records latest state in Stand", async () => {
     ExecutingTaskProjection.reset();
     const context = BoundedContext.singleTenant("Tasks")
@@ -1688,6 +1728,18 @@ describe("repository signal routing", () => {
     ).toThrow(/readable producer ID/);
   });
 
+  it("rejects non-finite producer IDs", () => {
+    const repository = createRoutingRepository();
+
+    expect(() =>
+      repository.routeEvent(
+        createProjectionEvent("event-non-finite-producer", "first-field-task", {
+          producerNumber: Number.NaN,
+        }),
+      ),
+    ).toThrow(/finite producer ID/);
+  });
+
   it("rejects invalid repository events before context event storage", async () => {
     const factory = new InMemoryStorageFactory();
     const repository = createRoutingRepository();
@@ -1815,6 +1867,18 @@ function createUserIdProjectionRepository(): Repository<typeof UserIdProjection>
   return new Repository({
     entityType: UserIdProjection,
     schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
+function createMessageIdTaskRepository(): Repository<typeof MessageIdTaskAggregate> {
+  const handlers = defineEntityHandlers(MessageIdTaskAggregate, TaskSchema, (builder) => [
+    builder.apply(TaskCreatedSchema, "applyTaskCreated"),
+  ]);
+
+  return new Repository({
+    entityType: MessageIdTaskAggregate,
+    schema: TaskSchema,
     handlers,
   });
 }
@@ -2230,6 +2294,7 @@ function createProjectionEvent(
   entityId: string,
   options: {
     readonly producerId?: string;
+    readonly producerNumber?: number;
     readonly producerMessage?: AggregateState;
     readonly importTenantId?: string;
     readonly pastMessageTenantId?: string;
@@ -2296,10 +2361,14 @@ function createTenantId(value: string) {
 
 function projectionProducerId(options: {
   readonly producerId?: string;
+  readonly producerNumber?: number;
   readonly producerMessage?: AggregateState;
 }) {
   if (options.producerMessage !== undefined) {
     return packAny(AggregateStateSchema, options.producerMessage);
+  }
+  if (options.producerNumber !== undefined) {
+    return packAny(DoubleValueSchema, create(DoubleValueSchema, { value: options.producerNumber }));
   }
   if (options.producerId !== undefined) {
     return packAny(UserIdSchema, create(UserIdSchema, { value: options.producerId }));

@@ -164,6 +164,7 @@ export {
   type AggregateSnapshot,
   type AggregateStorageOptions,
 } from "./repository/aggregate-storage.js";
+export { type MessageId, type PrimitiveId } from "./repository/primitive-id.js";
 
 export {
   type ConcreteRepositoryEntityType,

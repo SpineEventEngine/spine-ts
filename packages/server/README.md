@@ -62,7 +62,8 @@ Current slice exposes:
   and
 - `AggregateStorage` for the current finite primitive or single-field
   Protobuf message `AggregateId` snapshot/history seam, backed by
-  `StorageFactory`, `RecordStorage`, and `EventStore`;
+  `StorageFactory`, `RecordStorage`, and `EventStore`; `PrimitiveId` and
+  `MessageId` expose the accepted public ID shapes;
   and
 - `Delivery`, `Inbox`, `InboxStorage`, `ShardIndex`, `ShardSession`, and
   `ShardedWorkRegistry` for the first durable delivery slice: inbox writes with

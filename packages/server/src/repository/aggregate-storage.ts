@@ -110,13 +110,14 @@ export class AggregateStorage<
 
   /** Store or replace the latest snapshot for one aggregate. */
   async writeSnapshot(snapshot: AggregateSnapshot<Schema, Id>): Promise<void> {
-    this.#validateSnapshot(snapshot.aggregateId, snapshot.state, snapshot.version);
+    const aggregateId = requireAggregateId(snapshot.aggregateId);
+    this.#validateSnapshot(aggregateId, snapshot.state, snapshot.version);
     const storage = this.#snapshotStorage(snapshotStorageContext(this.#context));
 
     try {
       await storage.write(
         createSnapshotRecord({
-          aggregateId: snapshot.aggregateId,
+          aggregateId,
           stateTypeUrl: this.#stateTypeUrl,
           state: toBinary(this.#stateSchema, snapshot.state, { writeUnknownFields: false }),
           version: snapshot.version,
@@ -288,7 +289,7 @@ export class AggregateStorage<
     return readAggregateId((state as Record<string, unknown>)[firstField.localName]);
   }
 
-  #validateSnapshot(aggregateId: Id, state: MessageShape<Schema>, version: bigint): void {
+  #validateSnapshot(aggregateId: AggregateId, state: MessageShape<Schema>, version: bigint): void {
     if (version <= 0n) {
       throw new Error(
         `Aggregate snapshot for "${formatAggregateId(aggregateId)}" must have a positive version.`,
