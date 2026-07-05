@@ -1,6 +1,6 @@
 # T-0012.12f: Runnable Server And Guide
 
-Status: latest metadata correction committed; review latest commit
+Status: task review clean; final verification pending
 Start: `2026-07-05 20:59 WEST`
 End: Pending
 Baseline commit: `230452d`
@@ -8,14 +8,13 @@ Setup commit: `21c3c27`
 Implementation commit: `995e842`
 Review-fix commit: `9872e7d`
 Metadata follow-up commit: `21470bc`
-Metadata state correction commit: latest branch commit
+Metadata state correction commit: `fe46d2a`
 Task log path: `build-protocol/tasks/T-0012-12f-runnable-server-guide/TASK.md`
 Branch: `task/T-0012-12f-runnable-server-guide`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12f-runnable-server-guide`
 Authoring sub-agent: `019f33cd-dfd0-7c73-bb58-60b7e5045c5d` (closed)
-Reviewer sub-agents: round 1 complete and closed; round 2 and round 3 found
-metadata-only follow-up comments; round 4 found current-state comments
+Reviewer sub-agents: all task review rounds complete and closed
 
 ## Objective
 
@@ -124,6 +123,7 @@ Out of scope:
   metadata is too easy to stale while producing follow-up commits. The latest
   branch commit records the fix: future metadata-correction reviews should use
   `HEAD~1..HEAD` until the correction is accepted.
+- Round 5 re-review of `1dc0969..fe46d2a` was clean across all five lanes.
 
 ## Setup Verification
 
@@ -206,7 +206,8 @@ Out of scope:
 ## Latest Metadata Correction Verification
 
 - Correction commit before this one: `1dc0969`.
-- Current correction: latest branch commit.
-- Review target for this correction: `HEAD~1..HEAD`.
+- Current correction: `fe46d2a`.
+- Review package: `.superpowers/sdd/review-1dc0969..fe46d2a.diff`.
 - Changed-log Prettier check passed before commit.
 - `git diff --check` passed before commit.
+- Five-lane re-review was clean.
