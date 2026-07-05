@@ -6,7 +6,7 @@ Baseline commit: `89868e9`
 Reviewed commit/diff basis: Pending
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
-Status: splitting in progress
+Status: split complete; splitter review pending
 
 ## Required Review Lanes
 
@@ -18,8 +18,36 @@ Status: splitting in progress
 
 ## Splitter Review
 
-Pending.
+Pending independent review of the requirements split.
+
+Splitter output summary:
+
+- First selected slice:
+  `T-0012.12a Todo Proto Generation`
+- Proposed branch:
+  `task/T-0012-12a-todo-proto`
+- Proposed worktree:
+  `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12a-todo-proto`
+- Roadmap slices:
+  `T-0012.12a Todo Proto Generation`,
+  `T-0012.12b Create Task Flow`,
+  `T-0012.12c Task Operations`,
+  `T-0012.12d Validation And Refusal`,
+  `T-0012.12e Task Subscriptions`, and
+  `T-0012.12f Runnable Server And Guide`.
+
+Review focus for splitter review:
+
+- Confirm the split satisfies `TODO_EXAMPLE_SPEC.md` without implementing code
+  in the splitting assignment.
+- Confirm each slice has acceptance criteria, verification, branch/worktree
+  names, and small enough scope for one implementation sub-agent plus the five
+  required review lanes.
+- Confirm any future `@spine-ts/server` gap is routed before dependent example
+  work and carries the Spine JVM server-source/docs guardrail.
+- Confirm generated Protobuf-ES output under `examples/todo/generated/` is
+  planned as ignored/regenerated rather than committed.
 
 ## Implementation Review Rounds
 
-Pending split.
+Pending implementation slices.
