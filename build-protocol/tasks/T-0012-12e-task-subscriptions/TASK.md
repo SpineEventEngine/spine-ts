@@ -136,6 +136,17 @@ Out of scope:
   - `pnpm docs:check` passed.
   - `pnpm proto:check-generated` passed.
   - `git diff --check` passed.
+- GREEN:
+  - `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+    passed after the test/doc updates.
+- GREEN:
+  - `pnpm typecheck` passed.
+  - `pnpm lint` passed.
+  - `pnpm exec prettier --check examples/todo/src/index.test.ts examples/todo/README.md examples/todo/USER_GUIDE.md build-protocol/tasks/T-0012-12e-task-subscriptions/TASK.md build-protocol/tasks/T-0012-12e-task-subscriptions/IMPLEMENTATION_REPORT.md build-protocol/reviews/T-0012-12-to-do-example.md build-protocol/work-logs/T-0012-12.md`
+    passed.
+  - `pnpm docs:check` passed.
+  - `pnpm proto:check-generated` passed.
+  - `git diff --check` passed.
 - FINAL:
   - `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
     passed, 1 file / 14 tests.
@@ -149,17 +160,6 @@ Out of scope:
     `127.0.0.1` listeners are denied with `EPERM`; escalated
     `pnpm test:coverage` passed, 45 files / 650 tests, with 95.18% statements,
     90.48% branches, 97.63% functions, and 95.2% lines.
-- GREEN:
-  - `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
-    passed after the test/doc updates.
-- GREEN:
-  - `pnpm typecheck` passed.
-  - `pnpm lint` passed.
-  - `pnpm exec prettier --check examples/todo/src/index.test.ts examples/todo/README.md examples/todo/USER_GUIDE.md build-protocol/tasks/T-0012-12e-task-subscriptions/TASK.md build-protocol/tasks/T-0012-12e-task-subscriptions/IMPLEMENTATION_REPORT.md build-protocol/reviews/T-0012-12-to-do-example.md build-protocol/work-logs/T-0012-12.md`
-    passed.
-  - `pnpm docs:check` passed.
-  - `pnpm proto:check-generated` passed.
-  - `git diff --check` passed.
 
 ## Setup Baseline
 
