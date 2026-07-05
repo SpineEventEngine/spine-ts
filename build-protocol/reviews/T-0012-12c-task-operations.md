@@ -8,10 +8,10 @@ commit `3ee5c1a`; metadata-fix commit `b6495bb`; status-fix commit `6fea638`
 ; restart-guidance-fix commit `7ed30a3`; post-restart-status commit `2cb0cf8`
 ; round-seven-status commit `05bceb5`; round-eight-status commit `85909a7`;
 round-nine-status commit `f4d48e2`; round-ten-status commit `c098f0c`;
-round-eleven-status commit `67f6625`
+round-eleven-status commit `67f6625`; closure-verification commit `166680e`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
-Status: final verification complete; closure-log review pending
+Status: closure restart-guidance fixed; re-review pending
 
 ## Required Review Lanes
 
@@ -275,3 +275,23 @@ Findings:
 Planned fix:
 
 - None. Proceed to final verification and closure-log review.
+
+### Round 13 - `166680e`
+
+| Lane                       | Agent                                  | Result   |
+| -------------------------- | -------------------------------------- | -------- |
+| code style/maintainability | `019f3314-faa3-7c22-9d61-0f5f74da11ba` | Comments |
+| documentation              | `019f3314-fb42-7563-a798-d5f56d592daf` | Comments |
+| TypeScript/API docs        | `019f3314-fbb1-74c1-9649-e50de7183f78` | Comments |
+| security                   | `019f3314-fc3a-7ec2-bd61-62994600751f` | Clean    |
+| performance/reliability    | `019f3314-fcd9-76f3-9b7d-91448f706732` | Comments |
+
+Findings:
+
+- Work-log restart guidance still said to commit the closure-log update even
+  though `166680e` was already that committed update.
+
+Planned fix:
+
+- Record `166680e` as the committed closure verification and point current state
+  to review of this restart-guidance correction before merge.

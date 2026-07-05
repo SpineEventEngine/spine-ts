@@ -1,6 +1,6 @@
 # T-0012.12c: Task Operations
 
-Status: final verification complete; closure-log review pending
+Status: closure restart-guidance fixed; re-review pending
 Start: `2026-07-05 16:12 WEST`
 End: `2026-07-05 16:21 WEST`
 Baseline commit: `fc71408`
@@ -9,7 +9,7 @@ Branch: `task/T-0012-12c-task-operations`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
 Authoring sub-agent: `019f32d6-a303-7480-b4b9-d30a3da75ea1`
-Reviewer sub-agents: rounds one through twelve closed; closure-log review pending
+Reviewer sub-agents: rounds one through thirteen closed; re-review pending
 Implementation commit: `8ab4b5c`
 Review-fix commit: `3ee5c1a`
 Metadata-fix commit: `b6495bb`
@@ -21,6 +21,7 @@ Round-eight-status commit: `85909a7`
 Round-nine-status commit: `f4d48e2`
 Round-ten-status commit: `c098f0c`
 Round-eleven-status commit: `67f6625`
+Closure-verification commit: `166680e`
 Final branch HEAD: pending
 
 ## Objective
