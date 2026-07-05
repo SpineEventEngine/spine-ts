@@ -503,12 +503,15 @@ command is posted through `CommandService.Post`, the returned `Ack` carries the
 refusal type and message rather than generic `COMMAND_POST_ERROR`. Invalid
 payloads instead return `COMMAND_VALIDATION_ERROR` with message `Command
 payload validation failed.` and packed `spine.validation.ValidationError`
-details. State-transition validation remains owned by
-`EntityTransaction.commit()` and `validateEntityStateTransition()`. If an
-aggregate event applier commits a rejected transition, command execution stops
-before storing produced events or snapshots and `CommandService.Post` returns
-`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with message `Command state
-transition validation failed.` plus packed `ValidationError` details.
+details. Dispatcher-thrown `ValidationException` values and other unexpected
+command-bus failures remain sanitized as `COMMAND_POST_ERROR`. State-transition
+validation remains owned by `EntityTransaction.commit()` and
+`validateEntityStateTransition()`. If an aggregate event applier commits a
+rejected transition, command execution stops before storing produced events or
+snapshots and `CommandService.Post` returns
+`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with message
+`Command state transition validation failed.` plus packed `ValidationError`
+details.
 
 ## Direct Stand
 

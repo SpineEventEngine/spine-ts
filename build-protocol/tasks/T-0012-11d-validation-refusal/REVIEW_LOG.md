@@ -6,7 +6,7 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-3 fixes verified; ready for round-4 independent review
+Status: round-4 docs-only fixes verified; ready for round-5 independent review
 
 ## Required Lanes
 
@@ -14,8 +14,8 @@ Status: round-3 fixes verified; ready for round-4 independent review
 - documentation: docs check passed
 - TypeScript/API docs: typecheck and docs check passed
 - security: round-2 finding fixed and verified
-- performance/reliability: round-2 review clean; focused behavior tests and
-  coverage passed; sandbox coverage blocked by local endpoint permissions only
+- performance/reliability: round-3 finding fixed and verified; round-4 review
+  clean; sandbox coverage blocked by local endpoint permissions only
 
 ## Findings
 
@@ -126,3 +126,21 @@ Status: round-3 fixes verified; ready for round-4 independent review
   with 3 files and 6 selected tests. `pnpm typecheck`, `pnpm lint`,
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check` all passed
   after the third fix pass.
+
+### Round 4
+
+- `2026-07-05 05:58 WEST`: Code style and documentation found docs-only drift:
+  `IMPLEMENTATION_REPORT.md` still described round 3 as in progress, public
+  contract docs did not all state that dispatcher-thrown `ValidationException`
+  values stay sanitized as `COMMAND_POST_ERROR`, and the required-lanes rollup
+  still mentioned a round-2 reliability state.
+- `2026-07-05 05:59 WEST`: TypeScript/API docs, security, and
+  performance/reliability lanes were clean.
+
+## Round-4 Fix Pass
+
+- `2026-07-05 06:01 WEST`: Orchestrator updated public docs with the sanitized
+  dispatcher-exception sentence, changed the implementation report round-3
+  summary to past tense, and refreshed the review-log lane rollup.
+- `2026-07-05 06:04 WEST`: Docs-only verification passed:
+  `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.

@@ -496,7 +496,9 @@ message instead of `COMMAND_POST_ERROR`. If an event applier commits a
 transaction rejected by entity transition validation, command execution rejects
 with `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced events
 or snapshots; the validation details remain the
-`EntityTransaction`/`validateEntityStateTransition()` result.
+`EntityTransaction`/`validateEntityStateTransition()` result. Dispatcher-thrown
+`ValidationException` values and other unexpected command-bus failures remain
+sanitized as `COMMAND_POST_ERROR`.
 Aggregate command completion resolves after aggregate event storage and
 snapshot handling even though already-stored event redispatch continues
 asynchronously. If that later redispatch fails in dispatcher acceptance,

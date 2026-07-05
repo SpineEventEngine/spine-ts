@@ -45,7 +45,8 @@ aggregate dispatchers, validation still happens before route calculation,
 aggregate history load, event append, snapshot write, or stored-event dispatch.
 Transition validation failures from repository aggregate appliers continue to
 surface as `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed
-`ValidationError` details.
+`ValidationError` details. Dispatcher-thrown `ValidationException` values and
+other unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
 The public entry points mirror Spine JVM's
 `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
 `ContextSpec` remains a framework-owned immutable value surfaced through
