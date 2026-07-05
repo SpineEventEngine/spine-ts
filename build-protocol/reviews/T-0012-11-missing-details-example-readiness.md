@@ -1,6 +1,6 @@
 # Review Log: T-0012.11 Missing Details And Example Readiness
 
-Status: split complete; T-0012.11a merged and parent-verified; T-0012.11b round-5 fixes verified
+Status: T-0012.11a and T-0012.11b merged and parent-verified; T-0012.11c next
 Task log:
 `build-protocol/tasks/T-0012-11-missing-details-example-readiness/TASK.md`
 Branch: `task/T-0012-11-missing-details-example-readiness`
@@ -56,19 +56,17 @@ addressed in the task, report, parent docs, and work logs. `T-0012.11a` has
 since completed implementation review, merged into this parent branch at
 `1a7b6c8`, and passed parent verification.
 
-`T-0012.11b Projection Event Updates` is active in its child worktree. Initial
-implementation and review-fix rounds 1 through 3 passed child verification.
-Round-2 fixes covered the stored-event redispatch reliability gap. Round-3
-fixes covered tenant/security, bounded diagnostics, internal naming, and
-public/API docs. Round 4 attempted to close the residual no-id command tenant
-routing gap by binding command context without a command message ID. Round 5
-replaces that with the protobuf-contract-safe rule: aggregate command execution
-rejects missing `command.id` before events are bound, applied, or stored.
-Post-storage command completion remains resolved, later redispatch failures are
-observable through `BoundedContext.storedEventDispatchFailures()`, and no
-retry/catch-up/delivery worker scope was added. Round-5 child verification
-passed, including escalated coverage with 45 files and 580 tests; sandboxed
-coverage remains blocked only by local endpoint permissions.
+`T-0012.11b Projection Event Updates` is merged into this parent branch at
+`cb46983`. Final child review and parent verification passed. The slice keeps
+post-storage command completion resolved, records later redispatch failures
+through `BoundedContext.storedEventDispatchFailures()`, executes projection
+subscribers through delivered events and `Stand`, and rejects aggregate command
+execution without `command.id` before mutation/storage. Parent verification
+passed after merge, including escalated coverage with 45 files and 580 tests;
+sandboxed service/coverage runs remain blocked only by local endpoint
+permissions.
+
+`T-0012.11c Projection List Queries` is next.
 
 ## Round-2 Findings Summary
 

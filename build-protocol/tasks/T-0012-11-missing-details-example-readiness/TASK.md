@@ -1,6 +1,6 @@
 # T-0012.11: Missing Details And Example Readiness
 
-Status: split complete; T-0012.11a merged and parent-verified; T-0012.11b round-5 fixes verified
+Status: T-0012.11a and T-0012.11b merged and parent-verified; T-0012.11c next
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -137,23 +137,17 @@ Resumed-state note:
   `git diff --check HEAD^..HEAD`, and escalated `pnpm test:coverage` (45 files,
   564 tests; statements 94.85%, branches 90.03%, functions 97.33%, lines
   94.87%).
-- `T-0012.11b` is active in its child worktree. Initial implementation,
-  round-1 review fixes, round-2 reliability/docs fixes, and round-3
-  security/diagnostics/docs fixes are verified. The round-2 pass adds
-  observable `BoundedContext.storedEventDispatchFailures()` diagnostics for
-  asynchronous already-stored event redispatch failures while keeping aggregate
-  command completion resolved after storage/snapshot handling and avoiding
-  retry/catch-up/delivery scope. The round-3 pass binds aggregate-produced
-  event origin to the command tenant and makes diagnostics bounded and
-  snapshot-only. Round 4 attempted to support ID-less aggregate commands by
-  binding command context without a command message ID, but round 5 found that
-  was not protobuf-contract-safe because `Origin.message` is required. The
-  round-5 resolution rejects aggregate command execution when `command.id` is
-  missing before events are bound, applied, or stored; the no-id tenant
-  regression now expects rejection and no tenant-a or tenant-b projection write.
-  Round-5 child verification passed, including escalated coverage with 45 files
-  and 580 tests; sandboxed coverage remains blocked only by local endpoint
-  permissions.
+- `T-0012.11b` is merged into this parent branch at `cb46983`. It executes
+  projection subscribers from delivered events, writes changed projection state
+  through context-owned `Stand`, records bounded stored-event redispatch
+  diagnostics, and rejects aggregate command execution without `command.id`
+  before mutation/storage. Parent verification passed after the merge: focused
+  repository/service tests (2 files, 63 tests), `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `pnpm docs:check`, `git diff --check`, and escalated
+  `pnpm test:coverage` (45 files, 580 tests; branches 90.04%). Sandboxed
+  service/coverage runs remain blocked only by local endpoint permissions.
+- The next selected implementation slice is `T-0012.11c Projection List
+Queries`.
 
 ## Staged Subtasks
 
@@ -278,12 +272,12 @@ Why it blocks `T-0012.12` or real framework workflow:
 
 Current state:
 
-- `T-0012.11b` implementation and round-1 review fixes passed focused and full
-  verification in the child worktree.
-- Round-2 review fixes are verified for stored-event redispatch failure
-  diagnostics and stale parent status text. Escalated coverage passed with 45
-  files and 576 tests; sandboxed coverage remains blocked only by local
-  endpoint permissions.
+- `T-0012.11b` is merged into this parent branch at `cb46983`.
+- Parent verification passed after merge: focused repository/service tests,
+  typecheck, lint, format, docs, diff whitespace, and escalated coverage with
+  45 files and 580 tests.
+- Sandboxed service/coverage runs remain blocked only by local endpoint
+  permissions.
 
 ### T-0012.11c Projection List Queries
 

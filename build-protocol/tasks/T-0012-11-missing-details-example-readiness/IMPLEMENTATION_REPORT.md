@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11 Missing Details And Example Readiness
 
-Status: split complete; T-0012.11a merged and parent-verified; T-0012.11b round-5 fixes verified
+Status: T-0012.11a and T-0012.11b merged and parent-verified; T-0012.11c next
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -80,18 +80,14 @@ tests (5 files, 62 tests), `pnpm docs:check`, `pnpm typecheck`, `pnpm lint`,
 94.87%). Sandboxed coverage remains blocked only by local IPC/HTTP2 endpoint
 permissions.
 
-`T-0012.11b Projection Event Updates` is active in the child worktree. Its
-initial implementation and review-fix rounds 1 through 3 passed focused and
-full verification. The round-2 pass records asynchronous already-stored event
-redispatch failures through `BoundedContext.storedEventDispatchFailures()`
-without changing aggregate command completion after storage/snapshot handling
-or adding retry/catch-up delivery behavior. The round-3 pass binds
-aggregate-produced event origin to the command tenant, stores bounded frozen
-diagnostic error snapshots, and fixes public/API docs. Round 4 attempted to
-close the ID-less command tenant gap by binding command context without a
-command message ID. Round 5 replaces that with the contract-safe behavior:
-aggregate command execution rejects missing `command.id` before events are
-bound, applied, or stored, and the no-id tenant regression expects no tenant-a
-or tenant-b projection write. Round-5 verification passed, including escalated
-coverage with 45 files and 580 tests; sandboxed coverage remains blocked only
-by local endpoint permissions.
+`T-0012.11b Projection Event Updates` is merged into this parent branch at
+`cb46983`. It adds projection subscriber execution from delivered events,
+read-side `Stand` updates, bounded stored-event redispatch diagnostics, and the
+contract-safe aggregate `command.id` requirement before mutation/storage. Parent
+verification passed after the merge: focused repository/service tests (2 files,
+63 tests), `pnpm typecheck`, `pnpm lint`, `pnpm format:check`,
+`pnpm docs:check`, `git diff --check`, and escalated `pnpm test:coverage` (45
+files, 580 tests; branches 90.04%). Sandboxed service/coverage runs remain
+blocked only by local endpoint permissions.
+
+`T-0012.11c Projection List Queries` is the next implementation slice.
