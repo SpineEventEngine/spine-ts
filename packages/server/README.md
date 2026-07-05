@@ -466,6 +466,8 @@ inspection. Repository state schemas are also registered with the context-owned
 `stand()` as known state types.
 Repeated `add(repository)` calls before `build()` are idempotent.
 Registering the same repository instance with another built context is rejected.
+Aggregate command execution requires `command.id` so produced events can carry
+a contract-valid command origin; missing IDs reject before mutation or storage.
 Aggregate command completion resolves after aggregate event storage and
 snapshot handling even though already-stored event redispatch continues
 asynchronously. If that later redispatch fails in dispatcher acceptance,

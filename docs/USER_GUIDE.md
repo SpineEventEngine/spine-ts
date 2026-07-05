@@ -445,6 +445,8 @@ persist history and snapshots through `AggregateStorage`, and queue
 already-stored events for event-bus delivery. Projection repositories can
 consume delivered domestic events, invoke matching event subscribers, and write
 changed state through `Stand`.
+Aggregate command execution requires `command.id` so produced events can carry
+a contract-valid command origin; missing IDs reject before mutation or storage.
 
 ## Bounded Context Assembly
 

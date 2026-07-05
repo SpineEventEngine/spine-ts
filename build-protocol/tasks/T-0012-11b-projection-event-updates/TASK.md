@@ -127,3 +127,6 @@ events update read-side projection state through `Stand`.
   verification passed. Sandboxed `pnpm test:coverage` still fails only on local
   IPC/listen permissions; escalated coverage passed with 45 files and 580
   tests.
+- Round-6 cleanup documents the public `command.id` requirement for aggregate
+  command execution and makes the past-message test fixture contract-valid by
+  including required `Origin.message`.

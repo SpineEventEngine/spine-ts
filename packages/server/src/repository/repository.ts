@@ -226,10 +226,12 @@ export class RepositoryIdentityError extends Error {
  * authentic explicit aggregate handler metadata, the built context can also
  * execute aggregate commands through repository-owned assignees and appliers,
  * persist aggregate history and snapshots through `AggregateStorage`, and hand
- * already-stored events to the event bus. With authentic projection subscriber
- * metadata, built contexts can also execute projection subscribers and write
- * changed projection state through the context-owned `Stand`. The repository
- * surface still does not expose direct entity lookup/storage APIs,
+ * already-stored events to the event bus. Aggregate command execution requires
+ * `command.id` so produced events can carry a contract-valid command origin;
+ * missing IDs reject before mutation or storage. With authentic projection
+ * subscriber metadata, built contexts can also execute projection subscribers
+ * and write changed projection state through the context-owned `Stand`. The
+ * repository surface still does not expose direct entity lookup/storage APIs,
  * inbox/delivery management, caches, lifecycle monitors, or transport startup.
  *
  * @typeParam EntityType - A single concrete aggregate, projection, or process-manager constructor

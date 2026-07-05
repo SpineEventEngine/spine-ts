@@ -54,10 +54,12 @@ state schemas known to the context `Stand`. Repositories with authentic explicit
 handler metadata still expose route-only `routeCommand()` / `routeEvent()`
 calculations, and built contexts install internal repository dispatcher adapters
 that execute aggregate command assignees and appliers, and execute projection
-subscribers. Aggregate command completion resolves after aggregate event
-storage and snapshot handling; later already-stored event redispatch failures
-are observable through the copy-safe `storedEventDispatchFailures()` diagnostic
-snapshot on the owning `BoundedContext`. This slice does not create default
+subscribers. Aggregate command execution requires `command.id` so produced
+events can carry a contract-valid command origin; missing IDs reject before
+mutation or storage. Aggregate command completion resolves after aggregate
+event storage and snapshot handling; later already-stored event redispatch
+failures are observable through the copy-safe `storedEventDispatchFailures()`
+diagnostic snapshot on the owning `BoundedContext`. This slice does not create default
 repositories from entity classes,
 invoke query/process handlers, manage inboxes/delivery, run cache catch-up,
 create system contexts, write tenant indexes, expose a broad server lifecycle,

@@ -8,7 +8,7 @@ import {
   FileDescriptorSetSchema,
   StringValueSchema,
 } from "@bufbuild/protobuf/wkt";
-import { packAny, packCommand, packEvent, unpackAny } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packCommand, packEvent, unpackAny } from "@spine-ts/core";
 import {
   ActorContextSchema,
   CommandSchema,
@@ -18,6 +18,7 @@ import {
   EventContextSchema,
   EventIdSchema,
   EventSchema,
+  MessageIdSchema,
   OriginSchema,
   TenantIdSchema,
   UserIdSchema,
@@ -1691,6 +1692,10 @@ function projectionEventOrigin(options: {
     return {
       case: "pastMessage" as const,
       value: create(OriginSchema, {
+        message: create(MessageIdSchema, {
+          id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
+          typeUrl: deriveTypeUrl(AggregateStateSchema),
+        }),
         actorContext: create(ActorContextSchema, {
           tenantId: createTenantId(options.pastMessageTenantId),
         }),

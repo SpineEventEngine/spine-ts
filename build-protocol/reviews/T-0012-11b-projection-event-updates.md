@@ -74,3 +74,6 @@ Reviewers must verify:
   `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, `git diff --check`, and
   escalated `pnpm test:coverage` with 45 files and 580 tests. Sandboxed
   coverage still fails only on local IPC/listen permissions.
+- Round-6 cleanup addresses final documentation/API review comments by
+  documenting the public aggregate `command.id` requirement and making the
+  past-message test fixture include required `Origin.message`.

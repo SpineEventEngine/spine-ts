@@ -231,3 +231,8 @@ that updates `Stand` after a projection subscriber mutates projection state.
     reported `listen EPERM 127.0.0.1`.
   - Escalated `pnpm test:coverage` passed with 45 files and 580 tests; coverage
     summary: statements 94.97%, branches 90.04%, functions 97.5%, lines 95%.
+- Round-6 cleanup documents that aggregate command execution requires
+  `command.id` and makes the past-message test fixture include required
+  `Origin.message`. Focused repository tests, `pnpm typecheck`,
+  `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, and
+  `git diff --check` passed.
