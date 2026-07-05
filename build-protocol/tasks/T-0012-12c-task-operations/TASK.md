@@ -10,7 +10,7 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
 Authoring sub-agent: `019f32d6-a303-7480-b4b9-d30a3da75ea1`
 Reviewer sub-agents: pending
-Implementation commit: pending
+Implementation commit: `8ab4b5c`
 Final branch HEAD: pending
 
 ## Objective
