@@ -382,3 +382,11 @@ Status: round-15 durable-log/status fixes verified; ready for follow-up review
   directly to include round-14 docs/status verification and the follow-up child
   status alignment, then recorded this pass in the child durable logs. Docs,
   format, and whitespace verification passed.
+
+## Round-15 Header Follow-Up
+
+- `2026-07-05 10:20 WEST`: Orchestrator spot-check found child and parent top
+  status headers still stopped at round 14. Implementation worker aligned those
+  headers with the round-15 durable-log/status fix and recorded the correction
+  in child and parent work logs. Docs, format, and whitespace verification
+  passed.
