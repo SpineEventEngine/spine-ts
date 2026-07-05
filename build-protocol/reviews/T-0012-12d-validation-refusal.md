@@ -4,10 +4,10 @@ Task log: `build-protocol/tasks/T-0012-12d-validation-refusal/TASK.md`
 Branch: `task/T-0012-12d-validation-refusal`
 Baseline commit: `27250a0`
 Reviewed commit/diff basis:
-`af96a6a`
+`d6ae65b`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
-Status: round-eight metadata fixed; re-review pending
+Status: round-nine metadata fixed; re-review pending
 
 ## Required Review Lanes
 
@@ -214,3 +214,22 @@ Planned fixes:
 
 - Record `af96a6a` as the round-eight metadata commit and current branch head in
   the task log, implementation report, work log, and review log.
+
+### Round 10
+
+Reviewed basis: round-nine-metadata commit `d6ae65b`.
+
+Outcome: changes requested.
+
+Findings:
+
+- Current/final-head metadata and work-log current state still pointed at the
+  previous metadata commit `af96a6a` instead of the reviewed metadata commit
+  `d6ae65b`.
+- Work log omitted the chronological `d6ae65b` metadata-fix entry.
+
+Planned fixes:
+
+- Record `d6ae65b` as the round-nine metadata commit and current branch head in
+  the task log, implementation report, work log, and review log.
+- Add the missing chronological work-log entry and update current state.
