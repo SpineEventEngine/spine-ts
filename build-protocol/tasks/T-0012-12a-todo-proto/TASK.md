@@ -1,6 +1,6 @@
 # T-0012.12a: Todo Proto Generation
 
-Status: final-review fix committed; final re-review in progress
+Status: final log-state correction at current HEAD; clean final review pending
 Start: `2026-07-05 11:38 WEST`
 End: `2026-07-05 12:04 WEST`
 Baseline commit: `b12ef3b`
@@ -18,6 +18,8 @@ Second focused reliability fix commit:
 `56f0b8d Stabilize todo proto generation publishing`
 Final-review fix commit:
 `33aa420 Remove todo generated schema facade`
+Final log-state correction before current HEAD:
+`733c7ae Record final todo proto review state`
 
 ## Objective
 
@@ -376,9 +378,12 @@ permitted` and HTTP/2 `listen EPERM 127.0.0.1` timeouts.
   as `56f0b8d Stabilize todo proto generation publishing` and verified before
   final re-review. Final re-review found stale post-commit log wording and a
   public generated-schema facade; this small final-review fix was committed as
-  `33aa420 Remove todo generated schema facade`.
+  `33aa420 Remove todo generated schema facade`. A follow-up log-state
+  correction was committed as `733c7ae Record final todo proto review state`;
+  current HEAD carries the last log-only status correction for clean final
+  review.
 
 ## Integration Result
 
-Committed state through `33aa420 Remove todo generated schema facade` is
-verified. Remaining work is final re-review and integration.
+Committed state through current HEAD is verified by format and whitespace
+checks. Remaining work is clean final review and integration.

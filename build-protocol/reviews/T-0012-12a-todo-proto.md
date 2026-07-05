@@ -3,11 +3,11 @@
 Task log: `build-protocol/tasks/T-0012-12a-todo-proto/TASK.md`
 Branch: `task/T-0012-12a-todo-proto`
 Baseline commit: `07d06a2`
-Reviewed commit/diff basis: implementation commit `cbdb35c`; committed
-final-review fix `33aa420 Remove todo generated schema facade`
+Reviewed commit/diff basis: implementation commit `cbdb35c`; current HEAD
+contains the final log-state correction after `733c7ae`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12a-todo-proto`
-Status: final-review fix committed; final re-review in progress
+Status: final log-state correction at current HEAD; clean final review pending
 
 ## Required Review Lanes
 
