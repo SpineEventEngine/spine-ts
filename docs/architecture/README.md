@@ -363,6 +363,24 @@ subscription ID, abandoned inactive subscriptions expire after a small
 configurable TTL, slow consumers are bounded by a small configurable update
 queue, and stream/cancel cleanup releases the direct Stand handle.
 
+The current command service error contract remains intentionally small.
+`CommandBus` validates each accepted command payload with the existing core
+facade before dispatcher callbacks run, including custom
+`addCommandDispatcher()` routes. For repository-backed aggregate dispatchers,
+that still means validation happens before route calculation, aggregate history
+load, event append, snapshot write, or stored-event dispatch.
+`CommandService.Post` maps invalid payloads to `COMMAND_VALIDATION_ERROR`,
+message `Command payload validation failed.`, and packed
+`spine.validation.ValidationError` details. Handler-thrown `CommandRefusalError`
+values are the one immediate business refusal path mapped to stable non-ok
+`Ack` errors. Aggregate event appliers continue to use
+`EntityTransaction.commit()` for transition validation. When the rejected
+commit comes from applying events produced by the current command, repository
+execution raises `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed
+`ValidationError` details before events or snapshots are stored. Stored-history
+replay failures remain internal and are sanitized as `COMMAND_POST_ERROR`.
+Unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
+
 The following runtime pieces are still deferred to later explicit tasks:
 
 - default repository construction from entity classes,
@@ -409,16 +427,19 @@ identities, along with transport correlation keys back to topic/subscription
 arrays and planner-local worker IDs; they do not retain entity names, handler
 names, raw readiness metadata, or duplicate full transport contracts on each
 route. The package root now exports a small executable bus layer, direct Stand,
-and the `SpineServices` route registrar, but still does not export a broad
-server lifecycle, transport endpoint runner, integration broker, handler
-invocation/runtime wiring, command/event intake validation pipeline, or durable
-subscription store as part of this closure.
+repository-backed handler invocation through built contexts, command payload
+validation and refusal/Ack mapping through `SpineServices`, and the
+`SpineServices` route registrar. It still does not export a broad server
+lifecycle, transport endpoint runner, integration broker, event intake
+validation pipeline beyond current implemented seams, or durable subscription
+store as part of this closure.
 
-The architectural consequence is that later work must add those collaborators
-as explicit tasks at their own seams. Command and event intake can consume the
-existing readiness views and runtime-routing plan, but must still design
-validation, `Ack` mapping, filtering, storage-before-dispatch, dispatch
-outcomes, delivery, and transport integration separately.
+The architectural consequence is that later work must add the remaining
+collaborators as explicit tasks at their own seams. Event intake and broader
+transport integration can consume the existing readiness views and
+runtime-routing plan, but must still design event-side validation, filtering,
+storage-before-dispatch, dispatch outcomes, delivery, and integration behavior
+separately.
 
 ## Storage Boundary
 

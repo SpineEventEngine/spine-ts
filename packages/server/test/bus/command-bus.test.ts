@@ -2,7 +2,7 @@ import { create, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { deriveTypeUrl, packCommand } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packCommand } from "@spine-ts/core";
 import {
   ActorContextSchema,
   CommandSchema,
@@ -15,6 +15,7 @@ import { describe, expect, it } from "vitest";
 import { fromBinary, toBinary } from "@bufbuild/protobuf";
 
 import { CommandBus, type CommandDispatcher } from "../../src/index.js";
+import { CommandValidationError } from "../../src/bus/command-errors.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -27,6 +28,11 @@ type AggregateState = Message<"AggregateState"> & {
   id: string;
   name: string;
   archived: boolean;
+};
+
+type ValidatedTaskCommand = Message<"example.validation_refusal.ValidatedTaskCommand"> & {
+  id: string;
+  name: string;
 };
 
 function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
@@ -57,6 +63,18 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
+const fileValidationRefusalFixture = fileDesc(
+  "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
+    "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
+    "KAlCBICGJAFSAmlkEhIKBG5hbWUYAiABKAlSBG5hbWU6J/qKJAQIARAD2oskGwoZZXhhbXBsZS50YWdz" +
+    "LkFnZ3JlZ2F0ZVRhZyJAChRWYWxpZGF0ZWRUYXNrQ29tbWFuZBIOCgJpZBgBIAEoCVICaWQSGAoEbmFt" +
+    "ZRgCIAEoCUIEoIUkAVIEbmFtZWIGcHJvdG8z",
+  [file_spine_options],
+);
+const ValidatedTaskCommandSchema = messageDesc(
+  fileValidationRefusalFixture,
+  1,
+) as GenMessage<ValidatedTaskCommand>;
 
 describe("CommandBus", () => {
   it("posts commands asynchronously to exactly one matching dispatcher", async () => {
@@ -203,6 +221,75 @@ describe("CommandBus", () => {
     await expect(bus.post(command)).rejects.toThrow(/command.message.typeUrl/);
   });
 
+  it("rejects invalid command payloads before a custom dispatcher runs", async () => {
+    const observed: string[] = [];
+    const dispatcher = createValidatedCommandDispatcher((command) => {
+      observed.push(command.id?.uuid ?? "missing");
+    });
+    const bus = new CommandBus([dispatcher]);
+
+    await expect(
+      bus.post(createValidatedCommand("command-invalid", "task-invalid", "")),
+    ).rejects.toBeInstanceOf(CommandValidationError);
+
+    expect(observed).toEqual([]);
+  });
+
+  it("rejects incompatible command payload bytes before a custom dispatcher runs", async () => {
+    const observed: string[] = [];
+    const dispatcher = createValidatedCommandDispatcher((command) => {
+      observed.push(command.id?.uuid ?? "missing");
+    });
+    const command = createValidatedCommand("command-incompatible", "task-incompatible", "name");
+    const bus = new CommandBus([dispatcher]);
+
+    if (command.message !== undefined) {
+      command.message.value = new Uint8Array([255]);
+    }
+
+    await expect(bus.post(command)).rejects.toBeInstanceOf(CommandValidationError);
+
+    expect(observed).toEqual([]);
+  });
+
+  it("keeps validation queued behind earlier command dispatch", async () => {
+    const gate = createSignal();
+    const observed: string[] = [];
+    const dispatcher: CommandDispatcher = {
+      messageSchemas: () => [ProjectionStateSchema, ValidatedTaskCommandSchema],
+      dispatch: async (command) => {
+        observed.push(command.id?.uuid ?? "missing");
+        if (command.id?.uuid === "command-blocking") {
+          await gate.promise;
+        }
+      },
+    };
+    const bus = new CommandBus([dispatcher]);
+
+    const first = bus.post(createProjectionCommand("command-blocking"));
+    const second = bus.post(createValidatedCommand("command-queued-invalid", "task-invalid", ""));
+    let secondSettled = false;
+    void second.then(
+      () => {
+        secondSettled = true;
+      },
+      () => {
+        secondSettled = true;
+      },
+    );
+
+    await waitUntil(() => observed.includes("command-blocking"));
+    await waitForRuntimeTurn();
+
+    expect(secondSettled).toBe(false);
+    expect(observed).toEqual(["command-blocking"]);
+
+    gate.resolve();
+    await first;
+    await expect(second).rejects.toBeInstanceOf(CommandValidationError);
+    expect(observed).toEqual(["command-blocking"]);
+  });
+
   it("rejects nested posts from active command dispatch", async () => {
     const observed: string[] = [];
     const context: { bus?: CommandBus } = {};
@@ -232,6 +319,15 @@ function createCommandDispatcher(
   };
 }
 
+function createValidatedCommandDispatcher(
+  onDispatch: (command: ReturnType<typeof createValidatedCommand>) => void | Promise<void>,
+): CommandDispatcher {
+  return {
+    messageSchemas: () => [ValidatedTaskCommandSchema],
+    dispatch: (command) => Promise.resolve(onDispatch(command)),
+  };
+}
+
 function createProjectionCommand(id: string) {
   return packCommand({
     id: create(CommandIdSchema, { uuid: id }),
@@ -247,4 +343,50 @@ function createProjectionCommand(id: string) {
       priority: 1,
     }),
   });
+}
+
+function createValidatedCommand(id: string, aggregateId: string, name: string) {
+  return create(CommandSchema, {
+    id: create(CommandIdSchema, { uuid: id }),
+    context: create(CommandContextSchema, {
+      actorContext: create(ActorContextSchema, {
+        actor: create(UserIdSchema, { value: "user-1" }),
+      }),
+    }),
+    message: packAny(
+      ValidatedTaskCommandSchema,
+      create(ValidatedTaskCommandSchema, {
+        id: aggregateId,
+        name,
+      }),
+      { validate: false },
+    ),
+  });
+}
+
+function createSignal() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((fulfill) => {
+    resolve = () => {
+      fulfill();
+    };
+  });
+
+  return { promise, resolve };
+}
+
+async function waitForRuntimeTurn(): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
+}
+
+async function waitUntil(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 500;
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return;
+    }
+    await waitForRuntimeTurn();
+  }
 }

@@ -1,6 +1,6 @@
 # T-0012.11: Missing Details And Example Readiness
 
-Status: T-0012.11a, T-0012.11b, and T-0012.11c merged and parent-verified; T-0012.11d next
+Status: T-0012.11a, T-0012.11b, and T-0012.11c merged and parent-verified; T-0012.11d latest docs/status rollup fix verified
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -158,8 +158,10 @@ Resumed-state note:
   `pnpm docs:check`, `git diff --check`, and escalated `pnpm test:coverage`
   (45 files, 592 tests; branches 90.03%). Sandboxed coverage remains blocked
   only by local endpoint permissions.
-- The next selected implementation slice is
-  `T-0012.11d Validation And Immediate Refusal Outcomes`.
+- `T-0012.11d Validation And Immediate Refusal Outcomes` is implemented in its
+  child branch. Latest docs/status rollup fixes have been applied and verified;
+  docs/API, formatting, and whitespace checks passed for those docs-only
+  passes.
 
 ## Staged Subtasks
 

@@ -1,4 +1,5 @@
-import { fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
+import { clone, fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
+import { type ConstraintViolation, ValidationErrorSchema } from "@spine-ts/proto";
 
 import {
   describeEntityMetadata,
@@ -9,10 +10,19 @@ import {
   EntityTransaction,
   type EntityTransactionCommitResult,
   type EntityTransactionLifecycleFlags,
+  type EntityTransactionRejectedCommit,
   type EntityTransactionRollbackResult,
   type EntityTransactionUpdater,
   type EntityTransactionVersionMetadata,
 } from "./entity-transaction.js";
+import type { EntityStateTransitionValidationResult } from "./entity-transition-validation.js";
+
+type RejectedCommitSnapshot = EntityTransactionRejectedCommit<
+  DescriptorMessageSchema,
+  EntityVersionMetadata
+>;
+
+const rejectedCommits = new WeakMap<object, RejectedCommitSnapshot>();
 
 /** Lifecycle flags carried by a common entity shell. */
 export interface EntityLifecycleFlags {
@@ -23,7 +33,7 @@ export interface EntityLifecycleFlags {
 }
 
 /** Reason a {@link TransactionalEntity} transaction-scope operation failed. */
-export type TransactionalEntityScopeErrorReason = "duplicate" | "missing";
+export type EntityScopeReason = "duplicate" | "missing";
 
 /** Protected {@link TransactionalEntity} operation guarded by transaction scope. */
 export type TransactionalEntityScopeOperation =
@@ -43,16 +53,13 @@ export type TransactionalEntityScopeOperation =
 /** Error thrown when a transactional entity draft helper is used outside its scope. */
 export class TransactionalEntityScopeError extends Error {
   /** Scope failure reason. */
-  readonly reason: TransactionalEntityScopeErrorReason;
+  readonly reason: EntityScopeReason;
 
   /** Operation rejected by the current transaction scope. */
   readonly operation: TransactionalEntityScopeOperation;
 
   /** Create a deterministic transaction-scope error. */
-  constructor(
-    reason: TransactionalEntityScopeErrorReason,
-    operation: TransactionalEntityScopeOperation,
-  ) {
+  constructor(reason: EntityScopeReason, operation: TransactionalEntityScopeOperation) {
     super(
       reason === "duplicate"
         ? `Cannot ${operation}: transactional entity already has an active transaction.`
@@ -72,7 +79,7 @@ type EntityVersionMetadataPrimitive =
 export type EntityVersionMetadata =
   EntityVersionMetadataPrimitive | readonly EntityVersionMetadata[] | object;
 
-type NonPlainEntityVersionMetadata =
+type NonPlainVersion =
   | Date
   | RegExp
   | Error
@@ -97,24 +104,21 @@ type NonPlainEntityVersionMetadata =
   | BigUint64Array;
 
 /** Recursive type-level validator for caller-owned plain entity version metadata. */
-export type PlainEntityVersionMetadata<Version> = PlainEntityVersionMetadataAtDepth<Version, []>;
+export type PlainEntityVersionMetadata<Version> = PlainVersionAtDepth<Version, []>;
 
-type PlainEntityVersionMetadataAtDepth<
-  Version,
-  Depth extends readonly unknown[],
-> = Depth["length"] extends 20
+type PlainVersionAtDepth<Version, Depth extends readonly unknown[]> = Depth["length"] extends 20
   ? EntityVersionMetadata
   : Version extends EntityVersionMetadataPrimitive
     ? Version
     : Version extends (...args: never[]) => unknown
       ? never
-      : Version extends NonPlainEntityVersionMetadata
+      : Version extends NonPlainVersion
         ? never
         : Version extends readonly (infer Element)[]
-          ? readonly PlainEntityVersionMetadataAtDepth<Element, readonly [unknown, ...Depth]>[]
+          ? readonly PlainVersionAtDepth<Element, readonly [unknown, ...Depth]>[]
           : Version extends object
             ? {
-                readonly [Key in keyof Version]: PlainEntityVersionMetadataAtDepth<
+                readonly [Key in keyof Version]: PlainVersionAtDepth<
                   Version[Key],
                   readonly [unknown, ...Depth]
                 >;
@@ -441,6 +445,9 @@ export abstract class TransactionalEntity<
       this.replaceVersionMetadata(result.version.committed as EntityVersionMetadataInput<Version>);
       this.replaceLifecycleFlags(result.lifecycle);
       this.#transaction = undefined;
+      rejectedCommits.delete(this);
+    } else {
+      rejectedCommits.set(this, cloneCommitResult(result) as RejectedCommitSnapshot);
     }
 
     return cloneCommitResult(result);
@@ -469,6 +476,26 @@ export abstract class TransactionalEntity<
     return transaction;
   }
 }
+
+/** @internal Framework-only transactional entity inspection used by repository execution. */
+export interface TransactionalEntityAccess {
+  /** Return the last rejected transaction commit for this entity, if any. */
+  rejectedCommit(
+    entity: object,
+  ): EntityTransactionRejectedCommit<DescriptorMessageSchema> | undefined;
+}
+
+/** @internal Framework-only transactional entity inspection used by repository execution. */
+export const transactionalEntityAccess: TransactionalEntityAccess = Object.freeze({
+  rejectedCommit(
+    entity: object,
+  ): EntityTransactionRejectedCommit<DescriptorMessageSchema> | undefined {
+    const rejected = rejectedCommits.get(entity);
+    return rejected === undefined
+      ? undefined
+      : (cloneCommitResult(rejected) as EntityTransactionRejectedCommit<DescriptorMessageSchema>);
+  },
+});
 
 /**
  * Abstract aggregate family marker over the common transactional entity shell.
@@ -559,6 +586,7 @@ function cloneCommitResult<Schema extends DescriptorMessageSchema, Version>(
         archived: result.lifecycle.archived,
         deleted: result.lifecycle.deleted,
       },
+      validation: cloneTransitionValidation(result.validation) as typeof result.validation,
     };
   }
 
@@ -572,6 +600,26 @@ function cloneCommitResult<Schema extends DescriptorMessageSchema, Version>(
       archived: result.lifecycle.archived,
       deleted: result.lifecycle.deleted,
     },
+    validation: cloneTransitionValidation(result.validation) as typeof result.validation,
+  };
+}
+
+function cloneTransitionValidation(
+  validation: EntityStateTransitionValidationResult,
+): EntityStateTransitionValidationResult {
+  if (validation.valid) {
+    return {
+      valid: true,
+      violations: [],
+      error: undefined,
+    };
+  }
+  const error = clone(ValidationErrorSchema, validation.error);
+
+  return {
+    valid: false,
+    violations: error.constraintViolation as [ConstraintViolation, ...ConstraintViolation[]],
+    error,
   };
 }
 
@@ -610,7 +658,7 @@ function clonePlainVersionMetadata(
   depth: number,
 ): EntityVersionMetadata {
   if (depth > maxVersionMetadataDepth) {
-    throw nonPlainVersionMetadataError(path, "excessive nesting depth");
+    throw versionMetadataError(path, "excessive nesting depth");
   }
 
   if (value === null) {
@@ -626,7 +674,7 @@ function clonePlainVersionMetadata(
     case "undefined":
       return value;
     case "function":
-      throw nonPlainVersionMetadataError(path, "function");
+      throw versionMetadataError(path, "function");
     case "object":
       return clonePlainVersionObject(value, path, stack, depth);
   }
@@ -639,16 +687,16 @@ function clonePlainVersionObject(
   depth: number,
 ): EntityVersionMetadata {
   if (isProxy(value)) {
-    throw nonPlainVersionMetadataError(path, "Proxy");
+    throw versionMetadataError(path, "Proxy");
   }
   if (ArrayBuffer.isView(value)) {
-    throw nonPlainVersionMetadataError(path, getObjectKind(value));
+    throw versionMetadataError(path, getObjectKind(value));
   }
   if (value instanceof ArrayBuffer || isSharedArrayBuffer(value)) {
-    throw nonPlainVersionMetadataError(path, getObjectKind(value));
+    throw versionMetadataError(path, getObjectKind(value));
   }
   if (stack.has(value)) {
-    throw nonPlainVersionMetadataError(path, "cyclic object");
+    throw versionMetadataError(path, "cyclic object");
   }
 
   stack.add(value);
@@ -658,23 +706,23 @@ function clonePlainVersionObject(
     }
 
     if (!isPlainObject(value)) {
-      throw nonPlainVersionMetadataError(path, getObjectKind(value));
+      throw versionMetadataError(path, getObjectKind(value));
     }
 
     const clone = Object.create(getObjectPrototype(value)) as Record<string, EntityVersionMetadata>;
     const descriptors = Object.getOwnPropertyDescriptors(value);
     const [symbolKey] = Object.getOwnPropertySymbols(descriptors);
     if (symbolKey !== undefined) {
-      throw nonPlainVersionMetadataError(`${path}[${String(symbolKey)}]`, "symbol-keyed property");
+      throw versionMetadataError(`${path}[${String(symbolKey)}]`, "symbol-keyed property");
     }
 
     for (const [key, descriptor] of Object.entries(descriptors)) {
       const childPath = `${path}.${key}`;
       if (!descriptor.enumerable) {
-        throw nonPlainVersionMetadataError(childPath, "non-enumerable property");
+        throw versionMetadataError(childPath, "non-enumerable property");
       }
       if (!("value" in descriptor)) {
-        throw nonPlainVersionMetadataError(childPath, "accessor property");
+        throw versionMetadataError(childPath, "accessor property");
       }
       Object.defineProperty(clone, key, {
         configurable: true,
@@ -697,18 +745,18 @@ function clonePlainVersionArray(
   depth: number,
 ): readonly EntityVersionMetadata[] {
   if (getObjectPrototype(value) !== Array.prototype) {
-    throw nonPlainVersionMetadataError(path, "Array");
+    throw versionMetadataError(path, "Array");
   }
 
   const descriptors: Record<string, PropertyDescriptor> = Object.getOwnPropertyDescriptors(value);
   const [symbolKey] = Object.getOwnPropertySymbols(descriptors);
   if (symbolKey !== undefined) {
-    throw nonPlainVersionMetadataError(`${path}[${String(symbolKey)}]`, "symbol-keyed property");
+    throw versionMetadataError(`${path}[${String(symbolKey)}]`, "symbol-keyed property");
   }
 
   const lengthDescriptor = descriptors.length;
   if (lengthDescriptor === undefined || !("value" in lengthDescriptor)) {
-    throw nonPlainVersionMetadataError(path, "array without data length");
+    throw versionMetadataError(path, "array without data length");
   }
 
   const length = lengthDescriptor.value as number;
@@ -719,13 +767,13 @@ function clonePlainVersionArray(
     }
 
     if (!isArrayElementKey(key, length)) {
-      throw nonPlainVersionMetadataError(`${path}.${key}`, "custom array property");
+      throw versionMetadataError(`${path}.${key}`, "custom array property");
     }
     if (!descriptor.enumerable) {
-      throw nonPlainVersionMetadataError(`${path}[${key}]`, "non-enumerable property");
+      throw versionMetadataError(`${path}[${key}]`, "non-enumerable property");
     }
     if (!("value" in descriptor)) {
-      throw nonPlainVersionMetadataError(`${path}[${key}]`, "accessor property");
+      throw versionMetadataError(`${path}[${key}]`, "accessor property");
     }
   }
 
@@ -733,7 +781,7 @@ function clonePlainVersionArray(
     const key = String(index);
     const descriptor = descriptors[key];
     if (descriptor === undefined || !("value" in descriptor)) {
-      throw nonPlainVersionMetadataError(`${path}[${key}]`, "sparse array element");
+      throw versionMetadataError(`${path}[${key}]`, "sparse array element");
     }
 
     Object.defineProperty(clone, index, {
@@ -787,7 +835,7 @@ function isSharedArrayBuffer(value: object): boolean {
   return typeof SharedArrayBuffer !== "undefined" && value instanceof SharedArrayBuffer;
 }
 
-function nonPlainVersionMetadataError(path: string, kind: string): TypeError {
+function versionMetadataError(path: string, kind: string): TypeError {
   return new TypeError(
     `Entity version metadata must be plain snapshot data; ${path} contains ${kind}.`,
   );

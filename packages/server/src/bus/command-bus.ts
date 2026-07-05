@@ -1,7 +1,9 @@
 import { clone } from "@bufbuild/protobuf";
+import { ValidationException, checkValid, unpackAny } from "@spine-ts/core";
 import { CommandSchema, type Command } from "@spine-ts/proto";
 
 import { SingleProcessServerRuntime } from "../runtime/runtime.js";
+import { CommandValidationError } from "./command-errors.js";
 import { CommandDispatcherRegistry } from "./command-dispatcher-registry.js";
 import type { CommandDispatcher } from "./command-dispatcher.js";
 
@@ -40,18 +42,34 @@ export class CommandBus {
   }
 
   async #dispatch(command: Command): Promise<void> {
-    const typeUrl = command.message?.typeUrl;
+    const packed = command.message;
 
-    if (typeUrl === undefined || typeUrl === "") {
+    if (packed === undefined || packed.typeUrl === "") {
       throw new Error("CommandBus requires command.message.typeUrl.");
     }
+    const typeUrl = packed.typeUrl;
 
-    const dispatcher = this.#registry.find(typeUrl);
+    const registration = this.#registry.find(typeUrl);
 
-    if (dispatcher === undefined) {
+    if (registration === undefined) {
       throw new Error(`No command dispatcher registered for "${typeUrl}".`);
     }
 
-    await dispatcher.dispatch(clone(CommandSchema, command));
+    const message = unpackAny(packed, registration.schema);
+
+    if (message === undefined) {
+      throw CommandValidationError.invalidPayload();
+    }
+
+    try {
+      checkValid(registration.schema, message);
+    } catch (error) {
+      if (error instanceof ValidationException) {
+        throw new CommandValidationError(error.asMessage());
+      }
+      throw error;
+    }
+
+    await registration.dispatcher.dispatch(clone(CommandSchema, command));
   }
 }

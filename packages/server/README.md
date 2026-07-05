@@ -47,6 +47,19 @@ Current slice exposes:
   contexts, including projection-state ID-filter and `Target.include_all`
   query reads;
   and
+- `CommandRefusalError` for the current immediate business refusal path from
+  command handlers to non-ok `CommandService.Post` `Ack` errors;
+  and
+- `COMMAND_VALIDATION_ERROR` `Ack` responses with message
+  `Command payload validation failed.` and packed `spine.validation.ValidationError` details
+  when `CommandBus` rejects an invalid accepted command payload before
+  dispatcher execution, whether the dispatcher is a repository adapter or a
+  custom `addCommandDispatcher()` registration; transition-validation
+  rejections while applying events produced by the current aggregate command
+  surface as `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed
+  `ValidationError` details, while stored-history replay failures remain
+  internal and sanitized as `COMMAND_POST_ERROR`;
+  and
 - `AggregateStorage` for the current primitive-`AggregateId`
   snapshot/history seam, backed by `StorageFactory`, `RecordStorage`, and
   `EventStore`;
@@ -471,6 +484,24 @@ Repeated `add(repository)` calls before `build()` are idempotent.
 Registering the same repository instance with another built context is rejected.
 Aggregate command execution requires `command.id` so produced events can carry
 a contract-valid command origin; missing IDs reject before mutation or storage.
+`CommandBus` validates accepted command payloads before dispatcher callbacks,
+including custom `addCommandDispatcher()` routes. For repository-backed
+aggregate dispatchers, that still means validation happens before route
+calculation, aggregate history load, event append, snapshot write, or
+stored-event dispatch. `CommandService.Post` maps command-bus payload validation
+failures to `COMMAND_VALIDATION_ERROR` with message
+`Command payload validation failed.` and packed `spine.validation.ValidationError`
+details. If a command handler throws `CommandRefusalError`, `CommandService.Post`
+returns a non-ok `Ack` with that stable error type and message instead of
+`COMMAND_POST_ERROR`. If an event applier commits a transaction rejected by
+entity transition validation while applying events produced by the current
+command, command execution rejects with
+`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced events or
+snapshots; the validation details remain the
+`EntityTransaction`/`validateEntityStateTransition()` result. Replay failures
+from stored aggregate history remain internal and are sanitized as
+`COMMAND_POST_ERROR`. Dispatcher-thrown `ValidationException` values and other
+unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
 Aggregate command completion resolves after aggregate event storage and
 snapshot handling even though already-stored event redispatch continues
 asynchronously. If that later redispatch fails in dispatcher acceptance,

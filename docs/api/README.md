@@ -34,6 +34,22 @@ read/version/list/update/subscription contracts, and
 `BoundedContextNameError` for bounded-context assembly. `CommandEndpoint`
 also exposes accepted command message type URLs so service adapters can route
 without dispatch-probing unrelated contexts.
+`CommandRefusalError` is the current public immediate-refusal error that
+command handlers can throw so `CommandService.Post` returns a stable non-ok
+`Ack` error type/message. `CommandService.Post` also returns
+`COMMAND_VALIDATION_ERROR` with message `Command payload validation failed.`
+and packed `spine.validation.ValidationError` details when `CommandBus`
+rejects an invalid accepted command payload before dispatcher callbacks,
+including custom `addCommandDispatcher()` routes. For repository-backed
+aggregate dispatchers, validation still happens before route calculation,
+aggregate history load, event append, snapshot write, or stored-event dispatch.
+Transition validation failures while applying events produced by the current
+aggregate command continue to surface as
+`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
+details. Replay failures from stored aggregate history remain internal and are
+sanitized as `COMMAND_POST_ERROR`. Dispatcher-thrown `ValidationException`
+values and other unexpected command-bus failures remain sanitized as
+`COMMAND_POST_ERROR`.
 The public entry points mirror Spine JVM's
 `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
 `ContextSpec` remains a framework-owned immutable value surfaced through
@@ -66,7 +82,7 @@ create system contexts, write tenant indexes, expose a broad server lifecycle,
 or integrate transports.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
-`TransactionalEntityScopeError`, `TransactionalEntityScopeErrorReason`,
+`TransactionalEntityScopeError`, `EntityScopeReason`,
 `TransactionalEntityScopeOperation`, `EntityOptions`, `EntityVersionMetadata`,
 `PlainEntityVersionMetadata`, and `EntityLifecycleFlags` for local OOP entity
 state with identity, descriptor-derived metadata, cloned Protobuf-ES state
