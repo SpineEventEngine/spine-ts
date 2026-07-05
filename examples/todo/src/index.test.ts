@@ -1,5 +1,7 @@
 import { create } from "@bufbuild/protobuf";
 import { StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { createClient } from "@connectrpc/connect";
+import { createGrpcTransport } from "@connectrpc/connect-node";
 import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
 import {
   ActorContextSchema,
@@ -16,13 +18,17 @@ import {
   EntityStateWithVersionSchema,
   QueryIdSchema,
   QuerySchema,
+  type Query,
   type QueryResponse,
 } from "@spine-ts/proto/generated/spine/client/query_pb.js";
+import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
+import { QueryService } from "@spine-ts/proto/generated/spine/client/query_service_pb.js";
 import {
   TopicIdSchema,
   TopicSchema,
   type SubscriptionUpdate,
 } from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
+import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
 import { BoundedContextFixture } from "@spine-ts/testing";
 import { existsSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -46,12 +52,61 @@ import { TaskSchema, type Task } from "../generated/spine/example/todo/v1/tasks_
 type TodoModule = typeof import("../dist/src/index.js");
 
 let createTodoContext: TodoModule["createTodoContext"];
+let startTodoServer: TodoModule["startTodoServer"];
 let TaskListProjection: TodoModule["TaskListProjection"];
 
 describe("@spine-ts/example-todo", () => {
   beforeAll(async () => {
     assertBuiltExample();
-    ({ createTodoContext, TaskListProjection } = await import("../dist/src/index.js"));
+    ({ createTodoContext, startTodoServer, TaskListProjection } =
+      await import("../dist/src/index.js"));
+  });
+
+  it("runs as a standalone gRPC-compatible server for command, query, and subscription clients", async () => {
+    const server = await startTodoServer({ host: "127.0.0.1", port: 0 });
+
+    try {
+      const transport = createGrpcTransport({ baseUrl: server.baseUrl });
+      const commands = createClient(CommandService, transport);
+      const queries = createClient(QueryService, transport);
+      const subscriptions = createClient(SubscriptionService, transport);
+      const subscription = await subscriptions.subscribe(createTaskListTopic());
+      const updates: AsyncIterable<SubscriptionUpdate> = subscriptions.activate(subscription);
+      const iterator = updates[Symbol.asyncIterator]();
+      let nextUpdate: Promise<IteratorResult<SubscriptionUpdate>> | undefined;
+
+      try {
+        await delay(25);
+        nextUpdate = withTimeout(iterator.next(), "standalone server subscription update", 500);
+        const ack = await commands.post(
+          createTaskCommand("command-standalone-create", "task-standalone", "Standalone"),
+        );
+        const response = await readRemoteEventually(
+          queries,
+          createTaskListQuery(),
+          (candidate) => taskTitle(candidate, "task-standalone") === "Standalone",
+        );
+        const delivered = await nextUpdate;
+        nextUpdate = undefined;
+        if (delivered.done === true) {
+          throw new Error("Expected standalone server subscription update.");
+        }
+        const update = unpackSubscribedTaskList(delivered.value);
+
+        expect(server.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
+        expect(ack.status?.status.case).toBe("ok");
+        expect(response.response?.status?.status.case).toBe("ok");
+        expect(readTask(response, "task-standalone")?.completed).toBe(false);
+        expect(update.subscription.id).toEqual(subscription.id);
+        expect(update.list.tasks[0]?.title).toBe("Standalone");
+      } finally {
+        await nextUpdate?.catch(() => undefined);
+        await subscriptions.cancel(subscription);
+        await iterator.return?.();
+      }
+    } finally {
+      await server.close();
+    }
   });
 
   it("creates one task through command handling and exposes it in the task list", async () => {
@@ -618,6 +673,24 @@ async function nextSubscriptionUpdate(
   return await withTimeout(subscription.next(), `subscription update for ${label}`, timeoutMs);
 }
 
+async function readRemoteEventually(
+  client: { readonly read: (query: Query) => Promise<QueryResponse> },
+  query: Query,
+  accept: (response: QueryResponse) => boolean,
+  timeoutMs = 500,
+  intervalMs = 5,
+): Promise<QueryResponse> {
+  const deadline = Date.now() + timeoutMs;
+  let response = await client.read(query);
+
+  while (!accept(response) && Date.now() < deadline) {
+    await delay(intervalMs);
+    response = await client.read(query);
+  }
+
+  return response;
+}
+
 async function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs: number): Promise<T> {
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const timeoutPromise = new Promise<T>((_, reject) => {
@@ -633,6 +706,10 @@ async function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs: num
       clearTimeout(timeout);
     }
   }
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
 function readList(response: Pick<QueryResponse, "message">, taskId: string) {
