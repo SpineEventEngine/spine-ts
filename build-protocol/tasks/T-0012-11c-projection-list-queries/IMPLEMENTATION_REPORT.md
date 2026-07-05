@@ -66,13 +66,13 @@ Implemented the smallest storage-backed include-all path:
 - Required verification:
   - `pnpm typecheck` ✅
   - `pnpm lint` ✅
+  - `pnpm format:check` ✅ after formatting
+    `build-protocol/work-logs/T-0012-11.md`
   - `pnpm docs:check` ✅
   - `git diff --check` ✅
   - `pnpm test:coverage` ✅ after rerunning outside sandbox; coverage result:
     45 files, 586 tests, statements 94.97%, branches 90.01%, functions 97.51%,
     lines 94.99%
-  - `pnpm format:check` ⚠️ still fails on pre-existing unrelated file
-    `build-protocol/work-logs/T-0012-11.md`
 
 Sandbox notes:
 
