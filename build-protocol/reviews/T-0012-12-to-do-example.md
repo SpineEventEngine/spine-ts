@@ -3,7 +3,7 @@
 Task log: `build-protocol/tasks/T-0012-12-to-do-example/TASK.md`
 Branch: `task/T-0012-12-to-do-example`
 Baseline commit: `89868e9`
-Reviewed commit/diff basis: Pending
+Reviewed commit/diff basis: `6d82910..1949929`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12-to-do-example`
 Status: T-0012.12d merged; T-0012.12e selected
@@ -80,4 +80,6 @@ Review focus for splitter review:
 - `T-0012.12d Validation And Refusal`: complete and merged via `6d82910`.
   Final clean lanes: maintainability, documentation, TypeScript/API docs,
   security, and performance/reliability after closure metadata wording fixes.
+- Parent integration metadata review for `6d82910..1949929` had one
+  maintainability finding: replace the stale pending reviewed-basis field.
 - Next selected slice: `T-0012.12e Task Subscriptions`.
