@@ -1,6 +1,6 @@
 # T-0012.11d: Validation And Immediate Refusal Outcomes
 
-Status: active
+Status: round-11 fixes in progress
 Branch: `task/T-0012-11d-validation-refusal`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`

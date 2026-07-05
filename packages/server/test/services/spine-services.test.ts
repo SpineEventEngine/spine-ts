@@ -644,6 +644,24 @@ describe("SpineServices", () => {
     expect(dispatched).toEqual([]);
   });
 
+  it("returns stable Ack error details for incompatible command payload bytes", async () => {
+    const context = BoundedContext.singleTenant("Tasks").add(createValidatingRepository()).build();
+    const handlers = registeredCommandHandlers(context);
+    const command = createValidatedCommand("command-incompatible", "task-incompatible", "name");
+
+    if (command.message !== undefined) {
+      command.message.value = new Uint8Array([255]);
+    }
+
+    const ack = await handlers.post(command);
+    const details = validationDetails(ack.status?.status);
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
+    expect(errorMessage(ack.status?.status)).toBe("Command payload validation failed.");
+    expect(details?.constraintViolation).toHaveLength(1);
+  });
+
   it("keeps dispatcher-thrown validation exceptions sanitized", async () => {
     const dispatcher: CommandDispatcher = {
       messageSchemas: () => [ProjectionStateSchema],

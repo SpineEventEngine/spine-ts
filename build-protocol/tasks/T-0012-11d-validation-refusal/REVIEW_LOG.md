@@ -6,7 +6,7 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-10 docs fixes verified; ready for round-11 independent review
+Status: round-11 fixes verified; ready for round-12 independent review
 
 ## Required Lanes
 
@@ -284,3 +284,25 @@ Status: round-10 docs fixes verified; ready for round-11 independent review
   review summary.
 - `2026-07-05 09:03 WEST`: Docs-only verification passed:
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
+
+### Round 11
+
+- `2026-07-05 09:08 WEST`: Documentation, code style, and TypeScript/API docs
+  found current-state summaries that still stopped at round 9 or round 10.
+- `2026-07-05 09:09 WEST`: Security found incompatible command payload bytes
+  could expose a `COMMAND_VALIDATION_ERROR` detail with an empty
+  `ValidationError`.
+- `2026-07-05 09:10 WEST`: Performance/reliability was clean.
+
+## Round-11 Fix Pass
+
+- `2026-07-05 09:14 WEST`: Orchestrator changed invalid command payload
+  details to include one sanitized constraint violation, added a
+  `CommandService.Post` regression for incompatible payload bytes, and updated
+  parent/child status summaries.
+- `2026-07-05 09:20 WEST`: Focused incompatible-payload service regression
+  passed. Full affected bus/repository/service suites passed outside the
+  sandbox with 3 files and 97 tests. The sandboxed affected suite failed only
+  on known loopback gRPC listener permissions (`listen EPERM 127.0.0.1`).
+  `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, `pnpm format:check`, and
+  `git diff --check` passed.

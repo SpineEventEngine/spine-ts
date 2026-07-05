@@ -1,5 +1,10 @@
 import { create } from "@bufbuild/protobuf";
-import { ValidationErrorSchema, type ValidationError } from "@spine-ts/proto";
+import { createValidationError } from "@spine-ts/core";
+import {
+  ConstraintViolationSchema,
+  TemplateStringSchema,
+  type ValidationError,
+} from "@spine-ts/proto";
 
 /** Error raised when a command envelope payload fails command-bus validation. */
 export class CommandValidationError extends Error {
@@ -16,6 +21,14 @@ export class CommandValidationError extends Error {
 
   /** Create a validation error for payloads that cannot be unpacked as the registered type. */
   static invalidPayload(): CommandValidationError {
-    return new CommandValidationError(create(ValidationErrorSchema));
+    return new CommandValidationError(
+      createValidationError([
+        create(ConstraintViolationSchema, {
+          message: create(TemplateStringSchema, {
+            withPlaceholders: "Command payload could not be decoded as the registered type.",
+          }),
+        }),
+      ]),
+    );
   }
 }

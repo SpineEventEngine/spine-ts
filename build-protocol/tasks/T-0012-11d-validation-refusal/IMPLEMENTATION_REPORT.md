@@ -85,7 +85,7 @@ Baseline commit: `c13b19c`
 
 ## Review Summary
 
-Independent review has run through nine rounds so far. Round 1 moved payload
+Independent review has run through ten rounds so far. Round 1 moved payload
 validation to the `CommandBus`, removed an accidental public entity inspection
 hook, and filled missing public Ack docs. Round 2 moved internal validation
 errors back into their owning bus/repository layers and kept arbitrary
@@ -102,10 +102,17 @@ aggregate replay error separation, stale-marker recovery coverage, and queued
 command-bus validation ordering coverage. Round 9 protected rejected
 transition-validation details from handler mutation, moved replay errors to a
 replay-owned module, qualified public replay-failure docs, and refreshed parent
-ledger state.
+ledger state. Round 10 aligned remaining replay-failure documentation and
+status summaries.
 
 ### Latest Verification
 
+- `2026-07-05 09:20 WEST`: Focused incompatible-payload service regression
+  passed. Full affected bus/repository/service suites passed outside the
+  sandbox with 3 files and 97 tests. The sandboxed affected suite failed only
+  on known loopback gRPC listener permissions (`listen EPERM 127.0.0.1`).
+  `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, `pnpm format:check`, and
+  `git diff --check` passed.
 - `2026-07-05 09:03 WEST`: Docs-only round-10 verification passed:
   `pnpm docs:check`, `pnpm format:check`, and `git diff --check`.
 - `2026-07-05 08:49 WEST`: Focused mutation regression passed. Full affected
