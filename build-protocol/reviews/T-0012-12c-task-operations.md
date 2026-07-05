@@ -114,3 +114,23 @@ Planned fix:
 
 - Record `6fea638` as the status-fix commit and update current state to the
   post-status-fix re-review state.
+
+### Round 5 - `3624163`
+
+| Lane                       | Agent                                  | Result   |
+| -------------------------- | -------------------------------------- | -------- |
+| code style/maintainability | `019f32f9-628a-7242-86d2-db3babfa4add` | Comments |
+| documentation              | `019f32f9-632d-7482-8729-9c3aff5b8f21` | Comments |
+| TypeScript/API docs        | `019f32f9-63d4-7b72-832e-5be5bfb050fc` | Clean    |
+| security                   | `019f32f9-6476-7c61-b18e-34b04f0419d7` | Clean    |
+| performance/reliability    | `019f32f9-64fd-7ba2-9964-9abdd71d6c3e` | Comments |
+
+Findings:
+
+- Work-log current state still said to commit the post-status-fix log update
+  after `3624163` had already committed it.
+
+Planned fix:
+
+- Update work-log restart guidance to point at round-five re-review/task
+  closure.
