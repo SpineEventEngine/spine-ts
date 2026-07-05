@@ -3,10 +3,11 @@
 Task log: `build-protocol/tasks/T-0012-12f-runnable-server-guide/TASK.md`
 Branch: `task/T-0012-12f-runnable-server-guide`
 Baseline commit: `230452d`
-Reviewed commit/diff basis: latest round `995e842..9872e7d`
+Last completed review basis: `995e842..9872e7d`
+Current pending review basis: `9872e7d..21470bc`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12f-runnable-server-guide`
-Status: round 2 metadata follow-up pending re-review
+Status: round 3 metadata follow-up re-review in progress
 
 ## Required Review Lanes
 
@@ -90,4 +91,43 @@ Planned fixes:
 
 - Apply metadata-only log corrections, verify formatting and diff hygiene,
   commit the follow-up, and send the metadata diff back to all five review
+  lanes.
+
+Outcome:
+
+- Metadata follow-up was committed as `21470bc`.
+- Verification passed: changed-log Prettier check and `git diff --check`.
+- Re-review package: `.superpowers/sdd/review-9872e7d..21470bc.diff`.
+
+### Round 3
+
+Reviewed package:
+`.superpowers/sdd/review-9872e7d..21470bc.diff`
+
+Reviewers:
+
+- code style/maintainability:
+  `019f33e9-206f-7262-962b-101312217ecc` (metadata comments, closed)
+- documentation:
+  `019f33e9-3cc9-7863-9c52-80698551fe28` (metadata comments, closed)
+- TypeScript/API docs:
+  `019f33e9-57a3-7262-8e3a-d879fee3cb3a` (clean, closed)
+- security:
+  `019f33e9-7376-7861-8055-bc436c986034` (clean, closed)
+- performance/reliability:
+  `019f33e9-9858-71f3-a668-bc6c03618b78` (metadata comments, closed)
+
+Findings:
+
+- Update the work-log current state so it does not say the already committed
+  metadata follow-up still needs to be committed.
+- Distinguish the last completed review basis from the current pending review
+  basis.
+- Record follow-up verification evidence in the implementation report and
+  work log.
+
+Planned fixes:
+
+- Apply this metadata-only correction, verify formatting and diff hygiene,
+  commit the follow-up, and send the new metadata diff back to all five review
   lanes.

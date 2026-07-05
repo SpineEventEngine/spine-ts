@@ -1,19 +1,20 @@
 # T-0012.12f: Runnable Server And Guide
 
-Status: review-fix verified; ready for re-review
+Status: round 2 metadata follow-up committed; re-review in progress
 Start: `2026-07-05 20:59 WEST`
 End: Pending
 Baseline commit: `230452d`
 Setup commit: `21c3c27`
 Implementation commit: `995e842`
 Review-fix commit: `9872e7d`
+Metadata follow-up commit: `21470bc`
 Task log path: `build-protocol/tasks/T-0012-12f-runnable-server-guide/TASK.md`
 Branch: `task/T-0012-12f-runnable-server-guide`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12f-runnable-server-guide`
 Authoring sub-agent: `019f33cd-dfd0-7c73-bb58-60b7e5045c5d` (closed)
 Reviewer sub-agents: round 1 complete and closed; round 2 found
-metadata-only follow-up comments
+metadata-only follow-up comments; round 3 in progress
 
 ## Objective
 
@@ -114,6 +115,8 @@ Out of scope:
   in `9872e7d` and verified.
 - Round 2 re-review found metadata-only stale review-state wording. No code,
   API, security, or reliability gaps were reported in that round.
+- Metadata follow-up commit `21470bc` records the round 2 findings and the
+  current re-review basis.
 
 ## Setup Verification
 
@@ -177,3 +180,10 @@ Out of scope:
 - Documentation and maintainability: fix stale review-state wording left in
   `TASK.md`, `IMPLEMENTATION_REPORT.md`, and the work/review logs after
   `9872e7d` was committed.
+
+## Round 2 Metadata Follow-Up Verification
+
+- Metadata follow-up commit: `21470bc`.
+- Review package: `.superpowers/sdd/review-9872e7d..21470bc.diff`.
+- Changed-log Prettier check passed.
+- `git diff --check` passed.

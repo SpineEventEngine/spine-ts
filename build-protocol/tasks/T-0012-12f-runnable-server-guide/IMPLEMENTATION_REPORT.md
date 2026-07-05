@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12f Runnable Server And Guide
 
-Status: review-fix verified; ready for re-review
+Status: round 2 metadata follow-up committed; re-review in progress
 Branch: `task/T-0012-12f-runnable-server-guide`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12f-runnable-server-guide`
@@ -8,6 +8,7 @@ Baseline commit: `230452d`
 Setup commit: `21c3c27`
 Implementation commit: `995e842`
 Review-fix commit: `9872e7d`
+Metadata follow-up commit: `21470bc`
 
 ## Summary
 
@@ -116,9 +117,16 @@ Verification:
 
 ## Round 2 Re-Review Fixes
 
-Addressed in this metadata follow-up:
+Addressed in `21470bc`:
 
 - Updated stale review-state wording that still described the `9872e7d`
   review-fix commit as pending or in progress.
 - Recorded that round 2 found metadata-only comments while security,
   performance/reliability, and TypeScript/API docs were clean.
+
+Verification:
+
+- Changed-log Prettier check passed.
+- `git diff --check` passed.
+- Re-review package:
+  `.superpowers/sdd/review-9872e7d..21470bc.diff`.
