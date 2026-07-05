@@ -1,8 +1,8 @@
 # To-Do Example User Guide
 
 Current status: the in-process create-task, task-operation,
-subscription, validation-failure, and business-refusal flows are runnable in
-tests.
+live-subscription, validation-failure, and business-refusal flows are runnable
+in tests.
 
 Run the focused example test after generated code and build output exist:
 

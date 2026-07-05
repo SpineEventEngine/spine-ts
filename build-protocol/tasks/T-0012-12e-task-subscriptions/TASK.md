@@ -1,6 +1,6 @@
 # T-0012.12e: Task Subscriptions
 
-Status: implementation and local verification complete; pending review/merge
+Status: review-fix edits complete; local verification passed; committed; pending review
 Start: `2026-07-05 20:32 WEST`
 End: Pending
 Baseline commit: `a8c8f07`
@@ -97,15 +97,34 @@ Out of scope:
   confirms `next()` becomes inert after `cancel()`.
 - No framework changes were required. The existing `SubscriptionService`
   behavior already emitted projection-driven updates with the expected shape.
+- Review-fix note: the older `expectTaskListEventuallyUnchanged` helper is left
+  untouched because it predates this slice and is not part of the live
+  subscription hygiene fix.
 
 ## Verification Evidence
 
+- Review findings to fix:
+  - stale current-state wording in `build-protocol/work-logs/T-0012-12.md`;
+  - stale README summary and deferred-subscription statements in the example
+    docs;
+  - missing `try/finally` cleanup around the live subscription fixture;
+  - unbounded `subscription.next()` waits in the live-subscription test.
 - RED:
   - Added the new example subscription tests first, then ran
     `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`.
   - The first full run passed immediately with 14/14 tests because the
     framework behavior already existed; this slice needed example-level proof
     and docs rather than production code changes.
+- GREEN:
+  - `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+    passed after the review-fix edits.
+  - `pnpm typecheck` passed.
+  - `pnpm lint` passed.
+  - `pnpm exec prettier --check examples/todo/src/index.test.ts examples/todo/README.md examples/todo/USER_GUIDE.md build-protocol/tasks/T-0012-12e-task-subscriptions/TASK.md build-protocol/tasks/T-0012-12e-task-subscriptions/IMPLEMENTATION_REPORT.md build-protocol/reviews/T-0012-12e-task-subscriptions.md build-protocol/work-logs/T-0012-12.md`
+    passed.
+  - `pnpm docs:check` passed.
+  - `pnpm proto:check-generated` passed.
+  - `git diff --check` passed.
 - GREEN:
   - `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
     passed after the test/doc updates.

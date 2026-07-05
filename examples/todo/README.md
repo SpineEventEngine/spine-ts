@@ -2,11 +2,11 @@
 
 Small server-side to-do example for Spine TS.
 
-Current status: runnable in-process task operations with validation and
-business refusal. The example defines generated Protobuf-ES messages, a
-decorated task aggregate, task-list projection rows, and `createTodoContext()`
-for a single-tenant `Tasks` bounded context using the framework's default
-in-memory storage.
+Current status: runnable in-process task operations with validation, business
+refusal, and live task-list subscriptions. The example defines generated
+Protobuf-ES messages, a decorated task aggregate, task-list projection rows,
+and `createTodoContext()` for a single-tenant `Tasks` bounded context using the
+framework's default in-memory storage.
 
 Implemented in this slice:
 

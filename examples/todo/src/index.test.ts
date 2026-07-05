@@ -130,47 +130,57 @@ describe("@spine-ts/example-todo", () => {
     });
     const subscription = await fixture.subscribe(createTaskListTopic());
 
-    await fixture.post(createTaskCommand("command-subscribe-create", "task-live", "First"));
-    const created = unpackSubscribedTaskList(await subscription.next());
+    try {
+      await fixture.post(createTaskCommand("command-subscribe-create", "task-live", "First"));
+      const created = unpackSubscribedTaskList(
+        await nextSubscriptionUpdate(subscription, "create"),
+      );
 
-    expect(created.response.status?.status.case).toBe("ok");
-    expect(created.subscription.id).toEqual(subscription.subscription.id);
-    expect(created.list).toEqual(
-      create(TaskListSchema, {
-        id: "task-live",
-        tasks: [
-          {
-            id: create(TaskIdSchema, { value: "task-live" }),
-            title: "First",
-            completed: false,
-          },
-        ],
-        openTaskCount: 1,
-      }),
-    );
+      expect(created.response.status?.status.case).toBe("ok");
+      expect(created.subscription.id).toEqual(subscription.subscription.id);
+      expect(created.list).toEqual(
+        create(TaskListSchema, {
+          id: "task-live",
+          tasks: [
+            {
+              id: create(TaskIdSchema, { value: "task-live" }),
+              title: "First",
+              completed: false,
+            },
+          ],
+          openTaskCount: 1,
+        }),
+      );
 
-    await fixture.post(createRenameCommand("command-subscribe-rename", "task-live", "Renamed"));
-    const renamed = unpackSubscribedTaskList(await subscription.next());
+      await fixture.post(createRenameCommand("command-subscribe-rename", "task-live", "Renamed"));
+      const renamed = unpackSubscribedTaskList(
+        await nextSubscriptionUpdate(subscription, "rename"),
+      );
 
-    expect(renamed.list.tasks[0]?.title).toBe("Renamed");
-    expect(renamed.list.tasks[0]?.completed).toBe(false);
-    expect(renamed.list.openTaskCount).toBe(1);
+      expect(renamed.list.tasks[0]?.title).toBe("Renamed");
+      expect(renamed.list.tasks[0]?.completed).toBe(false);
+      expect(renamed.list.openTaskCount).toBe(1);
 
-    await fixture.post(createCompleteCommand("command-subscribe-complete", "task-live"));
-    const completed = unpackSubscribedTaskList(await subscription.next());
+      await fixture.post(createCompleteCommand("command-subscribe-complete", "task-live"));
+      const completed = unpackSubscribedTaskList(
+        await nextSubscriptionUpdate(subscription, "complete"),
+      );
 
-    expect(completed.list.tasks[0]?.title).toBe("Renamed");
-    expect(completed.list.tasks[0]?.completed).toBe(true);
-    expect(completed.list.openTaskCount).toBe(0);
+      expect(completed.list.tasks[0]?.title).toBe("Renamed");
+      expect(completed.list.tasks[0]?.completed).toBe(true);
+      expect(completed.list.openTaskCount).toBe(0);
 
-    await fixture.post(createReopenCommand("command-subscribe-reopen", "task-live"));
-    const reopened = unpackSubscribedTaskList(await subscription.next());
+      await fixture.post(createReopenCommand("command-subscribe-reopen", "task-live"));
+      const reopened = unpackSubscribedTaskList(
+        await nextSubscriptionUpdate(subscription, "reopen"),
+      );
 
-    expect(reopened.list.tasks[0]?.title).toBe("Renamed");
-    expect(reopened.list.tasks[0]?.completed).toBe(false);
-    expect(reopened.list.openTaskCount).toBe(1);
-
-    await subscription.close();
+      expect(reopened.list.tasks[0]?.title).toBe("Renamed");
+      expect(reopened.list.tasks[0]?.completed).toBe(false);
+      expect(reopened.list.openTaskCount).toBe(1);
+    } finally {
+      await subscription.close();
+    }
   });
 
   it("renames one task through command handling and exposes the new title", async () => {
@@ -591,6 +601,31 @@ function unpackSubscribedTaskList(update: SubscriptionUpdate | undefined) {
     subscription: update.subscription,
     list,
   };
+}
+
+async function nextSubscriptionUpdate(
+  subscription: Awaited<ReturnType<BoundedContextFixture["subscribe"]>>,
+  label: string,
+  timeoutMs = 250,
+) {
+  return await withTimeout(subscription.next(), `subscription update for ${label}`, timeoutMs);
+}
+
+async function withTimeout<T>(promise: Promise<T>, label: string, timeoutMs: number): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const timeoutPromise = new Promise<T>((_, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error(`Timed out waiting for ${label} after ${String(timeoutMs)}ms.`));
+    }, timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 function readList(response: Pick<QueryResponse, "message">, taskId: string) {

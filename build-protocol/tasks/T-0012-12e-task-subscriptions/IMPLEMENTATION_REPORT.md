@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12e Task Subscriptions
 
-Status: implementation and local verification complete; pending review/merge
+Status: review-fix edits complete; local verification passed; committed; pending review
 Branch: `task/T-0012-12e-task-subscriptions`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12e-task-subscriptions`
@@ -23,9 +23,18 @@ behavior over task-list projection updates.
 - Added small example-facing helpers in the test file to build a task-list
   topic and unpack the first projected list update.
 - No framework changes were needed.
+- Review-fix note: the older `expectTaskListEventuallyUnchanged` helper stays
+  as-is because it predates this slice and does not overlap with the live
+  subscription cleanup fix.
 
 ## Verification Evidence
 
+- Review findings to fix:
+  - stale current-state wording in `build-protocol/work-logs/T-0012-12.md`;
+  - stale README summary and deferred-subscription statements in the example
+    docs;
+  - missing `try/finally` cleanup around the live subscription fixture;
+  - unbounded `subscription.next()` waits in the live-subscription test.
 - RED:
   - Added the new subscription tests before any production-code edits.
   - First run of
