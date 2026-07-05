@@ -18,7 +18,17 @@ Status: split complete; splitter review pending
 
 ## Splitter Review
 
-Pending independent review of the requirements split.
+Round 1 produced findings from maintainability, documentation, TypeScript/API
+docs, and performance/reliability. The security lane was clean.
+
+Required fixes recorded before implementation:
+
+- Replace stale report wording that still said the next action was a
+  requirements splitter.
+- Add an explicit coverage gate for every implementation slice.
+- Add generated-clean verification for `examples/todo/generated/`.
+- Add TypeDoc/API-doc requirements for public example exports and generated
+  output exclusion/guarding.
 
 Splitter output summary:
 

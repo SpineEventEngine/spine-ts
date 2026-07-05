@@ -259,6 +259,18 @@ Splitting pattern:
 - Then add the remaining task operations, validation/refusal, subscriptions,
   and runnable server/user documentation.
 
+Common verification gate for every implementation slice:
+
+- Run and record focused tests for the slice.
+- Run and record `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, a
+  formatting check covering changed tracked files, and `git diff --check`.
+- Run and record `pnpm test:coverage` before a slice is considered complete.
+  If sandbox restrictions block local endpoints or IPC, rerun the same command
+  with approved escalation and record both the sandbox failure and the
+  escalated result.
+- Coverage must remain at or above the repository 90% threshold unless a
+  recorded framework-gap or review decision explicitly changes the gate.
+
 ### T-0012.12a Todo Proto Generation
 
 Proposed branch: `task/T-0012-12a-todo-proto`
@@ -284,7 +296,10 @@ Acceptance criteria:
 - Example TypeScript can import generated schemas directly without generated
   facades.
 - Root or example tooling excludes generated example output from lint,
-  coverage, and formatting churn while still proving ignored output is fresh.
+  coverage, TypeDoc, and formatting churn while still proving ignored output is
+  fresh.
+- The generated-clean check covers `examples/todo/generated/` and fails on
+  tracked, missing, symlinked, stale, or orphaned generated files.
 - No runtime framework behavior is added in this slice.
 
 Verification plan:
@@ -292,6 +307,11 @@ Verification plan:
 - Focused example generation command for `examples/todo`.
 - `git check-ignore -- examples/todo/generated/.cleanup-enforcement-check`
 - `git ls-files -- examples/todo/generated`
+- A generated-clean check for `examples/todo/generated/`, either by extending
+  `proto:check-generated` or adding an equivalent example-specific script.
+- `pnpm docs:check`, proving `examples/todo/generated/**` is excluded or
+  otherwise guarded from TypeDoc output while `examples/todo/src/index.ts`
+  remains documented.
 - Focused example proto/domain compile or smoke test.
 - `pnpm typecheck:build`
 - Tracked-file Prettier check for changed docs/config/example files.
@@ -565,8 +585,8 @@ Selection rationale:
 | Area                             | Impact                                                                                                                            |
 | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | Package README impact            | Example README must be updated from placeholder to runnable app guide.                                                            |
-| TypeDoc/API docs impact          | Pending implementation; required if public framework API changes.                                                                 |
-| Public API additions/removals    | Pending implementation; avoid unless a framework gap is proven.                                                                   |
+| TypeDoc/API docs impact          | Pending implementation; required for public example exports and for public framework API changes.                                 |
+| Public API additions/removals    | Pending implementation; avoid framework API changes unless a framework gap is proven; document public example exports in TypeDoc. |
 | Framework `USER_GUIDE.md` impact | Pending implementation; required if example reveals missing framework guidance.                                                   |
 | Example `USER_GUIDE.md` impact   | Required; the guide must explain generation, startup, command posting, querying, subscriptions, tests, and demonstrated features. |
 | API examples                     | Required through runnable example code and guide snippets.                                                                        |
@@ -588,6 +608,11 @@ Selection rationale:
 
 - Splitter-doc verification passed with focused Prettier check on the four
   allowed docs and `git diff --check`.
+- Round-1 splitter review requested fixes for stale splitter-next-action
+  wording, an explicit coverage gate, generated-clean verification for
+  `examples/todo/generated/`, and TypeDoc handling for public example exports
+  plus ignored generated output. This fix pass records those requirements before
+  first implementation.
 
 ## Open Risks And Follow-Up Routing
 

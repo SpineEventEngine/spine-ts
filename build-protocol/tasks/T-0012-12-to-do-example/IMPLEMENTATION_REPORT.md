@@ -22,11 +22,13 @@ framework details.
 - `T-0012.11` integrated aggregate command execution, projection event updates,
   projection list queries, validation/refusal wiring, and a black-box fixture.
 
-## Splitting Requirement
+## Splitting Outcome
 
-The next action is a requirements-splitting sub-agent. It must split this task
-into small slices, identify any missing framework feature exposed by the
-example, and select the first non-blocked implementation slice.
+The requirements-splitting sub-agent split this task into small slices,
+identified no framework gap before the first slice, and selected
+`T-0012.12a Todo Proto Generation` as the first non-blocked implementation
+slice. The next action is independent splitter review, then the selected
+implementation slice.
 
 ## Current State
 
