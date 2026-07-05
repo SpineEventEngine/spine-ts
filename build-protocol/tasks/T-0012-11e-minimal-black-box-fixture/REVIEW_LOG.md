@@ -10,11 +10,11 @@ Status: implemented and verified
 
 ## Required Lanes
 
-- code style/maintainability: pending
-- documentation: pending
-- TypeScript/API docs: pending
-- security: pending
-- performance/reliability: pending
+- code style/maintainability: round-1 findings under fix
+- documentation: round-1 findings under fix
+- TypeScript/API docs: round 1 clean
+- security: round-1 findings under fix
+- performance/reliability: round-1 findings under fix
 
 ## Review Focus
 
@@ -49,3 +49,24 @@ Reviewers must verify:
   `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, `git diff --check`, and
   escalated `pnpm test:coverage`. Sandboxed coverage failed only on local
   endpoint/IPC permissions.
+- Round-1 documentation review found stale parent `Child commit remains
+pending` wording after commit `67e2586` and impossible timestamp ordering in
+  child logs.
+- Round-1 reliability review found `subscribe()` did not actually activate
+  before returning. The documented subscribe/post/next order could miss updates
+  because activation started only when callers invoked `next()`.
+- Round-1 security and style reviews found the fixture exposed the original
+  `BoundedContext`, used the public mutable subscription as the cancel token,
+  and coupled testing-package tests to private server test fixtures.
+
+## Round-1 Fix Pass
+
+- `2026-07-05 09:39 WEST`: Fix pass started. The fixture now starts activation
+  eagerly, queues cloned updates for later `next()` calls, keeps a private
+  subscription for cancellation, exposes cloned subscription snapshots, removes
+  the `context` getter, moves descriptor test data under `packages/testing`, and
+  aligns parent/child durable status text.
+- `2026-07-05 09:44 WEST`: Focused fixture tests, `pnpm typecheck`,
+  `pnpm lint`, `pnpm docs:check`, and `git diff --check` passed for the fix.
+  The touched test and log files were formatted after `pnpm format:check`
+  reported Prettier drift.

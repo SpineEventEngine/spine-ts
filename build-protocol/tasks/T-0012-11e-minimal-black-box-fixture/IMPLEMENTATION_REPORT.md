@@ -19,7 +19,7 @@ Baseline commit: `6b5dd07`
 
 ## Implementation Notes
 
-- `2026-07-05 12:30 WEST`: Orchestrator created this child branch/worktree from
+- `2026-07-05 09:20 WEST`: Orchestrator created this child branch/worktree from
   parent commit `6b5dd07` and opened the durable task/report/review/work logs.
   Implementation must start with focused tests around the smallest useful
   fixture surface.
@@ -66,3 +66,18 @@ Baseline commit: `6b5dd07`
   `listen EPERM: operation not permitted 127.0.0.1`.
 - Escalated `pnpm test:coverage` passed with 45 files and 616 tests. Coverage
   summary: statements 95.02%, branches 90.17%, functions 97.59%, lines 95.04%.
+
+## Review Fixes
+
+- `2026-07-05 09:39 WEST`: Round-1 review found the subscription handle did not
+  activate before returning, exposed the original `BoundedContext`, used the
+  public mutable subscription as the cancel token, imported a private server
+  test fixture, left parent logs saying the child commit was pending, and had
+  impossible timestamp ordering. The fix starts subscription activation eagerly,
+  queues updates for later `next()` calls, keeps a private cancel token, removes
+  the context getter, moves descriptor test data under `packages/testing`, and
+  aligns durable status timestamps.
+- `2026-07-05 09:44 WEST`: Round-1 fix verification passed for focused fixture
+  tests, `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, and
+  `git diff --check`. `pnpm format:check` reported Prettier drift in touched
+  test and log files; those files were formatted before the final rerun.

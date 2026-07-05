@@ -11,8 +11,8 @@ import {
   SubscriptionSchema,
   SubscriptionUpdateSchema,
   TopicSchema,
-  type Subscription,
   type SubscriptionUpdate,
+  type Subscription,
   type Topic,
 } from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
 import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
@@ -82,11 +82,6 @@ export class BoundedContextFixture<Context extends BoundedContext = BoundedConte
     this.#subscriptions = handlers.subscriptions;
   }
 
-  /** Built bounded context under test. */
-  get context(): Context {
-    return this.#context;
-  }
-
   /** Post one command through the real in-process `CommandService` adapter. */
   async post(command: Command): Promise<Ack> {
     const ack = await this.#commands.post(clone(CommandSchema, command));
@@ -135,7 +130,9 @@ export class BoundedContextFixture<Context extends BoundedContext = BoundedConte
 class ActiveFixtureSubscription implements FixtureSubscription {
   readonly #handlers: SubscriptionHandlers;
   readonly #iterator: AsyncIterator<SubscriptionUpdate>;
-  readonly subscription: Subscription;
+  readonly #subscription: Subscription;
+  readonly #queue: SubscriptionUpdate[] = [];
+  readonly #waiters: OnSubscriptionUpdate[] = [];
   #closed = false;
 
   constructor(
@@ -143,29 +140,32 @@ class ActiveFixtureSubscription implements FixtureSubscription {
     updates: AsyncIterable<SubscriptionUpdate>,
     handlers: SubscriptionHandlers,
   ) {
-    this.subscription = clone(SubscriptionSchema, subscription);
+    this.#subscription = clone(SubscriptionSchema, subscription);
     this.#iterator = updates[Symbol.asyncIterator]();
     this.#handlers = handlers;
+    void this.#pump();
+  }
+
+  get subscription(): Subscription {
+    return clone(SubscriptionSchema, this.#subscription);
   }
 
   async next(): Promise<SubscriptionUpdate | undefined> {
+    const queued = this.#queue.shift();
+    if (queued !== undefined) {
+      return clone(SubscriptionUpdateSchema, queued);
+    }
     if (this.#closed) {
       return undefined;
     }
 
-    const result = await this.#iterator.next();
-    if (result.done === true) {
-      this.#closed = true;
-      return undefined;
-    }
-
-    return clone(SubscriptionUpdateSchema, result.value);
+    return this.#nextQueued();
   }
 
   async cancel(): Promise<Response> {
-    const response = await this.#handlers.cancel(clone(SubscriptionSchema, this.subscription));
-    this.#closed = true;
+    const response = await this.#handlers.cancel(clone(SubscriptionSchema, this.#subscription));
     await this.#iterator.return?.();
+    this.#finish();
 
     return clone(ResponseSchema, response);
   }
@@ -175,7 +175,47 @@ class ActiveFixtureSubscription implements FixtureSubscription {
       await this.cancel();
     }
   }
+
+  async #pump(): Promise<void> {
+    try {
+      while (!this.#closed) {
+        const result = await this.#iterator.next();
+        if (result.done === true) {
+          break;
+        }
+        this.#push(result.value);
+      }
+    } finally {
+      this.#finish();
+    }
+  }
+
+  #push(update: SubscriptionUpdate): void {
+    const copy = clone(SubscriptionUpdateSchema, update);
+    const waiter = this.#waiters.shift();
+    if (waiter === undefined) {
+      this.#queue.push(copy);
+    } else {
+      waiter(copy);
+    }
+  }
+
+  #nextQueued(): Promise<SubscriptionUpdate | undefined> {
+    return new Promise((resolve) => this.#waiters.push(resolve));
+  }
+
+  #finish(): void {
+    if (this.#closed) {
+      return;
+    }
+    this.#closed = true;
+    for (const waiter of this.#waiters.splice(0)) {
+      waiter(undefined);
+    }
+  }
 }
+
+type OnSubscriptionUpdate = (update: SubscriptionUpdate | undefined) => void;
 
 function captureHandlers(
   context: BoundedContext,

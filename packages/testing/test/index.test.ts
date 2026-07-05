@@ -36,7 +36,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { BoundedContextFixture } from "../src/index.js";
-import { serverEntityMetadataTestFixtures } from "../../server/test-fixtures/entity-metadata-fixtures.js";
+import { testingDescriptorSetBase64 } from "./fixtures/entity-metadata-fixture.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -50,9 +50,7 @@ type AggregateState = Message<"AggregateState"> & {
   archived: boolean;
 };
 
-const fileEntityMetadataFixture = createFixtureFileDescriptor(
-  serverEntityMetadataTestFixtures.main.descriptorSetBase64,
-);
+const fileEntityMetadataFixture = createFixtureFileDescriptor(testingDescriptorSetBase64);
 const ProjectionStateSchema = messageDesc(
   fileEntityMetadataFixture,
   0,
@@ -122,11 +120,10 @@ describe("BoundedContextFixture", () => {
   it("subscribes through SubscriptionService and receives real projection updates", async () => {
     const fixture = new BoundedContextFixture(createTaskContext());
     const subscription = await fixture.subscribe(createTaskTopic());
-    const nextUpdate = subscription.next();
 
     await fixture.post(createTaskCommand("command-subscribe", "task-2", "Second"));
 
-    const update = await nextUpdate;
+    const update = await subscription.next();
     const state =
       update?.update.case === "entityUpdates" ? update.update.value.update[0]?.kind : undefined;
 
@@ -153,13 +150,11 @@ describe("BoundedContextFixture", () => {
   });
 
   it("uses the default eventual-read predicate for non-empty OK query responses", async () => {
-    const context = createTaskContext();
-    const fixture = new BoundedContextFixture(context);
+    const fixture = new BoundedContextFixture(createTaskContext());
 
     await fixture.postEvent(createProjectionEvent("event-default", "task-default", "Default"));
     const response = await fixture.readEventually(createTaskQuery("task-default"));
 
-    expect(fixture.context).toBe(context);
     expect(response.response?.status?.status.case).toBe("ok");
     expect(unpackAny(response.message[0]?.state ?? missingAny(), ProjectionStateSchema)).toEqual(
       createProjectionState("task-default", "Default (projected)", 2),
@@ -184,6 +179,11 @@ describe("BoundedContextFixture", () => {
       queueLimit: 1,
     });
     const subscription = await fixture.subscribe(createTaskTopic());
+    const exposed = subscription.subscription;
+
+    if (exposed.id !== undefined) {
+      exposed.id.value = "mutated-by-test";
+    }
 
     const cancel = await subscription.cancel();
 
