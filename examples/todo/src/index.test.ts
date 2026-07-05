@@ -6,6 +6,7 @@ import {
   CommandContextSchema,
   CommandIdSchema,
   UserIdSchema,
+  ValidationErrorSchema,
 } from "@spine-ts/proto";
 import {
   TargetFiltersSchema,
@@ -138,6 +139,32 @@ describe("@spine-ts/example-todo", () => {
     expect(readList(response, "task-rename")?.openTaskCount).toBe(1);
   });
 
+  it("rejects invalid rename payloads with validation details without changing the task list", async () => {
+    const fixture = new BoundedContextFixture(createTodoContext(), {
+      timeoutMs: 500,
+      intervalMs: 5,
+    });
+
+    await fixture.post(createTaskCommand("command-invalid-rename-create", "task-invalid", "Kept"));
+    const originalResponse = await fixture.readEventually(
+      createTaskListQuery(),
+      (candidate) => taskTitle(candidate, "task-invalid") === "Kept",
+    );
+
+    const ack = await fixture.post(
+      createRenameCommand("command-invalid-rename", "task-invalid", "", { validate: false }),
+    );
+    const response = await fixture.read(createTaskListQuery());
+    const details = validationDetails(ack.status?.status);
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("COMMAND_VALIDATION_ERROR");
+    expect(errorMessage(ack.status?.status)).toBe("Command payload validation failed.");
+    expect(details?.constraintViolation.length).toBeGreaterThan(0);
+    expect(readTask(response, "task-invalid")).toEqual(readTask(originalResponse, "task-invalid"));
+    expect(readList(response, "task-invalid")?.openTaskCount).toBe(1);
+  });
+
   it("completes one task through command handling and closes the list row", async () => {
     const fixture = new BoundedContextFixture(createTodoContext(), {
       timeoutMs: 500,
@@ -156,6 +183,54 @@ describe("@spine-ts/example-todo", () => {
     expect(task?.title).toBe("Open");
     expect(task?.completed).toBe(true);
     expect(readList(response, "task-complete")?.openTaskCount).toBe(0);
+  });
+
+  it("refuses completing an already completed task without changing the task list", async () => {
+    const fixture = new BoundedContextFixture(createTodoContext(), {
+      timeoutMs: 500,
+      intervalMs: 5,
+    });
+
+    await fixture.post(createTaskCommand("command-refuse-create", "task-refuse", "One-shot"));
+    await fixture.post(createCompleteCommand("command-refuse-complete", "task-refuse"));
+    const completedResponse = await fixture.readEventually(
+      createTaskListQuery(),
+      (candidate) => taskCompleted(candidate, "task-refuse") === true,
+    );
+
+    const ack = await fixture.post(
+      createCompleteCommand("command-refuse-complete-again", "task-refuse"),
+    );
+    const response = await fixture.read(createTaskListQuery());
+    const task = readTask(response, "task-refuse");
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("TASK_ALREADY_DONE");
+    expect(errorMessage(ack.status?.status)).toBe("Task is already done.");
+    expect(task).toEqual(readTask(completedResponse, "task-refuse"));
+    expect(readList(response, "task-refuse")?.openTaskCount).toBe(0);
+  });
+
+  it("refuses reopening an open task without changing the task list", async () => {
+    const fixture = new BoundedContextFixture(createTodoContext(), {
+      timeoutMs: 500,
+      intervalMs: 5,
+    });
+
+    await fixture.post(createTaskCommand("command-refuse-reopen-create", "task-open", "Open"));
+    const openResponse = await fixture.readEventually(
+      createTaskListQuery(),
+      (candidate) => taskCompleted(candidate, "task-open") === false,
+    );
+
+    const ack = await fixture.post(createReopenCommand("command-refuse-reopen", "task-open"));
+    const response = await fixture.read(createTaskListQuery());
+
+    expect(ack.status?.status.case).toBe("error");
+    expect(errorType(ack.status?.status)).toBe("TASK_NOT_DONE");
+    expect(errorMessage(ack.status?.status)).toBe("Task is not done.");
+    expect(readTask(response, "task-open")).toEqual(readTask(openResponse, "task-open"));
+    expect(readList(response, "task-open")?.openTaskCount).toBe(1);
   });
 
   it("counts duplicate same-id projection rows", () => {
@@ -284,7 +359,12 @@ function createTaskCommand(commandId: string, taskId: string, title: string) {
   });
 }
 
-function createRenameCommand(commandId: string, taskId: string, title: string) {
+function createRenameCommand(
+  commandId: string,
+  taskId: string,
+  title: string,
+  options: { readonly validate?: boolean } = {},
+) {
   return packCommand({
     id: create(CommandIdSchema, { uuid: commandId }),
     context: create(CommandContextSchema, {
@@ -295,6 +375,7 @@ function createRenameCommand(commandId: string, taskId: string, title: string) {
       id: create(TaskIdSchema, { value: taskId }),
       title,
     }),
+    ...options,
   });
 }
 
@@ -387,4 +468,51 @@ function taskCompleted(
   taskId: string,
 ): boolean | undefined {
   return readTask(response, taskId)?.completed;
+}
+
+function errorMessage(status: unknown) {
+  if (
+    typeof status !== "object" ||
+    status === null ||
+    !("case" in status) ||
+    status.case !== "error"
+  ) {
+    return undefined;
+  }
+  const value = "value" in status ? status.value : undefined;
+
+  return typeof value === "object" && value !== null && "message" in value
+    ? value.message
+    : undefined;
+}
+
+function errorType(status: unknown) {
+  if (
+    typeof status !== "object" ||
+    status === null ||
+    !("case" in status) ||
+    status.case !== "error"
+  ) {
+    return undefined;
+  }
+  const value = "value" in status ? status.value : undefined;
+
+  return typeof value === "object" && value !== null && "type" in value ? value.type : undefined;
+}
+
+function validationDetails(status: unknown) {
+  if (
+    typeof status !== "object" ||
+    status === null ||
+    !("case" in status) ||
+    status.case !== "error"
+  ) {
+    return undefined;
+  }
+  const value = "value" in status ? status.value : undefined;
+  if (typeof value !== "object" || value === null || !("details" in value)) {
+    return undefined;
+  }
+
+  return unpackAny(value.details as Parameters<typeof unpackAny>[0], ValidationErrorSchema);
 }

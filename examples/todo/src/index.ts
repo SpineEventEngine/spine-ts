@@ -6,6 +6,7 @@ import {
   Apply,
   Assign,
   BoundedContext,
+  CommandRefusalError,
   Projection,
   Repository,
   Subscribe,
@@ -74,6 +75,9 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
   @Assign(CompleteTaskSchema)
   completeTask(command: CompleteTask): Event {
     const id = requireTaskId(command.id);
+    if (this.state.completed) {
+      throw new CommandRefusalError("TASK_ALREADY_DONE", "Task is already done.");
+    }
 
     return packEvent({
       id: create(EventIdSchema, { value: this.nextEventId("task-completed", id) }),
@@ -89,6 +93,9 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
   @Assign(ReopenTaskSchema)
   reopenTask(command: ReopenTask): Event {
     const id = requireTaskId(command.id);
+    if (!this.state.completed) {
+      throw new CommandRefusalError("TASK_NOT_DONE", "Task is not done.");
+    }
 
     return packEvent({
       id: create(EventIdSchema, { value: this.nextEventId("task-reopened", id) }),

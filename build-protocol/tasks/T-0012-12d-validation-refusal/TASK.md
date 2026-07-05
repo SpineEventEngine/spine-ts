@@ -1,18 +1,18 @@
 # T-0012.12d: Validation And Refusal
 
-Status: setup baseline verified; implementation pending
+Status: complete; commit pending
 Start: `2026-07-05 18:08 WEST`
-End: Pending
+End: `2026-07-05 18:49 WEST`
 Baseline commit: `27250a0`
 Task log path: `build-protocol/tasks/T-0012-12d-validation-refusal/TASK.md`
 Branch: `task/T-0012-12d-validation-refusal`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
-Authoring sub-agent: pending
-Reviewer sub-agents: pending
+Authoring sub-agent: main Codex implementer
+Reviewer sub-agents: unavailable in this session; local two-axis review completed
 Setup commit: `c264543`
-Implementation commit: pending
-Final branch HEAD: pending
+Implementation commit: current branch HEAD after final commit
+Final branch HEAD: current branch HEAD after final commit
 
 ## Objective
 
@@ -89,6 +89,60 @@ Out of scope:
 - `pnpm typecheck` passed in the task worktree.
 - `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
   passed, 1 file / 8 tests.
+
+## Implementation Notes
+
+- Added black-box to-do example tests for invalid rename validation, duplicate
+  complete refusal, and not-done reopen refusal.
+- Invalid rename is packed with validation disabled at the client-side `Any`
+  boundary so `CommandService.Post` performs the framework validation and
+  returns `COMMAND_VALIDATION_ERROR` with packed
+  `spine.validation.ValidationError` details.
+- `TaskAggregate` now throws the existing framework `CommandRefusalError` for
+  `TASK_ALREADY_DONE` and `TASK_NOT_DONE`; no framework code or custom details
+  hierarchy was added.
+- The tests read through `QueryService` after each rejected command and assert
+  the task-list projection state remains unchanged.
+
+## Red/Green Evidence
+
+- RED:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  failed with 10 tests / 1 failure: already-completed `CompleteTask` returned
+  Ack status `ok` instead of `error`.
+- GREEN:
+  `pnpm typecheck:build` passed.
+- GREEN:
+  `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed, 1 file / 11 tests.
+
+## Final Verification
+
+- `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+  passed, 1 file / 11 tests.
+- `pnpm typecheck` passed.
+- `pnpm lint` passed.
+- `pnpm exec prettier --check` on changed task/example files passed.
+- `pnpm docs:check` passed; TypeDoc reported the existing invalid `origin`
+  source-link warning only.
+- `pnpm proto:check-generated` passed.
+- `git diff --check` passed.
+- Sandboxed `pnpm test:coverage` failed because local IPC and loopback are
+  restricted (`Operation not permitted` and `listen EPERM 127.0.0.1`).
+- Escalated `pnpm test:coverage` passed, 45 files / 647 tests, with overall
+  coverage: statements 95.18%, branches 90.48%, functions 97.63%, lines
+  95.2%.
+
+## Review Notes
+
+- Standards: no issues found against `CODE_QUALITY.md`; the diff stays scoped
+  to the example and task logs, uses existing framework names, and does not add
+  a custom details hierarchy.
+- Spec: no gaps found against this task's acceptance criteria. Validation
+  fails through `CommandService.Post` with packed `ValidationError` details,
+  refusal uses `CommandRefusalError`, and tests assert unchanged read-side
+  projection state after both validation failure and business refusal.
+- Framework gap found: none.
 
 ## Skill Applicability Check
 

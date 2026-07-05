@@ -2,10 +2,11 @@
 
 Small server-side to-do example for Spine TS.
 
-Current status: runnable in-process task operations slice. The example defines
-generated Protobuf-ES messages, a decorated task aggregate, task-list projection
-rows, and `createTodoContext()` for a single-tenant `Tasks` bounded context
-using the framework's default in-memory storage.
+Current status: runnable in-process task operations with validation and
+business refusal. The example defines generated Protobuf-ES messages, a
+decorated task aggregate, task-list projection rows, and `createTodoContext()`
+for a single-tenant `Tasks` bounded context using the framework's default
+in-memory storage.
 
 Implemented in this slice:
 
@@ -16,6 +17,10 @@ Implemented in this slice:
   task-reopened events;
 - update `TaskListProjection` rows from event delivery;
 - query visible `TaskList` projection rows through `QueryService`.
+- reject invalid command payloads through `CommandService.Post` with
+  `COMMAND_VALIDATION_ERROR` and packed Spine validation details;
+- refuse already-done completion and not-done reopen commands with stable
+  Ack error names, without writing projection state.
 
-Still deferred: validation/refusal examples, subscriptions, standalone server
-startup, and the final end-to-end user guide.
+Still deferred: subscriptions, standalone server startup, and the final
+end-to-end user guide.
