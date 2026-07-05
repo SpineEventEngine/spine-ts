@@ -4,10 +4,10 @@ Task log: `build-protocol/tasks/T-0012-12c-task-operations/TASK.md`
 Branch: `task/T-0012-12c-task-operations`
 Baseline commit: `fc71408`
 Reviewed commit/diff basis: implementation commit `8ab4b5c`; review-fix
-commit `3ee5c1a`
+commit `3ee5c1a`; metadata-fix commit `b6495bb`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
-Status: round-two comments; title and metadata fix pending
+Status: metadata-fix committed; re-review pending
 
 ## Required Review Lanes
 
@@ -74,3 +74,23 @@ Planned fixes:
 
 - Rename the test to match the narrowed evidence.
 - Update task/work-log/review metadata for the committed review fix.
+
+### Round 3 - `b6495bb`
+
+| Lane                       | Agent                                  | Result   |
+| -------------------------- | -------------------------------------- | -------- |
+| code style/maintainability | `019f32f4-80f1-7562-a7d0-5750b391db56` | Comments |
+| documentation              | `019f32f4-816d-7732-810d-17de1aa7ea02` | Comments |
+| TypeScript/API docs        | `019f32f4-81e1-7bb2-afc2-1436113f1049` | Clean    |
+| security                   | `019f32f4-82b6-7b20-876b-1f81aaf253a7` | Clean    |
+| performance/reliability    | `019f32f4-8348-73f2-9c83-10ff06be09e6` | Comments |
+
+Findings:
+
+- Task, review, and work-log status fields still described the
+  title/metadata fix as pending after `b6495bb`.
+
+Planned fix:
+
+- Record `b6495bb` as the metadata-fix commit and update current state to the
+  post-metadata-fix re-review state.

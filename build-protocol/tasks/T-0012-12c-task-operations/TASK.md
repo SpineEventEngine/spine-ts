@@ -1,6 +1,6 @@
 # T-0012.12c: Task Operations
 
-Status: review-fix committed; re-review pending
+Status: metadata-fix committed; re-review pending
 Start: `2026-07-05 16:12 WEST`
 End: `2026-07-05 16:21 WEST`
 Baseline commit: `fc71408`
@@ -12,6 +12,7 @@ Authoring sub-agent: `019f32d6-a303-7480-b4b9-d30a3da75ea1`
 Reviewer sub-agents: round one closed; round two closed with comments
 Implementation commit: `8ab4b5c`
 Review-fix commit: `3ee5c1a`
+Metadata-fix commit: `b6495bb`
 Final branch HEAD: pending
 
 ## Objective
