@@ -508,6 +508,24 @@ await stand.update(TaskStateSchema, taskState, {
 
 const latest = await stand.read(TaskStateSchema, taskId);
 const versioned = await stand.readVersioned(TaskStateSchema, taskId);
+const allVersioned = await stand.readAllVersioned(TaskStateSchema);
+const tenantVersioned = await tenantTasks.stand().readAllVersioned(TaskStateSchema, {
+  tenantId: "tenant-a",
+});
+
+const query = create(QuerySchema, {
+  target: create(TargetSchema, {
+    type: deriveTypeUrl(TaskStateSchema),
+    criterion: { case: "includeAll", value: true },
+  }),
+  context: create(ActorContextSchema, {
+    tenantId: create(TenantIdSchema, {
+      kind: { case: "value", value: "tenant-a" },
+    }),
+  }),
+});
+
+const response = await queryClient.read(query);
 const subscription = stand.subscribe(TaskStateSchema, (update) => {
   update.state;
 });
@@ -518,13 +536,20 @@ subscription.unsubscribe();
 `Stand.register(schema)` is available for direct stand instances; built bounded
 contexts call it from registered repository metadata. Reads, updates, and
 subscriptions reject unknown state schemas with `StandStateTypeError`.
-Multitenant stands require `{ tenantId }`; single-tenant stands reject tenant
-options. Direct subscriptions are in-process only and must be cleaned up by
-calling `unsubscribe()`. `SpineServices` adapts built-context stands to the
-first raw gRPC-compatible query and subscription routes. Service subscriptions
-allocate IDs in `Subscribe` and attach Stand delivery in `Activate`; updates
-recorded before activation are not replayed by this first slice. This direct API
-does not provide a client query DSL.
+`readAllVersioned()` returns `StandReadResult` entries in deterministic
+`RecordStorage.query()` order and clones the stored state and caller-supplied
+version metadata the same way `readVersioned()` does. Multitenant stands require
+`{ tenantId }` for point reads, list reads, updates, and subscriptions; single-
+tenant stands reject tenant options. `SpineServices` adapts built-context
+stands to the first raw gRPC-compatible query and subscription routes, including
+projection-state `QueryService.Read` calls with `Target.include_all = true`.
+Include-all service reads use the same tenant-option behavior as direct stand
+reads and return `EntityStateWithVersion` values packed from
+`Stand.readAllVersioned()`. Direct subscriptions are in-process only and must be
+cleaned up by calling `unsubscribe()`. Service subscriptions allocate IDs in
+`Subscribe` and attach Stand delivery in `Activate`; updates recorded before
+activation are not replayed by this first slice. This direct API does not
+provide a client query DSL.
 
 ## Runtime Assembly Closure
 

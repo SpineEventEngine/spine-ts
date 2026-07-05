@@ -155,6 +155,36 @@ describe("Stand", () => {
     ]);
   });
 
+  it("returns copy-safe list read results for state and version", async () => {
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    stand.register(ProjectionStateSchema);
+
+    await stand.update(ProjectionStateSchema, createState("task-1", "First"), {
+      version: create(VersionSchema, { number: 7 }),
+    });
+
+    const results = await stand.readAllVersioned(ProjectionStateSchema);
+    const first = results[0];
+    if (first !== undefined) {
+      first.state.name = "Mutated";
+      if (first.version !== undefined) {
+        first.version.number = 99;
+      }
+    }
+
+    const reread = await stand.readAllVersioned(ProjectionStateSchema);
+
+    expect(reread).toEqual([
+      {
+        state: createState("task-1", "First"),
+        version: create(VersionSchema, { number: 7 }),
+      },
+    ]);
+  });
+
   it("rejects updates whose registered ID field is absent from the state", async () => {
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
@@ -233,6 +263,35 @@ describe("Stand", () => {
 
     expect(storageFactory.storages).toHaveLength(2);
     expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
+  });
+
+  it("closes the storage handle after successful list reads", async () => {
+    const storageFactory = new ClosingStorageFactory();
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    stand.register(ProjectionStateSchema);
+
+    await stand.update(ProjectionStateSchema, createState("task-1", "First"));
+    await stand.readAllVersioned(ProjectionStateSchema);
+
+    expect(storageFactory.storages).toHaveLength(2);
+    expect(storageFactory.storages[1]?.isOpen()).toBe(false);
+  });
+
+  it("closes the storage handle when list reads reject", async () => {
+    const storageFactory = new RejectingQueryStorageFactory();
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    stand.register(ProjectionStateSchema);
+
+    await expect(stand.readAllVersioned(ProjectionStateSchema)).rejects.toThrow("query failed");
+
+    expect(storageFactory.storages).toHaveLength(1);
+    expect(storageFactory.storages[0]?.isOpen()).toBe(false);
   });
 
   it("keeps multitenant state and subscribers isolated by tenant", async () => {
@@ -402,6 +461,17 @@ class ClosingStorageFactory extends InMemoryStorageFactory {
   ): RecordStorage<I, R> {
     const storage = super.onCreateRecordStorage(context, recordSpec);
     this.storages.push(storage);
+    return storage;
+  }
+}
+
+class RejectingQueryStorageFactory extends ClosingStorageFactory {
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    const storage = super.onCreateRecordStorage(context, recordSpec);
+    storage.query = async () => Promise.reject(new Error("query failed"));
     return storage;
   }
 }

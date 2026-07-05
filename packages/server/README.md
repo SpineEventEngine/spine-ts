@@ -4,7 +4,8 @@ Descriptor-derived server metadata for Spine entity schemas, explicit handler
 metadata, standard decorator metadata adapters, aggregate snapshot/event storage,
 the first command/event bus seam, and the first runtime routing plan seam over
 `@spine-ts/transport` contracts, plus the first direct storage-backed `Stand`
-slice for latest entity state reads and in-process update subscriptions.
+slice for latest entity state point/list reads and in-process update
+subscriptions.
 
 Current slice exposes:
 
@@ -36,13 +37,15 @@ Current slice exposes:
   projection event subscribers through the command and event buses;
   and
 - `context.stand()` / `new Stand({ context, storageFactory })` for direct
-  read-side entity state registration, latest-state updates, latest-state reads,
-  and explicit in-process subscription cleanup;
+  read-side entity state registration, latest-state updates, latest-state point
+  and list reads with caller-supplied version metadata, and explicit in-process
+  subscription cleanup;
   and
 - `new SpineServices({ contexts }).register(router)` for the first real
   Connect/Node route registration of Spine JVM `CommandService`,
   `QueryService`, and `SubscriptionService` contracts over built bounded
-  contexts;
+  contexts, including projection-state ID-filter and `Target.include_all`
+  query reads;
   and
 - `AggregateStorage` for the current primitive-`AggregateId`
   snapshot/history seam, backed by `StorageFactory`, `RecordStorage`, and

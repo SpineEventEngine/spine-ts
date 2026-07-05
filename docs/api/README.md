@@ -30,7 +30,7 @@ Server exports include `BoundedContext`, `BoundedContextBuilder`,
 `ContextSpec`, `BoundedContextName`, `TenantMode`, `BoundedContextSnapshot`,
 small immutable snapshot contracts, `CommandEndpoint`, `EventEndpoint`,
 `StoredEventDispatchFailure`, `DispatchErrorSnapshot`, `Stand`, direct stand
-option/update/subscription contracts, and
+read/version/list/update/subscription contracts, and
 `BoundedContextNameError` for bounded-context assembly. `CommandEndpoint`
 also exposes accepted command message type URLs so service adapters can route
 without dispatch-probing unrelated contexts.
@@ -132,18 +132,22 @@ direct read-side entity-state API. A stand registers known generated state
 schemas, rejects unknown state types on read/update/subscribe, stores latest
 states through `StorageFactory`/`RecordStorage`, reads latest state by schema
 and entity ID, can return caller-supplied version metadata through
-`readVersioned()`, and delivers direct in-process update notifications.
+`readVersioned()`, can return storage-order list results through
+`readAllVersioned()`, and delivers direct in-process update notifications.
 Subscription cleanup is explicit via `unsubscribe()`, and multitenant stands
-require a `tenantId` on read/update/subscribe while single-tenant stands reject
-tenant options.
+require a `tenantId` on point reads, list reads, updates, and subscriptions
+while single-tenant stands reject tenant options.
 `SpineServices` adapts built-context command buses and stands to the first real
 Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
-routes. `Subscribe` allocates opaque IDs, `Activate` attaches delivery, and
-`Cancel`/stream finalization release in-process handles. Never-activated
-subscriptions have a configurable inactive TTL, and active delivery uses a
-configurable queue limit for slow consumers. It is not a client DSL, event
-subscription implementation, broad server lifecycle, durable subscription store,
-or projection catch-up loop.
+routes. `QueryService.Read` supports projection-state ID-filter reads and
+`Target.include_all = true`, packing `EntityStateWithVersion` replies from
+`Stand.readVersioned()` and `Stand.readAllVersioned()` respectively. `Subscribe`
+allocates opaque IDs, `Activate` attaches delivery, and `Cancel`/stream
+finalization release in-process handles. Never-activated subscriptions have a
+configurable inactive TTL, and active delivery uses a configurable queue limit
+for slow consumers. It is not a client DSL, event subscription implementation,
+broad server lifecycle, durable subscription store, or projection catch-up
+loop.
 `AggregateStorage`, `AggregateStorageOptions`, `AggregateSnapshot`,
 `AggregateHistory`, and `AggregateId` form the minimal aggregate persistence
 seam. It writes latest snapshots through `StorageFactory`/`RecordStorage`,

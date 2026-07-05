@@ -1,18 +1,12 @@
 import { randomUUID } from "node:crypto";
 
 import { Code, ConnectError, type ConnectRouter } from "@connectrpc/connect";
-import { create, type Message } from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import { EmptySchema, StringValueSchema } from "@bufbuild/protobuf/wkt";
 import type { MessageSchema } from "@spine-ts/core";
 import { deriveTypeUrl, packAny, unpackAny } from "@spine-ts/core";
-import {
-  CommandIdSchema,
-  type Command,
-  type TenantId,
-  type Version,
-  VersionSchema,
-} from "@spine-ts/proto";
+import { CommandIdSchema, type Command, type TenantId, VersionSchema } from "@spine-ts/proto";
 import { ErrorSchema } from "@spine-ts/proto/generated/spine/base/error_pb.js";
 import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
 import type { Target } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
@@ -43,7 +37,7 @@ import {
 } from "@spine-ts/proto/generated/spine/core/response_pb.js";
 
 import type { BoundedContext } from "../context/bounded-context.js";
-import type { StandSubscription, StandUpdate } from "../stand/stand.js";
+import type { StandReadResult, StandSubscription, StandUpdate } from "../stand/stand.js";
 
 /** Small route registrar for the first public Spine gRPC service slice. */
 export class SpineServices {
@@ -480,9 +474,9 @@ function decodeId(id: Any): unknown {
   return stringId?.value ?? id;
 }
 
-function packVersionedState(
-  schema: MessageSchema,
-  result: { readonly state: Message; readonly version?: Version },
+function packVersionedState<Schema extends MessageSchema>(
+  schema: Schema,
+  result: StandReadResult<Schema>,
 ) {
   return create(EntityStateWithVersionSchema, {
     state: packAny(schema, result.state, { validate: false }),

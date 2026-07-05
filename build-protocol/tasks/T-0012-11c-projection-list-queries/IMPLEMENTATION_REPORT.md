@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11c Projection List Queries
 
-Status: in progress
+Status: complete
 Branch: `task/T-0012-11c-projection-list-queries`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11c-projection-list-queries`
@@ -10,6 +10,9 @@ Baseline commit: `8caec30`
 
 This slice adds the smallest read-side list query path needed by the to-do
 example: projection-state `include_all` reads through `QueryService.Read`.
+
+Review-fix follow-up from `13b1244` tightened the documentation and the direct
+stand reliability evidence without broadening the runtime surface.
 
 ## Initial Evidence
 
@@ -73,6 +76,14 @@ Implemented the smallest storage-backed include-all path:
   - `pnpm test:coverage` ✅ after rerunning outside sandbox; coverage result:
     45 files, 586 tests, statements 94.97%, branches 90.01%, functions 97.51%,
     lines 94.99%
+  - Review-fix focused verification from `13b1244`:
+    - `pnpm exec vitest run packages/server/test/stand/stand.test.ts -t "reads all stored entity states with their versions in storage order|returns copy-safe list read results for state and version|closes the storage handle after successful list reads|closes the storage handle when list reads reject"` ✅
+    - `pnpm exec vitest run packages/server/test/services/spine-services.test.ts -t "reads all projection states through QueryService include-all queries|returns stable errors for include-all read failures|treats include-all query tenant domain and email variants as present"` ✅
+    - `pnpm typecheck` ✅
+    - `pnpm lint` ✅
+    - `pnpm format:check` ✅
+    - `pnpm docs:check` ✅
+    - `git diff --check` ✅
 
 Sandbox notes:
 
@@ -89,3 +100,9 @@ Self-review pass: kept the change narrow to `Stand` plus `QueryService.Read`,
 used `RecordStorage.query()` directly, avoided new query abstractions, and
 added only the targeted tests needed to cover include-all reads, tenant
 behavior, sanitized errors, and unchanged ID-filter behavior.
+
+Review-fix pass: updated the public docs to describe direct list reads,
+`Target.include_all` query handling, deterministic storage-order results, and
+tenant-option behavior; added focused stand tests for list-read handle cleanup
+and copy-safe state/version results; and tightened `packVersionedState()` so
+the schema/result generic relation stays intact.

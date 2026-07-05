@@ -343,17 +343,20 @@ name validation or the builder-only build path by passing ad hoc objects.
 
 The current `Stand` slice is intentionally direct and storage-backed. It owns
 known generated state schemas, latest-state `RecordStorage`, direct
-read/update methods, versioned reads for caller-supplied update metadata, and
-deterministic in-process subscription handles with explicit `unsubscribe()`. It
-preserves read-side/write-side segregation by remaining the query/subscription
-facade over read-side state. Built bounded contexts may update it internally
-when repository event dispatch invokes projection subscribers, but application
-code still does not receive a repository read/write-side storage API. It does
-not run catch-up from events or provide a client query DSL. `SpineServices`
-adapts this direct read side and the context command bus to the first real
-Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
-routes. Service subscription delivery starts only when a client activates the
-opaque subscription ID, abandoned inactive subscriptions expire after a small
+read/update methods, versioned point reads, storage-order list reads through
+`Stand.readAllVersioned()`, and deterministic in-process subscription handles
+with explicit `unsubscribe()`. It preserves read-side/write-side segregation by
+remaining the query/subscription facade over read-side state. Built bounded
+contexts may update it internally when repository event dispatch invokes
+projection subscribers, but application code still does not receive a
+repository read/write-side storage API. It does not run catch-up from events or
+provide a client query DSL. `SpineServices` adapts this direct read side and
+the context command bus to the first real Connect/Node `CommandService`,
+`QueryService`, and `SubscriptionService` routes. Projection-state
+`QueryService.Read` calls with `Target.include_all = true` are satisfied through
+`Stand.readAllVersioned()` over the stand's `RecordStorage.query()` path.
+Service subscription delivery starts only when a client activates the opaque
+subscription ID, abandoned inactive subscriptions expire after a small
 configurable TTL, slow consumers are bounded by a small configurable update
 queue, and stream/cancel cleanup releases the direct Stand handle.
 
