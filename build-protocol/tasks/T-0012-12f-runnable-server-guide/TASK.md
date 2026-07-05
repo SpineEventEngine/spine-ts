@@ -6,12 +6,14 @@ End: Pending
 Baseline commit: `230452d`
 Setup commit: `21c3c27`
 Implementation commit: `995e842`
+Review-fix commit: `9872e7d`
 Task log path: `build-protocol/tasks/T-0012-12f-runnable-server-guide/TASK.md`
 Branch: `task/T-0012-12f-runnable-server-guide`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12f-runnable-server-guide`
 Authoring sub-agent: `019f33cd-dfd0-7c73-bb58-60b7e5045c5d` (closed)
-Reviewer sub-agents: round 1 complete and closed; review-fix pending
+Reviewer sub-agents: round 1 complete and closed; round 2 found
+metadata-only follow-up comments
 
 ## Objective
 
@@ -108,8 +110,10 @@ Out of scope:
 - Focused real-client smoke coverage passed with escalation after the sandbox
   denied loopback binding.
 - Round 1 review found test cleanup, IPv6 URL formatting, package description,
-  guide-snippet typing, and durable metadata fixes. Review-fix edits are in
-  progress.
+  guide-snippet typing, and durable metadata fixes. Those fixes are committed
+  in `9872e7d` and verified.
+- Round 2 re-review found metadata-only stale review-state wording. No code,
+  API, security, or reliability gaps were reported in that round.
 
 ## Setup Verification
 
@@ -164,3 +168,12 @@ Out of scope:
 - `pnpm docs:check` passed with the existing invalid-origin TypeDoc warning.
 - `pnpm proto:check-generated` passed.
 - Next review package starts after implementation commit `995e842`.
+
+## Round 2 Re-Review Findings
+
+- Security: clean.
+- Performance/reliability: clean.
+- TypeScript/API docs: clean.
+- Documentation and maintainability: fix stale review-state wording left in
+  `TASK.md`, `IMPLEMENTATION_REPORT.md`, and the work/review logs after
+  `9872e7d` was committed.

@@ -7,6 +7,7 @@ Worktree:
 Baseline commit: `230452d`
 Setup commit: `21c3c27`
 Implementation commit: `995e842`
+Review-fix commit: `9872e7d`
 
 ## Summary
 
@@ -91,7 +92,7 @@ function`.
 
 ## Round 1 Review Fixes
 
-In progress:
+Addressed in `9872e7d`:
 
 - Move standalone smoke-test cleanup so `server.close()` is guaranteed after
   server startup.
@@ -112,3 +113,12 @@ Verification:
 - `pnpm lint` passed.
 - `pnpm docs:check` passed with the existing invalid-origin TypeDoc warning.
 - `pnpm proto:check-generated` passed.
+
+## Round 2 Re-Review Fixes
+
+Addressed in this metadata follow-up:
+
+- Updated stale review-state wording that still described the `9872e7d`
+  review-fix commit as pending or in progress.
+- Recorded that round 2 found metadata-only comments while security,
+  performance/reliability, and TypeScript/API docs were clean.
