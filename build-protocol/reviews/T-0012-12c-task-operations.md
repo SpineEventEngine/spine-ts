@@ -6,9 +6,10 @@ Baseline commit: `fc71408`
 Reviewed commit/diff basis: implementation commit `8ab4b5c`; review-fix
 commit `3ee5c1a`; metadata-fix commit `b6495bb`; status-fix commit `6fea638`
 ; restart-guidance-fix commit `7ed30a3`; post-restart-status commit `2cb0cf8`
+; round-seven-status commit `05bceb5`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
-Status: post-restart-status committed; re-review pending
+Status: round-seven-status committed; re-review pending
 
 ## Required Review Lanes
 
@@ -175,3 +176,22 @@ Planned fix:
 
 - Record `2cb0cf8` and point current state to round-seven re-review/task
   closure.
+
+### Round 8 - `05bceb5`
+
+| Lane                       | Agent                                  | Result   |
+| -------------------------- | -------------------------------------- | -------- |
+| code style/maintainability | `019f3301-b4f2-7093-803b-f61ef0e49b68` | Clean    |
+| documentation              | `019f3301-b58b-7e91-ba49-c63c849aad70` | Comments |
+| TypeScript/API docs        | `019f3301-b60b-7ca0-aa91-674692b9e924` | Clean    |
+| security                   | `019f3301-b6a0-70e2-8998-fe58a760fbd1` | Clean    |
+| performance/reliability    | `019f3301-b748-7c72-bf6f-b3f3b7481ea7` | Comments |
+
+Findings:
+
+- Task, review, and work-log status fields still described the pre-`05bceb5`
+  state.
+
+Planned fix:
+
+- Record `05bceb5` and point current state to re-review/task closure.
