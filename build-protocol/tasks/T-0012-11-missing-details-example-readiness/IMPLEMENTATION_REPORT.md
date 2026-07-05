@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11 Missing Details And Example Readiness
 
-Status: T-0012.11a and T-0012.11b merged and parent-verified; T-0012.11c next
+Status: T-0012.11a, T-0012.11b, and T-0012.11c merged and parent-verified; T-0012.11d next
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -90,4 +90,15 @@ verification passed after the merge: focused repository/service tests (2 files,
 files, 580 tests; branches 90.04%). Sandboxed service/coverage runs remain
 blocked only by local endpoint permissions.
 
-`T-0012.11c Projection List Queries` is the next implementation slice.
+`T-0012.11c Projection List Queries` is merged into this parent branch at
+`413c5f7`. It adds direct Stand list reads, `QueryService.Read`
+projection-state `Target.include_all` support, tenant-boundary coverage, public
+docs/API updates, and focused list-read reliability tests. Parent verification
+passed after the merge: focused stand/service tests (2 files, 9 selected tests),
+`pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm docs:check`,
+`git diff --check HEAD^..HEAD`, and escalated `pnpm test:coverage` (45 files,
+589 tests; branches 90.01%). Sandboxed coverage remains blocked only by local
+endpoint permissions.
+
+`T-0012.11d Validation And Immediate Refusal Outcomes` is the next
+implementation slice.

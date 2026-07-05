@@ -1,6 +1,6 @@
 # Review Log: T-0012.11 Missing Details And Example Readiness
 
-Status: T-0012.11a and T-0012.11b merged and parent-verified; T-0012.11c next
+Status: T-0012.11a, T-0012.11b, and T-0012.11c merged and parent-verified; T-0012.11d next
 Task log:
 `build-protocol/tasks/T-0012-11-missing-details-example-readiness/TASK.md`
 Branch: `task/T-0012-11-missing-details-example-readiness`
@@ -66,7 +66,10 @@ passed after merge, including escalated coverage with 45 files and 580 tests;
 sandboxed service/coverage runs remain blocked only by local endpoint
 permissions.
 
-`T-0012.11c Projection List Queries` is next.
+`T-0012.11c Projection List Queries` is merged into this parent branch at
+`413c5f7`. Final child review lanes reported no remaining comments, and parent
+verification passed after merge. The next implementation slice is
+`T-0012.11d Validation And Immediate Refusal Outcomes`.
 
 ## Round-2 Findings Summary
 
