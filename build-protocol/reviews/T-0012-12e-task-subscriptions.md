@@ -3,14 +3,14 @@
 Task log: `build-protocol/tasks/T-0012-12e-task-subscriptions/TASK.md`
 Branch: `task/T-0012-12e-task-subscriptions`
 Baseline commit: `4bebdeb`
-Previous reviewed commit/diff basis: `d664526..e266478`
-Previous review package: `.superpowers/sdd/review-d664526..e266478.diff`
-Latest reviewed commit/diff basis: `e266478..815ebbe`
-Latest reviewed package: `.superpowers/sdd/review-e266478..815ebbe.diff`
+Previous reviewed commit/diff basis: `815ebbe..8983c60`
+Previous review package: `.superpowers/sdd/review-815ebbe..8983c60.diff`
+Latest reviewed commit/diff basis: `8983c60..858e77d`
+Latest reviewed package: `.superpowers/sdd/review-8983c60..858e77d.diff`
 Review recovery rule: review branch-tip changes after the latest reviewed basis.
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12e-task-subscriptions`
-Status: recovery-pointer docs fix committed; ready for review
+Status: final verification passed; ready for merge
 
 ## Required Review Lanes
 
@@ -112,3 +112,12 @@ Planned fixes:
 - record `e266478..815ebbe` as the latest reviewed package;
 - avoid self-referential "current commit" metadata by documenting the recovery
   rule: review branch-tip changes after the latest reviewed basis.
+
+Outcome:
+
+- Round 6 reviewers accepted the recovery rule in maintainability,
+  TypeScript/API docs, security, and reliability.
+- Documentation found only stale status wording.
+- `858e77d` changed the status lines to "recovery-pointer docs fix committed;
+  ready for review".
+- Round 7 reviewed `8983c60..858e77d` and returned clean across all five lanes.

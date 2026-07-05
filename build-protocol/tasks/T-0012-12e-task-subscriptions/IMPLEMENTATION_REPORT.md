@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12e Task Subscriptions
 
-Status: recovery-pointer docs fix committed; ready for review
+Status: final verification passed; ready for merge
 Branch: `task/T-0012-12e-task-subscriptions`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12e-task-subscriptions`
@@ -13,9 +13,11 @@ Metadata cleanup commit: `2a778c6`
 Metadata stamp commit: `d664526`
 Immutable-ref docs fix commit: `e266478`
 Recovery-pointer docs fix commit: `815ebbe`
-Previous reviewed package: `.superpowers/sdd/review-d664526..e266478.diff`
-Latest reviewed basis: `e266478..815ebbe`
-Latest reviewed package: `.superpowers/sdd/review-e266478..815ebbe.diff`
+Recovery-rule docs fix commit: `8983c60`
+Status docs fix commit: `858e77d`
+Previous reviewed package: `.superpowers/sdd/review-815ebbe..8983c60.diff`
+Latest reviewed basis: `8983c60..858e77d`
+Latest reviewed package: `.superpowers/sdd/review-8983c60..858e77d.diff`
 Review recovery rule: review branch-tip changes after the latest reviewed basis.
 
 ## Summary
@@ -64,6 +66,19 @@ behavior over task-list projection updates.
   - `pnpm docs:check` passed.
   - `pnpm proto:check-generated` passed.
   - `git diff --check` passed.
+- FINAL:
+  - Focused
+    `pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests`
+    passed, 1 file / 14 tests.
+  - `pnpm typecheck` passed.
+  - `pnpm lint` passed.
+  - `pnpm docs:check` passed with the existing invalid-origin TypeDoc warning.
+  - `pnpm proto:check-generated` passed.
+  - Changed-file Prettier check passed.
+  - `git diff --check` passed.
+  - Sandboxed `pnpm test:coverage` failed on blocked local IPC/listeners with
+    `EPERM`; escalated `pnpm test:coverage` passed, 45 files / 650 tests, with
+    95.18% statements and 90.48% branches.
 
 ## Framework Gap
 
