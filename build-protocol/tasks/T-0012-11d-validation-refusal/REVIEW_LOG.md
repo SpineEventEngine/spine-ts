@@ -6,17 +6,16 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-19 Required Lanes rollup fix verified; ready for follow-up review
+Status: round-20 status/API-doc rollup fix verified; ready for follow-up review
 
 ## Required Lanes
 
-- code style/maintainability: formatting passed through round 18
-  report/status fixes
-- documentation: docs check passed through round 18 report/status fixes
-- TypeScript/API docs: typecheck passed through round 12; docs check passed
-  through round 18, including round-13 README Markdown, round-14/16/17 docs
-  updates, round-15/16 status rollup fixes, and round-18 report/status
-  consistency fixes
+- code style/maintainability: formatting passed through round 19 rollup fixes
+- documentation: docs check passed through round 19 rollup fixes
+- TypeScript/API docs: typecheck passed through round 12; docs/API checks
+  passed through round 19 docs-only verification, including round-13 README
+  Markdown, round-14/16/17 docs updates, round-15/16 status rollup fixes, and
+  round-18/19 report/status rollup fixes
 - security: round-11 incompatible-payload detail fix verified; earlier
   dispatcher-thrown validation detail sanitization remains verified
 - performance/reliability: round-12 rejected-commit marker lifetime fix
@@ -472,3 +471,17 @@ Status: round-19 Required Lanes rollup fix verified; ready for follow-up review
   rollup to carry round-18 formatting/docs/API-docs verification forward and
   recorded the pass in child durable logs. Docs, format, and whitespace
   verification passed.
+
+### Round 20
+
+- `2026-07-05 11:20 WEST`: Documentation review found parent headers and
+  current-state bodies still stopped at round 18, and the Required Lanes rollup
+  did not carry round-19 docs/format/whitespace verification forward.
+
+## Round-20 Fix Pass
+
+- `2026-07-05 11:25 WEST`: Implementation worker aligned parent headers and
+  current-state bodies with the round-19 Required Lanes rollup fix, updated the
+  lane summary to include round-19 docs/format/whitespace verification without
+  advancing TypeScript typecheck state, and recorded the pass in child and
+  parent work logs. Docs, format, and whitespace verification passed.
