@@ -1,6 +1,6 @@
 # Review Log: T-0012.11 Missing Details And Example Readiness
 
-Status: split complete; T-0012.11a merged and parent-verified; T-0012.11b round-2 fixes verified
+Status: split complete; T-0012.11a merged and parent-verified; T-0012.11b round-3 fixes verified
 Task log:
 `build-protocol/tasks/T-0012-11-missing-details-example-readiness/TASK.md`
 Branch: `task/T-0012-11-missing-details-example-readiness`
@@ -57,15 +57,14 @@ since completed implementation review, merged into this parent branch at
 `1a7b6c8`, and passed parent verification.
 
 `T-0012.11b Projection Event Updates` is active in its child worktree. Initial
-implementation and round-1 review fixes passed child verification. Round-2
-review fixes are verified for the stored-event redispatch reliability gap:
-post-storage command completion remains resolved, while later redispatch
-failures are observable through
-`BoundedContext.storedEventDispatchFailures()` without adding retry,
-catch-up, or delivery-worker scope. The parent task/report/review statuses and
-current-state text now agree with the parent work log. Escalated coverage
-passed with 45 files and 576 tests; sandboxed coverage remains blocked only by
-local endpoint permissions.
+implementation and review-fix rounds 1 through 3 passed child verification.
+Round-2 fixes covered the stored-event redispatch reliability gap. Round-3
+fixes covered tenant/security, bounded diagnostics, internal naming, and
+public/API docs. Post-storage command completion remains resolved, later
+redispatch failures are observable through
+`BoundedContext.storedEventDispatchFailures()`, and no retry/catch-up/delivery
+worker scope was added. Escalated coverage passed with 45 files and 579 tests;
+sandboxed coverage remains blocked only by local endpoint permissions.
 
 ## Round-2 Findings Summary
 

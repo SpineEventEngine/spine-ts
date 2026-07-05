@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11 Missing Details And Example Readiness
 
-Status: split complete; T-0012.11a merged and parent-verified; T-0012.11b round-2 fixes verified
+Status: split complete; T-0012.11a merged and parent-verified; T-0012.11b round-3 fixes verified
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -81,12 +81,12 @@ tests (5 files, 62 tests), `pnpm docs:check`, `pnpm typecheck`, `pnpm lint`,
 permissions.
 
 `T-0012.11b Projection Event Updates` is active in the child worktree. Its
-initial implementation and round-1 review fixes passed focused and full
-verification. The round-2 review-fix pass is verified and records
-asynchronous already-stored event redispatch failures through
-`BoundedContext.storedEventDispatchFailures()` without changing aggregate
-command completion after storage/snapshot handling or adding retry/catch-up
-delivery behavior. Parent task/report/review status text now matches the
-parent work log instead of stopping at `T-0012.11a`. Escalated coverage passed
-with 45 files and 576 tests; sandboxed coverage remains blocked only by local
-endpoint permissions.
+initial implementation and review-fix rounds 1 through 3 passed focused and
+full verification. The round-2 pass records asynchronous already-stored event
+redispatch failures through `BoundedContext.storedEventDispatchFailures()`
+without changing aggregate command completion after storage/snapshot handling
+or adding retry/catch-up delivery behavior. The round-3 pass binds
+aggregate-produced event origin to the command tenant, stores bounded frozen
+diagnostic error snapshots, and fixes public/API docs. Escalated coverage
+passed with 45 files and 579 tests; sandboxed coverage remains blocked only by
+local endpoint permissions.

@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.11b Projection Event Updates
 
-Status: round-2 review fixes implemented; verification passed
+Status: round-3 review fixes implemented; verification passed
 Branch: `task/T-0012-11b-projection-event-updates`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11b-projection-event-updates`
@@ -78,6 +78,23 @@ that updates `Stand` after a projection subscriber mutates projection state.
   the already-updated parent work log so durable docs no longer stop at
   `T-0012.11a`.
 
+## Round-3 Review Fixes
+
+- Aggregate command execution now overwrites handler-produced event origin
+  metadata with the current command as direct `pastMessage` origin. This keeps
+  multitenant projection dispatch under the command tenant even when an
+  aggregate handler returns an event with conflicting `importContext` or
+  embedded `pastMessage` tenant metadata.
+- Stored-event redispatch diagnostics now keep only a small bounded buffer,
+  clone events on write/read, and store frozen scalar `DispatchErrorSnapshot`
+  values instead of retaining thrown objects by reference.
+- Internal context/repository callback names were shortened to
+  `recordDispatchFailure`; the public `storedEventDispatchFailures()` API
+  remains unchanged.
+- API docs, server README wording, repository TypeDoc, and API export
+  expectations now describe projection subscriber execution and the bounded
+  diagnostic error snapshot.
+
 ## Verification
 
 - RED:
@@ -139,3 +156,14 @@ that updates `Stand` after a projection subscriber mutates projection state.
   the permission failures. Escalated `pnpm test:coverage` passed with 45 files
   and 576 tests; coverage summary: statements 95.01%, branches 90.09%,
   functions 97.49%, lines 95.03%.
+- Round-3 focused repository verification:
+  `pnpm vitest run packages/server/test/repository/repository-routing.test.ts`
+  passed with 1 file and 37 tests.
+- Round-3 final verification passed: `pnpm typecheck`, `pnpm lint`,
+  `pnpm format:check`, `pnpm docs:check`, and `git diff --check`.
+- Sandboxed `pnpm test:coverage` failed only on local endpoint permissions:
+  ZeroMQ IPC reported `Operation not permitted`, and gRPC service tests
+  reported `listen EPERM 127.0.0.1`. The sandboxed run had 43 files and 557
+  tests passing, with 2 files and 21 tests failed due to those permissions.
+- Escalated `pnpm test:coverage` passed with 45 files and 579 tests; coverage
+  summary: statements 94.97%, branches 90.04%, functions 97.5%, lines 94.99%.

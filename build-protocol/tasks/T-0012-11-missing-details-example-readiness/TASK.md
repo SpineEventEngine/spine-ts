@@ -1,6 +1,6 @@
 # T-0012.11: Missing Details And Example Readiness
 
-Status: split complete; T-0012.11a merged and parent-verified; T-0012.11b round-2 fixes verified
+Status: split complete; T-0012.11a merged and parent-verified; T-0012.11b round-3 fixes verified
 Branch: `task/T-0012-11-missing-details-example-readiness`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11-missing-details-example-readiness`
@@ -138,12 +138,15 @@ Resumed-state note:
   564 tests; statements 94.85%, branches 90.03%, functions 97.33%, lines
   94.87%).
 - `T-0012.11b` is active in its child worktree. Initial implementation,
-  round-1 review fixes, and round-2 reliability/docs fixes are verified.
-  The round-2 pass adds observable
+  round-1 review fixes, round-2 reliability/docs fixes, and round-3
+  security/diagnostics/docs fixes are verified. The round-2 pass adds
+  observable
   `BoundedContext.storedEventDispatchFailures()` diagnostics for asynchronous
   already-stored event redispatch failures while keeping aggregate command
   completion resolved after storage/snapshot handling and avoiding
-  retry/catch-up/delivery scope.
+  retry/catch-up/delivery scope. The round-3 pass binds aggregate-produced
+  event origin to the command tenant and makes diagnostics bounded and
+  snapshot-only.
 
 ## Staged Subtasks
 

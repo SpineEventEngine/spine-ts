@@ -1,6 +1,6 @@
 # T-0012.11b: Projection Event Updates
 
-Status: round-2 review fixes implemented; verification passed
+Status: round-3 review fixes implemented; verification passed
 Start: `2026-07-05 00:23 WEST`
 Parent task: `T-0012.11 Missing Details And Example Readiness`
 Branch: `task/T-0012-11b-projection-event-updates`
@@ -106,3 +106,13 @@ events update read-side projection state through `Stand`.
 - Final round-2 verification passed. Sandboxed `pnpm test:coverage` still fails
   only on known local IPC/HTTP2 endpoint permissions; escalated coverage passed
   with 45 files and 576 tests.
+- Round-3 review fixes are implemented and verified. Aggregate-produced events
+  now always bind their direct origin to the executing command, preventing
+  handler-supplied origin tenants from routing projection updates into another
+  tenant. Stored-event dispatch diagnostics now retain a bounded buffer of
+  frozen `DispatchErrorSnapshot` values and clone events on write/read.
+  Internal dispatch-failure callbacks use the shorter `recordDispatchFailure`
+  name. Public/API docs and TypeDoc export expectations were updated.
+- Round-3 verification passed. Sandboxed `pnpm test:coverage` still fails only
+  on local IPC/listen permissions; escalated coverage passed with 45 files and
+  579 tests, including 90.04% branch coverage.

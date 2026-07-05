@@ -226,9 +226,11 @@ export class RepositoryIdentityError extends Error {
  * authentic explicit aggregate handler metadata, the built context can also
  * execute aggregate commands through repository-owned assignees and appliers,
  * persist aggregate history and snapshots through `AggregateStorage`, and hand
- * already-stored events to the event bus. The repository surface still does
- * not expose direct entity lookup/storage APIs, inbox/delivery management,
- * caches, lifecycle monitors, or transport startup.
+ * already-stored events to the event bus. With authentic projection subscriber
+ * metadata, built contexts can also execute projection subscribers and write
+ * changed projection state through the context-owned `Stand`. The repository
+ * surface still does not expose direct entity lookup/storage APIs,
+ * inbox/delivery management, caches, lifecycle monitors, or transport startup.
  *
  * @typeParam EntityType - A single concrete aggregate, projection, or process-manager constructor
  * with one concrete generated state schema. Broad constructor, constructor-union, broad-schema, and
@@ -442,7 +444,7 @@ interface RepositoryRuntime {
   readonly storageFactory: StorageFactory;
   readonly stand: Stand;
   readonly dispatchStored: (event: Event) => Promise<void>;
-  readonly recordStoredDispatchFailure: (event: Event, error: unknown) => void;
+  readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
 
 type RepositoryHandlersOption =
@@ -726,11 +728,7 @@ class AggregateCommandExecution {
 
     context.producerId = PrimitiveIds.pack(aggregateId);
     context.version = create(VersionSchema, { number: eventVersionNumber(version) });
-    if (
-      context.origin.case === undefined &&
-      this.#command.context !== undefined &&
-      this.#command.id !== undefined
-    ) {
+    if (this.#command.context !== undefined && this.#command.id !== undefined) {
       context.origin = {
         case: "pastMessage",
         value: create(OriginSchema, {
@@ -754,7 +752,7 @@ class AggregateCommandExecution {
   #dispatchStoredEvents(events: readonly Event[]): void {
     for (const event of events) {
       void this.#runtime.dispatchStored(event).catch((error: unknown) => {
-        this.#runtime.recordStoredDispatchFailure(event, error);
+        this.#runtime.recordDispatchFailure(event, error);
       });
     }
   }

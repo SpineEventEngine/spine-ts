@@ -17,6 +17,7 @@ import {
   EventContextSchema,
   EventIdSchema,
   EventSchema,
+  OriginSchema,
   TenantIdSchema,
   UserIdSchema,
   VersionSchema,
@@ -249,9 +250,13 @@ class BigintVersionAggregate extends Aggregate<string, typeof AggregateStateSche
 
 class ProjectionProducingAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: AggregateState) {
-    return createProjectionEvent(`event-${command.name}`, command.id, {
-      importTenantId: "tenant-a",
-    });
+    return createProjectionEvent(
+      `event-${command.name}`,
+      command.id,
+      command.name === "PastMessageTenant"
+        ? { pastMessageTenantId: "tenant-b" }
+        : { importTenantId: "tenant-b" },
+    );
   }
 
   applyProjection(event: ProjectionState): void {
@@ -638,8 +643,9 @@ describe("repository signal routing", () => {
     const [failure] = await waitForStoredEventDispatchFailures(context, 1);
     expect(failure).toMatchObject({
       event: { id: { value: "event-Task" } },
-      error: dispatchFailure,
+      error: { name: "Error", message: "dispatch failed after commit" },
     });
+    expect(failure?.error).not.toBe(dispatchFailure);
   });
 
   it("dispatches appended events when snapshot writing fails but rejects command completion", async () => {
@@ -990,7 +996,7 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
-  it("preserves imported tenant metadata when stored aggregate events update projections", async () => {
+  it("uses command tenant over imported tenant metadata when stored aggregate events update projections", async () => {
     const context = BoundedContext.multitenant("Tasks")
       .add(createProjectionProducingRepository())
       .add(createExecutingProjectionRepository())
@@ -1008,6 +1014,36 @@ describe("repository signal routing", () => {
     });
     await expect(
       context.stand().read(ProjectionStateSchema, "task-tenant", { tenantId: "tenant-b" }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("uses command tenant over embedded past-message tenant", async () => {
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createProjectionProducingRepository())
+      .add(createExecutingProjectionRepository())
+      .build();
+
+    await context
+      .commandBus()
+      .post(
+        createAggregateCommand(
+          "command-project-past-message-tenant",
+          "task-past-message-tenant",
+          "PastMessageTenant",
+          "tenant-a",
+        ),
+      );
+
+    const projected = await waitForProjectionState(context, "task-past-message-tenant", "tenant-a");
+
+    expect(projected).toMatchObject({
+      name: "Task (projected)",
+      priority: 2,
+    });
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-past-message-tenant", {
+        tenantId: "tenant-b",
+      }),
     ).resolves.toBeUndefined();
   });
 
@@ -1071,7 +1107,87 @@ describe("repository signal routing", () => {
     const [failure] = await waitForStoredEventDispatchFailures(context, 1);
     expect(failure).toMatchObject({
       event: { id: { value: "event-Projected" } },
-      error: subscriberFailure,
+      error: { name: "Error", message: "projection subscriber failed after commit" },
+    });
+    expect(failure?.error).not.toBe(subscriberFailure);
+  });
+
+  it("snapshots stored-event dispatch failures as bounded diagnostics", async () => {
+    const thrown = new Error("x".repeat(600));
+    thrown.name = "";
+    delete thrown.stack;
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: () => Promise.reject(thrown),
+      })
+      .build();
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("command-non-error-dispatch", "task-non-error-dispatch")),
+    ).resolves.toBeUndefined();
+
+    const [failure] = await waitForStoredEventDispatchFailures(context, 1);
+
+    expect(failure).toMatchObject({
+      event: { id: { value: "event-Task" } },
+      error: {
+        name: "Error",
+        message: `${"x".repeat(497)}...`,
+      },
+    });
+    expect(failure?.error).not.toBe(thrown);
+    expect(Object.isFrozen(failure?.error)).toBe(true);
+  });
+
+  it("bounds stored-event dispatch failure diagnostics and returns copy-safe snapshots", async () => {
+    const subscriberFailure = new Error("bounded projection subscriber failed");
+    ThrowingTaskProjection.failure = subscriberFailure;
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProjectionProducingRepository())
+      .add(createThrowingProjectionRepository())
+      .build();
+
+    for (let index = 0; index < 12; index++) {
+      const suffix = String(index);
+      await context
+        .commandBus()
+        .post(
+          createAggregateCommand(
+            `command-bounded-${suffix}`,
+            `task-bounded-${suffix}`,
+            `B${suffix}`,
+          ),
+        );
+    }
+
+    await waitForStoredEventDispatchFailure(context, (failures) =>
+      failures.some((failure) => failure.event.id?.value === "event-B11"),
+    );
+    const failures = context.storedEventDispatchFailures();
+
+    expect(failures).toHaveLength(10);
+    expect(failures[0]).toMatchObject({ event: { id: { value: "event-B2" } } });
+    expect(failures.at(-1)).toMatchObject({
+      event: { id: { value: "event-B11" } },
+      error: { name: "Error", message: "bounded projection subscriber failed" },
+    });
+    expect(failures.at(-1)?.error).not.toBe(subscriberFailure);
+    expect(Object.isFrozen(failures.at(-1)?.error)).toBe(true);
+
+    subscriberFailure.message = "mutated after capture";
+    const firstFailure = failures[0];
+    if (firstFailure?.event.id !== undefined) {
+      firstFailure.event.id.value = "mutated-returned-event";
+    }
+    const reread = context.storedEventDispatchFailures();
+
+    expect(reread[0]).toMatchObject({
+      event: { id: { value: "event-B2" } },
+      error: { message: "bounded projection subscriber failed" },
     });
   });
 
@@ -1487,27 +1603,16 @@ function createProjectionEvent(
     readonly producerId?: string;
     readonly producerMessage?: AggregateState;
     readonly importTenantId?: string;
+    readonly pastMessageTenantId?: string;
     readonly includeVersion?: boolean;
   } = {},
 ) {
+  const origin = projectionEventOrigin(options);
+
   return packEvent({
     id: create(EventIdSchema, { value: id }),
     context: create(EventContextSchema, {
-      ...(options.importTenantId === undefined
-        ? {}
-        : {
-            origin: {
-              case: "importContext" as const,
-              value: create(ActorContextSchema, {
-                tenantId: create(TenantIdSchema, {
-                  kind: {
-                    case: "value",
-                    value: options.importTenantId,
-                  },
-                }),
-              }),
-            },
-          }),
+      ...(origin === undefined ? {} : { origin }),
       producerId: projectionProducerId(options),
       ...(options.includeVersion === false
         ? {}
@@ -1519,6 +1624,40 @@ function createProjectionEvent(
       name: "Task",
       priority: 1,
     }),
+  });
+}
+
+function projectionEventOrigin(options: {
+  readonly importTenantId?: string;
+  readonly pastMessageTenantId?: string;
+}) {
+  if (options.importTenantId !== undefined) {
+    return {
+      case: "importContext" as const,
+      value: create(ActorContextSchema, {
+        tenantId: createTenantId(options.importTenantId),
+      }),
+    };
+  }
+  if (options.pastMessageTenantId !== undefined) {
+    return {
+      case: "pastMessage" as const,
+      value: create(OriginSchema, {
+        actorContext: create(ActorContextSchema, {
+          tenantId: createTenantId(options.pastMessageTenantId),
+        }),
+      }),
+    };
+  }
+  return undefined;
+}
+
+function createTenantId(value: string) {
+  return create(TenantIdSchema, {
+    kind: {
+      case: "value",
+      value,
+    },
   });
 }
 
@@ -1589,6 +1728,21 @@ async function waitForStoredEventDispatchFailures(
   while (Date.now() < deadline) {
     const failures = context.storedEventDispatchFailures();
     if (failures.length >= count) {
+      return failures;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  return context.storedEventDispatchFailures();
+}
+
+async function waitForStoredEventDispatchFailure(
+  context: BoundedContext,
+  predicate: (failures: ReturnType<BoundedContext["storedEventDispatchFailures"]>) => boolean,
+): Promise<ReturnType<BoundedContext["storedEventDispatchFailures"]>> {
+  const deadline = Date.now() + 500;
+  while (Date.now() < deadline) {
+    const failures = context.storedEventDispatchFailures();
+    if (predicate(failures)) {
       return failures;
     }
     await new Promise((resolve) => setTimeout(resolve, 5));

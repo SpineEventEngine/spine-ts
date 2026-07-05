@@ -1,6 +1,6 @@
 # Review Log: T-0012.11b Projection Event Updates
 
-Status: round-2 review fixes implemented; verification passed
+Status: round-3 review fixes implemented; verification passed
 Task log: `build-protocol/tasks/T-0012-11b-projection-event-updates/TASK.md`
 Branch: `task/T-0012-11b-projection-event-updates`
 Worktree:
@@ -53,3 +53,12 @@ Reviewers must verify:
   `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, `git diff --check`,
   and escalated `pnpm test:coverage` with 45 files and 576 tests. Sandboxed
   coverage still fails only on known local IPC/HTTP2 endpoint permissions.
+- Round-3 review fixes addressed tenant/security, diagnostics reliability,
+  internal naming, and docs/API findings. Aggregate-produced events now bind
+  origin to the executing command, diagnostics retain bounded frozen error
+  snapshots, internal callbacks use `recordDispatchFailure`, and public docs no
+  longer contain the stale handler/fragments wording.
+- Round-3 verification passed: focused repository tests, `pnpm typecheck`,
+  `pnpm lint`, `pnpm format:check`, `pnpm docs:check`, `git diff --check`, and
+  escalated `pnpm test:coverage` with 45 files and 579 tests. Sandboxed
+  coverage still fails only on local IPC/listen permissions.

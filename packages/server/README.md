@@ -472,9 +472,9 @@ context records a copy-safe diagnostic snapshot through
 `storedEventDispatchFailures()`; it does not retry or run catch-up delivery.
 
 This slice deliberately does not create default repositories from entity
-classes, invoke handlers, construct system contexts, start query/subscription
-buses, write tenant indexes, expose a broad server lifecycle, or integrate
-transports.
+classes, invoke query/process handlers, construct system contexts, start
+query/subscription buses, write tenant indexes, expose a broad server
+lifecycle, or integrate transports.
 
 ## Direct Stand
 

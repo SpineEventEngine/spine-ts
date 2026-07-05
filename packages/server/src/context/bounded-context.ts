@@ -77,7 +77,7 @@ interface RepositoryRegistration {
   /** Stored-event dispatch callback into the owning context event bus. */
   readonly dispatchStored: (event: Event) => Promise<void>;
   /** Records post-commit stored-event dispatch failures for diagnostics. */
-  readonly recordStoredEventDispatchFailure: (event: Event, error: unknown) => void;
+  readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
 
 interface RegistrationSnapshot {
@@ -109,8 +109,18 @@ export interface EventEndpoint {
 export interface StoredEventDispatchFailure {
   /** Stored event whose post-commit dispatch failed. */
   readonly event: Event;
-  /** Failure thrown by dispatcher acceptance, dispatch, subscriber execution, or Stand update. */
-  readonly error: unknown;
+  /** Frozen scalar snapshot of the thrown failure. */
+  readonly error: DispatchErrorSnapshot;
+}
+
+/** Copy-safe stored-event dispatch error diagnostic. */
+export interface DispatchErrorSnapshot {
+  /** Error class/name, or a stable label for non-Error throws. */
+  readonly name: string;
+  /** Bounded diagnostic message. */
+  readonly message: string;
+  /** Bounded stack string when the thrown value is an Error with a stack. */
+  readonly stack?: string;
 }
 
 /** Error thrown when a bounded context name cannot be accepted. */
@@ -134,6 +144,9 @@ interface FrameworkConstructionToken {
 const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
   frameworkConstructionToken: true,
 });
+const dispatchFailureLimit = 10;
+const dispatchErrorMessageLimit = 500;
+const dispatchErrorStackLimit = 2_000;
 let constructBoundedContext:
   | ((
       snapshot: BoundedContextSnapshot,
@@ -239,8 +252,8 @@ export class BoundedContext {
       storageFactory: this.#storageFactory,
       stand: this.#stand,
       dispatchStored: (event) => eventBusAccess.postStored(this.#eventBus, event),
-      recordStoredEventDispatchFailure: (event, error) => {
-        this.#recordStoredEventDispatchFailure(event, error);
+      recordDispatchFailure: (event, error) => {
+        this.#recordDispatchFailure(event, error);
       },
     };
     const preparedRepositories: PreparedRepository[] = [];
@@ -325,13 +338,19 @@ export class BoundedContext {
     return this.#storedEventDispatchFailures.map(cloneDispatchFailure);
   }
 
-  #recordStoredEventDispatchFailure(event: Event, error: unknown): void {
+  #recordDispatchFailure(event: Event, error: unknown): void {
     this.#storedEventDispatchFailures.push(
       Object.freeze({
         event: clone(EventSchema, event),
-        error,
+        error: snapshotDispatchError(error),
       }),
     );
+    if (this.#storedEventDispatchFailures.length > dispatchFailureLimit) {
+      this.#storedEventDispatchFailures.splice(
+        0,
+        this.#storedEventDispatchFailures.length - dispatchFailureLimit,
+      );
+    }
   }
 }
 
@@ -703,7 +722,7 @@ function prepareRepositoryForContext(
     storageFactory: registration.storageFactory,
     stand: registration.stand,
     dispatchStored: registration.dispatchStored,
-    recordStoredDispatchFailure: registration.recordStoredEventDispatchFailure,
+    recordDispatchFailure: registration.recordDispatchFailure,
   });
 
   return {
@@ -781,8 +800,38 @@ function createRepositoryView(snapshot: RegistrationSnapshot): RepositoryView {
 function cloneDispatchFailure(failure: StoredEventDispatchFailure): StoredEventDispatchFailure {
   return Object.freeze({
     event: clone(EventSchema, failure.event),
-    error: failure.error,
+    error: cloneDispatchError(failure.error),
   });
+}
+
+function snapshotDispatchError(error: unknown): DispatchErrorSnapshot {
+  if (error instanceof Error) {
+    const snapshot: DispatchErrorSnapshot = {
+      name: boundedErrorString(error.name, dispatchErrorMessageLimit) || "Error",
+      message: boundedErrorString(error.message, dispatchErrorMessageLimit),
+      ...(typeof error.stack === "string"
+        ? { stack: boundedErrorString(error.stack, dispatchErrorStackLimit) }
+        : {}),
+    };
+    return Object.freeze(snapshot);
+  }
+
+  return Object.freeze({
+    name: "NonErrorThrow",
+    message: boundedErrorString(String(error), dispatchErrorMessageLimit),
+  });
+}
+
+function cloneDispatchError(error: DispatchErrorSnapshot): DispatchErrorSnapshot {
+  return Object.freeze({
+    name: error.name,
+    message: error.message,
+    ...(error.stack === undefined ? {} : { stack: error.stack }),
+  });
+}
+
+function boundedErrorString(value: string, limit: number): string {
+  return value.length <= limit ? value : `${value.slice(0, limit - 3)}...`;
 }
 
 function readRecordId(record: Message, snapshot: RegistrationSnapshot): unknown {
