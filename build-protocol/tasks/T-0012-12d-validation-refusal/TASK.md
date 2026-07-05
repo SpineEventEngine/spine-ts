@@ -1,6 +1,6 @@
 # T-0012.12d: Validation And Refusal
 
-Status: round-two fix ready for re-review
+Status: round-two metadata fixed; re-review pending
 Start: `2026-07-05 18:08 WEST`
 End: `2026-07-05 18:49 WEST`
 Baseline commit: `27250a0`
@@ -14,7 +14,8 @@ Setup commit: `c264543`
 Implementation commit: `a831bd6273335c90a85f57e9772a64afe09e687d`
 Round-one reviewed branch HEAD: `a831bd6273335c90a85f57e9772a64afe09e687d`
 Review-fix commit: `dc2d37e`
-Final branch HEAD before round-two fix: `dc2d37e`
+Round-two-fix commit: `ec3e9d2`
+Final branch HEAD: `ec3e9d2`
 
 ## Objective
 

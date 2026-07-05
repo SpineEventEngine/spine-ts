@@ -4,10 +4,10 @@ Task log: `build-protocol/tasks/T-0012-12d-validation-refusal/TASK.md`
 Branch: `task/T-0012-12d-validation-refusal`
 Baseline commit: `27250a0`
 Reviewed commit/diff basis:
-`dc2d37e`
+`ec3e9d2`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
-Status: round-two fix ready for re-review
+Status: round-two metadata fixed; re-review pending
 
 ## Required Review Lanes
 
@@ -96,3 +96,22 @@ Fix evidence:
   `pnpm exec prettier --check`, `pnpm docs:check`,
   `pnpm proto:check-generated`, and `git diff --check` passed. The docs check
   reported the existing invalid `origin` TypeDoc source-link warning only.
+
+### Round 3
+
+Reviewed basis: round-two-fix commit `ec3e9d2`.
+
+Outcome: changes requested.
+
+Findings:
+
+- Task and work-log metadata still recorded only the pre-round-two head
+  `dc2d37e` after round-two fix commit `ec3e9d2`.
+- Work-log round-two timestamps were out of chronological order after an
+  existing `18:56 WEST` entry.
+
+Planned fixes:
+
+- Record `ec3e9d2` as the round-two fix and final branch head in task,
+  implementation report, and work-log metadata.
+- Correct round-two work-log timestamps so the log remains chronological.
