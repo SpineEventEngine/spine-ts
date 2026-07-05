@@ -3,10 +3,11 @@
 Task log: `build-protocol/tasks/T-0012-12e-task-subscriptions/TASK.md`
 Branch: `task/T-0012-12e-task-subscriptions`
 Baseline commit: `4bebdeb`
-Previous reviewed commit/diff basis: `7eb9315..d664526`
-Previous review package: `.superpowers/sdd/review-7eb9315..d664526.diff`
-Latest reviewed commit/diff basis: `d664526..e266478`
-Latest review package: `.superpowers/sdd/review-d664526..e266478.diff`
+Previous reviewed commit/diff basis: `d664526..e266478`
+Previous review package: `.superpowers/sdd/review-d664526..e266478.diff`
+Latest reviewed commit/diff basis: `e266478..815ebbe`
+Latest reviewed package: `.superpowers/sdd/review-e266478..815ebbe.diff`
+Review recovery rule: review branch-tip changes after the latest reviewed basis.
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12e-task-subscriptions`
 Status: metadata cleanup committed; ready for review
@@ -98,3 +99,16 @@ Planned fixes:
 - record `d664526..e266478` and
   `.superpowers/sdd/review-d664526..e266478.diff` as the latest review package;
 - update the current-state entry to name `e266478` as the last completed step.
+
+Round 5 findings:
+
+- Documentation, maintainability, and reliability: after `815ebbe`, the
+  metadata again named the prior package as latest/current, which makes
+  branch-tip recovery ambiguous.
+
+Planned fixes:
+
+- record `815ebbe` as the latest completed reviewed recovery-pointer fix;
+- record `e266478..815ebbe` as the latest reviewed package;
+- avoid self-referential "current commit" metadata by documenting the recovery
+  rule: review branch-tip changes after the latest reviewed basis.

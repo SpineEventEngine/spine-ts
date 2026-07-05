@@ -12,9 +12,11 @@ Second review-fix commit: `7eb9315`
 Metadata cleanup commit: `2a778c6`
 Metadata stamp commit: `d664526`
 Immutable-ref docs fix commit: `e266478`
-Previous review package: `.superpowers/sdd/review-7eb9315..d664526.diff`
-Latest completed review-fix basis: `d664526..e266478`
-Latest review package: `.superpowers/sdd/review-d664526..e266478.diff`
+Recovery-pointer docs fix commit: `815ebbe`
+Previous reviewed package: `.superpowers/sdd/review-d664526..e266478.diff`
+Latest reviewed basis: `e266478..815ebbe`
+Latest reviewed package: `.superpowers/sdd/review-e266478..815ebbe.diff`
+Review recovery rule: review branch-tip changes after the latest reviewed basis.
 
 ## Summary
 
