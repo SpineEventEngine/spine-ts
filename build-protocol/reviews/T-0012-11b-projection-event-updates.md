@@ -77,3 +77,7 @@ Reviewers must verify:
 - Round-6 cleanup addresses final documentation/API review comments by
   documenting the public aggregate `command.id` requirement and making the
   past-message test fixture include required `Origin.message`.
+- Final round-6 style, documentation, TypeScript/API docs, security, and
+  performance/reliability re-reviews reported no findings. Fresh final
+  verification passed focused and full repository routing tests, typecheck,
+  lint, format, docs, diff whitespace, and escalated coverage.

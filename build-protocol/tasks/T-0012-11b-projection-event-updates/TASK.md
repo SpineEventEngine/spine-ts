@@ -130,3 +130,5 @@ events update read-side projection state through `Stand`.
 - Round-6 cleanup documents the public `command.id` requirement for aggregate
   command execution and makes the past-message test fixture contract-valid by
   including required `Origin.message`.
+- Final round-6 re-review and verification passed. The branch is ready to merge
+  into the parent `T-0012.11` worktree.
