@@ -228,7 +228,7 @@ describe("@spine-ts/example-todo", () => {
     expect(readList(response, "task-reopen")?.openTaskCount).toBe(1);
   });
 
-  it("preserves task state through persisted aggregate rehydration", async () => {
+  it("preserves visible task state through command and projection updates", async () => {
     const fixture = new BoundedContextFixture(createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,

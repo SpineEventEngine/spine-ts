@@ -3,10 +3,11 @@
 Task log: `build-protocol/tasks/T-0012-12c-task-operations/TASK.md`
 Branch: `task/T-0012-12c-task-operations`
 Baseline commit: `fc71408`
-Reviewed commit/diff basis: implementation commit `8ab4b5c`
+Reviewed commit/diff basis: implementation commit `8ab4b5c`; review-fix
+commit `3ee5c1a`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
-Status: round-one comments; fix pending
+Status: round-two comments; title and metadata fix pending
 
 ## Required Review Lanes
 
@@ -51,3 +52,25 @@ Planned fixes:
 - Strengthen the reopen test to observe completed state first.
 - Add or narrow aggregate rehydration evidence.
 - Update task/report/work-log metadata.
+
+### Round 2 - `3ee5c1a`
+
+| Lane                       | Agent                                  | Result   |
+| -------------------------- | -------------------------------------- | -------- |
+| code style/maintainability | `019f32f1-3fd5-7d02-873a-6a60fe0f4786` | Comments |
+| documentation              | `019f32f1-406a-7ee3-9b3a-17c9097c1057` | Comments |
+| TypeScript/API docs        | `019f32f1-40da-7073-979a-3c1f8c8fff18` | Comments |
+| security                   | `019f32f1-4176-7512-aada-be510c3c9061` | Clean    |
+| performance/reliability    | `019f32f1-41e5-7701-86be-8957fc3f729b` | Clean    |
+
+Findings:
+
+- The multi-command test title still claimed persisted aggregate rehydration
+  even though the body now covers command/projection-visible state.
+- Task/work-log metadata still described final/fix commit state as pending
+  after `3ee5c1a`.
+
+Planned fixes:
+
+- Rename the test to match the narrowed evidence.
+- Update task/work-log/review metadata for the committed review fix.
