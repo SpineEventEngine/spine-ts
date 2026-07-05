@@ -158,8 +158,8 @@ Resumed-state note:
   `pnpm docs:check`, `git diff --check`, and escalated `pnpm test:coverage`
   (45 files, 592 tests; branches 90.03%). Sandboxed coverage remains blocked
   only by local endpoint permissions.
-- The next selected implementation slice is
-  `T-0012.11d Validation And Immediate Refusal Outcomes`.
+- `T-0012.11d Validation And Immediate Refusal Outcomes` is implemented in its
+  child branch. Round-9 review follow-ups have been applied and verified.
 
 ## Staged Subtasks
 

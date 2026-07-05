@@ -239,6 +239,27 @@ class RollingBackTransitionAggregate extends TransitionViolatingAggregate {
   }
 }
 
+class MutatingRejectedAggregate extends TransitionViolatingAggregate {
+  override assignTask(command: AggregateState) {
+    return createAggregateEvent("event-transition-mutated", command.id, 0, command.name);
+  }
+
+  override applyTask(event: AggregateState): void {
+    this.startTransaction();
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: `${event.id}-changed`,
+        name: event.name,
+        archived: event.archived,
+      }),
+    );
+    const result = this.commitTransaction();
+    if (result.status === "rejected") {
+      result.validation.error.constraintViolation.length = 0;
+    }
+  }
+}
+
 class RecoveringTransitionAggregate extends TransitionViolatingAggregate {
   override assignTask(command: AggregateState) {
     return createAggregateEvent("event-transition-recovers", command.id, 0, command.name);
@@ -960,6 +981,27 @@ describe("repository signal routing", () => {
       snapshot: undefined,
       events: [],
     });
+  });
+
+  it("protects transition validation details from handler mutation", async () => {
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createMutatingRejectedRepository())
+      .build();
+
+    let rejection: unknown;
+    try {
+      await context
+        .commandBus()
+        .post(createAggregateCommand("command-transition-mutated", "task-transition-mutated"));
+    } catch (error) {
+      rejection = error;
+    }
+
+    expect(rejection).toMatchObject({
+      type: "COMMAND_STATE_TRANSITION_VALIDATION_FAILED",
+      clientMessage: "Command state transition validation failed.",
+    });
+    expect(readTransitionViolations(rejection)).toBeGreaterThan(0);
   });
 
   it("reports invalid stored history as aggregate replay failure", async () => {
@@ -1761,6 +1803,23 @@ function createRollingBackTransitionRepository(): Repository<
   });
 }
 
+function createMutatingRejectedRepository(): Repository<typeof MutatingRejectedAggregate> {
+  const handlers = defineEntityHandlers(
+    MutatingRejectedAggregate,
+    AggregateStateSchema,
+    (builder) => [
+      builder.assign(AggregateStateSchema, "assignTask"),
+      builder.apply(AggregateStateSchema, "applyTask"),
+    ],
+  );
+
+  return new Repository({
+    entityType: MutatingRejectedAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
 function createRecoveringTransitionRepository(): Repository<typeof RecoveringTransitionAggregate> {
   const handlers = defineEntityHandlers(
     RecoveringTransitionAggregate,
@@ -2123,6 +2182,13 @@ function readReadableProducerId(event: { readonly context?: unknown } | undefine
     unpackAny(producerId, UserIdSchema)?.value ??
     unpackAny(producerId, StringValueSchema)?.value ??
     unpackAny(producerId, BoolValueSchema)?.value
+  );
+}
+
+function readTransitionViolations(error: unknown): number {
+  return (
+    (error as { readonly validationError?: { readonly constraintViolation?: readonly unknown[] } })
+      .validationError?.constraintViolation?.length ?? 0
   );
 }
 

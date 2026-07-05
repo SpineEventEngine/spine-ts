@@ -6,7 +6,7 @@ Branch: `task/T-0012-11d-validation-refusal`
 Baseline commit: `c13b19c`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-11d-validation-refusal`
-Status: round-8 reliability fixes verified; ready for round-9 independent review
+Status: round-9 fixes verified; ready for round-10 independent review
 
 ## Required Lanes
 
@@ -236,3 +236,33 @@ Status: round-8 reliability fixes verified; ready for round-9 independent review
   only on known loopback gRPC listener permissions (`listen EPERM 127.0.0.1`).
   `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, `pnpm format:check`, and
   `git diff --check` passed.
+
+### Round 9
+
+- `2026-07-05 07:48 WEST`: Documentation found stale parent task/report/work
+  log text that still described `T-0012.11d` as the next selected slice, and
+  found the child implementation report still labeled earlier coverage evidence
+  as final.
+- `2026-07-05 07:49 WEST`: Code style found the same stale parent log state and
+  noted that `ReplayError` belongs in a repository replay module rather than
+  the command-facing error module.
+- `2026-07-05 07:50 WEST`: Security found that rejected transaction validation
+  details were shallow-cloned, allowing applier code to mutate the
+  `ValidationError` later exposed by `CommandService.Post`.
+- `2026-07-05 07:51 WEST`: TypeScript/API docs found public docs needed to
+  distinguish command-produced event transition validation from internal
+  aggregate-history replay failures.
+- `2026-07-05 07:52 WEST`: Performance/reliability was clean.
+
+## Round-9 Fix Pass
+
+- `2026-07-05 07:57 WEST`: Orchestrator moved `ReplayError` to a replay-owned
+  repository module, cloned nested rejected transition `ValidationError`
+  messages with the generated protobuf API, added a mutation regression, and
+  qualified public docs plus parent/child task logs.
+- `2026-07-05 08:49 WEST`: Focused mutation regression passed. Full affected
+  bus/repository/service suites passed outside the sandbox with 3 files and 96
+  tests. The sandboxed affected suite failed only on known loopback gRPC
+  listener permissions (`listen EPERM 127.0.0.1`). `pnpm typecheck`,
+  `pnpm lint`, `pnpm docs:check`, `pnpm format:check`, and `git diff --check`
+  passed.

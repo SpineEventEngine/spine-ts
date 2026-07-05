@@ -102,5 +102,7 @@ passed: focused stand/service tests, `pnpm typecheck`, `pnpm lint`,
 `pnpm test:coverage` (45 files, 592 tests; branches 90.03%). Sandboxed coverage
 remains blocked only by local endpoint permissions.
 
-`T-0012.11d Validation And Immediate Refusal Outcomes` is the next
-implementation slice.
+`T-0012.11d Validation And Immediate Refusal Outcomes` is implemented in its
+child branch. Round-9 review found parent-ledger wording, replay-error
+placement, rejected-validation cloning, and public-doc precision follow-ups;
+the child branch has applied and verified those fixes.

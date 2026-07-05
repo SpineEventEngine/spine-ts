@@ -507,11 +507,12 @@ details. Dispatcher-thrown `ValidationException` values and other unexpected
 command-bus failures remain sanitized as `COMMAND_POST_ERROR`. State-transition
 validation remains owned by `EntityTransaction.commit()` and
 `validateEntityStateTransition()`. If an aggregate event applier commits a
-rejected transition, command execution stops before storing produced events or
-snapshots and `CommandService.Post` returns
-`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with message
-`Command state transition validation failed.` plus packed `ValidationError`
-details.
+rejected transition while applying events produced by the current command,
+command execution stops before storing produced events or snapshots and
+`CommandService.Post` returns `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with
+message `Command state transition validation failed.` plus packed
+`ValidationError` details. Replay failures from stored aggregate history remain
+internal and are sanitized as `COMMAND_POST_ERROR`.
 
 ## Direct Stand
 

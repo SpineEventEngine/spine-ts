@@ -493,12 +493,14 @@ failures to `COMMAND_VALIDATION_ERROR` with message
 details. If a command handler throws `CommandRefusalError`, `CommandService.Post`
 returns a non-ok `Ack` with that stable error type and message instead of
 `COMMAND_POST_ERROR`. If an event applier commits a transaction rejected by
-entity transition validation, command execution rejects with
+entity transition validation while applying events produced by the current
+command, command execution rejects with
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced events or
 snapshots; the validation details remain the
-`EntityTransaction`/`validateEntityStateTransition()` result. Dispatcher-thrown
-`ValidationException` values and other unexpected command-bus failures remain
-sanitized as `COMMAND_POST_ERROR`.
+`EntityTransaction`/`validateEntityStateTransition()` result. Replay failures
+from stored aggregate history remain internal and are sanitized as
+`COMMAND_POST_ERROR`. Dispatcher-thrown `ValidationException` values and other
+unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
 Aggregate command completion resolves after aggregate event storage and
 snapshot handling even though already-stored event redispatch continues
 asynchronously. If that later redispatch fails in dispatcher acceptance,

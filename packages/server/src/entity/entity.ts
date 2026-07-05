@@ -1,4 +1,5 @@
-import { fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
+import { clone, fromBinary, toBinary, type MessageShape } from "@bufbuild/protobuf";
+import { type ConstraintViolation, ValidationErrorSchema } from "@spine-ts/proto";
 
 import {
   describeEntityMetadata,
@@ -14,6 +15,7 @@ import {
   type EntityTransactionUpdater,
   type EntityTransactionVersionMetadata,
 } from "./entity-transaction.js";
+import type { EntityStateTransitionValidationResult } from "./entity-transition-validation.js";
 
 type RejectedCommitSnapshot = EntityTransactionRejectedCommit<
   DescriptorMessageSchema,
@@ -585,6 +587,7 @@ function cloneCommitResult<Schema extends DescriptorMessageSchema, Version>(
         archived: result.lifecycle.archived,
         deleted: result.lifecycle.deleted,
       },
+      validation: cloneTransitionValidation(result.validation) as typeof result.validation,
     };
   }
 
@@ -598,6 +601,26 @@ function cloneCommitResult<Schema extends DescriptorMessageSchema, Version>(
       archived: result.lifecycle.archived,
       deleted: result.lifecycle.deleted,
     },
+    validation: cloneTransitionValidation(result.validation) as typeof result.validation,
+  };
+}
+
+function cloneTransitionValidation(
+  validation: EntityStateTransitionValidationResult,
+): EntityStateTransitionValidationResult {
+  if (validation.valid) {
+    return {
+      valid: true,
+      violations: [],
+      error: undefined,
+    };
+  }
+  const error = clone(ValidationErrorSchema, validation.error);
+
+  return {
+    valid: false,
+    violations: error.constraintViolation as [ConstraintViolation, ...ConstraintViolation[]],
+    error,
   };
 }
 

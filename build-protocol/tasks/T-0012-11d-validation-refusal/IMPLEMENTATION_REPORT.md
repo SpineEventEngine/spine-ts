@@ -68,7 +68,7 @@ Baseline commit: `c13b19c`
 - `pnpm vitest run packages/server/test/repository/repository-routing.test.ts packages/server/test/services/spine-services.test.ts -t "rejects invalid aggregate command payloads before durable aggregate work|returns stable Ack errors|rejects state-transition validation failures before storing aggregate output"`:
   passed with 2 files, 5 tests, and 71 skipped.
 
-### Final Verification
+### Initial Full Verification
 
 - `pnpm typecheck`: passed.
 - `pnpm lint`: passed.
@@ -100,3 +100,18 @@ alignment found by TypeScript/API review and passed docs/report verification.
 Round 7 resolved rejected transition rollback handling. Round 8 resolved
 aggregate replay error separation, stale-marker recovery coverage, and queued
 command-bus validation ordering coverage.
+
+### Latest Verification
+
+- `2026-07-05 08:49 WEST`: Focused mutation regression passed. Full affected
+  bus/repository/service suites passed outside the sandbox with 3 files and 96
+  tests. The sandboxed affected suite failed only on known loopback gRPC
+  listener permissions (`listen EPERM 127.0.0.1`). `pnpm typecheck`,
+  `pnpm lint`, `pnpm docs:check`, `pnpm format:check`, and `git diff --check`
+  passed.
+- `2026-07-05 07:34 WEST`: Focused bus/repository regressions passed with 3
+  selected tests. Full affected bus/repository/service suites passed outside
+  the sandbox with 3 files and 95 tests. The sandboxed affected suite failed
+  only on known loopback gRPC listener permissions (`listen EPERM 127.0.0.1`).
+  `pnpm typecheck`, `pnpm lint`, `pnpm docs:check`, `pnpm format:check`, and
+  `git diff --check` passed.
