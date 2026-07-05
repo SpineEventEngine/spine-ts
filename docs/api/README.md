@@ -10,8 +10,9 @@ set-once transition validation, explicit handler metadata APIs, the first
 command/event bus exports, the first server runtime lifecycle/async queue
 kernel, write-side signal intake result exports, the runtime-routing planner
 seam, the real Connect/Node `SpineServices` route registrar for the raw Spine
-command/query/subscription services, the first `@spine-ts/transport` contracts, and the first
-`@spine-ts/storage` contracts.
+command/query/subscription services, the first `@spine-ts/transport` contracts,
+the first `@spine-ts/storage` contracts, and the minimal `@spine-ts/testing`
+bounded-context fixture.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
@@ -165,6 +166,15 @@ configurable inactive TTL, and active delivery uses a configurable queue limit
 for slow consumers. It is not a client DSL, event subscription implementation,
 broad server lifecycle, durable subscription store, or projection catch-up
 loop.
+`@spine-ts/testing` exports `BoundedContextFixture`,
+`BoundedContextFixtureOptions`, and `FixtureSubscription`. The fixture wraps one
+built `BoundedContext`, captures the in-process `SpineServices` handlers, and
+lets tests post generated `Command` envelopes, post generated `Event` envelopes,
+read generated `Query` envelopes, poll query responses for asynchronous
+projection consequences, and subscribe to generated `Topic` envelopes. It clones
+protobuf messages at its boundary and keeps command, query, and subscription
+behavior on the real framework paths. It does not expose a broad client DSL,
+start a server/process, manage browser tooling, or simulate service outcomes.
 `AggregateStorage`, `AggregateStorageOptions`, `AggregateSnapshot`,
 `AggregateHistory`, and `AggregateId` form the minimal aggregate persistence
 seam. It writes latest snapshots through `StorageFactory`/`RecordStorage`,
