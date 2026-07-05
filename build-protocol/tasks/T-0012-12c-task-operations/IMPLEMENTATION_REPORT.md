@@ -1,6 +1,6 @@
 # Implementation Report: T-0012.12c Task Operations
 
-Status: final verification complete; closure-log review pending
+Status: complete
 Branch: `task/T-0012-12c-task-operations`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`

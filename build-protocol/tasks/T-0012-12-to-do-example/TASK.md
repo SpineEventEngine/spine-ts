@@ -1,6 +1,6 @@
 # T-0012.12: To-Do Example
 
-Status: T-0012.12b merged; T-0012.12c selected
+Status: T-0012.12c merged; T-0012.12d selected
 Start: `2026-07-05 10:53 WEST`
 End: Pending
 Baseline commit: `89868e9`
@@ -11,7 +11,8 @@ Worktree:
 Authoring sub-agent: Requirements splitter
 `019f31b8-0110-72c2-bea9-aeb6deea028b`; `T-0012.12a` implementation and
 review sub-agents complete and closed; `T-0012.12b` implementation and review
-sub-agents complete and closed; `T-0012.12c` implementation pending.
+sub-agents complete and closed; `T-0012.12c` implementation and review
+sub-agents complete and closed; `T-0012.12d` implementation pending.
 Reviewer sub-agents:
 
 - code style/maintainability:
@@ -30,8 +31,8 @@ Reviewer sub-agents:
   `019f31c3-258a-7ef0-bef3-6cec938b84ca`,
   `019f31c7-772a-7e42-b17c-2d7388b5c24b`
   Implementation commits: `3cc8625` merge of `T-0012.12a`; `63f8e9f` merge of
-  `T-0012.12b`
-  Final branch HEAD: `63f8e9f`; `T-0012.12c` pending
+  `T-0012.12b`; `e27b033` merge of `T-0012.12c`
+  Final branch HEAD: `e27b033`; `T-0012.12d` pending
 
 ## Objective
 
@@ -413,18 +414,21 @@ Acceptance criteria:
   completed, and reopened tasks.
 - Black-box tests verify command posting and query results after each
   operation.
-- Event appliers preserve aggregate state through persisted history and
-  snapshots rather than mutating projection state directly.
+- Event appliers update aggregate state for the task-operation events, and
+  black-box tests verify command/projection-visible state across multi-command
+  operation sequences.
 
 Verification plan:
 
-- Focused example black-box tests for rename, complete, reopen, and replayed
-  aggregate state.
+- Focused example black-box tests for rename, complete, reopen, duplicate
+  same-ID projection counts, and multi-command state visibility.
 - `pnpm typecheck`
 - `pnpm lint`
 - `pnpm format:check` or tracked-file Prettier check.
 - `pnpm docs:check` if public exports or docs change.
 - `git diff --check`
+
+- Status: complete and merged via `e27b033`.
 
 ### T-0012.12d Validation And Refusal
 
@@ -580,19 +584,19 @@ Selection rationale:
 
 ## Current Selected Slice
 
-Selected next implementable slice: `T-0012.12c Task Operations`.
+Selected next implementable slice: `T-0012.12d Validation And Refusal`.
 
-Branch: `task/T-0012-12c-task-operations`
+Branch: `task/T-0012-12d-validation-refusal`
 
 Worktree:
-`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
+`/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12d-validation-refusal`
 
 Selection rationale:
 
-- `T-0012.12b` proved one create command through real aggregate handling, event
-  production, projection update, and query visibility.
-- The next smallest runnable behavior is the remaining normal task operations
-  on the same path.
+- `T-0012.12c` completed the normal create, rename, complete, and reopen
+  command path.
+- The next smallest runnable behavior is the required invalid-command and
+  business-refusal path over the same aggregate and projection.
 - No framework gap is known before this slice. If implementation proves one,
   it must be routed through a framework-gap task before continuing dependent
   example work.

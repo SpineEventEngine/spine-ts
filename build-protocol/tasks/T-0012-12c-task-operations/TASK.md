@@ -1,6 +1,6 @@
 # T-0012.12c: Task Operations
 
-Status: closure-guidance metadata fixed; re-review pending
+Status: complete
 Start: `2026-07-05 16:12 WEST`
 End: `2026-07-05 16:21 WEST`
 Baseline commit: `fc71408`
@@ -9,7 +9,7 @@ Branch: `task/T-0012-12c-task-operations`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0012-12c-task-operations`
 Authoring sub-agent: `019f32d6-a303-7480-b4b9-d30a3da75ea1`
-Reviewer sub-agents: rounds one through fourteen closed; re-review pending
+Reviewer sub-agents: rounds one through fifteen closed; all clean
 Implementation commit: `8ab4b5c`
 Review-fix commit: `3ee5c1a`
 Metadata-fix commit: `b6495bb`
@@ -23,7 +23,9 @@ Round-ten-status commit: `c098f0c`
 Round-eleven-status commit: `67f6625`
 Closure-verification commit: `166680e`
 Closure-guidance commit: `3717ea9`
-Final branch HEAD: pending
+Final reviewed commit: `0fe6070`
+Final branch HEAD: `0fe6070`
+Integration result: merged to `main` as `e27b033`.
 
 ## Objective
 
