@@ -1,6 +1,6 @@
 # T-0012.12d: Validation And Refusal
 
-Status: round-four metadata fixed; re-review pending
+Status: round-five metadata fixed; re-review pending
 Start: `2026-07-05 18:08 WEST`
 End: `2026-07-05 18:49 WEST`
 Baseline commit: `27250a0`
@@ -17,7 +17,8 @@ Review-fix commit: `dc2d37e`
 Round-two-fix commit: `ec3e9d2`
 Round-three-metadata commit: `7c0d191`
 Round-four-metadata commit: `443d95b`
-Final branch HEAD: `443d95b`
+Round-five-metadata commit: `b75fb49`
+Final branch HEAD: `b75fb49`
 
 ## Objective
 
