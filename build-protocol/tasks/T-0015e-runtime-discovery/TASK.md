@@ -12,8 +12,8 @@ Requirements splitter: `019f3dce-6067-7190-919d-cf6a62eebfa7`; completed and clo
 Authoring sub-agent: Codex implementation sub-agent
 Reviewer status: all required lanes clean after three rounds plus focused docs re-review
 Implementation commit: `9d28aeb`
-Final branch HEAD: `9d28aeb`
-Integrated to main: Pending
+Final branch HEAD: `b56d60d`
+Integrated to main: `b56d60d`
 
 ## Objective
 
