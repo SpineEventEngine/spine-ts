@@ -1,6 +1,6 @@
 # Review Log: T-0015b Framework Registry Ingestion API
 
-Status: round 1 fixed; pending review
+Status: complete
 
 Task log: `build-protocol/tasks/T-0015b-registry-ingestion-api/TASK.md`
 Branch: `task/T-0015b-registry-ingestion-api`
@@ -37,3 +37,7 @@ Required review lanes:
 - `2026-07-07 20:25 WEST` — Round 1 findings fixed. Reliability, security,
   TS/API, and JVM/ADR findings were addressed; style and docs reviewers were
   clean in round 1. Awaiting follow-up review.
+- `2026-07-07 20:30 WEST` — Round 2 completed clean. Review lanes returned:
+  code style/maintainability clean, documentation clean, TypeScript/API docs
+  clean, security clean, performance/reliability clean, and JVM/ADR alignment
+  clean. All participating reviewer sub-agents were closed after reporting.

@@ -1,6 +1,6 @@
 # T-0015b: Framework Registry Ingestion API
 
-Status: implemented; awaiting review
+Status: complete
 Start: `2026-07-07 19:57 WEST`
 End: `2026-07-07 20:25 WEST`
 Baseline commit: `0d0f0eb`
@@ -9,10 +9,10 @@ Branch: `task/T-0015b-registry-ingestion-api`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0015b-registry-ingestion-api`
 Requirements splitter: `019f3dce-6067-7190-919d-cf6a62eebfa7`; completed and closed during T-0015a setup.
-Authoring sub-agent: complete
-Reviewer sub-agents: pending
-Implementation commit: Pending
-Final branch HEAD: Pending
+Authoring sub-agent: `019f3df6-7af3-7180-89e9-7db33a739884`; completed and closed.
+Reviewer sub-agents: all required review lanes completed clean and closed.
+Implementation commit: `8f8efcd`
+Final branch HEAD: Pending final log commit
 Integrated to main: Pending
 
 ## Objective
@@ -63,9 +63,10 @@ T-0015a accepted `D-0059` and documented the logical registry shape:
   and returns/folds into existing `EntityHandlersMetadata`.
 - Preserve existing `defineEntityHandlers()` compatibility.
 - Reject unsupported registry versions, `event-application` records, invalid
-  arity, empty emitted schemas for emitting handlers, emitted schemas on
-  subscribers, and duplicate/invalid records through existing metadata
-  validation where possible.
+  arity, empty emitted schemas for command assignees/reactors, emitted schemas
+  on subscribers, and duplicate/invalid records through existing metadata
+  validation where possible. Event reactors may declare zero emitted schemas for
+  ADR 0001-compatible no-emission reactions.
 - Do not add analyzer, package generator, automatic discovery, to-do migration,
   or handler invocation behavior in this slice.
 - Update docs/API docs and export expectations only for the API introduced here.
@@ -92,6 +93,14 @@ T-0015a accepted `D-0059` and documented the logical registry shape:
   non-empty `typeName`; top-level registry typing accepts heterogeneous
   per-entity groups; and generated event reactions may declare zero emitted
   schemas. Appended the round-1 fix report.
+- `2026-07-07 20:30 WEST`: Review round 2 completed clean across
+  code style/maintainability, documentation, TypeScript/API docs, security,
+  performance/reliability, and JVM/ADR alignment. All participating sub-agents
+  were closed.
+- `2026-07-07 20:31 WEST`: Main orchestrator reran focused tests,
+  `typecheck:build`, `docs:check`, `lint`, `format:check`, and
+  `git diff --check`; all commands passed. `docs:check` still reports the known
+  invalid-origin TypeDoc source-link warning only.
 
 ## Verification Plan
 
