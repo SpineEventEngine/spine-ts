@@ -81,6 +81,21 @@ describe("build-time handler analyzer", () => {
     ]);
   });
 
+  it("accepts string-literal handler method names", () => {
+    const result = analyzeBuildHandlers(programWithSource("src/string-name.ts", stringNameSource));
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.entities[0]?.handlers).toEqual([
+      {
+        kind: "command-assignment",
+        methodName: 'create\u2028"task"\nnext',
+        signalSchema: schema("../generated/commands_pb.js", "CreateTaskSchema"),
+        emittedSchemas: [schema("../generated/events_pb.js", "TaskCreatedSchema")],
+        parameterCount: 1,
+      },
+    ]);
+  });
+
   it("reports deterministic diagnostics for unsupported decorator and signature shapes", () => {
     const result = analyzeBuildHandlers(programWithSource("src/bad.ts", invalidSource));
 
@@ -463,6 +478,20 @@ const noEmissionSource = `
     @React
     observe(event: TaskCreated): void {
       void event;
+    }
+  }
+`;
+
+const stringNameSource = `
+  import { Aggregate, Assign } from "@spine-ts/server";
+  import { TaskSchema } from "../generated/task_pb.js";
+  import { type CreateTask } from "../generated/commands_pb.js";
+  import { type TaskCreated } from "../generated/events_pb.js";
+
+  export class QuotedAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+    @Assign
+    "create\\u2028\\"task\\"\\nnext"(command: CreateTask): TaskCreated {
+      throw new Error(String(command));
     }
   }
 `;

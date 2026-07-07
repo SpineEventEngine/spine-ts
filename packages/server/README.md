@@ -112,8 +112,8 @@ Current slice exposes:
   planner-local worker IDs, and explicit deferred routing seams.
 - `@Assign`, `@Command`, `@Subscribe`, and `@React` standard method decorators.
   Bare decorators are the ordinary application syntax; schema-bearing overloads,
-  `@Apply`, and decorator materialization remain legacy/framework compatibility
-  until generated registry tooling owns schema inference.
+  `@Apply`, and decorator materialization are compatibility/testing paths for
+  framework internals and migration seams, not ordinary end-user API.
 - `HandlerRegistryIngestor` for turning framework-generated handler registry
   artifacts into the same canonical `EntityHandlersMetadata` accepted by
   `HandlerMetadataRegistry`. The generated registry contract is versioned and
@@ -219,10 +219,11 @@ storage, register buses, start transport, or implement service adapters.
 The decorator API is an adapter over that explicit contract. Decorators record
 standard per-class metadata from public instance methods only. Bare
 `@Assign`, `@Command`, `@Subscribe`, and `@React` are the ordinary application
-forms. Schema-bearing overloads and materialization remain framework
-compatibility until generated registry tooling owns schema inference. Decorators
-do not use `emitDecoratorMetadata`, `reflect-metadata`, parameter decorators, a
-global handler registry, or handler invocation.
+forms. Schema-bearing overloads and `materializeDecoratedEntityHandlers()` are
+compatibility/testing paths for framework-owned migration seams, not ordinary
+end-user API. Decorators do not use `emitDecoratorMetadata`,
+`reflect-metadata`, parameter decorators, a global handler registry, or handler
+invocation.
 
 Generated handler registry tooling will infer the signal schema from each
 handler's explicit first parameter type and infer emitted schemas from explicit
@@ -233,8 +234,10 @@ Both `handler(signal)` and `handler(signal, context)` are part of the public
 signature contract. `HandlerRegistryIngestor` validates version `1`, rejects
 new generated `@Apply`/event-application records, checks generated arity and
 emitted-schema/schema-shape rules, and then routes records through
-`defineEntityHandlers()`. The current server package does not yet implement
-automatic registry discovery; that runtime anchor is intentionally deferred.
+`defineEntityHandlers()`. The internal build-time writer renders deterministic
+registry modules under ignored `generated/` output only when explicitly
+invoked. The current server package does not yet implement automatic registry
+discovery; that runtime anchor is intentionally deferred.
 
 `HandlerMetadataRegistry` registers existing `EntityHandlersMetadata` objects
 and exposes frozen listing/lookup arrays by entity state full type name, handler

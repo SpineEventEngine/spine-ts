@@ -70,8 +70,10 @@ transactional rather than event-sourced.
 
 Generated registry modules are build artifacts under ignored `generated/`
 directories. T-0015c implements the build-time analyzer that extracts
-structured handler records. Rendering package-level registry modules and
-locating them at runtime are deferred to the generator and discovery subtasks.
+structured handler records. T-0015d adds the internal writer that turns those
+records into deterministic version-1 TypeScript source and writes files only
+when explicitly invoked into a caller-configured generated root that stays
+under Git ignore. Runtime discovery/loading remains deferred.
 
 ## Handler Decorators
 

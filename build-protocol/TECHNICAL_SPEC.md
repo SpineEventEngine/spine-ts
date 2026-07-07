@@ -113,8 +113,9 @@ Bare handler decorators are source declarations, not complete runtime metadata.
 The generated registry is the framework-owned bridge from decorated TypeScript
 classes to canonical handler metadata. T-0015a defined the contract, and
 T-0015c implements the build-time analyzer that produces structured analysis
-records. Package-level registry source generation, the runtime discovery
-anchor, and example migration remain later T-0015 subtasks.
+records. T-0015d adds the internal package-level registry writer that renders
+guarded generated source under ignored `generated/` output. Automatic runtime
+discovery and example migration remain later T-0015 subtasks.
 
 Build-time tooling must read ordinary application source, find bare
 `@Assign`, `@Command`, `@React`, and `@Subscribe` methods, and infer schemas
@@ -174,9 +175,12 @@ It must not include `event-application` records for new aggregate behavior.
 
 Generated registry files belong under ignored generated output locations such
 as `packages/<package>/generated/`; they are regenerated build artifacts and
-must not be committed. The unresolved runtime anchor for locating and loading
-these generated registries is a later T-0015d/T-0015e detail, not part of the
-T-0015c analyzer slice.
+must not be committed. T-0015d adds a deterministic build-time writer that
+renders the version-1 registry source from analyzer output and writes it only
+when explicitly invoked, after validating analyzer diagnostics, generated-root
+ownership, Git-ignore coverage, and symlink safety. The unresolved runtime
+anchor for locating and loading these generated registries remains a later
+discovery slice, not part of the analyzer or writer work.
 
 ## Command Target ID And Default Routing
 
