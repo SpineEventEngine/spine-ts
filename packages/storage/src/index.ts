@@ -1,4 +1,4 @@
-export { EventStore, type OnEventAccepted } from "./event/event-store.js";
+export { EventStore, type EventRollback, type OnEventAccepted } from "./event/event-store.js";
 export { InMemoryRecordStorage } from "./memory/in-memory-record-storage.js";
 export { InMemoryStorageFactory } from "./memory/in-memory-storage-factory.js";
 export { RecordColumn } from "./record/record-column.js";

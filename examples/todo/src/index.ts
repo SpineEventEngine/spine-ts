@@ -4,11 +4,8 @@ import { pathToFileURL } from "node:url";
 
 import { clone, create } from "@bufbuild/protobuf";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
-import { packEvent } from "@spine-ts/core";
-import { EventContextSchema, EventIdSchema, type Event } from "@spine-ts/proto";
 import {
   Aggregate,
-  Apply,
   Assign,
   BoundedContext,
   CommandRefusalError,
@@ -16,7 +13,7 @@ import {
   Repository,
   SpineServices,
   Subscribe,
-  materializeDecoratedEntityHandlers,
+  defineEntityHandlers,
 } from "@spine-ts/server";
 
 import {
@@ -43,114 +40,53 @@ import { TaskIdSchema, type TaskId } from "../generated/spine/example/todo/v1/ta
 import { TaskListSchema } from "../generated/spine/example/todo/v1/task_list_pb.js";
 import { TaskSchema } from "../generated/spine/example/todo/v1/tasks_pb.js";
 
-/** Event-sourced task aggregate for the create-task example flow. */
+/** Task aggregate for the create-task example flow. */
 export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {
   /** Handle `CreateTask` and produce the domain event stored by the context. */
-  @Assign(CreateTaskSchema)
-  createTask(command: CreateTask): Event {
-    const id = requireTaskId(command.id);
+  @Assign
+  createTask(command: CreateTask): TaskCreated {
+    const id = clone(TaskIdSchema, this.id);
 
-    return packEvent({
-      id: create(EventIdSchema, { value: this.nextEventId("task-created", id) }),
-      context: create(EventContextSchema),
-      schema: TaskCreatedSchema,
-      message: create(TaskCreatedSchema, {
+    this.updateDraftState(() =>
+      create(TaskSchema, {
         id,
         title: command.title,
+        completed: false,
       }),
+    );
+    return create(TaskCreatedSchema, {
+      id,
+      title: command.title,
     });
   }
 
   /** Handle `RenameTask` and produce the event stored by the context. */
-  @Assign(RenameTaskSchema)
-  renameTask(command: RenameTask): Event {
-    const id = requireTaskId(command.id);
+  @Assign
+  renameTask(command: RenameTask): TaskRenamed {
+    const id = clone(TaskIdSchema, this.id);
 
-    return packEvent({
-      id: create(EventIdSchema, { value: this.nextEventId("task-renamed", id) }),
-      context: create(EventContextSchema),
-      schema: TaskRenamedSchema,
-      message: create(TaskRenamedSchema, {
+    this.updateDraftState((state) =>
+      create(TaskSchema, {
         id,
         title: command.title,
+        completed: state.completed,
       }),
+    );
+    return create(TaskRenamedSchema, {
+      id,
+      title: command.title,
     });
   }
 
   /** Handle `CompleteTask` and produce the event stored by the context. */
-  @Assign(CompleteTaskSchema)
-  completeTask(command: CompleteTask): Event {
-    const id = requireTaskId(command.id);
+  @Assign
+  completeTask(command: CompleteTask): TaskCompleted {
+    void command;
+    const id = clone(TaskIdSchema, this.id);
     if (this.state.completed) {
       throw new CommandRefusalError("TASK_ALREADY_DONE", "Task is already done.");
     }
 
-    return packEvent({
-      id: create(EventIdSchema, { value: this.nextEventId("task-completed", id) }),
-      context: create(EventContextSchema),
-      schema: TaskCompletedSchema,
-      message: create(TaskCompletedSchema, {
-        id,
-      }),
-    });
-  }
-
-  /** Handle `ReopenTask` and produce the event stored by the context. */
-  @Assign(ReopenTaskSchema)
-  reopenTask(command: ReopenTask): Event {
-    const id = requireTaskId(command.id);
-    if (!this.state.completed) {
-      throw new CommandRefusalError("TASK_NOT_DONE", "Task is not done.");
-    }
-
-    return packEvent({
-      id: create(EventIdSchema, { value: this.nextEventId("task-reopened", id) }),
-      context: create(EventContextSchema),
-      schema: TaskReopenedSchema,
-      message: create(TaskReopenedSchema, {
-        id,
-      }),
-    });
-  }
-
-  /** Apply `TaskCreated` to the aggregate state. */
-  @Apply(TaskCreatedSchema)
-  onTaskCreated(event: TaskCreated): void {
-    const id = requireTaskId(event.id);
-
-    this.startTransaction();
-    this.updateDraftState(() =>
-      create(TaskSchema, {
-        id,
-        title: event.title,
-        completed: false,
-      }),
-    );
-    this.commitTransaction();
-  }
-
-  /** Apply `TaskRenamed` to the aggregate state. */
-  @Apply(TaskRenamedSchema)
-  onTaskRenamed(event: TaskRenamed): void {
-    const id = requireTaskId(event.id);
-
-    this.startTransaction();
-    this.updateDraftState((state) =>
-      create(TaskSchema, {
-        id,
-        title: event.title,
-        completed: state.completed,
-      }),
-    );
-    this.commitTransaction();
-  }
-
-  /** Apply `TaskCompleted` to the aggregate state. */
-  @Apply(TaskCompletedSchema)
-  onTaskCompleted(event: TaskCompleted): void {
-    const id = requireTaskId(event.id);
-
-    this.startTransaction();
     this.updateDraftState((state) =>
       create(TaskSchema, {
         id,
@@ -158,15 +94,18 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
         completed: true,
       }),
     );
-    this.commitTransaction();
+    return create(TaskCompletedSchema, { id });
   }
 
-  /** Apply `TaskReopened` to the aggregate state. */
-  @Apply(TaskReopenedSchema)
-  onTaskReopened(event: TaskReopened): void {
-    const id = requireTaskId(event.id);
+  /** Handle `ReopenTask` and produce the event stored by the context. */
+  @Assign
+  reopenTask(command: ReopenTask): TaskReopened {
+    void command;
+    const id = clone(TaskIdSchema, this.id);
+    if (!this.state.completed) {
+      throw new CommandRefusalError("TASK_NOT_DONE", "Task is not done.");
+    }
 
-    this.startTransaction();
     this.updateDraftState((state) =>
       create(TaskSchema, {
         id,
@@ -174,22 +113,17 @@ export class TaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> 
         completed: false,
       }),
     );
-    this.commitTransaction();
-  }
-
-  private nextEventId(prefix: string, id: TaskId): string {
-    return `${prefix}-${id.value}-${String(this.version + 1n)}`;
+    return create(TaskReopenedSchema, { id });
   }
 }
 
 /** Read-side task list projection for visible task queries. */
 export class TaskListProjection extends Projection<string, typeof TaskListSchema, number> {
   /** Add newly created tasks to the read-side list. */
-  @Subscribe(TaskCreatedSchema)
+  @Subscribe
   onTaskCreated(event: TaskCreated): void {
-    const id = requireTaskId(event.id);
+    const id = taskId(event.id);
 
-    this.startTransaction();
     this.updateDraftState((state) =>
       create(TaskListSchema, {
         id: id.value,
@@ -204,15 +138,13 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
         openTaskCount: state.openTaskCount + 1,
       }),
     );
-    this.commitTransaction();
   }
 
   /** Rename an existing task in the read-side list. */
-  @Subscribe(TaskRenamedSchema)
+  @Subscribe
   onTaskRenamed(event: TaskRenamed): void {
-    const id = requireTaskId(event.id);
+    const id = taskId(event.id);
 
-    this.startTransaction();
     this.updateDraftState((state) =>
       create(TaskListSchema, {
         id: id.value,
@@ -228,15 +160,13 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
         openTaskCount: state.openTaskCount,
       }),
     );
-    this.commitTransaction();
   }
 
   /** Mark an existing task completed in the read-side list. */
-  @Subscribe(TaskCompletedSchema)
+  @Subscribe
   onTaskCompleted(event: TaskCompleted): void {
-    const id = requireTaskId(event.id);
+    const id = taskId(event.id);
 
-    this.startTransaction();
     this.updateDraftState((state) => {
       const tasks = state.tasks.map((task) =>
         task.id?.value === id.value
@@ -254,15 +184,13 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
         openTaskCount: tasks.filter((task) => !task.completed).length,
       });
     });
-    this.commitTransaction();
   }
 
   /** Mark an existing task open in the read-side list. */
-  @Subscribe(TaskReopenedSchema)
+  @Subscribe
   onTaskReopened(event: TaskReopened): void {
-    const id = requireTaskId(event.id);
+    const id = taskId(event.id);
 
-    this.startTransaction();
     this.updateDraftState((state) => {
       const tasks = state.tasks.map((task) =>
         task.id?.value === id.value
@@ -280,7 +208,6 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
         openTaskCount: tasks.filter((task) => !task.completed).length,
       });
     });
-    this.commitTransaction();
   }
 }
 
@@ -345,7 +272,13 @@ function createTaskRepository(): Repository<typeof TaskAggregate> {
   return new Repository({
     entityType: TaskAggregate,
     schema: TaskSchema,
-    handlers: materializeDecoratedEntityHandlers(TaskAggregate, TaskSchema),
+    handlers: defineEntityHandlers(TaskAggregate, TaskSchema, (builder) => [
+      builder.assign(CreateTaskSchema, "createTask"),
+      builder.assign(RenameTaskSchema, "renameTask"),
+      builder.assign(CompleteTaskSchema, "completeTask"),
+      builder.assign(ReopenTaskSchema, "reopenTask"),
+    ]),
+    events: [TaskCreatedSchema, TaskRenamedSchema, TaskCompletedSchema, TaskReopenedSchema],
   });
 }
 
@@ -353,13 +286,18 @@ function createTaskListRepository(): Repository<typeof TaskListProjection> {
   return new Repository({
     entityType: TaskListProjection,
     schema: TaskListSchema,
-    handlers: materializeDecoratedEntityHandlers(TaskListProjection, TaskListSchema),
+    handlers: defineEntityHandlers(TaskListProjection, TaskListSchema, (builder) => [
+      builder.subscribe(TaskCreatedSchema, "onTaskCreated"),
+      builder.subscribe(TaskRenamedSchema, "onTaskRenamed"),
+      builder.subscribe(TaskCompletedSchema, "onTaskCompleted"),
+      builder.subscribe(TaskReopenedSchema, "onTaskReopened"),
+    ]),
   });
 }
 
-function requireTaskId(id: TaskId | undefined): TaskId {
-  if (id === undefined || id.value.trim().length === 0) {
-    throw new Error("Task ID is required.");
+function taskId(id: TaskId | undefined): TaskId {
+  if (id === undefined) {
+    throw new Error("Framework-provided task ID is missing.");
   }
 
   return clone(TaskIdSchema, id);

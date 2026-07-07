@@ -43,8 +43,10 @@ The example should model a small but representative bounded context:
 
 The example must demonstrate:
 
-- command handling through decorated aggregate methods;
-- event appliers;
+- command handling through bare-decorated aggregate methods;
+- emitting handlers that return generated domain event/command messages, never
+  framework `Event` or `Command` envelopes;
+- default-route command target-ID validation before handler invocation;
 - projection subscribers;
 - query of projection state;
 - subscription to task list updates;
@@ -57,6 +59,39 @@ The example must demonstrate:
 If building the example exposes a missing framework feature, implementation
 returns to the framework first, adds the missing feature, and then resumes the
 example.
+
+## End-User API Constraints
+
+The example is a public API specimen. It must not use framework internals to
+make the example pass.
+
+- Use bare decorators: `@Assign`, `@Command`, `@React`, and `@Subscribe`.
+- Do not use schema-bearing decorators such as `@Assign(CreateTaskSchema)`.
+- `@Assign` handlers return generated domain event messages, singular or
+  tuple/rest types with a required first event message, such as
+  `readonly [TaskCreated, ...TaskCreated[]]`.
+- `@Command` handlers return generated domain command messages, singular or
+  tuple/rest types with a required first command message.
+- `@React` handlers return generated domain event messages, singular or
+  tuple/rest types with a required first event message.
+- `@Subscribe` handlers declare explicit `void` return types.
+- The example must not define or use aggregate `@Apply` handlers.
+- The example must not call transaction-control methods such as
+  `startTransaction()` or `commitTransaction()`. The framework owns entity
+  transactions.
+- Ordinary example handlers must not return `Event`, `Command`, or other
+  framework envelopes, and must not call `packEvent()` or `packCommand()` to
+  satisfy handler returns.
+- Ordinary example handlers must not create internal framework event IDs or use
+  `EventIdSchema`.
+- Ordinary example handlers must not perform default command target-ID
+  extraction such as `requireTaskId(command.id)`. The default command route
+  must reject commands missing the first-field target ID before the handler is
+  invoked.
+- The example must not define, import, alias, or call handler metadata
+  discovery/materialization helper code such as
+  `materializeDecoratedEntityHandlers`. Decorated handler discovery is a
+  framework/generated-registry concern.
 
 ## Documentation
 

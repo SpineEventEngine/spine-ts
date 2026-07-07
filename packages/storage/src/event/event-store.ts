@@ -74,6 +74,27 @@ export class EventStore {
     }
   }
 
+  /** Append generated Spine events and return a one-shot token for rolling back this append. */
+  async appendAllWithRollback(events: Iterable<Event>): Promise<EventRollback> {
+    const records = [...events].map((event) => clone(EventSchema, event));
+    const context = snapshotContext(this.#context);
+    const ids = records.map((record) => eventId(record));
+
+    if (records.length > 0) {
+      await this.appendUnique(records, context);
+    }
+    let used = false;
+    return Object.freeze({
+      rollback: async () => {
+        if (used) {
+          throw new Error("Event rollback token has already been used.");
+        }
+        used = true;
+        await this.deleteIds(ids, context);
+      },
+    });
+  }
+
   /** Read persisted events through the underlying record-storage query seam. */
   read(query: RecordQuery<EventId> = {}): Promise<readonly Event[]> {
     return this.#storage.query(query);
@@ -89,6 +110,21 @@ export class EventStore {
       try {
         await rejectStoredIds(storage, ids);
         await storage.writeAll(records);
+      } finally {
+        storage.close();
+      }
+    });
+  }
+
+  private async deleteIds(ids: readonly EventId[], context: StorageContext): Promise<void> {
+    this.requireOpen();
+
+    await EventStoreLocks.withLock(this.#factory, context, async () => {
+      const storage = this.#factory.createRecordStorage(context, eventSpec);
+      try {
+        for (const id of ids) {
+          await storage.delete(id);
+        }
       } finally {
         storage.close();
       }
@@ -118,6 +154,12 @@ export class EventStore {
 
 /** Callback invoked after `EventStore` prechecks an event and before append. */
 export type OnEventAccepted = (event: Event) => Promise<void> | void;
+
+/** One-shot rollback token scoped to one successful event-store append. */
+export interface EventRollback {
+  /** Delete the events appended by the operation that created this token. */
+  rollback(): Promise<void>;
+}
 
 const EventStoreLocks = Object.freeze({
   queues: new WeakMap<StorageFactory, Map<string, Promise<void>>>(),

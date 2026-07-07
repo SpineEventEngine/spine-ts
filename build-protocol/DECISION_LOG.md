@@ -1654,3 +1654,126 @@ Consequences:
   Protobuf-ES workflow; no additional generator is needed.
 - Later tasks can wrap this small route-registration API in a larger server
   lifecycle only when the roadmap explicitly calls for it.
+
+## D-0057: End-User Handlers Use Domain Messages And Default-Route Validation
+
+Status: Accepted
+
+Date: 2026-07-07
+
+Context: Human review found the to-do example using schema-bearing decorators,
+returning framework `Event` envelopes from aggregate handlers, and extracting
+the target entity ID inside handler code. This contradicted prior human
+requirements for the public TypeScript handler model. Local JVM research notes
+also record Spine's first-field command routing convention: default command
+routing reads the first field in Protobuf declaration order and requires it to
+match the target entity ID type unless a repository route overrides it.
+
+Decision:
+
+- Normal end-user emitting handlers return generated domain messages, not
+  framework `Command` or `Event` envelopes.
+- Generated domain message return provenance must resolve to generated
+  Protobuf-ES imports, generated namespace/value imports, or aliases proven back
+  to those generated imports.
+- `@Assign`, `@Command`, and `@React` handlers require explicit return types.
+  They may return one generated message or a TypeScript tuple/rest type with a
+  required first generated message, such as
+  `readonly [TaskCreated, ...TaskCreated[]]`. Plain `T[]`, `readonly T[]`, and
+  rest-only tuples are empty-capable and are not sufficient public handler
+  return types.
+- `@Subscribe` handlers require explicit `void` return types.
+- End-user application code uses bare decorators. Schema-bearing decorators are
+  forbidden in ordinary app code unless a task records a narrow temporary
+  legacy/testing exception.
+- End-user application code must not discover or materialize decorated handler
+  metadata. Handler discovery/materialization belongs to the framework and
+  generated registry tooling.
+- Aggregates must not use `@Apply`; aggregate state changes happen in
+  framework-owned transactions for non-event-sourced aggregates.
+- End-user application code must not call entity transaction-control methods such
+  as `startTransaction()` or `commitTransaction()`.
+- End-user application code must not create framework-internal `Event` envelopes
+  or internal `EventId` values. The framework wraps returned domain event
+  messages and generates internal event IDs.
+- Default command target-ID extraction and validation belongs to the default
+  command route. Commands handled by the default route and missing an acceptable
+  first-field target ID must be rejected before handler invocation.
+- Custom command routes belong to the corresponding entity repository and must
+  be explicit. A custom route replaces the default first-field route, so the
+  framework must not enforce the first-field requirement for commands handled
+  by that custom route unless the route explicitly does so.
+- Future task briefs and reviewer prompts must carry a human-imposed
+  requirements ledger and an end-user API audit gate.
+
+Consequences:
+
+- The to-do example cannot be accepted while handlers return framework
+  envelopes, use schema decorators, or call helper code such as
+  `requireTaskId(command.id)` for default routing.
+- Generated registry tooling must infer schemas from explicit handler parameter
+  and return types, or a task must provide an explicit fallback that does not
+  leak schema arguments into ordinary app handlers.
+- Automated checks should be added where practical to reject envelope returns,
+  `packEvent()`/`packCommand()` in ordinary handlers, schema-bearing
+  decorators, aggregate `@Apply` handlers, transaction-control calls, direct
+  internal event ID construction, missing `void` subscriber returns, and
+  default-route ID extraction in examples, plus handler materialization helpers
+  in end-user app code.
+
+## D-0058: T-0014 Uses Explicit Metadata Until Generated Handler Registries Exist
+
+Status: Accepted
+
+Date: 2026-07-07
+
+Context: The public handler syntax must be bare decorators such as `@Assign`,
+`@React`, `@Subscribe`, and `@Command`, without schema arguments in ordinary
+application code. At the same time, the first T-0014 implementation does not yet
+include the build-time generated registry that will infer command/event schemas
+from explicit handler parameter and return types. Human review also explicitly
+forbids example/application code from defining or calling
+`materializeDecoratedEntityHandlers`; handler discovery/materialization is a
+framework responsibility only.
+
+Decision:
+
+- Keep the public decorators capable of recording bare standard-decorator
+  declarations.
+- Keep the migrated to-do example on explicit framework-owned
+  `defineEntityHandlers()` metadata for now, so no schema-bearing decorators or
+  application-owned materialization appear in end-user code.
+- Make legacy `materializeDecoratedEntityHandlers()` reject bare decorated
+  handlers with a clear error. It may still materialize schema-bearing legacy
+  decorators for framework tests and temporary compatibility paths.
+- Let repository execution own the new non-event-sourced aggregate path:
+  aggregate assignees mutate draft state inside framework-owned transactions,
+  return generated domain event messages, and the framework wraps those messages
+  into internal `Event` envelopes with internal IDs before storage/dispatch.
+- Let projection subscriber execution own transactions for subscribers that only
+  mutate draft state, while preserving the legacy self-managed transaction path
+  for existing tests until that compatibility surface is intentionally removed.
+
+Alternatives considered:
+
+- Generate registry metadata in this same slice. Rejected because it is a
+  build-time discovery/codegen task and would make T-0014 larger than needed to
+  remove the current end-user API violations.
+- Keep schema-bearing decorators in the example temporarily. Rejected because the
+  human requirement forbids explicit schema decorators in ordinary application
+  code.
+- Keep local example materialization as a bridge. Rejected because handler
+  discovery/materialization is framework-owned and must not be copied into
+  end-user apps.
+
+Consequences:
+
+- The next registry/codegen task must replace explicit to-do example metadata
+  with generated framework metadata without changing the public bare decorator
+  syntax.
+- The cleanup guard now rejects app-owned materializers, framework envelope
+  returns, aggregate appliers, transaction control, direct internal event IDs,
+  and default-route ID validation helpers in example/end-user source.
+- The current runtime supports the de-event-sourced aggregate direction while
+  preserving enough legacy handler metadata behavior for existing framework
+  tests to keep passing.

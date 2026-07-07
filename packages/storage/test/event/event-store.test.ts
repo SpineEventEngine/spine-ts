@@ -53,6 +53,8 @@ describe("EventStore", () => {
     const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
 
     await expect(store.appendAll([])).resolves.toBeUndefined();
+    const rollback = await store.appendAllWithRollback([]);
+    await expect(rollback.rollback()).resolves.toBeUndefined();
     expect(store.isOpen()).toBe(true);
 
     store.close();
@@ -128,6 +130,39 @@ describe("EventStore", () => {
       ]),
     ).rejects.toThrow(/unique event IDs/);
     await expect(store.read()).resolves.toEqual([]);
+  });
+
+  it("rolls back appended events using cloned event IDs", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const first = createEvent("event-delete-1", "type.spine.io/tasks.TaskCreated", 1n);
+
+    const rollback = await store.appendAllWithRollback([
+      first,
+      createEvent("event-delete-2", "type.spine.io/tasks.TaskRenamed", 2n),
+    ]);
+    first.id = create(EventIdSchema, { value: "event-mutated" });
+
+    await rollback.rollback();
+
+    await expect(store.read()).resolves.toEqual([]);
+    await store.append(createEvent("event-delete-1", "type.spine.io/tasks.TaskCreated", 3n));
+    await expect(rollback.rollback()).rejects.toThrow(
+      "Event rollback token has already been used.",
+    );
+    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-delete-1" } }]);
+  });
+
+  it("rejects rollback after close", async () => {
+    const factory = new InMemoryStorageFactory();
+    const store = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    const rollback = await store.appendAllWithRollback([
+      createEvent("event-after-close", "type.spine.io/tasks.TaskCreated", 1n),
+    ]);
+
+    store.close();
+
+    await expect(rollback.rollback()).rejects.toThrow(/closed/);
   });
 
   it("snapshots events before queued append work runs", async () => {

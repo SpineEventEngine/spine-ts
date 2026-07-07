@@ -44,8 +44,8 @@ rejects an invalid accepted command payload before dispatcher callbacks,
 including custom `addCommandDispatcher()` routes. For repository-backed
 aggregate dispatchers, validation still happens before route calculation,
 aggregate history load, event append, snapshot write, or stored-event dispatch.
-Transition validation failures while applying events produced by the current
-aggregate command continue to surface as
+Transition validation failures from the framework-owned aggregate command
+transaction continue to surface as
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
 details. Replay failures from stored aggregate history remain internal and are
 sanitized as `COMMAND_POST_ERROR`. Dispatcher-thrown `ValidationException`
@@ -70,8 +70,8 @@ the context `StorageFactory`; registered repositories also make their entity
 state schemas known to the context `Stand`. Repositories with authentic explicit
 handler metadata still expose route-only `routeCommand()` / `routeEvent()`
 calculations, and built contexts install internal repository dispatcher adapters
-that execute aggregate command assignees and appliers, and execute projection
-subscribers. Aggregate command execution requires `command.id` so produced
+that execute aggregate command assignees in framework-owned transactions and
+execute projection subscribers. Aggregate command execution requires `command.id` so produced
 events can carry a contract-valid command origin; missing IDs reject before
 mutation or storage. Aggregate command completion resolves after aggregate
 event storage and snapshot handling; later already-stored event redispatch
@@ -135,11 +135,12 @@ public API. When explicit handler metadata is supplied, repository routing
 calculates command and event routes by generated message full type name,
 readiness metadata, producer ID, or first-field ID. Built bounded contexts
 register repository dispatcher adapters internally so aggregate commands can
-load or create one aggregate, invoke one assignee, apply the produced events,
-persist history and snapshots through `AggregateStorage`, and then queue
-already-stored events for event-bus delivery without appending them again. The
-repository surface still does not expose direct entity lookup/storage APIs,
-inboxes, caches, catch-up, or transport startup. Built bounded contexts use
+load or create one aggregate, invoke one assignee in a framework-owned
+transaction, pack and store returned domain events, persist the managed snapshot
+through `AggregateStorage`, and then queue already-stored events for event-bus
+delivery without appending them again. The repository surface still does not
+expose direct entity lookup/storage APIs, inboxes, caches, catch-up, or
+transport startup. Built bounded contexts use
 repository metadata to register known state types with their direct read-side
 `Stand`.
 `Stand`, `StandOptions`, `StandRegisterOptions`, `StandReadOptions`,
@@ -233,14 +234,16 @@ the discarded draft evidence.
 Server handler metadata exports include
 `defineEntityHandlers()`, `HandlerRegistrationBuilder`, the five handler
 metadata roles for command assignment, command reaction, event subscription,
-event reaction, and event application, and `HandlerMetadataError` for
+event reaction, and legacy event application, and `HandlerMetadataError` for
 registration-time structural failures. Handler names must refer to own prototype
 data methods declared with normal class method syntax. Decorator adapter exports
-include `@Assign`, `@Command`, `@Subscribe`, `@React`, `@Apply`,
-`materializeDecoratedEntityHandlers()`, `HandlerMethodDecorator`, and
-`HandlerMethodValue`. Decorators require explicit Protobuf-ES schema arguments
-and record standard per-class metadata that materializes into the same
-`EntityHandlersMetadata` contract as explicit registration. The server registry
+include `@Assign`, `@Command`, `@Subscribe`, `@React`, legacy/framework-only
+`@Apply`, framework-only `materializeDecoratedEntityHandlers()`,
+`HandlerMethodDecorator`, and `HandlerMethodValue`. Bare `@Assign`, `@Command`,
+`@Subscribe`, and `@React` are the ordinary application syntax. Schema-bearing
+decorator overloads, `@Apply`, and `materializeDecoratedEntityHandlers()` are
+legacy/framework compatibility until generated handler registries own schema
+inference; new application code must not use them. The server registry
 exports include `HandlerMetadataRegistry`,
 `HandlerMetadataRegistryLookup`, `RegisteredHandlerMetadata`, and
 `HandlerMetadataRegistryError` for caller-owned lookup-only registration and

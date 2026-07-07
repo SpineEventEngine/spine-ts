@@ -41,6 +41,13 @@ including computer restart, lost internet, or thread compaction. No change may
 be made without updating the appropriate log first or in the same atomic work
 step.
 
+Human-imposed requirements are binding invariants. When the human states a
+technical rule, the orchestrator must record it in the task docs and, when it
+applies beyond one task, in the governing specification or decision log before
+or alongside the first related change. An implementation may not be called
+complete while code, docs, examples, tests, or generated artifacts contradict a
+recorded human-imposed invariant.
+
 Required persistent files during implementation:
 
 - `DECISION_LOG.md` for architectural/tooling decisions;
@@ -75,6 +82,14 @@ senior engineer specializing in the assigned aspect.
 9. The orchestrator integrates the branch.
 10. All participating sub-agents are closed.
 
+Each task brief must include a "Human-Imposed Requirements Ledger" section. The
+ledger must list every explicit human rule that applies to the task, including
+rules inherited from `TECHNICAL_SPEC.md`, `DEVELOPER_API.md`, and accepted
+decisions. Reviewer prompts must quote or reference the full ledger, not a
+loose summary. If a requirement appears to conflict with another governing
+source, the orchestrator must treat it as a blocking question unless the human
+already resolved the conflict.
+
 The corrected roadmap must be split only after the cleanup guardrails are in
 place. It must follow the order recorded in `D-0047` and in
 `TECHNICAL_SPEC.md`: storage/event store first, then buses/dispatch, bounded
@@ -107,6 +122,10 @@ Reviewer comments are fed back to the authoring sub-agent. The authoring sub-age
 - request another review round.
 
 The loop stops only when all reviewers report no remaining comments.
+
+Reviewers must explicitly check the human-imposed requirements ledger. A clean
+review is invalid if it ignores a ledger item that is visible in the diff or in
+the examples/docs affected by the task.
 
 ## Human Questions
 
@@ -242,6 +261,53 @@ A task cannot be marked complete until:
 - framework or example `USER_GUIDE.md` is updated when user workflow changes;
 - all reviewer rounds are complete;
 - all participating sub-agents are closed.
+
+Additional end-user API gates:
+
+- handwritten end-user application code, including examples, must not return
+  framework `Command` or `Event` envelopes from `@Assign`, `@Command`, or
+  `@React` handlers;
+- end-user `@Assign`, `@Command`, and `@React` handlers must return generated
+  domain messages with explicit return types, singular or tuple/rest types with a
+  required first generated message as allowed by `TECHNICAL_SPEC.md`;
+- end-user `@Subscribe` handlers must declare explicit `void` return types;
+- end-user application code must not use schema-bearing decorators such as
+  `@Assign(SomeSchema)` unless a task records a temporary legacy/testing
+  exception;
+- end-user application code must not define or call aggregate `@Apply` handlers;
+- end-user application code must not call transaction-control methods such as
+  `startTransaction()` or `commitTransaction()`;
+- end-user application code must not construct internal `Event` IDs or use
+  `EventIdSchema` for ordinary handler returns;
+- end-user handlers must not perform default command target-ID extraction such
+  as `requireTaskId(command.id)`;
+- end-user application code must not contain handler discovery/materialization
+  adapters; framework/generated-registry code owns decorated handler metadata
+  materialization;
+- commands handled through the default command route must be rejected by that
+  route before handler invocation when the first-field target ID is missing or
+  invalid;
+- explicit custom command routes replace the default first-field route and must
+  define their own route-validity behavior.
+
+Before marking any task complete, the orchestrator must run an end-user API
+audit over changed example and documentation code. Where practical, add or run
+automated checks that reject:
+
+- handler return types of `Command`, `Event`, or other framework envelopes in
+  `examples/**/src`;
+- `packCommand(` or `packEvent(` inside ordinary end-user handler methods;
+- schema-bearing decorators in ordinary end-user/example code;
+- aggregate `@Apply` handlers in ordinary end-user/example code;
+- transaction-control calls such as `startTransaction()` and
+  `commitTransaction()` inside ordinary end-user/example code;
+- direct internal event ID construction such as `EventIdSchema` usage inside
+  ordinary end-user/example code;
+- `@Subscribe` handlers without explicit `void` return types;
+- default-route ID extraction helpers in end-user handlers;
+- handler materialization helpers in examples, including
+  `materializeDecoratedEntityHandlers`, whether imported from the framework or
+  locally declared in application code.
 
 Additional cleanup-era gates:
 

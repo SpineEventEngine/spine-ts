@@ -97,6 +97,7 @@ interface DecoratedClassFactoryOutput {
   readonly BorrowingProjection: new () => object;
   readonly DecoratedBaseProjection: new () => object;
   readonly UndecoratedOverrideProjection: new () => object;
+  readonly BareDecoratedProjection: new () => object;
 }
 
 async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
@@ -203,6 +204,28 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
         }
       }
 
+      class BareDecoratedProjection {
+        @Assign
+        assignCreate(command) {
+          void command;
+        }
+
+        @Command
+        commandFromCommand(command) {
+          void command;
+        }
+
+        @Subscribe
+        subscribeCreated(event) {
+          void event;
+        }
+
+        @React
+        reactToCreated(event) {
+          void event;
+        }
+      }
+
       return {
         DecoratedProjection,
         DecoratedAggregate,
@@ -213,6 +236,7 @@ async function createDecoratedClasses(): Promise<DecoratedClassFactoryOutput> {
         BorrowingProjection,
         DecoratedBaseProjection,
         UndecoratedOverrideProjection,
+        BareDecoratedProjection,
       };
     }
   `;
@@ -320,7 +344,7 @@ describe("handler decorators", () => {
     `);
 
     expect(diagnostics).toEqual([]);
-  });
+  }, 15_000);
 
   it("materializes every decorator kind into frozen handler metadata in declaration order", async () => {
     const { DecoratedProjection } = await createDecoratedClasses();
@@ -359,6 +383,36 @@ describe("handler decorators", () => {
     expect(Object.isFrozen(metadata)).toBe(true);
     expect(Object.isFrozen(metadata.handlers)).toBe(true);
     expect(Object.isFrozen(metadata.handlers[0])).toBe(true);
+  });
+
+  it("keeps bare decorators for framework-owned registry generation only", async () => {
+    const { BareDecoratedProjection } = await createDecoratedClasses();
+
+    expect(() =>
+      materializeDecoratedEntityHandlers(BareDecoratedProjection, ProjectionStateSchema),
+    ).toThrow(
+      'Decorated handler "assignCreate" was declared without a schema; use generated registry ' +
+        "metadata or explicit defineEntityHandlers() registration.",
+    );
+  });
+
+  it("rejects invalid standard decorator contexts", () => {
+    const method = function handler(): void {
+      return;
+    };
+
+    expect(() => {
+      Assign(CommandSchema)(method, decoratorContext({ static: true }));
+    }).toThrow("public instance methods");
+    expect(() => {
+      Assign(CommandSchema)(method, decoratorContext({ private: true }));
+    }).toThrow("public instance methods");
+    expect(() => {
+      Assign(CommandSchema)(method, decoratorContext({ name: Symbol("handler") }));
+    }).toThrow("string-named methods");
+    expect(() => {
+      Assign(CommandSchema)(method, decoratorContext({ metadata: undefined }));
+    }).toThrow("metadata support");
   });
 
   it("registers materialized decorator metadata through the caller-owned registry", async () => {
@@ -488,3 +542,28 @@ describe("handler decorators", () => {
     );
   });
 });
+
+function decoratorContext(
+  overrides: Partial<ClassMethodDecoratorContext<object, HandlerFixtureMethod>>,
+): ClassMethodDecoratorContext<object, HandlerFixtureMethod> {
+  return {
+    kind: "method",
+    name: "handler",
+    static: false,
+    private: false,
+    access: {
+      has: () => true,
+      get: () =>
+        function handler(): void {
+          return;
+        },
+    },
+    metadata: {},
+    addInitializer: () => {
+      return;
+    },
+    ...overrides,
+  };
+}
+
+type HandlerFixtureMethod = () => void;

@@ -31,7 +31,7 @@ restart the process to clear tasks.
 
 - `CreateTask`, `RenameTask`, `CompleteTask`, and `ReopenTask` commands posted
   through `CommandService.Post`.
-- Decorated aggregate command handlers and event appliers.
+- Aggregate command handlers that update state and return domain events.
 - Projection subscribers that update `TaskList` rows from delivered events.
 - `QueryService.Read` for all task-list rows or a task-list row by projection
   ID.

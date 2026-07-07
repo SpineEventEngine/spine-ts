@@ -30,14 +30,9 @@ The preferred end-user mechanism is standard TypeScript decorators:
 
 ```typescript
 class TaskAggregate extends Aggregate<TaskId, Task> {
-  @Assign(CreateTaskSchema)
+  @Assign
   create(command: CreateTask, ctx: CommandContext): TaskCreated {
     return create(TaskCreatedSchema, { task: command.id, name: command.name });
-  }
-
-  @Apply(TaskCreatedSchema)
-  onCreated(event: TaskCreated): void {
-    this.setState({ name: event.name });
   }
 }
 ```
@@ -48,25 +43,31 @@ Decorator requirements:
 - do not rely on legacy decorator metadata or `emitDecoratorMetadata` as a core requirement;
 - do not rely on parameter decorators, because standard decorators do not
   provide the same legacy parameter-decorator model;
-- require explicit schema arguments where runtime type metadata is otherwise unavailable;
+- do not require or allow explicit schema arguments in normal end-user
+  application code;
 - allow decorators to register metadata through class initializers or static metadata tables;
 - provide a non-decorator registration fallback for environments where decorators are unavailable.
 
-Implementation must investigate whether standard decorators plus explicit
-schema arguments are sufficient. If not, a custom code generation step may
-produce registration metadata from decorated source or from explicit static
-metadata.
+Implementation must use build-time registry generation or explicit static
+metadata to recover schemas from TypeScript parameter and return types. Runtime
+decorator metadata alone is not enough to justify schema-bearing decorators in
+end-user code.
+
+Handler discovery and decorated metadata materialization are framework
+responsibilities. End-user applications must not define, import, or call helper
+adapters such as `materializeDecoratedEntityHandlers()`.
 
 ## Handler Decorators
 
 Initial decorator set:
 
-- `@Assign(CommandSchema)` for command assignees that produce events or rejection outcomes.
-- `@Command(CommandSchema)` for command receptors that produce commands or
-  events according to the process manager model.
-- `@Subscribe(EventSchema, options?)` for event subscribers/projection updaters.
-- `@React(EventSchema, options?)` for reactors that emit new commands/events.
-- `@Apply(EventSchema, options?)` for aggregate event appliers.
+- `@Assign` for command assignees that produce one or more generated domain
+  event messages or rejection outcomes.
+- `@Command` for command-producing methods that produce one or more generated
+  domain command messages.
+- `@Subscribe` for event subscribers/projection updaters. These handlers must
+  declare explicit `void` return types.
+- `@React` for reactors that emit one or more generated domain event messages.
 - `@External()` option for external event/command handlers.
 - Field-filter options equivalent to Spine handler filtering.
 
@@ -74,11 +75,65 @@ Decorators define model metadata. They must not perform runtime registration by
 executing arbitrary global side effects during import unless the behavior is
 deterministic and testable.
 
+`@Apply` must not be introduced for new aggregate behavior. Spine TS aggregates
+are planned as non-event-sourced, so aggregate command handlers mutate state in
+framework-controlled transactions and return generated domain event messages
+for publication.
+
+End-user emitting handlers must not return framework `Command` or `Event`
+envelopes. The framework wraps generated domain messages into envelopes
+internally.
+
+Allowed public signatures include:
+
+```typescript
+@Assign
+create(command: CreateTask): TaskCreated;
+
+@Assign
+rename(command: RenameTask, context: CommandContext): readonly [TaskRenamed, ...TaskRenamed[]];
+
+@Command
+whenTaskCreated(event: TaskCreated, context: EventContext): NotifyOwner;
+
+@React
+whenTaskCompleted(event: TaskCompleted): TaskArchived;
+
+@Subscribe
+onTaskRenamed(event: TaskRenamed, context: EventContext): void;
+```
+
+The generated registry must reject unsupported signatures, missing explicit
+return types on emitting handlers, `@Subscribe` handlers without explicit
+`void`, and ordinary end-user handlers that expose framework envelopes.
+
+## Command Target Routing
+
+Default command routing follows Spine JVM's first-field convention. The first
+field of the command message in Protobuf declaration order is the default
+target entity ID. The default command route must validate this before invoking
+a handler.
+
+End-user handlers should receive route-valid commands and must not implement
+default target-ID checks such as:
+
+```typescript
+const id = requireTaskId(command.id);
+```
+
+If the first field is absent, blank, or not assignable to the repository ID
+type, the default command route must reject the command before handler
+invocation. Custom command routes belong to the corresponding entity repository
+and must be explicit. A custom route replaces the default first-field route, so
+the framework must not enforce the first-field requirement for commands handled
+by that custom route unless the route explicitly does so.
+
 ## Entity Transactions
 
 Entities mutate state only inside framework-controlled handling transactions:
 
-- aggregate state changes only by applying events;
+- aggregate state changes during framework-owned command or reaction handling,
+  through transaction/update helpers rather than app-owned event appliers;
 - projection state changes only by event subscription handling;
 - process manager state changes by command/event handling where allowed;
 - state validation runs before commit;

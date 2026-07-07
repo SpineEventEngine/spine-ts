@@ -58,6 +58,80 @@ line.
 12. Production code may import generated code directly. Do not add generated
     facades unless a later task records a concrete reason.
 
+## End-User Handler API Invariants
+
+These invariants come from human clarification on `2026-07-07` and are
+blocking requirements for all framework and example work.
+
+- Normal end-user handler code must work with generated domain messages and
+  generated Spine context messages, not framework signal envelopes.
+- `Command`, `Event`, and other framework envelope messages are framework
+  internals for ordinary command/event handler code. End users may use them only
+  in explicitly documented low-level integration points.
+- `@Assign`, `@Command`, and `@React` handlers must declare explicit return
+  types.
+- `@Assign` handlers return at least one generated domain event message, either
+  as one event message or a tuple/rest type with a required first event message.
+- `@React` handlers return at least one generated domain event message, either
+  as one event message or a tuple/rest type with a required first event message.
+- `@Command` handlers return at least one generated domain command message,
+  either as one command message or a tuple/rest type with a required first
+  command message.
+- Generated domain message return provenance must resolve to generated
+  Protobuf-ES imports, generated namespace/value imports, or local aliases
+  proven back to those generated imports.
+- Public TypeScript signatures must make non-empty multi-message returns visible
+  in the type annotation, for example with tuple/rest notation such as
+  `readonly [TaskCreated, ...TaskCreated[]]`; plain `TaskCreated[]` and
+  `readonly TaskCreated[]` are empty-capable and are not sufficient public
+  handler return types.
+- `@Subscribe` handlers must declare an explicit `void` return type.
+- New aggregate behavior must not introduce or depend on `@Apply`; aggregates
+  are planned as non-event-sourced in Spine TS.
+- End-user application code must not start, commit, roll back, or otherwise
+  control framework entity transactions. Entity transactions are opened,
+  validated, committed, and rolled back by the framework runtime.
+- End-user application code must not create framework-internal `Event` envelopes
+  or internal `EventId` values. The framework wraps returned domain event
+  messages and generates internal event IDs.
+- End-user application code must use bare decorators such as `@Assign`,
+  `@Command`, `@React`, and `@Subscribe`. Schema-bearing decorators such as
+  `@Assign(SomeSchema)` are forbidden in end-user app code unless a narrow
+  legacy/testing exception is documented in the task.
+- Generated registry/build-time tooling must infer handler signal schemas from
+  explicit parameter types and emitted schemas from explicit return types.
+- Handler discovery and materialization of decorated declarations into
+  canonical metadata is framework/generated-registry responsibility. End-user
+  applications must not define helper adapters such as
+  `materializeDecoratedEntityHandlers()`, and must not import or call such
+  materialization helpers from ordinary application code.
+- Example applications are part of the public API contract. A framework task is
+  incomplete if an example uses framework envelopes, explicit schema decorators,
+  or other internals that the public handler model forbids.
+
+## Command Target ID And Default Routing
+
+Default command routing follows the Spine JVM first-field convention.
+
+- The first field of a command message in Protobuf declaration order, not by
+  numeric field index, is the default target entity ID.
+- For commands handled through the default command route, the first command
+  field is required and must be set before the command reaches any end-user
+  handler.
+- The default command route must reject a command whose first field is absent,
+  blank, or not assignable to the repository ID type before invoking handler
+  code.
+- End-user handlers must not contain defensive target-ID extraction such as
+  `requireTaskId(command.id)` for the default route. The default route owns
+  this validation and passes only route-valid commands to handlers.
+- Custom command routing may override the default route in the corresponding
+  entity repository. When custom routing is used, the default first-field
+  requirement is not enforced unless the custom route explicitly chooses that
+  behavior. Such overrides must be explicit, tested, and documented in the task
+  that introduces them.
+- Generated or registered routing metadata must preserve Protobuf declaration
+  order so the first-field route cannot accidentally become field-number based.
+
 ## High-Level Architecture
 
 ```mermaid

@@ -37,10 +37,12 @@ service descriptors with Connect/Node so callers can host `CommandService.Post`,
 real gRPC-compatible runtime.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
 deterministic in-memory adapter for tests/development. Built bounded contexts
-can now execute aggregate command assignees/appliers and dispatch produced
-aggregate events to projection subscribers that update `Stand`; broader entity
-runtime dispatch, transport endpoint execution, durable production storage,
-broader server lifecycle, and the to-do application remain later slices.
+can now execute aggregate command assignees that update state in
+framework-owned transactions and return generated domain events, then dispatch
+stored aggregate events to projection subscribers that update `Stand`; broader
+entity runtime dispatch, transport endpoint execution, durable production
+storage, broader server lifecycle, and the to-do application remain later
+slices.
 
 ## What Exists Now
 
@@ -115,11 +117,12 @@ broader server lifecycle, and the to-do application remain later slices.
   generated command/event schemas to entity method names for command assignment,
   command reaction, event subscription, event reaction, and event application.
 - Server standard method decorators in `@spine-ts/server` that collect
-  class-owned handler metadata with explicit generated schemas and materialize
-  into the same `EntityHandlersMetadata` shape as explicit registration.
+  class-owned handler metadata. Bare decorators are the ordinary application
+  syntax; explicit schema decorator overloads remain legacy/framework
+  compatibility until generated registry tooling owns schema inference.
 - A caller-owned server handler metadata registry that registers explicit
   entity handler metadata, rejects duplicate command assignments and duplicate
-  event appliers for the same entity/event pair, and exposes frozen
+  legacy event applications for the same entity/event pair, and exposes frozen
   deterministic lookup views.
 - A bounded-context builder shell in `@spine-ts/server` with
   `BoundedContext.singleTenant(name)`, `BoundedContext.multitenant(name)`,
@@ -170,13 +173,13 @@ broader server lifecycle, and the to-do application remain later slices.
   persistence, ZeroMQ endpoint topology, broker process supervision, retry
   workers, durable delivery storage, transport-backed service execution,
   durable production storage, and to-do domain runtime behavior.
-- Built bounded contexts can invoke aggregate command assignees and aggregate
-  event appliers, then deliver stored aggregate-produced events to projection
-  event subscribers that update read-side state through `Stand`, including
-  tenant-scoped projection updates from the command tenant. Other
-  handler/runtime execution remains deferred, including process-manager
-  reactions, broader subscriber/reactor delivery semantics, and import/catch-up
-  flows.
+- Built bounded contexts can invoke aggregate command assignees that update
+  state in framework-owned transactions and return generated domain events, then
+  deliver stored aggregate-produced events to projection event subscribers that
+  update read-side state through `Stand`, including tenant-scoped projection
+  updates from the command tenant. Other handler/runtime execution remains
+  deferred, including process-manager reactions, broader subscriber/reactor
+  delivery semantics, and import/catch-up flows.
 
 ## Type Registry
 
@@ -338,35 +341,19 @@ commit and rollback are evidence for later runtime layers, not persisted state.
 
 ## Transactional Entity Draft Helpers
 
-Extend `TransactionalEntity` when framework-owned subclasses need protected
-draft helpers over the transaction kernel:
+`TransactionalEntity` exposes protected draft helpers for framework-owned
+runtime execution. Application handlers call `updateDraftState()` and return
+generated domain events; they do not open, commit, or roll back transactions.
+Repository execution opens one transaction around the handler call, commits it
+after the handler returns, applies state-transition validation, and rolls it back
+on failure.
 
-```ts
-import { TransactionalEntity } from "@spine-ts/server";
-import { TaskStateSchema } from "./generated/tasks_pb.js";
-
-class TaskEntity extends TransactionalEntity<string, typeof TaskStateSchema, number> {
-  rename(name: string): void {
-    this.startTransaction();
-    this.updateDraftState((state) => ({ ...state, name }));
-    this.updateDraftVersionMetadata(this.version + 1);
-
-    const result = this.commitTransaction();
-    if (result.status === "rejected") {
-      this.rollbackTransaction();
-    }
-  }
-}
-```
-
-Only subclass code can use the draft scope. `startTransaction()` opens one
-active transaction from the entity's current state, version metadata, and
-lifecycle snapshots. Draft helpers return snapshots, so mutating returned state
-or version data does not mutate the buffered draft. Accepted commits close the
-scope and replace the entity state, explicit version metadata, and lifecycle
-flags. Rejected commits keep the scope active for correction or explicit
-rollback and apply nothing to the entity. `rollbackTransaction()` closes the
-scope without applying state, version, or lifecycle changes.
+The lower-level transaction scope starts from the entity's current state,
+version metadata, and lifecycle snapshots. Draft helpers return snapshots, so
+mutating returned state or version data does not mutate the buffered draft.
+Accepted commits close the scope and replace the entity state, explicit version
+metadata, and lifecycle flags. Rejected commits remain framework-owned evidence
+used to report state-transition failures.
 
 `changed` becomes true when an accepted commit changes entity state or committed
 lifecycle flags. It does not include version-only commits and does not decide
@@ -448,11 +435,11 @@ projection updates reach them through framework-owned repository dispatch in
 built contexts, not through a new application write-side read API. They do not
 run catch-up. When a repository is constructed with authentic explicit handler
 metadata and registered with a built bounded context, aggregate commands can
-load or create one aggregate, invoke one assignee, apply the produced events,
-persist history and snapshots through `AggregateStorage`, and queue
-already-stored events for event-bus delivery. Projection repositories can
-consume delivered domestic events, invoke matching event subscribers, and write
-changed state through `Stand`.
+load or create one aggregate, invoke one assignee in a framework-owned
+transaction, pack and store returned domain events, persist the managed snapshot
+through `AggregateStorage`, and queue already-stored events for event-bus
+delivery. Projection repositories can consume delivered domestic events, invoke
+matching event subscribers, and write changed state through `Stand`.
 Aggregate command execution requires `command.id` so produced events can carry
 a contract-valid command origin; missing IDs reject before mutation or storage.
 
@@ -495,11 +482,12 @@ known state types.
 This slice still does not create default repositories, write inboxes, manage
 delivery, emit lifecycle events, or start transport. Repositories with
 authentic explicit handler metadata do contribute dispatcher adapters to the
-built context's buses; aggregate repositories can therefore execute assignees
-and appliers, persist through `AggregateStorage`, and queue already-stored
-events for event-bus delivery. Aggregate command completion is not failed by
-later redispatch errors, but those errors are visible for diagnostics and tests
-via `context.storedEventDispatchFailures()`.
+built context's buses; aggregate repositories can therefore execute command
+assignees, persist managed snapshots and internal events through
+`AggregateStorage`, and queue already-stored events for event-bus delivery.
+Aggregate command completion is not failed by later redispatch errors, but
+those errors are visible for diagnostics and tests via
+`context.storedEventDispatchFailures()`.
 
 `CommandBus` validates accepted command payload messages through the core
 validation facade before dispatcher callbacks run. For aggregate repositories,
@@ -512,14 +500,14 @@ payloads instead return `COMMAND_VALIDATION_ERROR` with message `Command
 payload validation failed.` and packed `spine.validation.ValidationError`
 details. Dispatcher-thrown `ValidationException` values and other unexpected
 command-bus failures remain sanitized as `COMMAND_POST_ERROR`. State-transition
-validation remains owned by `EntityTransaction.commit()` and
-`validateEntityStateTransition()`. If an aggregate event applier commits a
-rejected transition while applying events produced by the current command,
-command execution stops before storing produced events or snapshots and
-`CommandService.Post` returns `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with
-message `Command state transition validation failed.` plus packed
-`ValidationError` details. Replay failures from stored aggregate history remain
-internal and are sanitized as `COMMAND_POST_ERROR`.
+validation remains owned by framework-managed entity transactions and
+`validateEntityStateTransition()`. If an aggregate command handler produces an
+invalid state transition, command execution stops before storing produced events
+or snapshots and `CommandService.Post` returns
+`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with message `Command state
+transition validation failed.` plus packed `ValidationError` details. Replay
+failures from legacy stored aggregate history remain internal and are sanitized
+as `COMMAND_POST_ERROR`.
 
 ## Direct Stand
 
@@ -612,7 +600,7 @@ const repository = new Repository({
 const tasks = BoundedContext.singleTenant("Tasks").add(repository).build();
 const handlers = defineEntityHandlers(TaskAggregate, TaskStateSchema, (builder) => [
   builder.assign(CreateTaskSchema, "create"),
-  builder.apply(TaskCreatedSchema, "onCreated", { allowImport: true }),
+  builder.subscribe(TaskCreatedSchema, "onCreated"),
 ]);
 const registry = new HandlerMetadataRegistry([handlers]);
 
@@ -626,13 +614,13 @@ const routingPlan = createServerRuntimeRoutingPlan({
 });
 
 routingPlan.commands.routes[0]?.receiverGroup; // "command-assignee"
-routingPlan.events.applicationRoutes[0]?.receiverGroup; // "application"
+routingPlan.events.subscriberRoutes[0]?.receiverGroup; // "subscriber"
 routingPlan.deferred.map(({ signalKind }) => signalKind); // ["query", "subscription", "system"]
 ```
 
 This assembly records what a later runtime can consume: context identity,
 repository ownership metadata, handler metadata, command assignment readiness,
-event subscriber/reactor/applier readiness, transport-owned command/event
+event subscriber/reactor readiness, transport-owned command/event
 topics, subscriptions, planner-local worker IDs, and deferred
 query/subscription/system routing seams. The routing plan is metadata:
 route descriptors expose sanitized message type names/type URLs, receiver
@@ -845,25 +833,31 @@ methods later runtime slices should inspect. This remains the canonical
 metadata contract and the fallback for codebases that avoid decorators:
 
 ```ts
+import { create } from "@bufbuild/protobuf";
 import { defineEntityHandlers } from "@spine-ts/server";
-import { CreateTaskSchema } from "./generated/task_commands_pb.js";
-import { TaskCreatedSchema, TaskStateSchema } from "./generated/tasks_pb.js";
+import { CreateTaskSchema, type CreateTask } from "./generated/task_commands_pb.js";
+import { TaskCreatedSchema, TaskStateSchema, type TaskCreated } from "./generated/tasks_pb.js";
 
 class TaskAggregate {
-  create(command: unknown): void {}
-
-  onCreated(event: unknown): void {}
+  create(command: CreateTask): TaskCreated {
+    void command;
+    return create(TaskCreatedSchema);
+  }
 }
 
-const taskHandlers = defineEntityHandlers(TaskAggregate, TaskStateSchema, ({ assign, apply }) => [
+class TaskProjection {
+  onCreated(event: TaskCreated): void {
+    void event;
+  }
+}
+
+const taskHandlers = defineEntityHandlers(TaskAggregate, TaskStateSchema, ({ assign }) => [
   assign(CreateTaskSchema, "create"),
-  apply(TaskCreatedSchema, "onCreated", { allowImport: true }),
 ]);
 
 taskHandlers.entity.fullTypeName;
 taskHandlers.handlers.map((handler) => handler.kind);
 taskHandlers.commandAssignments[0]?.methodName; // "create"
-taskHandlers.eventApplications[0]?.allowImport; // true
 ```
 
 `defineEntityHandlers()` calls `describeEntityMetadata()` for the state schema,
@@ -871,47 +865,43 @@ checks that named methods are own prototype data methods declared with normal
 class method syntax, and returns frozen metadata arrays preserving declaration
 order. Accessors, `constructor`, inherited methods, and instance fields are
 rejected without invoking user code. The builder exposes `assign()`,
-`command()`, `subscribe()`, `react()`, and `apply()` for the five first handler
-roles. `apply(..., { allowImport: true })` records importability for future
-event import/replay work.
+`command()`, `subscribe()`, and `react()` for ordinary application handlers.
+`apply()` remains only for legacy/framework compatibility paths; new aggregate
+code should not define appliers.
 
 Use the standard decorators when TypeScript 5+ decorator syntax fits your
-project. Every decorator requires an explicit generated Protobuf-ES schema; the
-framework does not infer message types through `emitDecoratorMetadata`,
-`reflect-metadata`, or parameter decorators:
+project. Ordinary application code uses bare decorators. Generated registry
+tooling will own schema discovery from explicit handler parameter and return
+types; until then, explicit `defineEntityHandlers()` metadata is the framework
+bridge:
 
 ```ts
-import {
-  Apply,
-  Assign,
-  HandlerMetadataRegistry,
-  materializeDecoratedEntityHandlers,
-} from "@spine-ts/server";
-import { CreateTaskSchema } from "./generated/task_commands_pb.js";
-import { TaskCreatedSchema, TaskStateSchema } from "./generated/tasks_pb.js";
+import { create } from "@bufbuild/protobuf";
+import { Assign, Subscribe } from "@spine-ts/server";
+import type { CreateTask } from "./generated/task_commands_pb.js";
+import { TaskCreatedSchema, type TaskCreated } from "./generated/tasks_pb.js";
 
 class TaskAggregate {
-  @Assign(CreateTaskSchema)
-  create(command: unknown): void {}
-
-  @Apply(TaskCreatedSchema, { allowImport: true })
-  onCreated(event: unknown): void {}
+  @Assign
+  create(command: CreateTask): TaskCreated {
+    void command;
+    return create(TaskCreatedSchema);
+  }
 }
 
-const taskHandlers = materializeDecoratedEntityHandlers(TaskAggregate, TaskStateSchema);
-const registry = new HandlerMetadataRegistry([taskHandlers]);
-
-registry.findCommandAssignment(CreateTaskSchema.typeName)?.handler.methodName; // "create"
-registry.findEventApplication(TaskStateSchema.typeName, TaskCreatedSchema.typeName)?.handler
-  .methodName; // "onCreated"
+class TaskProjection {
+  @Subscribe
+  onCreated(event: TaskCreated): void {
+    void event;
+  }
+}
 ```
 
-`@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply` record standard
-per-class metadata from public instance methods only.
-`materializeDecoratedEntityHandlers()` confirms the recorded handler names are
-still own prototype methods and returns the same frozen `EntityHandlersMetadata`
-shape as `defineEntityHandlers()`. Decorators do not instantiate the entity,
-invoke methods, unpack payloads, register in a global handler registry, validate
+`@Assign`, `@Command`, `@Subscribe`, and `@React` record standard per-class
+metadata from public instance methods only. Application code should not call
+handler materializers; handler discovery/materialization belongs to generated
+framework registry tooling. Decorators do not instantiate the entity, invoke
+methods, unpack payloads, register in a global handler registry, validate
 transactions, write storage, start buses, or start transport.
 
 Use `HandlerMetadataRegistry` when application assembly or tests need a
@@ -923,17 +913,16 @@ import { HandlerMetadataRegistry, defineEntityHandlers } from "@spine-ts/server"
 const registry = new HandlerMetadataRegistry([taskHandlers]);
 
 registry.findEntityHandlersByState(TaskStateSchema.typeName);
-registry.findHandlersByKind("event-application");
+registry.findHandlersByKind("event-subscription");
 registry.findHandlersByMessageFullTypeName(TaskCreatedSchema.typeName);
 registry.findCommandAssignment(CreateTaskSchema.typeName)?.handler.methodName; // "create"
-registry.findEventApplication(TaskStateSchema.typeName, TaskCreatedSchema.typeName)?.handler
-  .methodName; // "onCreated"
+registry.findHandlersByKind("event-subscription")[0]?.handler.methodName; // "onCreated"
 ```
 
 Registry listing and lookup methods return frozen arrays in registration and
 handler declaration order. One registry permits only one command assignment for
-each command message full type name and only one event application for each
-entity state full type name plus event message full type name. Command
+each command message full type name and only one legacy event application for
+each entity state full type name plus event message full type name. Command
 reactions, event subscriptions, and event reactions may have multiple handlers
 for the same message type, preserving later fan-out behavior. The registry is
 metadata-only and caller-owned: it does not instantiate entities, invoke

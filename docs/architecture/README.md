@@ -181,16 +181,16 @@ reactions intentionally allow multiple handlers for the same message type so
 later runtime fan-out remains possible.
 
 The standard decorator adapter is metadata-only syntax over the same explicit
-contract. `@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply` require
-explicit generated Protobuf-ES schemas, collect declarations from public
-instance methods into standard per-class decorator metadata, and
-`materializeDecoratedEntityHandlers()` confirms the recorded handler names are
-still own prototype methods before producing ordinary `EntityHandlersMetadata`.
-This keeps decorated classes compatible with `HandlerMetadataRegistry` and
-preserves `defineEntityHandlers()` as the canonical fallback for environments
-that avoid decorators. The adapter does not use legacy `emitDecoratorMetadata`,
-`reflect-metadata`, parameter decorators, inferred message type metadata, or a
-process-wide handler registry.
+contract. Bare `@Assign`, `@Command`, `@Subscribe`, and `@React` are the
+ordinary application syntax collected from public instance methods into
+standard per-class decorator metadata. Schema-bearing decorator overloads,
+`@Apply`, and `materializeDecoratedEntityHandlers()` remain legacy/framework
+compatibility until generated registry tooling owns schema inference from
+handler parameter and return types. This keeps decorated classes compatible with
+`HandlerMetadataRegistry` and preserves `defineEntityHandlers()` as the
+canonical fallback for environments that avoid decorators. The adapter does not
+use legacy `emitDecoratorMetadata`, `reflect-metadata`, parameter decorators, or
+a process-wide handler registry.
 
 `validateEntityStateTransition()` is the first high-level server validation API
 over previous and proposed entity state. It calls `describeEntityMetadata()` to
@@ -270,10 +270,11 @@ This follows the JVM `Repository` identity surface (`entityClass()`,
 step. When authentic explicit handler metadata is supplied, repositories now
 calculate command/event routes and bounded-context assembly registers internal
 dispatcher adapters for those routes. Aggregate repositories can then load or
-create one aggregate, invoke one assignee, apply the produced events, persist
-history and snapshots through `AggregateStorage`, and queue already-stored
-events for event-bus delivery without a second append. The TypeScript seam
-still omits public `create`, `find`, `store`, record conversion APIs,
+create one aggregate, invoke one assignee in a framework-owned transaction,
+pack and store returned domain events, persist the managed snapshot through
+`AggregateStorage`, and queue already-stored events for event-bus delivery
+without a second append. The TypeScript seam still omits public `create`,
+`find`, `store`, record conversion APIs,
 entity storage/cache/catch-up, inbox/delivery, lifecycle monitors, gRPC server
 lifecycle, and transport.
 
@@ -373,12 +374,12 @@ load, event append, snapshot write, or stored-event dispatch.
 message `Command payload validation failed.`, and packed
 `spine.validation.ValidationError` details. Handler-thrown `CommandRefusalError`
 values are the one immediate business refusal path mapped to stable non-ok
-`Ack` errors. Aggregate event appliers continue to use
-`EntityTransaction.commit()` for transition validation. When the rejected
-commit comes from applying events produced by the current command, repository
-execution raises `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed
-`ValidationError` details before events or snapshots are stored. Stored-history
-replay failures remain internal and are sanitized as `COMMAND_POST_ERROR`.
+`Ack` errors. Managed aggregate command handlers use framework-owned
+`EntityTransaction.commit()` for transition validation. When that transaction is
+rejected, repository execution raises
+`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
+details before events or snapshots are stored. Stored-history replay failures
+remain internal and are sanitized as `COMMAND_POST_ERROR`.
 Unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
 
 The following runtime pieces are still deferred to later explicit tasks:

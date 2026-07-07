@@ -55,9 +55,9 @@ Current slice exposes:
   when `CommandBus` rejects an invalid accepted command payload before
   dispatcher execution, whether the dispatcher is a repository adapter or a
   custom `addCommandDispatcher()` registration; transition-validation
-  rejections while applying events produced by the current aggregate command
-  surface as `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed
-  `ValidationError` details, while stored-history replay failures remain
+  rejections from the framework-owned aggregate command transaction surface as
+  `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
+  details, while stored-history replay failures remain
   internal and sanitized as `COMMAND_POST_ERROR`;
   and
 - `AggregateStorage` for the current finite primitive or single-field
@@ -90,7 +90,7 @@ Current slice exposes:
   explicit, frozen handler metadata that binds generated Protobuf-ES schemas to
   entity method names; and
 - `HandlerMetadataRegistry` for caller-owned metadata registration, deterministic
-  lookup views, and duplicate command/applier validation.
+  lookup views, and duplicate command or legacy event application validation.
 - `CommandRegistrationReadiness.fromRegistry()` /
   `CommandRegistrationReadiness.fromEntityHandlers()` for deterministic,
   metadata-only command type readiness over unique command assignments already
@@ -98,7 +98,7 @@ Current slice exposes:
 - `EventRegistrationReadiness.fromRegistry()` /
   `EventRegistrationReadiness.fromEntityHandlers()` for deterministic,
   metadata-only event type readiness over subscriber fan-out, reactor fan-out,
-  and event applications already validated by `HandlerMetadataRegistry`.
+  and legacy event applications already validated by `HandlerMetadataRegistry`.
 - `CommandBus` for async command posting to exactly one registered
   `CommandDispatcher`, with duplicate dispatcher rejection by command message
   type URL.
@@ -110,9 +110,10 @@ Current slice exposes:
   smallest immutable server/runtime wiring seam from built bounded-context
   metadata plus command/event readiness to transport topics, subscriptions,
   planner-local worker IDs, and explicit deferred routing seams.
-- `@Assign`, `@Command`, `@Subscribe`, `@React`, and `@Apply` standard method
-  decorators that require explicit Protobuf-ES schemas and materialize into the
-  same handler metadata contract.
+- `@Assign`, `@Command`, `@Subscribe`, and `@React` standard method decorators.
+  Bare decorators are the ordinary application syntax; schema-bearing overloads,
+  `@Apply`, and decorator materialization remain legacy/framework compatibility
+  until generated registry tooling owns schema inference.
 - `SingleProcessServerRuntime` for the first explicit server-owned lifecycle
   and async queue kernel with `start()`, `close()`, deterministic states, and
   post-intake work execution in a later microtask.
@@ -122,8 +123,8 @@ Current slice exposes:
   `Ack`, buses, filters, storage, dispatch, services, or transport.
 
 ```ts
+import { create } from "@bufbuild/protobuf";
 import {
-  Apply,
   Assign,
   BoundedContext,
   CommandRegistrationReadiness,
@@ -133,45 +134,43 @@ import {
   Subscribe,
   createServerRuntimeRoutingPlan,
   defineEntityHandlers,
-  materializeDecoratedEntityHandlers,
 } from "@spine-ts/server";
-import { CreateTaskSchema } from "./generated/task_commands_pb.js";
-import { TaskCreatedSchema, TaskStateSchema } from "./generated/tasks_pb.js";
+import { CreateTaskSchema, type CreateTask } from "./generated/task_commands_pb.js";
+import { TaskCreatedSchema, TaskStateSchema, type TaskCreated } from "./generated/tasks_pb.js";
 
 class TaskAggregate {
-  @Assign(CreateTaskSchema)
-  create(command: unknown): void {}
+  @Assign
+  create(command: CreateTask): TaskCreated {
+    void command;
+    return create(TaskCreatedSchema);
+  }
 
-  @Subscribe(TaskCreatedSchema)
-  noteCreated(event: unknown): void {}
+  @Subscribe
+  noteCreated(event: TaskCreated): void {
+    void event;
+  }
 
-  @React(TaskCreatedSchema)
-  reactToCreated(event: unknown): void {}
-
-  @Apply(TaskCreatedSchema, { allowImport: true })
-  onCreated(event: unknown): void {}
+  @React
+  reactToCreated(event: TaskCreated): TaskCreated {
+    void event;
+    return create(TaskCreatedSchema);
+  }
 }
-
-const decoratedTaskHandlers = materializeDecoratedEntityHandlers(TaskAggregate, TaskStateSchema);
 
 const explicitTaskHandlers = defineEntityHandlers(
   TaskAggregate,
   TaskStateSchema,
-  ({ assign, subscribe, react, apply }) => [
+  ({ assign, subscribe, react }) => [
     assign(CreateTaskSchema, "create"),
     subscribe(TaskCreatedSchema, "noteCreated"),
     react(TaskCreatedSchema, "reactToCreated"),
-    apply(TaskCreatedSchema, "onCreated", { allowImport: true }),
   ],
 );
 
-decoratedTaskHandlers.handlers.map((handler) => handler.kind);
-decoratedTaskHandlers.eventApplications[0]?.allowImport; // true
+explicitTaskHandlers.handlers.map((handler) => handler.kind);
 
-const registry = new HandlerMetadataRegistry([decoratedTaskHandlers]);
+const registry = new HandlerMetadataRegistry([explicitTaskHandlers]);
 registry.findCommandAssignment(CreateTaskSchema.typeName)?.handler.methodName; // "create"
-registry.findEventApplication(TaskStateSchema.typeName, TaskCreatedSchema.typeName)?.handler
-  .methodName; // "onCreated"
 
 const readiness = CommandRegistrationReadiness.fromRegistry(registry);
 readiness.registeredCommandMessageFullTypeNames(); // [CreateTaskSchema.typeName]
@@ -183,7 +182,6 @@ eventReadiness.findEventSubscribers(TaskCreatedSchema.typeName)[0]?.handler.meth
 // "noteCreated"
 eventReadiness.findEventReactors(TaskCreatedSchema.typeName)[0]?.handler.methodName;
 // "reactToCreated"
-eventReadiness.findEventApplications(TaskCreatedSchema.typeName)[0]?.handler.allowImport; // true
 
 const routingPlan = createServerRuntimeRoutingPlan({
   context: BoundedContext.singleTenant("Tasks").build(),
@@ -202,19 +200,20 @@ explicitTaskHandlers.handlers.map((handler) => handler.methodName); // same cont
 ```
 
 The explicit registration API records command assignments, command reactions,
-event subscriptions, event reactions, and event applications in declaration
-order. Handler names must refer to own prototype data methods declared with
-normal class method syntax; accessors, `constructor`, inherited methods, and
-instance fields are rejected without invoking user code. The API does not
+event subscriptions, event reactions, and legacy event applications in
+declaration order. Handler names must refer to own prototype data methods
+declared with normal class method syntax; accessors, `constructor`, inherited
+methods, and instance fields are rejected without invoking user code. The API does not
 invoke handlers, enforce transactions or `(set_once)`, build repositories, write
 storage, register buses, start transport, or implement service adapters.
 
 The decorator API is an adapter over that explicit contract. Decorators record
-standard per-class metadata from public instance methods only, require explicit
-generated schemas, and materialize after confirming the handler names still
-refer to the entity class's own prototype methods. Decorators do not use
-`emitDecoratorMetadata`, `reflect-metadata`, parameter decorators, inferred
-message types, a global handler registry, or handler invocation.
+standard per-class metadata from public instance methods only. Bare
+`@Assign`, `@Command`, `@Subscribe`, and `@React` are the ordinary application
+forms. Schema-bearing overloads and materialization remain framework
+compatibility until generated registry tooling owns schema inference. Decorators
+do not use `emitDecoratorMetadata`, `reflect-metadata`, parameter decorators, a
+global handler registry, or handler invocation.
 
 `HandlerMetadataRegistry` registers existing `EntityHandlersMetadata` objects
 and exposes frozen listing/lookup arrays by entity state full type name, handler
@@ -240,8 +239,8 @@ Spine `Ack` producer.
 `EventRegistrationReadiness` is the matching read-only event-registration view
 over the same handler metadata. It reports registered event message full type
 names in deterministic code-unit order and returns frozen copy-safe metadata
-for event subscribers, event reactors, and event appliers grouped by event
-type. Subscriber and reactor lookups preserve Spine event fan-out, so multiple
+for event subscribers, event reactors, and legacy event applications grouped by
+event type. Subscriber and reactor lookups preserve Spine event fan-out, so multiple
 entities may receive the same event type. Event application uniqueness remains
 the registry policy: one entity state may apply a given event type once, while
 multiple entity states may apply the same event type. Domestic/external event
@@ -416,7 +415,7 @@ const taskRepository = new Repository({
 const tasks = BoundedContext.singleTenant("Tasks").add(taskRepository).build();
 const handlers = defineEntityHandlers(TaskAggregate, TaskStateSchema, (builder) => [
   builder.assign(CreateTaskSchema, "create"),
-  builder.apply(TaskCreatedSchema, "onCreated", { allowImport: true }),
+  builder.subscribe(TaskCreatedSchema, "onCreated"),
 ]);
 const registry = new HandlerMetadataRegistry([handlers]);
 const routingPlan = createServerRuntimeRoutingPlan({
@@ -494,12 +493,11 @@ failures to `COMMAND_VALIDATION_ERROR` with message
 `Command payload validation failed.` and packed `spine.validation.ValidationError`
 details. If a command handler throws `CommandRefusalError`, `CommandService.Post`
 returns a non-ok `Ack` with that stable error type and message instead of
-`COMMAND_POST_ERROR`. If an event applier commits a transaction rejected by
-entity transition validation while applying events produced by the current
-command, command execution rejects with
+`COMMAND_POST_ERROR`. If an aggregate command handler produces an invalid
+state transition, command execution rejects with
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced events or
-snapshots; the validation details remain the
-`EntityTransaction`/`validateEntityStateTransition()` result. Replay failures
+snapshots; the validation details remain the framework transaction /
+`validateEntityStateTransition()` result. Replay failures
 from stored aggregate history remain internal and are sanitized as
 `COMMAND_POST_ERROR`. Dispatcher-thrown `ValidationException` values and other
 unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.

@@ -54,6 +54,21 @@ export class AggregateStorage<
     );
   }
 
+  /** Store a managed aggregate snapshot and events after validating the event batch. */
+  async writeSnapshotWithEvents(
+    snapshot: AggregateSnapshot<Schema, Id>,
+    events: Iterable<Event>,
+  ): Promise<void> {
+    const context = snapshotStorageContext(this.#context);
+    const aggregateId = snapshot.aggregateId;
+    const batch = Object.freeze([...events].map((event) => clone(EventSchema, event)));
+    const key = aggregateLockKey(context, requireAggregateId(aggregateId));
+
+    await AggregateStorageLocks.withLock(this.#storageFactory, key, () =>
+      this.#writeManagedBatch(context, snapshot, batch),
+    );
+  }
+
   async #appendEventBatch(
     context: StorageContext,
     aggregateId: Id,
@@ -63,11 +78,75 @@ export class AggregateStorage<
     const eventStore = this.#eventStore(context);
 
     try {
+      rejectConsecutiveVersions(storedEvents, 1n);
       const eventIds = new Set((await eventStore.read()).map((event) => requireEventId(event)));
       this.#validateBatch(aggregateId, batch, storedEvents.at(-1)?.version ?? 0n, eventIds);
       await eventStore.appendAll(batch);
     } finally {
       eventStore.close();
+    }
+  }
+
+  async #writeManagedBatch(
+    context: StorageContext,
+    snapshot: AggregateSnapshot<Schema, Id>,
+    batch: readonly Event[],
+  ): Promise<void> {
+    const aggregateId = snapshot.aggregateId;
+    const storedEvents = await this.#readAggregateEvents(context, aggregateId);
+    const eventStore = this.#eventStore(context);
+
+    try {
+      const eventIds = new Set((await eventStore.read()).map((event) => requireEventId(event)));
+      this.#validateManagedBatch(
+        aggregateId,
+        batch,
+        snapshot.version,
+        storedEvents.at(-1)?.version ?? 0n,
+        eventIds,
+      );
+      const rollback = await eventStore.appendAllWithRollback(batch);
+      try {
+        await this.#writeSnapshot(context, snapshot, aggregateId);
+      } catch (error) {
+        await this.#rollbackEvents(rollback, error);
+      }
+    } finally {
+      eventStore.close();
+    }
+  }
+
+  async #rollbackEvents(
+    rollback: { rollback(): Promise<void> },
+    snapshotError: unknown,
+  ): Promise<never> {
+    try {
+      await rollback.rollback();
+    } catch (rollbackError) {
+      throw new AggregateError(
+        [snapshotError, rollbackError],
+        "Managed aggregate persistence failed and event rollback failed.",
+      );
+    }
+    throw snapshotError;
+  }
+
+  #validateManagedBatch(
+    aggregateId: Id,
+    batch: readonly Event[],
+    snapshotVersion: bigint,
+    lastStoredVersion: bigint,
+    eventIds: Set<string>,
+  ): void {
+    if (snapshotVersion !== lastStoredVersion + 1n) {
+      throw new Error("Managed aggregate snapshots must advance by one dispatch version.");
+    }
+    for (const event of batch) {
+      this.#acceptEventId(event, eventIds);
+      this.#acceptEventRoute(event, aggregateId);
+      if (requireEventVersion(event) !== snapshotVersion) {
+        throw new Error("Managed aggregate events must use the snapshot dispatch version.");
+      }
     }
   }
 
@@ -111,8 +190,16 @@ export class AggregateStorage<
   /** Store or replace the latest snapshot for one aggregate. */
   async writeSnapshot(snapshot: AggregateSnapshot<Schema, Id>): Promise<void> {
     const aggregateId = requireAggregateId(snapshot.aggregateId);
+    await this.#writeSnapshot(snapshotStorageContext(this.#context), snapshot, aggregateId);
+  }
+
+  async #writeSnapshot(
+    context: StorageContext,
+    snapshot: AggregateSnapshot<Schema, Id>,
+    aggregateId: AggregateId,
+  ): Promise<void> {
     this.#validateSnapshot(aggregateId, snapshot.state, snapshot.version);
-    const storage = this.#snapshotStorage(snapshotStorageContext(this.#context));
+    const storage = this.#snapshotStorage(context);
 
     try {
       await storage.write(
@@ -136,9 +223,11 @@ export class AggregateStorage<
     const context = snapshotStorageContext(this.#context);
     const snapshot = await this.#readSnapshot(context, aggregateId);
     const snapshotVersion = snapshot?.version ?? -1n;
-    const events = (await this.#readAggregateEvents(context, aggregateId))
-      .filter(({ version }) => version > snapshotVersion)
-      .map(({ event }) => event);
+    const tail = (await this.#readAggregateEvents(context, aggregateId)).filter(
+      ({ version }) => version > snapshotVersion,
+    );
+    rejectConsecutiveVersions(tail, snapshot === undefined ? 1n : snapshot.version + 1n);
+    const events = tail.map(({ event }) => event);
 
     return Object.freeze({
       snapshot,
@@ -218,7 +307,6 @@ export class AggregateStorage<
 
     events.sort((left, right) => compareVersions(left.version, right.version));
     rejectDuplicateEventIds(events);
-    rejectConsecutiveVersions(events);
     return Object.freeze(events);
   }
 
@@ -505,8 +593,11 @@ function requireEventId(event: Event): string {
   return value;
 }
 
-function rejectConsecutiveVersions(events: readonly VersionedEvent[]): void {
-  let expectedVersion = 1n;
+function rejectConsecutiveVersions(
+  events: readonly VersionedEvent[],
+  firstExpectedVersion: bigint,
+): void {
+  let expectedVersion = firstExpectedVersion;
 
   for (const { version } of events) {
     if (version === expectedVersion - 1n) {

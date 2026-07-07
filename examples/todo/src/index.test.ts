@@ -40,11 +40,6 @@ import {
   RenameTaskSchema,
   ReopenTaskSchema,
 } from "../generated/spine/example/todo/v1/task_commands_pb.js";
-import {
-  TaskCompletedSchema,
-  TaskCreatedSchema,
-  TaskReopenedSchema,
-} from "../generated/spine/example/todo/v1/task_events_pb.js";
 import { TaskIdSchema } from "../generated/spine/example/todo/v1/task_id_pb.js";
 import { TaskListSchema, type TaskList } from "../generated/spine/example/todo/v1/task_list_pb.js";
 import { TaskSchema, type Task } from "../generated/spine/example/todo/v1/tasks_pb.js";
@@ -53,13 +48,11 @@ type TodoModule = typeof import("../dist/src/index.js");
 
 let createTodoContext: TodoModule["createTodoContext"];
 let startTodoServer: TodoModule["startTodoServer"];
-let TaskListProjection: TodoModule["TaskListProjection"];
 
 describe("@spine-ts/example-todo", () => {
   beforeAll(async () => {
     assertBuiltExample();
-    ({ createTodoContext, startTodoServer, TaskListProjection } =
-      await import("../dist/src/index.js"));
+    ({ createTodoContext, startTodoServer } = await import("../dist/src/index.js"));
   });
 
   it("runs as a standalone gRPC-compatible server for command, query, and subscription clients", async () => {
@@ -386,44 +379,36 @@ describe("@spine-ts/example-todo", () => {
     }
   });
 
-  it("counts duplicate same-id projection rows", () => {
-    const projection = new TaskListProjection({
-      id: "task-duplicate",
-      schema: TaskListSchema,
-      state: create(TaskListSchema, { id: "task-duplicate" }),
-      version: 0,
+  it("counts duplicate same-id projection rows", async () => {
+    const fixture = new BoundedContextFixture(createTodoContext(), {
+      timeoutMs: 500,
+      intervalMs: 5,
     });
 
-    projection.onTaskCreated(
-      create(TaskCreatedSchema, {
-        id: create(TaskIdSchema, { value: "task-duplicate" }),
-        title: "First",
-      }),
+    await fixture.post(createTaskCommand("command-duplicate-first", "task-duplicate", "First"));
+    await fixture.post(createTaskCommand("command-duplicate-second", "task-duplicate", "Second"));
+    await fixture.post(createCompleteCommand("command-duplicate-complete", "task-duplicate"));
+    const completed = await fixture.readEventually(
+      createTaskListIdQuery("task-duplicate"),
+      (candidate) =>
+        unpackTaskList(candidate.message[0]?.state)?.tasks.every((task) => task.completed) === true,
     );
-    projection.onTaskCreated(
-      create(TaskCreatedSchema, {
-        id: create(TaskIdSchema, { value: "task-duplicate" }),
-        title: "Second",
-      }),
+    const completedList = unpackTaskList(completed.message[0]?.state);
+
+    expect(completedList?.openTaskCount).toBe(0);
+    expect(completedList?.tasks.map((task) => task.completed)).toEqual([true, true]);
+
+    await fixture.post(createReopenCommand("command-duplicate-reopen", "task-duplicate"));
+    const reopened = await fixture.readEventually(
+      createTaskListIdQuery("task-duplicate"),
+      (candidate) =>
+        unpackTaskList(candidate.message[0]?.state)?.tasks.every((task) => !task.completed) ===
+        true,
     );
+    const reopenedList = unpackTaskList(reopened.message[0]?.state);
 
-    projection.onTaskCompleted(
-      create(TaskCompletedSchema, {
-        id: create(TaskIdSchema, { value: "task-duplicate" }),
-      }),
-    );
-
-    expect(projection.state.openTaskCount).toBe(0);
-    expect(projection.state.tasks.map((task) => task.completed)).toEqual([true, true]);
-
-    projection.onTaskReopened(
-      create(TaskReopenedSchema, {
-        id: create(TaskIdSchema, { value: "task-duplicate" }),
-      }),
-    );
-
-    expect(projection.state.openTaskCount).toBe(2);
-    expect(projection.state.tasks.map((task) => task.completed)).toEqual([false, false]);
+    expect(reopenedList?.openTaskCount).toBe(2);
+    expect(reopenedList?.tasks.map((task) => task.completed)).toEqual([false, false]);
   });
 
   it("detects changed task-list snapshots when an extra task row appears", () => {
@@ -601,7 +586,7 @@ function createTaskListQuery() {
   });
 }
 
-function createTaskListIdQuery() {
+function createTaskListIdQuery(id = "task-list-query") {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "query-task-list-by-id" }),
     target: create(TargetSchema, {
@@ -610,9 +595,7 @@ function createTaskListIdQuery() {
         case: "filters",
         value: create(TargetFiltersSchema, {
           idFilter: {
-            id: [
-              packAny(StringValueSchema, create(StringValueSchema, { value: "task-list-query" })),
-            ],
+            id: [packAny(StringValueSchema, create(StringValueSchema, { value: id }))],
           },
         }),
       },

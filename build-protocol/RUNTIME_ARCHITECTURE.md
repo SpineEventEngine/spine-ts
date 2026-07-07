@@ -130,14 +130,21 @@ Each worker process must declare:
 ### Command Bus
 
 The command bus accepts packed Spine `Command` messages. It validates command
-metadata and routes the command to one command assignee/receptor endpoint.
+metadata and dispatches commands through repository routes to matching command
+assignee/reactor endpoints.
 
 Requirements:
 
-- one effective handler per command message type in a bounded context unless
-  explicitly modeled as transformation/splitting;
-- default route by first command field;
-- support custom command routes;
+- command assignees and command reactors may both observe the same command type
+  when registered in one bounded context;
+- default entity route by the first command field in Protobuf declaration
+  order, not by numeric field index;
+- commands handled by the default route whose first-field target ID is absent,
+  blank, or not assignable to the repository ID type must be rejected by the
+  default route before handler invocation;
+- end-user handlers must not perform default target-ID extraction or validation;
+- support explicit custom command routes in repositories; custom routes replace
+  the default first-field route and define their own route-validity behavior;
 - preserve immediate `Ack` semantics separately from later command result subscriptions;
 - isolate command handler failure from broker failure.
 
@@ -152,7 +159,7 @@ Requirements:
 - domestic/external event distinction;
 - event enrichment before delivery where configured;
 - delivery through inbox-like durable records when persistence is enabled;
-- idempotence for event-sourced aggregate replay and projection updates.
+- idempotence for event redelivery/replay and projection updates.
 
 ### Query and Subscription Buses
 

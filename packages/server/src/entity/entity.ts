@@ -479,6 +479,12 @@ export abstract class TransactionalEntity<
 
 /** @internal Framework-only transactional entity inspection used by repository execution. */
 export interface TransactionalEntityAccess {
+  /** Start a framework-owned transaction scope for an entity. */
+  start(entity: object): void;
+  /** Commit a framework-owned transaction scope for an entity. */
+  commit(entity: object): EntityTransactionCommitResult<DescriptorMessageSchema>;
+  /** Roll back a framework-owned transaction scope for an entity, if possible. */
+  rollback(entity: object): void;
   /** Return the last rejected transaction commit for this entity, if any. */
   rejectedCommit(
     entity: object,
@@ -487,6 +493,27 @@ export interface TransactionalEntityAccess {
 
 /** @internal Framework-only transactional entity inspection used by repository execution. */
 export const transactionalEntityAccess: TransactionalEntityAccess = Object.freeze({
+  start(entity: object): void {
+    callTransactionMethod(entity, "startTransaction");
+  },
+
+  commit(entity: object): EntityTransactionCommitResult<DescriptorMessageSchema> {
+    return callTransactionMethod(
+      entity,
+      "commitTransaction",
+    ) as EntityTransactionCommitResult<DescriptorMessageSchema>;
+  },
+
+  rollback(entity: object): void {
+    try {
+      callTransactionMethod(entity, "rollbackTransaction");
+    } catch (error) {
+      if (!isMissingTransaction(error)) {
+        throw error;
+      }
+    }
+  },
+
   rejectedCommit(
     entity: object,
   ): EntityTransactionRejectedCommit<DescriptorMessageSchema> | undefined {
@@ -496,6 +523,20 @@ export const transactionalEntityAccess: TransactionalEntityAccess = Object.freez
       : (cloneCommitResult(rejected) as EntityTransactionRejectedCommit<DescriptorMessageSchema>);
   },
 });
+
+function callTransactionMethod(entity: object, methodName: string): unknown {
+  const method = (entity as Record<string, unknown>)[methodName];
+
+  if (typeof method !== "function") {
+    throw new TypeError(`Transactional entity access requires "${methodName}".`);
+  }
+
+  return Reflect.apply(method, entity, []);
+}
+
+function isMissingTransaction(error: unknown): boolean {
+  return error instanceof TransactionalEntityScopeError && error.reason === "missing";
+}
 
 /**
  * Abstract aggregate family marker over the common transactional entity shell.

@@ -138,6 +138,7 @@ const expectedCoreExports = [
 ];
 const expectedStorageExports = [
   "EventStore",
+  "EventRollback",
   "InMemoryRecordStorage",
   "InMemoryStorageFactory",
   "OnEventAccepted",

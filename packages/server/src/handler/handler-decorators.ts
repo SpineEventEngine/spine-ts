@@ -13,7 +13,7 @@ type DecoratedHandlerKind = HandlerKind;
 
 interface DecoratedHandlerRecord {
   readonly kind: DecoratedHandlerKind;
-  readonly schema: DescriptorMessageSchema;
+  readonly schema?: DescriptorMessageSchema;
   readonly methodName: string;
   readonly allowImport?: boolean;
 }
@@ -39,50 +39,90 @@ const handlerDecoratorMetadataKey = Symbol("@spine-ts/server.handlerDecorators")
 const decoratorMetadataSymbol = installDecoratorMetadataSymbol();
 
 /**
- * Declare a command assignee method with an explicit Protobuf-ES command schema.
+ * Declare a command assignee method.
  *
- * The decorator records metadata only. It does not register the handler in a
- * registry, instantiate the entity, or invoke the method.
+ * Bare `@Assign` is the ordinary application form. `@Assign(schema)` remains a
+ * legacy/framework compatibility form until generated handler registries own
+ * schema discovery. The decorator records metadata only; it does not register
+ * the handler, instantiate the entity, or invoke the method.
  */
-export function Assign(schema: DescriptorMessageSchema): HandlerMethodDecorator {
-  return createHandlerDecorator("command-assignment", schema);
+export function Assign(schema: DescriptorMessageSchema): HandlerMethodDecorator;
+export function Assign<This extends object, Parameters extends readonly unknown[], Return>(
+  value: HandlerMethodValue<This, Parameters, Return>,
+  context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
+): void;
+export function Assign(
+  schemaOrValue: DescriptorMessageSchema | HandlerMethodValue,
+  context?: ClassMethodDecoratorContext,
+): HandlerMethodDecorator | undefined {
+  return decorateOrCreate("command-assignment", schemaOrValue, context);
 }
 
 /**
- * Declare a command-reacting method with an explicit Protobuf-ES command schema.
+ * Declare a command-reacting method.
  *
- * Command reactors may fan out in `HandlerMetadataRegistry`; this decorator
- * only records the method declaration for later materialization.
+ * Bare `@Command` is the ordinary application form. `@Command(schema)` remains
+ * a legacy/framework compatibility form. Command reactors may fan out in
+ * `HandlerMetadataRegistry`; this decorator only records the declaration.
  */
-export function Command(schema: DescriptorMessageSchema): HandlerMethodDecorator {
-  return createHandlerDecorator("command-reaction", schema);
+export function Command(schema: DescriptorMessageSchema): HandlerMethodDecorator;
+export function Command<This extends object, Parameters extends readonly unknown[], Return>(
+  value: HandlerMethodValue<This, Parameters, Return>,
+  context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
+): void;
+export function Command(
+  schemaOrValue: DescriptorMessageSchema | HandlerMethodValue,
+  context?: ClassMethodDecoratorContext,
+): HandlerMethodDecorator | undefined {
+  return decorateOrCreate("command-reaction", schemaOrValue, context);
 }
 
 /**
- * Declare an event subscriber method with an explicit Protobuf-ES event schema.
+ * Declare an event subscriber method.
  *
- * Subscribers are metadata-only declarations until later runtime slices consume
- * materialized `EntityHandlersMetadata`.
+ * Bare `@Subscribe` is the ordinary application form. `@Subscribe(schema)`
+ * remains a legacy/framework compatibility form. Subscribers are metadata-only
+ * declarations until generated registry/runtime metadata consumes them.
  */
-export function Subscribe(schema: DescriptorMessageSchema): HandlerMethodDecorator {
-  return createHandlerDecorator("event-subscription", schema);
+export function Subscribe(schema: DescriptorMessageSchema): HandlerMethodDecorator;
+export function Subscribe<This extends object, Parameters extends readonly unknown[], Return>(
+  value: HandlerMethodValue<This, Parameters, Return>,
+  context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
+): void;
+export function Subscribe(
+  schemaOrValue: DescriptorMessageSchema | HandlerMethodValue,
+  context?: ClassMethodDecoratorContext,
+): HandlerMethodDecorator | undefined {
+  return decorateOrCreate("event-subscription", schemaOrValue, context);
 }
 
 /**
- * Declare an event reactor method with an explicit Protobuf-ES event schema.
+ * Declare an event reactor method.
  *
- * Reactors are collected as class-owned metadata and may fan out through the
- * caller-owned handler registry.
+ * Bare `@React` is the ordinary application form. `@React(schema)` remains a
+ * legacy/framework compatibility form. Reactors are collected as class-owned
+ * metadata and may fan out through the caller-owned handler registry.
  */
-export function React(schema: DescriptorMessageSchema): HandlerMethodDecorator {
-  return createHandlerDecorator("event-reaction", schema);
+export function React(schema: DescriptorMessageSchema): HandlerMethodDecorator;
+export function React<This extends object, Parameters extends readonly unknown[], Return>(
+  value: HandlerMethodValue<This, Parameters, Return>,
+  context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
+): void;
+export function React(
+  schemaOrValue: DescriptorMessageSchema | HandlerMethodValue,
+  context?: ClassMethodDecoratorContext,
+): HandlerMethodDecorator | undefined {
+  return decorateOrCreate("event-reaction", schemaOrValue, context);
 }
 
 /**
- * Declare an event applier method with an explicit Protobuf-ES event schema.
+ * Declare legacy/framework event application metadata.
  *
- * The optional `allowImport` flag is preserved in materialized event
- * application metadata for later import/replay machinery.
+ * New application aggregates must not use `@Apply`; managed aggregates are no
+ * longer event-sourced and the framework owns state transactions. This
+ * decorator is kept only for compatibility code that still needs explicit
+ * schema-bearing event application metadata. The optional `allowImport` flag is
+ * preserved in that legacy metadata for later import/replay machinery.
  */
 export function Apply(
   schema: DescriptorMessageSchema,
@@ -92,13 +132,18 @@ export function Apply(
 }
 
 /**
- * Materialize standard-decorator declarations into the canonical handler metadata shape.
+ * Materialize schema-bearing decorator declarations for framework compatibility.
  *
  * The returned object is the same frozen `EntityHandlersMetadata` contract
  * produced by `defineEntityHandlers()` and accepted by
  * `HandlerMetadataRegistry`. Only own prototype methods of `entityType` are
  * inspected; inherited decorated methods are intentionally not materialized by
  * this class-owned adapter.
+ *
+ * Application code must not call this function and must not provide its own
+ * handler discovery/materialization. Generated framework registries will own
+ * schema inference for bare decorators; this adapter only supports legacy
+ * schema-bearing decorator metadata.
  */
 export function materializeDecoratedEntityHandlers<
   Instance extends object,
@@ -118,15 +163,15 @@ export function materializeDecoratedEntityHandlers<
 
         switch (handler.kind) {
           case "command-assignment":
-            return builder.assign(handler.schema, methodName);
+            return builder.assign(requireDecoratedSchema(handler), methodName);
           case "command-reaction":
-            return builder.command(handler.schema, methodName);
+            return builder.command(requireDecoratedSchema(handler), methodName);
           case "event-subscription":
-            return builder.subscribe(handler.schema, methodName);
+            return builder.subscribe(requireDecoratedSchema(handler), methodName);
           case "event-reaction":
-            return builder.react(handler.schema, methodName);
+            return builder.react(requireDecoratedSchema(handler), methodName);
           case "event-application":
-            return builder.apply(handler.schema, methodName, {
+            return builder.apply(requireDecoratedSchema(handler), methodName, {
               allowImport: handler.allowImport ?? false,
             });
         }
@@ -134,9 +179,22 @@ export function materializeDecoratedEntityHandlers<
   );
 }
 
+function decorateOrCreate(
+  kind: DecoratedHandlerKind,
+  schemaOrValue: DescriptorMessageSchema | HandlerMethodValue,
+  context: ClassMethodDecoratorContext | undefined,
+): HandlerMethodDecorator | undefined {
+  if (context !== undefined) {
+    createHandlerDecorator(kind)(schemaOrValue as HandlerMethodValue, context);
+    return undefined;
+  }
+
+  return createHandlerDecorator(kind, schemaOrValue as DescriptorMessageSchema);
+}
+
 function createHandlerDecorator(
   kind: DecoratedHandlerKind,
-  schema: DescriptorMessageSchema,
+  schema?: DescriptorMessageSchema,
   options: EventApplicationOptions = {},
 ): HandlerMethodDecorator {
   return <This extends object, Parameters extends readonly unknown[], Return>(
@@ -153,7 +211,7 @@ function createHandlerDecorator(
 
     const record: DecoratedHandlerRecord = Object.freeze({
       kind,
-      schema,
+      ...(schema === undefined ? {} : { schema }),
       methodName: context.name,
       ...(kind === "event-application" ? { allowImport: options.allowImport ?? false } : {}),
     });
@@ -168,6 +226,17 @@ function createHandlerDecorator(
       writable: true,
     });
   };
+}
+
+function requireDecoratedSchema(handler: DecoratedHandlerRecord): DescriptorMessageSchema {
+  if (handler.schema === undefined) {
+    throw new TypeError(
+      `Decorated handler "${handler.methodName}" was declared without a schema; ` +
+        "use generated registry metadata or explicit defineEntityHandlers() registration.",
+    );
+  }
+
+  return handler.schema;
 }
 
 function collectOwnDecoratedHandlers<Instance extends object>(

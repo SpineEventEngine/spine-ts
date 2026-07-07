@@ -284,6 +284,80 @@ class ExecutingTaskAggregate extends Aggregate<string, typeof AggregateStateSche
   }
 }
 
+class ManagedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  static assigneeCalls = 0;
+
+  static reset(): void {
+    this.assigneeCalls = 0;
+  }
+
+  assignTask(command: AggregateState): AggregateState {
+    ManagedTaskAggregate.assigneeCalls++;
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: command.id,
+        name: `${command.name} (assigned)`,
+        archived: false,
+      }),
+    );
+    return create(AggregateStateSchema, {
+      id: command.id,
+      name: `${command.name} event`,
+      archived: false,
+    });
+  }
+}
+
+class MultiManagedAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  assignTask(command: AggregateState): readonly AggregateState[] {
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: command.id,
+        name: `${command.name} two (assigned)`,
+        archived: false,
+      }),
+    );
+    return [
+      create(AggregateStateSchema, {
+        id: command.id,
+        name: `${command.name} one event`,
+        archived: false,
+      }),
+      create(AggregateStateSchema, {
+        id: command.id,
+        name: `${command.name} two event`,
+        archived: false,
+      }),
+    ];
+  }
+}
+
+class EmptyManagedAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  assignTask(command: AggregateState): undefined {
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: command.id,
+        name: command.name,
+        archived: false,
+      }),
+    );
+    return undefined;
+  }
+}
+
+class EnvelopeManagedAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  assignTask(command: AggregateState): SpineEvent {
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: command.id,
+        name: command.name,
+        archived: false,
+      }),
+    );
+    return createAggregateEvent("spoofed-event", command.id, 0, command.name);
+  }
+}
+
 class ValidatingTaskAggregate extends Aggregate<
   string,
   typeof ValidatedAggregateStateSchema,
@@ -489,8 +563,19 @@ class AsyncApplierAggregate extends Aggregate<string, typeof AggregateStateSchem
 }
 
 class NoApplierAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
-  assignTask(command: AggregateState) {
-    return createAggregateEvent("event-no-applier", command.id, 0, command.name);
+  assignTask(command: AggregateState): AggregateState {
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: command.id,
+        name: `${command.name} (reaction metadata)`,
+        archived: false,
+      }),
+    );
+    return create(AggregateStateSchema, {
+      id: command.id,
+      name: `${command.name} event`,
+      archived: false,
+    });
   }
 
   reactTask(event: AggregateState): void {
@@ -591,7 +676,6 @@ class ExecutingTaskProjection extends Projection<string, typeof ProjectionStateS
 
   subscribeTask(event: ProjectionState): void {
     ExecutingTaskProjection.subscriberCalls++;
-    this.startTransaction();
     this.updateDraftState(() =>
       create(ProjectionStateSchema, {
         id: event.id,
@@ -599,7 +683,25 @@ class ExecutingTaskProjection extends Projection<string, typeof ProjectionStateS
         priority: event.priority + 1,
       }),
     );
-    this.commitTransaction();
+  }
+}
+
+class ManagedTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  static subscriberCalls = 0;
+
+  static reset(): void {
+    this.subscriberCalls = 0;
+  }
+
+  subscribeTask(event: ProjectionState): void {
+    ManagedTaskProjection.subscriberCalls++;
+    this.updateDraftState(() =>
+      create(ProjectionStateSchema, {
+        id: event.id,
+        name: `${event.name} (managed)`,
+        priority: event.priority + 1,
+      }),
+    );
   }
 }
 
@@ -618,13 +720,11 @@ class PassiveTaskProjection extends Projection<string, typeof ProjectionStateSch
 
 class AccumulatingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   subscribeTask(event: ProjectionState): void {
-    this.startTransaction();
     this.updateDraftState((draft) => {
       draft.name = event.name;
       draft.priority += event.priority;
       return draft;
     });
-    this.commitTransaction();
   }
 }
 
@@ -725,6 +825,223 @@ describe("repository signal routing", () => {
       events: [],
     });
     expect(observed).toEqual(["event-TaskExec"]);
+  });
+
+  it("packs aggregate-returned domain events and owns the aggregate transaction", async () => {
+    ManagedTaskAggregate.reset();
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createManagedRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await context
+      .commandBus()
+      .post(createAggregateCommand("command-managed", "task-managed", "Managed"));
+
+    expect(ManagedTaskAggregate.assigneeCalls).toBe(1);
+    await expect(eventStore.read()).resolves.toMatchObject([
+      {
+        id: { value: "command-managed-1" },
+        context: { version: { number: 1 } },
+      },
+    ]);
+    await expect(storage.readHistory("task-managed")).resolves.toMatchObject({
+      snapshot: {
+        aggregateId: "task-managed",
+        version: 1n,
+        state: {
+          id: "task-managed",
+          name: "Managed (assigned)",
+          archived: false,
+        },
+      },
+      events: [],
+    });
+  });
+
+  it("uses one dispatch version for multiple managed aggregate events", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createMultiManagedRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await context
+      .commandBus()
+      .post(createAggregateCommand("command-managed-multi", "task-managed-multi", "Multi"));
+
+    await expect(eventStore.read()).resolves.toMatchObject([
+      { id: { value: "command-managed-multi-1" }, context: { version: { number: 1 } } },
+      { id: { value: "command-managed-multi-2" }, context: { version: { number: 1 } } },
+    ]);
+    await expect(storage.readHistory("task-managed-multi")).resolves.toMatchObject({
+      snapshot: {
+        aggregateId: "task-managed-multi",
+        version: 1n,
+        state: {
+          id: "task-managed-multi",
+          name: "Multi two (assigned)",
+          archived: false,
+        },
+      },
+      events: [],
+    });
+  });
+
+  it("rejects managed aggregate handlers that return no domain event", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createEmptyManagedRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("command-empty", "task-empty")),
+    ).rejects.toThrow("must return at least one event");
+    await expect(eventStore.read()).resolves.toEqual([]);
+  });
+
+  it("rejects framework event envelopes returned from managed aggregate handlers", async () => {
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createEnvelopeManagedRepository())
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("command-envelope", "task-envelope")),
+    ).rejects.toThrow(/cannot pack event message "spine\.core\.Event"/);
+    await expect(eventStore.read()).resolves.toEqual([]);
+  });
+
+  it("does not append or dispatch managed aggregate events when snapshot writing fails", async () => {
+    const factory = new SnapshotFailingStorageFactory();
+    const observed: string[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createManagedRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (event) => {
+          observed.push(event.id?.value ?? "missing");
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("command-managed-fails", "task-managed-fails")),
+    ).rejects.toThrow("Cannot write aggregate snapshot.");
+
+    await expect(eventStore.read()).resolves.toEqual([]);
+    expect(observed).toEqual([]);
+  });
+
+  it("does not write managed aggregate snapshots when event append validation fails", async () => {
+    const factory = new InMemoryStorageFactory();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+    await eventStore.append(createAggregateEvent("command-duplicate-1", "other-task", 1, "Other"));
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createManagedRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("command-duplicate", "task-duplicate")),
+    ).rejects.toThrow("Aggregate event IDs must be unique before append.");
+
+    await expect(storage.readHistory("task-duplicate")).resolves.toMatchObject({
+      snapshot: undefined,
+      events: [],
+    });
+    await expect(eventStore.read()).resolves.toMatchObject([
+      { id: { value: "command-duplicate-1" } },
+    ]);
+  });
+
+  it("does not write managed aggregate snapshots when event append storage fails", async () => {
+    const factory = new EventFailingFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createManagedRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("command-append-fails", "task-append")),
+    ).rejects.toThrow("Cannot append aggregate event.");
+
+    await expect(storage.readHistory("task-append")).resolves.toMatchObject({
+      snapshot: undefined,
+      events: [],
+    });
+  });
+
+  it("reports snapshot and rollback failures for multi-event managed aggregates", async () => {
+    const factory = new DeleteFailingFactory("command-rollback-2");
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createMultiManagedRepository())
+      .withStorageFactory(factory)
+      .build();
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("command-rollback", "task-rollback")),
+    ).rejects.toMatchObject({
+      message: "Managed aggregate persistence failed and event rollback failed.",
+      errors: [
+        expect.objectContaining({ message: "Cannot write aggregate snapshot." }),
+        expect.objectContaining({ message: "Cannot delete aggregate event." }),
+      ],
+    });
+
+    await expect(storage.readHistory("task-rollback")).resolves.toMatchObject({
+      snapshot: undefined,
+      events: [{ id: { value: "command-rollback-2" }, context: { version: { number: 1 } } }],
+    });
+    await expect(eventStore.read()).resolves.toMatchObject([
+      { id: { value: "command-rollback-2" } },
+    ]);
+    await expect(
+      context.commandBus().post(createAggregateCommand("command-after-rollback", "task-rollback")),
+    ).rejects.toThrow("Managed aggregate history has unsnapshotted events.");
   });
 
   it("keeps an already registered repository executable after a failed second registration", async () => {
@@ -1037,7 +1354,7 @@ describe("repository signal routing", () => {
     await nestedFinished.promise;
   });
 
-  it("rejects aggregate command output when no applier is registered", async () => {
+  it("executes managed aggregate commands when only event reaction metadata is registered", async () => {
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")
       .add(createNoApplierRepository())
@@ -1047,8 +1364,13 @@ describe("repository signal routing", () => {
 
     await expect(
       context.commandBus().post(createAggregateCommand("command-no-applier", "task-no-applier")),
-    ).rejects.toThrow(/no applier/);
-    await expect(eventStore.read()).resolves.toEqual([]);
+    ).resolves.toBeUndefined();
+    await expect(eventStore.read()).resolves.toMatchObject([
+      {
+        id: { value: "command-no-applier-1" },
+        context: { version: { number: 1 } },
+      },
+    ]);
   });
 
   it("rejects malformed aggregate command output before storage", async () => {
@@ -1405,7 +1727,7 @@ describe("repository signal routing", () => {
     expect(readReadableProducerId(stored)).toBe("task-producer-id");
   });
 
-  it("routes commands to one aggregate ID by the first command field", async () => {
+  it("routes commands to one aggregate ID by the first command field", () => {
     const repository = createRoutingRepository();
     const command = createAggregateCommand("command-1", "task-1");
     const route = repository.routeCommand(command);
@@ -1417,9 +1739,15 @@ describe("repository signal routing", () => {
     });
     expectTypeOf(route.entityId).toEqualTypeOf<string>();
 
-    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    expect(() => BoundedContext.singleTenant("Tasks").add(repository).build()).not.toThrow();
+  });
 
-    await expect(context.commandBus().post(command)).resolves.toBeUndefined();
+  it("rejects blank first-field command IDs before handler invocation", () => {
+    const repository = createRoutingRepository();
+
+    expect(() => repository.routeCommand(createAggregateCommand("command-blank", ""))).toThrow(
+      "Repository command routing requires a non-empty first field.",
+    );
   });
 
   it("routes events by matching producer ID or by the first event field", async () => {
@@ -1526,6 +1854,25 @@ describe("repository signal routing", () => {
       state: {
         id: "task-projected",
         name: "Task (projected)",
+        priority: 2,
+      },
+      version: { number: 1 },
+    });
+  });
+
+  it("owns the projection transaction when subscribers only update draft state", async () => {
+    ManagedTaskProjection.reset();
+    const context = BoundedContext.singleTenant("Tasks").add(createManagedProjection()).build();
+
+    await context.eventBus().post(createProjectionEvent("event-managed", "task-managed"));
+
+    expect(ManagedTaskProjection.subscriberCalls).toBe(1);
+    await expect(
+      context.stand().readVersioned(ProjectionStateSchema, "task-managed"),
+    ).resolves.toMatchObject({
+      state: {
+        id: "task-managed",
+        name: "Task (managed)",
         priority: 2,
       },
       version: { number: 1 },
@@ -2010,6 +2357,18 @@ function createExecutingProjectionRepository(): Repository<typeof ExecutingTaskP
   });
 }
 
+function createManagedProjection(): Repository<typeof ManagedTaskProjection> {
+  const handlers = defineEntityHandlers(ManagedTaskProjection, ProjectionStateSchema, (builder) => [
+    builder.subscribe(ProjectionStateSchema, "subscribeTask"),
+  ]);
+
+  return new Repository({
+    entityType: ManagedTaskProjection,
+    schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
 function createUserIdProjectionRepository(): Repository<typeof UserIdProjection> {
   const handlers = defineEntityHandlers(UserIdProjection, ProjectionStateSchema, (builder) => [
     builder.subscribe(UserIdSchema, "subscribeUser"),
@@ -2099,6 +2458,60 @@ function createExecutingRepository(): Repository<typeof ExecutingTaskAggregate> 
     entityType: ExecutingTaskAggregate,
     schema: AggregateStateSchema,
     handlers,
+  });
+}
+
+function createManagedRepository(): Repository<typeof ManagedTaskAggregate> {
+  const handlers = defineEntityHandlers(ManagedTaskAggregate, AggregateStateSchema, (builder) => [
+    builder.assign(AggregateStateSchema, "assignTask"),
+  ]);
+
+  return new Repository({
+    entityType: ManagedTaskAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+    events: [AggregateStateSchema],
+  });
+}
+
+function createMultiManagedRepository(): Repository<typeof MultiManagedAggregate> {
+  const handlers = defineEntityHandlers(MultiManagedAggregate, AggregateStateSchema, (builder) => [
+    builder.assign(AggregateStateSchema, "assignTask"),
+  ]);
+
+  return new Repository({
+    entityType: MultiManagedAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+    events: [AggregateStateSchema],
+  });
+}
+
+function createEmptyManagedRepository(): Repository<typeof EmptyManagedAggregate> {
+  const handlers = defineEntityHandlers(EmptyManagedAggregate, AggregateStateSchema, (builder) => [
+    builder.assign(AggregateStateSchema, "assignTask"),
+  ]);
+
+  return new Repository({
+    entityType: EmptyManagedAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+    events: [AggregateStateSchema],
+  });
+}
+
+function createEnvelopeManagedRepository(): Repository<typeof EnvelopeManagedAggregate> {
+  const handlers = defineEntityHandlers(
+    EnvelopeManagedAggregate,
+    AggregateStateSchema,
+    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+  );
+
+  return new Repository({
+    entityType: EnvelopeManagedAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+    events: [AggregateStateSchema],
   });
 }
 
@@ -2319,6 +2732,7 @@ function createNoApplierRepository(): Repository<typeof NoApplierAggregate> {
     entityType: NoApplierAggregate,
     schema: AggregateStateSchema,
     handlers,
+    events: [AggregateStateSchema],
   });
 }
 
@@ -2638,6 +3052,37 @@ class SnapshotFailingStorageFactory extends InMemoryStorageFactory {
   }
 }
 
+class EventFailingFactory extends InMemoryStorageFactory {
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new EventFailingStorage(
+      context,
+      recordSpec,
+      super.onCreateRecordStorage(context, recordSpec),
+    );
+  }
+}
+
+class DeleteFailingFactory extends InMemoryStorageFactory {
+  constructor(private readonly eventId: string) {
+    super();
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new DeleteFailingStorage(
+      context,
+      recordSpec,
+      super.onCreateRecordStorage(context, recordSpec),
+      this.eventId,
+    );
+  }
+}
+
 class ReentrantRegistrationStorageFactory extends InMemoryStorageFactory {
   constructor(private readonly onCreate: () => void) {
     super();
@@ -2759,5 +3204,111 @@ class SnapshotFailingRecordStorage<I, R extends Message> extends RecordStorage<I
       return Promise.reject(new Error("Cannot write aggregate snapshot."));
     }
     return this.delegate.write(record.record);
+  }
+}
+
+class EventFailingStorage<I, R extends Message> extends RecordStorage<I, R> {
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    private readonly delegate: RecordStorage<I, R>,
+  ) {
+    super(context, recordSpec);
+  }
+
+  protected deleteRecord(id: I): Promise<boolean> {
+    return this.delegate.delete(id);
+  }
+
+  protected queryRecordEntries(query: Parameters<RecordStorage<I, R>["queryEntries"]>[0]) {
+    return this.delegate.queryEntries(query);
+  }
+
+  protected readRecord(id: I): Promise<R | undefined> {
+    return this.delegate.read(id);
+  }
+
+  protected compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    return this.delegate.compareAndSet(id, expected?.record, next?.record);
+  }
+
+  protected writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    if (records.some((record) => record.record.$typeName === EventSchema.typeName)) {
+      return Promise.reject(new Error("Cannot append aggregate event."));
+    }
+    return this.delegate.writeAll(records.map((record) => record.record));
+  }
+
+  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    if (record.record.$typeName === EventSchema.typeName) {
+      return Promise.reject(new Error("Cannot append aggregate event."));
+    }
+    return this.delegate.write(record.record);
+  }
+}
+
+class DeleteFailingStorage<I, R extends Message> extends RecordStorage<I, R> {
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    private readonly delegate: RecordStorage<I, R>,
+    private readonly eventId: string,
+  ) {
+    super(context, recordSpec);
+  }
+
+  protected async deleteRecord(id: I): Promise<boolean> {
+    if (this.isTargetEvent(id)) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      throw new Error("Cannot delete aggregate event.");
+    }
+    return this.delegate.delete(id);
+  }
+
+  protected queryRecordEntries(query: Parameters<RecordStorage<I, R>["queryEntries"]>[0]) {
+    return this.delegate.queryEntries(query);
+  }
+
+  protected readRecord(id: I): Promise<R | undefined> {
+    return this.delegate.read(id);
+  }
+
+  protected compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    return this.delegate.compareAndSet(id, expected?.record, next?.record);
+  }
+
+  protected writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    if (records.some((record) => record.record.$typeName === "google.protobuf.Any")) {
+      return Promise.reject(new Error("Cannot write aggregate snapshot."));
+    }
+    return this.delegate.writeAll(records.map((record) => record.record));
+  }
+
+  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    if (record.record.$typeName === "google.protobuf.Any") {
+      return Promise.reject(new Error("Cannot write aggregate snapshot."));
+    }
+    return this.delegate.write(record.record);
+  }
+
+  private isTargetEvent(id: I): boolean {
+    return (
+      typeof id === "object" &&
+      id !== null &&
+      !Array.isArray(id) &&
+      Reflect.get(id, "value") === this.eventId
+    );
   }
 }
