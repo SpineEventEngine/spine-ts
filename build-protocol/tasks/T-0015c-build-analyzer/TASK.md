@@ -11,8 +11,8 @@ Worktree:
 Requirements splitter: `019f3dce-6067-7190-919d-cf6a62eebfa7`; completed and closed during T-0015a setup.
 Authoring sub-agent: completed
 Reviewer sub-agents: all required review lanes completed clean and closed.
-Implementation commit: Pending
-Final branch HEAD: Pending
+Implementation commit: `89afdc1`
+Final branch HEAD: Pending final log commit
 Integrated to main: Pending
 
 ## Objective
@@ -128,6 +128,7 @@ packages/server/test/handler/build-time-handler-analyzer.test.ts`,
   `typecheck:build`, `docs:check`, `lint`, `format:check`, and diff checks; all
   commands passed. `docs:check` still reports the known invalid-origin TypeDoc
   source-link warning only.
+- `2026-07-07 21:23 WEST`: Committed implementation as `89afdc1`.
 
 ## Verification Plan
 
