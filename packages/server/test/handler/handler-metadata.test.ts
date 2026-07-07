@@ -12,6 +12,7 @@ import {
   HandlerMetadataError,
   HandlerMetadataRegistry,
   HandlerMetadataRegistryError,
+  type HandlerRegistrationBuilder,
   type HandlerMethodName,
 } from "../../src/index.js";
 
@@ -180,6 +181,7 @@ describe("handler metadata", () => {
       "spine.core.Event",
       "spine.core.Event",
     ]);
+    expect(metadata.handlers.map((handler) => handler.parameterCount)).toEqual([1, 1, 1, 1, 1]);
     expect(metadata.commandAssignments[0]).toBe(metadata.handlers[0]);
     expect(metadata.commandReactions[0]).toBe(metadata.handlers[1]);
     expect(metadata.eventSubscriptions[0]).toBe(metadata.handlers[2]);
@@ -191,6 +193,17 @@ describe("handler metadata", () => {
     expect(Object.isFrozen(metadata.handlers)).toBe(true);
     expect(Object.isFrozen(metadata.handlers[0])).toBe(true);
     expect(Object.isFrozen(metadata.eventApplications)).toBe(true);
+  });
+
+  it("keeps explicit handler registration one-argument compatible by default", () => {
+    expectTypeOf<Parameters<HandlerRegistrationBuilder<TaskProjection>["assign"]>>().toEqualTypeOf<
+      [schema: typeof CommandSchema, methodName: HandlerMethodName<TaskProjection>]
+    >();
+    expectTypeOf<
+      Parameters<HandlerRegistrationBuilder<TaskProjection>["subscribe"]>
+    >().toEqualTypeOf<
+      [schema: typeof EventSchema, methodName: HandlerMethodName<TaskProjection>]
+    >();
   });
 
   it("rejects method names that do not exist on the entity prototype", () => {

@@ -240,7 +240,15 @@ Both `handler(signal)` and `handler(signal, context)` are part of the public
 signature contract. `HandlerRegistryIngestor` validates version `1`, rejects
 new generated `@Apply`/event-application records, checks generated arity and
 emitted-schema/schema-shape rules, and then routes records through
-`defineEntityHandlers()`. The internal build-time writer renders deterministic
+`defineEntityHandlers()`. Canonical handler metadata records `parameterCount`;
+explicit/schema-bearing registrations default to one-argument invocation, while
+generated records preserve their declared arity. Built repository execution
+calls generated two-argument command assignees with the generated
+`CommandContext` from the command envelope, and generated two-argument event
+subscribers with the generated `EventContext` from the event envelope. If an
+envelope omits context, repository execution passes an empty generated context
+message of the proper schema. `@Apply` remains one-argument only. The internal
+build-time writer renders deterministic
 registry modules under ignored `generated/` output only when explicitly
 invoked. `GeneratedRegistryDiscovery` is the matching runtime anchor for
 explicit file loading. It accepts caller-provided filesystem paths or clean

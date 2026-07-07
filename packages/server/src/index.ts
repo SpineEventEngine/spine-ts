@@ -231,6 +231,7 @@ export {
   type HandlerMetadataRegistryErrorCode,
   type HandlerMetadataRegistryLookup,
   type HandlerMethodName,
+  type HandlerParameterCount,
   type HandlerRegistrationBuilder,
   type RegisteredHandlerMetadata,
   defineEntityHandlers,

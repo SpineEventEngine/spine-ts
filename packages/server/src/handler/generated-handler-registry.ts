@@ -1,6 +1,6 @@
 import type { DescriptorMessageSchema } from "../entity/entity-metadata.js";
 import {
-  defineEntityHandlers,
+  handlerMetadataAccess,
   HandlerMetadataRegistry,
   type EntityClass,
   type EntityHandlersMetadata,
@@ -137,9 +137,19 @@ function materializeGeneratedEntityHandlers(
   entity: GeneratedEntityHandlerGroup,
 ): EntityHandlersMetadata {
   validateSchema(entity.stateSchema, "entity state schema");
+  entity.handlers.forEach((handler) => {
+    validateGeneratedHandler(handler);
+  });
 
-  return defineEntityHandlers(entity.entityType, entity.stateSchema, (builder) =>
-    entity.handlers.map((handler) => buildGeneratedHandler(builder, handler)),
+  return handlerMetadataAccess.defineArity(
+    entity.entityType,
+    entity.stateSchema,
+    (builder) => entity.handlers.map((handler) => buildGeneratedHandler(builder, handler)),
+    entity.handlers.map((handler) => ({
+      kind: handler.kind,
+      methodName: handler.methodName,
+      parameterCount: handler.parameterCount,
+    })),
   );
 }
 
@@ -147,8 +157,6 @@ function buildGeneratedHandler<Instance extends object>(
   builder: HandlerRegistrationBuilder<Instance>,
   handler: GeneratedHandlerRecordInput,
 ): HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>> {
-  validateGeneratedHandler(handler);
-
   switch (handler.kind) {
     case "command-assignment":
       return builder.assign(

@@ -350,6 +350,7 @@ const expectedServerExports = [
   "HandlerMethodDecorator",
   "HandlerMethodName",
   "HandlerMethodValue",
+  "HandlerParameterCount",
   "HandlerRegistryIngestionError",
   "HandlerRegistryIngestor",
   "HandlerRegistrationBuilder",

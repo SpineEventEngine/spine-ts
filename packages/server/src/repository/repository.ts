@@ -2,6 +2,7 @@ import { clone, create } from "@bufbuild/protobuf";
 import { deriveTypeUrl, packAny, unpackAny, type MessageSchema } from "@spine-ts/core";
 import {
   ActorContextSchema,
+  CommandContextSchema,
   CommandIdSchema,
   EventContextSchema,
   EventIdSchema,
@@ -41,7 +42,11 @@ import {
   EventRegistrationReadiness,
   type EventRegistrationReadinessLookup,
 } from "../handler/event-registration-readiness.js";
-import { handlerMetadataAccess, type EntityHandlersMetadata } from "../handler/handler-metadata.js";
+import {
+  handlerMetadataAccess,
+  type EntityHandlersMetadata,
+  type HandlerParameterCount,
+} from "../handler/handler-metadata.js";
 import { AggregateStorage } from "./aggregate-storage.js";
 import { MessageIds, PrimitiveIds } from "./primitive-id.js";
 import type { Stand } from "../stand/stand.js";
@@ -582,9 +587,22 @@ class AggregateCommandExecution {
 
     const loaded = await this.#loadAggregate(route.entityId);
     const usesAppliers = this.#usesAppliers();
+    const commandContext = commandHandlerContext(this.#command);
     const produced = usesAppliers
-      ? await invokeEntityMethod(loaded.entity, assignee.handler.methodName, message)
-      : await this.#invokeAssignee(loaded.entity, assignee.handler.methodName, message);
+      ? await invokeEntityMethod(
+          loaded.entity,
+          assignee.handler.methodName,
+          message,
+          assignee.handler.parameterCount,
+          commandContext,
+        )
+      : await this.#invokeAssignee(
+          loaded.entity,
+          assignee.handler.methodName,
+          message,
+          assignee.handler.parameterCount,
+          commandContext,
+        );
     const events = this.#bindProducedEvents(
       this.#normalizeProducedSignals(produced),
       route.entityId,
@@ -647,10 +665,22 @@ class AggregateCommandExecution {
     }
   }
 
-  async #invokeAssignee(entity: object, methodName: string, message: unknown): Promise<unknown> {
+  async #invokeAssignee(
+    entity: object,
+    methodName: string,
+    message: unknown,
+    parameterCount: HandlerParameterCount,
+    context: unknown,
+  ): Promise<unknown> {
     transactionalEntityAccess.start(entity);
     try {
-      const produced = await invokeEntityMethod(entity, methodName, message);
+      const produced = await invokeEntityMethod(
+        entity,
+        methodName,
+        message,
+        parameterCount,
+        context,
+      );
       const commit = transactionalEntityAccess.commit(entity);
       if (commit.status === "rejected") {
         throw new TransitionValidationError(commit.validation.error);
@@ -948,7 +978,14 @@ class ProjectionEventExecution {
     transactionalEntityAccess.start(entity);
     try {
       for (const subscriber of subscribers) {
-        await invokeEntityMethod(entity, subscriber.handler.methodName, message);
+        const eventContext = eventHandlerContext(this.#event);
+        await invokeEntityMethod(
+          entity,
+          subscriber.handler.methodName,
+          message,
+          subscriber.handler.parameterCount,
+          eventContext,
+        );
       }
       const commit = transactionalEntityAccess.commit(entity);
       if (commit.status === "rejected") {
@@ -1015,14 +1052,32 @@ function historyVersion(snapshotVersion: bigint | undefined, events: readonly Ev
   return lastEvent === undefined ? (snapshotVersion ?? 0n) : readEventVersion(lastEvent);
 }
 
-function invokeEntityMethod(entity: object, methodName: string, message: unknown): unknown {
+function invokeEntityMethod(
+  entity: object,
+  methodName: string,
+  message: unknown,
+  parameterCount: HandlerParameterCount = 1,
+  context?: unknown,
+): unknown {
   const method = (entity as Record<string, unknown>)[methodName];
 
   if (typeof method !== "function") {
     throw new TypeError(`Repository entity execution requires method "${methodName}".`);
   }
 
-  return Reflect.apply(method, entity, [message]);
+  return Reflect.apply(method, entity, parameterCount === 2 ? [message, context] : [message]);
+}
+
+function commandHandlerContext(command: Command): NonNullable<Command["context"]> {
+  return command.context === undefined
+    ? create(CommandContextSchema)
+    : clone(CommandContextSchema, command.context);
+}
+
+function eventHandlerContext(event: Event): NonNullable<Event["context"]> {
+  return event.context === undefined
+    ? create(EventContextSchema)
+    : clone(EventContextSchema, event.context);
 }
 
 function unpackRequired(

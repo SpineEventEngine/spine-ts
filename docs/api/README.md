@@ -234,9 +234,10 @@ the discarded draft evidence.
 Server handler metadata exports include
 `defineEntityHandlers()`, `HandlerRegistrationBuilder`, the five handler
 metadata roles for command assignment, command reaction, event subscription,
-event reaction, and legacy event application, and `HandlerMetadataError` for
-registration-time structural failures. Handler names must refer to own prototype
-data methods declared with normal class method syntax. Decorator adapter exports
+event reaction, and legacy event application, `HandlerParameterCount` for
+canonical arity metadata, and `HandlerMetadataError` for registration-time
+structural failures. Handler names must refer to own prototype data methods
+declared with normal class method syntax. Decorator adapter exports
 include `@Assign`, `@Command`, `@Subscribe`, `@React`, legacy/framework-only
 `@Apply`, framework-only `materializeDecoratedEntityHandlers()`,
 `HandlerMethodDecorator`, and `HandlerMethodValue`. Bare `@Assign`, `@Command`,
@@ -254,8 +255,13 @@ decorators to canonical metadata. Their logical contract is a versioned list of
 entity handler groups with entity type, state schema, handler kind, method name,
 first-parameter signal schema, explicit one- or two-argument arity, and emitted
 schemas inferred from explicit return types. They are generated build artifacts
-under ignored `generated/` directories and are not committed. Runtime loading of
-those registry modules is deferred to later registry ingestion/discovery work.
+under ignored `generated/` directories and are not committed.
+`HandlerRegistryIngestor` preserves generated arity in canonical metadata, and
+`GeneratedRegistryDiscovery` loads explicit registry paths or clean `file:`
+URLs. Repository execution calls generated two-argument command assignees and
+event subscribers with generated `CommandContext` or `EventContext` values from
+the incoming envelope; if the envelope omits context, execution supplies an
+empty generated context message of the proper schema.
 Command registration readiness exports include
 `CommandRegistrationReadiness`, `CommandRegistrationReadinessLookup`, and
 `CommandRegistrationAssigneeMetadata`. The readiness view is built from an

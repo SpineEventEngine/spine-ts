@@ -20,6 +20,9 @@ export type HandlerKind =
   | "event-reaction"
   | "event-application";
 
+/** Public handler method arity recorded in canonical metadata. */
+export type HandlerParameterCount = 1 | 2;
+
 /**
  * Compile-time approximation of entity callable member names.
  *
@@ -38,7 +41,7 @@ export type HandlerMethodName<Instance extends object> = Extract<
 >;
 
 /** Error code for explicit handler metadata registration failures. */
-export type HandlerMetadataErrorCode = "UNKNOWN_HANDLER_METHOD";
+export type HandlerMetadataErrorCode = "UNKNOWN_HANDLER_METHOD" | "INVALID_PARAMETER_COUNT";
 
 /** Error thrown when explicit handler metadata cannot be defined. */
 export class HandlerMetadataError extends Error {
@@ -69,6 +72,8 @@ export interface BaseHandlerMetadata<
   readonly messageFullTypeName: Schema["typeName"];
   /** Entity instance method name selected by explicit registration. */
   readonly methodName: MethodName;
+  /** Public method arity: `handler(signal)` or `handler(signal, context)`. */
+  readonly parameterCount: HandlerParameterCount;
 }
 
 /** Metadata for a command assignee method. */
@@ -373,6 +378,16 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
 
 const authenticEntityHandlers = new WeakSet<EntityHandlersMetadata>();
 
+/** @internal Framework-owned arity override for generated handler metadata ingestion. */
+export interface HandlerArity {
+  /** Handler role whose public arity is being preserved. */
+  readonly kind: Exclude<HandlerKind, "event-application">;
+  /** Entity instance method name selected by generated metadata. */
+  readonly methodName: string;
+  /** Public method arity: `handler(signal)` or `handler(signal, context)`. */
+  readonly parameterCount: HandlerParameterCount;
+}
+
 /**
  * Explicitly bind schemas to entity class method names without invoking handlers.
  *
@@ -390,8 +405,26 @@ export function defineEntityHandlers<
     builder: HandlerRegistrationBuilder<Instance>,
   ) => readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
 ): EntityHandlersMetadata<Instance, StateSchema> {
+  return defineEntityHandlersCore(entityType, stateSchema, define, []);
+}
+
+function defineEntityHandlersCore<
+  Instance extends object,
+  StateSchema extends DescriptorMessageSchema,
+>(
+  entityType: EntityClass<Instance>,
+  stateSchema: StateSchema,
+  define: (
+    builder: HandlerRegistrationBuilder<Instance>,
+  ) => readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
+  arities: Iterable<HandlerArity>,
+): EntityHandlersMetadata<Instance, StateSchema> {
   const builtHandlers = new WeakSet<HandlerMetadata>();
-  const builder = createHandlerRegistrationBuilder(entityType, builtHandlers);
+  const builder = createHandlerRegistrationBuilder(
+    entityType,
+    builtHandlers,
+    createHandlerArityMap(arities),
+  );
   const handlers = Object.freeze([...define(builder)]);
   validateBuiltHandlers(handlers, builtHandlers);
   const metadata: EntityHandlersMetadata<Instance, StateSchema> = {
@@ -412,6 +445,14 @@ export function defineEntityHandlers<
 /** @internal Framework-only handler metadata authority contract. */
 export interface HandlerMetadataAccess {
   isAuthentic(metadata: EntityHandlersMetadata): metadata is EntityHandlersMetadata;
+  defineArity<Instance extends object, StateSchema extends DescriptorMessageSchema>(
+    entityType: EntityClass<Instance>,
+    stateSchema: StateSchema,
+    define: (
+      builder: HandlerRegistrationBuilder<Instance>,
+    ) => readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
+    arities: Iterable<HandlerArity>,
+  ): EntityHandlersMetadata<Instance, StateSchema>;
 }
 
 /** @internal Framework-only handler metadata authority. */
@@ -419,29 +460,43 @@ export const handlerMetadataAccess: HandlerMetadataAccess = Object.freeze({
   isAuthentic(metadata: EntityHandlersMetadata): metadata is EntityHandlersMetadata {
     return authenticEntityHandlers.has(metadata);
   },
+
+  defineArity<Instance extends object, StateSchema extends DescriptorMessageSchema>(
+    entityType: EntityClass<Instance>,
+    stateSchema: StateSchema,
+    define: (
+      builder: HandlerRegistrationBuilder<Instance>,
+    ) => readonly HandlerMetadata<DescriptorMessageSchema, HandlerMethodName<Instance>>[],
+    arities: Iterable<HandlerArity>,
+  ): EntityHandlersMetadata<Instance, StateSchema> {
+    return defineEntityHandlersCore(entityType, stateSchema, define, arities);
+  },
 });
 
 function createHandlerRegistrationBuilder<Instance extends object>(
   entityType: EntityClass<Instance>,
   builtHandlers: WeakSet<HandlerMetadata>,
+  arities: ReadonlyMap<string, HandlerParameterCount>,
 ): HandlerRegistrationBuilder<Instance> {
   return Object.freeze({
     assign: <Schema extends DescriptorMessageSchema>(
       schema: Schema,
       methodName: HandlerMethodName<Instance>,
-    ) => createHandler(entityType, "command-assignment", schema, methodName, builtHandlers),
+    ) =>
+      createHandler(entityType, "command-assignment", schema, methodName, builtHandlers, arities),
     command: <Schema extends DescriptorMessageSchema>(
       schema: Schema,
       methodName: HandlerMethodName<Instance>,
-    ) => createHandler(entityType, "command-reaction", schema, methodName, builtHandlers),
+    ) => createHandler(entityType, "command-reaction", schema, methodName, builtHandlers, arities),
     subscribe: <Schema extends DescriptorMessageSchema>(
       schema: Schema,
       methodName: HandlerMethodName<Instance>,
-    ) => createHandler(entityType, "event-subscription", schema, methodName, builtHandlers),
+    ) =>
+      createHandler(entityType, "event-subscription", schema, methodName, builtHandlers, arities),
     react: <Schema extends DescriptorMessageSchema>(
       schema: Schema,
       methodName: HandlerMethodName<Instance>,
-    ) => createHandler(entityType, "event-reaction", schema, methodName, builtHandlers),
+    ) => createHandler(entityType, "event-reaction", schema, methodName, builtHandlers, arities),
     apply: <Schema extends DescriptorMessageSchema>(
       schema: Schema,
       methodName: HandlerMethodName<Instance>,
@@ -470,8 +525,10 @@ function createHandler<
   schema: Schema,
   methodName: HandlerMethodName<Instance>,
   builtHandlers: WeakSet<HandlerMetadata>,
+  arities: ReadonlyMap<string, HandlerParameterCount> = new Map(),
 ): BaseHandlerMetadata<Kind, Schema, HandlerMethodName<Instance>> {
   validateHandlerMethod(entityType, methodName);
+  const parameterCount = arities.get(handlerArityKey(kind, methodName)) ?? 1;
 
   const handler = Object.freeze({
     kind,
@@ -479,9 +536,40 @@ function createHandler<
     descriptor: schema,
     messageFullTypeName: schema.typeName,
     methodName,
+    parameterCount,
   });
   builtHandlers.add(handler as HandlerMetadata);
   return handler;
+}
+
+function createHandlerArityMap(
+  arities: Iterable<HandlerArity>,
+): ReadonlyMap<string, HandlerParameterCount> {
+  const byHandler = new Map<string, HandlerParameterCount>();
+
+  for (const arity of arities) {
+    byHandler.set(
+      handlerArityKey(arity.kind, arity.methodName),
+      readParameterCount(arity.parameterCount),
+    );
+  }
+
+  return byHandler;
+}
+
+function readParameterCount(parameterCount: unknown): HandlerParameterCount {
+  if (parameterCount === 1 || parameterCount === 2) {
+    return parameterCount;
+  }
+
+  throw new HandlerMetadataError(
+    "INVALID_PARAMETER_COUNT",
+    `Handler metadata declares unsupported parameter count ${String(parameterCount)}.`,
+  );
+}
+
+function handlerArityKey(kind: HandlerKind, methodName: string): string {
+  return `${kind}\u0000${methodName}`;
 }
 
 function validateBuiltHandlers(

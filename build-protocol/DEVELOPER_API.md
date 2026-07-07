@@ -68,6 +68,16 @@ schemas because the required return type is explicit `void`. The generated
 registry intentionally excludes `@Apply`; new aggregate behavior is
 transactional rather than event-sourced.
 
+Generated registry ingestion preserves each handler record's public arity in
+canonical metadata. Existing explicit/schema-bearing handler registration
+continues to default to one-argument invocation. Repository execution calls
+generated one-argument handlers as `handler(signal)` and generated
+two-argument command assignees/event subscribers as `handler(signal, context)`,
+where `context` is the generated `CommandContext` or `EventContext` from the
+incoming envelope. If the envelope omits context, the framework passes an empty
+generated context message of the proper schema. `@Apply` has no two-argument
+runtime support.
+
 Generated registry modules are build artifacts under ignored `generated/`
 directories. T-0015c implements the build-time analyzer that extracts
 structured handler records. T-0015d adds the internal writer that turns those

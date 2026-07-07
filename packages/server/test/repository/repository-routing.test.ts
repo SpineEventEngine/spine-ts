@@ -13,9 +13,11 @@ import {
 import { deriveTypeUrl, packAny, packCommand, packEvent, unpackAny } from "@spine-ts/core";
 import {
   ActorContextSchema,
+  type CommandContext,
   CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
+  type EventContext,
   type Event as SpineEvent,
   EventContextSchema,
   EventIdSchema,
@@ -45,6 +47,7 @@ import {
   Repository,
   RepositoryIdentityError,
   defineEntityHandlers,
+  HandlerRegistryIngestor,
   type EntityHandlersMetadata,
   type EventDispatcher,
 } from "../../src/index.js";
@@ -297,6 +300,33 @@ class ManagedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema
       create(AggregateStateSchema, {
         id: command.id,
         name: `${command.name} (assigned)`,
+        archived: false,
+      }),
+    );
+    return create(AggregateStateSchema, {
+      id: command.id,
+      name: `${command.name} event`,
+      archived: false,
+    });
+  }
+}
+
+class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  static argumentCounts: number[] = [];
+  static contexts: CommandContext[] = [];
+
+  static reset(): void {
+    this.argumentCounts = [];
+    this.contexts = [];
+  }
+
+  assignTask(command: AggregateState, context: CommandContext): AggregateState {
+    GeneratedTwoArgAggregate.argumentCounts.push(arguments.length);
+    GeneratedTwoArgAggregate.contexts.push(context);
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: command.id,
+        name: `${command.name} (generated)`,
         archived: false,
       }),
     );
@@ -705,6 +735,63 @@ class ManagedTaskProjection extends Projection<string, typeof ProjectionStateSch
   }
 }
 
+class GeneratedTwoArgProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  static argumentCounts: number[] = [];
+  static contexts: EventContext[] = [];
+
+  static reset(): void {
+    this.argumentCounts = [];
+    this.contexts = [];
+  }
+
+  subscribeTask(event: ProjectionState, context: EventContext): void {
+    GeneratedTwoArgProjection.argumentCounts.push(arguments.length);
+    GeneratedTwoArgProjection.contexts.push(context);
+    this.updateDraftState(() =>
+      create(ProjectionStateSchema, {
+        id: event.id,
+        name: `${event.name} (generated)`,
+        priority: event.priority + 1,
+      }),
+    );
+  }
+}
+
+class ContextMutatingGeneratedProjection extends Projection<
+  string,
+  typeof ProjectionStateSchema,
+  number
+> {
+  static firstContext: EventContext | undefined;
+  static observerSawSameContext = false;
+  static observedVersions: (number | undefined)[] = [];
+
+  static reset(): void {
+    this.firstContext = undefined;
+    this.observerSawSameContext = false;
+    this.observedVersions = [];
+  }
+
+  mutateContext(event: ProjectionState, context: EventContext): void {
+    void event;
+    ContextMutatingGeneratedProjection.firstContext = context;
+    context.version = create(VersionSchema, { number: 99 });
+  }
+
+  observeContext(event: ProjectionState, context: EventContext): void {
+    ContextMutatingGeneratedProjection.observerSawSameContext =
+      context === ContextMutatingGeneratedProjection.firstContext;
+    ContextMutatingGeneratedProjection.observedVersions.push(context.version?.number);
+    this.updateDraftState(() =>
+      create(ProjectionStateSchema, {
+        id: event.id,
+        name: `${event.name} (observed)`,
+        priority: event.priority + 1,
+      }),
+    );
+  }
+}
+
 class PassiveTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   static subscriberCalls = 0;
 
@@ -865,6 +952,42 @@ describe("repository signal routing", () => {
       },
       events: [],
     });
+  });
+
+  it("passes CommandContext to generated-registry two-argument command assignees", async () => {
+    GeneratedTwoArgAggregate.reset();
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createGeneratedTwoArgAggregateRepository())
+      .withStorageFactory(new InMemoryStorageFactory())
+      .build();
+
+    await context
+      .commandBus()
+      .post(createAggregateCommand("command-generated", "task-generated", "Generated", "tenant-a"));
+
+    expect(GeneratedTwoArgAggregate.argumentCounts).toEqual([2]);
+    expect(GeneratedTwoArgAggregate.contexts).toHaveLength(1);
+    expect(GeneratedTwoArgAggregate.contexts[0]?.actorContext?.actor).toEqual(
+      create(UserIdSchema, { value: "user-1" }),
+    );
+    expect(GeneratedTwoArgAggregate.contexts[0]?.actorContext?.tenantId).toEqual(
+      createTenantId("tenant-a"),
+    );
+  });
+
+  it("passes empty CommandContext to generated two-argument assignees when the envelope has none", async () => {
+    GeneratedTwoArgAggregate.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedTwoArgAggregateRepository())
+      .withStorageFactory(new InMemoryStorageFactory())
+      .build();
+
+    await context
+      .commandBus()
+      .post(createContextlessAggregateCommand("command-empty-context", "task-empty-context"));
+
+    expect(GeneratedTwoArgAggregate.argumentCounts).toEqual([2]);
+    expect(GeneratedTwoArgAggregate.contexts).toEqual([create(CommandContextSchema)]);
   });
 
   it("uses one dispatch version for multiple managed aggregate events", async () => {
@@ -1860,6 +1983,52 @@ describe("repository signal routing", () => {
     });
   });
 
+  it("passes EventContext to generated-registry two-argument event subscribers", async () => {
+    GeneratedTwoArgProjection.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedTwoArgProjectionRepository())
+      .build();
+
+    await context.eventBus().post(
+      createProjectionEvent("event-generated", "task-generated", {
+        pastMessageTenantId: "tenant-b",
+      }),
+    );
+
+    expect(GeneratedTwoArgProjection.argumentCounts).toEqual([2]);
+    expect(GeneratedTwoArgProjection.contexts).toHaveLength(1);
+    expect(GeneratedTwoArgProjection.contexts[0]?.origin).toEqual(
+      projectionEventOrigin({ pastMessageTenantId: "tenant-b" }),
+    );
+    expect(GeneratedTwoArgProjection.contexts[0]?.version).toEqual(
+      create(VersionSchema, { number: 1 }),
+    );
+  });
+
+  it("passes empty EventContext to generated two-argument subscribers when the envelope has none", async () => {
+    GeneratedTwoArgProjection.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedTwoArgProjectionRepository())
+      .build();
+
+    await context.eventBus().post(createContextlessProjectionEvent("event-empty", "task-empty"));
+
+    expect(GeneratedTwoArgProjection.argumentCounts).toEqual([2]);
+    expect(GeneratedTwoArgProjection.contexts).toEqual([create(EventContextSchema)]);
+  });
+
+  it("isolates EventContext mutations between generated two-argument subscribers", async () => {
+    ContextMutatingGeneratedProjection.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createContextMutatingGeneratedProjectionRepository())
+      .build();
+
+    await context.eventBus().post(createProjectionEvent("event-mutating", "task-mutating"));
+
+    expect(ContextMutatingGeneratedProjection.observerSawSameContext).toBe(false);
+    expect(ContextMutatingGeneratedProjection.observedVersions).toEqual([1]);
+  });
+
   it("owns the projection transaction when subscribers only update draft state", async () => {
     ManagedTaskProjection.reset();
     const context = BoundedContext.singleTenant("Tasks").add(createManagedProjection()).build();
@@ -2369,6 +2538,69 @@ function createManagedProjection(): Repository<typeof ManagedTaskProjection> {
   });
 }
 
+function createGeneratedTwoArgProjectionRepository(): Repository<typeof GeneratedTwoArgProjection> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    version: 1,
+    entities: [
+      {
+        entityType: GeneratedTwoArgProjection,
+        stateSchema: ProjectionStateSchema,
+        handlers: [
+          {
+            kind: "event-subscription",
+            methodName: "subscribeTask",
+            signalSchema: ProjectionStateSchema,
+            emittedSchemas: [],
+            parameterCount: 2,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<GeneratedTwoArgProjection, typeof ProjectionStateSchema>;
+
+  return new Repository({
+    entityType: GeneratedTwoArgProjection,
+    schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
+function createContextMutatingGeneratedProjectionRepository(): Repository<
+  typeof ContextMutatingGeneratedProjection
+> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    version: 1,
+    entities: [
+      {
+        entityType: ContextMutatingGeneratedProjection,
+        stateSchema: ProjectionStateSchema,
+        handlers: [
+          {
+            kind: "event-subscription",
+            methodName: "mutateContext",
+            signalSchema: ProjectionStateSchema,
+            emittedSchemas: [],
+            parameterCount: 2,
+          },
+          {
+            kind: "event-subscription",
+            methodName: "observeContext",
+            signalSchema: ProjectionStateSchema,
+            emittedSchemas: [],
+            parameterCount: 2,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<ContextMutatingGeneratedProjection, typeof ProjectionStateSchema>;
+
+  return new Repository({
+    entityType: ContextMutatingGeneratedProjection,
+    schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
 function createUserIdProjectionRepository(): Repository<typeof UserIdProjection> {
   const handlers = defineEntityHandlers(UserIdProjection, ProjectionStateSchema, (builder) => [
     builder.subscribe(UserIdSchema, "subscribeUser"),
@@ -2468,6 +2700,34 @@ function createManagedRepository(): Repository<typeof ManagedTaskAggregate> {
 
   return new Repository({
     entityType: ManagedTaskAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+    events: [AggregateStateSchema],
+  });
+}
+
+function createGeneratedTwoArgAggregateRepository(): Repository<typeof GeneratedTwoArgAggregate> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    version: 1,
+    entities: [
+      {
+        entityType: GeneratedTwoArgAggregate,
+        stateSchema: AggregateStateSchema,
+        handlers: [
+          {
+            kind: "command-assignment",
+            methodName: "assignTask",
+            signalSchema: AggregateStateSchema,
+            emittedSchemas: [AggregateStateSchema],
+            parameterCount: 2,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<GeneratedTwoArgAggregate, typeof AggregateStateSchema>;
+
+  return new Repository({
+    entityType: GeneratedTwoArgAggregate,
     schema: AggregateStateSchema,
     handlers,
     events: [AggregateStateSchema],
@@ -2800,6 +3060,20 @@ function createAggregateCommand(id: string, aggregateId: string, name = "Task", 
   });
 }
 
+function createContextlessAggregateCommand(id: string, aggregateId: string, name = "Task") {
+  return create(CommandSchema, {
+    id: create(CommandIdSchema, { uuid: id }),
+    message: packAny(
+      AggregateStateSchema,
+      create(AggregateStateSchema, {
+        id: aggregateId,
+        name,
+        archived: false,
+      }),
+    ),
+  });
+}
+
 function createValidatedCommand(id: string, aggregateId: string, name: string, tenantId?: string) {
   return create(CommandSchema, {
     id: create(CommandIdSchema, { uuid: id }),
@@ -2898,6 +3172,20 @@ function createProjectionEvent(
       name: "Task",
       priority: 1,
     }),
+  });
+}
+
+function createContextlessProjectionEvent(id: string, entityId: string) {
+  return create(EventSchema, {
+    id: create(EventIdSchema, { value: id }),
+    message: packAny(
+      ProjectionStateSchema,
+      create(ProjectionStateSchema, {
+        id: entityId,
+        name: "Task",
+        priority: 1,
+      }),
+    ),
   });
 }
 

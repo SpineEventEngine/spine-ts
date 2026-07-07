@@ -172,8 +172,21 @@ interface GeneratedHandlerMetadata {
 
 `emittedSchemas` is non-empty for `@Assign` and `@Command`, contains generated
 event schemas or is empty for `@React`, and is empty for `@Subscribe`. The
-generated registry must preserve source declaration order within each entity.
-It must not include `event-application` records for new aggregate behavior.
+generated registry must preserve source declaration order and `parameterCount`
+within each entity. Ingested records become canonical handler metadata with the
+same public arity; explicit/schema-bearing registrations default to
+`parameterCount: 1` unless framework-owned generated ingestion supplies a
+different value. It must not include `event-application` records for new
+aggregate behavior.
+
+Runtime invocation follows canonical metadata. One-argument handlers are called
+as `handler(signal)`. Generated two-argument command assignees are called as
+`handler(command, context)` with the generated `CommandContext` from the
+incoming command envelope, or an empty generated `CommandContext` when the
+envelope has none. Generated two-argument event subscribers are called as
+`handler(event, context)` with the generated `EventContext` from the incoming
+event envelope, or an empty generated `EventContext` when the envelope has
+none. `@Apply`/event-application handlers remain one-argument only.
 
 Generated registry files belong under ignored generated output locations such
 as `packages/<package>/generated/`; they are regenerated build artifacts and

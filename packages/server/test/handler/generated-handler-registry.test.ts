@@ -123,6 +123,7 @@ describe("generated handler registry ingestion", () => {
       "spine.core.Event",
       "spine.core.Event",
     ]);
+    expect(entity?.handlers.map((handler) => handler.parameterCount)).toEqual([1, 2, 1, 2]);
     expect(entity?.commandAssignments[0]).toBe(entity?.handlers[0]);
     expect(entity?.commandReactions[0]).toBe(entity?.handlers[1]);
     expect(entity?.eventSubscriptions[0]).toBe(entity?.handlers[2]);

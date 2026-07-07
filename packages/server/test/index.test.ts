@@ -59,6 +59,7 @@ import {
   type GeneratedHandlerParameterCount,
   type GeneratedHandlerRecordInput,
   type GeneratedHandlerRegistry,
+  type HandlerParameterCount,
   type RegistryIngestionErrorCode,
   type RuntimeStateErrorCode,
   type ServerRuntimeLifecycle,
@@ -302,6 +303,7 @@ describe("@spine-ts/server", () => {
       readonly entities: readonly object[];
     }>();
     expectTypeOf<GeneratedHandlerParameterCount>().toEqualTypeOf<1 | 2>();
+    expectTypeOf<HandlerParameterCount>().toEqualTypeOf<1 | 2>();
     expectTypeOf<RegistryDiscoveryErrorCode>().toEqualTypeOf<
       | "MODULE_IMPORT_FAILED"
       | "MISSING_REGISTRY_EXPORT"
