@@ -1,6 +1,6 @@
 # T-0015d: Generated Registry File Generation
 
-Status: implementation committed; awaiting integration
+Status: integrated
 Start: `2026-07-07 21:27 WEST`
 End: Pending
 Baseline commit: `6691f62`
@@ -13,7 +13,7 @@ Authoring sub-agent: completed
 Reviewer status: final narrow review findings addressed; verification passed
 Implementation commit: `103f48b`
 Final branch HEAD: `103f48b`
-Integrated to main: Pending
+Integrated to main: `5e13d6d`
 
 ## Objective
 
