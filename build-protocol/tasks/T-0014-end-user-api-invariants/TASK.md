@@ -10,8 +10,8 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0014-end-user-api-invariants`
 Authoring sub-agent: Guardrail implementation and review-fix sub-agents completed checker/test lane
 Reviewer sub-agents: Round 28 clean; all participating reviewers closed
-Implementation commit: Pending branch commit
-Final branch HEAD: Pending branch commit
+Implementation commit: `0066de5`
+Final branch HEAD: log-maintenance commit after `0066de5`; see branch `HEAD`
 
 ## Objective
 
@@ -438,6 +438,9 @@ examples/todo/src/index.test.ts packages/server/test/repository/repository-routi
 - `2026-07-07 18:57 WEST`: T-0014 marked complete. The implementation goal is
   achieved, tests and coverage are passing, docs/API docs are updated, reviewer
   rounds are clean, and participating sub-agents are closed.
+- `2026-07-07 18:58 WEST`: Committed the reviewed T-0014 implementation as
+  `0066de5` (`Implement end-user API invariants`). This log-maintenance update
+  records that now-known commit and cannot name its own future hash.
 
 ## Staged Roadmap
 
