@@ -13,6 +13,29 @@ Required lanes:
 
 ## Review Rounds
 
+### 2026-07-08 docs round-2 fix
+
+Resolved remaining documentation review findings against `docs/USER_GUIDE.md`.
+
+- Documentation P2: to-do example status wording now says `examples/todo` is
+  runnable and uses generated handler registry loading.
+- Documentation P2: handler discovery now presents bare decorators plus
+  generated registry loading as the ordinary application workflow.
+- Documentation P2: explicit handler metadata is documented only as a
+  low-level framework-test, generated-ingestion, or legacy non-decorator escape
+  hatch.
+- Documentation P2: the runtime assembly example now loads generated registry
+  metadata instead of constructing manual handler metadata.
+- Documentation P2: event envelope helpers now clarify that ordinary handlers
+  return generated domain event messages and do not create framework `Event`
+  envelopes or event IDs.
+
+Verification:
+
+- `corepack pnpm docs:check`
+- `corepack pnpm format:check`
+- `git diff --check`
+
 ### 2026-07-08 review-fix
 
 Resolved follow-up review findings from implementation commit `ff93c98`.
