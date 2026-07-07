@@ -71,20 +71,18 @@ blocking requirements for all framework and example work.
 - `@Assign`, `@Command`, and `@React` handlers must declare explicit return
   types.
 - `@Assign` handlers return at least one generated domain event message, either
-  as one event message or a tuple/rest type with a required first event message.
-- `@React` handlers return at least one generated domain event message, either
-  as one event message or a tuple/rest type with a required first event message.
+  as one event message, an array type, or a tuple type.
+- `@React` handlers return generated domain event messages or explicit `void`
+  for a no-emission reaction.
 - `@Command` handlers return at least one generated domain command message,
-  either as one command message or a tuple/rest type with a required first
-  command message.
+  either as one command message, an array type, or a tuple type.
 - Generated domain message return provenance must resolve to generated
   Protobuf-ES imports, generated namespace/value imports, or local aliases
   proven back to those generated imports.
-- Public TypeScript signatures must make non-empty multi-message returns visible
-  in the type annotation, for example with tuple/rest notation such as
-  `readonly [TaskCreated, ...TaskCreated[]]`; plain `TaskCreated[]` and
-  `readonly TaskCreated[]` are empty-capable and are not sufficient public
-  handler return types.
+- Public TypeScript signatures may use singular message types, `T[]`,
+  `readonly T[]`, `Array<T>`, `ReadonlyArray<T>`, or tuple/readonly tuple
+  notation for emitted messages. `@Assign` and `@Command` still require at
+  least one emitted schema in the declared return type; `@React` may emit none.
 - `@Subscribe` handlers must declare an explicit `void` return type.
 - New aggregate behavior must not introduce or depend on `@Apply`; aggregates
   are planned as non-event-sourced in Spine TS.
@@ -113,9 +111,10 @@ blocking requirements for all framework and example work.
 
 Bare handler decorators are source declarations, not complete runtime metadata.
 The generated registry is the framework-owned bridge from decorated TypeScript
-classes to canonical handler metadata. T-0015a defines the contract only; the
-analyzer, package generator, runtime discovery anchor, and example migration
-belong to later T-0015 subtasks.
+classes to canonical handler metadata. T-0015a defined the contract, and
+T-0015c implements the build-time analyzer that produces structured analysis
+records. Package-level registry source generation, the runtime discovery
+anchor, and example migration remain later T-0015 subtasks.
 
 Build-time tooling must read ordinary application source, find bare
 `@Assign`, `@Command`, `@React`, and `@Subscribe` methods, and infer schemas
@@ -124,13 +123,22 @@ from TypeScript signatures:
 - the first parameter must have an explicit generated domain message type;
 - a second context parameter is allowed for all four decorator kinds and is not
   a signal schema source;
-- `@Assign` and `@React` must have explicit generated domain event return
-  types with at least one emitted event schema;
+- `@Assign` must have an explicit generated domain event return type with at
+  least one emitted event schema;
 - `@Command` must have an explicit generated domain command return type with at
   least one emitted command schema;
+- `@React` must have an explicit generated domain event return type or explicit
+  `void`; it may emit generated event schemas or nothing;
 - `@Subscribe` must have an explicit `void` return type and no emitted schemas;
 - framework `Command`/`Event` envelopes, schema-bearing decorators, app-owned
   materialization helpers, and `@Apply` are invalid in ordinary app code.
+
+T-0015c verifies imported generated message names and companion schema runtime
+value exports by inspecting generated module source. Command/event role
+classification currently comes from generated module file names containing
+`command(s)_pb` or `event(s)_pb`; neutral generated modules fail closed for
+handler signal and emitted-schema roles until a later slice adds deeper
+descriptor-based role inspection.
 
 The generated module must export a registry value with this logical shape:
 
@@ -159,16 +167,16 @@ interface GeneratedHandlerMetadata {
 }
 ```
 
-`emittedSchemas` is non-empty for `@Assign`, `@Command`, and `@React`, and
-empty for `@Subscribe`. The generated registry must preserve source declaration
-order within each entity. It must not include `event-application` records for
-new aggregate behavior.
+`emittedSchemas` is non-empty for `@Assign` and `@Command`, contains generated
+event schemas or is empty for `@React`, and is empty for `@Subscribe`. The
+generated registry must preserve source declaration order within each entity.
+It must not include `event-application` records for new aggregate behavior.
 
 Generated registry files belong under ignored generated output locations such
 as `packages/<package>/generated/`; they are regenerated build artifacts and
 must not be committed. The unresolved runtime anchor for locating and loading
-these generated registries is a later T-0015d/T-0015e detail, not part of this
-contract slice.
+these generated registries is a later T-0015d/T-0015e detail, not part of the
+T-0015c analyzer slice.
 
 ## Command Target ID And Default Routing
 

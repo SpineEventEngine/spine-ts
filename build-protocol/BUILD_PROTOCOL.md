@@ -267,9 +267,10 @@ Additional end-user API gates:
 - handwritten end-user application code, including examples, must not return
   framework `Command` or `Event` envelopes from `@Assign`, `@Command`, or
   `@React` handlers;
-- end-user `@Assign`, `@Command`, and `@React` handlers must return generated
-  domain messages with explicit return types, singular or tuple/rest types with a
-  required first generated message as allowed by `TECHNICAL_SPEC.md`;
+- end-user `@Assign`, `@Command`, and `@React` handlers must declare explicit
+  return types as allowed by `TECHNICAL_SPEC.md`: `@Assign` emits generated
+  events, `@Command` emits generated commands, and `@React` emits generated
+  events or explicit `void` for no emission;
 - end-user `@Subscribe` handlers must declare explicit `void` return types;
 - end-user application code must not use schema-bearing decorators such as
   `@Assign(SomeSchema)` unless a task records a temporary legacy/testing

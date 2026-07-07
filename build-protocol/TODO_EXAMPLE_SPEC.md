@@ -67,13 +67,12 @@ make the example pass.
 
 - Use bare decorators: `@Assign`, `@Command`, `@React`, and `@Subscribe`.
 - Do not use schema-bearing decorators such as `@Assign(CreateTaskSchema)`.
-- `@Assign` handlers return generated domain event messages, singular or
-  tuple/rest types with a required first event message, such as
-  `readonly [TaskCreated, ...TaskCreated[]]`.
-- `@Command` handlers return generated domain command messages, singular or
-  tuple/rest types with a required first command message.
-- `@React` handlers return generated domain event messages, singular or
-  tuple/rest types with a required first event message.
+- `@Assign` handlers return generated domain event messages, using singular
+  message, array, or tuple return types.
+- `@Command` handlers return generated domain command messages, using singular
+  message, array, or tuple return types.
+- `@React` handlers return generated domain event messages or explicit `void`
+  for no emission.
 - `@Subscribe` handlers declare explicit `void` return types.
 - The example must not define or use aggregate `@Apply` handlers.
 - The example must not call transaction-control methods such as

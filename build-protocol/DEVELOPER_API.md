@@ -69,9 +69,9 @@ registry intentionally excludes `@Apply`; new aggregate behavior is
 transactional rather than event-sourced.
 
 Generated registry modules are build artifacts under ignored `generated/`
-directories. T-0015a does not define how the runtime locates those modules;
-that package/runtime anchor is deferred to the generator and discovery
-subtasks.
+directories. T-0015c implements the build-time analyzer that extracts
+structured handler records. Rendering package-level registry modules and
+locating them at runtime are deferred to the generator and discovery subtasks.
 
 ## Handler Decorators
 
@@ -83,7 +83,8 @@ Initial decorator set:
   domain command messages.
 - `@Subscribe` for event subscribers/projection updaters. These handlers must
   declare explicit `void` return types.
-- `@React` for reactors that emit one or more generated domain event messages.
+- `@React` for reactors that emit generated domain event messages or explicitly
+  emit nothing with `void`.
 - `@External()` option for external event/command handlers.
 - Field-filter options equivalent to Spine handler filtering.
 
@@ -107,13 +108,16 @@ Allowed public signatures include:
 create(command: CreateTask): TaskCreated;
 
 @Assign
-rename(command: RenameTask, context: CommandContext): readonly [TaskRenamed, ...TaskRenamed[]];
+rename(command: RenameTask, context: CommandContext): ReadonlyArray<TaskRenamed>;
 
 @Command
 whenTaskCreated(event: TaskCreated, context: EventContext): NotifyOwner;
 
 @React
 whenTaskCompleted(event: TaskCompleted): TaskArchived;
+
+@React
+observeTaskCompleted(event: TaskCompleted): void;
 
 @Subscribe
 onTaskRenamed(event: TaskRenamed, context: EventContext): void;

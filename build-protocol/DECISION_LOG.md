@@ -15,31 +15,32 @@ Context: T-0014 established that ordinary end-user code uses bare `@Assign`,
 framework `Command`/`Event` envelope returns, and does not own decorated handler
 discovery or materialization. Runtime standard decorator metadata does not
 expose TypeScript parameter or return types, so bare decorators alone cannot
-recover Protobuf-ES schemas for command/event routing. T-0015a needs a small
-contract before later analyzer, package-generation, runtime-discovery, and
-to-do migration slices.
+recover Protobuf-ES schemas for command/event routing. T-0015a needed a small
+contract before later package-generation, runtime-discovery, and to-do
+migration slices; T-0015c adds the build-time analyzer for that contract.
 
 Decision: Treat the generated handler registry as the framework-owned bridge
 from bare decorated methods to canonical handler metadata. The logical registry
 is versioned and groups handlers by entity class. Each generated handler record
 contains the handler kind, method name, inferred first-parameter signal schema,
 explicit public arity of one or two parameters, and emitted schemas inferred
-from explicit return types. `@Assign` and `@React` emit non-empty generated
-event schemas, `@Command` emits non-empty generated command schemas, and
-`@Subscribe` emits none because it must return explicit `void`. New generated
-registry records do not include `@Apply`.
+from explicit return types. `@Assign` emits non-empty generated event schemas,
+`@Command` emits non-empty generated command schemas, `@React` emits generated
+event schemas or nothing, and `@Subscribe` emits none because it must return
+explicit `void`. New generated registry records do not include `@Apply`.
 
 Generated registry modules are ignored build artifacts under `generated/`
 output directories and must not be committed. T-0015a deliberately does not
-choose the final runtime loading anchor; package generation and automatic
-discovery remain later T-0015d/T-0015e work.
+choose the final runtime loading anchor; T-0015c implements the analyzer, while
+package generation and automatic discovery remain later T-0015d/T-0015e work.
 
 Consequences:
 
 - Ordinary application examples remain bare-decorator source and must not call
   `materializeDecoratedEntityHandlers()` or app-owned discovery helpers.
 - The analyzer must fail closed when the first parameter type or required return
-  type is missing, empty-capable, or resolves to a framework envelope.
+  type is missing, has the wrong generated signal role, lacks a verified
+  generated schema export, or resolves to a framework envelope.
 - Existing schema-bearing decorator materialization remains compatibility code
   only and is not the public path for new app handlers.
 - Later registry ingestion should convert generated records into existing
@@ -1719,10 +1720,10 @@ Decision:
   Protobuf-ES imports, generated namespace/value imports, or aliases proven back
   to those generated imports.
 - `@Assign`, `@Command`, and `@React` handlers require explicit return types.
-  They may return one generated message or a TypeScript tuple/rest type with a
-  required first generated message, such as
-  `readonly [TaskCreated, ...TaskCreated[]]`. Plain `T[]`, `readonly T[]`, and
-  rest-only tuples are empty-capable and are not sufficient public handler
+  `@Assign` returns generated event messages, `@Command` returns generated
+  command messages, and `@React` returns generated event messages or explicit
+  `void` for no emission. Emitting handlers may use one generated message,
+  `T[]`, `readonly T[]`, `Array<T>`, `ReadonlyArray<T>`, or tuple/readonly tuple
   return types.
 - `@Subscribe` handlers require explicit `void` return types.
 - End-user application code uses bare decorators. Schema-bearing decorators are
