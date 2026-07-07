@@ -5,6 +5,8 @@ Start: `2026-07-08 00:05 WEST`
 End: `2026-07-08 01:00 WEST`
 Baseline commit: `81c325b`
 Final commit: `aaf60d2`
+Closure commit: `b63274c`
+Integrated to main: `6a7845e`
 Branch: `task/T-0015g-todo-generated-registry`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0015g-todo-generated-registry`
