@@ -249,6 +249,13 @@ exports include `HandlerMetadataRegistry`,
 `HandlerMetadataRegistryError` for caller-owned lookup-only registration and
 duplicate-policy validation. These APIs are metadata-only and do not execute
 handlers, access storage, dispatch buses, or start transport.
+Generated handler registries are the intended ordinary bridge from bare
+decorators to canonical metadata. Their logical contract is a versioned list of
+entity handler groups with entity type, state schema, handler kind, method name,
+first-parameter signal schema, explicit one- or two-argument arity, and emitted
+schemas inferred from explicit return types. They are generated build artifacts
+under ignored `generated/` directories and are not committed. Runtime loading of
+those registry modules is deferred to later registry ingestion/discovery work.
 Command registration readiness exports include
 `CommandRegistrationReadiness`, `CommandRegistrationReadinessLookup`, and
 `CommandRegistrationAssigneeMetadata`. The readiness view is built from an

@@ -57,6 +57,22 @@ Handler discovery and decorated metadata materialization are framework
 responsibilities. End-user applications must not define, import, or call helper
 adapters such as `materializeDecoratedEntityHandlers()`.
 
+Generated registry tooling owns the ordinary decorated-handler path. The
+logical generated registry contains one entry per entity class with the entity
+type, state schema, and handler records for bare `@Assign`, `@Command`,
+`@Subscribe`, and `@React` declarations. Each handler record names the method,
+the inferred first-parameter signal schema, the allowed public arity
+`handler(signal)` or `handler(signal, context)`, and the explicit emitted
+schemas inferred from the return type. `@Subscribe` records have no emitted
+schemas because the required return type is explicit `void`. The generated
+registry intentionally excludes `@Apply`; new aggregate behavior is
+transactional rather than event-sourced.
+
+Generated registry modules are build artifacts under ignored `generated/`
+directories. T-0015a does not define how the runtime locates those modules;
+that package/runtime anchor is deferred to the generator and discovery
+subtasks.
+
 ## Handler Decorators
 
 Initial decorator set:
@@ -106,6 +122,8 @@ onTaskRenamed(event: TaskRenamed, context: EventContext): void;
 The generated registry must reject unsupported signatures, missing explicit
 return types on emitting handlers, `@Subscribe` handlers without explicit
 `void`, and ordinary end-user handlers that expose framework envelopes.
+It must also reject missing first-parameter type annotations because signal
+schema inference depends on that explicit type.
 
 ## Command Target Routing
 

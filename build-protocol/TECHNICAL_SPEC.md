@@ -109,6 +109,67 @@ blocking requirements for all framework and example work.
   incomplete if an example uses framework envelopes, explicit schema decorators,
   or other internals that the public handler model forbids.
 
+## Generated Handler Registry Contract
+
+Bare handler decorators are source declarations, not complete runtime metadata.
+The generated registry is the framework-owned bridge from decorated TypeScript
+classes to canonical handler metadata. T-0015a defines the contract only; the
+analyzer, package generator, runtime discovery anchor, and example migration
+belong to later T-0015 subtasks.
+
+Build-time tooling must read ordinary application source, find bare
+`@Assign`, `@Command`, `@React`, and `@Subscribe` methods, and infer schemas
+from TypeScript signatures:
+
+- the first parameter must have an explicit generated domain message type;
+- a second context parameter is allowed for all four decorator kinds and is not
+  a signal schema source;
+- `@Assign` and `@React` must have explicit generated domain event return
+  types with at least one emitted event schema;
+- `@Command` must have an explicit generated domain command return type with at
+  least one emitted command schema;
+- `@Subscribe` must have an explicit `void` return type and no emitted schemas;
+- framework `Command`/`Event` envelopes, schema-bearing decorators, app-owned
+  materialization helpers, and `@Apply` are invalid in ordinary app code.
+
+The generated module must export a registry value with this logical shape:
+
+```typescript
+interface GeneratedHandlerRegistry {
+  readonly version: 1;
+  readonly entities: readonly GeneratedEntityHandlers[];
+}
+
+interface GeneratedEntityHandlers {
+  readonly entityType: EntityClass;
+  readonly stateSchema: DescriptorMessageSchema;
+  readonly handlers: readonly GeneratedHandlerMetadata[];
+}
+
+interface GeneratedHandlerMetadata {
+  readonly kind:
+    | "command-assignment"
+    | "command-reaction"
+    | "event-subscription"
+    | "event-reaction";
+  readonly methodName: string;
+  readonly signalSchema: DescriptorMessageSchema;
+  readonly emittedSchemas: readonly DescriptorMessageSchema[];
+  readonly parameterCount: 1 | 2;
+}
+```
+
+`emittedSchemas` is non-empty for `@Assign`, `@Command`, and `@React`, and
+empty for `@Subscribe`. The generated registry must preserve source declaration
+order within each entity. It must not include `event-application` records for
+new aggregate behavior.
+
+Generated registry files belong under ignored generated output locations such
+as `packages/<package>/generated/`; they are regenerated build artifacts and
+must not be committed. The unresolved runtime anchor for locating and loading
+these generated registries is a later T-0015d/T-0015e detail, not part of this
+contract slice.
+
 ## Command Target ID And Default Routing
 
 Default command routing follows the Spine JVM first-field convention.

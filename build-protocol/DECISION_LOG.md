@@ -4,6 +4,48 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+## D-0059: Bare decorators are completed by generated handler registries
+
+Status: Accepted
+
+Date: 2026-07-07
+
+Context: T-0014 established that ordinary end-user code uses bare `@Assign`,
+`@Command`, `@React`, and `@Subscribe`, avoids schema-bearing decorators, avoids
+framework `Command`/`Event` envelope returns, and does not own decorated handler
+discovery or materialization. Runtime standard decorator metadata does not
+expose TypeScript parameter or return types, so bare decorators alone cannot
+recover Protobuf-ES schemas for command/event routing. T-0015a needs a small
+contract before later analyzer, package-generation, runtime-discovery, and
+to-do migration slices.
+
+Decision: Treat the generated handler registry as the framework-owned bridge
+from bare decorated methods to canonical handler metadata. The logical registry
+is versioned and groups handlers by entity class. Each generated handler record
+contains the handler kind, method name, inferred first-parameter signal schema,
+explicit public arity of one or two parameters, and emitted schemas inferred
+from explicit return types. `@Assign` and `@React` emit non-empty generated
+event schemas, `@Command` emits non-empty generated command schemas, and
+`@Subscribe` emits none because it must return explicit `void`. New generated
+registry records do not include `@Apply`.
+
+Generated registry modules are ignored build artifacts under `generated/`
+output directories and must not be committed. T-0015a deliberately does not
+choose the final runtime loading anchor; package generation and automatic
+discovery remain later T-0015d/T-0015e work.
+
+Consequences:
+
+- Ordinary application examples remain bare-decorator source and must not call
+  `materializeDecoratedEntityHandlers()` or app-owned discovery helpers.
+- The analyzer must fail closed when the first parameter type or required return
+  type is missing, empty-capable, or resolves to a framework envelope.
+- Existing schema-bearing decorator materialization remains compatibility code
+  only and is not the public path for new app handlers.
+- Later registry ingestion should convert generated records into existing
+  handler metadata/readiness surfaces instead of adding a broad parallel
+  runtime registration API.
+
 ## D-0047: Reset implementation toward simpler JVM-aligned architecture
 
 Status: Accepted

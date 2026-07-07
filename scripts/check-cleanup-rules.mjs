@@ -2040,6 +2040,13 @@ function collectExampleApiViolations(file, source) {
         });
       }
 
+      for (const parameterViolation of handlerParameterViolations(node, decoratorNames)) {
+        violations.push({
+          kind: "api",
+          detail: lineDetail(source, file, node, parameterViolation),
+        });
+      }
+
       const returnTypeLabel =
         node.type === undefined ? undefined : forbiddenTypeLabel(node.type, scopedState);
       if (
@@ -2151,6 +2158,21 @@ function handlerReturnViolations(node, decoratorNames, importState) {
     }
     if (name === "Subscribe" && !isVoidTypeNode(node.type)) {
       violations.push("@Subscribe handler return type void");
+    }
+  }
+
+  return violations;
+}
+
+function handlerParameterViolations(node, decoratorNames) {
+  const violations = [];
+
+  for (const name of decoratorNames) {
+    if (
+      (name === "Assign" || name === "Command" || name === "React" || name === "Subscribe") &&
+      node.parameters[0]?.type === undefined
+    ) {
+      violations.push(`@${name} handler first parameter type annotation`);
     }
   }
 

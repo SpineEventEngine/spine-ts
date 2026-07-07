@@ -114,6 +114,13 @@ Current slice exposes:
   Bare decorators are the ordinary application syntax; schema-bearing overloads,
   `@Apply`, and decorator materialization remain legacy/framework compatibility
   until generated registry tooling owns schema inference.
+- generated handler registry artifacts are the planned ordinary bridge from
+  bare decorators to canonical metadata. The registry shape is versioned and
+  contains entity type, state schema, handler kind, method name, inferred
+  first-parameter signal schema, explicit one- or two-argument arity, and
+  emitted schemas inferred from explicit return types. Generated registry files
+  live under ignored `generated/` output and are not committed; runtime loading
+  is deferred to the later registry ingestion/discovery slice.
 - `SingleProcessServerRuntime` for the first explicit server-owned lifecycle
   and async queue kernel with `start()`, `close()`, deterministic states, and
   post-intake work execution in a later microtask.
@@ -214,6 +221,14 @@ forms. Schema-bearing overloads and materialization remain framework
 compatibility until generated registry tooling owns schema inference. Decorators
 do not use `emitDecoratorMetadata`, `reflect-metadata`, parameter decorators, a
 global handler registry, or handler invocation.
+
+Generated handler registry tooling will infer the signal schema from each
+handler's explicit first parameter type and infer emitted schemas from explicit
+return types. `@Assign` and `@React` emit generated domain events, `@Command`
+emits generated domain commands, and `@Subscribe` returns explicit `void`.
+Both `handler(signal)` and `handler(signal, context)` are part of the public
+signature contract. The current server package does not yet implement automatic
+registry discovery; that runtime anchor is intentionally deferred.
 
 `HandlerMetadataRegistry` registers existing `EntityHandlersMetadata` objects
 and exposes frozen listing/lookup arrays by entity state full type name, handler

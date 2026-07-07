@@ -439,6 +439,102 @@ describe("check-cleanup-rules", () => {
     expect(result.stderr).toContain("handler return type generated domain");
   });
 
+  it("rejects handlers without explicit first parameter type annotations", () => {
+    const repoRoot = createFixture();
+    writeExampleSource(
+      repoRoot,
+      [
+        'import { Assign, Command, React, Subscribe } from "@spine-ts/server";',
+        'import type { NotifyOwner, TaskCreated, TaskCommand } from "../generated/example_pb.js";',
+        "",
+        "class DemoAggregate {",
+        "  @Assign",
+        "  assignTask(command): TaskCreated {",
+        "    return command.created;",
+        "  }",
+        "",
+        "  @Command",
+        "  commandTask(): NotifyOwner {",
+        "    return {} as NotifyOwner;",
+        "  }",
+        "",
+        "  @React",
+        "  reactToTask(event): TaskCreated {",
+        "    return event;",
+        "  }",
+        "",
+        "  @Subscribe",
+        "  onTask(event): void {",
+        "    void event;",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "missing parameter types"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("@Assign handler first parameter type annotation");
+    expect(result.stderr).toContain("@Command handler first parameter type annotation");
+    expect(result.stderr).toContain("@React handler first parameter type annotation");
+    expect(result.stderr).toContain("@Subscribe handler first parameter type annotation");
+  });
+
+  it("accepts one- and two-argument bare handler signatures in example source", () => {
+    const repoRoot = createFixture();
+    writeExampleSource(
+      repoRoot,
+      [
+        'import { Assign, Command, React, Subscribe } from "@spine-ts/server";',
+        'import type { NotifyOwner, TaskCreated, TaskCommand } from "../generated/example_pb.js";',
+        "",
+        "interface CommandContext {",
+        "  readonly tenant: string;",
+        "}",
+        "",
+        "interface EventContext {",
+        "  readonly tenant: string;",
+        "}",
+        "",
+        "class DemoAggregate {",
+        "  @Assign",
+        "  assignTask(command: TaskCommand): TaskCreated {",
+        "    return command.created;",
+        "  }",
+        "",
+        "  @Command",
+        "  commandTask(event: TaskCreated, context: EventContext): NotifyOwner {",
+        "    void context;",
+        "    return event.notify;",
+        "  }",
+        "",
+        "  @React",
+        "  reactToTask(event: TaskCreated, context: EventContext): TaskCreated {",
+        "    void context;",
+        "    return event;",
+        "  }",
+        "",
+        "  @Subscribe",
+        "  onTask(event: TaskCreated, context: CommandContext): void {",
+        "    void event;",
+        "    void context;",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "explicit parameter types"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(0);
+    expect(result.stdout).toContain("Cleanup enforcement checks passed.");
+  });
+
   it("rejects aliased and qualified forbidden handler return types", () => {
     const repoRoot = createFixture();
     writeExampleSource(
