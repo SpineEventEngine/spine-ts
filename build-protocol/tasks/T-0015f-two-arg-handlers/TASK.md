@@ -13,8 +13,8 @@ and closed during T-0015a setup.
 Authoring sub-agent: `019f3eb0-36e2-7171-8174-10b578c692ec`; completed and closed
 Reviewer status: all required lanes clean after two rounds plus focused style/log recheck
 Implementation commit: `54c9f1e`
-Final branch HEAD: `54c9f1e`
-Integrated to main: Pending
+Final branch HEAD: `ef95145`
+Integrated to main: `ef95145`
 
 ## Objective
 
