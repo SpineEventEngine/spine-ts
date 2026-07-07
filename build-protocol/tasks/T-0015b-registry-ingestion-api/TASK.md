@@ -1,6 +1,6 @@
 # T-0015b: Framework Registry Ingestion API
 
-Status: complete
+Status: integrated to main
 Start: `2026-07-07 19:57 WEST`
 End: `2026-07-07 20:25 WEST`
 Baseline commit: `0d0f0eb`
@@ -12,8 +12,8 @@ Requirements splitter: `019f3dce-6067-7190-919d-cf6a62eebfa7`; completed and clo
 Authoring sub-agent: `019f3df6-7af3-7180-89e9-7db33a739884`; completed and closed.
 Reviewer sub-agents: all required review lanes completed clean and closed.
 Implementation commit: `8f8efcd`
-Final branch HEAD: Pending final log commit
-Integrated to main: Pending
+Final branch HEAD: `37f7b16`
+Integrated to main: `2026-07-07 20:34 WEST`
 
 ## Objective
 
@@ -101,6 +101,8 @@ T-0015a accepted `D-0059` and documented the logical registry shape:
   `typecheck:build`, `docs:check`, `lint`, `format:check`, and
   `git diff --check`; all commands passed. `docs:check` still reports the known
   invalid-origin TypeDoc source-link warning only.
+- `2026-07-07 20:34 WEST`: Fast-forward merged
+  `task/T-0015b-registry-ingestion-api` into `main` at commit `37f7b16`.
 
 ## Verification Plan
 
