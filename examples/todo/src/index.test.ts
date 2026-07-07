@@ -30,10 +30,15 @@ import {
 } from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
 import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
 import { BoundedContextFixture } from "@spine-ts/testing";
-import { existsSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import ts from "typescript";
 import { beforeAll, describe, expect, it } from "vitest";
 
+import { analyzeBuildHandlers } from "../../../packages/server/src/handler/build-time-handler-analyzer.js";
+import { GeneratedRegistryWriter } from "../../../packages/server/src/handler/generated-registry-writer.js";
 import {
   CompleteTaskSchema,
   CreateTaskSchema,
@@ -53,6 +58,38 @@ describe("@spine-ts/example-todo", () => {
   beforeAll(async () => {
     assertBuiltExample();
     ({ createTodoContext, startTodoServer } = await import("../dist/src/index.js"));
+  });
+
+  it("recovers registry loading after an initial generated-registry failure", async () => {
+    const registry = fileURLToPath(
+      new URL("../dist/generated/handler/generated-handler-registry.js", import.meta.url),
+    );
+    const hiddenRegistry = `${registry}.missing-for-test`;
+
+    renameSync(registry, hiddenRegistry);
+    try {
+      await expect(createTodoContext()).rejects.toThrow();
+    } finally {
+      renameSync(hiddenRegistry, registry);
+    }
+
+    await expect(createTodoContext()).resolves.toBeDefined();
+  });
+
+  it("loads generated handler metadata into the bounded context", async () => {
+    const context = await createTodoContext();
+
+    expect([...context.commandBus().acceptedCommandTypes()].sort()).toEqual(
+      [
+        deriveTypeUrl(CreateTaskSchema),
+        deriveTypeUrl(RenameTaskSchema),
+        deriveTypeUrl(CompleteTaskSchema),
+        deriveTypeUrl(ReopenTaskSchema),
+      ].sort(),
+    );
+    expect(
+      context.registeredRepositories().map((repository) => repository.entityType.name),
+    ).toEqual(["TaskAggregate", "TaskListProjection"]);
   });
 
   it("runs as a standalone gRPC-compatible server for command, query, and subscription clients", async () => {
@@ -103,7 +140,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("creates one task through command handling and exposes it in the task list", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -133,7 +170,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("reads the task list by projection ID", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -151,7 +188,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("reads all task-list rows after creating two tasks", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -172,7 +209,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("subscribes to task-list updates and receives projection-driven changes", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -232,7 +269,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("renames one task through command handling and exposes the new title", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -254,7 +291,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("rejects invalid rename payloads with validation details without changing the task list", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -284,7 +321,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("completes one task through command handling and closes the list row", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -304,7 +341,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("refuses completing an already completed task without changing the task list", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -334,7 +371,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("refuses reopening an open task without changing the task list", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -356,7 +393,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("cancels task-list subscriptions and makes later reads inert", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -380,7 +417,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("counts duplicate same-id projection rows", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -441,7 +478,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("reopens one task through command handling and opens the list row", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -471,7 +508,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("preserves visible task state through command and projection updates", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -504,12 +541,122 @@ describe("@spine-ts/example-todo", () => {
 });
 
 function assertBuiltExample(): void {
-  const source = fileURLToPath(new URL("./index.ts", import.meta.url));
   const output = fileURLToPath(new URL("../dist/src/index.js", import.meta.url));
+  const registry = fileURLToPath(
+    new URL("../dist/generated/handler/generated-handler-registry.js", import.meta.url),
+  );
 
-  if (!existsSync(output) || statSync(output).mtimeMs < statSync(source).mtimeMs) {
+  if (!existsSync(output) || !existsSync(registry)) {
     throw new Error("Run `pnpm typecheck:build` before running the to-do example tests.");
   }
+
+  assertGeneratedRegistryFresh();
+  assertCompiledExampleFresh();
+}
+
+function assertGeneratedRegistryFresh(): void {
+  const project = fileURLToPath(new URL("../tsconfig.json", import.meta.url));
+  const registrySource = fileURLToPath(
+    new URL("../generated/handler/generated-handler-registry.ts", import.meta.url),
+  );
+  const parsed = parseTodoTsConfig(project);
+  const program = ts.createProgram({
+    rootNames: parsed.fileNames,
+    options: parsed.options,
+    projectReferences: parsed.projectReferences,
+  });
+  const analysis = analyzeBuildHandlers(program);
+
+  if (analysis.diagnostics.length > 0) {
+    throw new Error("Generated handler registry analysis failed.");
+  }
+
+  const expected = new GeneratedRegistryWriter().render(analysis, { outputFile: registrySource });
+  const actual = readFileSync(registrySource, "utf8");
+
+  if (actual !== expected) {
+    throw new Error("Run `pnpm typecheck:build`; the to-do generated handler registry is stale.");
+  }
+}
+
+function assertCompiledExampleFresh(): void {
+  const project = fileURLToPath(new URL("../tsconfig.json", import.meta.url));
+  const tempRoot = mkdtempSync(join(tmpdir(), "spine-todo-emit-"));
+
+  try {
+    const parsed = parseTodoTsConfig(project, {
+      outDir: tempRoot,
+      tsBuildInfoFile: join(tempRoot, "tsconfig.tsbuildinfo"),
+    });
+    const program = ts.createProgram({
+      rootNames: parsed.fileNames,
+      options: parsed.options,
+      projectReferences: parsed.projectReferences,
+    });
+    const emit = program.emit();
+    const diagnostics = [...ts.getPreEmitDiagnostics(program), ...emit.diagnostics];
+
+    if (diagnostics.length > 0 || emit.emitSkipped) {
+      throw new Error(formatDiagnostics(diagnostics));
+    }
+
+    assertFileContentEqual(
+      join(tempRoot, "src/index.js"),
+      fileURLToPath(new URL("../dist/src/index.js", import.meta.url)),
+      "compiled to-do example entry point",
+    );
+    assertFileContentEqual(
+      join(tempRoot, "generated/handler/generated-handler-registry.js"),
+      fileURLToPath(
+        new URL("../dist/generated/handler/generated-handler-registry.js", import.meta.url),
+      ),
+      "compiled to-do generated handler registry",
+    );
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true });
+  }
+}
+
+function assertFileContentEqual(expectedFile: string, actualFile: string, label: string): void {
+  const expected = readFileSync(expectedFile, "utf8");
+  const actual = readFileSync(actualFile, "utf8");
+
+  if (actual !== expected) {
+    throw new Error(`Run \`pnpm typecheck:build\`; the ${label} is stale.`);
+  }
+}
+
+function parseTodoTsConfig(
+  project: string,
+  overrides: ts.CompilerOptions = {},
+): ts.ParsedCommandLine {
+  const config = ts.readConfigFile(project, (path) => ts.sys.readFile(path));
+
+  if (config.error !== undefined) {
+    throw new Error(formatDiagnostics([config.error]));
+  }
+
+  const parsed = ts.parseJsonConfigFileContent(
+    config.config,
+    ts.sys,
+    fileURLToPath(new URL("..", import.meta.url)),
+    overrides,
+    project,
+  );
+
+  if (parsed.errors.length > 0) {
+    throw new Error(formatDiagnostics(parsed.errors));
+  }
+
+  return parsed;
+}
+
+function formatDiagnostics(diagnostics: readonly ts.Diagnostic[]): string {
+  return ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+    getCanonicalFileName: (fileName) => fileName,
+    getCurrentDirectory: () => fileURLToPath(new URL("../../..", import.meta.url)),
+    getNewLine: () => "\n",
+  });
 }
 
 function createTaskCommand(commandId: string, taskId: string, title: string) {

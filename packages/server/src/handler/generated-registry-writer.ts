@@ -92,6 +92,8 @@ export interface RegistryWriteOptions extends RegistryRenderOptions {
   readonly repoRoot: string;
   /** Explicit generated directory that must own the output file. */
   readonly generatedRoot: string;
+  /** Published output path used for relative imports when writing to staging. */
+  readonly publishedOutputFile?: string;
 }
 
 /** Build-time writer for version-1 generated handler registry source. */
@@ -119,7 +121,10 @@ export class GeneratedRegistryWriter {
   write(analysis: BuildHandlerAnalysis, options: RegistryWriteOptions): string {
     assertNoDiagnostics(analysis);
     assertWriteOptions(options);
-    const source = this.render(analysis, options);
+    const source = this.render(analysis, {
+      ...options,
+      outputFile: options.publishedOutputFile ?? options.outputFile,
+    });
     const repoRoot = resolve(options.repoRoot);
     const outputDir = dirname(resolve(options.outputFile));
 
@@ -457,6 +462,9 @@ function assertWriteOptions(options: RegistryWriteOptions): void {
   assertWithin(repoRoot, generatedRoot, "Generated root");
   assertWithin(repoRoot, outputFile, "Generated output");
   assertWithin(generatedRoot, outputFile, "Generated output");
+  if (options.publishedOutputFile !== undefined) {
+    assertWithin(repoRoot, resolve(options.publishedOutputFile), "Published generated output");
+  }
   assertNoSymlinkPath(repoRoot, generatedRoot, "Generated root");
   assertNoSymlinkPath(repoRoot, dirname(outputFile), "Generated output directory");
 }

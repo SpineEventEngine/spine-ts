@@ -13,7 +13,11 @@ pnpm typecheck:build
 ```
 
 Generated Protobuf-ES output lives under `examples/todo/generated/` and remains
-ignored by Git. The build writes runnable JavaScript under `examples/todo/dist/`.
+ignored by Git. The same generation step writes the framework-owned handler
+registry to `examples/todo/generated/handler/generated-handler-registry.ts`.
+The TypeScript build compiles runnable JavaScript under `examples/todo/dist/`,
+including the runtime registry module at
+`examples/todo/dist/generated/handler/generated-handler-registry.js`.
 
 ## Start The Server
 
@@ -40,8 +44,11 @@ await server.close();
 ```
 
 The server registers the existing Spine `CommandService`, `QueryService`, and
-`SubscriptionService` adapters over `createTodoContext()`. There is no separate
-process supervisor or framework facade in this example.
+`SubscriptionService` adapters over `await createTodoContext()`. Context
+creation loads the compiled generated handler registry with
+`GeneratedRegistryDiscovery`; application handlers stay as bare `@Assign` and
+`@Subscribe` methods and do not list handler schemas manually. There is no
+separate process supervisor or framework facade in this example.
 
 ## Post Commands
 
@@ -179,7 +186,9 @@ pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests
 The focused suite covers in-process black-box behavior and a real
 gRPC-compatible smoke test that starts the standalone server, posts a
 `CreateTask` command, reads `TaskList` through `QueryService`, and receives a
-`SubscriptionService` update.
+`SubscriptionService` update. It also checks that the compiled generated
+handler registry is present and that the bounded context accepts commands
+through generated metadata.
 
 Some sandboxes block loopback listeners with `EPERM`; rerun the focused test
 with the required local-network approval if that happens.

@@ -5,6 +5,8 @@ coverage/
 docs/api/reference/
 packages/*/generated/
 examples/*/generated/
+packages/*/.generated-*/generated/
+examples/*/.generated-*/generated/
 .pnpm-store/
 .eslintcache
 .turbo/

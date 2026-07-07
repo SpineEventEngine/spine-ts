@@ -1,6 +1,7 @@
 import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
-import { pathToFileURL } from "node:url";
+import { dirname } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { clone, create } from "@bufbuild/protobuf";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
@@ -9,18 +10,18 @@ import {
   Assign,
   BoundedContext,
   CommandRefusalError,
+  type DescriptorMessageSchema,
+  type EntityClass,
+  type EntityHandlersMetadata,
+  GeneratedRegistryDiscovery,
+  type HandlerMetadataRegistry,
   Projection,
   Repository,
   SpineServices,
   Subscribe,
-  defineEntityHandlers,
 } from "@spine-ts/server";
 
 import {
-  CompleteTaskSchema,
-  CreateTaskSchema,
-  RenameTaskSchema,
-  ReopenTaskSchema,
   type CompleteTask,
   type CreateTask,
   type RenameTask,
@@ -212,10 +213,12 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
 }
 
 /** Assemble the in-memory single-tenant Tasks bounded context. */
-export function createTodoContext(): BoundedContext {
+export async function createTodoContext(): Promise<BoundedContext> {
+  const handlerMetadata = await loadTodoHandlerMetadata();
+
   return BoundedContext.singleTenant("Tasks")
-    .add(createTaskRepository())
-    .add(createTaskListRepository())
+    .add(createTaskRepository(handlerMetadata))
+    .add(createTaskListRepository(handlerMetadata))
     .build();
 }
 
@@ -243,7 +246,7 @@ export interface TodoServer {
 export async function startTodoServer(options: TodoServerOptions = {}): Promise<TodoServer> {
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 8080;
-  const services = new SpineServices({ contexts: [createTodoContext()] });
+  const services = new SpineServices({ contexts: [await createTodoContext()] });
   const sessions = new Set<http2.ServerHttp2Session>();
   const server = http2.createServer(
     connectNodeAdapter({
@@ -268,31 +271,71 @@ export async function startTodoServer(options: TodoServerOptions = {}): Promise<
   };
 }
 
-function createTaskRepository(): Repository<typeof TaskAggregate> {
+function createTaskRepository(
+  handlerMetadata: HandlerMetadataRegistry,
+): Repository<typeof TaskAggregate> {
   return new Repository({
     entityType: TaskAggregate,
     schema: TaskSchema,
-    handlers: defineEntityHandlers(TaskAggregate, TaskSchema, (builder) => [
-      builder.assign(CreateTaskSchema, "createTask"),
-      builder.assign(RenameTaskSchema, "renameTask"),
-      builder.assign(CompleteTaskSchema, "completeTask"),
-      builder.assign(ReopenTaskSchema, "reopenTask"),
-    ]),
+    handlers: generatedHandlersFor(handlerMetadata, TaskAggregate, TaskSchema),
     events: [TaskCreatedSchema, TaskRenamedSchema, TaskCompletedSchema, TaskReopenedSchema],
   });
 }
 
-function createTaskListRepository(): Repository<typeof TaskListProjection> {
+function createTaskListRepository(
+  handlerMetadata: HandlerMetadataRegistry,
+): Repository<typeof TaskListProjection> {
   return new Repository({
     entityType: TaskListProjection,
     schema: TaskListSchema,
-    handlers: defineEntityHandlers(TaskListProjection, TaskListSchema, (builder) => [
-      builder.subscribe(TaskCreatedSchema, "onTaskCreated"),
-      builder.subscribe(TaskRenamedSchema, "onTaskRenamed"),
-      builder.subscribe(TaskCompletedSchema, "onTaskCompleted"),
-      builder.subscribe(TaskReopenedSchema, "onTaskReopened"),
-    ]),
+    handlers: generatedHandlersFor(handlerMetadata, TaskListProjection, TaskListSchema),
   });
+}
+
+let loadedTodoHandlerMetadata: Promise<HandlerMetadataRegistry> | undefined;
+let todoHandlerMetadataLoadAttempt = 0;
+
+function loadTodoHandlerMetadata(): Promise<HandlerMetadataRegistry> {
+  const discoveryOptions =
+    todoHandlerMetadataLoadAttempt === 0
+      ? {
+          modules: [GeneratedRegistryDiscovery.conventionalModulePath(compiledPackageRoot())],
+        }
+      : {
+          modules: [GeneratedRegistryDiscovery.conventionalModulePath(compiledPackageRoot())],
+          cacheBust: `retry-${todoHandlerMetadataLoadAttempt.toString()}`,
+        };
+
+  loadedTodoHandlerMetadata ??= new GeneratedRegistryDiscovery()
+    .register(discoveryOptions)
+    .catch((error: unknown) => {
+      loadedTodoHandlerMetadata = undefined;
+      todoHandlerMetadataLoadAttempt += 1;
+      throw error;
+    });
+
+  return loadedTodoHandlerMetadata;
+}
+
+function compiledPackageRoot(): string {
+  return dirname(dirname(fileURLToPath(import.meta.url)));
+}
+
+function generatedHandlersFor<Instance extends object, StateSchema extends DescriptorMessageSchema>(
+  registry: HandlerMetadataRegistry,
+  entityType: EntityClass<Instance>,
+  stateSchema: StateSchema,
+): EntityHandlersMetadata<Instance, StateSchema> {
+  const matches = registry.findEntityHandlersByState(stateSchema.typeName);
+  const metadata = matches.find((candidate) => candidate.entityType === entityType);
+
+  if (metadata === undefined) {
+    const entityName = "name" in entityType ? String(entityType.name) : "entity";
+
+    throw new Error(`Generated handler registry is missing metadata for ${entityName}.`);
+  }
+
+  return metadata as EntityHandlersMetadata<Instance, StateSchema>;
 }
 
 function taskId(id: TaskId | undefined): TaskId {

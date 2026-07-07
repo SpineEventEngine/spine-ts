@@ -39,10 +39,11 @@ real gRPC-compatible runtime.
 deterministic in-memory adapter for tests/development. Built bounded contexts
 can now execute aggregate command assignees that update state in
 framework-owned transactions and return generated domain events, then dispatch
-stored aggregate events to projection subscribers that update `Stand`; broader
-entity runtime dispatch, transport endpoint execution, durable production
-storage, broader server lifecycle, and the to-do application remain later
-slices.
+stored aggregate events to projection subscribers that update `Stand`. The
+runnable `examples/todo` package uses this path with bare decorators and
+generated handler registry loading; broader entity runtime dispatch, transport
+endpoint execution, durable production storage, and broader server lifecycle
+remain later slices.
 
 ## What Exists Now
 
@@ -64,9 +65,10 @@ slices.
 - A core validation facade that validates single Protobuf messages through
   `@spine-event-engine/validation-ts` while returning repo-local Spine
   `ValidationError` and `ConstraintViolation` data.
-- Core `packAny()`, `unpackAny()`, `packCommand()`, and `packEvent()` helpers
-  for Spine-aware payload packing and generated command/event envelope
-  construction.
+- Core `packAny()`, `unpackAny()`, and `packCommand()` helpers for
+  Spine-aware payload packing and generated command envelope construction, plus
+  low-level `packEvent()` support for framework/test code that already owns
+  event IDs and contexts.
 - Server entity metadata helpers in `@spine-ts/server` that normalize entity
   kind and visibility, expose first-field routing hints, surface `(column)`
   fields for projections/process managers, surface `(set_once)` fields for all
@@ -118,8 +120,14 @@ slices.
   command reaction, event subscription, event reaction, and event application.
 - Server standard method decorators in `@spine-ts/server` that collect
   class-owned handler metadata. Bare decorators are the ordinary application
-  syntax; explicit schema decorator overloads remain legacy/framework
-  compatibility until generated registry tooling owns schema inference.
+  syntax; generated registry tooling owns schema inference for compiled
+  application packages. Explicit schema decorator overloads remain
+  legacy/framework compatibility only.
+- Generated handler registry tooling that analyzes bare-decorated application
+  source after Protobuf-ES generation, writes ignored
+  `generated/handler/generated-handler-registry.ts` artifacts, and loads the
+  compiled registry module during context assembly with
+  `GeneratedRegistryDiscovery`.
 - A caller-owned server handler metadata registry that registers explicit
   entity handler metadata, rejects duplicate command assignments and duplicate
   legacy event applications for the same entity/event pair, and exposes frozen
@@ -158,7 +166,9 @@ slices.
   records by context name, tenant mode, tenant ID, and `RecordSpec` instance,
   keep tenant slices separate, clone stored values, return independently
   closeable handles, and are not durable across process restarts.
-- A placeholder to-do example workspace.
+- A runnable `examples/todo` package with generated Protobuf output, generated
+  handler registry loading, bare `@Assign`/`@Subscribe` handlers, in-memory
+  storage, and Connect/Node command, query, and subscription service routes.
 
 ## What Is Deferred
 
@@ -172,7 +182,7 @@ slices.
   construction, import buses, richer gRPC service execution, tenant index
   persistence, ZeroMQ endpoint topology, broker process supervision, retry
   workers, durable delivery storage, transport-backed service execution,
-  durable production storage, and to-do domain runtime behavior.
+  durable production storage, and broader production runtime hardening.
 - Built bounded contexts can invoke aggregate command assignees that update
   state in framework-owned transactions and return generated domain events, then
   deliver stored aggregate-produced events to projection event subscribers that
@@ -575,22 +585,32 @@ immutable transport routing contracts for later integrated service hosting,
 bounded-context runtime wiring, and transport/service assembly:
 
 ```ts
+import { create } from "@bufbuild/protobuf";
 import {
   Aggregate,
+  Assign,
   BoundedContext,
   CommandRegistrationReadiness,
   EventRegistrationReadiness,
-  HandlerMetadataRegistry,
+  GeneratedRegistryDiscovery,
   Repository,
+  Subscribe,
   createServerRuntimeRoutingPlan,
-  defineEntityHandlers,
 } from "@spine-ts/server";
-import { CreateTaskSchema } from "./generated/task_commands_pb.js";
-import { TaskCreatedSchema, TaskStateSchema } from "./generated/tasks_pb.js";
+import type { CreateTask } from "./generated/task_commands_pb.js";
+import { TaskCreatedSchema, TaskStateSchema, type TaskCreated } from "./generated/tasks_pb.js";
 
 class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, bigint> {
-  create(command: unknown): void {}
-  onCreated(event: unknown): void {}
+  @Assign
+  create(command: CreateTask): TaskCreated {
+    void command;
+    return create(TaskCreatedSchema);
+  }
+
+  @Subscribe
+  onCreated(event: TaskCreated): void {
+    void event;
+  }
 }
 
 const repository = new Repository({
@@ -598,11 +618,9 @@ const repository = new Repository({
   schema: TaskStateSchema,
 });
 const tasks = BoundedContext.singleTenant("Tasks").add(repository).build();
-const handlers = defineEntityHandlers(TaskAggregate, TaskStateSchema, (builder) => [
-  builder.assign(CreateTaskSchema, "create"),
-  builder.subscribe(TaskCreatedSchema, "onCreated"),
-]);
-const registry = new HandlerMetadataRegistry([handlers]);
+const registry = await new GeneratedRegistryDiscovery().register({
+  modules: [GeneratedRegistryDiscovery.conventionalModulePath(appRoot)],
+});
 
 const commandReadiness = CommandRegistrationReadiness.fromRegistry(registry);
 const eventReadiness = EventRegistrationReadiness.fromRegistry(registry);
@@ -729,11 +747,11 @@ unknown fields for stable helper output, but this slice does not claim fully
 canonical map ordering because Protobuf-ES 2.12.1 does not provide a
 deterministic map-order option.
 
-Command and event helpers wrap the same packing behavior in generated Spine
-envelopes:
+Client code can use `packCommand()` when it needs to post a generated command
+message through the raw Spine `CommandService` envelope:
 
 ```ts
-import { packCommand, packEvent } from "@spine-ts/core";
+import { packCommand } from "@spine-ts/core";
 
 const command = packCommand({
   id: commandId,
@@ -741,22 +759,20 @@ const command = packCommand({
   schema: CreateTaskSchema,
   message: payload,
 });
-
-const event = packEvent({
-  id: eventId,
-  context: eventContext,
-  schema: TaskCreatedSchema,
-  message: taskCreated,
-});
 ```
 
-The caller supplies generated IDs and contexts. The core helpers do not create
-UUIDs, timestamps, actor/tenant contexts, producer IDs, versions, origins,
-system properties, bus deliveries, storage records, or transport metadata.
-Validation errors are structured through `ValidationException` and do not expose
-packed bytes or payload contents. `unpackAny()` returns `undefined` for type URL
-mismatches or malformed payload bytes. Command and event envelopes snapshot the
-supplied generated IDs and contexts before returning.
+The caller supplies the generated command ID and context. The helper does not
+create UUIDs, timestamps, actor/tenant contexts, system properties, bus
+deliveries, storage records, or transport metadata. Validation errors are
+structured through `ValidationException` and do not expose packed bytes or
+payload contents. `unpackAny()` returns `undefined` for type URL mismatches or
+malformed payload bytes.
+
+`packEvent()` is available only for low-level framework and test-fixture code
+that already owns a generated event ID and context. Ordinary application
+handlers return generated domain event messages such as `TaskCreated`; the
+bounded-context runtime creates framework `Event` envelopes, event IDs, storage
+records, and fan-out metadata.
 
 ## Entity Metadata
 
@@ -826,54 +842,11 @@ public state setters, invoke handlers, write repositories or storage, emit
 lifecycle events, route IDs, query read models, start buses/transports, or use
 global runtime state.
 
-## Handler Metadata
+## Handler Discovery
 
-Use explicit handler metadata when an entity class needs to declare which
-methods later runtime slices should inspect. This remains the canonical
-metadata contract and the fallback for codebases that avoid decorators:
-
-```ts
-import { create } from "@bufbuild/protobuf";
-import { defineEntityHandlers } from "@spine-ts/server";
-import { CreateTaskSchema, type CreateTask } from "./generated/task_commands_pb.js";
-import { TaskCreatedSchema, TaskStateSchema, type TaskCreated } from "./generated/tasks_pb.js";
-
-class TaskAggregate {
-  create(command: CreateTask): TaskCreated {
-    void command;
-    return create(TaskCreatedSchema);
-  }
-}
-
-class TaskProjection {
-  onCreated(event: TaskCreated): void {
-    void event;
-  }
-}
-
-const taskHandlers = defineEntityHandlers(TaskAggregate, TaskStateSchema, ({ assign }) => [
-  assign(CreateTaskSchema, "create"),
-]);
-
-taskHandlers.entity.fullTypeName;
-taskHandlers.handlers.map((handler) => handler.kind);
-taskHandlers.commandAssignments[0]?.methodName; // "create"
-```
-
-`defineEntityHandlers()` calls `describeEntityMetadata()` for the state schema,
-checks that named methods are own prototype data methods declared with normal
-class method syntax, and returns frozen metadata arrays preserving declaration
-order. Accessors, `constructor`, inherited methods, and instance fields are
-rejected without invoking user code. The builder exposes `assign()`,
-`command()`, `subscribe()`, and `react()` for ordinary application handlers.
-`apply()` remains only for legacy/framework compatibility paths; new aggregate
-code should not define appliers.
-
-Use the standard decorators when TypeScript 5+ decorator syntax fits your
-project. Ordinary application code uses bare decorators. Generated registry
-tooling will own schema discovery from explicit handler parameter and return
-types; until then, explicit `defineEntityHandlers()` metadata is the framework
-bridge:
+Ordinary application code uses bare decorators on public instance methods.
+Command assignees return generated domain event messages; subscribers return
+`void`:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
@@ -897,26 +870,39 @@ class TaskProjection {
 }
 ```
 
-`@Assign`, `@Command`, `@Subscribe`, and `@React` record standard per-class
-metadata from public instance methods only. Application code should not call
-handler materializers; handler discovery/materialization belongs to generated
-framework registry tooling. Decorators do not instantiate the entity, invoke
-methods, unpack payloads, register in a global handler registry, validate
-transactions, write storage, start buses, or start transport.
-
-Use `HandlerMetadataRegistry` when application assembly or tests need a
-caller-owned lookup view over one or more `EntityHandlersMetadata` objects:
+After Protobuf generation, the generated registry tooling analyzes those
+decorated classes, writes an ignored
+`generated/handler/generated-handler-registry.ts` module, and the compiled
+application loads it during context assembly:
 
 ```ts
-import { HandlerMetadataRegistry, defineEntityHandlers } from "@spine-ts/server";
+import { GeneratedRegistryDiscovery } from "@spine-ts/server";
+import { CreateTaskSchema } from "./generated/task_commands_pb.js";
+import { TaskCreatedSchema, TaskStateSchema } from "./generated/tasks_pb.js";
 
-const registry = new HandlerMetadataRegistry([taskHandlers]);
+const registry = await new GeneratedRegistryDiscovery().register({
+  modules: [GeneratedRegistryDiscovery.conventionalModulePath(appRoot)],
+});
 
 registry.findEntityHandlersByState(TaskStateSchema.typeName);
-registry.findHandlersByKind("event-subscription");
-registry.findHandlersByMessageFullTypeName(TaskCreatedSchema.typeName);
 registry.findCommandAssignment(CreateTaskSchema.typeName)?.handler.methodName; // "create"
 registry.findHandlersByKind("event-subscription")[0]?.handler.methodName; // "onCreated"
+```
+
+`@Assign`, `@Command`, `@Subscribe`, and `@React` record standard per-class
+metadata from public instance methods only. Application code should not call
+handler materializers or list handler schemas manually; discovery and
+materialization belong to generated framework registry tooling. Decorators do
+not instantiate the entity, invoke methods, unpack payloads, register in a
+global handler registry, validate transactions, write storage, start buses, or
+start transport.
+
+`HandlerMetadataRegistry` is the caller-owned lookup view produced by generated
+registry discovery and also used by low-level tests:
+
+```ts
+registry.findHandlersByKind("event-subscription");
+registry.findHandlersByMessageFullTypeName(TaskCreatedSchema.typeName);
 ```
 
 Registry listing and lookup methods return frozen arrays in registration and
@@ -929,6 +915,13 @@ metadata-only and caller-owned: it does not instantiate entities, invoke
 handlers, unpack `Any` payloads, log payloads, mutate a global registry,
 implement an import bus, validate transactions, assemble repositories, write
 storage, or start transport.
+
+`defineEntityHandlers()` remains available for framework tests, generated
+registry ingestion, and legacy code that cannot use decorators. It is not the
+recommended end-user workflow. The helper checks that named methods are own
+prototype data methods declared with normal class method syntax, returns frozen
+metadata arrays, and rejects accessors, `constructor`, inherited methods, and
+instance fields without invoking user code.
 
 ## Storage
 
