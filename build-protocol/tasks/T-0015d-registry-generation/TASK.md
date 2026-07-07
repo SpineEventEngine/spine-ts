@@ -1,6 +1,6 @@
 # T-0015d: Generated Registry File Generation
 
-Status: final verification passed; awaiting commit and integration
+Status: implementation committed; awaiting integration
 Start: `2026-07-07 21:27 WEST`
 End: Pending
 Baseline commit: `6691f62`
@@ -11,8 +11,8 @@ Worktree:
 Requirements splitter: `019f3dce-6067-7190-919d-cf6a62eebfa7`; completed and closed during T-0015a setup.
 Authoring sub-agent: completed
 Reviewer status: final narrow review findings addressed; verification passed
-Implementation commit: Pending
-Final branch HEAD: Pending
+Implementation commit: `103f48b`
+Final branch HEAD: `103f48b`
 Integrated to main: Pending
 
 ## Objective
