@@ -121,8 +121,14 @@ Current slice exposes:
   first-parameter signal schema, explicit one- or two-argument arity, and
   emitted schemas inferred from explicit return types. Event reactors may
   declare no emitted schemas. Generated registry files live under ignored
-  `generated/` output and are not committed; automatic runtime discovery
-  remains deferred.
+  `generated/` output and are not committed.
+- `GeneratedRegistryDiscovery` for loading explicit generated registry
+  filesystem paths or clean `file:` URLs, or the conventional runtime file
+  location
+  `generated/handler/generated-handler-registry.js`, then ingesting those
+  registries into a caller-owned `HandlerMetadataRegistry`. Unsupported
+  non-`file:` URL schemes and `file:` URL query/hash aliases fail
+  deterministically before import.
 - `SingleProcessServerRuntime` for the first explicit server-owned lifecycle
   and async queue kernel with `start()`, `close()`, deterministic states, and
   post-intake work execution in a later microtask.
@@ -236,8 +242,14 @@ new generated `@Apply`/event-application records, checks generated arity and
 emitted-schema/schema-shape rules, and then routes records through
 `defineEntityHandlers()`. The internal build-time writer renders deterministic
 registry modules under ignored `generated/` output only when explicitly
-invoked. The current server package does not yet implement automatic registry
-discovery; that runtime anchor is intentionally deferred.
+invoked. `GeneratedRegistryDiscovery` is the matching runtime anchor for
+explicit file loading. It accepts caller-provided filesystem paths or clean
+`file:` URLs, offers helpers for the conventional runtime file location
+`generated/handler/generated-handler-registry.js`, rejects unsupported
+non-`file:` URL schemes and query/hash aliases deterministically, validates
+top-level module shape, reports stable import/export/module/ingestion failure
+codes, and registers discovered metadata through `HandlerRegistryIngestor`.
+Broad automatic scanning and global runtime loading remain out of scope.
 
 `HandlerMetadataRegistry` registers existing `EntityHandlersMetadata` objects
 and exposes frozen listing/lookup arrays by entity state full type name, handler

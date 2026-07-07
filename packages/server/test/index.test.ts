@@ -51,7 +51,10 @@ import {
   HandlerMetadataRegistry,
   HandlerRegistryIngestionError,
   HandlerRegistryIngestor,
+  GeneratedRegistryDiscovery,
+  GeneratedRegistryDiscoveryError,
   type GeneratedEntityHandlerGroup,
+  type RegistryDiscoveryErrorCode,
   defineEntityHandlers,
   type GeneratedHandlerParameterCount,
   type GeneratedHandlerRecordInput,
@@ -220,6 +223,8 @@ describe("@spine-ts/server", () => {
         "HandlerMetadataError",
         "HandlerMetadataRegistry",
         "HandlerMetadataRegistryError",
+        "GeneratedRegistryDiscovery",
+        "GeneratedRegistryDiscoveryError",
         "HandlerRegistryIngestionError",
         "HandlerRegistryIngestor",
         "Entity",
@@ -284,7 +289,11 @@ describe("@spine-ts/server", () => {
     expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
     expect(new StandStateTypeError("Unknown", "read")).toBeInstanceOf(StandStateTypeError);
     expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);
+    expect(new GeneratedRegistryDiscovery()).toBeInstanceOf(GeneratedRegistryDiscovery);
     expect(new HandlerRegistryIngestor()).toBeInstanceOf(HandlerRegistryIngestor);
+    expect(
+      new GeneratedRegistryDiscoveryError("MODULE_IMPORT_FAILED", "Nope", "file:///tmp/nope.js"),
+    ).toBeInstanceOf(GeneratedRegistryDiscoveryError);
     expect(
       new HandlerRegistryIngestionError("UNSUPPORTED_REGISTRY_VERSION", "Nope"),
     ).toBeInstanceOf(HandlerRegistryIngestionError);
@@ -293,6 +302,15 @@ describe("@spine-ts/server", () => {
       readonly entities: readonly object[];
     }>();
     expectTypeOf<GeneratedHandlerParameterCount>().toEqualTypeOf<1 | 2>();
+    expectTypeOf<RegistryDiscoveryErrorCode>().toEqualTypeOf<
+      | "MODULE_IMPORT_FAILED"
+      | "MISSING_REGISTRY_EXPORT"
+      | "INVALID_REGISTRY_MODULE"
+      | "REGISTRY_INGESTION_FAILED"
+      | "UNSUPPORTED_MODULE_SCHEME"
+      | "INVALID_MODULE_REF"
+      | "DUPLICATE_REGISTRY_MODULE"
+    >();
     expectTypeOf<RegistryIngestionErrorCode>().toEqualTypeOf<
       | "UNSUPPORTED_REGISTRY_VERSION"
       | "UNSUPPORTED_HANDLER_KIND"

@@ -114,8 +114,10 @@ The generated registry is the framework-owned bridge from decorated TypeScript
 classes to canonical handler metadata. T-0015a defined the contract, and
 T-0015c implements the build-time analyzer that produces structured analysis
 records. T-0015d adds the internal package-level registry writer that renders
-guarded generated source under ignored `generated/` output. Automatic runtime
-discovery and example migration remain later T-0015 subtasks.
+guarded generated source under ignored `generated/` output. T-0015e adds
+explicit runtime loading from filesystem paths or clean `file:` URLs. Broad
+automatic package scanning, global runtime loading, and example migration remain
+later T-0015 subtasks.
 
 Build-time tooling must read ordinary application source, find bare
 `@Assign`, `@Command`, `@React`, and `@Subscribe` methods, and infer schemas
@@ -178,9 +180,17 @@ as `packages/<package>/generated/`; they are regenerated build artifacts and
 must not be committed. T-0015d adds a deterministic build-time writer that
 renders the version-1 registry source from analyzer output and writes it only
 when explicitly invoked, after validating analyzer diagnostics, generated-root
-ownership, Git-ignore coverage, and symlink safety. The unresolved runtime
-anchor for locating and loading these generated registries remains a later
-discovery slice, not part of the analyzer or writer work.
+ownership, Git-ignore coverage, and symlink safety. T-0015e adds the first
+runtime discovery anchor: framework code may load one or more explicit
+filesystem paths or clean `file:` URLs, or build the conventional runtime file
+location `generated/handler/generated-handler-registry.js` from a package or
+app root. Discovery does not scan package trees, load registries globally, or
+perform broad automatic runtime discovery; those behaviors remain out of scope
+for this slice. Non-`file:` URL schemes and `file:` URLs with query or hash
+aliases fail deterministically before import. Discovery validates the top-level
+module shape, reports deterministic import/export/module errors, and ingests
+the loaded registries through `HandlerRegistryIngestor` into a caller-owned
+`HandlerMetadataRegistry`.
 
 ## Command Target ID And Default Routing
 

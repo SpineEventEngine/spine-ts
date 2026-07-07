@@ -73,7 +73,16 @@ directories. T-0015c implements the build-time analyzer that extracts
 structured handler records. T-0015d adds the internal writer that turns those
 records into deterministic version-1 TypeScript source and writes files only
 when explicitly invoked into a caller-configured generated root that stays
-under Git ignore. Runtime discovery/loading remains deferred.
+under Git ignore. T-0015e adds `GeneratedRegistryDiscovery` as the small
+runtime loader for these artifacts. Callers provide explicit filesystem paths
+or clean `file:` URLs, or derive the conventional runtime file location
+`generated/handler/generated-handler-registry.js` from a package or app root.
+Discovery rejects unsupported non-`file:` URL schemes and `file:` URL
+query/hash aliases deterministically before import. It does not scan package
+trees or perform global automatic loading. Discovery validates the loaded
+module shape, reports stable import/export and ingestion failure codes, and
+registers the discovered metadata through `HandlerRegistryIngestor` into a
+caller-owned `HandlerMetadataRegistry`.
 
 ## Handler Decorators
 

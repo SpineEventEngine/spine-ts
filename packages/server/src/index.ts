@@ -193,6 +193,13 @@ export {
 } from "./handler/handler-decorators.js";
 
 export {
+  GeneratedRegistryDiscovery,
+  GeneratedRegistryDiscoveryError,
+  type GeneratedRegistryDiscoveryOptions,
+  type RegistryDiscoveryErrorCode,
+} from "./handler/generated-registry-discovery.js";
+
+export {
   type GeneratedEntityHandlerGroup,
   type GeneratedEntityHandlers,
   type GeneratedHandlerKind,
