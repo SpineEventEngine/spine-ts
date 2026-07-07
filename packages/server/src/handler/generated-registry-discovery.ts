@@ -28,6 +28,8 @@ export interface GeneratedRegistryDiscoveryOptions {
   readonly modules: readonly (string | URL)[];
   /** Export name expected from each generated module. */
   readonly exportName?: string;
+  /** Optional retry token used to bypass Node's dynamic import cache for canonical modules. */
+  readonly cacheBust?: string;
 }
 
 /** Error thrown when generated registry discovery or loading fails. */
@@ -130,7 +132,7 @@ export class GeneratedRegistryDiscovery {
     assertNoDuplicateModules(moduleIds);
 
     for (const moduleId of moduleIds) {
-      const exports = await importGeneratedRegistryModule(moduleId);
+      const exports = await importGeneratedRegistryModule(cacheableModuleId(moduleId, options));
 
       loaded.push({
         moduleId,
@@ -158,6 +160,17 @@ async function importGeneratedRegistryModule(moduleId: string): Promise<unknown>
       error,
     );
   }
+}
+
+function cacheableModuleId(moduleId: string, options: GeneratedRegistryDiscoveryOptions): string {
+  if (options.cacheBust === undefined || options.cacheBust.length === 0) {
+    return moduleId;
+  }
+
+  const moduleUrl = new URL(moduleId);
+
+  moduleUrl.searchParams.set("spine-registry-cache", options.cacheBust);
+  return moduleUrl.href;
 }
 
 function readGeneratedRegistryExport(

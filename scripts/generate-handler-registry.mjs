@@ -1,5 +1,5 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 
@@ -10,14 +10,17 @@ const toolSources = [
   "packages/server/src/handler/generated-registry-writer.ts",
 ];
 
-export async function main(argv = process.argv.slice(2)) {
+async function main(argv = process.argv.slice(2)) {
   const options = parseArgs(argv);
   mkdirSync(tempParent, { recursive: true });
   const tempRoot = mkdtempSync(join(tempParent, "spine-handler-registry-"));
 
   try {
     const { analyzeBuildHandlers, GeneratedRegistryWriter } = await loadBuildTool(tempRoot);
-    const program = createProgram(options.project);
+    const program = createProgram(options.project, {
+      sourceGeneratedRoot: options.sourceGeneratedRoot,
+      stagedGeneratedRoot: options.generatedRoot,
+    });
     const analysis = analyzeBuildHandlers(program);
 
     if (analysis.diagnostics.length > 0) {
@@ -29,6 +32,7 @@ export async function main(argv = process.argv.slice(2)) {
       repoRoot: options.repoRoot,
       generatedRoot: options.generatedRoot,
       outputFile: options.outputFile,
+      publishedOutputFile: options.publishedOutputFile,
     });
     return 0;
   } catch (error) {
@@ -45,6 +49,8 @@ function parseArgs(argv) {
     project: undefined,
     generatedRoot: undefined,
     outputFile: undefined,
+    publishedOutputFile: undefined,
+    sourceGeneratedRoot: undefined,
   };
 
   for (let index = 0; index < argv.length; index += 2) {
@@ -65,8 +71,14 @@ function parseArgs(argv) {
       case "--generated-root":
         options.generatedRoot = resolve(value);
         break;
+      case "--source-generated-root":
+        options.sourceGeneratedRoot = resolve(value);
+        break;
       case "--out":
         options.outputFile = resolve(value);
+        break;
+      case "--published-out":
+        options.publishedOutputFile = resolve(value);
         break;
       default:
         throw new Error(`Unknown option: ${flag}`);
@@ -126,7 +138,7 @@ async function loadBuildTool(tempRoot) {
   };
 }
 
-function createProgram(project) {
+function createProgram(project, generatedRoots) {
   const config = ts.readConfigFile(project, ts.sys.readFile);
 
   if (config.error !== undefined) {
@@ -145,11 +157,54 @@ function createProgram(project) {
     throw new Error(formatConfigDiagnostics(parsed.errors));
   }
 
+  const host = createGeneratedRootRedirectHost(
+    parsed.options,
+    generatedRoots.sourceGeneratedRoot ?? generatedRoots.stagedGeneratedRoot,
+    generatedRoots.stagedGeneratedRoot,
+  );
+
   return ts.createProgram({
     rootNames: parsed.fileNames,
     options: parsed.options,
     projectReferences: parsed.projectReferences,
+    host,
   });
+}
+
+function createGeneratedRootRedirectHost(options, sourceGeneratedRoot, stagedGeneratedRoot) {
+  const host = ts.createCompilerHost(options);
+
+  if (sourceGeneratedRoot === stagedGeneratedRoot) {
+    return host;
+  }
+
+  const originalDirectoryExists = host.directoryExists?.bind(host);
+  const originalFileExists = host.fileExists.bind(host);
+  const originalReadFile = host.readFile.bind(host);
+  const originalRealpath = host.realpath?.bind(host);
+  const redirectPath = (path) =>
+    redirectGeneratedPath(path, sourceGeneratedRoot, stagedGeneratedRoot);
+
+  host.fileExists = (path) => originalFileExists(redirectPath(path));
+  host.readFile = (path) => originalReadFile(redirectPath(path));
+  if (originalDirectoryExists !== undefined) {
+    host.directoryExists = (path) => originalDirectoryExists(redirectPath(path));
+  }
+  if (originalRealpath !== undefined) {
+    host.realpath = (path) => originalRealpath(redirectPath(path));
+  }
+
+  return host;
+}
+
+function redirectGeneratedPath(path, sourceGeneratedRoot, stagedGeneratedRoot) {
+  const value = relative(sourceGeneratedRoot, resolve(path));
+
+  if (value === "" || value.startsWith("..") || isAbsolute(value)) {
+    return path;
+  }
+
+  return join(stagedGeneratedRoot, ...value.split(sep));
 }
 
 function printDiagnostics(diagnostics) {

@@ -111,8 +111,8 @@ function toTemplatePath(path) {
   return path.split(sep).join("/");
 }
 
-function writeStagedTemplate(target, stagedOutputRoot, stageRoot) {
-  const sourceTemplatePath = join(repoRoot, target.templatePath);
+function writeStagedTemplate(target, stagedOutputRoot, stageRoot, root) {
+  const sourceTemplatePath = join(root, target.templatePath);
   const stagedTemplatePath = join(stageRoot, "buf.gen.yaml");
   const sourceTemplate = readFileSync(sourceTemplatePath, "utf8");
   const outputPattern = new RegExp(`(^\\s*out:\\s*)${escapeRegExp(target.displayPath)}\\s*$`, "m");
@@ -293,23 +293,23 @@ export function publishGeneratedTargets(stagedTargets, root = repoRoot, options 
   }
 }
 
-function createTargetStage(target) {
-  const generatedRoot = join(repoRoot, target.displayPath);
+function createTargetStage(target, root = repoRoot) {
+  const generatedRoot = join(root, target.displayPath);
   const generatedParent = dirname(generatedRoot);
 
-  if (!assertGeneratedPathSafe(repoRoot, target.displayPath)) {
+  if (!assertGeneratedPathSafe(root, target.displayPath)) {
     return undefined;
   }
 
   mkdirSync(generatedParent, { recursive: true });
 
   const stageRoot = mkdtempSync(join(generatedParent, ".generated-"));
-  const stagedOutputRoot = join(stageRoot, "output");
+  const stagedOutputRoot = join(stageRoot, "generated");
 
   try {
     mkdirSync(stagedOutputRoot, { recursive: true });
 
-    const stagedTemplatePath = writeStagedTemplate(target, stagedOutputRoot, stageRoot);
+    const stagedTemplatePath = writeStagedTemplate(target, stagedOutputRoot, stageRoot, root);
 
     return {
       generatedRoot,
@@ -324,12 +324,14 @@ function createTargetStage(target) {
   }
 }
 
-function generateTargets() {
+export function generateTargets(options = {}) {
+  const root = options.repoRoot ?? repoRoot;
+  const run = options.runCommand ?? runCommand;
   const stagedTargets = [];
 
   try {
     for (const target of generatedTargets) {
-      const stagedTarget = createTargetStage(target);
+      const stagedTarget = createTargetStage(target, root);
 
       if (stagedTarget === undefined) {
         return 1;
@@ -337,19 +339,25 @@ function generateTargets() {
 
       stagedTargets.push(stagedTarget);
 
-      const generateStatus = runCommand(
-        `buf generate ${target.displayPath}`,
-        resolveBufExecutable(),
-        ["generate", "--template", stagedTarget.stagedTemplatePath],
-      );
+      const generateStatus = run(`buf generate ${target.displayPath}`, resolveBufExecutable(), [
+        "generate",
+        "--template",
+        stagedTarget.stagedTemplatePath,
+      ]);
 
       if (generateStatus !== 0) {
         return generateStatus;
       }
     }
 
-    publishGeneratedTargets(stagedTargets);
-    return generateTodoHandlerRegistry();
+    const registryStatus = generateTodoHandlerRegistry(stagedTargets, root, run);
+
+    if (registryStatus !== 0) {
+      return registryStatus;
+    }
+
+    publishGeneratedTargets(stagedTargets, root);
+    return 0;
   } catch (error) {
     console.error(
       `Failed to publish generated output: ${
@@ -364,15 +372,37 @@ function generateTargets() {
   }
 }
 
-function generateTodoHandlerRegistry() {
-  return runCommand("to-do handler registry generation", process.execPath, [
-    join(repoRoot, "scripts/generate-handler-registry.mjs"),
+function generateTodoHandlerRegistry(stagedTargets, root = repoRoot, run = runCommand) {
+  const stagedTodoTarget = stagedTargets.find(
+    (stagedTarget) => stagedTarget.target.displayPath === "examples/todo/generated",
+  );
+
+  if (stagedTodoTarget === undefined) {
+    console.error("Missing staged to-do generated target for handler registry generation.");
+    return 1;
+  }
+
+  const publishedOutputFile = join(
+    stagedTodoTarget.generatedRoot,
+    "handler/generated-handler-registry.ts",
+  );
+  const stagedOutputFile = join(
+    stagedTodoTarget.stagedOutputRoot,
+    "handler/generated-handler-registry.ts",
+  );
+
+  return run("to-do handler registry generation", process.execPath, [
+    join(root, "scripts/generate-handler-registry.mjs"),
     "--project",
-    join(repoRoot, "examples/todo/tsconfig.json"),
+    join(root, "examples/todo/tsconfig.json"),
     "--generated-root",
-    join(repoRoot, "examples/todo/generated"),
+    stagedTodoTarget.stagedOutputRoot,
+    "--source-generated-root",
+    stagedTodoTarget.generatedRoot,
     "--out",
-    join(repoRoot, "examples/todo/generated/handler/generated-handler-registry.ts"),
+    stagedOutputFile,
+    "--published-out",
+    publishedOutputFile,
   ]);
 }
 

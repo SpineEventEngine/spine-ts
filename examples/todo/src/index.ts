@@ -293,11 +293,26 @@ function createTaskListRepository(
 }
 
 let loadedTodoHandlerMetadata: Promise<HandlerMetadataRegistry> | undefined;
+let todoHandlerMetadataLoadAttempt = 0;
 
 function loadTodoHandlerMetadata(): Promise<HandlerMetadataRegistry> {
-  loadedTodoHandlerMetadata ??= new GeneratedRegistryDiscovery().register({
-    modules: [GeneratedRegistryDiscovery.conventionalModulePath(compiledPackageRoot())],
-  });
+  const discoveryOptions =
+    todoHandlerMetadataLoadAttempt === 0
+      ? {
+          modules: [GeneratedRegistryDiscovery.conventionalModulePath(compiledPackageRoot())],
+        }
+      : {
+          modules: [GeneratedRegistryDiscovery.conventionalModulePath(compiledPackageRoot())],
+          cacheBust: `retry-${todoHandlerMetadataLoadAttempt.toString()}`,
+        };
+
+  loadedTodoHandlerMetadata ??= new GeneratedRegistryDiscovery()
+    .register(discoveryOptions)
+    .catch((error: unknown) => {
+      loadedTodoHandlerMetadata = undefined;
+      todoHandlerMetadataLoadAttempt += 1;
+      throw error;
+    });
 
   return loadedTodoHandlerMetadata;
 }

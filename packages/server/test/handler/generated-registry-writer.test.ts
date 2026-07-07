@@ -259,6 +259,29 @@ describe("generated registry writer", () => {
     expect(readFileSync(outputFile, "utf8")).toContain("generatedHandlerRegistry");
   });
 
+  it("renders imports for the published registry path when writing to staging", () => {
+    const repoRoot = createRepoFixture(
+      "examples/todo/generated/\nexamples/todo/.generated-*/generated/\n",
+    );
+    const stagedGeneratedRoot = join(repoRoot, "examples/todo/.generated-test/generated");
+    const stagedOutputFile = join(stagedGeneratedRoot, "handler/generated-handler-registry.ts");
+    const publishedOutputFile = join(
+      repoRoot,
+      "examples/todo/generated/handler/generated-handler-registry.ts",
+    );
+
+    new GeneratedRegistryWriter().write(analysis(repoRoot), {
+      generatedRoot: stagedGeneratedRoot,
+      outputFile: stagedOutputFile,
+      publishedOutputFile,
+      repoRoot,
+    });
+
+    expect(readFileSync(stagedOutputFile, "utf8")).toContain(
+      'import { TaskAggregate } from "../../src/task-aggregate.js";',
+    );
+  });
+
   it("fails invalid render options before creating the output directory", () => {
     const repoRoot = createRepoFixture("packages/demo/generated/\n");
     const generatedRoot = join(repoRoot, "packages/demo/generated");

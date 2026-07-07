@@ -13,6 +13,33 @@ Required lanes:
 
 ## Review Rounds
 
+### 2026-07-08 review-fix
+
+Resolved follow-up review findings from implementation commit `ff93c98`.
+
+- Documentation P2: root README now describes the runnable `examples/todo`
+  package and `pnpm proto:generate` generated-registry workflow.
+- Maintainability P3: `scripts/generate-handler-registry.mjs` no longer
+  exports standalone `main()`.
+- Reliability P2: registry generation now writes into the same staged
+  generated-output lifecycle as protobuf output; publish occurs only after
+  handler registry generation succeeds.
+- Reliability P2: focused example tests now fail deterministically for stale
+  generated registry source or stale compiled example output.
+- Reliability P3: failed to-do registry metadata loads clear the cached
+  promise and retry with a discovery cache-bust token.
+
+Verification:
+
+- `corepack pnpm typecheck:build`
+- `corepack pnpm vitest run examples/todo/src/index.test.ts` with local
+  listener escalation
+- `corepack pnpm vitest run packages/server/test/handler/build-time-handler-analyzer.test.ts packages/server/test/handler/generated-registry-writer.test.ts packages/server/test/handler/generated-registry-discovery.test.ts scripts/proto-workflow.test.mjs`
+- `corepack pnpm docs:check`
+- `corepack pnpm lint`
+- `corepack pnpm format:check`
+- `git diff --check`
+
 ### 2026-07-08 00:38 WEST
 
 Manual two-axis review against baseline `81c325b`.

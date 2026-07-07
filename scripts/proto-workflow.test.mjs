@@ -10,7 +10,11 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { prepareGeneratedOutput, publishGeneratedTargets } from "./proto-workflow.mjs";
+import {
+  generateTargets,
+  prepareGeneratedOutput,
+  publishGeneratedTargets,
+} from "./proto-workflow.mjs";
 
 describe("proto-workflow", () => {
   it("refuses to prepare generated output through a symlinked ancestor", () => {
@@ -112,6 +116,60 @@ describe("proto-workflow", () => {
 
     expect(existsSync(generatedRoot)).toBe(true);
     expect(readFileSync(join(generatedRoot, "message.txt"), "utf8")).toBe("previous output\n");
+  });
+
+  it("does not publish staged protobuf output when handler registry generation fails", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "spine-proto-workflow-"));
+    const packageGenerated = join(repoRoot, "packages/proto/generated");
+    const todoGenerated = join(repoRoot, "examples/todo/generated");
+    const commands = [];
+
+    mkdirSync(packageGenerated, { recursive: true });
+    mkdirSync(todoGenerated, { recursive: true });
+    mkdirSync(join(repoRoot, "examples/todo"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "buf.gen.yaml"),
+      "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: packages/proto/generated\n",
+    );
+    writeFileSync(
+      join(repoRoot, "examples/todo/buf.gen.yaml"),
+      "version: v2\nplugins:\n  - local: protoc-gen-es\n    out: examples/todo/generated\n",
+    );
+    writeFileSync(join(packageGenerated, "message.txt"), "previous package output\n");
+    writeFileSync(join(todoGenerated, "message.txt"), "previous todo output\n");
+
+    const status = generateTargets({
+      repoRoot,
+      runCommand(label, _executable, args) {
+        commands.push(label);
+
+        if (label.startsWith("buf generate")) {
+          const templatePath = args.at(-1);
+          const outputPath = readFileSync(templatePath, "utf8").match(/^\s*out:\s*(.+)$/mu)?.[1];
+
+          if (outputPath === undefined) {
+            return 1;
+          }
+
+          mkdirSync(outputPath, { recursive: true });
+          writeFileSync(join(outputPath, "message.txt"), `${label} staged output\n`);
+          return 0;
+        }
+
+        return 1;
+      },
+    });
+
+    expect(status).toBe(1);
+    expect(commands).toEqual([
+      "buf generate packages/proto/generated",
+      "buf generate examples/todo/generated",
+      "to-do handler registry generation",
+    ]);
+    expect(readFileSync(join(packageGenerated, "message.txt"), "utf8")).toBe(
+      "previous package output\n",
+    );
+    expect(readFileSync(join(todoGenerated, "message.txt"), "utf8")).toBe("previous todo output\n");
   });
 
   it("restores already-published roots when a later publish fails", () => {
