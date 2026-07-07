@@ -49,7 +49,14 @@ import {
   ShardIndex,
   ShardSession,
   HandlerMetadataRegistry,
+  HandlerRegistryIngestionError,
+  HandlerRegistryIngestor,
+  type GeneratedEntityHandlerGroup,
   defineEntityHandlers,
+  type GeneratedHandlerParameterCount,
+  type GeneratedHandlerRecordInput,
+  type GeneratedHandlerRegistry,
+  type RegistryIngestionErrorCode,
   type RuntimeStateErrorCode,
   type ServerRuntimeLifecycle,
   type ServerRuntimeRejectedState,
@@ -213,6 +220,8 @@ describe("@spine-ts/server", () => {
         "HandlerMetadataError",
         "HandlerMetadataRegistry",
         "HandlerMetadataRegistryError",
+        "HandlerRegistryIngestionError",
+        "HandlerRegistryIngestor",
         "Entity",
         "Inbox",
         "InboxMessageError",
@@ -275,6 +284,26 @@ describe("@spine-ts/server", () => {
     expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
     expect(new StandStateTypeError("Unknown", "read")).toBeInstanceOf(StandStateTypeError);
     expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);
+    expect(new HandlerRegistryIngestor()).toBeInstanceOf(HandlerRegistryIngestor);
+    expect(
+      new HandlerRegistryIngestionError("UNSUPPORTED_REGISTRY_VERSION", "Nope"),
+    ).toBeInstanceOf(HandlerRegistryIngestionError);
+    expectTypeOf<GeneratedHandlerRegistry>().toExtend<{
+      readonly version: 1;
+      readonly entities: readonly object[];
+    }>();
+    expectTypeOf<GeneratedHandlerParameterCount>().toEqualTypeOf<1 | 2>();
+    expectTypeOf<RegistryIngestionErrorCode>().toEqualTypeOf<
+      | "UNSUPPORTED_REGISTRY_VERSION"
+      | "UNSUPPORTED_HANDLER_KIND"
+      | "INVALID_PARAMETER_COUNT"
+      | "INVALID_SCHEMA"
+      | "MISSING_EMITTED_SCHEMAS"
+      | "UNEXPECTED_EMITTED_SCHEMAS"
+    >();
+    expectTypeOf<GeneratedEntityHandlerGroup>().toExtend<{
+      readonly handlers: readonly GeneratedHandlerRecordInput[];
+    }>();
     expectTypeOf<SignalKind>().toEqualTypeOf<"command" | "event">();
     expectTypeOf<SignalIntakeAcceptedFor>().toEqualTypeOf<"async-work">();
     expectTypeOf<SignalIntakeFailureCode>().toEqualTypeOf<

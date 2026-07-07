@@ -193,6 +193,19 @@ export {
 } from "./handler/handler-decorators.js";
 
 export {
+  type GeneratedEntityHandlerGroup,
+  type GeneratedEntityHandlers,
+  type GeneratedHandlerKind,
+  type GeneratedHandlerParameterCount,
+  type GeneratedHandlerRecordInput,
+  type GeneratedHandlerRecord,
+  type GeneratedHandlerRegistry,
+  HandlerRegistryIngestionError,
+  HandlerRegistryIngestor,
+  type RegistryIngestionErrorCode,
+} from "./handler/generated-handler-registry.js";
+
+export {
   type BaseHandlerMetadata,
   type CommandAssignmentHandlerMetadata,
   type CommandReactionHandlerMetadata,
