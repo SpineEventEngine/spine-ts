@@ -11,7 +11,8 @@ Worktree:
 Authoring sub-agent: Guardrail implementation and review-fix sub-agents completed checker/test lane
 Reviewer sub-agents: Round 28 clean; all participating reviewers closed
 Implementation commit: `0066de5`
-Final branch HEAD: log-maintenance commit after `0066de5`; see branch `HEAD`
+Final branch HEAD: `7c7b27f`
+Integrated to main: fast-forwarded `main` to `7c7b27f`
 
 ## Objective
 
@@ -441,6 +442,10 @@ examples/todo/src/index.test.ts packages/server/test/repository/repository-routi
 - `2026-07-07 18:58 WEST`: Committed the reviewed T-0014 implementation as
   `0066de5` (`Implement end-user API invariants`). This log-maintenance update
   records that now-known commit and cannot name its own future hash.
+- `2026-07-07 19:02 WEST`: Integrated T-0014 into `main` with a fast-forward
+  merge from `cfc950c` to `7c7b27f`. The pre-existing dirty root spec files
+  were stale autonomous edits already superseded by T-0014; they were restored
+  before merge. The untracked `human-review-1-jul.md` file was left untouched.
 
 ## Staged Roadmap
 
