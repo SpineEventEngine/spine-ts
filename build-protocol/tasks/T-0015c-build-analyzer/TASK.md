@@ -1,6 +1,6 @@
 # T-0015c: Build-Time Handler Analyzer
 
-Status: complete
+Status: integrated to main
 Start: `2026-07-07 20:36 WEST`
 End: `2026-07-07 21:22 WEST`
 Baseline commit: `4b802fc`
@@ -12,8 +12,8 @@ Requirements splitter: `019f3dce-6067-7190-919d-cf6a62eebfa7`; completed and clo
 Authoring sub-agent: completed
 Reviewer sub-agents: all required review lanes completed clean and closed.
 Implementation commit: `89afdc1`
-Final branch HEAD: Pending final log commit
-Integrated to main: Pending
+Final branch HEAD: `d1a99fe`
+Integrated to main: `2026-07-07 21:25 WEST`
 
 ## Objective
 
@@ -129,6 +129,8 @@ packages/server/test/handler/build-time-handler-analyzer.test.ts`,
   commands passed. `docs:check` still reports the known invalid-origin TypeDoc
   source-link warning only.
 - `2026-07-07 21:23 WEST`: Committed implementation as `89afdc1`.
+- `2026-07-07 21:25 WEST`: Fast-forward merged
+  `task/T-0015c-build-analyzer` into `main` at commit `d1a99fe`.
 
 ## Verification Plan
 
