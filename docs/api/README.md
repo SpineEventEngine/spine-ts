@@ -258,10 +258,14 @@ schemas inferred from explicit return types. They are generated build artifacts
 under ignored `generated/` directories and are not committed.
 `HandlerRegistryIngestor` preserves generated arity in canonical metadata, and
 `GeneratedRegistryDiscovery` loads explicit registry paths or clean `file:`
-URLs. Repository execution calls generated two-argument command assignees and
-event subscribers with generated `CommandContext` or `EventContext` values from
-the incoming envelope; if the envelope omits context, execution supplies an
-empty generated context message of the proper schema.
+URLs. Application package builds run registry generation after Protobuf-ES
+generation and before `tsc`, then load the compiled registry module from the
+package output tree, commonly through
+`GeneratedRegistryDiscovery.conventionalModulePath(compiledPackageRoot)`.
+Repository execution calls generated two-argument command assignees and event
+subscribers with generated `CommandContext` or `EventContext` values from the
+incoming envelope; if the envelope omits context, execution supplies an empty
+generated context message of the proper schema.
 Command registration readiness exports include
 `CommandRegistrationReadiness`, `CommandRegistrationReadinessLookup`, and
 `CommandRegistrationAssigneeMetadata`. The readiness view is built from an

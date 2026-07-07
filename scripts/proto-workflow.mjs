@@ -349,7 +349,7 @@ function generateTargets() {
     }
 
     publishGeneratedTargets(stagedTargets);
-    return 0;
+    return generateTodoHandlerRegistry();
   } catch (error) {
     console.error(
       `Failed to publish generated output: ${
@@ -362,6 +362,18 @@ function generateTargets() {
       rmSync(stagedTarget.stageRoot, { recursive: true, force: true });
     }
   }
+}
+
+function generateTodoHandlerRegistry() {
+  return runCommand("to-do handler registry generation", process.execPath, [
+    join(repoRoot, "scripts/generate-handler-registry.mjs"),
+    "--project",
+    join(repoRoot, "examples/todo/tsconfig.json"),
+    "--generated-root",
+    join(repoRoot, "examples/todo/generated"),
+    "--out",
+    join(repoRoot, "examples/todo/generated/handler/generated-handler-registry.ts"),
+  ]);
 }
 
 const isMain =

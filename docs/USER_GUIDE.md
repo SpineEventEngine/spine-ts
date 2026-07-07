@@ -120,6 +120,11 @@ slices.
   class-owned handler metadata. Bare decorators are the ordinary application
   syntax; explicit schema decorator overloads remain legacy/framework
   compatibility until generated registry tooling owns schema inference.
+- Generated handler registry tooling that analyzes bare-decorated application
+  source after Protobuf-ES generation, writes ignored
+  `generated/handler/generated-handler-registry.ts` artifacts, and loads the
+  compiled registry module during context assembly with
+  `GeneratedRegistryDiscovery`.
 - A caller-owned server handler metadata registry that registers explicit
   entity handler metadata, rejects duplicate command assignments and duplicate
   legacy event applications for the same entity/event pair, and exposes frozen

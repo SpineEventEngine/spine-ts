@@ -116,8 +116,10 @@ T-0015c implements the build-time analyzer that produces structured analysis
 records. T-0015d adds the internal package-level registry writer that renders
 guarded generated source under ignored `generated/` output. T-0015e adds
 explicit runtime loading from filesystem paths or clean `file:` URLs. Broad
-automatic package scanning, global runtime loading, and example migration remain
-later T-0015 subtasks.
+automatic package scanning and global runtime loading remain out of scope.
+T-0015g wires the first application package, the to-do example, by generating
+`examples/todo/generated/handler/generated-handler-registry.ts` during
+`proto:generate` and loading the compiled registry during context creation.
 
 Build-time tooling must read ordinary application source, find bare
 `@Assign`, `@Command`, `@React`, and `@Subscribe` methods, and infer schemas
@@ -204,6 +206,14 @@ aliases fail deterministically before import. Discovery validates the top-level
 module shape, reports deterministic import/export/module errors, and ingests
 the loaded registries through `HandlerRegistryIngestor` into a caller-owned
 `HandlerMetadataRegistry`.
+
+For an application package, registry generation runs after generated protobuf
+files are present and before `tsc -b`. The generated TypeScript source remains
+ignored under `generated/`; the compiled JavaScript lives under the package
+output tree. Runtime code should pass the compiled package root to
+`GeneratedRegistryDiscovery.conventionalModulePath()` or otherwise provide the
+exact compiled registry module path. Missing or invalid registry modules fail
+while building the context, before command routing invokes an end-user handler.
 
 ## Command Target ID And Default Routing
 

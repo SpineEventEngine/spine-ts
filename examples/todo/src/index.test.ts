@@ -30,7 +30,7 @@ import {
 } from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
 import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
 import { BoundedContextFixture } from "@spine-ts/testing";
-import { existsSync, statSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 
@@ -53,6 +53,22 @@ describe("@spine-ts/example-todo", () => {
   beforeAll(async () => {
     assertBuiltExample();
     ({ createTodoContext, startTodoServer } = await import("../dist/src/index.js"));
+  });
+
+  it("loads generated handler metadata into the bounded context", async () => {
+    const context = await createTodoContext();
+
+    expect([...context.commandBus().acceptedCommandTypes()].sort()).toEqual(
+      [
+        deriveTypeUrl(CreateTaskSchema),
+        deriveTypeUrl(RenameTaskSchema),
+        deriveTypeUrl(CompleteTaskSchema),
+        deriveTypeUrl(ReopenTaskSchema),
+      ].sort(),
+    );
+    expect(
+      context.registeredRepositories().map((repository) => repository.entityType.name),
+    ).toEqual(["TaskAggregate", "TaskListProjection"]);
   });
 
   it("runs as a standalone gRPC-compatible server for command, query, and subscription clients", async () => {
@@ -103,7 +119,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("creates one task through command handling and exposes it in the task list", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -133,7 +149,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("reads the task list by projection ID", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -151,7 +167,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("reads all task-list rows after creating two tasks", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -172,7 +188,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("subscribes to task-list updates and receives projection-driven changes", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -232,7 +248,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("renames one task through command handling and exposes the new title", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -254,7 +270,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("rejects invalid rename payloads with validation details without changing the task list", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -284,7 +300,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("completes one task through command handling and closes the list row", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -304,7 +320,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("refuses completing an already completed task without changing the task list", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -334,7 +350,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("refuses reopening an open task without changing the task list", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -356,7 +372,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("cancels task-list subscriptions and makes later reads inert", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -380,7 +396,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("counts duplicate same-id projection rows", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -441,7 +457,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("reopens one task through command handling and opens the list row", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -471,7 +487,7 @@ describe("@spine-ts/example-todo", () => {
   });
 
   it("preserves visible task state through command and projection updates", async () => {
-    const fixture = new BoundedContextFixture(createTodoContext(), {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
@@ -504,10 +520,12 @@ describe("@spine-ts/example-todo", () => {
 });
 
 function assertBuiltExample(): void {
-  const source = fileURLToPath(new URL("./index.ts", import.meta.url));
   const output = fileURLToPath(new URL("../dist/src/index.js", import.meta.url));
+  const registry = fileURLToPath(
+    new URL("../dist/generated/handler/generated-handler-registry.js", import.meta.url),
+  );
 
-  if (!existsSync(output) || statSync(output).mtimeMs < statSync(source).mtimeMs) {
+  if (!existsSync(output) || !existsSync(registry)) {
     throw new Error("Run `pnpm typecheck:build` before running the to-do example tests.");
   }
 }

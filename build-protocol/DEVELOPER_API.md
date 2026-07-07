@@ -94,6 +94,16 @@ module shape, reports stable import/export and ingestion failure codes, and
 registers the discovered metadata through `HandlerRegistryIngestor` into a
 caller-owned `HandlerMetadataRegistry`.
 
+Application packages that use bare decorators need a build step that runs after
+their Protobuf-ES files are generated and before TypeScript compilation. The
+step analyzes the package source, writes
+`generated/handler/generated-handler-registry.ts`, and lets `tsc` compile that
+ignored source artifact into the package output. Runtime assembly loads the
+compiled registry with `GeneratedRegistryDiscovery`, usually by passing the
+compiled package root to `GeneratedRegistryDiscovery.conventionalModulePath()`.
+If the registry is missing, stale, malformed, or rejected during ingestion,
+context creation should fail deterministically before any handler is invoked.
+
 ## Handler Decorators
 
 Initial decorator set:

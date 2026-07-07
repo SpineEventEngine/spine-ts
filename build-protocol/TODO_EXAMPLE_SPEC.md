@@ -44,6 +44,7 @@ The example should model a small but representative bounded context:
 The example must demonstrate:
 
 - command handling through bare-decorated aggregate methods;
+- framework-generated handler registry discovery for those bare decorators;
 - emitting handlers that return generated domain event/command messages, never
   framework `Event` or `Command` envelopes;
 - default-route command target-ID validation before handler invocation;
@@ -91,6 +92,9 @@ make the example pass.
   discovery/materialization helper code such as
   `materializeDecoratedEntityHandlers`. Decorated handler discovery is a
   framework/generated-registry concern.
+- The build workflow must regenerate the ignored handler registry artifact
+  before TypeScript compilation, and runtime context assembly must load the
+  compiled registry through framework-owned discovery.
 
 ## Documentation
 
