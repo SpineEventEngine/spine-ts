@@ -12,8 +12,8 @@ Requirements splitter: `019f3dce-6067-7190-919d-cf6a62eebfa7`; completed and clo
 Authoring sub-agent: `019f3dd3-88d7-7643-9bc6-9710a713ad3d`
 Reviewer sub-agents: round 2 clean; all participating reviewers closed
 Implementation commit: `689ad50`
-Final branch HEAD: log-maintenance commit after `689ad50`; see branch `HEAD`
-Integrated to main: Pending
+Final branch HEAD: `ebb1d74`
+Integrated to main: fast-forwarded `main` to `ebb1d74`
 
 ## Objective
 
@@ -143,6 +143,9 @@ diff --check` passed.
   `689ad50` (`Define generated handler registry contract`). This
   log-maintenance update records that now-known commit and cannot name its own
   future hash.
+- `2026-07-07 19:57 WEST`: Integrated T-0015a into `main` with a fast-forward
+  merge from `d40e388` to `ebb1d74`. The untracked `human-review-1-jul.md`
+  file in the root worktree was left untouched.
 
 ## Verification Plan
 
