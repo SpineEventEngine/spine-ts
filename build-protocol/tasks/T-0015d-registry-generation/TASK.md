@@ -2,7 +2,7 @@
 
 Status: integrated
 Start: `2026-07-07 21:27 WEST`
-End: Pending
+End: `2026-07-07 22:35 WEST`
 Baseline commit: `6691f62`
 Task log path: `build-protocol/tasks/T-0015d-registry-generation/TASK.md`
 Branch: `task/T-0015d-registry-generation`
@@ -13,7 +13,7 @@ Authoring sub-agent: completed
 Reviewer status: final narrow review findings addressed; verification passed
 Implementation commit: `103f48b`
 Final branch HEAD: `103f48b`
-Integrated to main: `5e13d6d`
+Integrated to main: `5e13d6d`; integration logging recorded on `main`
 
 ## Objective
 
