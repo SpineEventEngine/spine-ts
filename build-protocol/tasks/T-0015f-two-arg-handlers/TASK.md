@@ -12,8 +12,8 @@ Requirements splitter: `019f3dce-6067-7190-919d-cf6a62eebfa7`; completed
 and closed during T-0015a setup.
 Authoring sub-agent: `019f3eb0-36e2-7171-8174-10b578c692ec`; completed and closed
 Reviewer status: all required lanes clean after two rounds plus focused style/log recheck
-Implementation commit: Pending
-Final branch HEAD: Pending
+Implementation commit: `54c9f1e`
+Final branch HEAD: `54c9f1e`
 Integrated to main: Pending
 
 ## Objective
