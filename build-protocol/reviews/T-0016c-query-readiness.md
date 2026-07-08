@@ -1,6 +1,6 @@
 # T-0016c Review Log
 
-Status: pending documentation re-review and integration
+Status: pending final documentation re-review, final verification, and integration
 
 Scope: query-readiness closure for `QueryService.Read`, direct `Stand` version
 metadata behavior, focused tests, and public docs.
@@ -14,12 +14,16 @@ metadata behavior, focused tests, and public docs.
   its own sub-agent ID).
 - Round 2 documentation log-status fix sub-agent:
   `unknown/self` (this session was not given a distinct sub-agent ID).
-- Current integration status: round-1 fixes are committed in `e26a908`. Its
-  subject is `Fix T-0016c review findings`. Code style/maintainability and
-  TypeScript/API docs re-reviews are clean. Documentation re-review found stale
-  durable-log status text; this round-2 documentation log-status fix updates
-  that bookkeeping. Remaining state after this fix is documentation re-review
-  and integration.
+- Current integration status:
+  - implementation commit: `4341202`;
+  - decision/review trail commit: `28b6d11`;
+  - round-1 review-fix commit: `e26a908`;
+  - round-2 documentation log-status fix commit: `055175c`;
+  - latest recovery-state clarification commit: `b3dea53`;
+  - style, TypeScript/API docs, security, and performance/reliability lanes are
+    clean;
+  - remaining state is final documentation re-review, final verification, and
+    integration.
 
 ## Required Lanes
 
@@ -85,7 +89,9 @@ metadata behavior, focused tests, and public docs.
   - reviewer `019f4155-4f5b-7b13-9ea6-bdb219b7ab83` found one stale sentence
     saying `e26a908` was the current branch head after `055175c` had become
     `HEAD`;
-  - the orchestrator corrected that sentence in this review log;
+  - commit `b3dea53` corrected that sentence in this review log;
+  - final documentation re-review then requested explicit recovery metadata for
+    commits `055175c` and `b3dea53`, which this log now records;
   - final documentation re-review is the remaining review gate before
     verification and integration.
 
