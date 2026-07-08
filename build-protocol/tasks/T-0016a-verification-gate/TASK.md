@@ -1,6 +1,6 @@
 # T-0016a: Verification Gate Normalization
 
-Status: review complete; ready for final verification
+Status: integrated into `main`
 Start: `2026-07-08 02:13 WEST`
 Baseline commit: `f8a95d5`
 Task log path: `build-protocol/tasks/T-0016a-verification-gate/TASK.md`
@@ -12,6 +12,8 @@ Authoring sub-agent: `019f3f4c-09d9-74c1-bcae-133f0ba857d0` completed and closed
 Reviewer sub-agents: all required lanes clean; see
 `build-protocol/reviews/T-0016a-verification-gate.md`
 Implementation commit: `277a6a2`
+Final branch commit: `f8ca8fb`
+Integrated to main: `1931945`
 
 ## Objective
 
@@ -190,3 +192,4 @@ Canonical checklist evidence:
   - docs/API check, proto lint, and `proto:check-generated` passed;
   - final `git status --short --ignored` showed no tracked changes and only
     ignored generated/build/dependency outputs.
+- Integrated into `main` with merge commit `1931945`.
