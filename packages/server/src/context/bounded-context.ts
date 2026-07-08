@@ -4,7 +4,8 @@ import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { clone, type Message } from "@bufbuild/protobuf";
-import { EventSchema, type Command, type Event } from "@spine-ts/proto";
+import { deriveTypeUrl } from "@spine-ts/core";
+import { EventSchema, type Command, type Event, type TenantId } from "@spine-ts/proto";
 import {
   EventStore,
   InMemoryStorageFactory,
@@ -119,6 +120,35 @@ export interface EventEndpoint {
   /** Posts an event into the context-owned event bus. */
   post(event: Event): Promise<void>;
 }
+
+/**
+ * Tenant-scoped options for one framework-owned read-side catch-up run.
+ *
+ * Single-tenant contexts reject `tenantId`. Multitenant contexts require a
+ * non-blank `tenantId` and preserve the exact non-blank string supplied.
+ */
+export interface ReadCatchUpOptions {
+  /** Tenant slice to rebuild for multitenant contexts. */
+  readonly tenantId?: string;
+}
+
+/**
+ * Summary from one framework-owned read-side catch-up run.
+ *
+ * The replay boundary covers only already-stored events routed to registered
+ * projection subscribers after `Stand.clear()` removes the target projection
+ * rows for the selected tenant slice.
+ */
+export interface ReadCatchUpResult {
+  /** Number of already-stored events dispatched to at least one projection subscriber. */
+  readonly replayedEventCount: number;
+  /** Number of cleared projection-state rows before replay. */
+  readonly clearedEntityCount: number;
+  /** Unique projection state type URLs cleared once before replay. */
+  readonly clearedStateTypes: readonly string[];
+}
+
+type CatchUpReplayCode = "READ_SIDE_CATCH_UP_REPLAY_FAILED";
 
 /** Observable failure from asynchronous already-stored event dispatch. */
 export interface StoredEventDispatchFailure {
@@ -357,6 +387,59 @@ export class BoundedContext {
   /** Copy-safe diagnostics for asynchronous already-stored event dispatch failures. */
   storedEventDispatchFailures(): readonly StoredEventDispatchFailure[] {
     return this.#storedEventDispatchFailures.map(cloneDispatchFailure);
+  }
+
+  /**
+   * Rebuild registered projection subscribers from already-stored events.
+   *
+   * Supported boundary:
+   * - projection subscribers only;
+   * - already-stored events only;
+   * - clear then replay, with no event re-append;
+   * - single-tenant contexts reject `tenantId`;
+   * - multitenant contexts require the exact non-blank `tenantId`;
+   * - process-local sequential execution on the same EventBus runtime queue as
+   *   live event intake and stored redispatch.
+   *
+   * Unsupported boundary:
+   * - Delivery jobs, schedulers, inbox lifecycle, retries, and transport
+   *   topology;
+   * - durable live-traffic catch-up orchestration across processes.
+   */
+  async catchUpReadSide(options: ReadCatchUpOptions = {}): Promise<ReadCatchUpResult> {
+    return eventBusAccess.runExclusive(this.#eventBus, () => this.#catchUpReadSideOnce(options));
+  }
+
+  async #catchUpReadSideOnce(options: ReadCatchUpOptions): Promise<ReadCatchUpResult> {
+    const storageContext = catchUpStorageContext(this.#snapshot.spec, options);
+    const tenantOptions = catchUpStandOptions(storageContext);
+    const projections = projectionDispatchers(this.#repositoryViews);
+    const clearTargets = projectionStateClearTargets(projections);
+    const clearedStateTypes: string[] = [];
+    let clearedEntityCount = 0;
+    let replayedEventCount = 0;
+
+    for (const target of clearTargets) {
+      clearedEntityCount += await this.#stand.clear(target.schema, tenantOptions);
+      clearedStateTypes.push(target.typeUrl);
+    }
+
+    const events = await readStoredEvents(storageContext, this.#storageFactory);
+
+    for (const event of events) {
+      try {
+        validateReplayTenant(storageContext, event);
+        replayedEventCount += await dispatchStoredProjectionEvent(projections, event);
+      } catch (error) {
+        throw catchUpReplayError(event, error);
+      }
+    }
+
+    return Object.freeze({
+      replayedEventCount,
+      clearedEntityCount,
+      clearedStateTypes: Object.freeze(clearedStateTypes),
+    });
   }
 
   /**
@@ -697,6 +780,33 @@ function createStorageContext(specSnapshot: ContextSpecSnapshot): StorageContext
   return Object.freeze({
     name: specSnapshot.name.value,
     multitenant: specSnapshot.multitenant,
+  });
+}
+
+function catchUpStorageContext(
+  specSnapshot: ContextSpecSnapshot,
+  options: ReadCatchUpOptions,
+): StorageContext {
+  if (!specSnapshot.multitenant) {
+    if (options.tenantId !== undefined) {
+      throw new Error(
+        `Single-tenant read-side catch-up for "${specSnapshot.name.value}" does not accept tenantId.`,
+      );
+    }
+    return createStorageContext(specSnapshot);
+  }
+
+  const tenantId = options.tenantId;
+  if (tenantId === undefined || tenantId.trim().length === 0) {
+    throw new Error(
+      `Multitenant read-side catch-up for "${specSnapshot.name.value}" requires tenantId.`,
+    );
+  }
+
+  return Object.freeze({
+    name: specSnapshot.name.value,
+    multitenant: true,
+    tenantId,
   });
 }
 
@@ -1099,6 +1209,37 @@ interface PreparedRepository {
 
 const registeredRepositories = new WeakMap<RepositoryView, RepositoryOwner>();
 
+interface ProjectionDispatch {
+  readonly dispatcher: EventDispatcher;
+  readonly eventTypeUrls: ReadonlySet<string>;
+  readonly schema: DescriptorMessageSchema;
+  readonly typeUrl: string;
+}
+
+interface ProjectionStateClearTarget {
+  readonly schema: DescriptorMessageSchema;
+  readonly typeUrl: string;
+}
+
+interface CatchUpReplayDetail {
+  readonly name: string;
+  readonly message: string;
+}
+
+class CatchUpReplayError extends Error {
+  readonly code: CatchUpReplayCode = "READ_SIDE_CATCH_UP_REPLAY_FAILED";
+  readonly eventId: string;
+  readonly detail: CatchUpReplayDetail;
+
+  constructor(eventId: string, detail: CatchUpReplayDetail) {
+    super(`Read-side catch-up failed for stored event "${eventId}".`);
+    this.name = "ReadCatchUpReplayError";
+    this.eventId = eventId;
+    this.detail = detail;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
 function repositorySnapshot(repository: RepositoryView): RegistrationSnapshot {
   const snapshot = repositoryAccess.snapshot(repository);
 
@@ -1180,8 +1321,170 @@ function cloneDispatchError(error: DispatchErrorSnapshot): DispatchErrorSnapshot
   });
 }
 
+function projectionDispatchers(
+  repositories: Iterable<RepositoryView>,
+): readonly ProjectionDispatch[] {
+  const projections: ProjectionDispatch[] = [];
+
+  for (const repository of repositories) {
+    const snapshot = repositoryAccess.snapshot(repository);
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+
+    if (snapshot.entityFamily !== "projection" || dispatcher === undefined) {
+      continue;
+    }
+
+    projections.push(
+      Object.freeze({
+        dispatcher,
+        eventTypeUrls: new Set(dispatcher.messageSchemas().map((schema) => deriveTypeUrl(schema))),
+        schema: snapshot.stateSchema,
+        typeUrl: deriveTypeUrl(snapshot.stateSchema),
+      }),
+    );
+  }
+
+  return Object.freeze(projections);
+}
+
+function projectionStateClearTargets(
+  projections: readonly ProjectionDispatch[],
+): readonly ProjectionStateClearTarget[] {
+  const unique = new Map<string, ProjectionStateClearTarget>();
+
+  for (const projection of projections) {
+    if (!unique.has(projection.typeUrl)) {
+      unique.set(
+        projection.typeUrl,
+        Object.freeze({
+          schema: projection.schema,
+          typeUrl: projection.typeUrl,
+        }),
+      );
+    }
+  }
+
+  return Object.freeze([...unique.values()]);
+}
+
+async function readStoredEvents(
+  context: StorageContext,
+  storageFactory: StorageFactory,
+): Promise<readonly Event[]> {
+  const eventStore = new EventStore(context, storageFactory);
+
+  try {
+    return await eventStore.read({
+      sort: [
+        { field: "timestamp", direction: "asc" },
+        { field: "context.producerId.value", direction: "asc" },
+        { field: "context.version.number", direction: "asc" },
+        { field: "id.value", direction: "asc" },
+      ],
+    });
+  } finally {
+    eventStore.close();
+  }
+}
+
+function catchUpStandOptions(context: StorageContext): { readonly tenantId?: string } {
+  if (!context.multitenant) {
+    return {};
+  }
+
+  const { tenantId } = context;
+  if (tenantId === undefined) {
+    throw new Error(`Multitenant read-side catch-up for "${context.name}" requires tenantId.`);
+  }
+
+  return Object.freeze({ tenantId });
+}
+
+function validateReplayTenant(context: StorageContext, event: Event): void {
+  if (!context.multitenant) {
+    return;
+  }
+
+  const expectedTenantId = context.tenantId;
+  if (expectedTenantId === undefined) {
+    throw new Error(`Multitenant read-side catch-up for "${context.name}" requires tenantId.`);
+  }
+
+  const envelopeTenantId = readReplayTenant(event);
+  if (envelopeTenantId === undefined) {
+    throw new Error("Read-side catch-up requires stored event envelope tenant.");
+  }
+  if (envelopeTenantId !== expectedTenantId) {
+    throw new Error("Read-side catch-up stored event envelope tenant does not match.");
+  }
+}
+
+function readReplayTenant(event: Event): string | undefined {
+  switch (event.context?.origin.case) {
+    case "importContext":
+      return tenantIdValue(event.context.origin.value.tenantId);
+    case "pastMessage":
+      return tenantIdValue(event.context.origin.value.actorContext?.tenantId);
+    default:
+      return undefined;
+  }
+}
+
+function tenantIdValue(tenantId: TenantId | undefined): string | undefined {
+  switch (tenantId?.kind.case) {
+    case "value":
+      return tenantId.kind.value;
+    case "domain":
+      return `domain:${tenantId.kind.value.value}`;
+    case "email":
+      return `email:${tenantId.kind.value.value}`;
+    default:
+      return undefined;
+  }
+}
+
+async function dispatchStoredProjectionEvent(
+  projections: readonly ProjectionDispatch[],
+  event: Event,
+): Promise<number> {
+  const typeUrl = event.message?.typeUrl;
+
+  if (typeUrl === undefined || typeUrl === "") {
+    throw new Error("Read-side catch-up requires stored event.message.typeUrl.");
+  }
+
+  const matching = projections.filter((projection) => projection.eventTypeUrls.has(typeUrl));
+
+  for (const projection of matching) {
+    await projection.dispatcher.accept?.(clone(EventSchema, event));
+  }
+  for (const projection of matching) {
+    await projection.dispatcher.dispatch(clone(EventSchema, event));
+  }
+
+  return matching.length > 0 ? 1 : 0;
+}
+
+function catchUpReplayError(event: Event, cause: unknown): Error {
+  return new CatchUpReplayError(event.id?.value ?? "(missing)", catchUpReplayDetail(cause));
+}
+
 function boundedErrorString(value: string, limit: number): string {
   return value.length <= limit ? value : `${value.slice(0, limit - 3)}...`;
+}
+
+function catchUpReplayDetail(error: unknown): CatchUpReplayDetail {
+  if (error instanceof Error) {
+    return Object.freeze({
+      name: boundedErrorString(error.name, dispatchErrorMessageLimit) || "Error",
+      message: boundedErrorString(error.message, dispatchErrorMessageLimit),
+    });
+  }
+
+  return Object.freeze({
+    name: "NonErrorThrow",
+    message: boundedErrorString(String(error), dispatchErrorMessageLimit),
+  });
 }
 
 function readRecordId(record: Message, snapshot: RegistrationSnapshot): unknown {

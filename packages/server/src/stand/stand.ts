@@ -213,6 +213,35 @@ export class Stand {
     }
   }
 
+  /**
+   * Clear all stored states and process-local version metadata for one known state schema.
+   *
+   * `BoundedContext.catchUpReadSide()` uses this to reset one projection state
+   * type before replay for the selected tenant slice.
+   */
+  async clear(schema: MessageSchema, options: StandReadOptions = {}): Promise<number> {
+    const finish = this.#beginOperation();
+
+    try {
+      const registration = this.#registration(schema, "clear");
+      const tenantId = this.#tenantId(options.tenantId);
+      const storage = this.#openStorage(registration, tenantId);
+
+      try {
+        const ids = await storage.index();
+        for (const id of ids) {
+          await storage.delete(id);
+        }
+        this.#clearVersions(registration.typeUrl, tenantId);
+        return ids.length;
+      } finally {
+        storage.close();
+      }
+    } finally {
+      finish();
+    }
+  }
+
   /** Record one latest entity state and deliver an in-process update to matching subscribers. */
   async update<Schema extends MessageSchema>(
     schema: Schema,
@@ -384,6 +413,16 @@ export class Stand {
     }
 
     return tenantId;
+  }
+
+  #clearVersions(typeUrl: string, tenantId: string | undefined): void {
+    const prefix = `${typeUrl}\n${tenantId ?? ""}\n`;
+
+    for (const key of this.#versions.keys()) {
+      if (key.startsWith(prefix)) {
+        this.#versions.delete(key);
+      }
+    }
   }
 
   #storageContext(tenantId: string | undefined): StorageContext {

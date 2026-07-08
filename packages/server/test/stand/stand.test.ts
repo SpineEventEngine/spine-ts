@@ -156,6 +156,26 @@ describe("Stand", () => {
     ]);
   });
 
+  it("clears stored entity states and their version metadata for one registered type", async () => {
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    stand.register(ProjectionStateSchema);
+
+    await stand.update(ProjectionStateSchema, createState("task-1", "First"), {
+      version: create(VersionSchema, { number: 1 }),
+    });
+    await stand.update(ProjectionStateSchema, createState("task-2", "Second"), {
+      version: create(VersionSchema, { number: 2 }),
+    });
+
+    await expect(stand.clear(ProjectionStateSchema)).resolves.toBe(2);
+    await expect(stand.read(ProjectionStateSchema, "task-1")).resolves.toBeUndefined();
+    await expect(stand.read(ProjectionStateSchema, "task-2")).resolves.toBeUndefined();
+    await expect(stand.readAllVersioned(ProjectionStateSchema)).resolves.toEqual([]);
+  });
+
   it("returns copy-safe list read results for state and version", async () => {
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },

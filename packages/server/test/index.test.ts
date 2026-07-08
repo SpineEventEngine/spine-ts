@@ -30,6 +30,7 @@ import {
   DescriptorMetadataError,
   isEntitySchema,
   type BoundedContextName,
+  type ReadCatchUpResult,
   type BoundedContextSnapshot,
   type CommandEndpoint,
   type EventEndpoint,
@@ -287,6 +288,9 @@ describe("@spine-ts/server", () => {
       BoundedContext.singleTenant("Exports").build().eventBus(),
     ).toEqualTypeOf<EventEndpoint>();
     expectTypeOf(BoundedContext.singleTenant("Exports").build().stand()).toEqualTypeOf<Stand>();
+    expectTypeOf(BoundedContext.singleTenant("Exports").build().catchUpReadSide()).toEqualTypeOf<
+      Promise<ReadCatchUpResult>
+    >();
     expectTypeOf<StandReadResult>().toExtend<{ readonly state: Message }>();
     expectTypeOf<StandSubscription>().toExtend<{ readonly closed: boolean }>();
     expectTypeOf<StandUpdate>().toExtend<{ readonly typeUrl: string; readonly id: unknown }>();

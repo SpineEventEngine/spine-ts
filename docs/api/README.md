@@ -31,8 +31,9 @@ envelope construction exports include `packAny()`, `unpackAny()`,
 Server exports include `BoundedContext`, `BoundedContextBuilder`,
 `ContextSpec`, `BoundedContextName`, `TenantMode`, `BoundedContextSnapshot`,
 small immutable snapshot contracts, `CommandEndpoint`, `EventEndpoint`,
-`StoredEventDispatchFailure`, `DispatchErrorSnapshot`, `Stand`, direct stand
-read/version/list/update/subscription contracts, and
+`ReadCatchUpOptions`, `ReadCatchUpResult`, `StoredEventDispatchFailure`,
+`DispatchErrorSnapshot`, `Stand`, direct stand
+read/version/list/update/subscription/clear contracts, and
 `BoundedContextNameError` for bounded-context assembly. `CommandEndpoint`
 also exposes accepted command message type URLs so service adapters can route
 without dispatch-probing unrelated contexts.
@@ -82,8 +83,16 @@ event redispatch failures are observable through the copy-safe
 `BoundedContext`. Generated entity-class assembly creates default repositories
 through `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This
 slice does not invoke query/process handlers, manage inboxes/delivery, run
-cache catch-up, create system contexts, write tenant indexes, expose a broad
+durable Delivery catch-up, create system contexts, write tenant indexes, expose a broad
 server lifecycle, or integrate transports.
+`BoundedContext.catchUpReadSide(options?)` is the current framework-owned
+read-side catch-up boundary. It clears registered projection rows through
+`Stand.clear()`, reads only already-stored events, and replays each event only
+to registered projection subscribers whose dispatcher declares that event
+message schema/type URL. It never re-appends events. Single-tenant contexts
+reject `tenantId`; multitenant contexts require the exact non-blank `tenantId`.
+The helper runs sequentially inside one local process and does not implement
+Delivery jobs, schedulers, inbox lifecycle, retries, or transport topology.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `EntityScopeReason`,
@@ -154,7 +163,8 @@ schemas, rejects unknown state types on read/update/subscribe, stores latest
 states through `StorageFactory`/`RecordStorage`, reads latest state by schema
 and entity ID, can return caller-supplied version metadata through
 `readVersioned()`, can return storage-order list results through
-`readAllVersioned()`, and delivers direct in-process update notifications.
+`readAllVersioned()`, can clear one registered state type through
+`clear(schema, options?)`, and delivers direct in-process update notifications.
 Version metadata is process-local and in-memory only in the current `Stand`;
 the latest state record is storage-backed, but the state-to-version metadata
 map is not persisted.

@@ -17,11 +17,13 @@ import {
   CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
+  EmailAddressSchema,
   type EventContext,
   type Event as SpineEvent,
   EventContextSchema,
   EventIdSchema,
   EventSchema,
+  InternetDomainSchema,
   MessageIdSchema,
   OriginSchema,
   TenantIdSchema,
@@ -30,6 +32,7 @@ import {
   file_spine_options,
 } from "@spine-ts/proto";
 import type { UserId } from "@spine-ts/proto/generated/spine/core/user_id_pb.js";
+import { TaskListSchema } from "../../../../examples/todo/generated/spine/example/todo/v1/task_list_pb.js";
 import {
   EventStore,
   InMemoryStorageFactory,
@@ -735,6 +738,70 @@ class ManagedTaskProjection extends Projection<string, typeof ProjectionStateSch
   }
 }
 
+class AlternateCatchUpProjection extends Projection<string, typeof TaskListSchema, number> {
+  static subscriberCalls = 0;
+
+  static reset(): void {
+    this.subscriberCalls = 0;
+  }
+
+  subscribeAggregate(event: AggregateState): void {
+    AlternateCatchUpProjection.subscriberCalls++;
+    this.updateDraftState(() =>
+      create(TaskListSchema, {
+        id: event.id,
+        openTaskCount: event.archived ? 0 : 1,
+      }),
+    );
+  }
+}
+
+class BlockingCatchUpProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  static startedCalls = 0;
+  static completedCalls = 0;
+  static block = false;
+  static gates: ReturnType<typeof createSignal>[] = [];
+
+  static reset(gateCount = 0): void {
+    this.startedCalls = 0;
+    this.completedCalls = 0;
+    this.block = gateCount > 0;
+    this.gates = Array.from({ length: gateCount }, () => createSignal());
+  }
+
+  static release(index: number): void {
+    const gate = this.gates[index];
+
+    if (gate === undefined) {
+      throw new Error(`Missing catch-up gate ${String(index)}.`);
+    }
+
+    gate.resolve();
+  }
+
+  async subscribeTask(event: ProjectionState): Promise<void> {
+    if (BlockingCatchUpProjection.block) {
+      const index = BlockingCatchUpProjection.startedCalls;
+      const gate = BlockingCatchUpProjection.gates[index];
+
+      BlockingCatchUpProjection.startedCalls++;
+
+      if (gate !== undefined) {
+        await gate.promise;
+      }
+    }
+
+    BlockingCatchUpProjection.completedCalls++;
+    this.updateDraftState(() =>
+      create(ProjectionStateSchema, {
+        id: event.id,
+        name: `${event.name} (blocking)`,
+        priority: event.priority + 1,
+      }),
+    );
+  }
+}
+
 class GeneratedTwoArgProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   static argumentCounts: number[] = [];
   static contexts: EventContext[] = [];
@@ -854,7 +921,11 @@ class MissingSubscriberMethodProjection extends Projection<
 }
 
 class ThrowingTaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
-  static failure = new Error("projection subscriber failed");
+  static failure: unknown = new Error("projection subscriber failed");
+
+  static reset(failure: unknown = new Error("projection subscriber failed")): void {
+    this.failure = failure;
+  }
 
   subscribeTask(event: ProjectionState): void {
     void event;
@@ -1983,6 +2054,655 @@ describe("repository signal routing", () => {
     });
   });
 
+  it("rebuilds projection state from stored events without re-appending them", async () => {
+    ExecutingTaskProjection.reset();
+    const storageFactory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .add(createExecutingProjectionRepository())
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, storageFactory);
+
+    await context.eventBus().post(createProjectionEvent("event-catch-up", "task-catch-up"));
+    await context.stand().update(
+      ProjectionStateSchema,
+      create(ProjectionStateSchema, {
+        id: "task-catch-up",
+        name: "Wrong",
+        priority: 99,
+      }),
+    );
+    await context.stand().update(
+      ProjectionStateSchema,
+      create(ProjectionStateSchema, {
+        id: "task-stale",
+        name: "Stale",
+        priority: 7,
+      }),
+    );
+
+    const storedBefore = await eventStore.read();
+    ExecutingTaskProjection.reset();
+
+    await expect(context.catchUpReadSide()).resolves.toEqual({
+      replayedEventCount: 1,
+      clearedEntityCount: 2,
+      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+    });
+    await expect(
+      context.stand().readVersioned(ProjectionStateSchema, "task-catch-up"),
+    ).resolves.toEqual({
+      state: create(ProjectionStateSchema, {
+        id: "task-catch-up",
+        name: "Task (projected)",
+        priority: 2,
+      }),
+      version: create(VersionSchema, { number: 1 }),
+    });
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-stale"),
+    ).resolves.toBeUndefined();
+    await expect(eventStore.read()).resolves.toEqual(storedBefore);
+    expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+  });
+
+  it("keeps read-side catch-up tenant-scoped", async () => {
+    ExecutingTaskProjection.reset();
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createProjectionProducingRepository())
+      .add(createExecutingProjectionRepository())
+      .build();
+
+    await context
+      .commandBus()
+      .post(
+        createAggregateCommand(
+          "command-catch-up-tenant-a",
+          "task-catch-up-tenant",
+          "A",
+          "tenant-a",
+        ),
+      );
+    await context
+      .commandBus()
+      .post(
+        createAggregateCommand(
+          "command-catch-up-tenant-b",
+          "task-catch-up-tenant",
+          "B",
+          "tenant-b",
+        ),
+      );
+    await waitForProjectionState(context, "task-catch-up-tenant", "tenant-a");
+    const tenantBBefore = await waitForProjectionState(context, "task-catch-up-tenant", "tenant-b");
+
+    await context.stand().update(
+      ProjectionStateSchema,
+      create(ProjectionStateSchema, {
+        id: "task-catch-up-tenant",
+        name: "Wrong tenant-a",
+        priority: 99,
+      }),
+      { tenantId: "tenant-a" },
+    );
+    ExecutingTaskProjection.reset();
+
+    await expect(context.catchUpReadSide({ tenantId: "tenant-a" })).resolves.toEqual({
+      replayedEventCount: 1,
+      clearedEntityCount: 1,
+      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+    });
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-catch-up-tenant", {
+        tenantId: "tenant-a",
+      }),
+    ).resolves.toEqual(
+      create(ProjectionStateSchema, {
+        id: "task-catch-up-tenant",
+        name: "Task (projected)",
+        priority: 2,
+      }),
+    );
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-catch-up-tenant", {
+        tenantId: "tenant-b",
+      }),
+    ).resolves.toEqual(tenantBBefore);
+    expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+  });
+
+  it("rejects read-side catch-up tenant options that do not match the context mode", async () => {
+    const singleTenant = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .build();
+    const multitenant = BoundedContext.multitenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .build();
+
+    await expect(singleTenant.catchUpReadSide({ tenantId: "tenant-a" })).rejects.toThrow(
+      'Single-tenant read-side catch-up for "Tasks" does not accept tenantId.',
+    );
+    await expect(multitenant.catchUpReadSide()).rejects.toThrow(
+      'Multitenant read-side catch-up for "Tasks" requires tenantId.',
+    );
+    await expect(multitenant.catchUpReadSide({ tenantId: " \t " })).rejects.toThrow(
+      'Multitenant read-side catch-up for "Tasks" requires tenantId.',
+    );
+  });
+
+  it("replays stored events only to matching projection dispatchers during catch-up", async () => {
+    ExecutingTaskProjection.reset();
+    AlternateCatchUpProjection.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .add(createAlternateCatchUpProjectionRepository())
+      .build();
+
+    await context.eventBus().post(createProjectionEvent("event-primary", "task-primary"));
+    await context
+      .eventBus()
+      .post(createAggregateEvent("event-alternate", "task-alternate", 0, "Alt"));
+    await context.stand().update(
+      ProjectionStateSchema,
+      create(ProjectionStateSchema, {
+        id: "task-primary",
+        name: "Wrong primary",
+        priority: 99,
+      }),
+    );
+    await context.stand().update(
+      TaskListSchema,
+      create(TaskListSchema, {
+        id: "task-alternate",
+        openTaskCount: 99,
+      }),
+    );
+    ExecutingTaskProjection.reset();
+    AlternateCatchUpProjection.reset();
+
+    await expect(context.catchUpReadSide()).resolves.toEqual({
+      replayedEventCount: 2,
+      clearedEntityCount: 2,
+      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema), deriveTypeUrl(TaskListSchema)],
+    });
+    await expect(context.stand().read(ProjectionStateSchema, "task-primary")).resolves.toEqual(
+      create(ProjectionStateSchema, {
+        id: "task-primary",
+        name: "Task (projected)",
+        priority: 2,
+      }),
+    );
+    await expect(context.stand().read(TaskListSchema, "task-alternate")).resolves.toEqual(
+      create(TaskListSchema, {
+        id: "task-alternate",
+        openTaskCount: 1,
+      }),
+    );
+    expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+    expect(AlternateCatchUpProjection.subscriberCalls).toBe(1);
+  });
+
+  it("counts only matched replay events during catch-up", async () => {
+    ExecutingTaskProjection.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .build();
+
+    await context.eventBus().post(createProjectionEvent("event-shared-state", "task-shared-state"));
+    await context.eventBus().post(
+      packEvent({
+        id: create(EventIdSchema, { value: "event-unmatched-state" }),
+        context: create(EventContextSchema, {
+          version: create(VersionSchema, { number: 1 }),
+        }),
+        schema: NumberRouteEventSchema,
+        message: create(NumberRouteEventSchema, {
+          id: 7,
+        }),
+      }),
+    );
+    await context.stand().update(
+      ProjectionStateSchema,
+      create(ProjectionStateSchema, {
+        id: "task-shared-state",
+        name: "Wrong shared state",
+        priority: 99,
+      }),
+    );
+    ExecutingTaskProjection.reset();
+
+    await expect(context.catchUpReadSide()).resolves.toEqual({
+      replayedEventCount: 1,
+      clearedEntityCount: 1,
+      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+    });
+    expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+  });
+
+  it("preserves exact multitenant catch-up tenant IDs instead of trimming them", async () => {
+    ExecutingTaskProjection.reset();
+    const rawTenantId = " tenant-a ";
+    const trimmedTenantId = "tenant-a";
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createProjectionProducingRepository())
+      .add(createExecutingProjectionRepository())
+      .build();
+
+    await context
+      .commandBus()
+      .post(createAggregateCommand("command-space-raw", "task-space-tenant", "Raw", rawTenantId));
+    await context
+      .commandBus()
+      .post(
+        createAggregateCommand(
+          "command-space-trimmed",
+          "task-space-tenant",
+          "Trimmed",
+          trimmedTenantId,
+        ),
+      );
+    await waitForProjectionState(context, "task-space-tenant", rawTenantId);
+    const trimmedBefore = await waitForProjectionState(
+      context,
+      "task-space-tenant",
+      trimmedTenantId,
+    );
+
+    await context.stand().update(
+      ProjectionStateSchema,
+      create(ProjectionStateSchema, {
+        id: "task-space-tenant",
+        name: "Wrong raw tenant",
+        priority: 99,
+      }),
+      { tenantId: rawTenantId },
+    );
+    ExecutingTaskProjection.reset();
+
+    await expect(context.catchUpReadSide({ tenantId: rawTenantId })).resolves.toEqual({
+      replayedEventCount: 1,
+      clearedEntityCount: 1,
+      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+    });
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-space-tenant", {
+        tenantId: rawTenantId,
+      }),
+    ).resolves.toEqual(
+      create(ProjectionStateSchema, {
+        id: "task-space-tenant",
+        name: "Task (projected)",
+        priority: 2,
+      }),
+    );
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-space-tenant", {
+        tenantId: trimmedTenantId,
+      }),
+    ).resolves.toEqual(trimmedBefore);
+    expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+  });
+
+  it("accepts import-context domain tenant IDs during multitenant catch-up", async () => {
+    ExecutingTaskProjection.reset();
+    const storageFactory = new InMemoryStorageFactory();
+    const context = BoundedContext.multitenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .add(createExecutingProjectionRepository())
+      .build();
+    const eventStore = new EventStore(
+      { name: "Tasks", multitenant: true, tenantId: "domain:example.com" },
+      storageFactory,
+    );
+
+    await eventStore.append(
+      createProjectionEvent("event-domain-tenant", "task-domain-tenant", {
+        importTenantId: "example.com",
+        importTenantKind: "domain",
+      }),
+    );
+
+    await expect(context.catchUpReadSide({ tenantId: "domain:example.com" })).resolves.toEqual({
+      replayedEventCount: 1,
+      clearedEntityCount: 0,
+      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+    });
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-domain-tenant", {
+        tenantId: "domain:example.com",
+      }),
+    ).resolves.toEqual(
+      create(ProjectionStateSchema, {
+        id: "task-domain-tenant",
+        name: "Task (projected)",
+        priority: 2,
+      }),
+    );
+  });
+
+  it("accepts past-message email tenant IDs during multitenant catch-up", async () => {
+    ExecutingTaskProjection.reset();
+    const storageFactory = new InMemoryStorageFactory();
+    const context = BoundedContext.multitenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .add(createExecutingProjectionRepository())
+      .build();
+    const eventStore = new EventStore(
+      { name: "Tasks", multitenant: true, tenantId: "email:owner@example.com" },
+      storageFactory,
+    );
+
+    await eventStore.append(
+      createProjectionEvent("event-email-tenant", "task-email-tenant", {
+        pastMessageTenantId: "owner@example.com",
+        pastMessageTenantKind: "email",
+      }),
+    );
+
+    await expect(context.catchUpReadSide({ tenantId: "email:owner@example.com" })).resolves.toEqual(
+      {
+        replayedEventCount: 1,
+        clearedEntityCount: 0,
+        clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      },
+    );
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-email-tenant", {
+        tenantId: "email:owner@example.com",
+      }),
+    ).resolves.toEqual(
+      create(ProjectionStateSchema, {
+        id: "task-email-tenant",
+        name: "Task (projected)",
+        priority: 2,
+      }),
+    );
+  });
+
+  it("rejects multitenant catch-up events whose envelope tenant mismatches storage", async () => {
+    ExecutingTaskProjection.reset();
+    const storageFactory = new InMemoryStorageFactory();
+    const context = BoundedContext.multitenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .add(createExecutingProjectionRepository())
+      .build();
+    const tenantBState = create(ProjectionStateSchema, {
+      id: "task-corrupt-tenant",
+      name: "Tenant B before catch-up",
+      priority: 7,
+    });
+    const eventStore = new EventStore(
+      { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      storageFactory,
+    );
+
+    await eventStore.append(
+      createProjectionEvent("event-corrupt-tenant", "task-corrupt-tenant", {
+        pastMessageTenantId: "tenant-b",
+      }),
+    );
+    await context.stand().update(ProjectionStateSchema, tenantBState, { tenantId: "tenant-b" });
+
+    await expect(context.catchUpReadSide({ tenantId: "tenant-a" })).rejects.toMatchObject({
+      name: "ReadCatchUpReplayError",
+      code: "READ_SIDE_CATCH_UP_REPLAY_FAILED",
+      eventId: "event-corrupt-tenant",
+      detail: {
+        name: "Error",
+        message: "Read-side catch-up stored event envelope tenant does not match.",
+      },
+    });
+    await context.catchUpReadSide({ tenantId: "tenant-a" }).catch((error: unknown) => {
+      const detail = (error as { readonly detail?: { readonly message?: string } }).detail;
+
+      expect(detail?.message).not.toContain("tenant-a");
+      expect(detail?.message).not.toContain("tenant-b");
+    });
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-corrupt-tenant", {
+        tenantId: "tenant-b",
+      }),
+    ).resolves.toEqual(tenantBState);
+    expect(ExecutingTaskProjection.subscriberCalls).toBe(0);
+  });
+
+  it("rejects multitenant catch-up events without an envelope tenant", async () => {
+    ExecutingTaskProjection.reset();
+    const storageFactory = new InMemoryStorageFactory();
+    const context = BoundedContext.multitenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .add(createExecutingProjectionRepository())
+      .build();
+    const eventStore = new EventStore(
+      { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      storageFactory,
+    );
+
+    await eventStore.append(createProjectionEvent("event-missing-tenant", "task-missing-tenant"));
+
+    await expect(context.catchUpReadSide({ tenantId: "tenant-a" })).rejects.toMatchObject({
+      name: "ReadCatchUpReplayError",
+      code: "READ_SIDE_CATCH_UP_REPLAY_FAILED",
+      eventId: "event-missing-tenant",
+      detail: {
+        name: "Error",
+        message: "Read-side catch-up requires stored event envelope tenant.",
+      },
+    });
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-missing-tenant", {
+        tenantId: "tenant-a",
+      }),
+    ).resolves.toBeUndefined();
+    expect(ExecutingTaskProjection.subscriberCalls).toBe(0);
+  });
+
+  it("serializes concurrent read-side catch-up calls", async () => {
+    BlockingCatchUpProjection.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createBlockingCatchUpProjectionRepository())
+      .build();
+
+    await context.eventBus().post(createProjectionEvent("event-blocking", "task-blocking"));
+    await context.stand().update(
+      ProjectionStateSchema,
+      create(ProjectionStateSchema, {
+        id: "task-blocking",
+        name: "Wrong blocking",
+        priority: 99,
+      }),
+    );
+    BlockingCatchUpProjection.reset(2);
+
+    const first = context.catchUpReadSide();
+    const second = context.catchUpReadSide();
+
+    await waitForCondition(() => BlockingCatchUpProjection.startedCalls === 1);
+    expect(BlockingCatchUpProjection.completedCalls).toBe(0);
+    BlockingCatchUpProjection.release(0);
+
+    await expect(first).resolves.toEqual({
+      replayedEventCount: 1,
+      clearedEntityCount: 1,
+      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+    });
+    await waitForCondition(() => BlockingCatchUpProjection.startedCalls === 2);
+    expect(BlockingCatchUpProjection.completedCalls).toBe(1);
+    BlockingCatchUpProjection.release(1);
+
+    await expect(second).resolves.toEqual({
+      replayedEventCount: 1,
+      clearedEntityCount: 1,
+      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+    });
+    expect(BlockingCatchUpProjection.completedCalls).toBe(2);
+  });
+
+  it("serializes read-side catch-up with live event intake on the EventBus queue", async () => {
+    BlockingCatchUpProjection.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createBlockingCatchUpProjectionRepository())
+      .build();
+
+    await context.eventBus().post(createProjectionEvent("event-queued-catch-up", "task-queued"));
+    await context.stand().update(
+      ProjectionStateSchema,
+      create(ProjectionStateSchema, {
+        id: "task-queued",
+        name: "Wrong queued",
+        priority: 99,
+      }),
+    );
+    BlockingCatchUpProjection.reset(2);
+
+    const catchUp = context.catchUpReadSide();
+    await waitForCondition(() => BlockingCatchUpProjection.startedCalls === 1);
+
+    const livePost = context
+      .eventBus()
+      .post(createProjectionEvent("event-queued-live", "task-live"));
+
+    await expect(Promise.race([livePost.then(() => "posted"), delay(25)])).resolves.toBe("pending");
+    expect(BlockingCatchUpProjection.completedCalls).toBe(0);
+    await expect(context.stand().read(ProjectionStateSchema, "task-live")).resolves.toBeUndefined();
+
+    BlockingCatchUpProjection.release(0);
+
+    await expect(catchUp).resolves.toEqual({
+      replayedEventCount: 1,
+      clearedEntityCount: 1,
+      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+    });
+    await waitForCondition(() => BlockingCatchUpProjection.startedCalls === 2);
+    expect(BlockingCatchUpProjection.completedCalls).toBe(1);
+
+    BlockingCatchUpProjection.release(1);
+
+    await expect(livePost).resolves.toBeUndefined();
+    expect(BlockingCatchUpProjection.completedCalls).toBe(2);
+    await expect(context.stand().read(ProjectionStateSchema, "task-live")).resolves.toEqual(
+      create(ProjectionStateSchema, {
+        id: "task-live",
+        name: "Task (blocking)",
+        priority: 2,
+      }),
+    );
+  });
+
+  it("waits for active read-side catch-up before closing the context", async () => {
+    BlockingCatchUpProjection.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createBlockingCatchUpProjectionRepository())
+      .build();
+
+    await context.eventBus().post(createProjectionEvent("event-close", "task-close"));
+    await context.stand().update(
+      ProjectionStateSchema,
+      create(ProjectionStateSchema, {
+        id: "task-close",
+        name: "Wrong close",
+        priority: 99,
+      }),
+    );
+    BlockingCatchUpProjection.reset(1);
+
+    const catchUp = context.catchUpReadSide();
+    await waitForCondition(() => BlockingCatchUpProjection.startedCalls === 1);
+
+    const close = context.close().then(() => "closed");
+
+    await expect(Promise.race([close, delay(25)])).resolves.toBe("pending");
+
+    BlockingCatchUpProjection.release(0);
+
+    await expect(catchUp).resolves.toEqual({
+      replayedEventCount: 1,
+      clearedEntityCount: 1,
+      clearedStateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+    });
+    await expect(close).resolves.toBe("closed");
+  });
+
+  it("reports a stable error when stored projection replay fails during catch-up", async () => {
+    ThrowingTaskProjection.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createThrowingProjectionRepository())
+      .build();
+
+    await expect(
+      context
+        .eventBus()
+        .post(createProjectionEvent("event-catch-up-failure", "task-catch-up-failure")),
+    ).rejects.toThrow("projection subscriber failed");
+
+    await expect(context.catchUpReadSide()).rejects.toMatchObject({
+      name: "ReadCatchUpReplayError",
+      code: "READ_SIDE_CATCH_UP_REPLAY_FAILED",
+      eventId: "event-catch-up-failure",
+      detail: {
+        name: "Error",
+        message: "projection subscriber failed",
+      },
+      message: 'Read-side catch-up failed for stored event "event-catch-up-failure".',
+    });
+    await context.catchUpReadSide().catch((error: unknown) => {
+      expect(error).not.toHaveProperty("cause");
+      expect(error).not.toHaveProperty("detail.stack");
+    });
+  });
+
+  it("reports bounded non-error throw detail during read-side catch-up", async () => {
+    ThrowingTaskProjection.reset("projection subscriber failed without Error");
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createThrowingProjectionRepository())
+      .build();
+
+    try {
+      await expect(
+        context
+          .eventBus()
+          .post(createProjectionEvent("event-catch-up-string-failure", "task-string-failure")),
+      ).rejects.toBe("projection subscriber failed without Error");
+
+      await expect(context.catchUpReadSide()).rejects.toMatchObject({
+        name: "ReadCatchUpReplayError",
+        code: "READ_SIDE_CATCH_UP_REPLAY_FAILED",
+        eventId: "event-catch-up-string-failure",
+        detail: {
+          name: "NonErrorThrow",
+          message: "projection subscriber failed without Error",
+        },
+      });
+    } finally {
+      ThrowingTaskProjection.reset();
+    }
+  });
+
+  it("reports a stable error when stored catch-up events have no message type", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .add(createExecutingProjectionRepository())
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, storageFactory);
+
+    await eventStore.append(
+      create(EventSchema, {
+        id: create(EventIdSchema, { value: "event-without-message" }),
+      }),
+    );
+
+    await expect(context.catchUpReadSide()).rejects.toMatchObject({
+      name: "ReadCatchUpReplayError",
+      code: "READ_SIDE_CATCH_UP_REPLAY_FAILED",
+      eventId: "event-without-message",
+      detail: {
+        name: "Error",
+        message: "Read-side catch-up requires stored event.message.typeUrl.",
+      },
+    });
+  });
+
   it("passes EventContext to generated-registry two-argument event subscribers", async () => {
     GeneratedTwoArgProjection.reset();
     const context = BoundedContext.singleTenant("Tasks")
@@ -2533,6 +3253,34 @@ function createManagedProjection(): Repository<typeof ManagedTaskProjection> {
 
   return new Repository({
     entityType: ManagedTaskProjection,
+    schema: ProjectionStateSchema,
+    handlers,
+  });
+}
+
+function createAlternateCatchUpProjectionRepository(): Repository<
+  typeof AlternateCatchUpProjection
+> {
+  const handlers = defineEntityHandlers(AlternateCatchUpProjection, TaskListSchema, (builder) => [
+    builder.subscribe(AggregateStateSchema, "subscribeAggregate"),
+  ]);
+
+  return new Repository({
+    entityType: AlternateCatchUpProjection,
+    schema: TaskListSchema,
+    handlers,
+  });
+}
+
+function createBlockingCatchUpProjectionRepository(): Repository<typeof BlockingCatchUpProjection> {
+  const handlers = defineEntityHandlers(
+    BlockingCatchUpProjection,
+    ProjectionStateSchema,
+    (builder) => [builder.subscribe(ProjectionStateSchema, "subscribeTask")],
+  );
+
+  return new Repository({
+    entityType: BlockingCatchUpProjection,
     schema: ProjectionStateSchema,
     handlers,
   });
@@ -3151,7 +3899,9 @@ function createProjectionEvent(
     readonly producerNumber?: number;
     readonly producerMessage?: AggregateState;
     readonly importTenantId?: string;
+    readonly importTenantKind?: TenantKind;
     readonly pastMessageTenantId?: string;
+    readonly pastMessageTenantKind?: TenantKind;
     readonly includeVersion?: boolean;
   } = {},
 ) {
@@ -3191,13 +3941,15 @@ function createContextlessProjectionEvent(id: string, entityId: string) {
 
 function projectionEventOrigin(options: {
   readonly importTenantId?: string;
+  readonly importTenantKind?: TenantKind;
   readonly pastMessageTenantId?: string;
+  readonly pastMessageTenantKind?: TenantKind;
 }) {
   if (options.importTenantId !== undefined) {
     return {
       case: "importContext" as const,
       value: create(ActorContextSchema, {
-        tenantId: createTenantId(options.importTenantId),
+        tenantId: createTenantId(options.importTenantId, options.importTenantKind),
       }),
     };
   }
@@ -3210,7 +3962,7 @@ function projectionEventOrigin(options: {
           typeUrl: deriveTypeUrl(AggregateStateSchema),
         }),
         actorContext: create(ActorContextSchema, {
-          tenantId: createTenantId(options.pastMessageTenantId),
+          tenantId: createTenantId(options.pastMessageTenantId, options.pastMessageTenantKind),
         }),
       }),
     };
@@ -3218,7 +3970,26 @@ function projectionEventOrigin(options: {
   return undefined;
 }
 
-function createTenantId(value: string) {
+type TenantKind = "value" | "domain" | "email";
+
+function createTenantId(value: string, kind: TenantKind = "value") {
+  if (kind === "domain") {
+    return create(TenantIdSchema, {
+      kind: {
+        case: "domain",
+        value: create(InternetDomainSchema, { value }),
+      },
+    });
+  }
+  if (kind === "email") {
+    return create(TenantIdSchema, {
+      kind: {
+        case: "email",
+        value: create(EmailAddressSchema, { value }),
+      },
+    });
+  }
+
   return create(TenantIdSchema, {
     kind: {
       case: "value",
@@ -3277,6 +4048,27 @@ function createSignal() {
   });
 
   return { promise, resolve };
+}
+
+function delay(ms: number): Promise<"pending"> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve("pending");
+    }, ms);
+  });
+}
+
+async function waitForCondition(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 500;
+
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  throw new Error("Timed out waiting for condition.");
 }
 
 async function waitForProjectionState(

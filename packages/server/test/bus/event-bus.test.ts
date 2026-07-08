@@ -448,6 +448,12 @@ describe("EventBus", () => {
     ).toThrow(/EventBus instance/);
   });
 
+  it("rejects exclusive framework work for non-event-bus values", () => {
+    expect(() => eventBusAccess.runExclusive({} as EventBus, () => "unused")).toThrow(
+      /EventBus instance/,
+    );
+  });
+
   it("rejects nested posts from active event dispatch", async () => {
     const store = new EventStore(
       { name: "Tasks", multitenant: false },

@@ -410,8 +410,13 @@ The following runtime pieces are still deferred to later explicit tasks:
 
 - visibility/type-supplier registration and lifecycle callbacks over the
   repository identity seam;
-- process-manager event handler execution, read-side catch-up, and
-  query/subscription execution over repository routes;
+- process-manager event handler execution and query/subscription execution over
+  repository routes. A limited local read-side catch-up slice now exists on
+  `BoundedContext.catchUpReadSide(options?)`: it clears registered projection
+  state rows for one tenant slice, replays already-stored events only to
+  matching projection subscribers through the same EventBus runtime queue as
+  live intake, does not re-append events, and excludes Delivery/scheduler
+  orchestration, inbox lifecycle, retries, and cross-process catch-up control;
 - delivery scheduler/catch-up loops, durable storage lifecycle, entity
   storage/cache catch-up, and tenant-index persistence. Durable inbox records,
   dedup guards, shard leases, and the direct local shard drain are present;

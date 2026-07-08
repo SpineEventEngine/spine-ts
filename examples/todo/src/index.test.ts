@@ -562,6 +562,59 @@ describe("@spine-ts/example-todo", () => {
     expect(openTask?.completed).toBe(false);
     expect(readList(openResponse, "task-history")?.openTaskCount).toBe(1);
   });
+
+  it("rebuilds the task list from stored events during read-side catch-up", async () => {
+    const context = await createTodoContext();
+    const fixture = new BoundedContextFixture(context, {
+      timeoutMs: 500,
+      intervalMs: 5,
+    });
+
+    try {
+      await fixture.post(createTaskCommand("command-catch-up-create", "task-catch-up", "Original"));
+      await fixture.post(createCompleteCommand("command-catch-up-complete", "task-catch-up"));
+      await fixture.readEventually(
+        createTaskListQuery(),
+        (candidate) => taskCompleted(candidate, "task-catch-up") === true,
+      );
+
+      await context.stand().update(
+        TaskListSchema,
+        create(TaskListSchema, {
+          id: "task-catch-up",
+          tasks: [
+            {
+              id: create(TaskIdSchema, { value: "task-catch-up" }),
+              title: "Wrong",
+              completed: false,
+            },
+          ],
+          openTaskCount: 1,
+        }),
+      );
+
+      await expect(context.catchUpReadSide()).resolves.toEqual({
+        replayedEventCount: 2,
+        clearedEntityCount: 1,
+        clearedStateTypes: [deriveTypeUrl(TaskListSchema)],
+      });
+      await expect(context.stand().read(TaskListSchema, "task-catch-up")).resolves.toEqual(
+        create(TaskListSchema, {
+          id: "task-catch-up",
+          tasks: [
+            {
+              id: create(TaskIdSchema, { value: "task-catch-up" }),
+              title: "Original",
+              completed: true,
+            },
+          ],
+          openTaskCount: 0,
+        }),
+      );
+    } finally {
+      await context.close();
+    }
+  });
 });
 
 function assertBuiltExample(): void {

@@ -202,9 +202,14 @@ remain later slices.
   state in framework-owned transactions and return generated domain events, then
   deliver stored aggregate-produced events to projection event subscribers that
   update read-side state through `Stand`, including tenant-scoped projection
-  updates from the command tenant. Other handler/runtime execution remains
-  deferred, including process-manager reactions, broader subscriber/reactor
-  delivery semantics, and catch-up/read-side recovery flows.
+  updates from the command tenant. Built contexts also expose a limited local
+  `catchUpReadSide(options?)` boundary that clears registered projection rows
+  for one tenant slice and replays already-stored events only to matching
+  projection subscribers on the same EventBus runtime queue, without
+  re-appending those events. Other handler/runtime execution remains deferred,
+  including process-manager reactions, broader subscriber/reactor delivery
+  semantics, Delivery/scheduler catch-up orchestration, and cross-process
+  read-side recovery.
 
 ## Type Registry
 
@@ -454,12 +459,15 @@ opens a `RecordStorage` for the repository state schema using the context
 are not public API.
 
 This slice still does not expose direct entity lookup/storage APIs; convert
-entity records; write inboxes; manage delivery; manage entity caches; run
-catch-up; emit lifecycle events; start buses from repositories; or use
-gRPC/transport. Direct stands can store and read latest entity states;
-projection updates reach them through framework-owned repository dispatch in
-built contexts, not through a new application write-side read API. They do not
-run catch-up. When a repository is constructed with authentic explicit handler
+entity records; write inboxes; manage delivery; manage entity caches beyond the
+framework-owned read-side replay path; emit lifecycle events; start buses from
+repositories; or use gRPC/transport. Direct stands can store and read latest
+entity states; projection updates reach them through framework-owned repository
+dispatch in built contexts, not through a new application write-side read API.
+`BoundedContext.catchUpReadSide(options?)` is the one supported catch-up entry
+point, and it remains limited to clearing registered projection rows plus
+replaying already-stored events to matching projection subscribers only. When a
+repository is constructed with authentic explicit handler
 metadata and registered with a built bounded context, aggregate commands can
 load or create one aggregate, invoke one assignee in a framework-owned
 transaction, pack and store returned domain events, persist the latest managed
@@ -614,9 +622,11 @@ queued updates for slow active consumers.
 The current read side is not durable subscription storage. Direct Stand
 subscriptions, service subscription records, Stand version metadata, and the
 in-memory storage adapter are all process-local development/test state.
-Durable production storage, catch-up replay, and recovery of subscription
-positions remain outside this slice. This direct API does not provide a client
-query DSL.
+Durable production storage, Delivery/scheduler catch-up orchestration, and
+recovery of subscription positions remain outside this slice. The implemented
+local catch-up boundary is limited to `BoundedContext.catchUpReadSide(options?)`
+for registered projection replay from already-stored events. This direct API
+does not provide a client query DSL.
 
 ## Runtime Assembly Closure
 

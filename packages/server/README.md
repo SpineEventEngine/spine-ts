@@ -46,8 +46,19 @@ Current slice exposes:
   and
 - `context.stand()` / `new Stand({ context, storageFactory })` for direct
   read-side entity state registration, latest-state updates, latest-state point
-  and list reads with caller-supplied version metadata, and explicit in-process
-  subscription cleanup;
+  and list reads with caller-supplied version metadata, `Stand.clear()` for one
+  known entity type, and explicit in-process subscription cleanup;
+  and
+- `context.catchUpReadSide(options?: ReadCatchUpOptions)` for the first
+  framework-owned local read-side catch-up slice. It clears registered
+  projection state in `Stand`, reads already stored events from the
+  bounded-context event log, and replays them only through registered
+  projection subscribers whose dispatcher schema matches each stored event type
+  URL. It does not re-append events. Single-tenant contexts reject `tenantId`;
+  multitenant contexts require the exact non-blank `tenantId`. The method
+  returns `ReadCatchUpResult`, runs sequentially inside one local process, and
+  intentionally excludes delivery jobs, schedulers, inbox lifecycle
+  management, retries, and transport topology;
   and
 - `new SpineServices({ contexts }).register(router)` for the first real
   Connect/Node route registration of Spine JVM `CommandService`,
@@ -599,7 +610,16 @@ same caller-supplied version metadata as point reads. Stand version metadata is
 process-local and in-memory only; the current slice persists latest state
 records through storage, but not the side-map that associates those states with
 versions. Direct subscriptions are deterministic in-process callbacks and must
-be cleaned up explicitly.
+be cleaned up explicitly. `clear(schema, options?)` deletes the stored rows and
+process-local version metadata for one registered state schema and is the
+framework-owned reset step used by `catchUpReadSide()`.
+
+`catchUpReadSide(options?)` is intentionally narrow: it replays only
+already-stored events into registered projection subscribers, clears then
+rebuilds projection rows in `Stand`, never re-appends events, and remains a
+process-local sequential helper rather than a durable live-traffic Delivery
+replacement. Custom event dispatchers, delivery jobs, schedulers, inbox
+lifecycle, retries, and transport topology remain out of scope for this slice.
 `SpineServices` adapts built-context command
 buses and stands to the first `CommandService`, `QueryService`, and
 `SubscriptionService` methods, including `QueryService.Read` support for
@@ -623,8 +643,8 @@ TTL defaults to 30 seconds and the active queue limit defaults to 100 queued
 updates. Service subscriptions, direct Stand subscriptions, Stand version
 metadata, and the in-memory storage adapter are process-local development/test
 state, not durable delivery or catch-up storage. Cross-context fallback, client
-query DSLs, event subscriptions, field filtering, and projection catch-up
-remain outside this slice.
+query DSLs, event subscriptions, field filtering, and durable cross-process
+Delivery/subscription recovery catch-up remain outside this slice.
 
 ## Local Server Lifecycle
 

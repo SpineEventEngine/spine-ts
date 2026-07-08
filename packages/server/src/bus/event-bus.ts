@@ -7,9 +7,14 @@ import { EventDispatcherRegistry } from "./event-dispatcher-registry.js";
 import type { EventDispatcher } from "./event-dispatcher.js";
 
 const storedDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
+const exclusiveWorkers = new WeakMap<
+  EventBus,
+  <Result>(work: () => Result | Promise<Result>) => Promise<Result>
+>();
 
 interface EventBusAccess {
   postStored(eventBus: EventBus, event: Event): Promise<void>;
+  runExclusive<Result>(eventBus: EventBus, work: () => Result | Promise<Result>): Promise<Result>;
 }
 
 /**
@@ -31,6 +36,7 @@ export class EventBus {
     this.#eventStore = eventStore;
     this.#started = this.#runtime.start();
     storedDispatchers.set(this, (event) => this.#postStored(event));
+    exclusiveWorkers.set(this, (work) => this.#runExclusive(work));
 
     for (const dispatcher of dispatchers) {
       this.register(dispatcher);
@@ -45,7 +51,7 @@ export class EventBus {
   post(event: Event): Promise<void> {
     const accepted = clone(EventSchema, event);
 
-    return this.#started.then(() => this.#runtime.enqueue(() => this.#dispatch(accepted)));
+    return this.#runExclusive(() => this.#dispatch(accepted));
   }
 
   /**
@@ -93,7 +99,7 @@ export class EventBus {
   #postStored(event: Event): Promise<void> {
     const accepted = clone(EventSchema, event);
 
-    return this.#started.then(() => this.#runtime.enqueue(() => this.#dispatchStored(accepted)));
+    return this.#runExclusive(() => this.#dispatchStored(accepted));
   }
 
   async #dispatchStored(event: Event): Promise<void> {
@@ -116,6 +122,18 @@ export class EventBus {
       await dispatcher.accept?.(clone(EventSchema, event));
     }
   }
+
+  #runExclusive<Result>(work: () => Result | Promise<Result>): Promise<Result> {
+    let result: Result | undefined;
+
+    return this.#started
+      .then(() =>
+        this.#runtime.enqueue(async () => {
+          result = await work();
+        }),
+      )
+      .then(() => result as Result);
+  }
 }
 
 /** @internal Event-bus access used when events are already stored. */
@@ -128,6 +146,16 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     }
 
     return postStored(event);
+  },
+
+  runExclusive<Result>(eventBus: EventBus, work: () => Result | Promise<Result>): Promise<Result> {
+    const runExclusive = exclusiveWorkers.get(eventBus);
+
+    if (runExclusive === undefined) {
+      throw new TypeError("Exclusive event-bus work requires an EventBus instance.");
+    }
+
+    return runExclusive(work);
   },
 });
 

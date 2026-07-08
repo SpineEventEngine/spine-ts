@@ -7,6 +7,8 @@ export {
   type CommandEndpoint,
   ContextSpec,
   type ContextSpecSnapshot,
+  type ReadCatchUpOptions,
+  type ReadCatchUpResult,
   type EventEndpoint,
   type DispatchErrorSnapshot,
   type StoredEventDispatchFailure,

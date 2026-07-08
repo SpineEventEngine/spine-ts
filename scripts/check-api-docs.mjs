@@ -208,6 +208,8 @@ const expectedServerExports = [
   "CommandReactionHandlerMetadata",
   "ContextSpec",
   "ContextSpecSnapshot",
+  "ReadCatchUpOptions",
+  "ReadCatchUpResult",
   "Delivery",
   "DeliveryDrainOptions",
   "DeliveryEndpoint",
