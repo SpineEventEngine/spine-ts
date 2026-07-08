@@ -1,6 +1,6 @@
 # T-0017a: Read-Side Catch-Up
 
-Status: in progress
+Status: complete
 Started: `2026-07-08`
 Branch: `task/T-0017a-read-side-catch-up`
 Worktree:
