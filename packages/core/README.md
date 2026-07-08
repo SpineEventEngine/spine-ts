@@ -85,10 +85,10 @@ structured repo-local violations.
 
 Stateful checks such as Spine `(set_once)` require previous and proposed state.
 They are intentionally separate from single-message validation and use the
-framework-owned `validateTransition()` seam. Full entity transaction enforcement
-will attach transition rules in a later runtime task. Rule-returned violations
-are sanitized before aggregation, and throwing transition rules are isolated
-into structured violations so later rules still run in order.
+framework-owned `validateTransition()` seam consumed by current server entity
+transaction validation. Rule-returned violations are sanitized before
+aggregation, and throwing transition rules are isolated into structured
+violations so later rules still run in order.
 
 ## Envelope Packing
 
@@ -117,7 +117,8 @@ T-0007b. The helpers do not include packed bytes or payload contents in their
 validation errors, and `unpackAny()` returns `undefined` for type URL mismatches
 or malformed payload bytes.
 
-Use `packCommand()` and `packEvent()` to create generated Spine envelopes:
+Low-level framework and test-fixture code can use `packCommand()` and
+`packEvent()` when it already owns generated Spine envelope IDs and contexts:
 
 ```ts
 import { packCommand, packEvent } from "@spine-ts/core";
@@ -137,11 +138,13 @@ const event = packEvent({
 });
 ```
 
-The caller supplies generated IDs and generated contexts. These helpers do not
-generate UUIDs, timestamps, actor or tenant context, producer IDs, versions,
-origins, system properties, storage records, bus deliveries, or transport
-metadata. The helpers snapshot supplied IDs and contexts before embedding them
-in the returned envelope.
+The caller supplies generated IDs and generated contexts. Ordinary application
+handlers return generated domain messages; the server runtime owns framework
+event envelopes, event IDs, storage records, and fan-out metadata. These
+helpers do not generate UUIDs, timestamps, actor or tenant context, producer
+IDs, versions, origins, system properties, storage records, bus deliveries, or
+transport metadata. The helpers snapshot supplied IDs and contexts before
+embedding them in the returned envelope.
 
 This package does not yet implement runtime buses, entity repositories, storage,
 decorators, handlers, or transport behavior.

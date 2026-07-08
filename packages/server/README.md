@@ -1,11 +1,11 @@
 # @spine-ts/server
 
 Descriptor-derived server metadata for Spine entity schemas, explicit handler
-metadata, standard decorator metadata adapters, aggregate snapshot/event storage,
-the first command/event bus seam, and the first runtime routing plan seam over
-`@spine-ts/transport` contracts, plus the first direct storage-backed `Stand`
-slice for latest entity state point/list reads and in-process update
-subscriptions.
+metadata, standard decorator metadata adapters, aggregate latest-state/event
+journal storage, the first command/event bus seam, and the first runtime routing
+plan seam over `@spine-ts/transport` contracts, plus the first direct
+storage-backed `Stand` slice for latest entity state point/list reads and
+in-process update subscriptions.
 
 Current slice exposes:
 
@@ -57,13 +57,13 @@ Current slice exposes:
   custom `addCommandDispatcher()` registration; transition-validation
   rejections from the framework-owned aggregate command transaction surface as
   `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
-  details, while stored-history replay failures remain
+  details, while legacy/internal aggregate-history validation failures remain
   internal and sanitized as `COMMAND_POST_ERROR`;
   and
 - `AggregateStorage` for the current finite primitive or single-field
-  Protobuf message `AggregateId` snapshot/history seam, backed by
-  `StorageFactory`, `RecordStorage`, and `EventStore`; `PrimitiveId` and
-  `MessageId` expose the accepted public ID shapes;
+  Protobuf message `AggregateId` latest-state and traceability event-journal
+  seam, backed by `StorageFactory`, `RecordStorage`, and `EventStore`;
+  `PrimitiveId` and `MessageId` expose the accepted public ID shapes;
   and
 - `Delivery`, `Inbox`, `InboxStorage`, `ShardIndex`, `ShardSession`, and
   `ShardedWorkRegistry` for the first durable delivery slice: inbox writes with
@@ -139,21 +139,23 @@ Current slice exposes:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
+  Aggregate,
   Assign,
   BoundedContext,
   CommandRegistrationReadiness,
   EventRegistrationReadiness,
-  HandlerMetadataRegistry,
+  GeneratedRegistryDiscovery,
   React,
   Subscribe,
   createServerRuntimeRoutingPlan,
-  defineEntityHandlers,
 } from "@spine-ts/server";
 import { CreateTaskSchema, type CreateTask } from "./generated/task_commands_pb.js";
 import { TaskCreatedSchema, TaskStateSchema, type TaskCreated } from "./generated/tasks_pb.js";
 
-class TaskAggregate {
+export class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {
   @Assign
   create(command: CreateTask): TaskCreated {
     void command;
@@ -172,19 +174,11 @@ class TaskAggregate {
   }
 }
 
-const explicitTaskHandlers = defineEntityHandlers(
-  TaskAggregate,
-  TaskStateSchema,
-  ({ assign, subscribe, react }) => [
-    assign(CreateTaskSchema, "create"),
-    subscribe(TaskCreatedSchema, "noteCreated"),
-    react(TaskCreatedSchema, "reactToCreated"),
-  ],
-);
-
-explicitTaskHandlers.handlers.map((handler) => handler.kind);
-
-const registry = new HandlerMetadataRegistry([explicitTaskHandlers]);
+const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const compiledPackageRoot = resolve(appRoot, "dist");
+const registry = await new GeneratedRegistryDiscovery().register({
+  modules: [GeneratedRegistryDiscovery.conventionalModulePath(compiledPackageRoot)],
+});
 registry.findCommandAssignment(CreateTaskSchema.typeName)?.handler.methodName; // "create"
 
 const readiness = CommandRegistrationReadiness.fromRegistry(registry);
@@ -211,11 +205,13 @@ routingPlan.events.subscriberRoutes[0]?.workerId; // planner-local event worker 
 routingPlan.deferred.map(({ signalKind }) => signalKind);
 // ["query", "subscription", "system"]
 
-explicitTaskHandlers.handlers.map((handler) => handler.methodName); // same contract
+registry.findHandlersByKind("event-reaction")[0]?.handler.methodName; // "reactToCreated"
 ```
 
-The explicit registration API records command assignments, command reactions,
-event subscriptions, event reactions, and legacy event applications in
+Generated registry discovery is the ordinary application bridge from bare
+decorators to canonical handler metadata. The low-level explicit registration
+API records command assignments, command reactions, event subscriptions, event
+reactions, and legacy event applications in
 declaration order. Handler names must refer to own prototype data methods
 declared with normal class method syntax; accessors, `constructor`, inherited
 methods, and instance fields are rejected without invoking user code. The API does not
@@ -231,9 +227,9 @@ end-user API. Decorators do not use `emitDecoratorMetadata`,
 `reflect-metadata`, parameter decorators, a global handler registry, or handler
 invocation.
 
-Generated handler registry tooling will infer the signal schema from each
-handler's explicit first parameter type and infer emitted schemas from explicit
-return types. `@Assign` emits generated domain events, `@Command` emits
+Generated handler registry tooling infers the signal schema from each
+handler's explicit first parameter type and emitted schemas from explicit return
+types. `@Assign` emits generated domain events, `@Command` emits
 generated domain commands, `@React` may emit generated domain events or emit
 nothing, and `@Subscribe` returns explicit `void`.
 Both `handler(signal)` and `handler(signal, context)` are part of the public
@@ -429,9 +425,9 @@ store events, dispatch handlers, run services, or expose transport behavior.
 
 ## Metadata And Routing Smoke Slice
 
-The current slice can be assembled with repository identity and
-registration-readiness metadata, but the result is still metadata and routing
-descriptors only:
+Framework tests and non-decorator migrations can still assemble explicit
+handler metadata with repository identity and registration-readiness views when
+they need to inspect routing descriptors directly:
 
 ```ts
 import {
@@ -473,12 +469,13 @@ EventRegistrationReadiness.fromRegistry(registry).registeredEventMessageFullType
 routingPlan.commands.topics;
 ```
 
-This assembly proves the current public seams fit together; it does not turn
-registered command/event metadata into runtime dispatch, delivery, handler
-invocation, service hosting, or `Ack` behavior. Route calculation remains a
-metadata and transport-plan concern; the routing plan deliberately does not
-create worker registrations, lifecycle handles, queues, buses, repositories,
-storage, services, or transport endpoints.
+This assembly proves the low-level metadata and routing-plan seams fit
+together. The routing plan itself does not turn registered command/event
+metadata into runtime dispatch, delivery, handler invocation, service hosting,
+or `Ack` behavior. Route calculation remains a metadata and transport-plan
+concern; the routing plan deliberately does not create worker registrations,
+lifecycle handles, queues, buses, repositories, storage, services, or transport
+endpoints.
 
 ## Bounded Context Assembly
 
@@ -531,22 +528,25 @@ a contract-valid command origin; missing IDs reject before mutation or storage.
 `CommandBus` validates accepted command payloads before dispatcher callbacks,
 including custom `addCommandDispatcher()` routes. For repository-backed
 aggregate dispatchers, that still means validation happens before route
-calculation, aggregate history load, event append, snapshot write, or
-stored-event dispatch. `CommandService.Post` maps command-bus payload validation
-failures to `COMMAND_VALIDATION_ERROR` with message
-`Command payload validation failed.` and packed `spine.validation.ValidationError`
-details. If a command handler throws `CommandRefusalError`, `CommandService.Post`
+calculation, latest persisted state load, traceability event-journal append,
+latest-state write, or stored-event dispatch. `CommandService.Post` maps
+command-bus payload validation failures to `COMMAND_VALIDATION_ERROR` with
+message `Command payload validation failed.` and packed
+`spine.validation.ValidationError` details. If a command handler throws
+`CommandRefusalError`, `CommandService.Post`
 returns a non-ok `Ack` with that stable error type and message instead of
 `COMMAND_POST_ERROR`. If an aggregate command handler produces an invalid
 state transition, command execution rejects with
-`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced events or
-snapshots; the validation details remain the framework transaction /
-`validateEntityStateTransition()` result. Replay failures
-from stored aggregate history remain internal and are sanitized as
-`COMMAND_POST_ERROR`. Dispatcher-thrown `ValidationException` values and other
-unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
-Aggregate command completion resolves after aggregate event storage and
-snapshot handling even though already-stored event redispatch continues
+`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced
+traceability events or latest state; the validation details remain the
+framework transaction / `validateEntityStateTransition()` result.
+Legacy/internal aggregate-history replay failures remain internal and are
+sanitized as `COMMAND_POST_ERROR`; ordinary generated-registry aggregate
+loading uses the latest persisted state instead of replaying stored events.
+Dispatcher-thrown `ValidationException` values and other unexpected command-bus
+failures remain sanitized as `COMMAND_POST_ERROR`.
+Aggregate command completion resolves after traceability event-journal append
+and latest-state write even though already-stored event redispatch continues
 asynchronously. If that later redispatch fails in dispatcher acceptance,
 dispatcher execution, projection subscribers, or `Stand` updates, the owning
 context records a copy-safe diagnostic snapshot through
@@ -622,14 +622,15 @@ maps, sets, class instances, and proxies are rejected. The exported
 `PlainEntityVersionMetadata<T>` type helper preserves ordinary plain metadata
 interfaces at entity input boundaries while rejecting known non-plain types such
 as `Date`. State and version access return cloned snapshots so caller mutation
-does not mutate stored entity state. Protected replacement hooks exist only for
-later framework-owned subclasses; there are no public state setters, Java
+does not mutate stored entity state. Protected replacement hooks are current
+framework-owned seams used by `TransactionalEntity` and repository code to
+apply accepted drafts; there are no public state setters, Java
 builders, automatic version increments, transactions, handler invocation,
 repository writes, storage calls, lifecycle events, routing, queries, buses,
 transports, or global runtime state.
 
-`TransactionalEntity` is the small protected draft layer for future
-framework-owned entity families. Subclasses can start one active transaction,
+`TransactionalEntity` is the small protected draft layer used by the current
+entity family base classes. Subclasses can start one active transaction,
 read/update the draft state snapshot, replace explicit draft version metadata,
 adjust draft lifecycle flags, and then commit or roll back. Accepted commits
 apply state, version metadata, and lifecycle flags back into the entity through
@@ -648,7 +649,7 @@ family base classes. They are thin abstract subclasses of `TransactionalEntity`
 with the same `<Id, Schema, Version>` generic pattern and a stable
 readonly `entityFamily` property returning `"aggregate"`, `"projection"`, or
 `"process-manager"`. Use them when application or framework-owned code needs
-the right OOP family type before repositories and dispatch runtime exist:
+the right OOP family type for repositories and built contexts:
 
 ```ts
 import { Aggregate } from "@spine-ts/server";
@@ -784,11 +785,11 @@ if (result.status === "rejected") {
 }
 ```
 
-Compatibility note: `EntityTransaction` is the public draft/result shape that
-future framework-owned entity bases can use around handler execution. It is not
-a storage-backed transaction, a unit-of-work implementation, or a process-wide
-runtime context; applications should treat its returned snapshots as evidence
-for later runtime layers rather than as persisted state.
+Compatibility note: `EntityTransaction` is the public draft/result shape used
+by framework-owned entity bases around state mutation. It is not a
+storage-backed transaction, a unit-of-work implementation, or a process-wide
+runtime context; applications should treat its returned snapshots as validation
+and commit evidence rather than as persisted state.
 
 `rollback()` releases the transaction and returns previous/draft evidence
 without accepting state. `archive()`, `unarchive()`, `markDeleted()`, and
@@ -801,7 +802,7 @@ accepted commit or rollback, active-only helpers throw
 `EntityTransactionStateError` deterministically; archived/deleted active drafts
 throw `EntityTransactionDraftStateError` without embedding entity state payloads.
 
-This is only an in-memory commit boundary for future entity base classes. It
-does not instantiate entities, invoke handlers, write repositories or storage,
-apply snapshots, dispatch messages, register buses, start transport, or provide
-async-local/global transaction state.
+This is only an in-memory commit boundary for entity base classes and
+repository-owned execution. It does not instantiate entities, invoke handlers,
+write repositories or storage, apply snapshots, dispatch messages, register
+buses, start transport, or provide async-local/global transaction state.

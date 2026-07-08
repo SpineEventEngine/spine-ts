@@ -114,7 +114,8 @@ The helpers deliberately do not own runtime policy. They do not generate UUIDs,
 timestamps, actor or tenant context, event producer IDs, entity versions,
 origins, command system properties, storage records, acknowledgements, delivery
 state, bus dispatch, handler registration, or transport metadata. Those
-responsibilities remain with later runtime slices.
+responsibilities belong to the server/runtime layers that own the current
+workflow.
 
 ## Server Entity Metadata
 
@@ -154,13 +155,14 @@ map-valued, and explicit optional `(set_once)` fields are intentionally
 unsupported in this slice, matching the JVM generation boundary; they fail
 closed with field-specific violations and no raw previous/next value leakage.
 
-`defineEntityHandlers()` is the explicit metadata target that later decorators
-must produce. It accepts an entity class, a state schema, and a builder callback
+`defineEntityHandlers()` is the low-level explicit metadata constructor used by
+framework tests, generated registry ingestion, and legacy non-decorator
+integrations. It accepts an entity class, a state schema, and a builder callback
 whose methods record command assignment, command reaction, event subscription,
 event reaction, and event application metadata. Each handler record keeps the
 generated Protobuf-ES schema, message full type name, handler kind, and entity
-method name. Event application metadata also records `allowImport` for future
-import/replay machinery.
+method name. Event application metadata also records `allowImport` only for
+legacy schema-bearing `@Apply` compatibility metadata.
 
 Handler metadata is deterministic and frozen. The all-handlers array preserves
 the user declaration order, and role-specific arrays preserve the same relative
@@ -185,10 +187,10 @@ contract. Bare `@Assign`, `@Command`, `@Subscribe`, and `@React` are the
 ordinary application syntax collected from public instance methods into
 standard per-class decorator metadata. Schema-bearing decorator overloads,
 `@Apply`, and `materializeDecoratedEntityHandlers()` remain legacy/framework
-compatibility until generated registry tooling owns schema inference from
-handler parameter and return types. This keeps decorated classes compatible with
-`HandlerMetadataRegistry` and preserves `defineEntityHandlers()` as the
-canonical fallback for environments that avoid decorators. The adapter does not
+compatibility. Generated registry tooling owns ordinary schema inference from
+handler parameter and return types, keeps decorated classes compatible with
+`HandlerMetadataRegistry`, and preserves `defineEntityHandlers()` as the
+low-level fallback for environments that avoid decorators. The adapter does not
 use legacy `emitDecoratorMetadata`, `reflect-metadata`, parameter decorators, or
 a process-wide handler registry.
 
@@ -208,7 +210,7 @@ ID to one descriptor-backed Protobuf-ES state schema, derives and caches
 `EntityMetadata`, snapshots state on construction and read access, snapshots
 caller-owned plain version metadata without computing increments, and exposes
 lifecycle flags plus `isActive`, `isArchived`, `isDeleted`, and sticky
-`lifecycleFlagsChanged` accessors. Protected replacement hooks give future
+`lifecycleFlagsChanged` accessors. Protected replacement hooks give
 framework-owned subclasses a narrow place to apply accepted state/version or
 lifecycle evidence, but the public shell has no state setters or Java builders
 and does not own transactions, repositories, handler invocation, storage,
@@ -271,7 +273,7 @@ step. When authentic explicit handler metadata is supplied, repositories now
 calculate command/event routes and bounded-context assembly registers internal
 dispatcher adapters for those routes. Aggregate repositories can then load or
 create one aggregate, invoke one assignee in a framework-owned transaction,
-pack and store returned domain events, persist the managed snapshot through
+pack and store returned domain events, persist the latest managed state through
 `AggregateStorage`, and queue already-stored events for event-bus delivery
 without a second append. The TypeScript seam still omits public `create`,
 `find`, `store`, record conversion APIs,
@@ -282,7 +284,7 @@ lifecycle, and transport.
 one entity state. It buffers a draft state, explicit previous/draft version
 metadata, lifecycle flags, and visible status (`active`, `committed`, or
 `rolled-back`). The compatibility contract is intentionally small and
-JVM-familiar: this API owns only in-memory transaction evidence for future
+JVM-familiar: this API owns only in-memory transaction evidence for
 framework-controlled entity bases, not repository storage, database
 transactions, dispatch phases, event emission, or process-wide transaction
 state. `update()` replaces only the buffered draft, while `previous` and
@@ -320,7 +322,8 @@ surface:
   starting context assembly;
 - `ContextSpec` is a framework-owned immutable value exposed through
   `builder.spec` and `context.spec`; it carries the validated bounded-context
-  name, tenant mode, and event-storage metadata for future runtime work;
+  name, tenant mode, and event-storage metadata used when
+  `withStorageFactory()` creates the context `EventStore`;
 - `BoundedContextBuilder.addCommandDispatcher()` /
   `removeCommandDispatcher()` and `addEventDispatcher()` /
   `removeEventDispatcher()` collect dispatchers for the context being built;
@@ -368,8 +371,9 @@ The current command service error contract remains intentionally small.
 `CommandBus` validates each accepted command payload with the existing core
 facade before dispatcher callbacks run, including custom
 `addCommandDispatcher()` routes. For repository-backed aggregate dispatchers,
-that still means validation happens before route calculation, aggregate history
-load, event append, snapshot write, or stored-event dispatch.
+that still means validation happens before route calculation, latest persisted
+state load, traceability event-journal append, latest-state write, or
+stored-event dispatch.
 `CommandService.Post` maps invalid payloads to `COMMAND_VALIDATION_ERROR`,
 message `Command payload validation failed.`, and packed
 `spine.validation.ValidationError` details. Handler-thrown `CommandRefusalError`
@@ -378,8 +382,10 @@ values are the one immediate business refusal path mapped to stable non-ok
 `EntityTransaction.commit()` for transition validation. When that transaction is
 rejected, repository execution raises
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
-details before events or snapshots are stored. Stored-history replay failures
-remain internal and are sanitized as `COMMAND_POST_ERROR`.
+details before traceability events or latest state are stored. Legacy/internal
+aggregate-history replay or validation failures remain internal and are
+sanitized as `COMMAND_POST_ERROR`; ordinary generated-registry aggregate loading
+uses the latest persisted state instead of replaying stored events.
 Unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
 
 The following runtime pieces are still deferred to later explicit tasks:
@@ -477,10 +483,13 @@ return independently closeable handles, and clone stored values so later caller
 mutation cannot affect stored records. Payloads must remain cloneable, which
 preserves byte arrays used by packed Protobuf `Any` payloads.
 
-Aggregate snapshot/history storage is available through the current
-`AggregateStorage` seam. Delivery records, tenant indexes, diagnostics,
-repository storage policy, read-side projection stores, and durable production
-storage remain deferred.
+Aggregate latest-state and traceability event-journal storage is available
+through the current `AggregateStorage` seam. Its history-read API remains
+legacy/internal compatibility support; ordinary generated-registry aggregate
+loading uses the latest persisted state rather than snapshot-plus-replay
+loading. Delivery records, tenant indexes, diagnostics, repository storage
+policy, read-side projection stores, and durable production storage remain
+deferred.
 
 ## Transport Boundary
 

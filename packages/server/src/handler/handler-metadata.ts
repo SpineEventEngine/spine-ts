@@ -102,7 +102,7 @@ export type EventReactionHandlerMetadata<
 
 /** Options accepted by event applier registration. */
 export interface EventApplicationOptions {
-  /** Whether this applier may be used by later import/replay machinery. */
+  /** Legacy compatibility flag preserved on schema-bearing event appliers. */
   readonly allowImport?: boolean;
 }
 
@@ -111,7 +111,7 @@ export interface EventApplicationHandlerMetadata<
   Schema extends DescriptorMessageSchema = DescriptorMessageSchema,
   MethodName extends string = string,
 > extends BaseHandlerMetadata<"event-application", Schema, MethodName> {
-  /** Whether later import/replay machinery may use this applier. */
+  /** Legacy compatibility flag preserved on schema-bearing event appliers. */
   readonly allowImport: boolean;
 }
 

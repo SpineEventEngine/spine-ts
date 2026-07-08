@@ -2,11 +2,11 @@ import type { Event } from "@spine-ts/proto";
 import type { MessageSchema } from "@spine-ts/core";
 
 /**
- * Small multicast event-dispatch seam for later repository/runtime owners.
+ * Small multicast event-dispatch seam for bus and repository adapters.
  *
- * Dispatchers declare the event message schemas they accept and perform the
- * actual handling behind the bus seam. The bus does not instantiate entities
- * or invoke entity methods directly.
+ * Dispatchers declare the event message schemas they accept and perform
+ * handling behind the bus seam. Repository-backed adapters own projection or
+ * subscriber invocation; the bus validates, stores, and routes event envelopes.
  */
 export interface EventDispatcher {
   /** Generated event message schemas accepted by this dispatcher. */
