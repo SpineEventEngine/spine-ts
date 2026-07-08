@@ -1,6 +1,6 @@
 # T-0016d Review Log
 
-Status: all required lanes clean; final verification passed; pending integration
+Status: all required lanes clean; final verification passed; integrated to `main`
 
 Scope: Subscription service lifecycle semantics, focused tests, and public docs.
 
@@ -48,6 +48,15 @@ Scope: Subscription service lifecycle semantics, focused tests, and public docs.
 - TypeDoc completed with the existing invalid-`origin` source-link warning.
 - Proto lint passed, and generated proto outputs were confirmed ignored,
   untracked, and freshly regenerated.
+
+## Main Integration
+
+- Merged `task/T-0016d-subscription-semantics` into `main` with merge commit
+  `5e470a6`.
+- Post-merge unsandboxed `corepack pnpm verify` passed with 50 test files and
+  842 tests, 94.98% statement coverage, 90.16% branch coverage, TypeDoc's
+  existing invalid-`origin` warning only, proto lint passing, and generated
+  proto outputs ignored, untracked, and freshly regenerated.
 
 ## Review Policy
 

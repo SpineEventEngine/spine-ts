@@ -238,6 +238,8 @@ Spine JVM inspection: required for query/read-model behavior.
 
 ### T-0016d Subscription Semantics Closure
 
+Status: integrated into `main` with merge commit `5e470a6`.
+
 Acceptance criteria:
 
 - Subscription service defines known/unknown target behavior.
