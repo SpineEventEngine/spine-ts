@@ -204,6 +204,7 @@ consistency, and aggregate version order before storage. It does not implement
 handler invocation, delivery, catch-up, read-side indexing, subscriptions,
 system events, or aggregate repository caching.
 Delivery exports include `Delivery`, `DeliveryOptions`,
+`DeliveryDrainOptions`, `DeliveryEndpoint`, `DeliveryFailure`, `DeliveryRun`,
 `DeliveryStorageCorruptionError`, `Inbox`, `InboxId`, `InboxMessage`,
 `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
 `InboxReadOptions`, `InboxWriteResult`, `InboxStorage`, `InboxStorageOptions`,
@@ -215,12 +216,22 @@ inbox messages and shard lease records through `StorageFactory` /
 ordering metadata on each message with receive time (`whenReceived`),
 `version`, and inbox message UUID ordering. Direct inbox writes require
 `InboxMessage.id.shard` to match `InboxMessage.shard`. Delivery also exposes a
-storage-backed shard pickup / release seam backed by atomic
-`RecordStorage.compareAndSet()`.
-`InboxReadOptions.limit` is the current positive page-size control with a
-bounded default when omitted. This slice does not run worker loops,
-retry monitors, conveyor/stations, repository invocation, broad server
-lifecycle, transport retries, example app work, or read-side catch-up loops.
+storage-backed shard pickup/release seam backed by atomic
+`RecordStorage.compareAndSet()`, plus `Delivery.drain()` as the direct local
+worker boundary. `Delivery.drain(shard, { node, onMessage, limit })` claims one
+shard, reads `TO_DELIVER` rows in inbox order, invokes the `DeliveryEndpoint`
+once per row, marks exact-message successes `DELIVERED`, leaves endpoint or
+marker failures pending for retry, releases the shard in `finally`, and returns
+a `DeliveryRun` with counts and per-message `DeliveryFailure` values retained
+only in that result. `DeliveryDrainOptions.limit` / `InboxReadOptions.limit`
+are the current positive page-size controls with a bounded default when
+omitted. `Inbox.markDelivered()` and `InboxStorage.markDelivered()` return
+`undefined` for missing rows, non-pending rows, or caller snapshots that do not
+match the stored message; already-delivered matching rows are returned
+idempotently. This slice does not run scheduler loops, retry monitors,
+conveyor/stations, repository invocation, broad server lifecycle, transport
+retries, retained attempt history, example app work, or read-side catch-up
+loops.
 Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field

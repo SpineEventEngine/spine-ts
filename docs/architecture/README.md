@@ -411,8 +411,9 @@ The following runtime pieces are still deferred to later explicit tasks:
   repository identity seam;
 - process-manager event handler execution, read-side catch-up, and
   query/subscription execution over repository routes;
-- inbox/delivery storage, durable storage lifecycle, entity storage/cache
-  catch-up, and tenant-index persistence;
+- delivery scheduler/catch-up loops, durable storage lifecycle, entity
+  storage/cache catch-up, and tenant-index persistence. Durable inbox records,
+  dedup guards, shard leases, and the direct local shard drain are present;
 - richer query filtering, event subscriptions, and durable subscription
   recovery;
 - system-context pairing and broad server/gRPC lifecycle; and
@@ -503,9 +504,14 @@ Aggregate latest-state and traceability event-journal storage is available
 through the current `AggregateStorage` seam. Its history-read API remains
 legacy/internal compatibility support; ordinary generated-registry aggregate
 loading uses the latest persisted state rather than snapshot-plus-replay
-loading. Delivery records, tenant indexes, diagnostics, repository storage
-policy, read-side projection stores, and durable production storage remain
-deferred.
+loading. Delivery now persists durable inbox rows through `RecordStorage`,
+keeps live deduplication guards beside those rows, coordinates shard ownership
+with durable shard leases, and exposes a local `Delivery.drain()` loop that
+claims one shard, invokes one framework callback per `TO_DELIVER` row, and
+marks successful rows `DELIVERED`. Scheduler/catch-up orchestration,
+transport-backed worker loops, retained delivery-attempt history, tenant
+indexes, diagnostics, repository storage policy, read-side projection stores,
+and durable production storage adapters remain deferred.
 
 ## Transport Boundary
 

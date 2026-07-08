@@ -156,6 +156,20 @@ describe("Inbox", () => {
     ]);
   });
 
+  it("rejects non-object receive inputs before writing storage records", async () => {
+    const inbox = new Inbox(
+      new InboxStorage({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+      }),
+    );
+
+    const receive = inbox.receive(undefined as never);
+
+    await expect(receive).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(receive).rejects.toThrow("Inbox message input is invalid.");
+  });
+
   it("keeps multitenant inbox storage isolated by tenant", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const tenantA = new InboxStorage({
@@ -1541,6 +1555,21 @@ describe("Inbox", () => {
     await expect(write).rejects.toThrow(/conflicting inbox/i);
   });
 
+  it("retries when a pending guard changes before embedded message recovery", async () => {
+    const pending = createMessage("message-1", "signal-1", 1n);
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new CorruptGuardFactory({
+        guard: pendingThenFinalDedupRecord(pending),
+      }),
+    });
+
+    const write = storage.write(createMessage("message-2", "signal-1", 2n));
+
+    await expect(write).rejects.toBeInstanceOf(DeliveryStorageCorruptionError);
+    await expect(write).rejects.toThrow(/points to a missing inbox message/i);
+  });
+
   it("fails clearly when inbox row compare-and-set keeps missing", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -1951,6 +1980,7 @@ describe("Inbox", () => {
             shardTotal: 1,
             state: "FINAL",
             status: "DELIVERED",
+            keepUntilMs: new Date("2026-07-02T10:00:00.000Z").getTime(),
           }),
           "utf8",
         ),
@@ -2700,6 +2730,23 @@ function cloneFailsOnReuse(record: Any): Any {
   } as unknown as Any & { clone: () => Any };
   firstRead.clone = () => rematerialized;
   return firstRead;
+}
+
+function pendingThenFinalDedupRecord(message: ReturnType<typeof createMessage>): Any {
+  const pending = DedupRecords.writeClaim(message);
+  const final = DedupRecords.writeFinal(message);
+  let reads = 0;
+
+  const record = {
+    typeUrl: pending.typeUrl,
+    get value(): Uint8Array {
+      reads += 1;
+      return reads <= 2 ? pending.value : final.value;
+    },
+  } as Any & { clone: () => Any };
+  record.clone = () => record;
+
+  return record;
 }
 
 class ExistingInboxRowFactory extends StorageFactory {

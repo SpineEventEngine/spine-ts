@@ -200,11 +200,13 @@ adapter behind the same contract.
 
 ## Delivery and Reliability
 
-The current TS runtime preserves only the first durable inbox slice:
+The current TS runtime preserves the first durable inbox slice and a small local
+delivery worker boundary:
 
 - standalone delivery writes can be recorded before the asynchronous worker
-  handoff point where durability is configured, but this slice does not yet
-  integrate `CommandBus` or `EventBus` intake with that handoff;
+  handoff point where durability is configured, and a framework-owned
+  `Delivery.drain()` run can drain one shard by callback, but this slice does
+  not yet integrate `CommandBus` or `EventBus` intake with that handoff;
 - durable inbox rows store the inbox target identity, signal identity, shard,
   status, label, receive time, version, optional signal payload, and optional
   dedup retention;
@@ -212,10 +214,16 @@ The current TS runtime preserves only the first durable inbox slice:
   while allowing crash recovery from a durable inbox row;
 - shard pickup persists lease-backed shard sessions through storage
   compare-and-set rather than process-local locks; and
+- one direct drain run claims a shard through `ShardedWorkRegistry`, reads
+  `TO_DELIVER` rows in inbox order, invokes one supplied framework endpoint
+  callback per row, marks successful rows `DELIVERED`, leaves failed endpoint
+  calls `TO_DELIVER` for a later run, returns simple counts plus per-message
+  failures, and releases the shard in a `finally` path; and
 - malformed, oversized, or key-mismatched inbox, dedup, and shard-session
   records fail closed as storage corruption.
 
-This slice stops at durable storage and readback. It does not yet implement
-worker loops, repository invocation from the inbox, retry monitors, attempt
-counters, or retained delivery error details. Those concerns are deferred to a
-later delivery task.
+This slice stops at durable storage, ordered readback, and one direct drain call.
+It does not yet implement worker loops, repository invocation from the inbox,
+retry monitors, attempt counters, retained delivery error details, catch-up, or
+transport-backed delivery. Those concerns are deferred to later delivery and
+runtime tasks.
