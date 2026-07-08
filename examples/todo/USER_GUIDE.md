@@ -8,8 +8,11 @@ shared across processes and disappears when the process exits.
 
 Run generation and TypeScript build from the repository root:
 
+Install workspace dependencies with `pnpm install` before running these
+commands.
+
 ```bash
-pnpm --config.verify-deps-before-run=false typecheck:build
+pnpm typecheck:build
 ```
 
 Generated Protobuf-ES output lives under `examples/todo/generated/` and remains
@@ -24,7 +27,7 @@ including the runtime registry module at
 Start the example after building:
 
 ```bash
-pnpm --config.verify-deps-before-run=false --filter @spine-ts/example-todo start
+pnpm --filter @spine-ts/example-todo start
 ```
 
 By default the process listens at:
@@ -147,6 +150,7 @@ import { create } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { deriveTypeUrl, unpackAny } from "@spine-ts/core";
+import { ActorContextSchema, UserIdSchema } from "@spine-ts/proto";
 import { TargetSchema } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
 import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
 import {
@@ -163,6 +167,9 @@ const subscription = await subscriptions.subscribe(
     target: create(TargetSchema, {
       type: deriveTypeUrl(TaskListSchema),
       criterion: { case: "includeAll", value: true },
+    }),
+    context: create(ActorContextSchema, {
+      actor: create(UserIdSchema, { value: "todo-user" }),
     }),
   }),
 );
@@ -185,8 +192,8 @@ client is done.
 Focused example coverage:
 
 ```bash
-pnpm --config.verify-deps-before-run=false typecheck:build
-pnpm --config.verify-deps-before-run=false vitest run examples/todo/src/index.test.ts --passWithNoTests
+pnpm typecheck:build
+pnpm vitest run examples/todo/src/index.test.ts --passWithNoTests
 ```
 
 The focused suite covers in-process black-box behavior and a real
