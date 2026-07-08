@@ -1,6 +1,6 @@
 # T-0016d Review Log
 
-Status: all required lanes clean; pending final verification and integration
+Status: all required lanes clean; final verification passed; pending integration
 
 Scope: Subscription service lifecycle semantics, focused tests, and public docs.
 
@@ -39,6 +39,15 @@ Scope: Subscription service lifecycle semantics, focused tests, and public docs.
   `019f418b-5cc6-72f1-97f0-54aa45c98392`: clean after commit `7a1c654`
   replaced the stale `Reviewers: pending` entry with the actual review and
   re-review participant records.
+
+## Final Verification
+
+- Final unsandboxed `corepack pnpm verify`: passed.
+- Full tests passed with 50 test files and 842 tests.
+- Coverage passed with 94.98% statements and 90.16% branches.
+- TypeDoc completed with the existing invalid-`origin` source-link warning.
+- Proto lint passed, and generated proto outputs were confirmed ignored,
+  untracked, and freshly regenerated.
 
 ## Review Policy
 
