@@ -7,13 +7,13 @@ tenant-scoped `Stand` updates, docs/API boundary, and verification evidence.
 
 ## Required Lanes
 
-| Lane                       | Latest Review     | Result                                                                 |
-| -------------------------- | ----------------- | ---------------------------------------------------------------------- |
-| Code style/maintainability | Final re-review   | Clean.                                                                 |
-| Documentation completeness | Final re-review   | Clean.                                                                 |
-| TypeScript/API docs        | Final re-review   | Clean.                                                                 |
-| Security                   | Targeted rerun    | Clean.                                                                 |
-| Performance/reliability    | Final re-review   | Clean.                                                                 |
+| Lane                       | Latest Review   | Result |
+| -------------------------- | --------------- | ------ |
+| Code style/maintainability | Final re-review | Clean. |
+| Documentation completeness | Final re-review | Clean. |
+| TypeScript/API docs        | Final re-review | Clean. |
+| Security                   | Targeted rerun  | Clean. |
+| Performance/reliability    | Final re-review | Clean. |
 
 ## Findings
 

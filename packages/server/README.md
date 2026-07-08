@@ -584,8 +584,8 @@ lifecycle, or integrate transports.
 
 ## Direct Stand
 
-Use the context-owned `Stand` for direct latest-state reads, storage-order
-latest-state list reads, and in-process entity update notifications:
+Use the context-owned `Stand` for direct latest-state reads, storage-backed
+latest-state queries, and in-process entity update notifications:
 
 ```ts
 const stand = tasks.stand();
@@ -593,6 +593,10 @@ const stand = tasks.stand();
 await stand.update(TaskStateSchema, taskState, { version });
 const latest = await stand.read(TaskStateSchema, taskId);
 const all = await stand.readAllVersioned(TaskStateSchema);
+const newest = await stand.queryVersioned(TaskStateSchema, {
+  sort: [{ field: "createdAt", direction: "desc" }],
+  limit: 10,
+});
 
 const subscription = stand.subscribe(TaskStateSchema, (update) => {
   update.state;
@@ -604,8 +608,10 @@ Repositories registered with a built context make their state schemas known to
 that context's stand. Stand reads, updates, and subscriptions reject unknown
 state schemas with `StandStateTypeError`. Multitenant stands require
 `{ tenantId }` on point reads, list reads, updates, and subscriptions; single-
-tenant stands reject tenant options. `readAllVersioned()` returns
-`StandReadResult` entries in deterministic storage query order and reuses the
+tenant stands reject tenant options. `queryVersioned()` accepts the storage
+`RecordQuery` slice for IDs, exact filters, masks, ordering, and positive
+limits; `readAllVersioned()` is the no-filter convenience path. Both return
+`StandReadResult` entries in deterministic storage query order and reuse the
 same caller-supplied version metadata as point reads. Stand version metadata is
 process-local and in-memory only; the current slice persists latest state
 records through storage, but not the side-map that associates those states with
@@ -624,9 +630,15 @@ lifecycle, retries, and transport topology remain out of scope for this slice.
 buses and stands to the first `CommandService`, `QueryService`, and
 `SubscriptionService` methods, including `QueryService.Read` support for
 ID filters on any registered state route and projection-state
-`Target.include_all = true` reads. `QueryService.Read` rejects column filters,
-field masks, ordering, limits, missing criteria, and `include_all = false`
-before reading Stand storage.
+`Target.include_all = true` reads. Projection queries also support top-level
+`EQUAL` filters over declared projection `(column)` proto field names,
+`ResponseFormat.field_mask`, repeated `ResponseFormat.order_by` over declared
+proto column names, and positive `limit` values when at least one ordering
+directive is present. Use proto column names such as `open_task_count`, not
+generated TS local names such as `openTaskCount`. Undeclared columns,
+unsupported operators, nested/disjunctive composites, limits without ordering,
+missing criteria, and `include_all = false` return `INVALID_QUERY` before
+reading Stand storage.
 
 `SubscriptionService.Subscribe` accepts only known registered state targets and
 rejects unknown targets with `INVALID_ARGUMENT` before creating a subscription.
@@ -643,8 +655,9 @@ TTL defaults to 30 seconds and the active queue limit defaults to 100 queued
 updates. Service subscriptions, direct Stand subscriptions, Stand version
 metadata, and the in-memory storage adapter are process-local development/test
 state, not durable delivery or catch-up storage. Cross-context fallback, client
-query DSLs, event subscriptions, field filtering, and durable cross-process
-Delivery/subscription recovery catch-up remain outside this slice.
+query DSLs, richer field expressions beyond supported field masks, event
+subscriptions, and durable cross-process Delivery/subscription recovery
+catch-up remain outside this slice.
 
 ## Local Server Lifecycle
 

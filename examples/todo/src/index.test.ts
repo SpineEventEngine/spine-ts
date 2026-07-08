@@ -1,5 +1,5 @@
 import { create } from "@bufbuild/protobuf";
-import { StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
+import { Int32ValueSchema, StringValueSchema, type Any } from "@bufbuild/protobuf/wkt";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
@@ -11,7 +11,10 @@ import {
   ValidationErrorSchema,
 } from "@spine-ts/proto";
 import {
+  CompositeFilter_CompositeOperator,
   CompositeFilterSchema,
+  Filter_Operator,
+  FilterSchema,
   TargetFiltersSchema,
   TargetSchema,
 } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
@@ -218,18 +221,26 @@ describe("@spine-ts/example-todo", () => {
     ]);
   });
 
-  it("returns a stable error for unsupported task-list column queries", async () => {
+  it("filters task-list rows by projection columns", async () => {
     const fixture = new BoundedContextFixture(await createTodoContext(), {
       timeoutMs: 500,
       intervalMs: 5,
     });
 
-    const response = await fixture.read(createColumnFilterQuery());
+    await fixture.post(createTaskCommand("command-column-first", "task-column-first", "First"));
+    await fixture.post(createTaskCommand("command-column-second", "task-column-second", "Second"));
+    await fixture.post(createCompleteCommand("command-column-complete", "task-column-first"));
+    const response = await fixture.readEventually(createOpenTaskCountQuery(1), (candidate) => {
+      const rows = candidate.message.map((message) => unpackTaskList(message.state));
+      return rows.length === 1 && rows[0]?.id === "task-column-second";
+    });
+    const rows = response.message.map((message) => unpackTaskList(message.state));
 
-    expect(response.response?.status?.status.case).toBe("error");
-    expect(errorMessage(response.response?.status?.status)).toBe(
-      "QueryService.Read does not support column filters.",
-    );
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe("task-column-second");
+    expect(rows[0]?.openTaskCount).toBe(1);
+    expect(rows[0]?.tasks[0]?.title).toBe("Second");
   });
 
   it("subscribes to task-list updates and receives projection-driven changes", async () => {
@@ -832,7 +843,7 @@ function createTaskListIdQuery(id = "task-list-query") {
   });
 }
 
-function createColumnFilterQuery() {
+function createOpenTaskCountQuery(openTaskCount: number) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "query-task-list-column" }),
     target: create(TargetSchema, {
@@ -840,7 +851,21 @@ function createColumnFilterQuery() {
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
-          filter: [create(CompositeFilterSchema)],
+          filter: [
+            create(CompositeFilterSchema, {
+              filter: [
+                create(FilterSchema, {
+                  fieldPath: { fieldName: ["open_task_count"] },
+                  value: packAny(
+                    Int32ValueSchema,
+                    create(Int32ValueSchema, { value: openTaskCount }),
+                  ),
+                  operator: Filter_Operator.EQUAL,
+                }),
+              ],
+              operator: CompositeFilter_CompositeOperator.ALL,
+            }),
+          ],
         }),
       },
     }),

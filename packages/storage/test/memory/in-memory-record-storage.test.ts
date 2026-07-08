@@ -31,8 +31,23 @@ describe("InMemoryRecordStorage", () => {
       id: { value: "event-1" },
       context: { timestamp: { seconds: 3n } },
     });
+    expect(masked?.$typeName).toBe(EventSchema.typeName);
     expect(masked?.message).toBeUndefined();
     expect(stored?.message?.typeUrl).toBe("type.spine.io/tasks.TaskCreated");
+  });
+
+  it("ignores blank mask paths while applying requested fields", async () => {
+    const storage = createStorage();
+
+    await storage.write(createEvent("event-1", "type.spine.io/tasks.TaskCreated", 3n));
+
+    const masked = await storage.read(create(EventIdSchema, { value: "event-1" }), {
+      mask: [" ", "id", "\t"],
+    });
+
+    expect(masked).toEqual(
+      create(EventSchema, { id: create(EventIdSchema, { value: "event-1" }) }),
+    );
   });
 
   it("filters, sorts, and limits by record ids and columns deterministically", async () => {

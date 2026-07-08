@@ -162,7 +162,8 @@ direct read-side entity-state API. A stand registers known generated state
 schemas, rejects unknown state types on read/update/subscribe, stores latest
 states through `StorageFactory`/`RecordStorage`, reads latest state by schema
 and entity ID, can return caller-supplied version metadata through
-`readVersioned()`, can return storage-order list results through
+`readVersioned()`, can return storage-backed query results through
+`queryVersioned()`, can return storage-order list results through
 `readAllVersioned()`, can clear one registered state type through
 `clear(schema, options?)`, and delivers direct in-process update notifications.
 Version metadata is process-local and in-memory only in the current `Stand`;
@@ -176,9 +177,14 @@ Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
 routes. `QueryService.Read` supports ID-filter reads for any registered state
 route and projection-state `Target.include_all = true` reads, packing
 `EntityStateWithVersion` replies from
-`Stand.readVersioned()` and `Stand.readAllVersioned()` respectively. It rejects
-column filters, field masks, ordering, limits, missing criteria, and
-`include_all = false` as `INVALID_QUERY` before reading Stand storage.
+`Stand.queryVersioned()`. Projection queries also support top-level `EQUAL`
+filters over declared projection `(column)` proto field names, field masks,
+repeated ordering directives over declared proto column names, and positive
+limits when ordering is present. Use proto column names such as
+`open_task_count`, not generated TS local names such as `openTaskCount`.
+Undeclared columns, unsupported operators, nested or `EITHER` composites, limits
+without ordering, missing criteria, and `include_all = false` return
+`INVALID_QUERY` before reading Stand storage.
 `Subscribe`
 allocates opaque IDs, `Activate` attaches delivery, and `Cancel`/stream
 finalization release in-process handles. Never-activated subscriptions have a

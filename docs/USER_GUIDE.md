@@ -589,9 +589,12 @@ subscription.unsubscribe();
 `Stand.register(schema)` is available for direct stand instances; built bounded
 contexts call it from registered repository metadata. Reads, updates, and
 subscriptions reject unknown state schemas with `StandStateTypeError`.
-`readAllVersioned()` returns `StandReadResult` entries in deterministic
-`RecordStorage.query()` order and clones the stored state and caller-supplied
-version metadata the same way `readVersioned()` does. Version metadata is
+`queryVersioned()` accepts the storage `RecordQuery` slice for IDs, exact
+filters, masks, ordering, and positive limits. `readAllVersioned()` is the
+no-filter convenience path. Both return `StandReadResult` entries in
+deterministic `RecordStorage.queryEntries()` order and clone the stored state
+and caller-supplied version metadata the same way `readVersioned()` does.
+Version metadata is
 process-local and in-memory only in the current `Stand`; latest state records
 are storage-backed, but the state-to-version metadata map is not persisted.
 Multitenant stands require
@@ -602,9 +605,15 @@ reads support ID-filter point reads for any registered state route and
 projection-state `QueryService.Read` calls with `Target.include_all = true`.
 Include-all service reads use the same tenant-option behavior as direct stand
 reads and return `EntityStateWithVersion` values packed from
-`Stand.readAllVersioned()`.
-Column filters, field masks, ordering, limits, missing criteria, and
-`include_all = false` return `INVALID_QUERY` before Stand storage is read.
+`Stand.queryVersioned()`. Projection queries also support top-level `EQUAL`
+filters over declared projection `(column)` proto field names,
+`ResponseFormat.field_mask`, repeated `ResponseFormat.order_by` over declared
+proto column names, and positive `limit` values when at least one ordering
+directive is present. Use proto column names such as `open_task_count`, not
+generated TS local names such as `openTaskCount`. Undeclared columns,
+unsupported operators, nested or `EITHER` composites, limits without ordering,
+missing criteria, and `include_all = false` return `INVALID_QUERY` before Stand
+storage is read.
 Direct subscriptions are in-process only and must be cleaned up by calling
 `unsubscribe()`. Service subscriptions allocate IDs in `Subscribe` and attach
 Stand delivery in `Activate`; updates recorded before activation are not

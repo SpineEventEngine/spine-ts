@@ -32,6 +32,8 @@ type AggregateState = Message<"AggregateState"> & {
   archived: boolean;
 };
 
+type EmptyState = Message<"EmptyState">;
+
 function createFixtureFileDescriptor(descriptorSetBase64: string, imports = [file_spine_options]) {
   const descriptorSet = fromBinary(
     FileDescriptorSetSchema,
@@ -60,6 +62,10 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
+const fileEntityEmptyFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.empty.descriptorSetBase64,
+);
+const EmptyStateSchema = messageDesc(fileEntityEmptyFixture, 0) as GenMessage<EmptyState>;
 
 describe("Stand", () => {
   it("registers known entity state types and rejects unknown reads and subscriptions", async () => {
@@ -76,6 +82,17 @@ describe("Stand", () => {
     expect(() => stand.subscribe(AggregateStateSchema, () => undefined)).toThrow(
       StandStateTypeError,
     );
+  });
+
+  it("rejects registration when a schema has no inferred ID field", () => {
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+
+    expect(() => {
+      stand.register(EmptyStateSchema);
+    }).toThrow('Stand state "EmptyState" requires an entity ID field.');
   });
 
   it("records entity state updates, reads latest state, and notifies subscribers", async () => {
@@ -152,6 +169,42 @@ describe("Stand", () => {
       {
         state: createState("task-2", "Second"),
         version: create(VersionSchema, { number: 2 }),
+      },
+    ]);
+  });
+
+  it("queries stored entity states with storage options and preserves masked versions", async () => {
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    stand.register(ProjectionStateSchema);
+
+    await stand.update(ProjectionStateSchema, createState("task-1", "Beta"), {
+      version: create(VersionSchema, { number: 1 }),
+    });
+    await stand.update(ProjectionStateSchema, createState("task-2", "Alpha"), {
+      version: create(VersionSchema, { number: 2 }),
+    });
+    await stand.update(ProjectionStateSchema, createState("task-3", "Ignored"), {
+      version: create(VersionSchema, { number: 3 }),
+    });
+
+    const results = await stand.queryVersioned(ProjectionStateSchema, {
+      filters: [{ column: "priority", value: 1 }],
+      sort: [{ field: "name", direction: "asc" }],
+      limit: 2,
+      mask: ["name"],
+    });
+
+    expect(results).toEqual([
+      {
+        state: create(ProjectionStateSchema, { name: "Alpha" }),
+        version: create(VersionSchema, { number: 2 }),
+      },
+      {
+        state: create(ProjectionStateSchema, { name: "Beta" }),
+        version: create(VersionSchema, { number: 1 }),
       },
     ]);
   });
@@ -537,6 +590,7 @@ class RejectingQueryStorageFactory extends ClosingStorageFactory {
   ): RecordStorage<I, R> {
     const storage = super.onCreateRecordStorage(context, recordSpec);
     storage.query = async () => Promise.reject(new Error("query failed"));
+    storage.queryEntries = async () => Promise.reject(new Error("query failed"));
     return storage;
   }
 }

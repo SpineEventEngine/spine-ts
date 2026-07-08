@@ -349,7 +349,8 @@ name validation or the builder-only build path by passing ad hoc objects.
 
 The current `Stand` slice is intentionally direct and storage-backed. It owns
 known generated state schemas, latest-state `RecordStorage`, direct
-read/update methods, versioned point reads, storage-order list reads through
+read/update methods, versioned point reads, storage-backed queries through
+`Stand.queryVersioned()`, storage-order list reads through
 `Stand.readAllVersioned()`, and deterministic in-process subscription handles
 with explicit `unsubscribe()`. Its version metadata map is process-local and
 in-memory only; latest state records go through storage, but state-to-version
@@ -362,11 +363,15 @@ provide a client query DSL. `SpineServices` adapts this direct read side and
 the context command bus to the first real Connect/Node `CommandService`,
 `QueryService`, and `SubscriptionService` routes. Projection-state
 `QueryService.Read` calls with `Target.include_all = true` are satisfied through
-`Stand.readAllVersioned()` over the stand's `RecordStorage.query()` path.
-ID-filter reads for any registered state route are satisfied through
-`Stand.readVersioned()`.
-Column filters, field masks, ordering, limits, missing criteria, and
-`include_all = false` are rejected before Stand storage reads.
+`Stand.queryVersioned()` over the stand's `RecordStorage.queryEntries()` path.
+ID-filter reads for any registered state route use the same path with a storage
+ID filter. Projection queries also support top-level `EQUAL` filters over
+declared projection `(column)` proto field names, field masks, repeated ordering
+directives over declared proto column names, and positive limits when ordering
+is present. Use proto column names such as `open_task_count`, not generated TS
+local names such as `openTaskCount`. Undeclared columns, unsupported operators,
+nested or `EITHER` composites, limits without ordering, missing criteria, and
+`include_all = false` return `INVALID_QUERY` before Stand storage reads.
 Direct list reads and `QueryService.Read` include-all calls follow the same
 tenant rules as point reads: single-tenant contexts reject tenant options, and
 multitenant contexts require `tenantId`.

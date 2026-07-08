@@ -61,6 +61,9 @@ function prune(value: unknown, node: MaskNode): void {
   }
 
   for (const key of Object.keys(value)) {
+    if (key === "$typeName") {
+      continue;
+    }
     const child = node.children.get(key);
 
     if (child === undefined) {

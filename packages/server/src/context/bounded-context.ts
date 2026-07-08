@@ -285,6 +285,7 @@ export class BoundedContext {
       for (const preparedRepository of preparedRepositories) {
         this.#stand.register(preparedRepository.snapshot.stateSchema, {
           idField: preparedRepository.snapshot.idField.localName,
+          columns: repositoryColumns(preparedRepository.snapshot),
         });
         preparedRepository.commit();
         this.#registeredRepositories.push(preparedRepository.snapshot);
@@ -1270,10 +1271,14 @@ function createRepositoryRecordSpec(snapshot: RegistrationSnapshot): RecordSpec<
   return new RecordSpec<unknown, Message>({
     schema: snapshot.stateSchema,
     extractId: (record) => readRecordId(record, snapshot),
-    columns: snapshot.metadata.columns.map(
-      (field) => new RecordColumn(field.name, (record) => readRecordField(record, field.localName)),
-    ),
+    columns: repositoryColumns(snapshot),
   });
+}
+
+function repositoryColumns(snapshot: RegistrationSnapshot): readonly RecordColumn<Message>[] {
+  return snapshot.metadata.columns.map(
+    (field) => new RecordColumn(field.name, (record) => readRecordField(record, field.localName)),
+  );
 }
 
 function createRepositoryView(snapshot: RegistrationSnapshot): RepositoryView {

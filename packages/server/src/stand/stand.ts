@@ -1,7 +1,13 @@
 import { clone, type Message, type MessageShape } from "@bufbuild/protobuf";
 import { deriveTypeUrl, type MessageSchema } from "@spine-ts/core";
 import { VersionSchema, type Version } from "@spine-ts/proto";
-import { RecordSpec, type RecordStorage, type StorageContext } from "@spine-ts/storage";
+import {
+  RecordColumn,
+  RecordSpec,
+  type RecordQuery,
+  type RecordStorage,
+  type StorageContext,
+} from "@spine-ts/storage";
 import type { StorageFactory } from "@spine-ts/storage";
 
 /** Options for constructing a direct read-side Stand. */
@@ -16,6 +22,8 @@ export interface StandOptions {
 export interface StandRegisterOptions {
   /** Generated local property name for the entity ID field. Defaults to the schema's first field. */
   readonly idField?: string;
+  /** Queryable columns materialized for this state type. */
+  readonly columns?: readonly RecordColumn<Message>[];
 }
 
 /** Tenant and version metadata accepted when recording an entity state update. */
@@ -138,7 +146,7 @@ export class Stand {
         schema,
         typeUrl,
         idField,
-        recordSpec: createStandRecordSpec(schema, idField),
+        recordSpec: createStandRecordSpec(schema, idField, options.columns ?? []),
         subscribers: new Set<Subscriber>(),
       }),
     );
@@ -193,6 +201,15 @@ export class Stand {
     schema: Schema,
     options: StandReadOptions = {},
   ): Promise<readonly StandReadResult<Schema>[]> {
+    return this.queryVersioned(schema, {}, options);
+  }
+
+  /** Query latest states and caller-supplied version metadata in storage query order. */
+  async queryVersioned<Schema extends MessageSchema>(
+    schema: Schema,
+    query: RecordQuery<unknown> = {},
+    options: StandReadOptions = {},
+  ): Promise<readonly StandReadResult<Schema>[]> {
     const finish = this.#beginOperation();
 
     try {
@@ -201,9 +218,9 @@ export class Stand {
       const storage = this.#openStorage(registration, tenantId);
 
       try {
-        const stored = await storage.query();
-        return stored.map((state) =>
-          this.#readResult(registration, state as MessageShape<Schema>, tenantId),
+        const stored = await storage.queryEntries(query);
+        return stored.map((entry) =>
+          this.#readResult(registration, entry.record as MessageShape<Schema>, tenantId, entry.id),
         );
       } finally {
         storage.close();
@@ -355,8 +372,9 @@ export class Stand {
     registration: Registration<Schema>,
     state: MessageShape<Schema>,
     tenantId: string | undefined,
+    idOverride?: unknown,
   ): StandReadResult<Schema> {
-    const id = registration.recordSpec.idValueIn(state);
+    const id = idOverride ?? registration.recordSpec.idValueIn(state);
     const version = this.#versions.get(versionKey(registration.typeUrl, tenantId, id));
 
     return Object.freeze({
@@ -456,6 +474,7 @@ export class Stand {
 function createStandRecordSpec(
   schema: MessageSchema,
   idField: string,
+  columns: readonly RecordColumn<Message>[],
 ): RecordSpec<unknown, Message> {
   return new RecordSpec<unknown, Message>({
     schema,
@@ -465,6 +484,7 @@ function createStandRecordSpec(
         schema,
         typeUrl: deriveTypeUrl(schema),
       }),
+    columns,
   });
 }
 

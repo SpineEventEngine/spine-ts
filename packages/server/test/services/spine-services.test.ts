@@ -8,7 +8,9 @@ import {
   FileDescriptorProtoSchema,
   FileDescriptorSetSchema,
   FieldMaskSchema,
+  Int32ValueSchema,
   StringValueSchema,
+  type Any,
 } from "@bufbuild/protobuf/wkt";
 import {
   ValidationException,
@@ -36,7 +38,10 @@ import {
 } from "@spine-ts/proto";
 import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
 import {
+  CompositeFilter_CompositeOperator,
   CompositeFilterSchema,
+  Filter_Operator,
+  FilterSchema,
   TargetFiltersSchema,
   TargetSchema,
 } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
@@ -544,32 +549,314 @@ describe("SpineServices", () => {
     }
   });
 
-  it("rejects unsupported column filters before reading storage", async () => {
-    const context = createRejectingReadContext();
+  it("applies field masks to ID-filter and include-all reads", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    await context.stand().update(ProjectionStateSchema, createState("task-1", "First"), {
+      version: create(VersionSchema, { number: 7 }),
+    });
+    await context.stand().update(ProjectionStateSchema, createState("task-2", "Second"), {
+      version: create(VersionSchema, { number: 8 }),
+    });
     const handlers = registeredQueryHandlers(context);
+    const nameOnly = create(ResponseFormatSchema, {
+      fieldMask: create(FieldMaskSchema, { paths: ["name"] }),
+    });
+    const idOnly = create(ResponseFormatSchema, {
+      fieldMask: create(FieldMaskSchema, { paths: ["id"] }),
+    });
 
-    const response = await handlers.read(createColumnFilterQuery());
+    const idResponse = await handlers.read(createFormattedQuery(nameOnly));
+    const allResponse = await handlers.read(createFormattedIncludeAllQuery(idOnly));
 
-    expect(response.response?.status?.status.case).toBe("error");
-    expect(responseErrorMessage(response)).toBe(
-      "QueryService.Read does not support column filters.",
+    const idState = unpackAny(idResponse.message[0]?.state ?? packMissing(), ProjectionStateSchema);
+    const allStates = allResponse.message.map((message) =>
+      unpackAny(message.state ?? packMissing(), ProjectionStateSchema),
     );
+    if (idState === undefined) {
+      throw new Error("Expected masked ID-filter state.");
+    }
+    expect(idResponse.response?.status?.status.case).toBe("ok");
+    expect(idState).toMatchObject({ name: "First" });
+    expect(idState.id).toBe("");
+    expect(idState.priority).toBe(0);
+    expect(idResponse.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
+    expect(allResponse.response?.status?.status.case).toBe("ok");
+    expect(allStates).toEqual([
+      create(ProjectionStateSchema, { id: "task-1" }),
+      create(ProjectionStateSchema, { id: "task-2" }),
+    ]);
+    expect(allResponse.message[0]?.version).toEqual(create(VersionSchema, { number: 7 }));
   });
 
-  it("rejects unsupported response formats before reading storage", async () => {
-    const context = createRejectingReadContext();
+  it("applies ordering and limit to include-all projection reads", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    await context.stand().update(ProjectionStateSchema, createState("task-1", "Beta", 2));
+    await context.stand().update(ProjectionStateSchema, createState("task-2", "Alpha", 2));
+    await context.stand().update(ProjectionStateSchema, createState("task-3", "Gamma", 1));
     const handlers = registeredQueryHandlers(context);
-
-    const fieldMask = await handlers.read(
-      createFormattedQuery(
+    const response = await handlers.read(
+      createFormattedIncludeAllQuery(
         create(ResponseFormatSchema, {
-          fieldMask: create(FieldMaskSchema, { paths: ["name"] }),
+          orderBy: [
+            create(OrderBySchema, {
+              column: "priority",
+              direction: OrderBy_Direction.DESCENDING,
+            }),
+            create(OrderBySchema, {
+              column: "name",
+              direction: OrderBy_Direction.ASCENDING,
+            }),
+          ],
+          limit: 2,
         }),
       ),
     );
-    const orderBy = await handlers.read(
+
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(response.message.map((message) => unpackProjectionState(message.state))).toEqual([
+      createState("task-2", "Alpha", 2),
+      createState("task-1", "Beta", 2),
+    ]);
+  });
+
+  it("applies top-level exact column filters over projection state", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    await context.stand().update(ProjectionStateSchema, createState("task-1", "Open", 1));
+    await context.stand().update(ProjectionStateSchema, createState("task-2", "Closed", 2));
+    await context.stand().update(ProjectionStateSchema, createState("task-3", "Open", 3));
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(createColumnFilterQuery("name", packStringId("Open")));
+
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(response.message.map((message) => unpackProjectionState(message.state))).toEqual([
+      createState("task-1", "Open", 1),
+      createState("task-3", "Open", 3),
+    ]);
+  });
+
+  it("applies tenant-scoped filters, ordering, and masks", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.multitenant("Tasks").add(repository).build();
+    await context.stand().update(ProjectionStateSchema, createState("task-1", "Tenant A", 1), {
+      tenantId: "tenant-a",
+    });
+    await context.stand().update(ProjectionStateSchema, createState("task-2", "Bravo", 2), {
+      tenantId: "tenant-b",
+      version: create(VersionSchema, { number: 2 }),
+    });
+    await context.stand().update(ProjectionStateSchema, createState("task-3", "Alpha", 2), {
+      tenantId: "tenant-b",
+      version: create(VersionSchema, { number: 3 }),
+    });
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(
+      createFormattedColumnFilterQuery(
+        "priority",
+        packInt32(2),
+        create(ResponseFormatSchema, {
+          fieldMask: create(FieldMaskSchema, { paths: ["name"] }),
+          orderBy: [
+            create(OrderBySchema, {
+              column: "name",
+              direction: OrderBy_Direction.ASCENDING,
+            }),
+          ],
+        }),
+        "tenant-b",
+      ),
+    );
+
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(response.message.map((message) => unpackProjectionState(message.state))).toEqual([
+      create(ProjectionStateSchema, { name: "Alpha" }),
+      create(ProjectionStateSchema, { name: "Bravo" }),
+    ]);
+    expect(response.message.map((message) => message.version)).toEqual([
+      create(VersionSchema, { number: 3 }),
+      create(VersionSchema, { number: 2 }),
+    ]);
+  });
+
+  it("rejects limit without ordering before reading storage", async () => {
+    const context = createRejectingReadContext();
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(
+      createFormattedQuery(create(ResponseFormatSchema, { limit: 1 })),
+    );
+
+    expect(response.response?.status?.status.case).toBe("error");
+    expect(responseErrorMessage(response)).toBe("QueryService.Read limit requires ordering.");
+  });
+
+  it("rejects malformed ordering before reading storage", async () => {
+    const context = createRejectingReadContext();
+    const handlers = registeredQueryHandlers(context);
+
+    const missingColumn = await handlers.read(
       createFormattedQuery(
         create(ResponseFormatSchema, {
+          orderBy: [create(OrderBySchema, { column: " " })],
+        }),
+      ),
+    );
+    const unknownDirection = await handlers.read(
+      createFormattedQuery(
+        create(ResponseFormatSchema, {
+          orderBy: [
+            create(OrderBySchema, {
+              column: "name",
+              direction: OrderBy_Direction.OD_UNKNOWN,
+            }),
+          ],
+        }),
+      ),
+    );
+
+    expect(responseErrorMessage(missingColumn)).toBe(
+      "QueryService.Read order_by column is required.",
+    );
+    expect(responseErrorMessage(unknownDirection)).toBe(
+      "QueryService.Read order_by direction must be ASCENDING or DESCENDING.",
+    );
+  });
+
+  it("preserves malformed ID-filter entries for storage query execution", async () => {
+    let observedQuery: { readonly ids?: readonly unknown[] } | undefined;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      queryVersioned: (_schema, query) => {
+        observedQuery = query as { readonly ids?: readonly unknown[] };
+        return Promise.resolve([]);
+      },
+    });
+    const handlers = registeredQueryHandlers(context);
+    const query = createQueryWithIds([packStringId("task-1")]);
+    if (query.target?.criterion.case !== "filters") {
+      throw new Error("Expected test query filters.");
+    }
+    const filters = query.target.criterion.value;
+    filters.idFilter?.id.push(undefined as unknown as Any);
+
+    const response = await handlers.read(query);
+
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(observedQuery?.ids).toEqual(["task-1", undefined]);
+  });
+
+  it("rejects unsupported column filter operators and composites", async () => {
+    const context = createRejectingReadContext();
+    const handlers = registeredQueryHandlers(context);
+
+    const either = await handlers.read(
+      createColumnFilterQuery("name", packStringId("Open"), {
+        compositeOperator: CompositeFilter_CompositeOperator.EITHER,
+      }),
+    );
+    const nested = await handlers.read(
+      createColumnFilterQuery("name", packStringId("Open"), { nested: true }),
+    );
+    const greaterThan = await handlers.read(
+      createColumnFilterQuery("priority", packInt32(1), {
+        operator: Filter_Operator.GREATER_THAN,
+      }),
+    );
+
+    expect(responseErrorMessage(either)).toBe(
+      "QueryService.Read supports only ALL column filters.",
+    );
+    expect(responseErrorMessage(nested)).toBe(
+      "QueryService.Read does not support nested column filters.",
+    );
+    expect(responseErrorMessage(greaterThan)).toBe(
+      "QueryService.Read supports only EQUAL column filters.",
+    );
+  });
+
+  it("rejects undefined, empty, and blank column filter names before reading storage", async () => {
+    const context = createRejectingReadContext();
+    const handlers = registeredQueryHandlers(context);
+
+    const missing = createColumnFilterQuery("name", packStringId("Open"));
+    if (missing.target?.criterion.case !== "filters") {
+      throw new Error("Expected test query filters.");
+    }
+    const missingField = missing.target.criterion.value.filter[0]?.filter[0];
+    if (missingField === undefined) {
+      throw new Error("Expected test query filter.");
+    }
+    missingField.fieldPath = undefined;
+
+    const empty = await handlers.read(createColumnFilterQuery("", packStringId("Open")));
+    const blank = await handlers.read(createColumnFilterQuery(" ", packStringId("Open")));
+    const undefinedColumn = await handlers.read(missing);
+
+    expect(responseErrorMessage(undefinedColumn)).toBe(
+      "QueryService.Read column filter field is required.",
+    );
+    expect(responseErrorMessage(empty)).toBe("QueryService.Read column filter field is required.");
+    expect(responseErrorMessage(blank)).toBe("QueryService.Read column filter field is required.");
+  });
+
+  it("rejects excessive query breadth before reading storage", async () => {
+    const context = createRejectingReadContext();
+    const handlers = registeredQueryHandlers(context);
+
+    const tooManyIds = await handlers.read(
+      createQueryWithIds(Array.from({ length: 101 }, () => packStringId("x"))),
+    );
+    const tooManyFilters = await handlers.read(createColumnFilterQueryWithFilters(17));
+    const tooManyInvalidFilters = await handlers.read(
+      createColumnFilterQueryWithFilters(17, "unknown"),
+    );
+    const tooManyComposites = await handlers.read(createColumnFilterQueryWithComposites(9));
+    const tooManyOrderings = await handlers.read(
+      createFormattedIncludeAllQuery(
+        create(ResponseFormatSchema, {
+          orderBy: new Array(9).fill(undefined).map(() =>
+            create(OrderBySchema, {
+              column: "name",
+              direction: OrderBy_Direction.ASCENDING,
+            }),
+          ),
+        }),
+      ),
+    );
+    const tooManyMaskPaths = await handlers.read(
+      createFormattedQuery(
+        create(ResponseFormatSchema, {
+          fieldMask: create(FieldMaskSchema, { paths: new Array(33).fill("name") }),
+        }),
+      ),
+    );
+    const tooLongMaskPath = await handlers.read(
+      createFormattedQuery(
+        create(ResponseFormatSchema, {
+          fieldMask: create(FieldMaskSchema, { paths: ["n".repeat(129)] }),
+        }),
+      ),
+    );
+    const tooLargeLimit = await handlers.read(
+      createFormattedIncludeAllQuery(
+        create(ResponseFormatSchema, {
+          limit: 1_001,
           orderBy: [
             create(OrderBySchema, {
               column: "name",
@@ -579,17 +866,72 @@ describe("SpineServices", () => {
         }),
       ),
     );
-    const limit = await handlers.read(
-      createFormattedQuery(
+
+    expect(responseErrorMessage(tooManyIds)).toBe(
+      "QueryService.Read id_filter may contain at most 100 IDs.",
+    );
+    expect(responseErrorMessage(tooManyFilters)).toBe(
+      "QueryService.Read may contain at most 16 simple column filters.",
+    );
+    expect(responseErrorMessage(tooManyInvalidFilters)).toBe(
+      "QueryService.Read may contain at most 16 simple column filters.",
+    );
+    expect(responseErrorMessage(tooManyComposites)).toBe(
+      "QueryService.Read may contain at most 8 composite filters.",
+    );
+    expect(responseErrorMessage(tooManyOrderings)).toBe(
+      "QueryService.Read order_by may contain at most 8 entries.",
+    );
+    expect(responseErrorMessage(tooManyMaskPaths)).toBe(
+      "QueryService.Read field_mask may contain at most 32 paths.",
+    );
+    expect(responseErrorMessage(tooLongMaskPath)).toBe(
+      "QueryService.Read field_mask paths may contain at most 128 characters.",
+    );
+    expect(responseErrorMessage(tooLargeLimit)).toBe(
+      "QueryService.Read limit may be at most 1000.",
+    );
+  });
+
+  it("rejects non-column filter and order_by names before reading storage", async () => {
+    const context = createRejectingReadContext();
+    const handlers = registeredQueryHandlers(context);
+
+    const filter = await handlers.read(createColumnFilterQuery("id", packStringId("task-1")));
+    const ordering = await handlers.read(
+      createFormattedIncludeAllQuery(
         create(ResponseFormatSchema, {
-          limit: 1,
+          orderBy: [
+            create(OrderBySchema, {
+              column: "id",
+              direction: OrderBy_Direction.ASCENDING,
+            }),
+          ],
         }),
       ),
     );
 
-    expect(responseErrorMessage(fieldMask)).toBe("QueryService.Read does not support field masks.");
-    expect(responseErrorMessage(orderBy)).toBe("QueryService.Read does not support ordering.");
-    expect(responseErrorMessage(limit)).toBe("QueryService.Read does not support limits.");
+    expect(responseErrorMessage(filter)).toBe(
+      'QueryService.Read column filter "id" is not a declared column.',
+    );
+    expect(responseErrorMessage(ordering)).toBe(
+      'QueryService.Read order_by column "id" is not a declared column.',
+    );
+  });
+
+  it("rejects undefined composite filter operators before reading storage", async () => {
+    const context = createRejectingReadContext();
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(
+      createColumnFilterQuery("name", packStringId("Open"), {
+        compositeOperator: CompositeFilter_CompositeOperator.CCF_CO_UNDEFINED,
+      }),
+    );
+
+    expect(responseErrorMessage(response)).toBe(
+      "QueryService.Read supports only ALL column filters.",
+    );
   });
 
   it("accepts an empty response format as a no-op", async () => {
@@ -1993,7 +2335,15 @@ function createQueryWithIds(ids: ReturnType<typeof packAny>[], tenantId?: Tenant
   });
 }
 
-function createColumnFilterQuery() {
+function createColumnFilterQuery(
+  column = "name",
+  value: ReturnType<typeof packAny> = packStringId("First"),
+  options: {
+    readonly operator?: Filter_Operator;
+    readonly compositeOperator?: CompositeFilter_CompositeOperator;
+    readonly nested?: boolean;
+  } = {},
+) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "q-column-filter" }),
     target: create(TargetSchema, {
@@ -2001,15 +2351,85 @@ function createColumnFilterQuery() {
       criterion: {
         case: "filters",
         value: create(TargetFiltersSchema, {
-          idFilter: {
-            id: [packStringId("task-1")],
-          },
-          filter: [create(CompositeFilterSchema)],
+          filter: [
+            create(CompositeFilterSchema, {
+              filter: [
+                create(FilterSchema, {
+                  fieldPath: { fieldName: [column] },
+                  value,
+                  operator: options.operator ?? Filter_Operator.EQUAL,
+                }),
+              ],
+              operator: options.compositeOperator ?? CompositeFilter_CompositeOperator.ALL,
+              compositeFilter:
+                options.nested === true
+                  ? [
+                      create(CompositeFilterSchema, {
+                        operator: CompositeFilter_CompositeOperator.ALL,
+                      }),
+                    ]
+                  : [],
+            }),
+          ],
         }),
       },
     }),
     context: createActorContext(),
   });
+}
+
+function createColumnFilterQueryWithFilters(filterCount: number, column = "name") {
+  const query = createColumnFilterQuery(column, packStringId("Open"));
+  if (query.target?.criterion.case !== "filters") {
+    throw new Error("Expected test query filters.");
+  }
+  const composite = query.target.criterion.value.filter[0];
+  if (composite === undefined) {
+    throw new Error("Expected test query composite.");
+  }
+  composite.filter = new Array(filterCount).fill(undefined).map(() =>
+    create(FilterSchema, {
+      fieldPath: { fieldName: [column] },
+      value: packStringId("Open"),
+      operator: Filter_Operator.EQUAL,
+    }),
+  );
+
+  return query;
+}
+
+function createColumnFilterQueryWithComposites(compositeCount: number) {
+  const query = createColumnFilterQuery("name", packStringId("Open"));
+  if (query.target?.criterion.case !== "filters") {
+    throw new Error("Expected test query filters.");
+  }
+  query.target.criterion.value.filter = new Array(compositeCount).fill(undefined).map(() =>
+    create(CompositeFilterSchema, {
+      filter: [
+        create(FilterSchema, {
+          fieldPath: { fieldName: ["name"] },
+          value: packStringId("Open"),
+          operator: Filter_Operator.EQUAL,
+        }),
+      ],
+      operator: CompositeFilter_CompositeOperator.ALL,
+    }),
+  );
+
+  return query;
+}
+
+function createFormattedColumnFilterQuery(
+  column: string,
+  value: ReturnType<typeof packAny>,
+  format: Query["format"],
+  tenantId?: TenantInput,
+) {
+  const query = createColumnFilterQuery(column, value);
+  query.context = createActorContext(tenantId);
+  query.format = format;
+
+  return query;
 }
 
 function createFormattedQuery(format: Query["format"]) {
@@ -2031,6 +2451,13 @@ function createIncludeAllQuery(tenantId?: TenantInput) {
     }),
     context: createActorContext(tenantId),
   });
+}
+
+function createFormattedIncludeAllQuery(format: Query["format"], tenantId?: TenantInput) {
+  const query = createIncludeAllQuery(tenantId);
+  query.format = format;
+
+  return query;
 }
 
 function createTopic(tenantId?: TenantInput) {
@@ -2095,6 +2522,14 @@ function createState(id: string, name: string, priority = 1): ProjectionState {
 
 function packStringId(id: string) {
   return packAny(StringValueSchema, create(StringValueSchema, { value: id }));
+}
+
+function packInt32(value: number) {
+  return packAny(Int32ValueSchema, create(Int32ValueSchema, { value }));
+}
+
+function unpackProjectionState(state: Any | undefined) {
+  return unpackAny(state ?? packMissing(), ProjectionStateSchema);
 }
 
 function packMissing() {
@@ -2171,6 +2606,9 @@ function responseErrorMessage(response: unknown) {
 function createRejectingReadContext() {
   return createFakeContext({
     stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+    queryVersioned: () => {
+      throw new Error("unsupported query must not query storage.");
+    },
     readAllVersioned: () => {
       throw new Error("unsupported query must not list storage.");
     },
@@ -2195,6 +2633,11 @@ function createFakeContext(options: {
     schema: typeof ProjectionStateSchema,
     options: { readonly tenantId?: string },
   ) => Promise<readonly { readonly state: ProjectionState; readonly version?: unknown }[]>;
+  readonly queryVersioned?: (
+    schema: typeof ProjectionStateSchema,
+    query: unknown,
+    options: { readonly tenantId?: string },
+  ) => Promise<readonly { readonly state: ProjectionState; readonly version?: unknown }[]>;
   readonly subscribe?: (
     schema: typeof ProjectionStateSchema,
     callback: (update: {
@@ -2207,6 +2650,7 @@ function createFakeContext(options: {
 }) {
   const commandTypes = options.commandTypes ?? [];
   const stateTypes = options.stateTypes ?? [];
+  const queryVersioned = options.queryVersioned ?? createFakeQueryVersioned(options);
 
   return {
     isMultitenant: options.isMultitenant ?? false,
@@ -2219,6 +2663,9 @@ function createFakeContext(options: {
       stateTypes.map((typeUrl) =>
         Object.freeze({
           entityFamily: options.entityFamily ?? "projection",
+          metadata: {
+            columns: [{ name: "name" }, { name: "priority" }],
+          },
           stateSchema: ProjectionStateSchema,
           typeUrl,
         }),
@@ -2228,8 +2675,44 @@ function createFakeContext(options: {
         subscribe: options.subscribe ?? (() => ({ closed: false, unsubscribe: () => undefined })),
         readAllVersioned: options.readAllVersioned ?? (() => Promise.resolve([])),
         readVersioned: options.readVersioned ?? (() => Promise.resolve(undefined)),
+        queryVersioned: queryVersioned ?? (() => Promise.resolve([])),
       }),
   } as unknown as BoundedContext;
+}
+
+function createFakeQueryVersioned(options: {
+  readonly readVersioned?: (
+    schema: typeof ProjectionStateSchema,
+    id: unknown,
+    options: { readonly tenantId?: string },
+  ) => Promise<{ readonly state: ProjectionState; readonly version?: unknown } | undefined>;
+  readonly readAllVersioned?: (
+    schema: typeof ProjectionStateSchema,
+    options: { readonly tenantId?: string },
+  ) => Promise<readonly { readonly state: ProjectionState; readonly version?: unknown }[]>;
+}) {
+  if (options.readVersioned !== undefined) {
+    const readVersioned = options.readVersioned;
+    return async (
+      schema: typeof ProjectionStateSchema,
+      query: { readonly ids?: readonly unknown[] },
+      readOptions: { readonly tenantId?: string },
+    ) => {
+      const results = await Promise.all(
+        (query.ids ?? []).map((id) => readVersioned(schema, id, readOptions)),
+      );
+
+      return results.filter((result) => result !== undefined);
+    };
+  }
+
+  return options.readAllVersioned === undefined
+    ? undefined
+    : (
+        schema: typeof ProjectionStateSchema,
+        _query: unknown,
+        readOptions: { readonly tenantId?: string },
+      ) => options.readAllVersioned?.(schema, readOptions);
 }
 
 function registeredCommandHandlers(
