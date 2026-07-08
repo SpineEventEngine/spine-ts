@@ -1,6 +1,6 @@
 # T-0016c Review Log
 
-Status: all required lanes clean; pending final verification and integration
+Status: all required lanes clean; final verification passed; pending integration
 
 Scope: query-readiness closure for `QueryService.Read`, direct `Stand` version
 metadata behavior, focused tests, and public docs.
@@ -27,8 +27,9 @@ metadata behavior, focused tests, and public docs.
     completion;
   - style, TypeScript/API docs, security, and performance/reliability lanes are
     clean;
-  - remaining state is final documentation re-review, final verification, and
-    integration.
+  - final verification passed unsandboxed after the sandbox denied local
+    HTTP/2 listen and ZeroMQ IPC operations;
+  - remaining state is integration.
 
 ## Required Lanes
 
@@ -110,6 +111,14 @@ metadata behavior, focused tests, and public docs.
     adding commits `55186ba`, `57d0c41`, and `5dbc377`;
   - this log now names them and uses self-referential wording for the commit
     that records this final recovery-chain completion.
+- Final verification:
+  - sandboxed `corepack pnpm verify` failed on local transport permissions:
+    `listen EPERM: operation not permitted 127.0.0.1` for HTTP/2-backed gRPC
+    tests and ZeroMQ `Operation not permitted` for IPC smoke tests;
+  - unsandboxed `corepack pnpm verify` passed with 50 test files and 836 tests,
+    coverage at 94.95% statements and 90.11% branches, TypeDoc completing with
+    the existing invalid-`origin` warning, and generated proto outputs
+    confirmed ignored, untracked, and freshly regenerated.
 
 ## Review Policy
 
