@@ -887,6 +887,34 @@ function readValueAlias(initializer, state) {
     }
   }
 
+  if (
+    ts.isElementAccessExpression(expression) &&
+    expressionPath(expression.expression) !== undefined
+  ) {
+    const namespace = expressionPath(expression.expression);
+    const name = elementAccessStringName(expression);
+
+    if (namespace !== undefined && name !== undefined && state.serverNamespaces.has(namespace)) {
+      return { kind: "server", name };
+    }
+    if (
+      namespace !== undefined &&
+      name !== undefined &&
+      state.coreNamespaces.has(namespace) &&
+      (name === "packEvent" || name === "packCommand")
+    ) {
+      return { kind: "forbidden", name };
+    }
+    if (
+      namespace !== undefined &&
+      name !== undefined &&
+      state.protoNamespaces.has(namespace) &&
+      name === "EventIdSchema"
+    ) {
+      return { kind: "forbidden", name };
+    }
+  }
+
   if (ts.isObjectLiteralExpression(expression)) {
     const members = readObjectAlias(expression, state);
     return members.size === 0 ? undefined : { kind: "object", members };
@@ -923,6 +951,12 @@ function expressionPath(node) {
   }
 
   return undefined;
+}
+
+function elementAccessStringName(node) {
+  const argument = unwrappedExpression(node.argumentExpression);
+
+  return ts.isStringLiteral(argument) ? argument.text : undefined;
 }
 
 function applyValueAlias(alias, value, state) {
@@ -1136,6 +1170,33 @@ function forbiddenApiName(node, importState) {
       (namespace !== undefined &&
         importState.serverNamespaces.has(namespace) &&
         isForbiddenEndUserServerApi(name))
+    ) {
+      return name;
+    }
+  }
+
+  if (ts.isElementAccessExpression(node) && expressionPath(node.expression) !== undefined) {
+    const namespace = expressionPath(node.expression);
+    const name = elementAccessStringName(node);
+    const aliasedName =
+      namespace === undefined || name === undefined
+        ? undefined
+        : importState.forbiddenApiAliases.get(`${namespace}.${name}`);
+    if (aliasedName !== undefined) {
+      return aliasedName;
+    }
+
+    if (
+      name !== undefined &&
+      ((namespace !== undefined &&
+        importState.coreNamespaces.has(namespace) &&
+        (name === "packEvent" || name === "packCommand")) ||
+        (namespace !== undefined &&
+          importState.protoNamespaces.has(namespace) &&
+          name === "EventIdSchema") ||
+        (namespace !== undefined &&
+          importState.serverNamespaces.has(namespace) &&
+          isForbiddenEndUserServerApi(name)))
     ) {
       return name;
     }

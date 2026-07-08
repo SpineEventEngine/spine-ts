@@ -44,7 +44,7 @@ restart the process to clear tasks.
 - Aggregate command handlers that update state and return domain events.
 - Projection subscribers that update `TaskList` rows from delivered events.
 - Framework-owned generated repository assembly through
-  `BoundedContext.singleTenant("Tasks").add(EntityClass).buildAsync()`.
+  `BoundedContext.singleTenant("Tasks").add(EntityClass).withGeneratedRegistryRoot(compiledPackageRoot).buildAsync()`.
 - `QueryService.Read` for all task-list rows or a task-list row by projection
   ID.
 - `SubscriptionService.Subscribe` and `Activate` for live `TaskList` projection

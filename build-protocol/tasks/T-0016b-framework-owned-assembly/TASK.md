@@ -131,6 +131,20 @@ Canonical checklist evidence:
 - GitHub/library search is not required for this slice because it reuses the
   existing generated registry discovery and repository classes; no common
   infrastructure or dependency is being selected.
+- Review-fix sub-agent check performed `2026-07-08 03:32 WEST` before round-1
+  fix code edits and recorded during this fix pass:
+  - selected and read required skill files for `receiving-code-review`,
+    `verification-before-completion`, `typescript-advanced-types`,
+    `javascript-testing-patterns`, `security-best-practices`, and
+    `codebase-design`;
+  - loaded JavaScript/TypeScript backend security references relevant to
+    filesystem/import trust before hardening generated registry loading;
+  - skipped sub-agent skills because the round-1 prompt explicitly forbids
+    spawning sub-agents;
+  - treated `security-best-practices` and `codebase-design` as applicable for
+    the dynamic-import trusted-root fix and public builder interface; treated
+    `typescript-advanced-types` and `javascript-testing-patterns` as applicable
+    for the public type surface and regression coverage.
 
 ## Acceptance Criteria
 
@@ -191,3 +205,22 @@ Canonical checklist evidence:
   `corepack pnpm test` passed (50 files / 825 tests),
   `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
   warning, and `git diff --check` passed.
+- `2026-07-08 03:40 WEST`: Applied round-1 review fixes. Entity-class
+  generated assembly now requires explicit
+  `withGeneratedRegistryRoot(compiledPackageRoot)`, canonicalizes the trusted
+  root and final registry module realpaths, rejects registry symlink escapes,
+  and checks the registry file is still readable before every dynamic import.
+  The public `withGeneratedRegistryRoot()` parameter is the simple
+  `string | URL` surface. Cleanup rules now catch string-literal namespace
+  element access to forbidden server internals. Package/user/API/example docs
+  now show the explicit trusted root requirement and keep synchronous
+  `build()` documented for explicit repository assembly. Verification run:
+  focused server/cleanup tests passed (123 tests), sandboxed to-do test failed
+  only on `listen EPERM` and escalated rerun passed (18 tests),
+  `corepack pnpm typecheck` passed, `corepack pnpm docs:check` passed with the
+  known TypeDoc invalid-origin warning, sandboxed `corepack pnpm test` failed
+  only on local HTTP/2 listener and ZeroMQ IPC sandbox permission errors, and
+  escalated `corepack pnpm test` passed (50 files / 829 tests). Integration
+  result remains pending. Commit metadata: branch
+  `task/T-0016b-framework-owned-assembly`, planned message
+  `Fix generated registry assembly review findings`.

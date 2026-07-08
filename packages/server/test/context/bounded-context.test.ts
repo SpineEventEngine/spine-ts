@@ -1,6 +1,7 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { create, type Message } from "@bufbuild/protobuf";
 import { fromBinary, toBinary } from "@bufbuild/protobuf";
@@ -377,6 +378,60 @@ describe("BoundedContext assembly", () => {
     await expect(context.commandBus().post(createProjectionCommand("command-4"))).resolves.toBe(
       undefined,
     );
+  });
+
+  it("requires an explicit generated registry root for entity-class assembly", async () => {
+    await expect(
+      BoundedContext.singleTenant("Tasks").add(GeneratedTaskAggregate).buildAsync(),
+    ).rejects.toThrow("requires withGeneratedRegistryRoot(root)");
+  });
+
+  it("rejects generated registry modules that resolve outside the trusted root", async () => {
+    const fixture = createGeneratedRegistryFixture([
+      {
+        entityType: GeneratedTaskAggregate,
+        stateSchema: AggregateStateSchema,
+        handlers: [],
+      },
+    ]);
+    const root = mkdtempSync(join(tmpdir(), "spine-context-generated-registry-root-"));
+    const moduleDir = join(root, "generated/handler");
+
+    mkdirSync(moduleDir, { recursive: true });
+    symlinkSync(fixture.registryPath, join(moduleDir, "generated-handler-registry.js"));
+
+    await expect(
+      BoundedContext.singleTenant("Tasks")
+        .withGeneratedRegistryRoot(pathToFileURL(root))
+        .add(GeneratedTaskAggregate)
+        .buildAsync(),
+    ).rejects.toThrow("must resolve within the configured generated registry root");
+  });
+
+  it("checks the generated registry file before each import instead of using a stale module cache", async () => {
+    const fixture = createGeneratedRegistryFixture([
+      {
+        entityType: GeneratedTaskAggregate,
+        stateSchema: AggregateStateSchema,
+        handlers: [],
+      },
+    ]);
+
+    await expect(
+      BoundedContext.singleTenant("Tasks")
+        .withGeneratedRegistryRoot(fixture.root)
+        .add(GeneratedTaskAggregate)
+        .buildAsync(),
+    ).resolves.toBeInstanceOf(BoundedContext);
+
+    rmSync(fixture.registryPath);
+
+    await expect(
+      BoundedContext.singleTenant("Tasks")
+        .withGeneratedRegistryRoot(fixture.root)
+        .add(GeneratedTaskAggregate)
+        .buildAsync(),
+    ).rejects.toThrow("must exist and be readable");
   });
 
   it("fails clearly when generated metadata is missing for an entity class", async () => {
@@ -824,7 +879,7 @@ function createProjectionEvent(id: string) {
   });
 }
 
-function createGeneratedRegistryRoot(
+function createGeneratedRegistryFixture(
   entities: readonly {
     readonly entityType: object;
     readonly stateSchema: GenMessage<Message>;
@@ -837,21 +892,31 @@ function createGeneratedRegistryRoot(
       readonly parameterCount: 1 | 2;
     }[];
   }[],
-): URL {
+): { readonly root: URL; readonly registryPath: string } {
   const slot = `__spineContextGeneratedRegistry_${Math.random().toString(36).slice(2)}`;
   const root = mkdtempSync(join(tmpdir(), "spine-context-generated-registry-"));
   const moduleDir = join(root, "generated/handler");
+  const registryPath = join(moduleDir, "generated-handler-registry.js");
   const values = globalThis as Record<string, unknown>;
 
   mkdirSync(moduleDir, { recursive: true });
   values[slot] = Object.freeze({ version: 1, entities });
   writeFileSync(
-    join(moduleDir, "generated-handler-registry.js"),
+    registryPath,
     `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
     "utf8",
   );
 
-  return new URL(`file://${root}/`);
+  return Object.freeze({
+    root: pathToFileURL(root),
+    registryPath,
+  });
+}
+
+function createGeneratedRegistryRoot(
+  entities: Parameters<typeof createGeneratedRegistryFixture>[0],
+): URL {
+  return createGeneratedRegistryFixture(entities).root;
 }
 
 interface StorageCreation {

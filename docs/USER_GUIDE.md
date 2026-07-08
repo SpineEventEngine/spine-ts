@@ -127,7 +127,7 @@ remain later slices.
   source after Protobuf-ES generation, writes ignored
   `generated/handler/generated-handler-registry.ts` artifacts. Context
   assembly loads the compiled registry module through
-  `BoundedContextBuilder.buildAsync()`.
+  `BoundedContextBuilder.withGeneratedRegistryRoot(root).buildAsync()`.
 - A caller-owned server handler metadata registry that registers explicit
   entity handler metadata, rejects duplicate command assignments and duplicate
   legacy event applications for the same entity/event pair, and exposes frozen
@@ -620,7 +620,8 @@ tasks.registeredRepositories().map((repository) => repository.entityType.name);
 This assembly records context identity, repository ownership metadata, generated
 handler metadata, command assignment readiness, and event subscriber/reactor
 readiness behind the bounded-context builder. The generated registry module is
-loaded by the framework from the conventional compiled package output location;
+loaded by the framework from the conventional compiled package output location
+under the explicit trusted root passed to `withGeneratedRegistryRoot(root)`;
 ordinary application code does not import `GeneratedRegistryDiscovery`,
 `HandlerMetadataRegistry`, or `EntityHandlersMetadata`.
 
@@ -869,6 +870,7 @@ import { BoundedContext } from "@spine-ts/server";
 const tasks = await BoundedContext.singleTenant("Tasks")
   .add(TaskAggregate)
   .add(TaskProjection)
+  .withGeneratedRegistryRoot(new URL("..", import.meta.url))
   .buildAsync();
 ```
 

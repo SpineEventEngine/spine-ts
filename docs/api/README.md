@@ -250,10 +250,11 @@ handler registries own ordinary schema inference. Schema-bearing decorator
 overloads, `@Apply`, and `materializeDecoratedEntityHandlers()` are
 legacy/framework compatibility; new application code must not use them.
 Ordinary generated assembly uses
-`await BoundedContext.singleTenant(name).add(EntityClass).buildAsync()`. The
-builder loads the conventional compiled generated registry module, matches
-entity-class metadata, constructs default repositories, and keeps synchronous
-`build()` for explicit `add(repository)` assembly. The server registry exports
+`await BoundedContext.singleTenant(name).add(EntityClass).withGeneratedRegistryRoot(compiledPackageRoot).buildAsync()`.
+The builder requires that explicit trusted compiled package/app root, loads the
+conventional generated registry module under it, matches entity-class metadata,
+constructs default repositories, and keeps synchronous `build()` for explicit
+`add(repository)` assembly. The server registry exports
 include `HandlerMetadataRegistry`, `HandlerMetadataRegistryLookup`,
 `RegisteredHandlerMetadata`, and `HandlerMetadataRegistryError` for low-level
 lookup-only registration and duplicate-policy validation. These APIs are
@@ -269,8 +270,8 @@ under ignored `generated/` directories and are not committed.
 `GeneratedRegistryDiscovery` loads explicit registry paths or clean `file:`
 URLs for framework/tooling paths. Application package builds run registry
 generation after Protobuf-ES generation and before `tsc`; normal context
-assembly lets `buildAsync()` load the compiled registry module from the package
-output tree.
+assembly lets `buildAsync()` load the compiled registry module from the explicit
+trusted package output tree passed to `withGeneratedRegistryRoot(root)`.
 Repository execution calls generated two-argument command assignees and event
 subscribers with generated `CommandContext` or `EventContext` values from the
 incoming envelope; if the envelope omits context, execution supplies an empty

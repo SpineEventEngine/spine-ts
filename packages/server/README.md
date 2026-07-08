@@ -30,11 +30,12 @@ Current slice exposes:
   context registration over one entity constructor and matching entity state
   schema;
   and
-- `BoundedContext.singleTenant(name).add(EntityClass).buildAsync()` for
-  framework-owned generated repository assembly. The builder loads the
-  conventional compiled generated registry module, finds metadata for each
-  entity class, constructs default repositories, and preserves synchronous
-  `build()` for explicit `add(repository)` assembly;
+- `BoundedContext.singleTenant(name).add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`
+  for framework-owned generated repository assembly. The explicit trusted root
+  points at the compiled package/app output that contains the conventional
+  generated registry module. The builder finds metadata for each entity class,
+  constructs default repositories, and preserves synchronous `build()` for
+  explicit `add(repository)` assembly;
   and
 - `new Repository({ entityType, schema, handlers })` route calculation through
   `routeCommand()` and `routeEvent()` when explicit handler metadata is supplied.
@@ -179,8 +180,11 @@ tasks.registeredRepositories().map((repository) => repository.entityType.name);
 ```
 
 `buildAsync()` is the ordinary application bridge from bare decorators to
-default repositories. Generated registry discovery and ingestion stay inside
-the framework-owned assembly path; application code adds entity classes, not
+default repositories. Entity-class assembly requires
+`withGeneratedRegistryRoot(compiledPackageRoot)` so the framework imports only
+the conventional generated registry module under an explicit trusted root.
+Generated registry discovery and ingestion stay inside the framework-owned
+assembly path; application code adds entity classes, not
 `HandlerMetadataRegistry` values. The low-level explicit registration API
 records command assignments, command reactions, event subscriptions, event
 reactions, and legacy event applications in

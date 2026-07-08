@@ -213,6 +213,7 @@ End-user assembly should be concise:
 const tasks = await BoundedContext.singleTenant("Tasks")
   .add(TaskAggregate)
   .add(TaskProjection)
+  .withGeneratedRegistryRoot(compiledPackageRoot)
   .buildAsync();
 ```
 
@@ -226,7 +227,9 @@ The framework may create default repositories from entity classes, but it must a
 
 Generated entity-class assembly is asynchronous because the builder loads the
 compiled generated handler registry module before constructing default
-repositories. Synchronous `build()` remains the explicit repository path:
+repositories. It requires an explicit trusted compiled package/app root through
+`withGeneratedRegistryRoot(root)`. Synchronous `build()` remains the explicit
+repository path:
 
 ```typescript
 const tasks = BoundedContext.singleTenant("Tasks")

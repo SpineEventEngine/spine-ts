@@ -1,5 +1,7 @@
-import { resolve } from "node:path";
-import { cwd } from "node:process";
+import { constants as fsConstants } from "node:fs";
+import { access, realpath } from "node:fs/promises";
+import { isAbsolute, relative, resolve, sep } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { clone, type Message } from "@bufbuild/protobuf";
 import { EventSchema, type Command, type Event } from "@spine-ts/proto";
@@ -70,9 +72,6 @@ export interface BoundedContextSnapshot {
   /** Context specification used to build the context. */
   readonly spec: ContextSpecSnapshot;
 }
-
-/** Root used to locate the conventional compiled generated handler registry. */
-export type GeneratedRegistryRoot = string | URL;
 
 /** Minimal repository owner marker retained after registration. */
 interface RepositoryOwner {
@@ -163,6 +162,8 @@ const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
 const dispatchFailureLimit = 10;
 const dispatchErrorMessageLimit = 500;
 const dispatchErrorStackLimit = 2_000;
+const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
+const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
 const generatedRegistryLoadAttempts = new Map<string, number>();
 let constructBoundedContext:
   | ((
@@ -379,7 +380,7 @@ export class BoundedContextBuilder {
   readonly #repositories = new Set<RepositoryView>();
   readonly #entityTypes = new Set<RepositoryEntityType>();
   #storageFactory: StorageFactory | undefined;
-  #generatedRegistryRoot: GeneratedRegistryRoot | undefined;
+  #generatedRegistryRoot: string | URL | undefined;
 
   static {
     constructBoundedContextBuilder = (snapshot, token): BoundedContextBuilder =>
@@ -482,8 +483,8 @@ export class BoundedContextBuilder {
     return this;
   }
 
-  /** Uses a package/app root for the conventional generated handler registry module. */
-  withGeneratedRegistryRoot(root: GeneratedRegistryRoot): this {
+  /** Uses a trusted compiled package/app root for the conventional generated handler registry module. */
+  withGeneratedRegistryRoot(root: string | URL): this {
     this.#generatedRegistryRoot = root;
     return this;
   }
@@ -544,13 +545,13 @@ export class BoundedContextBuilder {
       return Object.freeze([]);
     }
 
-    const root = this.#generatedRegistryRoot ?? cwd();
+    const root = requireGeneratedRegistryRoot(this.#generatedRegistryRoot);
     const discovery = new GeneratedRegistryDiscovery();
-    const registryKey = generatedRegistryRootKey(root);
-    const module = generatedRegistryModule(root);
+    const registryModule = await trustedGeneratedRegistryModule(root);
+    const registryKey = registryModule.href;
     const registries = await discovery
       .load({
-        modules: [module],
+        modules: [registryModule],
         ...generatedRegistryCacheBust(registryKey),
       })
       .catch((error: unknown) => {
@@ -730,16 +731,102 @@ function rejectSyncEntityAssembly(entityTypes: ReadonlySet<RepositoryEntityType>
   );
 }
 
-function generatedRegistryModule(root: GeneratedRegistryRoot): string | URL {
-  if (root instanceof URL) {
-    return new URL("generated/handler/generated-handler-registry.js", root);
+function requireGeneratedRegistryRoot(root: string | URL | undefined): string | URL {
+  if (root !== undefined) {
+    return root;
   }
 
-  return GeneratedRegistryDiscovery.conventionalModulePath(resolve(root));
+  throw new Error(
+    "BoundedContextBuilder.buildAsync() requires withGeneratedRegistryRoot(root) " +
+      "when assembling entity classes from generated metadata.",
+  );
 }
 
-function generatedRegistryRootKey(root: GeneratedRegistryRoot): string {
-  return root instanceof URL ? root.href : resolve(root);
+async function trustedGeneratedRegistryModule(root: string | URL): Promise<URL> {
+  const trustedRoot = await canonicalGeneratedRegistryRoot(root);
+  const registryPath = resolve(trustedRoot, generatedRegistryFile);
+  const canonicalRegistryPath = await canonicalReadableRegistryPath(registryPath);
+
+  if (resolvesOutsideRoot(trustedRoot, canonicalRegistryPath)) {
+    throw new Error(
+      `Generated handler registry module "${canonicalRegistryPath}" must resolve within ` +
+        `the configured generated registry root "${trustedRoot}".`,
+    );
+  }
+
+  return pathToFileURL(canonicalRegistryPath);
+}
+
+async function canonicalGeneratedRegistryRoot(root: string | URL): Promise<string> {
+  const rootPath = generatedRegistryRootPath(root);
+
+  try {
+    return await realpath(rootPath);
+  } catch (error) {
+    throw new Error(
+      `Generated registry root "${rootPath}" must be an existing readable directory.`,
+      { cause: error },
+    );
+  }
+}
+
+function generatedRegistryRootPath(root: string | URL): string {
+  if (root instanceof URL) {
+    return fileUrlPath(root, "Generated registry root");
+  }
+
+  if (isUrlLike(root)) {
+    return fileUrlPath(parseRootUrl(root), "Generated registry root");
+  }
+
+  return resolve(root);
+}
+
+function fileUrlPath(url: URL, label: string): string {
+  if (url.protocol !== "file:") {
+    throw new Error(`${label} "${url.href}" must use the file: URL scheme.`);
+  }
+
+  if (url.search.length > 0 || url.hash.length > 0) {
+    throw new Error(`${label} "${url.href}" must not include a query or hash.`);
+  }
+
+  return resolve(fileURLToPath(url));
+}
+
+function parseRootUrl(root: string): URL {
+  try {
+    return new URL(root);
+  } catch (error) {
+    throw new Error(`Generated registry root "${root}" is not a valid URL.`, { cause: error });
+  }
+}
+
+function isUrlLike(value: string): boolean {
+  return moduleSchemeRe.test(value) && !/^[A-Za-z]:[\\/]/.test(value);
+}
+
+async function canonicalReadableRegistryPath(registryPath: string): Promise<string> {
+  try {
+    await access(registryPath, fsConstants.R_OK);
+    return await realpath(registryPath);
+  } catch (error) {
+    throw new Error(
+      `Generated handler registry module "${registryPath}" must exist and be readable.`,
+      { cause: error },
+    );
+  }
+}
+
+function resolvesOutsideRoot(canonicalRoot: string, canonicalPath: string): boolean {
+  const relativePath = relative(canonicalRoot, canonicalPath);
+
+  return (
+    relativePath.startsWith("..") ||
+    relativePath === ".." ||
+    relativePath.split(sep).includes("..") ||
+    isAbsolute(relativePath)
+  );
 }
 
 function generatedRegistryCacheBust(
