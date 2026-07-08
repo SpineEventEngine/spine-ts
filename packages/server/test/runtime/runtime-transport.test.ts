@@ -475,7 +475,7 @@ describe("RuntimeTransportBinding", () => {
         return new FailOnceCloseHandle(subscription, closeLog, runtimeState);
       }
 
-      return new InMemoryHandle(subscription, closeLog, runtimeState);
+      return new NonIdempotentCloseHandle(subscription, closeLog, runtimeState);
     });
     const runtime = new SingleProcessServerRuntime();
     transport.bindRuntime(runtime);
@@ -748,6 +748,37 @@ class BlockingCloseHandle<
     this.#closed = true;
     this.#log.push(`handle:${this.subscription.descriptorKey}:${this.#runtimeState()}`);
     await this.#block;
+  }
+}
+
+class NonIdempotentCloseHandle<
+  Kind extends TransportSignalKind,
+> implements TransportSubscriptionHandle<Kind> {
+  readonly subscription: TransportSubscription<Kind>;
+  readonly #log: string[];
+  readonly #runtimeState: () => string;
+  #closed = false;
+
+  constructor(
+    subscription: TransportSubscription<Kind>,
+    log: string[],
+    runtimeState: () => string,
+  ) {
+    this.subscription = subscription;
+    this.#log = log;
+    this.#runtimeState = runtimeState;
+  }
+
+  close(): Promise<void> {
+    if (this.#closed) {
+      return Promise.reject(
+        new Error(`test handle ${this.subscription.descriptorKey} closed twice`),
+      );
+    }
+
+    this.#closed = true;
+    this.#log.push(`handle:${this.subscription.descriptorKey}:${this.#runtimeState()}`);
+    return Promise.resolve();
   }
 }
 

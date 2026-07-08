@@ -1,6 +1,6 @@
 # T-0016f Review Log
 
-Status: first-round findings fixed and verified
+Status: second-round findings fixed and verified
 
 Scope: transport-backed local command/event runtime execution over
 `SignalTransport`, local-only transport documentation, focused runtime tests,
@@ -21,6 +21,13 @@ because the request explicitly said not to spawn sub-agents.
 | Documentation           | P1       | Architecture docs still listed transport-backed runtime execution as deferred.                                | Fixed      |
 | Documentation           | P3       | Work log still said baseline verification was pending despite passed baseline/final verification.             | Fixed      |
 
+## Second-Round Findings
+
+| Lane                    | Severity | Finding                                                                                                               | Fix status |
+| ----------------------- | -------- | --------------------------------------------------------------------------------------------------------------------- | ---------- |
+| TypeScript/API docs     | P2       | Rendered TypeDoc page for `RuntimeTransportBinding` did not show `open()` local-only, validation, and close ordering. | Fixed      |
+| Performance/reliability | P2       | Retry after a failed binding close re-ran `close()` on transport handles that had already closed successfully.        | Fixed      |
+
 ## Fix Notes
 
 - Added a binding-level intake gate that flips to closing before transport
@@ -34,8 +41,41 @@ because the request explicitly said not to spawn sub-agents.
   retry failed handle cleanup.
 - Updated `RuntimeTransportBinding.open` TypeDoc and architecture/work-log
   wording for the local-only boundary, validation behavior, and close order.
+- Duplicated the `open()` local-only, validation-before-callback-enqueue, and
+  close-order wording onto the exported `RuntimeTransportBinding` TypeDoc
+  comment so it renders on the binding page.
+- Added binding-owned per-handle close success tracking. Retries now skip only
+  handles that have already closed successfully, keep attempting all still
+  pending handles in each pass, and keep the close gate in effect across
+  failures.
 
 ## Review-Fix Verification
+
+- Second-round red test:
+  `pnpm --config.verify-deps-before-run=false vitest run packages/server/test/runtime/runtime-transport.test.ts`
+  failed before the production change because a non-idempotent already-closed
+  event handle was closed twice.
+- Second-round focused runtime transport:
+  `pnpm --config.verify-deps-before-run=false vitest run packages/server/test/runtime/runtime-transport.test.ts`
+  passed with 1 file and 11 tests.
+- `pnpm --config.verify-deps-before-run=false docs:check`: passed with the
+  existing invalid-`origin` TypeDoc source-link warning. The generated
+  `RuntimeTransportBinding` page contains the `same-host/local-only`,
+  validation-before-enqueue, and close-order wording.
+- `pnpm --config.verify-deps-before-run=false typecheck`: passed.
+- `pnpm --config.verify-deps-before-run=false lint`: passed.
+- `pnpm --config.verify-deps-before-run=false format:check`: passed after
+  formatting the focused test helper.
+- Sandboxed `pnpm --config.verify-deps-before-run=false verify`: failed only in
+  local IPC/loopback tests with ZeroMQ `Operation not permitted` and
+  `listen EPERM: operation not permitted 127.0.0.1`.
+- Native `pnpm --config.verify-deps-before-run=false verify`: passed. Plain
+  tests passed with 52 files and 871 tests; coverage passed with 94.78%
+  statements, 90.05% branches, 97.70% functions, and 94.77% lines. TypeDoc
+  completed with the existing invalid-`origin` source-link warning; API export
+  checks, proto lint, and generated proto cleanliness passed.
+
+## First-Round Review-Fix Verification
 
 - `pnpm --config.verify-deps-before-run=false vitest run packages/server/test/runtime/runtime-transport.test.ts`:
   passed with 1 file and 11 tests.

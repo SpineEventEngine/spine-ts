@@ -68,7 +68,19 @@ export class RuntimeTransportEnvelopeError extends Error {
   }
 }
 
-/** Framework-owned executable binding between runtime routing plans and `SignalTransport`. */
+/**
+ * Framework-owned executable binding between runtime routing plans and
+ * `SignalTransport`.
+ *
+ * `open()` registers command and event routes with a same-host/local-only
+ * supplied transport. The binding does not own endpoint names, filesystem
+ * placement, or remote access policy; those remain adapter-owned behind
+ * `SignalTransport`. Inbound generated Spine command/event envelopes are parsed
+ * into clean generated messages and validated before handler callbacks are
+ * enqueued. Closing first stops binding intake, then closes transport
+ * registrations, and finally closes the runtime after already accepted work
+ * drains.
+ */
 export const RuntimeTransportBinding: Readonly<{
   /** Create the immutable runtime routing plan used by this binding. */
   plan(input: ServerRuntimeRoutingPlanInput): ServerRuntimeRoutingPlan;
@@ -218,6 +230,7 @@ class RuntimeTransportHandle implements RuntimeTransportBindingHandle {
   readonly #handles: readonly TransportSubscriptionHandle[];
   readonly #runtime: SingleProcessServerRuntime;
   readonly #gate: RuntimeTransportBindingGate;
+  readonly #closedHandles = new WeakSet<TransportSubscriptionHandle>();
   #close: Promise<void> | undefined;
 
   constructor(
@@ -246,8 +259,13 @@ class RuntimeTransportHandle implements RuntimeTransportBindingHandle {
     const failures: Error[] = [];
 
     for (const handle of this.#handles) {
+      if (this.#closedHandles.has(handle)) {
+        continue;
+      }
+
       try {
         await handle.close();
+        this.#closedHandles.add(handle);
       } catch (error) {
         failures.push(toError(error));
       }
