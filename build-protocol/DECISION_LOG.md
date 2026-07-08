@@ -4,6 +4,41 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+## D-0061: Keep T-0016c Query Readiness To The Minimal Explicit Profile
+
+Status: Accepted
+
+Date: 2026-07-08
+
+Decision: For T-0016c, keep `QueryService.Read` on the current minimal Spine TS
+profile: ID-filter point reads and projection-state `Target.include_all = true`
+reads. Reject unsupported column filters and response-format features explicitly
+before storage reads. Keep the service layer as a thin bounded-context router
+and error translator, with read-side execution delegated to the context-owned
+`Stand`.
+
+Rationale: Current Spine JVM source keeps `QueryService` as a target-type router
+and delegates to `context.stand().execute(query, observer)`. JVM `Stand` then
+uses query processors backed by repository/storage query APIs. Spine TS does
+not yet have the full repository/query-column/response-format machinery, so
+silently accepting unsupported query shapes would mislead users. A small,
+explicit profile matches the current framework stage and avoids inventing a
+generic query engine.
+
+Alternatives considered:
+
+- Implement full JVM-style column filters, field masks, ordering, and limits in
+  this task. Rejected as too broad for T-0016c and likely to overbuild storage
+  semantics before repositories expose the needed metadata.
+- Continue accepting partially malformed filters and returning empty results.
+  Rejected because unsupported query features must fail explicitly and early.
+
+Consequences:
+
+- Docs must state the supported profile and unsupported features clearly.
+- Later tasks can add column filters/response format when storage and
+  query-column metadata are ready.
+
 ## D-0059: Bare decorators are completed by generated handler registries
 
 Status: Accepted

@@ -15,7 +15,7 @@ import {
 } from "@spine-ts/proto";
 import { ErrorSchema } from "@spine-ts/proto/generated/spine/base/error_pb.js";
 import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
-import type { Target } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
+import type { Target, TargetFilters } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
 import {
   EntityStateWithVersionSchema,
   QueryResponseSchema,
@@ -49,7 +49,14 @@ import { TransitionValidationError } from "../repository/command-errors.js";
 import type { StandReadResult, StandSubscription, StandUpdate } from "../stand/stand.js";
 import { CommandRefusalError } from "./command-errors.js";
 
-/** Small route registrar for the first public Spine gRPC service slice. */
+/**
+ * Small route registrar for the first public Spine gRPC service slice.
+ *
+ * `QueryService.Read` supports ID filters for any registered state route and
+ * projection-state `include_all = true` reads. Column filters, field masks,
+ * ordering, limits, missing criteria, and inactive include-all criteria return
+ * stable `INVALID_QUERY` responses before Stand storage is read.
+ */
 export class SpineServices {
   readonly #contexts: readonly BoundedContext[];
   readonly #commandRoutes = new Map<string, CommandRoute>();
@@ -149,74 +156,71 @@ export class SpineServices {
 
   async #read(query: Query): Promise<QueryResponse> {
     const target = query.target;
-    const route = target === undefined ? undefined : this.#stateRoutes.get(target.type);
+    const route = this.#readRoute(target);
 
     if (target === undefined || route === undefined) {
-      return create(QueryResponseSchema, {
-        response: errorResponse(
-          "UNSUPPORTED_QUERY_TARGET",
-          "No bounded context owns query target.",
-        ),
-      });
+      return queryErrorResponse(
+        "UNSUPPORTED_QUERY_TARGET",
+        "No bounded context owns query target.",
+      );
     }
 
-    const includeAllRequested = target.criterion.case === "includeAll" && target.criterion.value;
-    if (includeAllRequested && route.entityFamily !== "projection") {
-      return create(QueryResponseSchema, {
-        response: errorResponse(
-          "INVALID_QUERY",
-          "QueryService.Read include_all requires a projection target.",
-        ),
-      });
+    const queryError = validateReadQuery(query, target, route);
+    if (queryError !== undefined) {
+      return queryErrorResponse(queryError.type, queryError.message);
     }
 
     const tenantId = tenantValue(query.context?.tenantId);
     const tenantError = tenantMismatch(route.context.isMultitenant, tenantId, "query");
     if (tenantError !== undefined) {
-      return create(QueryResponseSchema, {
-        response: errorResponse(tenantError.type, tenantError.message),
-      });
+      return queryErrorResponse(tenantError.type, tenantError.message);
     }
 
     try {
-      if (includeAllRequested) {
-        const results = await route.context
-          .stand()
-          .readAllVersioned(route.schema, tenantOptions(tenantId));
-
-        return create(QueryResponseSchema, {
-          response: okResponse(),
-          message: results.map((result) => packVersionedState(route.schema, result)),
-        });
-      }
-
-      const ids = targetIds(target);
-      if (ids.length === 0) {
-        return create(QueryResponseSchema, {
-          response: errorResponse("INVALID_QUERY", "QueryService.Read requires an ID filter."),
-        });
-      }
-
-      const messages = [];
-
-      for (const id of ids) {
-        const result = await route.context
-          .stand()
-          .readVersioned(route.schema, id, tenantOptions(tenantId));
-        if (result !== undefined) {
-          messages.push(packVersionedState(route.schema, result));
-        }
-      }
-
-      return create(QueryResponseSchema, {
-        response: okResponse(),
-        message: messages,
-      });
+      return target.criterion.case === "includeAll"
+        ? await this.#readAll(route, tenantId)
+        : await this.#readIds(target, route, tenantId);
     } catch {
-      return create(QueryResponseSchema, {
-        response: errorResponse("QUERY_READ_ERROR", "Query read failed."),
-      });
+      return queryErrorResponse("QUERY_READ_ERROR", "Query read failed.");
     }
+  }
+
+  #readRoute(target: Target | undefined): StateRoute | undefined {
+    return target === undefined ? undefined : this.#stateRoutes.get(target.type);
+  }
+
+  async #readAll(route: StateRoute, tenantId: string | undefined): Promise<QueryResponse> {
+    const results = await route.context
+      .stand()
+      .readAllVersioned(route.schema, tenantOptions(tenantId));
+
+    return create(QueryResponseSchema, {
+      response: okResponse(),
+      message: results.map((result) => packVersionedState(route.schema, result)),
+    });
+  }
+
+  async #readIds(
+    target: Target,
+    route: StateRoute,
+    tenantId: string | undefined,
+  ): Promise<QueryResponse> {
+    const filters = target.criterion.value as TargetFilters;
+    const messages = [];
+
+    for (const id of filters.idFilter?.id.map(decodeId) ?? []) {
+      const result = await route.context
+        .stand()
+        .readVersioned(route.schema, id, tenantOptions(tenantId));
+      if (result !== undefined) {
+        messages.push(packVersionedState(route.schema, result));
+      }
+    }
+
+    return create(QueryResponseSchema, {
+      response: okResponse(),
+      message: messages,
+    });
   }
 
   #subscribe(topic: Topic): Subscription {
@@ -463,12 +467,83 @@ function errorResponse(type: string, message: string): Response {
   return create(ResponseSchema, { status: errorStatus(type, message) });
 }
 
-function targetIds(target: Target): unknown[] {
-  if (target.criterion.case !== "filters") {
-    return [];
+function queryErrorResponse(type: string, message: string): QueryResponse {
+  return create(QueryResponseSchema, {
+    response: errorResponse(type, message),
+  });
+}
+
+function validateReadQuery(
+  query: Query,
+  target: Target,
+  route: StateRoute,
+): ContractError | undefined {
+  const formatError = formatReadError(query);
+  if (formatError !== undefined) {
+    return formatError;
   }
 
-  return (target.criterion.value.idFilter?.id ?? []).map(decodeId);
+  switch (target.criterion.case) {
+    case "includeAll":
+      if (!target.criterion.value) {
+        return invalidCriterionError();
+      }
+      return route.entityFamily === "projection"
+        ? undefined
+        : {
+            type: "INVALID_QUERY",
+            message: "QueryService.Read include_all requires a projection target.",
+          };
+    case "filters":
+      if (target.criterion.value.filter.length > 0) {
+        return {
+          type: "INVALID_QUERY",
+          message: "QueryService.Read does not support column filters.",
+        };
+      }
+      return (target.criterion.value.idFilter?.id ?? []).length === 0
+        ? {
+            type: "INVALID_QUERY",
+            message: "QueryService.Read requires an ID filter.",
+          }
+        : undefined;
+    default:
+      return invalidCriterionError();
+  }
+}
+
+function formatReadError(query: Query): ContractError | undefined {
+  const format = query.format;
+  if (format === undefined) {
+    return undefined;
+  }
+  if (format.fieldMask !== undefined) {
+    return {
+      type: "INVALID_QUERY",
+      message: "QueryService.Read does not support field masks.",
+    };
+  }
+  if (format.orderBy.length > 0) {
+    return {
+      type: "INVALID_QUERY",
+      message: "QueryService.Read does not support ordering.",
+    };
+  }
+  if (format.limit > 0) {
+    return {
+      type: "INVALID_QUERY",
+      message: "QueryService.Read does not support limits.",
+    };
+  }
+
+  return undefined;
+}
+
+function invalidCriterionError(): ContractError {
+  return {
+    type: "INVALID_QUERY",
+    message: "QueryService.Read requires filters or include_all = true.",
+  };
 }
 
 const DEFAULT_INACTIVE_TTL_MS = 30_000;

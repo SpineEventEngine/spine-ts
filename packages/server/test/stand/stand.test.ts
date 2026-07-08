@@ -6,8 +6,8 @@ import { deriveTypeUrl } from "@spine-ts/core";
 import { VersionSchema, file_spine_options } from "@spine-ts/proto";
 import {
   InMemoryStorageFactory,
+  RecordStorage,
   type RecordSpec,
-  type RecordStorage,
   type StorageContext,
 } from "@spine-ts/storage";
 import { describe, expect, expectTypeOf, it } from "vitest";
@@ -68,6 +68,7 @@ describe("Stand", () => {
       storageFactory: new InMemoryStorageFactory(),
     });
 
+    stand.register(ProjectionStateSchema);
     stand.register(ProjectionStateSchema);
 
     expect(stand.stateTypes()).toEqual([deriveTypeUrl(ProjectionStateSchema)]);
@@ -183,6 +184,23 @@ describe("Stand", () => {
         version: create(VersionSchema, { number: 7 }),
       },
     ]);
+  });
+
+  it("clears process-local version metadata when an update has no version", async () => {
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    stand.register(ProjectionStateSchema);
+
+    await stand.update(ProjectionStateSchema, createState("task-1", "First"), {
+      version: create(VersionSchema, { number: 7 }),
+    });
+    await stand.update(ProjectionStateSchema, createState("task-1", "Second"));
+
+    await expect(stand.readVersioned(ProjectionStateSchema, "task-1")).resolves.toEqual({
+      state: createState("task-1", "Second"),
+    });
   });
 
   it("rejects updates whose registered ID field is absent from the state", async () => {

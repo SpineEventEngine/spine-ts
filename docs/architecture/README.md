@@ -349,7 +349,9 @@ The current `Stand` slice is intentionally direct and storage-backed. It owns
 known generated state schemas, latest-state `RecordStorage`, direct
 read/update methods, versioned point reads, storage-order list reads through
 `Stand.readAllVersioned()`, and deterministic in-process subscription handles
-with explicit `unsubscribe()`. It preserves read-side/write-side segregation by
+with explicit `unsubscribe()`. Its version metadata map is process-local and
+in-memory only; latest state records go through storage, but state-to-version
+metadata is not persisted by this slice. It preserves read-side/write-side segregation by
 remaining the query/subscription facade over read-side state. Built bounded
 contexts may update it internally when repository event dispatch invokes
 projection subscribers, but application code still does not receive a
@@ -359,6 +361,10 @@ the context command bus to the first real Connect/Node `CommandService`,
 `QueryService`, and `SubscriptionService` routes. Projection-state
 `QueryService.Read` calls with `Target.include_all = true` are satisfied through
 `Stand.readAllVersioned()` over the stand's `RecordStorage.query()` path.
+ID-filter reads for any registered state route are satisfied through
+`Stand.readVersioned()`.
+Column filters, field masks, ordering, limits, missing criteria, and
+`include_all = false` are rejected before Stand storage reads.
 Direct list reads and `QueryService.Read` include-all calls follow the same
 tenant rules as point reads: single-tenant contexts reject tenant options, and
 multitenant contexts require `tenantId`.

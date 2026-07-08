@@ -22,7 +22,7 @@ export interface StandRegisterOptions {
 export interface StandUpdateOptions {
   /** Tenant slice for multitenant stands. */
   readonly tenantId?: string;
-  /** Version associated with the updated state. */
+  /** Version associated with the updated state in this Stand instance's in-memory map. */
   readonly version?: Version;
 }
 
@@ -36,7 +36,7 @@ export interface StandReadOptions {
 export interface StandReadResult<Schema extends MessageSchema = MessageSchema> {
   /** Latest entity state. */
   readonly state: MessageShape<Schema>;
-  /** Version associated with the latest entity state when supplied. */
+  /** Version from this Stand instance's in-memory, process-local metadata map when supplied. */
   readonly version?: Version;
 }
 
@@ -97,7 +97,13 @@ interface Registration<Schema extends MessageSchema = MessageSchema> {
   readonly subscribers: Set<Subscriber<Schema>>;
 }
 
-/** Direct read-side access point for storage-backed entity states and updates. */
+/**
+ * Direct read-side access point for storage-backed entity states and updates.
+ *
+ * Entity states are stored through the configured `StorageFactory`. Version
+ * metadata is held in this `Stand` instance's in-memory, process-local map and
+ * is not persisted by the current slice.
+ */
 export class Stand {
   readonly #context: StorageContext;
   readonly #storageFactory: StorageFactory;

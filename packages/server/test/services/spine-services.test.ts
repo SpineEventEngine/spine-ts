@@ -10,6 +10,7 @@ import {
   EmptySchema,
   FileDescriptorProtoSchema,
   FileDescriptorSetSchema,
+  FieldMaskSchema,
   StringValueSchema,
 } from "@bufbuild/protobuf/wkt";
 import {
@@ -38,12 +39,16 @@ import {
 } from "@spine-ts/proto";
 import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
 import {
+  CompositeFilterSchema,
   TargetFiltersSchema,
   TargetSchema,
 } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
 import {
+  OrderBySchema,
+  OrderBy_Direction,
   QueryIdSchema,
   QuerySchema,
+  ResponseFormatSchema,
   type Query,
   type QueryResponse,
 } from "@spine-ts/proto/generated/spine/client/query_pb.js";
@@ -538,6 +543,104 @@ describe("SpineServices", () => {
       await emptyServer.close();
       await server.close();
     }
+  });
+
+  it("rejects unsupported column filters before reading storage", async () => {
+    const context = createRejectingReadContext();
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(createColumnFilterQuery());
+
+    expect(response.response?.status?.status.case).toBe("error");
+    expect(responseErrorMessage(response)).toBe(
+      "QueryService.Read does not support column filters.",
+    );
+  });
+
+  it("rejects unsupported response formats before reading storage", async () => {
+    const context = createRejectingReadContext();
+    const handlers = registeredQueryHandlers(context);
+
+    const fieldMask = await handlers.read(
+      createFormattedQuery(
+        create(ResponseFormatSchema, {
+          fieldMask: create(FieldMaskSchema, { paths: ["name"] }),
+        }),
+      ),
+    );
+    const orderBy = await handlers.read(
+      createFormattedQuery(
+        create(ResponseFormatSchema, {
+          orderBy: [
+            create(OrderBySchema, {
+              column: "name",
+              direction: OrderBy_Direction.ASCENDING,
+            }),
+          ],
+        }),
+      ),
+    );
+    const limit = await handlers.read(
+      createFormattedQuery(
+        create(ResponseFormatSchema, {
+          limit: 1,
+        }),
+      ),
+    );
+
+    expect(responseErrorMessage(fieldMask)).toBe("QueryService.Read does not support field masks.");
+    expect(responseErrorMessage(orderBy)).toBe("QueryService.Read does not support ordering.");
+    expect(responseErrorMessage(limit)).toBe("QueryService.Read does not support limits.");
+  });
+
+  it("accepts an empty response format as a no-op", async () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    await context.stand().update(ProjectionStateSchema, createState("task-1", "First"));
+    const handlers = registeredQueryHandlers(context);
+
+    const response = await handlers.read(createFormattedQuery(create(ResponseFormatSchema)));
+
+    expect(response.response?.status?.status.case).toBe("ok");
+    expect(response.message).toHaveLength(1);
+  });
+
+  it("rejects inactive query criteria before reading storage", async () => {
+    const context = createRejectingReadContext();
+    const handlers = registeredQueryHandlers(context);
+
+    const missingCriterion = await handlers.read(
+      create(QuerySchema, {
+        id: create(QueryIdSchema, { value: "q-missing-criterion" }),
+        target: create(TargetSchema, {
+          type: deriveTypeUrl(ProjectionStateSchema),
+        }),
+        context: createActorContext(),
+      }),
+    );
+    const falseIncludeAll = await handlers.read(
+      create(QuerySchema, {
+        id: create(QueryIdSchema, { value: "q-false-include-all" }),
+        target: create(TargetSchema, {
+          type: deriveTypeUrl(ProjectionStateSchema),
+          criterion: {
+            case: "includeAll",
+            value: false,
+          },
+        }),
+        context: createActorContext(),
+      }),
+    );
+
+    expect(responseErrorMessage(missingCriterion)).toBe(
+      "QueryService.Read requires filters or include_all = true.",
+    );
+    expect(responseErrorMessage(falseIncludeAll)).toBe(
+      "QueryService.Read requires filters or include_all = true.",
+    );
   });
 
   it("returns stable errors for invalid command envelopes and read failures", async () => {
@@ -1424,6 +1527,42 @@ describe("SpineServices", () => {
       await server.close();
     }
   });
+
+  it("fails known subscription topics with missing context or criterion directly", () => {
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks").add(repository).build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const target = create(TargetSchema, {
+      type: deriveTypeUrl(ProjectionStateSchema),
+      criterion: {
+        case: "includeAll",
+        value: true,
+      },
+    });
+
+    expect(() =>
+      handlers.subscribe(
+        create(TopicSchema, {
+          id: create(TopicIdSchema, { value: "t-missing-context" }),
+          target,
+        }),
+      ),
+    ).toThrow("Subscription topic context is required.");
+    expect(() =>
+      handlers.subscribe(
+        create(TopicSchema, {
+          id: create(TopicIdSchema, { value: "t-missing-criterion" }),
+          target: create(TargetSchema, {
+            type: deriveTypeUrl(ProjectionStateSchema),
+          }),
+          context: createActorContext(),
+        }),
+      ),
+    ).toThrow("Subscription topic criterion is required.");
+  });
 });
 
 function createCommandDispatcher(
@@ -1644,6 +1783,32 @@ function createQueryWithIds(ids: ReturnType<typeof packAny>[], tenantId?: Tenant
   });
 }
 
+function createColumnFilterQuery() {
+  return create(QuerySchema, {
+    id: create(QueryIdSchema, { value: "q-column-filter" }),
+    target: create(TargetSchema, {
+      type: deriveTypeUrl(ProjectionStateSchema),
+      criterion: {
+        case: "filters",
+        value: create(TargetFiltersSchema, {
+          idFilter: {
+            id: [packStringId("task-1")],
+          },
+          filter: [create(CompositeFilterSchema)],
+        }),
+      },
+    }),
+    context: createActorContext(),
+  });
+}
+
+function createFormattedQuery(format: Query["format"]) {
+  const query = createQuery("task-1");
+  query.format = format;
+
+  return query;
+}
+
 function createIncludeAllQuery(tenantId?: TenantInput) {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "q-empty" }),
@@ -1791,6 +1956,18 @@ function responseErrorMessage(response: unknown) {
   }
 
   return errorMessage(status.status);
+}
+
+function createRejectingReadContext() {
+  return createFakeContext({
+    stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+    readAllVersioned: () => {
+      throw new Error("unsupported query must not list storage.");
+    },
+    readVersioned: () => {
+      throw new Error("unsupported query must not read storage.");
+    },
+  });
 }
 
 function createFakeContext(options: {
