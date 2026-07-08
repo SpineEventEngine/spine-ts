@@ -66,7 +66,8 @@ metadata behavior, focused tests, and public docs.
     keeping `QueryService` a thin router/error translator;
   - `createTaskListColumnQuery` was renamed to `createColumnFilterQuery`.
 - Round 1 outcome after fix pass: local verification passed and review-fix
-  commit `e26a908` (`Fix T-0016c review findings`) is the current branch head.
+  commit `e26a908` (`Fix T-0016c review findings`) exists as the round-1
+  review-fix commit.
 - Round 2 re-review status:
   - Code style/maintainability re-review is clean.
   - TypeScript/API docs re-review is clean.
@@ -79,7 +80,14 @@ metadata behavior, focused tests, and public docs.
   - updates the durable logs to record that `e26a908` exists, style and
     TypeScript/API re-reviews are clean, and documentation re-review found this
     bookkeeping issue;
-  - remaining state after this fix is documentation re-review and integration.
+  - follow-up commit `055175c` records this log-status fix.
+- Round 3 documentation re-review:
+  - reviewer `019f4155-4f5b-7b13-9ea6-bdb219b7ab83` found one stale sentence
+    saying `e26a908` was the current branch head after `055175c` had become
+    `HEAD`;
+  - the orchestrator corrected that sentence in this review log;
+  - final documentation re-review is the remaining review gate before
+    verification and integration.
 
 ## Review Policy
 
