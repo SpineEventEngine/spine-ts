@@ -5,7 +5,8 @@ metadata, standard decorator metadata adapters, aggregate latest-state/event
 journal storage, the first command/event bus seam, and the first runtime routing
 plan seam over `@spine-ts/transport` contracts, plus the first direct
 storage-backed `Stand` slice for latest entity state point/list reads and
-in-process update subscriptions.
+in-process update subscriptions, and a small local `Server` lifecycle owner for
+real Connect/gRPC-compatible services.
 
 Current slice exposes:
 
@@ -54,6 +55,13 @@ Current slice exposes:
   contexts, including ID-filter reads for registered state routes and
   projection-state `Target.include_all` query reads;
   and
+- `Server`, `ServerOptions`, and `RunningServer` for a small framework-owned
+  HTTP/2 listener lifecycle over `SpineServices`. The default host is
+  local-only `127.0.0.1`; broad binding such as `0.0.0.0` is an explicit
+  caller choice. `RunningServer.close()` stops network intake, closes active
+  HTTP/2 sessions, then closes owned contexts/resources and reports aggregate
+  close failures after attempting every close;
+  and
 - `CommandRefusalError` for the current immediate business refusal path from
   command handlers to non-ok `CommandService.Post` `Ack` errors;
   and
@@ -84,7 +92,7 @@ Current slice exposes:
   supplied `onMessage` endpoint callback per `TO_DELIVER` row, mark successful
   rows `DELIVERED`, leave failures pending for retry, and return simple run
   statistics. This slice explicitly excludes worker loops, retry monitors,
-  conveyor/stations, repository invocation, broad server lifecycle, transport
+  conveyor/stations, repository invocation, broad production lifecycle, transport
   retries, retained attempt history, and example app work;
 - and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
@@ -556,8 +564,8 @@ context records a copy-safe diagnostic snapshot through
 Generated entity-class assembly creates default repositories through
 `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This slice
 still does not invoke query/process handlers, construct system contexts, start
-query/subscription buses, write tenant indexes, expose a broad server lifecycle,
-or integrate transports.
+query/subscription buses, write tenant indexes, expose a broad production
+lifecycle, or integrate transports.
 
 ## Direct Stand
 
@@ -613,6 +621,41 @@ metadata, and the in-memory storage adapter are process-local development/test
 state, not durable delivery or catch-up storage. Cross-context fallback, client
 query DSLs, event subscriptions, field filtering, and projection catch-up
 remain outside this slice.
+
+## Local Server Lifecycle
+
+Use `Server` when a local Node process should host the built Spine services over
+HTTP/2:
+
+```ts
+import { BoundedContext, Server } from "@spine-ts/server";
+
+const tasks = await BoundedContext.singleTenant("Tasks")
+  .add(TaskAggregate)
+  .withGeneratedRegistryRoot(new URL("..", import.meta.url))
+  .buildAsync();
+
+const server = await Server.atPort(8080).add(tasks).start();
+
+server.host; // "127.0.0.1" by default
+server.baseUrl; // "http://127.0.0.1:8080"
+
+await server.close();
+```
+
+`Server` reuses `SpineServices` directly and keeps ZeroMQ, local IPC endpoints,
+worker supervision, retry policy, and process-wide environment configuration out
+of the public API. `Server.atPort(port)` binds to `127.0.0.1`; pass
+`{ host: "0.0.0.0" }` only when this process should accept non-local clients.
+The returned `RunningServer` exposes `host`, `port`, `baseUrl`, and an
+idempotent `close()`.
+
+Shutdown is deterministic: the listener stops accepting new requests first,
+then active HTTP/2 sessions close, then owned contexts and explicit
+framework-owned resources close. Resource cleanup continues after failures and
+throws one `AggregateError` containing every close failure. Listener-based tests
+may fail with `EPERM` in managed sandboxes that block loopback binds; rerun
+those checks natively when verifying this lifecycle.
 
 ## Entity State Shell
 

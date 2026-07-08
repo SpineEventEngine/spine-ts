@@ -17,6 +17,7 @@ export class CommandBus {
   readonly #registry = new CommandDispatcherRegistry();
   readonly #runtime = new SingleProcessServerRuntime();
   readonly #started: Promise<void>;
+  #closed: Promise<void> | undefined;
 
   constructor(dispatchers: Iterable<CommandDispatcher> = []) {
     this.#started = this.#runtime.start();
@@ -39,6 +40,12 @@ export class CommandBus {
     const accepted = clone(CommandSchema, command);
 
     return this.#started.then(() => this.#runtime.enqueue(() => this.#dispatch(accepted)));
+  }
+
+  /** Stop accepting new command work and wait for accepted work to settle. */
+  close(): Promise<void> {
+    this.#closed ??= this.#started.then(() => this.#runtime.close());
+    return this.#closed;
   }
 
   async #dispatch(command: Command): Promise<void> {

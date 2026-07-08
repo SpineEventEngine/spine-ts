@@ -373,6 +373,27 @@ Their message contracts come from copied Spine `.proto` files. Service
 implementations may use any Node gRPC library chosen during implementation, but
 transport-specific APIs must not leak into domain code.
 
+The first public server lifecycle API is deliberately small:
+
+```typescript
+const running = await Server.atPort(8080).add(tasks).start();
+
+running.host; // "127.0.0.1" by default
+running.port;
+running.baseUrl;
+
+await running.close();
+```
+
+`ServerOptions.host` defaults to local-only `127.0.0.1`; broader binding such
+as `0.0.0.0` must be explicit. `RunningServer.close()` is idempotent and stops
+the HTTP/2 listener before closing active sessions and then owned
+contexts/resources. If one close fails, the server still attempts every
+remaining close and rejects with an aggregate failure. This API reuses
+`SpineServices` directly and keeps ZeroMQ, IPC endpoints, worker supervision,
+durable scheduling, broad resource ownership, and any singleton
+`ServerEnvironment` out of the public surface.
+
 ## Validation API
 
 End-user code should normally build messages with Protobuf-ES helpers and

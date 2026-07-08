@@ -694,6 +694,66 @@ describe("BoundedContext assembly", () => {
     expect(builder).toBeInstanceOf(BoundedContextBuilder);
   });
 
+  it("closes owned buses, stand, event store, and repository storage once", async () => {
+    const storageFactory = new ObservingStorageFactory([]);
+    const repository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .add(repository)
+      .build();
+
+    await context.close();
+    await context.close();
+
+    await expect(
+      context.commandBus().post(createProjectionCommand("command-closed")),
+    ).rejects.toMatchObject({
+      operation: "enqueue",
+      state: "closed",
+    });
+    expect(() => context.stand().stateTypes()).toThrow("Stand is closed.");
+    expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
+    expect(storageFactory.isOpen()).toBe(true);
+  });
+
+  it("attempts every bounded-context close and reports aggregate failure", async () => {
+    const storageFactory = new ObservingStorageFactory([], [1, 2]);
+    const repository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .add(repository)
+      .build();
+
+    const closeFailure = await context.close().then(
+      () => {
+        throw new Error("Expected BoundedContext close to fail.");
+      },
+      (error: unknown) => {
+        expect(error).toBeInstanceOf(AggregateError);
+        return error as AggregateError;
+      },
+    );
+
+    expect(closeFailure).toBeInstanceOf(AggregateError);
+    expect(closeFailure).toMatchObject({
+      message: "BoundedContext close failed.",
+    });
+    await expect(context.close()).rejects.toMatchObject({
+      message: "BoundedContext close failed.",
+    });
+    expect(closeFailure.errors.map((error: Error) => error.message)).toEqual([
+      "Cannot close record storage.",
+      "Cannot close record storage.",
+    ]);
+    expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
+  });
+
   it("does not expose repository, delivery, gRPC, or transport APIs on BoundedContext", () => {
     const context = BoundedContext.singleTenant("Tasks").build();
     const forbiddenMembers = [

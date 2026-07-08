@@ -1,8 +1,5 @@
-import * as http2 from "node:http2";
-import type { AddressInfo } from "node:net";
-
 import { Code, ConnectError, createClient } from "@connectrpc/connect";
-import { connectNodeAdapter, createGrpcTransport } from "@connectrpc/connect-node";
+import { createGrpcTransport } from "@connectrpc/connect-node";
 import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
@@ -72,9 +69,11 @@ import {
   CommandRefusalError,
   Projection,
   Repository,
+  Server,
   SpineServices,
   defineEntityHandlers,
   type CommandDispatcher,
+  type RunningServer,
 } from "../../src/index.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
@@ -2316,40 +2315,8 @@ function registeredQueryHandlers(
   return handlers;
 }
 
-async function startServices(...contexts: BoundedContext[]) {
-  const services = new SpineServices({ contexts });
-  const sessions = new Set<http2.ServerHttp2Session>();
-  const server = http2.createServer(
-    connectNodeAdapter({
-      routes: (router) => {
-        services.register(router);
-      },
-    }),
-  );
-  server.on("session", (session) => {
-    sessions.add(session);
-    session.on("close", () => sessions.delete(session));
-  });
-
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const address = server.address() as AddressInfo;
-
-  return {
-    baseUrl: `http://127.0.0.1:${address.port.toString()}`,
-    close: () =>
-      new Promise<void>((resolve, reject) => {
-        for (const session of sessions) {
-          session.destroy();
-        }
-        server.close((error) => {
-          if (error) {
-            reject(error);
-          } else {
-            resolve();
-          }
-        });
-      }),
-  };
+async function startServices(...contexts: BoundedContext[]): Promise<RunningServer> {
+  return new Server({ contexts }).start();
 }
 
 async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {

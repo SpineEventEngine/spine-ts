@@ -1,7 +1,8 @@
 # T-0016g: Server Lifecycle And Environment
 
-Status: in progress
+Status: implemented
 Start: `2026-07-08T15:11:00Z`
+Implementation completed: `2026-07-08T15:28:04Z`
 Baseline commit: `655a4d6`
 Branch: `task/T-0016g-server-lifecycle`
 Worktree:

@@ -25,6 +25,14 @@ types unless the current implementation needs that precision. Prefer `Inbox`,
 long names. Public standalone helper functions are disallowed unless a task log
 records why a class/object/prototype method would be worse.
 
+The first TS `Server` slice is intentionally narrower than Spine JVM's complete
+server/runtime environment. It owns a Node HTTP/2 listener over `SpineServices`,
+defaults to `127.0.0.1`, returns a `RunningServer` with `host`, `port`,
+`baseUrl`, and idempotent `close()`, and shuts down in this order: stop network
+intake, close active HTTP/2 sessions, then close owned contexts/resources. It
+does not introduce `ServerEnvironment`, process supervision, worker management,
+durable scheduling, or ZeroMQ-specific public API.
+
 ## Read-Side and Write-Side Segregation
 
 The write side owns:

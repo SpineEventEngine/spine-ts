@@ -1,16 +1,13 @@
-import * as http2 from "node:http2";
-import type { AddressInfo } from "node:net";
-
 import { clone, create } from "@bufbuild/protobuf";
-import { connectNodeAdapter } from "@connectrpc/connect-node";
 import {
   Aggregate,
   Assign,
   BoundedContext,
   CommandRefusalError,
   Projection,
-  SpineServices,
+  Server,
   Subscribe,
+  type RunningServer,
 } from "@spine-ts/server";
 
 import {
@@ -222,44 +219,15 @@ export interface TodoServerOptions {
 }
 
 /** Running standalone to-do example server. */
-export interface TodoServer {
-  /** Host accepted by the listener. */
-  readonly host: string;
-  /** Bound listener port. */
-  readonly port: number;
-  /** Base URL for Connect gRPC-compatible clients. */
-  readonly baseUrl: string;
-  /** Stop accepting requests and close active HTTP/2 sessions. */
-  close(): Promise<void>;
-}
+export type TodoServer = RunningServer;
 
 /** Start the standalone to-do example server with in-memory storage. */
 export async function startTodoServer(options: TodoServerOptions = {}): Promise<TodoServer> {
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 8080;
-  const services = new SpineServices({ contexts: [await createTodoContext()] });
-  const sessions = new Set<http2.ServerHttp2Session>();
-  const server = http2.createServer(
-    connectNodeAdapter({
-      routes: (router) => {
-        services.register(router);
-      },
-    }),
-  );
-  server.on("session", (session) => {
-    sessions.add(session);
-    session.on("close", () => sessions.delete(session));
-  });
-
-  const address = await listen(server, host, port);
-  const boundHost = typeof address.address === "string" ? address.address : host;
-
-  return {
-    host: boundHost,
-    port: address.port,
-    baseUrl: `http://${formatHostForUrl(boundHost)}:${address.port.toString()}`,
-    close: () => closeServer(server, sessions),
-  };
+  return Server.atPort(port, { host })
+    .add(await createTodoContext())
+    .start();
 }
 
 function taskId(id: TaskId | undefined): TaskId {
@@ -268,44 +236,6 @@ function taskId(id: TaskId | undefined): TaskId {
   }
 
   return clone(TaskIdSchema, id);
-}
-
-function listen(server: http2.Http2Server, host: string, port: number): Promise<AddressInfo> {
-  return new Promise((resolve, reject) => {
-    const onError = (error: Error) => {
-      server.off("listening", onListening);
-      reject(error);
-    };
-    const onListening = () => {
-      server.off("error", onError);
-      resolve(server.address() as AddressInfo);
-    };
-    server.once("error", onError);
-    server.once("listening", onListening);
-    server.listen(port, host);
-  });
-}
-
-function formatHostForUrl(host: string): string {
-  return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
-}
-
-function closeServer(
-  server: http2.Http2Server,
-  sessions: Set<http2.ServerHttp2Session>,
-): Promise<void> {
-  return new Promise((resolve, reject) => {
-    for (const session of sessions) {
-      session.destroy();
-    }
-    server.close((error) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve();
-      }
-    });
-  });
 }
 
 function isEntrypoint(): boolean {

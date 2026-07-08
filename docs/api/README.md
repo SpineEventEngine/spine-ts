@@ -10,9 +10,10 @@ set-once transition validation, explicit handler metadata APIs, the first
 command/event bus exports, the first server runtime lifecycle/async queue
 kernel, write-side signal intake result exports, the runtime-routing planner
 seam, the real Connect/Node `SpineServices` route registrar for the raw Spine
-command/query/subscription services, the first `@spine-ts/transport` contracts,
-the first `@spine-ts/storage` contracts, and the minimal `@spine-ts/testing`
-bounded-context fixture.
+command/query/subscription services, a small local `Server` lifecycle owner for
+real Connect/gRPC-compatible services, the first `@spine-ts/transport`
+contracts, the first `@spine-ts/storage` contracts, and the minimal
+`@spine-ts/testing` bounded-context fixture.
 
 Proto exports include message types, generated schemas, enum values and enum
 descriptors, file descriptors, and the `type_url_prefix` custom option for the
@@ -183,6 +184,15 @@ inactive expiry and 100 queued updates per active subscription. The service
 subscription registry is process-local memory, not durable subscription
 storage. It is not a client DSL, event subscription implementation, broad
 server lifecycle, durable subscription store, or projection catch-up loop.
+`Server`, `ServerOptions`, and `RunningServer` form the small public lifecycle
+owner for hosting those routes over Node HTTP/2. `Server.atPort(port)` defaults
+to local-only `127.0.0.1`; broader hosts are explicit through `ServerOptions`.
+`RunningServer` exposes `host`, `port`, `baseUrl`, and idempotent `close()`.
+Close stops network intake, closes active HTTP/2 sessions, then closes owned
+contexts/resources. Cleanup continues after individual close failures and
+reports them as one `AggregateError`. The API deliberately hides ZeroMQ, IPC
+endpoint names, worker/process supervision, durable scheduling, and any
+process-wide `ServerEnvironment`.
 `@spine-ts/testing` exports `BoundedContextFixture`,
 `BoundedContextFixtureOptions`, and `FixtureSubscription`. The fixture wraps one
 built `BoundedContext`, captures the in-process `SpineServices` handlers, and
@@ -229,7 +239,7 @@ omitted. `Inbox.markDelivered()` and `InboxStorage.markDelivered()` return
 `undefined` for missing rows, non-pending rows, or caller snapshots that do not
 match the stored message; already-delivered matching rows are returned
 idempotently. This slice does not run scheduler loops, retry monitors,
-conveyor/stations, repository invocation, broad server lifecycle, transport
+conveyor/stations, repository invocation, broad production lifecycle, transport
 retries, retained attempt history, example app work, or read-side catch-up
 loops.
 Server metadata exports
@@ -403,12 +413,13 @@ The public runtime closure smoke path composes these exports with
 `BoundedContext`, `Repository`, `HandlerMetadataRegistry`,
 `CommandRegistrationReadiness`, `EventRegistrationReadiness`, and
 `createServerRuntimeRoutingPlan()` to prove the metadata and lifecycle
-interfaces fit together without adding new public API. That composition
-produces context-scoped metadata, command/event readiness views, immutable
-runtime-routing plans, and deterministic lifecycle state only. It deliberately
-does not expose a `Server` export, service routing, command/event/import bus
-behavior, handler invocation, read-side execution, transport lifecycle,
-validation, delivery, integration-broker behavior, or Spine `Ack` mapping.
+interfaces fit together. That composition produces context-scoped metadata,
+command/event readiness views, immutable runtime-routing plans, and
+deterministic runtime state only. The public `Server` export added later is a
+separate local HTTP/2 service host over `SpineServices`; it does not broaden the
+runtime-routing plan into service routing, command/event/import bus behavior,
+handler invocation, read-side execution, transport lifecycle, validation,
+delivery, integration-broker behavior, or Spine `Ack` mapping.
 Write-side signal intake exports include `SignalKind`, `SignalIntakeResult`,
 `SignalIntakeAccepted`, `SignalIntakeAcceptedFor`, `SignalIntakeFailure`,
 `SignalIntakeFailureCode`, `SignalIntakeFailureDetails`,

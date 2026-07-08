@@ -109,6 +109,7 @@ export class Stand {
   readonly #storageFactory: StorageFactory;
   readonly #registrations = new Map<string, Registration>();
   readonly #versions = new Map<string, Version>();
+  #closed = false;
 
   constructor(options: StandOptions) {
     this.#context = cloneStorageContext(options.context);
@@ -117,6 +118,7 @@ export class Stand {
 
   /** Register one known entity state schema. Re-registering the same schema is idempotent. */
   register(schema: MessageSchema, options: StandRegisterOptions = {}): void {
+    this.#requireOpen();
     const typeUrl = deriveTypeUrl(schema);
     if (this.#registrations.has(typeUrl)) {
       return;
@@ -141,6 +143,7 @@ export class Stand {
 
   /** Type URLs of state schemas known to this Stand, in registration order. */
   stateTypes(): readonly string[] {
+    this.#requireOpen();
     return Object.freeze([...this.#registrations.keys()]);
   }
 
@@ -232,6 +235,7 @@ export class Stand {
     callback: (update: StandUpdate<Schema>) => void,
     options: StandSubscribeOptions = {},
   ): StandSubscription {
+    this.#requireOpen();
     const registration = this.#registration(schema, "subscribe");
     const tenantKey = this.#tenantKey(options.tenantId);
     const subscriber: Subscriber<Schema> = Object.freeze({ tenantKey, callback });
@@ -251,10 +255,23 @@ export class Stand {
     });
   }
 
+  /** Close direct subscriptions and reject later Stand operations. */
+  close(): void {
+    if (this.#closed) {
+      return;
+    }
+    this.#closed = true;
+    this.#versions.clear();
+    for (const registration of this.#registrations.values()) {
+      registration.subscribers.clear();
+    }
+  }
+
   #registration<Schema extends MessageSchema>(
     schema: Schema,
     operation: string,
   ): Registration<Schema> {
+    this.#requireOpen();
     const typeUrl = deriveTypeUrl(schema);
     const registration = this.#registrations.get(typeUrl);
     if (registration === undefined) {
@@ -343,6 +360,12 @@ export class Stand {
       ...this.#context,
       ...(tenantId === undefined ? {} : { tenantId }),
     });
+  }
+
+  #requireOpen(): void {
+    if (this.#closed) {
+      throw new Error("Stand is closed.");
+    }
   }
 }
 
