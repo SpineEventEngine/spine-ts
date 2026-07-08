@@ -241,3 +241,23 @@ Canonical checklist evidence:
   confirmed expected listener/IPC sandbox failures, plus one real
   bounded-context assertion mismatch caused by changed structural-repository
   error wording. Restored the original repository-instance operation wording.
+- `2026-07-08 04:25 WEST`: Final verification evidence after the last code
+  change:
+  - `corepack pnpm typecheck` passed;
+  - `corepack pnpm lint` passed, including cleanup enforcement;
+  - `corepack pnpm docs:check` passed with the known TypeDoc invalid-origin
+    warning;
+  - `corepack pnpm format:check` passed;
+  - `corepack pnpm exec vitest run packages/server/test/context/bounded-context.test.ts`
+    passed with 29 tests;
+  - `corepack pnpm exec vitest run ...context... scripts/check-cleanup-rules.test.mjs examples/todo/src/index.test.ts --passWithNoTests`
+    passed 140 tests and failed only the standalone to-do HTTP/2 listener test
+    with sandbox `listen EPERM: operation not permitted 127.0.0.1`;
+  - sandboxed `corepack pnpm verify` passed typecheck, lint, and format, then
+    failed only local HTTP/2 listener and ZeroMQ IPC tests: 807 tests passed,
+    22 tests failed due `listen EPERM`/`Operation not permitted`;
+  - escalated `corepack pnpm verify` was requested because prior successful
+    full runs require listener/IPC permissions, but the environment rejected the
+    escalation request;
+  - `corepack pnpm proto:lint`, `corepack pnpm proto:check-generated`, and
+    `git diff --check` passed.

@@ -79,3 +79,11 @@ cleanup, and related docs/tests.
 - Round 3 re-review:
   - TypeScript/API docs `019f3fa2-19e8-7152-903e-60f198a768b2`: clean;
   - documentation completeness `019f3fa2-192b-7c73-8905-92147754b8ce`: clean.
+- Final verification note:
+  - focused bounded-context tests passed after the verification lint fix;
+  - final typecheck, lint, docs, format, proto lint, generated-clean, and
+    whitespace checks passed;
+  - non-escalated full verification failed only on local HTTP/2 listener and
+    ZeroMQ IPC sandbox permissions after 807 tests passed;
+  - escalated full verification could not be rerun because the environment
+    rejected the escalation request for `corepack pnpm verify`.
