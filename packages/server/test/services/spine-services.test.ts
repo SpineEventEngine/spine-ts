@@ -1399,6 +1399,88 @@ describe("SpineServices", () => {
     expect(activeStandSubscriptions).toEqual([]);
   });
 
+  it("keeps duplicate activation inert after a subscription is active", async () => {
+    let deliverUpdate:
+      | ((update: {
+          readonly typeUrl: string;
+          readonly id: unknown;
+          readonly state: ProjectionState;
+        }) => void)
+      | undefined;
+    let subscribeCalls = 0;
+    let unsubscribeCount = 0;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: (_schema, callback) => {
+        subscribeCalls += 1;
+        deliverUpdate = callback;
+        return {
+          get closed() {
+            return unsubscribeCount > 0;
+          },
+          unsubscribe: () => {
+            unsubscribeCount += 1;
+          },
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+    const primaryIterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const firstUpdate = primaryIterator.next();
+
+    await delay(25);
+    const duplicateIterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const duplicateDone = await withTimeout(duplicateIterator.next(), "duplicate activation close");
+
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "task-primary",
+      state: createState("task-primary", "Primary"),
+    });
+    const delivered = await withTimeout(firstUpdate, "primary activation update");
+    await duplicateIterator.return?.();
+    const secondUpdate = primaryIterator.next();
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "task-still-active",
+      state: createState("task-still-active", "Still active"),
+    });
+    const stillActive = await withTimeout(secondUpdate, "primary activation after duplicate");
+
+    expect(duplicateDone.done).toBe(true);
+    expect(delivered.done).toBe(false);
+    expect(stillActive.done).toBe(false);
+    expect(subscribeCalls).toBe(1);
+    expect(unsubscribeCount).toBe(0);
+    await primaryIterator.return?.();
+    expect(unsubscribeCount).toBe(1);
+  });
+
+  it("removes inactive subscription records when activation attachment fails", async () => {
+    let subscribeCalls = 0;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: () => {
+        subscribeCalls += 1;
+        throw new Error("stand subscribe failed");
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+
+    await expect(iterator.next()).rejects.toThrow("stand subscribe failed");
+
+    const secondActivation = await withTimeout(
+      handlers.activate(subscription)[Symbol.asyncIterator]().next(),
+      "activation after failed attachment",
+    );
+
+    expect(secondActivation.done).toBe(true);
+    expect(subscribeCalls).toBe(1);
+  });
+
   it("cancels subscriptions by ID and keeps cleanup idempotent", async () => {
     const unsubscribeCounts: number[] = [];
     const callbacks: ((update: {

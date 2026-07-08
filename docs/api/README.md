@@ -174,10 +174,11 @@ finalization release in-process handles. Never-activated subscriptions have a
 configurable inactive TTL, and active delivery uses a configurable queue limit
 for slow consumers. `Subscribe` rejects unknown targets with `INVALID_ARGUMENT`
 before creating an inactive record. Activation is by the opaque ID in the same
-`SpineServices` instance; unknown IDs complete without updates. Cancellation
-of a missing, unknown, already-canceled, or already-cleaned subscription returns
-OK. Cleanup is idempotent across cancellation, activation-stream finalization,
-inactive expiry, and slow-consumer queue closure. Defaults are 30 seconds for
+`SpineServices` instance; unknown IDs and duplicate activation of an already
+active ID complete without updates. Cancellation of a missing, unknown,
+already-canceled, or already-cleaned subscription returns OK. Cleanup is
+idempotent across cancellation, activation-stream finalization, inactive
+expiry, and slow-consumer queue closure. Defaults are 30 seconds for
 inactive expiry and 100 queued updates per active subscription. The service
 subscription registry is process-local memory, not durable subscription
 storage. It is not a client DSL, event subscription implementation, broad

@@ -59,8 +59,9 @@ import { CommandRefusalError } from "./command-errors.js";
  *
  * `SubscriptionService.Subscribe` accepts only known state targets, creates an
  * inactive process-local record, and attaches delivery to `Stand` only when the
- * opaque subscription ID is activated. Unknown activation IDs complete without
- * updates, and cancellation of unknown or already-cleaned IDs returns OK.
+ * opaque subscription ID is activated. Unknown or duplicate activation IDs
+ * complete without updates, and cancellation of unknown or already-cleaned IDs
+ * returns OK.
  */
 export class SpineServices {
   readonly #contexts: readonly BoundedContext[];
@@ -275,7 +276,16 @@ export class SpineServices {
       return;
     }
 
-    this.#activateRecord(record);
+    if (record.delivery.active) {
+      return;
+    }
+
+    try {
+      this.#activateRecord(record);
+    } catch (error) {
+      this.#removeSubscription(id);
+      throw error;
+    }
 
     try {
       while (!record.delivery.closed) {
@@ -312,10 +322,6 @@ export class SpineServices {
   }
 
   #activateRecord(record: SubscriptionRecord): void {
-    if (record.delivery.active) {
-      return;
-    }
-
     clearInactiveTimer(record);
     const tenantId = topicTenant(record.subscription.topic);
     const standSubscription = record.route.context.stand().subscribe(

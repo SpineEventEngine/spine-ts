@@ -577,6 +577,8 @@ Accepted subscriptions are inactive, opaque, process-local records owned by the
 current `SpineServices` instance; updates recorded before `Activate` are not
 replayed. `Activate` attaches the record to the context `Stand` by subscription
 ID. Missing or unknown activation IDs complete without updates, and
+duplicate activation for an already-active ID completes without updates while
+leaving the active stream attached.
 `Cancel` returns OK for unknown, missing, canceled, or already-cleaned IDs.
 Cleanup is idempotent when a client cancels, an activation iterator closes, an
 inactive record expires, or the active queue limit is exceeded. The inactive

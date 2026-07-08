@@ -375,7 +375,8 @@ queue, and stream/cancel cleanup releases the direct Stand handle.
 `Subscribe` rejects unknown state targets before creating a process-local
 record. Activation and cancellation are keyed by subscription ID in the current
 `SpineServices` instance: unknown activations complete without updates, and
-unknown or duplicate cancellations return OK. Cleanup is idempotent across
+duplicate activation of an already-active ID also completes without updates.
+Unknown or duplicate cancellations return OK. Cleanup is idempotent across
 cancel, stream finalization, inactive expiry, and queue-limit closure. The
 subscription registry, direct Stand subscriber sets, Stand version metadata,
 and in-memory storage adapter are local process state; this slice does not

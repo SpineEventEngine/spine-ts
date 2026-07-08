@@ -12,11 +12,16 @@ Date: 2026-07-08
 
 Decision: For T-0016d, keep `SubscriptionService` as a thin adapter over
 context-owned `Stand` subscriptions. A subscription is created as an inactive
-in-memory service record, activation attaches that record to the context
-`Stand`, cancellation removes the record idempotently, and slow consumers are
-closed when the bounded update queue is exceeded. Unknown subscription
-activation completes without updates, and unknown or missing-ID cancellation
-returns OK.
+in-memory service record only after `Subscribe` validates that the requested
+target is registered. Activation attaches that record to the context `Stand`;
+duplicate activation for an already-active record completes without updates
+and does not add delivery waiters or close the active stream. Cancellation
+removes the record idempotently, abandoned inactive records expire after the
+inactive TTL, activation iterator/stream finalization removes active records,
+and slow consumers are closed when the bounded update queue is exceeded.
+Unknown subscription activation completes without updates, and unknown or
+missing-ID cancellation returns OK. If activation fails while attaching to
+`Stand`, the inactive service record is removed before the error is propagated.
 
 Rationale: Current Spine JVM `SubscriptionService` delegates
 `subscribe`/`activate`/`cancel` to `Stand`; `Stand` validates topics and
@@ -40,6 +45,9 @@ Consequences:
 
 - Documentation must explicitly call subscription state process-local and
   in-memory.
+- Unknown subscription targets are rejected before service records exist; never
+  activated records expire by TTL; active records are removed by cancellation,
+  stream finalization, attach failure, or queue-limit closure.
 - Later server lifecycle/runtime tasks may replace the service-local map with a
   richer registry, but must preserve tenant checks and cleanup guarantees.
 

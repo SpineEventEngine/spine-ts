@@ -589,8 +589,9 @@ Stand delivery in `Activate`; updates recorded before activation are not
 replayed by this first slice. `Subscribe` rejects unknown state targets before
 creating an inactive record. Subscription IDs are opaque and process-local to
 one `SpineServices` instance; activating the same ID against another instance,
-or activating any missing/unknown ID, completes without updates. `Cancel`
-returns OK for missing, unknown, already-canceled, or already-cleaned IDs.
+activating an already-active ID, or activating any missing/unknown ID completes
+without updates. `Cancel` returns OK for missing, unknown, already-canceled, or
+already-cleaned IDs.
 Cleanup is explicit and idempotent when cancellation happens, an activation
 iterator closes, the inactive TTL expires, or the active queue limit is
 exceeded. Defaults are 30 seconds for never-activated subscriptions and 100
