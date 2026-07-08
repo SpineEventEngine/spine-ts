@@ -144,11 +144,10 @@ import {
   BoundedContext,
   CommandRegistrationReadiness,
   EventRegistrationReadiness,
-  HandlerMetadataRegistry,
+  GeneratedRegistryDiscovery,
   React,
   Subscribe,
   createServerRuntimeRoutingPlan,
-  defineEntityHandlers,
 } from "@spine-ts/server";
 import { CreateTaskSchema, type CreateTask } from "./generated/task_commands_pb.js";
 import { TaskCreatedSchema, TaskStateSchema, type TaskCreated } from "./generated/tasks_pb.js";
@@ -172,19 +171,9 @@ class TaskAggregate {
   }
 }
 
-const explicitTaskHandlers = defineEntityHandlers(
-  TaskAggregate,
-  TaskStateSchema,
-  ({ assign, subscribe, react }) => [
-    assign(CreateTaskSchema, "create"),
-    subscribe(TaskCreatedSchema, "noteCreated"),
-    react(TaskCreatedSchema, "reactToCreated"),
-  ],
-);
-
-explicitTaskHandlers.handlers.map((handler) => handler.kind);
-
-const registry = new HandlerMetadataRegistry([explicitTaskHandlers]);
+const registry = await new GeneratedRegistryDiscovery().register({
+  modules: [GeneratedRegistryDiscovery.conventionalModulePath("./dist")],
+});
 registry.findCommandAssignment(CreateTaskSchema.typeName)?.handler.methodName; // "create"
 
 const readiness = CommandRegistrationReadiness.fromRegistry(registry);
@@ -211,11 +200,13 @@ routingPlan.events.subscriberRoutes[0]?.workerId; // planner-local event worker 
 routingPlan.deferred.map(({ signalKind }) => signalKind);
 // ["query", "subscription", "system"]
 
-explicitTaskHandlers.handlers.map((handler) => handler.methodName); // same contract
+registry.findHandlersByKind("event-reaction")[0]?.handler.methodName; // "reactToCreated"
 ```
 
-The explicit registration API records command assignments, command reactions,
-event subscriptions, event reactions, and legacy event applications in
+Generated registry discovery is the ordinary application bridge from bare
+decorators to canonical handler metadata. The low-level explicit registration
+API records command assignments, command reactions, event subscriptions, event
+reactions, and legacy event applications in
 declaration order. Handler names must refer to own prototype data methods
 declared with normal class method syntax; accessors, `constructor`, inherited
 methods, and instance fields are rejected without invoking user code. The API does not
@@ -231,9 +222,9 @@ end-user API. Decorators do not use `emitDecoratorMetadata`,
 `reflect-metadata`, parameter decorators, a global handler registry, or handler
 invocation.
 
-Generated handler registry tooling will infer the signal schema from each
-handler's explicit first parameter type and infer emitted schemas from explicit
-return types. `@Assign` emits generated domain events, `@Command` emits
+Generated handler registry tooling infers the signal schema from each
+handler's explicit first parameter type and emitted schemas from explicit return
+types. `@Assign` emits generated domain events, `@Command` emits
 generated domain commands, `@React` may emit generated domain events or emit
 nothing, and `@Subscribe` returns explicit `void`.
 Both `handler(signal)` and `handler(signal, context)` are part of the public
@@ -429,9 +420,9 @@ store events, dispatch handlers, run services, or expose transport behavior.
 
 ## Metadata And Routing Smoke Slice
 
-The current slice can be assembled with repository identity and
-registration-readiness metadata, but the result is still metadata and routing
-descriptors only:
+Framework tests and non-decorator migrations can still assemble explicit
+handler metadata with repository identity and registration-readiness views when
+they need to inspect routing descriptors directly:
 
 ```ts
 import {
@@ -473,12 +464,13 @@ EventRegistrationReadiness.fromRegistry(registry).registeredEventMessageFullType
 routingPlan.commands.topics;
 ```
 
-This assembly proves the current public seams fit together; it does not turn
-registered command/event metadata into runtime dispatch, delivery, handler
-invocation, service hosting, or `Ack` behavior. Route calculation remains a
-metadata and transport-plan concern; the routing plan deliberately does not
-create worker registrations, lifecycle handles, queues, buses, repositories,
-storage, services, or transport endpoints.
+This assembly proves the low-level metadata and routing-plan seams fit
+together. The routing plan itself does not turn registered command/event
+metadata into runtime dispatch, delivery, handler invocation, service hosting,
+or `Ack` behavior. Route calculation remains a metadata and transport-plan
+concern; the routing plan deliberately does not create worker registrations,
+lifecycle handles, queues, buses, repositories, storage, services, or transport
+endpoints.
 
 ## Bounded Context Assembly
 

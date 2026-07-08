@@ -10,6 +10,10 @@ const maxSemanticComponents = 4;
 const maxTypeReferenceVisits = 200;
 const tooDeepTypeLabel = "too deep to audit";
 const generatedNamePatterns = [/^file_spine_/, /^generated[A-Z]/, /^[A-Z0-9_]+$/];
+const forbiddenEndUserServerApis = new Set([
+  "defineEntityHandlers",
+  "materializeDecoratedEntityHandlers",
+]);
 const eventSuffixes = [
   "Accepted",
   "Added",
@@ -578,7 +582,7 @@ function recordServerImport(clause, state) {
     const importedName = element.propertyName?.text ?? element.name.text;
 
     state.serverDecoratorAliases.set(element.name.text, importedName);
-    if (importedName === "materializeDecoratedEntityHandlers") {
+    if (isForbiddenEndUserServerApi(importedName)) {
       state.forbiddenApiAliases.set(element.name.text, importedName);
     }
   }
@@ -684,7 +688,7 @@ function applyImportEqualsAlias(alias, importState) {
   }
   if (valueImport && importState.serverNamespaces.has(namespace)) {
     changed = addToMap(importState.serverDecoratorAliases, alias.alias, name) || changed;
-    if (name === "materializeDecoratedEntityHandlers") {
+    if (isForbiddenEndUserServerApi(name)) {
       changed = addToMap(importState.forbiddenApiAliases, alias.alias, name) || changed;
     }
   }
@@ -921,7 +925,7 @@ function applyValueAlias(alias, value, state) {
   }
   if (value.kind === "server") {
     state.serverDecoratorAliases.set(alias, value.name);
-    if (value.name === "materializeDecoratedEntityHandlers") {
+    if (isForbiddenEndUserServerApi(value.name)) {
       state.forbiddenApiAliases.set(alias, value.name);
     }
     return;
@@ -1015,7 +1019,7 @@ function applyNamespaceMember(alias, namespace, name, state, aliasNames) {
   if (namespace === "server") {
     state.serverDecoratorAliases.set(alias, name);
     aliasNames.add(alias);
-    if (name === "materializeDecoratedEntityHandlers") {
+    if (isForbiddenEndUserServerApi(name)) {
       state.forbiddenApiAliases.set(alias, name);
     }
   }
@@ -1124,13 +1128,17 @@ function forbiddenApiName(node, importState) {
         name === "EventIdSchema") ||
       (namespace !== undefined &&
         importState.serverNamespaces.has(namespace) &&
-        name === "materializeDecoratedEntityHandlers")
+        isForbiddenEndUserServerApi(name))
     ) {
       return name;
     }
   }
 
   return undefined;
+}
+
+function isForbiddenEndUserServerApi(name) {
+  return forbiddenEndUserServerApis.has(name);
 }
 
 function forbiddenTypeLabel(typeNode, importState) {

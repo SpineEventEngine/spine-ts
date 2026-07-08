@@ -241,10 +241,10 @@ declared with normal class method syntax. Decorator adapter exports
 include `@Assign`, `@Command`, `@Subscribe`, `@React`, legacy/framework-only
 `@Apply`, framework-only `materializeDecoratedEntityHandlers()`,
 `HandlerMethodDecorator`, and `HandlerMethodValue`. Bare `@Assign`, `@Command`,
-`@Subscribe`, and `@React` are the ordinary application syntax. Schema-bearing
-decorator overloads, `@Apply`, and `materializeDecoratedEntityHandlers()` are
-legacy/framework compatibility until generated handler registries own schema
-inference; new application code must not use them. The server registry
+`@Subscribe`, and `@React` are the ordinary application syntax. Generated
+handler registries own ordinary schema inference. Schema-bearing decorator
+overloads, `@Apply`, and `materializeDecoratedEntityHandlers()` are
+legacy/framework compatibility; new application code must not use them. The server registry
 exports include `HandlerMetadataRegistry`,
 `HandlerMetadataRegistryLookup`, `RegisteredHandlerMetadata`, and
 `HandlerMetadataRegistryError` for caller-owned lookup-only registration and

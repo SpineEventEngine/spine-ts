@@ -114,7 +114,8 @@ The helpers deliberately do not own runtime policy. They do not generate UUIDs,
 timestamps, actor or tenant context, event producer IDs, entity versions,
 origins, command system properties, storage records, acknowledgements, delivery
 state, bus dispatch, handler registration, or transport metadata. Those
-responsibilities remain with later runtime slices.
+responsibilities belong to the server/runtime layers that own the current
+workflow.
 
 ## Server Entity Metadata
 
@@ -154,8 +155,9 @@ map-valued, and explicit optional `(set_once)` fields are intentionally
 unsupported in this slice, matching the JVM generation boundary; they fail
 closed with field-specific violations and no raw previous/next value leakage.
 
-`defineEntityHandlers()` is the explicit metadata target that later decorators
-must produce. It accepts an entity class, a state schema, and a builder callback
+`defineEntityHandlers()` is the low-level explicit metadata constructor used by
+framework tests, generated registry ingestion, and legacy non-decorator
+integrations. It accepts an entity class, a state schema, and a builder callback
 whose methods record command assignment, command reaction, event subscription,
 event reaction, and event application metadata. Each handler record keeps the
 generated Protobuf-ES schema, message full type name, handler kind, and entity
@@ -185,10 +187,10 @@ contract. Bare `@Assign`, `@Command`, `@Subscribe`, and `@React` are the
 ordinary application syntax collected from public instance methods into
 standard per-class decorator metadata. Schema-bearing decorator overloads,
 `@Apply`, and `materializeDecoratedEntityHandlers()` remain legacy/framework
-compatibility until generated registry tooling owns schema inference from
-handler parameter and return types. This keeps decorated classes compatible with
-`HandlerMetadataRegistry` and preserves `defineEntityHandlers()` as the
-canonical fallback for environments that avoid decorators. The adapter does not
+compatibility. Generated registry tooling owns ordinary schema inference from
+handler parameter and return types, keeps decorated classes compatible with
+`HandlerMetadataRegistry`, and preserves `defineEntityHandlers()` as the
+low-level fallback for environments that avoid decorators. The adapter does not
 use legacy `emitDecoratorMetadata`, `reflect-metadata`, parameter decorators, or
 a process-wide handler registry.
 

@@ -288,8 +288,9 @@ describe("check-cleanup-rules", () => {
       [
         'import { packCommand, packEvent } from "@spine-ts/core";',
         'import { EventIdSchema, type Command, type Event } from "@spine-ts/proto";',
-        "import { Apply, Assign, Command, React, Subscribe,",
+        "import { Apply, Assign, Command, React, Subscribe, defineEntityHandlers,",
         '  materializeDecoratedEntityHandlers } from "@spine-ts/server";',
+        'import * as server from "@spine-ts/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "class DemoAggregate {",
@@ -319,6 +320,8 @@ describe("check-cleanup-rules", () => {
         "  applyTask(event: TaskCreated): void {}",
         "}",
         "",
+        "defineEntityHandlers(DemoAggregate);",
+        "server.defineEntityHandlers(DemoAggregate);",
         "materializeDecoratedEntityHandlers(DemoAggregate);",
         "",
       ].join("\n"),
@@ -341,6 +344,7 @@ describe("check-cleanup-rules", () => {
     expect(result.stderr).toContain("packEvent");
     expect(result.stderr).toContain("packCommand");
     expect(result.stderr).toContain("EventIdSchema");
+    expect(result.stderr).toContain("defineEntityHandlers");
     expect(result.stderr).toContain("materializeDecoratedEntityHandlers");
     expect(result.stderr).toContain("handler return type Event");
     expect(result.stderr).toContain("handler return type Command");
