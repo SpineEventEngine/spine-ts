@@ -165,6 +165,15 @@ export {
 } from "./runtime/runtime-routing.js";
 
 export {
+  RuntimeTransportBinding,
+  RuntimeTransportEnvelopeError,
+  type CommandRuntimeTransportHandler,
+  type EventRuntimeTransportHandler,
+  type RuntimeTransportBindingHandle,
+  type RuntimeTransportBindingInput,
+} from "./runtime/runtime-transport.js";
+
+export {
   AggregateStorage,
   type AggregateId,
   type AggregateHistory,

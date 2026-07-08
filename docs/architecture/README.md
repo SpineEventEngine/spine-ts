@@ -417,7 +417,8 @@ The following runtime pieces are still deferred to later explicit tasks:
 - richer query filtering, event subscriptions, and durable subscription
   recovery;
 - system-context pairing and broad server/gRPC lifecycle; and
-- ZeroMQ endpoint topology and transport-backed runtime execution.
+- ZeroMQ endpoint topology and production transport-backed worker execution
+  beyond the current local `RuntimeTransportBinding`.
 
 ## Server Runtime Closure
 
@@ -450,13 +451,22 @@ message type names/type URLs plus stable receiver-group and local route/worker
 identities, along with transport correlation keys back to topic/subscription
 arrays and planner-local worker IDs; they do not retain entity names, handler
 names, raw readiness metadata, or duplicate full transport contracts on each
-route. The package root now exports a small executable bus layer, direct Stand,
-repository-backed handler invocation through built contexts, command payload
-validation and refusal/Ack mapping through `SpineServices`, and the
-`SpineServices` route registrar. It still does not export a broad server
-lifecycle, transport endpoint runner, integration broker, event intake
-validation pipeline beyond current implemented seams, or durable subscription
-store as part of this closure.
+route. `RuntimeTransportBinding` is the first executable transport bridge over
+that plan: it registers command routes through `SignalTransport.respond()`,
+event routes through `SignalTransport.subscribe()`, checks incoming generated
+Spine command/event envelope shape and enclosed message type URL, parses
+accepted envelopes into clean generated messages before enqueue, and queues
+accepted callbacks through `SingleProcessServerRuntime`. Its close handle is
+idempotent, stops binding intake before unregistering transport handles, attempts
+every transport registration close even after one rejects, and closes the
+runtime after transport registrations. The package root now exports a small
+executable bus layer, direct Stand, repository-backed handler invocation through
+built contexts, command payload validation and refusal/Ack mapping through
+`SpineServices`, the `SpineServices` route registrar, and this local runtime
+transport binding. It still does not export a broad server lifecycle, transport
+endpoint runner, integration broker, durable retry owner, process supervisor,
+event storage policy beyond current seams, or durable subscription store as part
+of this closure.
 
 The architectural consequence is that later work must add the remaining
 collaborators as explicit tasks at their own seams. Event intake and broader
@@ -541,13 +551,15 @@ retry classification. Those decisions remain in later transport and runtime
 tasks.
 
 The transport package now pins the maintained official `zeromq@6.5.0` line for
-the local IPC adapter foundation. That native dependency is adapter-private: current
-helper code validates a local IPC configuration shape and keeps native module
+the local IPC adapter foundation. That native dependency is adapter-private:
+current helper code validates a local IPC configuration shape and keeps native module
 typing out of the public entry point, while package-private smoke tests prove
 same-host publish/subscribe and request/reply IPC over temporary endpoints. The
 tests do not define production endpoint layout, frame protocols, broker
-topology, worker registration handshakes, delivery retries, process
-supervision, or server runtime wiring. The workspace explicitly approves the
+topology, worker registration handshakes, delivery retries, or process
+supervision. Runtime transport binding tests use a contract-level
+`SignalTransport` test double; ZeroMQ remains adapter-private until a production
+adapter exists. The workspace explicitly approves the
 `zeromq` install script in pnpm configuration, so dependency restoration must
 run in an environment that permits native package build/install scripts.
 Managed sandboxes may reject ZeroMQ `ipc://` binds with `EPERM`, so live local

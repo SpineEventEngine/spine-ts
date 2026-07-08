@@ -4,6 +4,49 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+## D-0064: Execute Local Runtime Routes Through SignalTransport
+
+Status: Accepted
+
+Date: 2026-07-08
+
+Decision: For T-0016f, make the existing command/event runtime routing plan
+executable through the adapter-agnostic `SignalTransport` contract. The runtime
+binding registers command routes with request/respond semantics and event routes
+with publish/subscribe semantics, validates inbound transport envelopes before
+runtime intake, enqueues accepted dispatch work through
+`SingleProcessServerRuntime`, and returns a closeable handle that closes
+transport registrations before the runtime. Keep ZeroMQ local IPC details in
+`@spine-ts/transport` adapter-private code and keep the public server API
+same-host/local by construction.
+
+Rationale: Spine JVM contexts route commands through `CommandBus`, events
+through `EventBus`, and integration traffic through transport-backed broker
+facilities owned by server runtime configuration. Spine TS already has
+adapter-agnostic transport descriptors and metadata routing plans, but those
+plans are not executable. A small runtime binding proves the local transport
+boundary without adding the broader server/environment owner that belongs to
+T-0016g.
+
+Alternatives considered:
+
+- Build a complete JVM-style `ServerEnvironment`, integration broker, and
+  process supervisor now. Rejected as overbroad for this slice and contrary to
+  the simplification mandate.
+- Expose ZeroMQ endpoints or socket options in server runtime APIs. Rejected
+  because ZeroMQ must remain an adapter-private local IPC implementation detail.
+- Keep the routing plan metadata-only. Rejected because T-0016f exists to make
+  command/event routes executable over `SignalTransport`.
+
+Consequences:
+
+- Docs must state that the runtime binding is local-only and that live IPC tests
+  may require sandbox/network escalation.
+- Inbound transport validation must fail before handler dispatch or runtime
+  queue intake.
+- Later T-0016g lifecycle work owns public server/environment startup and
+  shutdown policy; this slice only returns closeable binding handles.
+
 ## D-0063: Start Delivery Worker As A Small Shard Drain
 
 Status: Accepted

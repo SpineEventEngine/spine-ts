@@ -151,6 +151,12 @@ remain later slices.
   readiness views, and `createServerRuntimeRoutingPlan()` without exposing a
   server facade, services, handler invocation, worker lifecycle registration,
   or transport endpoint execution.
+- A local `RuntimeTransportBinding` that registers command/event routing plans
+  with a supplied `SignalTransport`, validates incoming generated Spine
+  command/event envelopes before runtime intake, enqueues accepted work through
+  `SingleProcessServerRuntime`, and returns an idempotent close handle. The
+  binding does not own ZeroMQ endpoints, process supervision, retry policy, or a
+  broad server environment.
 - Adapter-agnostic transport contracts in `@spine-ts/transport` for immutable
   signal topics, logical subscriptions, publish/request operations, and async
   close behavior.

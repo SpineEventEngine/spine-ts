@@ -89,6 +89,18 @@ The final interface will be refined during implementation, but it must:
 - support graceful close and broker restart handling;
 - allow later replacement with another local IPC or distributed transport.
 
+T-0016f adds the first executable server-side bridge over this abstraction.
+`RuntimeTransportBinding.open()` consumes a `ServerRuntimeRoutingPlan`, a
+supplied `SignalTransport`, a supplied `SingleProcessServerRuntime`, and
+framework-owned `onCommand` / `onEvent` callbacks. It registers command routes
+with request/respond semantics, registers event routes with publish/subscribe
+semantics, validates incoming generated Spine command/event envelope shape plus
+the enclosed message type URL before runtime intake, and enqueues accepted
+callbacks through the runtime. Its handle is idempotent and closes transport
+registrations before the runtime. It deliberately does not own the transport
+instance, choose IPC endpoint names, expose ZeroMQ, supervise processes, retain
+delivery attempts, retry work, or create a JVM-style server environment.
+
 ## ZeroMQ Local Broker
 
 ZeroMQ is used only for local IPC between Node.js processes on one host.
