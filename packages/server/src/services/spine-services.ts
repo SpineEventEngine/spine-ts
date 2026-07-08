@@ -52,7 +52,7 @@ import { CommandRefusalError } from "./command-errors.js";
 /**
  * Small route registrar for the first public Spine gRPC service slice.
  *
- * `QueryService.Read` supports only projection-state ID filters and
+ * `QueryService.Read` supports ID filters for any registered state route and
  * projection-state `include_all = true` reads. Column filters, field masks,
  * ordering, limits, missing criteria, and inactive include-all criteria return
  * stable `INVALID_QUERY` responses before Stand storage is read.
@@ -156,73 +156,71 @@ export class SpineServices {
 
   async #read(query: Query): Promise<QueryResponse> {
     const target = query.target;
-    const route = target === undefined ? undefined : this.#stateRoutes.get(target.type);
+    const route = this.#readRoute(target);
 
     if (target === undefined || route === undefined) {
-      return create(QueryResponseSchema, {
-        response: errorResponse(
-          "UNSUPPORTED_QUERY_TARGET",
-          "No bounded context owns query target.",
-        ),
-      });
+      return queryErrorResponse(
+        "UNSUPPORTED_QUERY_TARGET",
+        "No bounded context owns query target.",
+      );
     }
 
     const queryError = validateReadQuery(query, target, route);
     if (queryError !== undefined) {
-      return create(QueryResponseSchema, {
-        response: errorResponse(queryError.type, queryError.message),
-      });
+      return queryErrorResponse(queryError.type, queryError.message);
     }
 
-    const includeAllRequested = target.criterion.case === "includeAll";
     const tenantId = tenantValue(query.context?.tenantId);
     const tenantError = tenantMismatch(route.context.isMultitenant, tenantId, "query");
     if (tenantError !== undefined) {
-      return create(QueryResponseSchema, {
-        response: errorResponse(tenantError.type, tenantError.message),
-      });
+      return queryErrorResponse(tenantError.type, tenantError.message);
     }
 
     try {
-      if (includeAllRequested) {
-        const results = await route.context
-          .stand()
-          .readAllVersioned(route.schema, tenantOptions(tenantId));
-
-        return create(QueryResponseSchema, {
-          response: okResponse(),
-          message: results.map((result) => packVersionedState(route.schema, result)),
-        });
-      }
-
-      const filters = target.criterion.value as TargetFilters;
-      const ids = filters.idFilter?.id.map(decodeId) ?? [];
-      if (ids.length === 0) {
-        return create(QueryResponseSchema, {
-          response: errorResponse("INVALID_QUERY", "QueryService.Read requires an ID filter."),
-        });
-      }
-
-      const messages = [];
-
-      for (const id of ids) {
-        const result = await route.context
-          .stand()
-          .readVersioned(route.schema, id, tenantOptions(tenantId));
-        if (result !== undefined) {
-          messages.push(packVersionedState(route.schema, result));
-        }
-      }
-
-      return create(QueryResponseSchema, {
-        response: okResponse(),
-        message: messages,
-      });
+      return target.criterion.case === "includeAll"
+        ? await this.#readAll(route, tenantId)
+        : await this.#readIds(target, route, tenantId);
     } catch {
-      return create(QueryResponseSchema, {
-        response: errorResponse("QUERY_READ_ERROR", "Query read failed."),
-      });
+      return queryErrorResponse("QUERY_READ_ERROR", "Query read failed.");
     }
+  }
+
+  #readRoute(target: Target | undefined): StateRoute | undefined {
+    return target === undefined ? undefined : this.#stateRoutes.get(target.type);
+  }
+
+  async #readAll(route: StateRoute, tenantId: string | undefined): Promise<QueryResponse> {
+    const results = await route.context
+      .stand()
+      .readAllVersioned(route.schema, tenantOptions(tenantId));
+
+    return create(QueryResponseSchema, {
+      response: okResponse(),
+      message: results.map((result) => packVersionedState(route.schema, result)),
+    });
+  }
+
+  async #readIds(
+    target: Target,
+    route: StateRoute,
+    tenantId: string | undefined,
+  ): Promise<QueryResponse> {
+    const filters = target.criterion.value as TargetFilters;
+    const messages = [];
+
+    for (const id of filters.idFilter?.id.map(decodeId) ?? []) {
+      const result = await route.context
+        .stand()
+        .readVersioned(route.schema, id, tenantOptions(tenantId));
+      if (result !== undefined) {
+        messages.push(packVersionedState(route.schema, result));
+      }
+    }
+
+    return create(QueryResponseSchema, {
+      response: okResponse(),
+      message: messages,
+    });
   }
 
   #subscribe(topic: Topic): Subscription {
@@ -467,6 +465,12 @@ function okResponse(): Response {
 
 function errorResponse(type: string, message: string): Response {
   return create(ResponseSchema, { status: errorStatus(type, message) });
+}
+
+function queryErrorResponse(type: string, message: string): QueryResponse {
+  return create(QueryResponseSchema, {
+    response: errorResponse(type, message),
+  });
 }
 
 function validateReadQuery(

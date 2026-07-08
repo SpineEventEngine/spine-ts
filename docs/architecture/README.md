@@ -361,7 +361,8 @@ the context command bus to the first real Connect/Node `CommandService`,
 `QueryService`, and `SubscriptionService` routes. Projection-state
 `QueryService.Read` calls with `Target.include_all = true` are satisfied through
 `Stand.readAllVersioned()` over the stand's `RecordStorage.query()` path.
-Projection-state ID-filter reads are satisfied through `Stand.readVersioned()`.
+ID-filter reads for any registered state route are satisfied through
+`Stand.readVersioned()`.
 Column filters, field masks, ordering, limits, missing criteria, and
 `include_all = false` are rejected before Stand storage reads.
 Direct list reads and `QueryService.Read` include-all calls follow the same

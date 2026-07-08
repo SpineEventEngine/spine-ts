@@ -7,8 +7,6 @@ import { VersionSchema, file_spine_options } from "@spine-ts/proto";
 import {
   InMemoryStorageFactory,
   RecordStorage,
-  StorageFactory,
-  type RecordEntry,
   type RecordSpec,
   type StorageContext,
 } from "@spine-ts/storage";
@@ -188,29 +186,20 @@ describe("Stand", () => {
     ]);
   });
 
-  it("keeps version metadata in the Stand process-local map", async () => {
-    const storageFactory = new SharedStateStorageFactory();
-    const firstStand = new Stand({
+  it("clears process-local version metadata when an update has no version", async () => {
+    const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
-      storageFactory,
+      storageFactory: new InMemoryStorageFactory(),
     });
-    const secondStand = new Stand({
-      context: { name: "Tasks", multitenant: false },
-      storageFactory,
-    });
-    firstStand.register(ProjectionStateSchema);
-    secondStand.register(ProjectionStateSchema);
+    stand.register(ProjectionStateSchema);
 
-    await firstStand.update(ProjectionStateSchema, createState("task-1", "First"), {
+    await stand.update(ProjectionStateSchema, createState("task-1", "First"), {
       version: create(VersionSchema, { number: 7 }),
     });
+    await stand.update(ProjectionStateSchema, createState("task-1", "Second"));
 
-    await expect(firstStand.readVersioned(ProjectionStateSchema, "task-1")).resolves.toEqual({
-      state: createState("task-1", "First"),
-      version: create(VersionSchema, { number: 7 }),
-    });
-    await expect(secondStand.readVersioned(ProjectionStateSchema, "task-1")).resolves.toEqual({
-      state: createState("task-1", "First"),
+    await expect(stand.readVersioned(ProjectionStateSchema, "task-1")).resolves.toEqual({
+      state: createState("task-1", "Second"),
     });
   });
 
@@ -503,87 +492,4 @@ class RejectingQueryStorageFactory extends ClosingStorageFactory {
     storage.query = async () => Promise.reject(new Error("query failed"));
     return storage;
   }
-}
-
-class SharedStateStorageFactory extends StorageFactory {
-  readonly #records = new Map<string, { readonly id: unknown; readonly record: Message }>();
-
-  protected override onCreateRecordStorage<I, R extends Message>(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-  ): RecordStorage<I, R> {
-    return new SharedStateStorage(context, recordSpec, this.#records);
-  }
-}
-
-class SharedStateStorage<I, R extends Message> extends RecordStorage<I, R> {
-  readonly #records: Map<string, { readonly id: unknown; readonly record: Message }>;
-
-  constructor(
-    context: StorageContext,
-    recordSpec: RecordSpec<I, R>,
-    records: Map<string, { readonly id: unknown; readonly record: Message }>,
-  ) {
-    super(context, recordSpec);
-    this.#records = records;
-  }
-
-  protected override deleteRecord(id: I): Promise<boolean> {
-    return Promise.resolve(this.#records.delete(sharedIdKey(id)));
-  }
-
-  protected override queryRecordEntries(): Promise<readonly RecordEntry<I, R>[]> {
-    return Promise.resolve(
-      [...this.#records.values()].map((entry) => ({
-        id: this.recordSpec.cloneId(entry.id as I),
-        record: this.recordSpec.cloneRecord(entry.record as R),
-      })),
-    );
-  }
-
-  protected override readRecord(id: I): Promise<R | undefined> {
-    const entry = this.#records.get(sharedIdKey(id));
-
-    return Promise.resolve(
-      entry === undefined ? undefined : this.recordSpec.cloneRecord(entry.record as R),
-    );
-  }
-
-  protected override compareAndSetRecord(
-    id: I,
-    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
-    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
-  ): Promise<boolean> {
-    const current = this.#records.get(sharedIdKey(id));
-    if (JSON.stringify(current?.record) !== JSON.stringify(expected?.record)) {
-      return Promise.resolve(false);
-    }
-    if (next === undefined) {
-      this.#records.delete(sharedIdKey(id));
-    } else {
-      this.#records.set(sharedIdKey(next.id), next);
-    }
-
-    return Promise.resolve(true);
-  }
-
-  protected override async writeAllRecords(
-    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
-  ): Promise<void> {
-    for (const record of records) {
-      await this.writeRecord(record);
-    }
-  }
-
-  protected override writeRecord(
-    record: ReturnType<RecordSpec<I, R>["materialize"]>,
-  ): Promise<void> {
-    this.#records.set(sharedIdKey(record.id), record);
-
-    return Promise.resolve();
-  }
-}
-
-function sharedIdKey(id: unknown): string {
-  return typeof id === "object" && id !== null ? JSON.stringify(id) : `${typeof id}:${String(id)}`;
 }

@@ -162,8 +162,8 @@ require a `tenantId` on point reads, list reads, updates, and subscriptions
 while single-tenant stands reject tenant options.
 `SpineServices` adapts built-context command buses and stands to the first real
 Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
-routes. `QueryService.Read` supports projection-state ID-filter reads and
-projection-state `Target.include_all = true` reads, packing
+routes. `QueryService.Read` supports ID-filter reads for any registered state
+route and projection-state `Target.include_all = true` reads, packing
 `EntityStateWithVersion` replies from
 `Stand.readVersioned()` and `Stand.readAllVersioned()` respectively. It rejects
 column filters, field masks, ordering, limits, missing criteria, and

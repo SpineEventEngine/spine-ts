@@ -98,7 +98,7 @@ remain later slices.
   real Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
   routes without adding a broad server facade or client DSL. Command routes are
   selected from built-time bus registrations, queries preserve Stand-recorded
-  versions for ID-filter and `Target.include_all` projection reads, and
+  versions for ID-filter reads and projection `Target.include_all` reads, and
   subscriptions attach delivery only after explicit activation.
   Inactive subscriptions expire by default and active subscriptions use a small
   bounded update queue for slow consumers.
@@ -575,11 +575,12 @@ are storage-backed, but the state-to-version metadata map is not persisted.
 Multitenant stands require
 `{ tenantId }` for point reads, list reads, updates, and subscriptions; single-
 tenant stands reject tenant options. `SpineServices` adapts built-context
-stands to the first raw gRPC-compatible query and subscription routes, including
+stands to the first raw gRPC-compatible query and subscription routes. Service
+reads support ID-filter point reads for any registered state route and
 projection-state `QueryService.Read` calls with `Target.include_all = true`.
 Include-all service reads use the same tenant-option behavior as direct stand
 reads and return `EntityStateWithVersion` values packed from
-`Stand.readAllVersioned()`. Service reads also support ID-filter point reads.
+`Stand.readAllVersioned()`.
 Column filters, field masks, ordering, limits, missing criteria, and
 `include_all = false` return `INVALID_QUERY` before Stand storage is read.
 Direct subscriptions are in-process only and must be cleaned up by calling

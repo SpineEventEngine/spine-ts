@@ -224,7 +224,7 @@ describe("@spine-ts/example-todo", () => {
       intervalMs: 5,
     });
 
-    const response = await fixture.read(createTaskListColumnQuery());
+    const response = await fixture.read(createColumnFilterQuery());
 
     expect(response.response?.status?.status.case).toBe("error");
     expect(errorMessage(response.response?.status?.status)).toBe(
@@ -779,7 +779,7 @@ function createTaskListIdQuery(id = "task-list-query") {
   });
 }
 
-function createTaskListColumnQuery() {
+function createColumnFilterQuery() {
   return create(QuerySchema, {
     id: create(QueryIdSchema, { value: "query-task-list-column" }),
     target: create(TargetSchema, {

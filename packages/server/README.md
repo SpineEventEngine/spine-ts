@@ -51,8 +51,8 @@ Current slice exposes:
 - `new SpineServices({ contexts }).register(router)` for the first real
   Connect/Node route registration of Spine JVM `CommandService`,
   `QueryService`, and `SubscriptionService` contracts over built bounded
-  contexts, including projection-state ID-filter and `Target.include_all`
-  query reads;
+  contexts, including ID-filter reads for registered state routes and
+  projection-state `Target.include_all` query reads;
   and
 - `CommandRefusalError` for the current immediate business refusal path from
   command handlers to non-ok `CommandService.Post` `Ack` errors;
@@ -566,11 +566,12 @@ be cleaned up explicitly.
 `SpineServices` adapts built-context command
 buses and stands to the first `CommandService`, `QueryService`, and
 `SubscriptionService` methods, including `QueryService.Read` support for
-projection-state ID filters and projection-state `Target.include_all = true`
-reads. `QueryService.Read` rejects column filters, field masks, ordering,
-limits, missing criteria, and `include_all = false` before reading Stand
-storage. Cross-context fallback, client query DSLs, event subscriptions, field
-filtering, and projection catch-up remain outside this slice.
+ID filters on any registered state route and projection-state
+`Target.include_all = true` reads. `QueryService.Read` rejects column filters,
+field masks, ordering, limits, missing criteria, and `include_all = false`
+before reading Stand storage. Cross-context fallback, client query DSLs, event
+subscriptions, field filtering, and projection catch-up remain outside this
+slice.
 
 ## Entity State Shell
 
