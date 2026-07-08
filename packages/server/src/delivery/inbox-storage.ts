@@ -76,6 +76,122 @@ export class InboxStorage {
     }
   }
 
+  /** Mark one `TO_DELIVER` inbox message as `DELIVERED`. */
+  async markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
+    const snapshot = InboxRecords.read(InboxRecords.write(message));
+    const inboxStorage = this.#inboxStorage();
+    const dedupStorage = this.#dedupStorage();
+
+    try {
+      return await this.#markDeliveredWithDedup(inboxStorage, dedupStorage, snapshot);
+    } finally {
+      inboxStorage.close();
+      dedupStorage.close();
+    }
+  }
+
+  async #markDeliveredWithDedup(
+    inboxStorage: RecordStorage<string, Any>,
+    dedupStorage: RecordStorage<string, Any>,
+    message: InboxMessage,
+  ): Promise<InboxMessage | undefined> {
+    const key = this.#messageKey(message.id);
+
+    for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
+      const currentRecord = await this.#durableRead("Inbox record", () => inboxStorage.read(key));
+      if (currentRecord === undefined) {
+        return undefined;
+      }
+
+      const current = InboxRecords.read(currentRecord, key);
+      if (current.status === "DELIVERED") {
+        await this.#syncDeliveredDedupGuard(dedupStorage, current, current);
+        return current;
+      }
+      if (current.status !== "TO_DELIVER") {
+        return undefined;
+      }
+
+      const delivered = Object.freeze({
+        ...current,
+        status: "DELIVERED" as const,
+      });
+      const nextRecord = InboxRecords.write(delivered);
+      const marked = await this.#durableCompareAndSet(
+        "Inbox record",
+        inboxStorage,
+        key,
+        currentRecord,
+        nextRecord,
+      );
+      if (!marked) {
+        continue;
+      }
+
+      await this.#syncDeliveredDedupGuard(dedupStorage, current, delivered);
+      return delivered;
+    }
+
+    throw casRetriesExhausted("Inbox delivery status");
+  }
+
+  async #syncDeliveredDedupGuard(
+    dedupStorage: RecordStorage<string, Any>,
+    expected: InboxMessage,
+    delivered: InboxMessage,
+  ): Promise<void> {
+    const dedupKey = DedupRecords.guardKey(delivered);
+    const nextRecord = DedupRecords.writeFinal(delivered);
+
+    for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
+      const currentRecord = await this.#durableRead("Inbox dedup guard", () =>
+        dedupStorage.read(dedupKey),
+      );
+      if (currentRecord === undefined) {
+        throw new DeliveryStorageCorruptionError(
+          `Inbox dedup guard "${dedupKey}" is missing for a delivered message.`,
+        );
+      }
+
+      if (this.#sameRecord(currentRecord, nextRecord)) {
+        return;
+      }
+      if (this.#dedupGuardMatches(currentRecord, dedupKey, delivered)) {
+        return;
+      }
+      if (!this.#dedupGuardMatches(currentRecord, dedupKey, expected)) {
+        throw new DeliveryStorageCorruptionError(
+          `Inbox dedup guard "${dedupKey}" does not match the delivered message.`,
+        );
+      }
+
+      const updated = await this.#durableCompareAndSet(
+        "Inbox dedup guard",
+        dedupStorage,
+        dedupKey,
+        currentRecord,
+        nextRecord,
+      );
+      if (updated) {
+        return;
+      }
+    }
+
+    throw casRetriesExhausted("Inbox dedup guard");
+  }
+
+  #dedupGuardMatches(record: Any, dedupKey: string, message: InboxMessage): boolean {
+    const pending = DedupRecords.readPendingMessage(record);
+    if (pending !== undefined) {
+      return this.#sameRecord(InboxRecords.write(pending), InboxRecords.write(message));
+    }
+
+    const guard = DedupRecords.readGuard(record, dedupKey);
+    return (
+      this.#sameMessageId(guard.messageId, message.id) && this.#sameGuardMetadata(guard, message)
+    );
+  }
+
   async #writeWithDedup(
     inboxStorage: RecordStorage<string, Any>,
     dedupStorage: RecordStorage<string, Any>,
@@ -354,6 +470,10 @@ export class InboxStorage {
 
   #sameTime(left: Date | undefined, right: Date | undefined): boolean {
     return left?.getTime() === right?.getTime();
+  }
+
+  #sameMessageId(left: InboxMessage["id"], right: InboxMessage["id"]): boolean {
+    return left.value === right.value && left.shard.key() === right.shard.key();
   }
 
   async #durableRead<T>(label: string, read: () => Promise<T>): Promise<T> {

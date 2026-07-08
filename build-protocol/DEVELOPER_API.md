@@ -249,22 +249,34 @@ storage. The storage delegate remains a storage-only seam.
 
 ## Delivery and Inbox API
 
-The current public delivery surface is the durable inbox handoff point for one
-bounded context. It is intentionally smaller than the later worker/retry stack:
+The current public delivery surface is the durable inbox handoff point and a
+small framework-owned shard drain for one bounded context. It is intentionally
+smaller than the later scheduler/retry stack:
 
 - `Delivery` groups `Inbox` and `ShardedWorkRegistry` for one storage context;
+- `Delivery.drain(shard, { node, deliver, limit })` claims one shard, reads
+  `TO_DELIVER` rows in inbox order, invokes the supplied framework endpoint
+  callback once per row, marks successful rows `DELIVERED`, leaves callback
+  failures `TO_DELIVER` for retry, returns simple `DeliveryRun` statistics, and
+  releases the shard in a `finally` path. If the shard is already owned by
+  another live worker lease, the run returns `SKIPPED` with zero counts and does
+  not invoke the callback;
 - `Inbox` is the low-level durable delivery storage primitive in this slice: it
   accepts `InboxMessageInput` with `receive()` and lets framework delivery code
-  read durable inbox rows by `ShardIndex`. Its public `storage` property is an
+  read durable inbox rows by `ShardIndex`. `markDelivered()` is the narrow
+  worker-owned status update used by `Delivery.drain()`. Its public `storage`
+  property is an
   intentional low-level escape hatch for storage-focused tests and
   integrations, not an application-facing query facade;
 - `InboxStorage` is the lower-level durable storage seam behind `Inbox`,
-  useful for framework tests or storage-focused integrations rather than as an
+  including the same narrow `markDelivered()` status update. It remains useful
+  for framework tests or storage-focused integrations rather than as an
   application-facing read-side/query facade;
 - `ShardIndex` identifies one delivery shard, `ShardSession` is the durable
   lease snapshot for that shard, and `ShardedWorkRegistry` persists shard
   pickup/release across processes; and
-- `DeliveryLabel`, `DeliveryStatus`, `InboxId`, `InboxMessage`,
+- `DeliveryDrainOptions`, `DeliveryEndpoint`, `DeliveryFailure`,
+  `DeliveryLabel`, `DeliveryRun`, `DeliveryStatus`, `InboxId`, `InboxMessage`,
   `DeliveryStorageCorruptionError`, `InboxMessageError`, `InboxMessageId`,
   `InboxMessageInput`,
   `InboxReadOptions`, `InboxWriteResult`, `InboxStorageOptions`,
@@ -302,13 +314,22 @@ const pending = await delivery.inbox.read(ShardIndex.single(), {
   statuses: ["TO_DELIVER"],
   limit: 100,
 });
+
+const run = await delivery.drain(ShardIndex.single(), {
+  node: "worker-a",
+  limit: 100,
+  async deliver(message) {
+    await frameworkEndpoint(message);
+  },
+});
 ```
 
 Keep the write/read split intact at the application/service/domain level. These
-storage primitives persist inbox rows so a future delivery worker can consume
-them by shard; they are not user-facing read-side facades. The current API does
-not invoke repositories from inbox rows, mutate read-side projections, run retry
-workers, or retain attempt/error history.
+storage primitives and the direct shard drain are framework internals; they are
+not user-facing read-side facades. The current API does not schedule repeated
+runs, invoke repositories from inbox rows by itself, mutate read-side
+projections, run retry monitors, open transport workers, or retain attempt/error
+history beyond the returned `DeliveryRun`.
 
 ## Public Services
 

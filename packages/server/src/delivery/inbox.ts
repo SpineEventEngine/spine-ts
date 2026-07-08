@@ -46,6 +46,11 @@ export class Inbox {
     return this.storage.read(shard, options);
   }
 
+  /** Mark one pending inbox message delivered. */
+  markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
+    return this.storage.markDelivered(message);
+  }
+
   #inputObject(value: unknown, label: string): Record<string, unknown> {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       throw new InboxMessageError(`${label} is invalid.`);
