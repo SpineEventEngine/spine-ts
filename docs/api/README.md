@@ -248,12 +248,17 @@ include `@Assign`, `@Command`, `@Subscribe`, `@React`, legacy/framework-only
 `@Subscribe`, and `@React` are the ordinary application syntax. Generated
 handler registries own ordinary schema inference. Schema-bearing decorator
 overloads, `@Apply`, and `materializeDecoratedEntityHandlers()` are
-legacy/framework compatibility; new application code must not use them. The server registry
-exports include `HandlerMetadataRegistry`,
-`HandlerMetadataRegistryLookup`, `RegisteredHandlerMetadata`, and
-`HandlerMetadataRegistryError` for caller-owned lookup-only registration and
-duplicate-policy validation. These APIs are metadata-only and do not execute
-handlers, access storage, dispatch buses, or start transport.
+legacy/framework compatibility; new application code must not use them.
+Ordinary generated assembly uses
+`await BoundedContext.singleTenant(name).add(EntityClass).buildAsync()`. The
+builder loads the conventional compiled generated registry module, matches
+entity-class metadata, constructs default repositories, and keeps synchronous
+`build()` for explicit `add(repository)` assembly. The server registry exports
+include `HandlerMetadataRegistry`, `HandlerMetadataRegistryLookup`,
+`RegisteredHandlerMetadata`, and `HandlerMetadataRegistryError` for low-level
+lookup-only registration and duplicate-policy validation. These APIs are
+metadata-only and do not execute handlers, access storage, dispatch buses, or
+start transport.
 Generated handler registries are the intended ordinary bridge from bare
 decorators to canonical metadata. Their logical contract is a versioned list of
 entity handler groups with entity type, state schema, handler kind, method name,
@@ -262,10 +267,10 @@ schemas inferred from explicit return types. They are generated build artifacts
 under ignored `generated/` directories and are not committed.
 `HandlerRegistryIngestor` preserves generated arity in canonical metadata, and
 `GeneratedRegistryDiscovery` loads explicit registry paths or clean `file:`
-URLs. Application package builds run registry generation after Protobuf-ES
-generation and before `tsc`, then load the compiled registry module from the
-package output tree, commonly through
-`GeneratedRegistryDiscovery.conventionalModulePath(compiledPackageRoot)`.
+URLs for framework/tooling paths. Application package builds run registry
+generation after Protobuf-ES generation and before `tsc`; normal context
+assembly lets `buildAsync()` load the compiled registry module from the package
+output tree.
 Repository execution calls generated two-argument command assignees and event
 subscribers with generated `CommandContext` or `EventContext` values from the
 incoming envelope; if the envelope omits context, execution supplies an empty

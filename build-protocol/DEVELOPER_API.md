@@ -98,9 +98,10 @@ Application packages that use bare decorators need a build step that runs after
 their Protobuf-ES files are generated and before TypeScript compilation. The
 step analyzes the package source, writes
 `generated/handler/generated-handler-registry.ts`, and lets `tsc` compile that
-ignored source artifact into the package output. Runtime assembly loads the
-compiled registry with `GeneratedRegistryDiscovery`, usually by passing the
-compiled package root to `GeneratedRegistryDiscovery.conventionalModulePath()`.
+ignored source artifact into the package output. Runtime assembly adds entity
+classes to `BoundedContextBuilder` and calls `buildAsync()`, which loads the
+compiled registry through framework-owned discovery before constructing default
+repositories.
 If the registry is missing, stale, malformed, or rejected during ingestion,
 context creation should fail deterministically before any handler is invoked.
 
@@ -209,10 +210,10 @@ The final API must avoid hidden mutation that bypasses validation.
 End-user assembly should be concise:
 
 ```typescript
-const tasks = BoundedContext.singleTenant("Tasks")
+const tasks = await BoundedContext.singleTenant("Tasks")
   .add(TaskAggregate)
   .add(TaskProjection)
-  .build();
+  .buildAsync();
 ```
 
 The framework may create default repositories from entity classes, but it must also support custom repositories for:
@@ -222,6 +223,16 @@ The framework may create default repositories from entity classes, but it must a
 - custom storage;
 - dependency injection;
 - domain-specific repository methods.
+
+Generated entity-class assembly is asynchronous because the builder loads the
+compiled generated handler registry module before constructing default
+repositories. Synchronous `build()` remains the explicit repository path:
+
+```typescript
+const tasks = BoundedContext.singleTenant("Tasks")
+  .add(new TaskRepository())
+  .build();
+```
 
 The current storage API is intentionally smaller than those future repository
 seams. Adapters implement `StorageFactory.createRecordStorage(context, spec)`,

@@ -12,6 +12,15 @@ const tooDeepTypeLabel = "too deep to audit";
 const generatedNamePatterns = [/^file_spine_/, /^generated[A-Z]/, /^[A-Z0-9_]+$/];
 const forbiddenEndUserServerApis = new Set([
   "defineEntityHandlers",
+  "EntityHandlersMetadata",
+  "GeneratedEntityHandlerGroup",
+  "GeneratedEntityHandlers",
+  "GeneratedHandlerRecord",
+  "GeneratedHandlerRegistry",
+  "GeneratedRegistryDiscovery",
+  "GeneratedRegistryDiscoveryOptions",
+  "HandlerMetadataRegistry",
+  "HandlerRegistryIngestor",
   "materializeDecoratedEntityHandlers",
 ]);
 const eventSuffixes = [
@@ -564,24 +573,22 @@ function recordCoreImport(clause, state) {
 }
 
 function recordServerImport(clause, state) {
-  if (clause.isTypeOnly) {
-    return;
-  }
-
   const bindings = clause.namedBindings;
+  const valueImport = clause.isTypeOnly !== true;
   if (ts.isNamespaceImport(bindings)) {
-    state.serverNamespaces.add(bindings.name.text);
+    if (valueImport) {
+      state.serverNamespaces.add(bindings.name.text);
+    }
     return;
   }
 
   for (const element of bindings.elements) {
-    if (element.isTypeOnly) {
-      continue;
-    }
-
     const importedName = element.propertyName?.text ?? element.name.text;
+    const valueElement = valueImport && !element.isTypeOnly;
 
-    state.serverDecoratorAliases.set(element.name.text, importedName);
+    if (valueElement) {
+      state.serverDecoratorAliases.set(element.name.text, importedName);
+    }
     if (isForbiddenEndUserServerApi(importedName)) {
       state.forbiddenApiAliases.set(element.name.text, importedName);
     }

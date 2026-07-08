@@ -125,9 +125,9 @@ remain later slices.
   legacy/framework compatibility only.
 - Generated handler registry tooling that analyzes bare-decorated application
   source after Protobuf-ES generation, writes ignored
-  `generated/handler/generated-handler-registry.ts` artifacts, and loads the
-  compiled registry module during context assembly with
-  `GeneratedRegistryDiscovery`.
+  `generated/handler/generated-handler-registry.ts` artifacts. Context
+  assembly loads the compiled registry module through
+  `BoundedContextBuilder.buildAsync()`.
 - A caller-owned server handler metadata registry that registers explicit
   entity handler metadata, rejects duplicate command assignments and duplicate
   legacy event applications for the same entity/event pair, and exposes frozen
@@ -591,17 +591,7 @@ bounded-context runtime wiring, and transport/service assembly:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import {
-  Aggregate,
-  Assign,
-  BoundedContext,
-  CommandRegistrationReadiness,
-  EventRegistrationReadiness,
-  GeneratedRegistryDiscovery,
-  Repository,
-  Subscribe,
-  createServerRuntimeRoutingPlan,
-} from "@spine-ts/server";
+import { Aggregate, Assign, BoundedContext, Subscribe } from "@spine-ts/server";
 import type { CreateTask } from "./generated/task_commands_pb.js";
 import { TaskCreatedSchema, TaskStateSchema, type TaskCreated } from "./generated/tasks_pb.js";
 
@@ -618,34 +608,26 @@ class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, bigint> {
   }
 }
 
-const repository = new Repository({
-  entityType: TaskAggregate,
-  schema: TaskStateSchema,
-});
-const tasks = BoundedContext.singleTenant("Tasks").add(repository).build();
-const registry = await new GeneratedRegistryDiscovery().register({
-  modules: [GeneratedRegistryDiscovery.conventionalModulePath(appRoot)],
-});
+const tasks = await BoundedContext.singleTenant("Tasks")
+  .add(TaskAggregate)
+  .withGeneratedRegistryRoot(new URL("..", import.meta.url))
+  .buildAsync();
 
-const commandReadiness = CommandRegistrationReadiness.fromRegistry(registry);
-const eventReadiness = EventRegistrationReadiness.fromRegistry(registry);
-
-const routingPlan = createServerRuntimeRoutingPlan({
-  context: tasks,
-  commands: commandReadiness,
-  events: eventReadiness,
-});
-
-routingPlan.commands.routes[0]?.receiverGroup; // "command-assignee"
-routingPlan.events.subscriberRoutes[0]?.receiverGroup; // "subscriber"
-routingPlan.deferred.map(({ signalKind }) => signalKind); // ["query", "subscription", "system"]
+tasks.commandBus().acceptedCommandTypes();
+tasks.registeredRepositories().map((repository) => repository.entityType.name);
 ```
 
-This assembly records what a later runtime can consume: context identity,
-repository ownership metadata, handler metadata, command assignment readiness,
-event subscriber/reactor readiness, transport-owned command/event
-topics, subscriptions, planner-local worker IDs, and deferred
-query/subscription/system routing seams. The routing plan is metadata:
+This assembly records context identity, repository ownership metadata, generated
+handler metadata, command assignment readiness, and event subscriber/reactor
+readiness behind the bounded-context builder. The generated registry module is
+loaded by the framework from the conventional compiled package output location;
+ordinary application code does not import `GeneratedRegistryDiscovery`,
+`HandlerMetadataRegistry`, or `EntityHandlersMetadata`.
+
+Advanced framework/runtime planning can still consume built context metadata,
+transport-owned command/event topics, subscriptions, planner-local worker IDs,
+and deferred query/subscription/system routing seams. A routing plan is
+metadata:
 route descriptors expose sanitized message type names/type URLs, receiver
 groups, planner-local route/worker IDs, and correlation keys back to plan-level
 transport arrays. They do not retain handler names, entity names, raw readiness
@@ -876,22 +858,18 @@ class TaskProjection {
 ```
 
 After Protobuf generation, the generated registry tooling analyzes those
-decorated classes, writes an ignored
-`generated/handler/generated-handler-registry.ts` module, and the compiled
-application loads it during context assembly:
+decorated classes and writes an ignored
+`generated/handler/generated-handler-registry.ts` module. Ordinary application
+code adds entity classes and lets the bounded-context builder load the compiled
+registry during async assembly:
 
 ```ts
-import { GeneratedRegistryDiscovery } from "@spine-ts/server";
-import { CreateTaskSchema } from "./generated/task_commands_pb.js";
-import { TaskCreatedSchema, TaskStateSchema } from "./generated/tasks_pb.js";
+import { BoundedContext } from "@spine-ts/server";
 
-const registry = await new GeneratedRegistryDiscovery().register({
-  modules: [GeneratedRegistryDiscovery.conventionalModulePath(appRoot)],
-});
-
-registry.findEntityHandlersByState(TaskStateSchema.typeName);
-registry.findCommandAssignment(CreateTaskSchema.typeName)?.handler.methodName; // "create"
-registry.findHandlersByKind("event-subscription")[0]?.handler.methodName; // "onCreated"
+const tasks = await BoundedContext.singleTenant("Tasks")
+  .add(TaskAggregate)
+  .add(TaskProjection)
+  .buildAsync();
 ```
 
 `@Assign`, `@Command`, `@Subscribe`, and `@React` record standard per-class
@@ -902,8 +880,8 @@ not instantiate the entity, invoke methods, unpack payloads, register in a
 global handler registry, validate transactions, write storage, start buses, or
 start transport.
 
-`HandlerMetadataRegistry` is the caller-owned lookup view produced by generated
-registry discovery and also used by low-level tests:
+`HandlerMetadataRegistry` remains available for low-level framework tests and
+explicit metadata tooling:
 
 ```ts
 registry.findHandlersByKind("event-subscription");

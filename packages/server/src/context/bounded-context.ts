@@ -1,3 +1,6 @@
+import { resolve } from "node:path";
+import { cwd } from "node:process";
+
 import { clone, type Message } from "@bufbuild/protobuf";
 import { EventSchema, type Command, type Event } from "@spine-ts/proto";
 import {
@@ -27,6 +30,16 @@ import type {
   DescriptorFieldMetadata,
   EntityMetadata,
 } from "../entity/entity-metadata.js";
+import { GeneratedRegistryDiscovery } from "../handler/generated-registry-discovery.js";
+import {
+  HandlerRegistryIngestor,
+  type GeneratedEntityHandlerGroup,
+  type GeneratedHandlerRegistry,
+} from "../handler/generated-handler-registry.js";
+import {
+  HandlerMetadataRegistry,
+  type EntityHandlersMetadata,
+} from "../handler/handler-metadata.js";
 import { Stand } from "../stand/stand.js";
 
 /** Tenant isolation mode declared by a bounded context specification. */
@@ -57,6 +70,9 @@ export interface BoundedContextSnapshot {
   /** Context specification used to build the context. */
   readonly spec: ContextSpecSnapshot;
 }
+
+/** Root used to locate the conventional compiled generated handler registry. */
+export type GeneratedRegistryRoot = string | URL;
 
 /** Minimal repository owner marker retained after registration. */
 interface RepositoryOwner {
@@ -147,6 +163,7 @@ const frameworkConstructionToken: FrameworkConstructionToken = Object.freeze({
 const dispatchFailureLimit = 10;
 const dispatchErrorMessageLimit = 500;
 const dispatchErrorStackLimit = 2_000;
+const generatedRegistryLoadAttempts = new Map<string, number>();
 let constructBoundedContext:
   | ((
       snapshot: BoundedContextSnapshot,
@@ -360,7 +377,9 @@ export class BoundedContextBuilder {
   readonly #commandDispatchers = new Set<CommandDispatcher>();
   readonly #eventDispatchers = new Set<EventDispatcher>();
   readonly #repositories = new Set<RepositoryView>();
+  readonly #entityTypes = new Set<RepositoryEntityType>();
   #storageFactory: StorageFactory | undefined;
+  #generatedRegistryRoot: GeneratedRegistryRoot | undefined;
 
   static {
     constructBoundedContextBuilder = (snapshot, token): BoundedContextBuilder =>
@@ -400,9 +419,27 @@ export class BoundedContextBuilder {
   /** Adds a repository to the context registration list. */
   add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
     repository: Repository<EntityType>,
+  ): this;
+  /**
+   * Adds an entity class for framework-owned generated repository assembly.
+   *
+   * Entity-class assembly loads generated handler metadata, so callers must use
+   * {@link buildAsync}. Use `add(repository).build()` for explicit synchronous
+   * assembly.
+   */
+  add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
+    entityType: EntityType,
+  ): this;
+  add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
+    entry: Repository<EntityType> | EntityType,
   ): this {
-    requireRepositoryInstance(repository, "BoundedContextBuilder.add(repository)");
-    this.#repositories.add(repository);
+    if (repositoryAccess.hasInstance(entry)) {
+      this.#repositories.add(entry);
+      return this;
+    }
+
+    requireEntityClass(entry, "BoundedContextBuilder.add(repository)");
+    this.#entityTypes.add(entry as EntityType);
     return this;
   }
 
@@ -445,20 +482,41 @@ export class BoundedContextBuilder {
     return this;
   }
 
+  /** Uses a package/app root for the conventional generated handler registry module. */
+  withGeneratedRegistryRoot(root: GeneratedRegistryRoot): this {
+    this.#generatedRegistryRoot = root;
+    return this;
+  }
+
   /** Builds a bounded context that owns configured command and event buses. */
   build(): BoundedContext {
-    const repositories = [...this.#repositories];
-    preflightRepositories(repositories);
+    rejectSyncEntityAssembly(this.#entityTypes);
+    return this.#buildWith([...this.#repositories]);
+  }
+
+  /** Builds a bounded context, loading generated metadata for entity classes added to the builder. */
+  async buildAsync(): Promise<BoundedContext> {
+    const repositories = [
+      ...this.#repositories,
+      ...(await this.#loadGeneratedRepositories([...this.#entityTypes])),
+    ];
+
+    return this.#buildWith(repositories);
+  }
+
+  #buildWith(repositories: readonly RepositoryView[]): BoundedContext {
+    const registeredRepositories = [...repositories];
+    preflightRepositories(registeredRepositories);
     const storageFactory = this.#storageFactory ?? new InMemoryStorageFactory();
     const commandBus = new CommandBus([
       ...this.#commandDispatchers,
-      ...repositoryCommandDispatchers(repositories),
+      ...repositoryCommandDispatchers(registeredRepositories),
     ]);
     const eventStore = this.createEventStore(storageFactory);
 
     try {
       const eventBus = new EventBus(eventStore, [
-        ...repositoryEventDispatchers(repositories),
+        ...repositoryEventDispatchers(registeredRepositories),
         ...this.#eventDispatchers,
       ]);
       const stand = new Stand({
@@ -471,12 +529,39 @@ export class BoundedContextBuilder {
         eventBus,
         stand,
         storageFactory,
-        repositories,
+        registeredRepositories,
       );
     } catch (error) {
       closeEventStore(eventStore, error);
       throw error;
     }
+  }
+
+  async #loadGeneratedRepositories(
+    entityTypes: readonly RepositoryEntityType[],
+  ): Promise<readonly RepositoryView[]> {
+    if (entityTypes.length === 0) {
+      return Object.freeze([]);
+    }
+
+    const root = this.#generatedRegistryRoot ?? cwd();
+    const discovery = new GeneratedRegistryDiscovery();
+    const registryKey = generatedRegistryRootKey(root);
+    const module = generatedRegistryModule(root);
+    const registries = await discovery
+      .load({
+        modules: [module],
+        ...generatedRegistryCacheBust(registryKey),
+      })
+      .catch((error: unknown) => {
+        recordGeneratedRegistryFailure(registryKey);
+        throw error;
+      });
+    const metadata = ingestGeneratedRegistries(registries);
+
+    return Object.freeze(
+      entityTypes.map((entityType) => createGeneratedRepository(entityType, registries, metadata)),
+    );
   }
 
   private createEventStore(storageFactory: StorageFactory): EventStore {
@@ -624,6 +709,132 @@ function requireRepositoryInstance(repository: unknown, operation: string): void
   if (!repositoryAccess.hasInstance(repository)) {
     throw new TypeError(`${operation} requires a Repository instance.`);
   }
+}
+
+function requireEntityClass(entityType: unknown, operation: string): void {
+  if (typeof entityType !== "function") {
+    throw new TypeError(
+      `${operation} requires a Repository instance. Use an entity class only with buildAsync().`,
+    );
+  }
+}
+
+function rejectSyncEntityAssembly(entityTypes: ReadonlySet<RepositoryEntityType>): void {
+  if (entityTypes.size === 0) {
+    return;
+  }
+
+  throw new Error(
+    "BoundedContextBuilder.build() cannot assemble entity classes from generated metadata. " +
+      "Use buildAsync().",
+  );
+}
+
+function generatedRegistryModule(root: GeneratedRegistryRoot): string | URL {
+  if (root instanceof URL) {
+    return new URL("generated/handler/generated-handler-registry.js", root);
+  }
+
+  return GeneratedRegistryDiscovery.conventionalModulePath(resolve(root));
+}
+
+function generatedRegistryRootKey(root: GeneratedRegistryRoot): string {
+  return root instanceof URL ? root.href : resolve(root);
+}
+
+function generatedRegistryCacheBust(
+  registryKey: string,
+): { readonly cacheBust: string } | Record<string, never> {
+  const attempt = generatedRegistryLoadAttempts.get(registryKey) ?? 0;
+
+  return attempt === 0 ? {} : { cacheBust: `retry-${attempt.toString()}` };
+}
+
+function recordGeneratedRegistryFailure(registryKey: string): void {
+  generatedRegistryLoadAttempts.set(
+    registryKey,
+    (generatedRegistryLoadAttempts.get(registryKey) ?? 0) + 1,
+  );
+}
+
+function ingestGeneratedRegistries(
+  registries: readonly GeneratedHandlerRegistry[],
+): HandlerMetadataRegistry {
+  const registry = new HandlerMetadataRegistry();
+  const ingestor = new HandlerRegistryIngestor();
+
+  for (const generated of registries) {
+    ingestor.register(generated, registry);
+  }
+
+  return registry;
+}
+
+function createGeneratedRepository(
+  entityType: RepositoryEntityType,
+  registries: readonly GeneratedHandlerRegistry[],
+  metadata: HandlerMetadataRegistry,
+): RepositoryView {
+  const generated = findGeneratedEntity(entityType, registries);
+  const handlers = findGeneratedHandlers(entityType, generated, metadata);
+
+  return new Repository({
+    entityType: entityType as never,
+    schema: generated.stateSchema,
+    handlers: handlers as never,
+    events: aggregateAssignedEvents(generated),
+  });
+}
+
+function findGeneratedEntity(
+  entityType: RepositoryEntityType,
+  registries: readonly GeneratedHandlerRegistry[],
+): GeneratedEntityHandlerGroup {
+  for (const registry of registries) {
+    const generated = registry.entities.find((entity) => entity.entityType === entityType);
+    if (generated !== undefined) {
+      return generated;
+    }
+  }
+
+  throw new Error(`Generated handler registry is missing metadata for ${entityType.name}.`);
+}
+
+function findGeneratedHandlers(
+  entityType: RepositoryEntityType,
+  generated: GeneratedEntityHandlerGroup,
+  metadata: HandlerMetadataRegistry,
+): EntityHandlersMetadata {
+  const matches = metadata.findEntityHandlersByState(generated.stateSchema.typeName);
+  const handlers = matches.find((candidate) => candidate.entityType === entityType);
+
+  if (handlers === undefined) {
+    throw new Error(`Generated handler registry is missing metadata for ${entityType.name}.`);
+  }
+
+  return handlers;
+}
+
+function aggregateAssignedEvents(
+  generated: GeneratedEntityHandlerGroup,
+): readonly DescriptorMessageSchema[] {
+  return uniqueSchemas(
+    generated.handlers.flatMap((handler) =>
+      handler.kind === "command-assignment" ? handler.emittedSchemas : [],
+    ),
+  );
+}
+
+function uniqueSchemas<Schema extends DescriptorMessageSchema>(
+  schemas: readonly Schema[],
+): readonly Schema[] {
+  const byTypeName = new Map<string, Schema>();
+
+  for (const schema of schemas) {
+    byTypeName.set(schema.typeName, schema);
+  }
+
+  return Object.freeze([...byTypeName.values()]);
 }
 
 function preflightRepositories(repositories: readonly RepositoryView[]): void {
