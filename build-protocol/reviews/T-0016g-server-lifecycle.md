@@ -1,6 +1,6 @@
 # T-0016g Review Log
 
-Status: first-round findings fixed; formal re-review pending
+Status: all required lanes clean; final verification passed
 
 Scope: small framework-owned server lifecycle owner for real local
 gRPC-compatible services, lifecycle docs, example/test migration, and public API
@@ -12,13 +12,13 @@ after its role is complete.
 
 ## Required Lanes
 
-| Lane                       | Status                        | Result                                                                                               |
-| -------------------------- | ----------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Code style/maintainability | First-round finding fixed     | Primary `Server` declaration now precedes supporting public interfaces in `server.ts`.               |
-| Documentation completeness | First-round bookkeeping fixed | Work log, review log, and implementation report updated for first-round review-fix actions.          |
-| TypeScript/API docs        | First-round findings fixed    | Public lifecycle TypeDoc now documents ownership, idempotence, and aggregate failure behavior.       |
-| Security                   | First-round finding fixed     | `RunningServer.close()` now bounds graceful HTTP/2 session drain and destroys non-draining sessions. |
-| Performance/reliability    | First-round finding fixed     | Direct `Stand` close now rejects new work, drains accepted reads/updates, then clears subscriptions. |
+| Lane                       | Status | Result                                                     |
+| -------------------------- | ------ | ---------------------------------------------------------- |
+| Code style/maintainability | Clean  | Re-review reported `CODE STYLE REVIEW CLEAN`.              |
+| Documentation completeness | Clean  | Re-review reported `DOCUMENTATION REVIEW CLEAN`.           |
+| TypeScript/API docs        | Clean  | Re-review reported `TYPESCRIPT/API REVIEW CLEAN`.          |
+| Security                   | Clean  | Re-review reported `SECURITY REVIEW CLEAN`.                |
+| Performance/reliability    | Clean  | Re-review reported `PERFORMANCE/RELIABILITY REVIEW CLEAN`. |
 
 ## Findings
 
@@ -47,11 +47,23 @@ after its role is complete.
   findings, work-log participants were stale, and implementation report did not
   include review-fix actions. Status: fixed in this pass.
 
-Formal clean re-review of these fixed first-round findings remains pending for
-the orchestrator unless it is run after this review-fix pass. Review-fix
-verification passed, including the required focused native listener/lifecycle
-suite, `typecheck`, `lint`, `format:check`, `docs:check`, `git diff --check`,
-and full native `pnpm --config.verify-deps-before-run=false verify`.
+### Clean Re-Review
+
+- Code style/maintainability: clean after the primary `Server` declaration was
+  moved before supporting public interfaces.
+- Documentation completeness: clean after review, work, and implementation logs
+  were updated and full native verification evidence was recorded.
+- TypeScript/API docs: clean after public lifecycle ownership, idempotence, and
+  aggregate failure behavior were documented in TypeDoc-visible comments.
+- Security: clean after `RunningServer.close()` gained bounded graceful session
+  drain with `session.destroy()` fallback.
+- Performance/reliability: clean after active-stream close and direct `Stand`
+  close race coverage/fixes.
+
+Review-fix verification passed, including the required focused native
+listener/lifecycle suite, `typecheck`, `lint`, `format:check`, `docs:check`,
+`git diff --check`, and full native
+`pnpm --config.verify-deps-before-run=false verify`.
 
 ## Review Policy
 
