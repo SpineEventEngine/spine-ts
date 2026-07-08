@@ -1,11 +1,11 @@
 # @spine-ts/server
 
 Descriptor-derived server metadata for Spine entity schemas, explicit handler
-metadata, standard decorator metadata adapters, aggregate snapshot/event storage,
-the first command/event bus seam, and the first runtime routing plan seam over
-`@spine-ts/transport` contracts, plus the first direct storage-backed `Stand`
-slice for latest entity state point/list reads and in-process update
-subscriptions.
+metadata, standard decorator metadata adapters, aggregate latest-state/event
+journal storage, the first command/event bus seam, and the first runtime routing
+plan seam over `@spine-ts/transport` contracts, plus the first direct
+storage-backed `Stand` slice for latest entity state point/list reads and
+in-process update subscriptions.
 
 Current slice exposes:
 
@@ -57,13 +57,13 @@ Current slice exposes:
   custom `addCommandDispatcher()` registration; transition-validation
   rejections from the framework-owned aggregate command transaction surface as
   `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
-  details, while stored-history replay failures remain
+  details, while legacy/internal aggregate-history validation failures remain
   internal and sanitized as `COMMAND_POST_ERROR`;
   and
 - `AggregateStorage` for the current finite primitive or single-field
-  Protobuf message `AggregateId` snapshot/history seam, backed by
-  `StorageFactory`, `RecordStorage`, and `EventStore`; `PrimitiveId` and
-  `MessageId` expose the accepted public ID shapes;
+  Protobuf message `AggregateId` latest-state and traceability event-journal
+  seam, backed by `StorageFactory`, `RecordStorage`, and `EventStore`;
+  `PrimitiveId` and `MessageId` expose the accepted public ID shapes;
   and
 - `Delivery`, `Inbox`, `InboxStorage`, `ShardIndex`, `ShardSession`, and
   `ShardedWorkRegistry` for the first durable delivery slice: inbox writes with
@@ -528,22 +528,25 @@ a contract-valid command origin; missing IDs reject before mutation or storage.
 `CommandBus` validates accepted command payloads before dispatcher callbacks,
 including custom `addCommandDispatcher()` routes. For repository-backed
 aggregate dispatchers, that still means validation happens before route
-calculation, aggregate history load, event append, snapshot write, or
-stored-event dispatch. `CommandService.Post` maps command-bus payload validation
-failures to `COMMAND_VALIDATION_ERROR` with message
-`Command payload validation failed.` and packed `spine.validation.ValidationError`
-details. If a command handler throws `CommandRefusalError`, `CommandService.Post`
+calculation, latest persisted state load, traceability event-journal append,
+latest-state write, or stored-event dispatch. `CommandService.Post` maps
+command-bus payload validation failures to `COMMAND_VALIDATION_ERROR` with
+message `Command payload validation failed.` and packed
+`spine.validation.ValidationError` details. If a command handler throws
+`CommandRefusalError`, `CommandService.Post`
 returns a non-ok `Ack` with that stable error type and message instead of
 `COMMAND_POST_ERROR`. If an aggregate command handler produces an invalid
 state transition, command execution rejects with
-`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced events or
-snapshots; the validation details remain the framework transaction /
-`validateEntityStateTransition()` result. Replay failures
-from stored aggregate history remain internal and are sanitized as
-`COMMAND_POST_ERROR`. Dispatcher-thrown `ValidationException` values and other
-unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
-Aggregate command completion resolves after aggregate event storage and
-snapshot handling even though already-stored event redispatch continues
+`COMMAND_STATE_TRANSITION_VALIDATION_FAILED` before storing produced
+traceability events or latest state; the validation details remain the
+framework transaction / `validateEntityStateTransition()` result.
+Legacy/internal aggregate-history replay failures remain internal and are
+sanitized as `COMMAND_POST_ERROR`; ordinary generated-registry aggregate
+loading uses the latest persisted state instead of replaying stored events.
+Dispatcher-thrown `ValidationException` values and other unexpected command-bus
+failures remain sanitized as `COMMAND_POST_ERROR`.
+Aggregate command completion resolves after traceability event-journal append
+and latest-state write even though already-stored event redispatch continues
 asynchronously. If that later redispatch fails in dispatcher acceptance,
 dispatcher execution, projection subscribers, or `Stand` updates, the owning
 context records a copy-safe diagnostic snapshot through

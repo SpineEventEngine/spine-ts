@@ -43,14 +43,15 @@ and packed `spine.validation.ValidationError` details when `CommandBus`
 rejects an invalid accepted command payload before dispatcher callbacks,
 including custom `addCommandDispatcher()` routes. For repository-backed
 aggregate dispatchers, validation still happens before route calculation,
-aggregate history load, event append, snapshot write, or stored-event dispatch.
-Transition validation failures from the framework-owned aggregate command
-transaction continue to surface as
+latest persisted state load, traceability event-journal append, latest-state
+write, or stored-event dispatch. Transition validation failures from the
+framework-owned aggregate command transaction continue to surface as
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
-details. Replay failures from stored aggregate history remain internal and are
-sanitized as `COMMAND_POST_ERROR`. Dispatcher-thrown `ValidationException`
-values and other unexpected command-bus failures remain sanitized as
-`COMMAND_POST_ERROR`.
+details. Legacy/internal aggregate-history validation failures remain internal
+and are sanitized as `COMMAND_POST_ERROR`; ordinary generated-registry
+aggregate loading uses the latest persisted state rather than replaying stored
+events. Dispatcher-thrown `ValidationException` values and other unexpected
+command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
 The public entry points mirror Spine JVM's
 `BoundedContext.singleTenant(name)` and `BoundedContext.multitenant(name)`.
 `ContextSpec` remains a framework-owned immutable value surfaced through
@@ -73,10 +74,11 @@ calculations, and built contexts install internal repository dispatcher adapters
 that execute aggregate command assignees in framework-owned transactions and
 execute projection subscribers. Aggregate command execution requires `command.id` so produced
 events can carry a contract-valid command origin; missing IDs reject before
-mutation or storage. Aggregate command completion resolves after aggregate
-event storage and snapshot handling; later already-stored event redispatch
-failures are observable through the copy-safe `storedEventDispatchFailures()`
-diagnostic snapshot on the owning `BoundedContext`. This slice does not create
+mutation or storage. Aggregate command completion resolves after traceability
+event-journal append and latest persisted state write; later already-stored
+event redispatch failures are observable through the copy-safe
+`storedEventDispatchFailures()` diagnostic snapshot on the owning
+`BoundedContext`. This slice does not create
 default repositories from entity classes,
 invoke query/process handlers, manage inboxes/delivery, run cache catch-up,
 create system contexts, write tenant indexes, expose a broad server lifecycle,
@@ -91,11 +93,11 @@ snapshots, caller-owned plain version metadata, lifecycle flags, and
 active/archive/delete accessors.
 `PlainEntityVersionMetadata<T>` is the compile-time plain-shape helper used by
 entity inputs so ordinary metadata interfaces can be accepted while non-plain
-types such as `Date` are rejected. The shell has protected hooks for future
-framework-owned subclasses, but no public state setters, Java builders,
-transaction execution, repository/storage writes, handler invocation, dispatch,
-lifecycle events, automatic version increments, routing, query APIs, buses,
-transports, or global runtime state.
+types such as `Date` are rejected. The shell has protected hooks used by
+framework-owned subclasses and repository/runtime seams, but no public state
+setters, Java builders, transaction execution, repository/storage writes,
+handler invocation, dispatch, lifecycle events, automatic version increments,
+routing, query APIs, buses, transports, or global runtime state.
 `TransactionalEntity` adds only protected, scoped draft helpers over
 `EntityTransaction`: one active transaction can read/update draft state, replace
 draft version metadata, update draft lifecycle flags, commit accepted results
@@ -136,8 +138,8 @@ calculates command and event routes by generated message full type name,
 readiness metadata, producer ID, or first-field ID. Built bounded contexts
 register repository dispatcher adapters internally so aggregate commands can
 load or create one aggregate, invoke one assignee in a framework-owned
-transaction, pack and store returned domain events, persist the managed snapshot
-through `AggregateStorage`, and then queue already-stored events for event-bus
+transaction, pack and store returned domain events, persist the latest managed
+state through `AggregateStorage`, and then queue already-stored events for event-bus
 delivery without appending them again. The repository surface still does not
 expose direct entity lookup/storage APIs, inboxes, caches, catch-up, or
 transport startup. Built bounded contexts use
@@ -178,13 +180,15 @@ behavior on the real framework paths. It does not expose a broad client DSL,
 start a server/process, manage browser tooling, or simulate service outcomes.
 `AggregateStorage`, `AggregateStorageOptions`, `AggregateSnapshot`,
 `AggregateHistory`, `AggregateId`, `PrimitiveId`, and `MessageId` form the
-minimal aggregate persistence seam. It writes latest snapshots through
-`StorageFactory`/`RecordStorage`, appends events through the storage event store,
-and reads aggregate history as an optional snapshot plus events after the
-snapshot version. It validates finite primitive or single-field Protobuf message
-aggregate IDs, route consistency, and aggregate version order before storage. It
-does not implement handler invocation, delivery, catch-up, read-side indexing,
-subscriptions, system events, or aggregate repository caching.
+low-level aggregate persistence seam. It writes latest persisted state through
+`StorageFactory`/`RecordStorage`, appends events through the storage event store
+as a traceability journal, and retains history reads for legacy/internal
+compatibility. Ordinary generated-registry repository loading uses the latest
+persisted state and does not rely on snapshot-plus-replay loading. It validates
+finite primitive or single-field Protobuf message aggregate IDs, route
+consistency, and aggregate version order before storage. It does not implement
+handler invocation, delivery, catch-up, read-side indexing, subscriptions,
+system events, or aggregate repository caching.
 Delivery exports include `Delivery`, `DeliveryOptions`,
 `DeliveryStorageCorruptionError`, `Inbox`, `InboxId`, `InboxMessage`,
 `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,

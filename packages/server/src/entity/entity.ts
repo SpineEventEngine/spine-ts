@@ -253,17 +253,17 @@ export abstract class Entity<
     return this.#lifecycleFlagsChanged;
   }
 
-  /** Replace stored state from future subclass/runtime code. */
+  /** Replace stored state from framework-owned subclass/runtime code. */
   protected replaceState(state: MessageShape<Schema>): void {
     this.#state = cloneState(this.#schema, state);
   }
 
-  /** Replace caller-owned plain version metadata from future subclass/runtime code. */
+  /** Replace caller-owned plain version metadata from framework-owned subclass/runtime code. */
   protected replaceVersionMetadata(version: EntityVersionMetadataInput<Version>): void {
     this.#version = cloneVersionMetadata(version) as Version;
   }
 
-  /** Replace lifecycle flags from future subclass/runtime code. */
+  /** Replace lifecycle flags from framework-owned subclass/runtime code. */
   protected replaceLifecycleFlags(lifecycle: Partial<EntityLifecycleFlags>): void {
     const next = {
       archived: lifecycle.archived ?? this.#lifecycle.archived,

@@ -42,9 +42,10 @@ const decoratorMetadataSymbol = installDecoratorMetadataSymbol();
  * Declare a command assignee method.
  *
  * Bare `@Assign` is the ordinary application form. `@Assign(schema)` remains a
- * legacy/framework compatibility form until generated handler registries own
- * schema discovery. The decorator records metadata only; it does not register
- * the handler, instantiate the entity, or invoke the method.
+ * legacy/framework compatibility form for explicit schema-bearing metadata;
+ * generated handler registries own ordinary schema discovery. The decorator
+ * records metadata only; it does not register the handler, instantiate the
+ * entity, or invoke the method.
  */
 export function Assign(schema: DescriptorMessageSchema): HandlerMethodDecorator;
 export function Assign<This extends object, Parameters extends readonly unknown[], Return>(
@@ -82,7 +83,7 @@ export function Command(
  *
  * Bare `@Subscribe` is the ordinary application form. `@Subscribe(schema)`
  * remains a legacy/framework compatibility form. Subscribers are metadata-only
- * declarations until generated registry/runtime metadata consumes them.
+ * declarations bridged by generated registry and runtime metadata.
  */
 export function Subscribe(schema: DescriptorMessageSchema): HandlerMethodDecorator;
 export function Subscribe<This extends object, Parameters extends readonly unknown[], Return>(
@@ -141,8 +142,8 @@ export function Apply(
  * this class-owned adapter.
  *
  * Application code must not call this function and must not provide its own
- * handler discovery/materialization. Generated framework registries will own
- * schema inference for bare decorators; this adapter only supports legacy
+ * handler discovery/materialization. Generated framework registries own schema
+ * inference for bare decorators; this adapter only supports legacy
  * schema-bearing decorator metadata.
  */
 export function materializeDecoratedEntityHandlers<

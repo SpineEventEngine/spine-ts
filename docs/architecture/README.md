@@ -210,7 +210,7 @@ ID to one descriptor-backed Protobuf-ES state schema, derives and caches
 `EntityMetadata`, snapshots state on construction and read access, snapshots
 caller-owned plain version metadata without computing increments, and exposes
 lifecycle flags plus `isActive`, `isArchived`, `isDeleted`, and sticky
-`lifecycleFlagsChanged` accessors. Protected replacement hooks give future
+`lifecycleFlagsChanged` accessors. Protected replacement hooks give
 framework-owned subclasses a narrow place to apply accepted state/version or
 lifecycle evidence, but the public shell has no state setters or Java builders
 and does not own transactions, repositories, handler invocation, storage,
@@ -273,7 +273,7 @@ step. When authentic explicit handler metadata is supplied, repositories now
 calculate command/event routes and bounded-context assembly registers internal
 dispatcher adapters for those routes. Aggregate repositories can then load or
 create one aggregate, invoke one assignee in a framework-owned transaction,
-pack and store returned domain events, persist the managed snapshot through
+pack and store returned domain events, persist the latest managed state through
 `AggregateStorage`, and queue already-stored events for event-bus delivery
 without a second append. The TypeScript seam still omits public `create`,
 `find`, `store`, record conversion APIs,
@@ -284,7 +284,7 @@ lifecycle, and transport.
 one entity state. It buffers a draft state, explicit previous/draft version
 metadata, lifecycle flags, and visible status (`active`, `committed`, or
 `rolled-back`). The compatibility contract is intentionally small and
-JVM-familiar: this API owns only in-memory transaction evidence for future
+JVM-familiar: this API owns only in-memory transaction evidence for
 framework-controlled entity bases, not repository storage, database
 transactions, dispatch phases, event emission, or process-wide transaction
 state. `update()` replaces only the buffered draft, while `previous` and
@@ -370,8 +370,9 @@ The current command service error contract remains intentionally small.
 `CommandBus` validates each accepted command payload with the existing core
 facade before dispatcher callbacks run, including custom
 `addCommandDispatcher()` routes. For repository-backed aggregate dispatchers,
-that still means validation happens before route calculation, aggregate history
-load, event append, snapshot write, or stored-event dispatch.
+that still means validation happens before route calculation, latest persisted
+state load, traceability event-journal append, latest-state write, or
+stored-event dispatch.
 `CommandService.Post` maps invalid payloads to `COMMAND_VALIDATION_ERROR`,
 message `Command payload validation failed.`, and packed
 `spine.validation.ValidationError` details. Handler-thrown `CommandRefusalError`
@@ -380,8 +381,10 @@ values are the one immediate business refusal path mapped to stable non-ok
 `EntityTransaction.commit()` for transition validation. When that transaction is
 rejected, repository execution raises
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with packed `ValidationError`
-details before events or snapshots are stored. Stored-history replay failures
-remain internal and are sanitized as `COMMAND_POST_ERROR`.
+details before traceability events or latest state are stored. Legacy/internal
+aggregate-history replay or validation failures remain internal and are
+sanitized as `COMMAND_POST_ERROR`; ordinary generated-registry aggregate loading
+uses the latest persisted state instead of replaying stored events.
 Unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
 
 The following runtime pieces are still deferred to later explicit tasks:
@@ -479,10 +482,13 @@ return independently closeable handles, and clone stored values so later caller
 mutation cannot affect stored records. Payloads must remain cloneable, which
 preserves byte arrays used by packed Protobuf `Any` payloads.
 
-Aggregate snapshot/history storage is available through the current
-`AggregateStorage` seam. Delivery records, tenant indexes, diagnostics,
-repository storage policy, read-side projection stores, and durable production
-storage remain deferred.
+Aggregate latest-state and traceability event-journal storage is available
+through the current `AggregateStorage` seam. Its history-read API remains
+legacy/internal compatibility support; ordinary generated-registry aggregate
+loading uses the latest persisted state rather than snapshot-plus-replay
+loading. Delivery records, tenant indexes, diagnostics, repository storage
+policy, read-side projection stores, and durable production storage remain
+deferred.
 
 ## Transport Boundary
 

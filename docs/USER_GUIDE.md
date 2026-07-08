@@ -338,16 +338,17 @@ buffered draft lifecycle metadata. They do not write storage, emit lifecycle
 events, or filter queries. Use `updateVersionMetadata()` only when caller-owned
 draft version metadata should be replaced explicitly; automatic version
 increments, clocks, event versions, and producer metadata remain deferred.
-`requireActive()` is the active-state guard future entity base classes can call
-before state mutation: it rejects committed/rolled-back transactions and active
-drafts already marked archived or deleted with deterministic errors that do not
-include entity state payloads.
+`requireActive()` is the active-state guard framework-owned entity base classes
+call before state mutation: it rejects committed/rolled-back transactions and
+active drafts already marked archived or deleted with deterministic errors that
+do not include entity state payloads.
 
 Compatibility note: this transaction kernel is the public draft/result boundary
-for future framework-owned entity bases. It is not a storage-backed transaction
+for framework-owned entity bases. It is not a storage-backed transaction
 system, repository unit of work, handler dispatch phase, lifecycle-event
 emitter, or async-local/global transaction context. The snapshots returned from
-commit and rollback are evidence for later runtime layers, not persisted state.
+commit and rollback are evidence for repository/runtime layers, not persisted
+state.
 
 ## Transactional Entity Draft Helpers
 
@@ -446,8 +447,8 @@ built contexts, not through a new application write-side read API. They do not
 run catch-up. When a repository is constructed with authentic explicit handler
 metadata and registered with a built bounded context, aggregate commands can
 load or create one aggregate, invoke one assignee in a framework-owned
-transaction, pack and store returned domain events, persist the managed snapshot
-through `AggregateStorage`, and queue already-stored events for event-bus
+transaction, pack and store returned domain events, persist the latest managed
+state through `AggregateStorage`, and queue already-stored events for event-bus
 delivery. Projection repositories can consume delivered domestic events, invoke
 matching event subscribers, and write changed state through `Stand`.
 Aggregate command execution requires `command.id` so produced events can carry
@@ -493,7 +494,7 @@ This slice still does not create default repositories, write inboxes, manage
 delivery, emit lifecycle events, or start transport. Repositories with
 authentic explicit handler metadata do contribute dispatcher adapters to the
 built context's buses; aggregate repositories can therefore execute command
-assignees, persist managed snapshots and internal events through
+assignees, persist latest managed state and internal traceability events through
 `AggregateStorage`, and queue already-stored events for event-bus delivery.
 Aggregate command completion is not failed by later redispatch errors, but
 those errors are visible for diagnostics and tests via
@@ -501,8 +502,9 @@ those errors are visible for diagnostics and tests via
 
 `CommandBus` validates accepted command payload messages through the core
 validation facade before dispatcher callbacks run. For aggregate repositories,
-that still means validation happens before route calculation, aggregate history
-load, event append, snapshot write, or stored-event dispatch. Command handlers
+that still means validation happens before route calculation, latest persisted
+state load, traceability event-journal append, latest-state write, or
+stored-event dispatch. Command handlers
 may immediately refuse one command by throwing `CommandRefusalError`; when the
 command is posted through `CommandService.Post`, the returned `Ack` carries the
 refusal type and message rather than generic `COMMAND_POST_ERROR`. Invalid
@@ -512,12 +514,13 @@ details. Dispatcher-thrown `ValidationException` values and other unexpected
 command-bus failures remain sanitized as `COMMAND_POST_ERROR`. State-transition
 validation remains owned by framework-managed entity transactions and
 `validateEntityStateTransition()`. If an aggregate command handler produces an
-invalid state transition, command execution stops before storing produced events
-or snapshots and `CommandService.Post` returns
+invalid state transition, command execution stops before storing produced
+traceability events or latest state and `CommandService.Post` returns
 `COMMAND_STATE_TRANSITION_VALIDATION_FAILED` with message `Command state
-transition validation failed.` plus packed `ValidationError` details. Replay
-failures from legacy stored aggregate history remain internal and are sanitized
-as `COMMAND_POST_ERROR`.
+transition validation failed.` plus packed `ValidationError` details.
+Legacy/internal aggregate-history replay failures remain internal and are
+sanitized as `COMMAND_POST_ERROR`; ordinary generated-registry aggregate
+loading uses the latest persisted state instead of replaying stored events.
 
 ## Direct Stand
 
@@ -834,8 +837,8 @@ are cloned, while functions, typed arrays, buffers, dates, maps, sets, class
 instances, and other non-plain objects are rejected. The shell does not
 increment versions, compute timestamps, or derive producer/event metadata.
 Lifecycle flags default to active/not deleted, and `lifecycleFlagsChanged`
-becomes true only when future subclass/runtime code changes lifecycle flags
-through protected hooks.
+becomes true only when framework-owned subclass/runtime code changes lifecycle
+flags through protected hooks.
 
 The shell is deliberately not a transaction or runtime. It does not expose
 public state setters, invoke handlers, write repositories or storage, emit
@@ -987,9 +990,12 @@ Spine `Event` messages and rejects missing, blank, or duplicate event IDs on
 append, but it does not dispatch them to subscribers, manage delivery attempts,
 or implement retry/bus behavior.
 
-Aggregate snapshot/history storage is available through `AggregateStorage`,
-using finite primitive or single-field Protobuf message `AggregateId` values for
-this slice. Delivery records, tenant indexes, diagnostics, repository storage
+Aggregate latest-state and traceability event-journal storage is available
+through `AggregateStorage`, using finite primitive or single-field Protobuf
+message `AggregateId` values for this slice. Its history-read API remains
+legacy/internal compatibility support; ordinary generated-registry aggregate
+loading uses the latest persisted state rather than snapshot-plus-replay
+loading. Delivery records, tenant indexes, diagnostics, repository storage
 policy, and read-side projection stores are deferred.
 
 ## First Commands

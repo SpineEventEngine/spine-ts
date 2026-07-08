@@ -70,3 +70,30 @@ Status: completed
 - `corepack pnpm typecheck:build` passed.
 - `corepack pnpm format:check` passed.
 - `git diff --check` passed.
+
+## Second Review-Fix Follow-Up
+
+Status: completed
+
+- P2 handler-decorator public JSDoc stale wording: fixed. Public comments now
+  describe schema-bearing decorator overloads as present compatibility forms,
+  subscriber decorator metadata as a current generated-registry/runtime bridge,
+  and generated framework registries as current owners of bare-decorator schema
+  inference.
+- P2/P1 entity/runtime future-only wording: fixed. Public docs and API comments
+  now describe protected entity hooks, entity-family bases, and
+  `EntityTransaction` as current low-level framework seams used by repository
+  and runtime code.
+- P1 aggregate replay/snapshot stale docs: fixed. Active docs now describe
+  generated-registry aggregate loading from latest persisted state, event
+  storage as a traceability journal, no ordinary snapshot-plus-replay loading
+  path, and low-level aggregate-history APIs as legacy/internal compatibility
+  support.
+
+### Verification
+
+- `corepack pnpm docs:check` passed. TypeDoc emitted the existing local warning
+  that git remote `origin` is invalid for source links.
+- `corepack pnpm format:check` passed.
+- `git diff --check` passed.
+- `corepack pnpm typecheck:build` passed.
