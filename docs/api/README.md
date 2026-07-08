@@ -172,9 +172,16 @@ column filters, field masks, ordering, limits, missing criteria, and
 allocates opaque IDs, `Activate` attaches delivery, and `Cancel`/stream
 finalization release in-process handles. Never-activated subscriptions have a
 configurable inactive TTL, and active delivery uses a configurable queue limit
-for slow consumers. It is not a client DSL, event subscription implementation,
-broad server lifecycle, durable subscription store, or projection catch-up
-loop.
+for slow consumers. `Subscribe` rejects unknown targets with `INVALID_ARGUMENT`
+before creating an inactive record. Activation is by the opaque ID in the same
+`SpineServices` instance; unknown IDs complete without updates. Cancellation
+of a missing, unknown, already-canceled, or already-cleaned subscription returns
+OK. Cleanup is idempotent across cancellation, activation-stream finalization,
+inactive expiry, and slow-consumer queue closure. Defaults are 30 seconds for
+inactive expiry and 100 queued updates per active subscription. The service
+subscription registry is process-local memory, not durable subscription
+storage. It is not a client DSL, event subscription implementation, broad
+server lifecycle, durable subscription store, or projection catch-up loop.
 `@spine-ts/testing` exports `BoundedContextFixture`,
 `BoundedContextFixtureOptions`, and `FixtureSubscription`. The fixture wraps one
 built `BoundedContext`, captures the in-process `SpineServices` handlers, and

@@ -586,8 +586,22 @@ Column filters, field masks, ordering, limits, missing criteria, and
 Direct subscriptions are in-process only and must be cleaned up by calling
 `unsubscribe()`. Service subscriptions allocate IDs in `Subscribe` and attach
 Stand delivery in `Activate`; updates recorded before activation are not
-replayed by this first slice. This direct API does not provide a client query
-DSL.
+replayed by this first slice. `Subscribe` rejects unknown state targets before
+creating an inactive record. Subscription IDs are opaque and process-local to
+one `SpineServices` instance; activating the same ID against another instance,
+or activating any missing/unknown ID, completes without updates. `Cancel`
+returns OK for missing, unknown, already-canceled, or already-cleaned IDs.
+Cleanup is explicit and idempotent when cancellation happens, an activation
+iterator closes, the inactive TTL expires, or the active queue limit is
+exceeded. Defaults are 30 seconds for never-activated subscriptions and 100
+queued updates for slow active consumers.
+
+The current read side is not durable subscription storage. Direct Stand
+subscriptions, service subscription records, Stand version metadata, and the
+in-memory storage adapter are all process-local development/test state.
+Durable production storage, catch-up replay, and recovery of subscription
+positions remain outside this slice. This direct API does not provide a client
+query DSL.
 
 ## Runtime Assembly Closure
 

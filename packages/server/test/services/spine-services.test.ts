@@ -1309,6 +1309,51 @@ describe("SpineServices", () => {
     }
   });
 
+  it("keeps subscription identities process-local to one service adapter", async () => {
+    let deliverUpdate:
+      | ((update: {
+          readonly typeUrl: string;
+          readonly id: unknown;
+          readonly state: ProjectionState;
+        }) => void)
+      | undefined;
+    let subscribeCalls = 0;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: (_schema, callback) => {
+        subscribeCalls += 1;
+        deliverUpdate = callback;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const firstHandlers = registeredSubscriptionHandlers(context);
+    const secondHandlers = registeredSubscriptionHandlers(context);
+    const subscription = await firstHandlers.subscribe(createTopic());
+
+    const unknownNext = await withTimeout(
+      secondHandlers.activate(subscription)[Symbol.asyncIterator]().next(),
+      "other service adapter subscription close",
+    );
+    const iterator = firstHandlers.activate(subscription)[Symbol.asyncIterator]();
+    const nextUpdate = iterator.next();
+
+    await delay(25);
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "task-local",
+      state: createState("task-local", "Local"),
+    });
+    const delivered = await withTimeout(nextUpdate, "original service adapter update");
+
+    expect(unknownNext.done).toBe(true);
+    expect(delivered.done).toBe(false);
+    expect(subscribeCalls).toBe(1);
+    await iterator.return?.();
+  });
+
   it("releases subscription delivery when the activation iterator closes", async () => {
     const activeStandSubscriptions: string[] = [];
     let deliverUpdate:
@@ -1352,6 +1397,61 @@ describe("SpineServices", () => {
     await iterator.return?.();
 
     expect(activeStandSubscriptions).toEqual([]);
+  });
+
+  it("cancels subscriptions by ID and keeps cleanup idempotent", async () => {
+    const unsubscribeCounts: number[] = [];
+    const callbacks: ((update: {
+      readonly typeUrl: string;
+      readonly id: unknown;
+      readonly state: ProjectionState;
+    }) => void)[] = [];
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: (_schema, callback) => {
+        const index = callbacks.length;
+        let closed = false;
+        callbacks.push(callback);
+        unsubscribeCounts.push(0);
+        return {
+          get closed() {
+            return closed;
+          },
+          unsubscribe: () => {
+            unsubscribeCounts[index] = (unsubscribeCounts[index] ?? 0) + 1;
+            closed = true;
+          },
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const firstSubscription = await handlers.subscribe(createTopic());
+    const secondSubscription = await handlers.subscribe(createTopic());
+    const firstIterator = handlers.activate(firstSubscription)[Symbol.asyncIterator]();
+    const secondIterator = handlers.activate(secondSubscription)[Symbol.asyncIterator]();
+    const firstNext = firstIterator.next();
+    const secondNext = secondIterator.next();
+
+    await delay(25);
+    await handlers.cancel(firstSubscription);
+    await handlers.cancel(firstSubscription);
+    await firstIterator.return?.();
+    callbacks[1]?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "task-second",
+      state: createState("task-second", "Second"),
+    });
+
+    const firstClosed = await withTimeout(firstNext, "canceled subscription close");
+    const secondDelivered = await withTimeout(secondNext, "second subscription update");
+
+    expect(firstSubscription.id?.value).not.toBe(secondSubscription.id?.value);
+    expect(firstClosed.done).toBe(true);
+    expect(secondDelivered.done).toBe(false);
+    expect(unsubscribeCounts).toEqual([1, 0]);
+    await handlers.cancel(secondSubscription);
+    await secondIterator.return?.();
+    expect(unsubscribeCounts).toEqual([1, 1]);
   });
 
   it("delivers post-activation queued updates and omits non-string update IDs", async () => {
@@ -1499,6 +1599,35 @@ describe("SpineServices", () => {
     } finally {
       await server.close();
     }
+  });
+
+  it("rejects unknown subscription targets before attaching Stand delivery", () => {
+    let subscribeCalls = 0;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: () => {
+        subscribeCalls += 1;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: "t-unknown-target" }),
+      target: create(TargetSchema, {
+        type: "type.spine.io/example.UnknownState",
+        criterion: {
+          case: "includeAll",
+          value: true,
+        },
+      }),
+      context: createActorContext(),
+    });
+
+    expect(() => handlers.subscribe(topic)).toThrow("Unsupported subscription target.");
+    expect(subscribeCalls).toBe(0);
   });
 
   it("fails known subscription topics with missing required fields", async () => {
@@ -2057,6 +2186,7 @@ function registeredSubscriptionHandlers(
     | {
         subscribe(topic: Topic): Subscription | Promise<Subscription>;
         activate(subscription: Subscription): AsyncIterable<SubscriptionUpdate>;
+        cancel(subscription: Subscription): unknown;
       }
     | undefined;
   const services = new SpineServices({ contexts: [context], ...options });
