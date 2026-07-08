@@ -3,7 +3,7 @@
 Current status: early implementation notes through the first command/event bus,
 runtime-routing, transport-foundation seams, and the real Connect/Node
 `SpineServices` route registrar for the raw Spine command/query/subscription
-services.
+services, plus a small local `Server` lifecycle owner over those services.
 
 Architecture documentation starts from the build protocol and specification documents under `build-protocol/`. This folder is reserved for implementation-era architecture notes that evolve with actual package boundaries and runtime behavior.
 
@@ -416,7 +416,7 @@ The following runtime pieces are still deferred to later explicit tasks:
   dedup guards, shard leases, and the direct local shard drain are present;
 - richer query filtering, event subscriptions, and durable subscription
   recovery;
-- system-context pairing and broad server/gRPC lifecycle; and
+- system-context pairing and broad production server/gRPC lifecycle; and
 - ZeroMQ endpoint topology and production transport-backed worker execution
   beyond the current local `RuntimeTransportBinding`.
 
@@ -463,10 +463,14 @@ runtime after transport registrations. The package root now exports a small
 executable bus layer, direct Stand, repository-backed handler invocation through
 built contexts, command payload validation and refusal/Ack mapping through
 `SpineServices`, the `SpineServices` route registrar, and this local runtime
-transport binding. It still does not export a broad server lifecycle, transport
-endpoint runner, integration broker, durable retry owner, process supervisor,
-event storage policy beyond current seams, or durable subscription store as part
-of this closure.
+transport binding. The package now also exports `Server` as a small local
+HTTP/2 owner over `SpineServices`: it defaults to `127.0.0.1`, returns
+`host`/`port`/`baseUrl`, and closes by stopping intake, closing active sessions,
+then closing owned contexts/resources with aggregate failure reporting. It still
+does not export a broad production lifecycle, transport endpoint runner,
+integration broker, durable retry owner, process supervisor, event storage
+policy beyond current seams, durable subscription store, or process-wide
+`ServerEnvironment` as part of this closure.
 
 The architectural consequence is that later work must add the remaining
 collaborators as explicit tasks at their own seams. Event intake and broader

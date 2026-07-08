@@ -191,9 +191,11 @@ export class BoundedContext {
   readonly #eventEndpoint: EventEndpoint;
   readonly #registeredRepositories: RegistrationSnapshot[] = [];
   readonly #storedEventDispatchFailures: StoredEventDispatchFailure[] = [];
+  readonly #repositoryViews = new Set<RepositoryView>();
   readonly #repositoryStorages = new Set<RecordStorage<unknown, Message>>();
   readonly #storageFactory: StorageFactory;
   readonly #stand: Stand;
+  #closed: Promise<void> | undefined;
 
   static {
     constructBoundedContext = (
@@ -256,6 +258,7 @@ export class BoundedContext {
         });
         preparedRepository.commit();
         this.#registeredRepositories.push(preparedRepository.snapshot);
+        this.#repositoryViews.add(preparedRepository.repository);
         this.#repositoryStorages.add(preparedRepository.storage);
       }
     } catch (error) {
@@ -354,6 +357,43 @@ export class BoundedContext {
   /** Copy-safe diagnostics for asynchronous already-stored event dispatch failures. */
   storedEventDispatchFailures(): readonly StoredEventDispatchFailure[] {
     return this.#storedEventDispatchFailures.map(cloneDispatchFailure);
+  }
+
+  /**
+   * Close context-owned buses, stand, and repository storage/runtime bindings.
+   *
+   * Close is idempotent and returns the same close outcome on repeated calls.
+   * The context attempts every owned close hook; when any hook fails, the
+   * returned promise rejects with an `AggregateError` after the remaining hooks
+   * have also been attempted.
+   */
+  close(): Promise<void> {
+    this.#closed ??= this.#closeOnce();
+    return this.#closed;
+  }
+
+  async #closeOnce(): Promise<void> {
+    const errors: unknown[] = [];
+
+    await closeContextPart(() => this.#commandBus.close(), errors);
+    await closeContextPart(() => this.#eventBus.close(), errors);
+    await closeContextPart(() => this.#stand.close(), errors);
+
+    for (const repository of this.#repositoryViews) {
+      await closeContextPart(() => {
+        repositoryAccess.clearRuntime(repository);
+        registeredRepositories.delete(repository);
+      }, errors);
+    }
+    for (const storage of this.#repositoryStorages) {
+      await closeContextPart(() => {
+        storage.close();
+      }, errors);
+    }
+
+    if (errors.length > 0) {
+      throw new AggregateError(errors, "BoundedContext close failed.");
+    }
   }
 
   #recordDispatchFailure(event: Event, error: unknown): void {
@@ -990,6 +1030,25 @@ function closePreparedRepositories(
   }
 
   return errors;
+}
+
+async function closeContextPart(close: () => unknown, errors: unknown[]): Promise<void> {
+  try {
+    await close();
+  } catch (error) {
+    collectCloseError(error, errors);
+  }
+}
+
+function collectCloseError(error: unknown, errors: unknown[]): void {
+  if (error instanceof AggregateError) {
+    const causes = error.errors as readonly unknown[];
+    for (const cause of causes) {
+      errors.push(cause);
+    }
+    return;
+  }
+  errors.push(error);
 }
 
 function prepareRepositoryForContext(

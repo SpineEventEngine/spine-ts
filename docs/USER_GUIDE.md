@@ -34,7 +34,8 @@ The same package now also exposes a small executable `CommandBus` and
 `EventStore` before event fan-out. `SpineServices` registers generated Spine
 service descriptors with Connect/Node so callers can host `CommandService.Post`,
 `QueryService.Read`, and `SubscriptionService.Subscribe/Activate/Cancel` over a
-real gRPC-compatible runtime.
+real gRPC-compatible runtime. `Server` is the small framework-owned local
+HTTP/2 lifecycle API around those services.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
 deterministic in-memory adapter for tests/development. Built bounded contexts
 can now execute aggregate command assignees that update state in
@@ -42,7 +43,7 @@ framework-owned transactions and return generated domain events, then dispatch
 stored aggregate events to projection subscribers that update `Stand`. The
 runnable `examples/todo` package uses this path with bare decorators and
 generated handler registry loading; broader entity runtime dispatch, transport
-endpoint execution, durable production storage, and broader server lifecycle
+endpoint execution, durable production storage, and broader production lifecycle
 remain later slices.
 
 ## What Exists Now
@@ -102,6 +103,11 @@ remain later slices.
   subscriptions attach delivery only after explicit activation.
   Inactive subscriptions expire by default and active subscriptions use a small
   bounded update queue for slow consumers.
+- A small public `Server` API that starts real local Connect/gRPC-compatible
+  services over Node HTTP/2. It binds to `127.0.0.1` by default, exposes
+  `host`, `port`, `baseUrl`, and idempotent `close()`, and shuts down by
+  stopping network intake, closing active HTTP/2 sessions, then closing owned
+  contexts/resources with aggregate failure reporting.
 - A minimal `BoundedContextFixture` in `@spine-ts/testing` that wraps one built
   bounded context and drives generated `Command`, `Event`, `Query`, and `Topic`
   envelopes through the real in-process command, event, query, and subscription
@@ -664,13 +670,46 @@ groups, planner-local route/worker IDs, and correlation keys back to plan-level
 transport arrays. They do not retain handler names, entity names, raw readiness
 metadata, or ZeroMQ details.
 
-It does not create a TypeScript `Server`, context runtime handle,
-command/event/import bus, broad server lifecycle, storage lifecycle, delivery
-engine, integration broker, transport endpoint, broker supervisor, retry worker,
-durable delivery store, or handler invocation path. Accepted signal intake
-values still mean only accepted for later asynchronous work; they are not `Ack`
-messages and do not claim validation, storage, dispatch, delivery, or
-successful handling.
+It does not create a context runtime handle, command/event/import bus, storage
+lifecycle, delivery engine, integration broker, transport endpoint, broker
+supervisor, retry worker, durable delivery store, or handler invocation path.
+The separate `Server` API is only a local HTTP/2 owner around `SpineServices`.
+Accepted signal intake values still mean only accepted for later asynchronous
+work; they are not `Ack` messages and do not claim validation, storage,
+dispatch, delivery, or successful handling.
+
+## Local Server Lifecycle
+
+Use `Server` to host one or more built contexts as real Connect/gRPC-compatible
+services in a local Node process:
+
+```ts
+import { BoundedContext, Server } from "@spine-ts/server";
+
+const tasks = await BoundedContext.singleTenant("Tasks")
+  .add(TaskAggregate)
+  .withGeneratedRegistryRoot(new URL("..", import.meta.url))
+  .buildAsync();
+
+const server = await Server.atPort(8080).add(tasks).start();
+
+server.baseUrl; // "http://127.0.0.1:8080"
+
+await server.close();
+```
+
+The default host is `127.0.0.1`, so local examples and tests do not expose a
+network service outside the machine by accident. Use
+`Server.atPort(8080, { host: "0.0.0.0" })` only when broader binding is
+intended. Closing a running server is idempotent and follows the JVM-familiar
+order: stop accepting requests, close active HTTP/2 sessions, then close owned
+contexts/resources. If a close hook fails, remaining close hooks still run and
+the returned promise rejects with an `AggregateError`.
+
+`Server` does not expose ZeroMQ, IPC endpoint names, worker supervision,
+durable scheduling, retry ownership, or a process-wide `ServerEnvironment`.
+Managed sandboxes may reject local listener tests with `EPERM`; rerun
+listener-based verification natively when that happens.
 
 When a caller already owns executable dispatchers, the current server package
 also exposes the first small bus seam:

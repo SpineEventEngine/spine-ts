@@ -25,6 +25,7 @@ export class EventBus {
   readonly #registry = new EventDispatcherRegistry();
   readonly #runtime = new SingleProcessServerRuntime();
   readonly #started: Promise<void>;
+  #closed: Promise<void> | undefined;
 
   constructor(eventStore: EventStore, dispatchers: Iterable<EventDispatcher> = []) {
     this.#eventStore = eventStore;
@@ -45,6 +46,31 @@ export class EventBus {
     const accepted = clone(EventSchema, event);
 
     return this.#started.then(() => this.#runtime.enqueue(() => this.#dispatch(accepted)));
+  }
+
+  /**
+   * Stop accepting new event work, drain accepted work, and close the event store.
+   *
+   * Close is idempotent and returns the same close outcome on repeated calls.
+   * Runtime and event-store close hooks are both attempted; failures reject as
+   * an `AggregateError`.
+   */
+  close(): Promise<void> {
+    this.#closed ??= this.#closeOnce();
+    return this.#closed;
+  }
+
+  async #closeOnce(): Promise<void> {
+    const errors: unknown[] = [];
+
+    await closePart(() => this.#started.then(() => this.#runtime.close()), errors);
+    await closePart(() => {
+      this.#eventStore.close();
+    }, errors);
+
+    if (errors.length > 0) {
+      throw new AggregateError(errors, "EventBus close failed.");
+    }
   }
 
   async #dispatch(event: Event): Promise<void> {
@@ -104,3 +130,11 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     return postStored(event);
   },
 });
+
+async function closePart(close: () => unknown, errors: unknown[]): Promise<void> {
+  try {
+    await close();
+  } catch (error) {
+    errors.push(error);
+  }
+}
