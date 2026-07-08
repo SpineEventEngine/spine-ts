@@ -154,6 +154,9 @@ states through `StorageFactory`/`RecordStorage`, reads latest state by schema
 and entity ID, can return caller-supplied version metadata through
 `readVersioned()`, can return storage-order list results through
 `readAllVersioned()`, and delivers direct in-process update notifications.
+Version metadata is process-local and in-memory only in the current `Stand`;
+the latest state record is storage-backed, but the state-to-version metadata
+map is not persisted.
 Subscription cleanup is explicit via `unsubscribe()`, and multitenant stands
 require a `tenantId` on point reads, list reads, updates, and subscriptions
 while single-tenant stands reject tenant options.
@@ -162,7 +165,10 @@ Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
 routes. `QueryService.Read` supports projection-state ID-filter reads and
 projection-state `Target.include_all = true` reads, packing
 `EntityStateWithVersion` replies from
-`Stand.readVersioned()` and `Stand.readAllVersioned()` respectively. `Subscribe`
+`Stand.readVersioned()` and `Stand.readAllVersioned()` respectively. It rejects
+column filters, field masks, ordering, limits, missing criteria, and
+`include_all = false` as `INVALID_QUERY` before reading Stand storage.
+`Subscribe`
 allocates opaque IDs, `Activate` attaches delivery, and `Cancel`/stream
 finalization release in-process handles. Never-activated subscriptions have a
 configurable inactive TTL, and active delivery uses a configurable queue limit

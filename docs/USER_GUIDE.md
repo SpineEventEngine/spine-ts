@@ -569,18 +569,24 @@ contexts call it from registered repository metadata. Reads, updates, and
 subscriptions reject unknown state schemas with `StandStateTypeError`.
 `readAllVersioned()` returns `StandReadResult` entries in deterministic
 `RecordStorage.query()` order and clones the stored state and caller-supplied
-version metadata the same way `readVersioned()` does. Multitenant stands require
+version metadata the same way `readVersioned()` does. Version metadata is
+process-local and in-memory only in the current `Stand`; latest state records
+are storage-backed, but the state-to-version metadata map is not persisted.
+Multitenant stands require
 `{ tenantId }` for point reads, list reads, updates, and subscriptions; single-
 tenant stands reject tenant options. `SpineServices` adapts built-context
 stands to the first raw gRPC-compatible query and subscription routes, including
 projection-state `QueryService.Read` calls with `Target.include_all = true`.
 Include-all service reads use the same tenant-option behavior as direct stand
 reads and return `EntityStateWithVersion` values packed from
-`Stand.readAllVersioned()`. Direct subscriptions are in-process only and must be
-cleaned up by calling `unsubscribe()`. Service subscriptions allocate IDs in
-`Subscribe` and attach Stand delivery in `Activate`; updates recorded before
-activation are not replayed by this first slice. This direct API does not
-provide a client query DSL.
+`Stand.readAllVersioned()`. Service reads also support ID-filter point reads.
+Column filters, field masks, ordering, limits, missing criteria, and
+`include_all = false` return `INVALID_QUERY` before Stand storage is read.
+Direct subscriptions are in-process only and must be cleaned up by calling
+`unsubscribe()`. Service subscriptions allocate IDs in `Subscribe` and attach
+Stand delivery in `Activate`; updates recorded before activation are not
+replayed by this first slice. This direct API does not provide a client query
+DSL.
 
 ## Runtime Assembly Closure
 

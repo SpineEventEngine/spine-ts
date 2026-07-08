@@ -558,14 +558,19 @@ state schemas with `StandStateTypeError`. Multitenant stands require
 `{ tenantId }` on point reads, list reads, updates, and subscriptions; single-
 tenant stands reject tenant options. `readAllVersioned()` returns
 `StandReadResult` entries in deterministic storage query order and reuses the
-same caller-supplied version metadata as point reads. Direct subscriptions are
-deterministic in-process callbacks and must be cleaned up explicitly.
+same caller-supplied version metadata as point reads. Stand version metadata is
+process-local and in-memory only; the current slice persists latest state
+records through storage, but not the side-map that associates those states with
+versions. Direct subscriptions are deterministic in-process callbacks and must
+be cleaned up explicitly.
 `SpineServices` adapts built-context command
 buses and stands to the first `CommandService`, `QueryService`, and
 `SubscriptionService` methods, including `QueryService.Read` support for
-projection-state ID filters and `Target.include_all` reads. Cross-context
-fallback, client query DSLs, event subscriptions, field filtering, and
-projection catch-up remain outside this slice.
+projection-state ID filters and projection-state `Target.include_all = true`
+reads. `QueryService.Read` rejects column filters, field masks, ordering,
+limits, missing criteria, and `include_all = false` before reading Stand
+storage. Cross-context fallback, client query DSLs, event subscriptions, field
+filtering, and projection catch-up remain outside this slice.
 
 ## Entity State Shell
 

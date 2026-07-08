@@ -11,6 +11,7 @@ import {
   ValidationErrorSchema,
 } from "@spine-ts/proto";
 import {
+  CompositeFilterSchema,
   TargetFiltersSchema,
   TargetSchema,
 } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
@@ -58,7 +59,7 @@ describe("@spine-ts/example-todo", () => {
   beforeAll(async () => {
     assertBuiltExample();
     ({ createTodoContext, startTodoServer } = await import("../dist/src/index.js"));
-  });
+  }, 30_000);
 
   it("recovers registry loading after an initial generated-registry failure", async () => {
     const registry = fileURLToPath(
@@ -215,6 +216,20 @@ describe("@spine-ts/example-todo", () => {
       "First",
       "Second",
     ]);
+  });
+
+  it("returns a stable error for unsupported task-list column queries", async () => {
+    const fixture = new BoundedContextFixture(await createTodoContext(), {
+      timeoutMs: 500,
+      intervalMs: 5,
+    });
+
+    const response = await fixture.read(createTaskListColumnQuery());
+
+    expect(response.response?.status?.status.case).toBe("error");
+    expect(errorMessage(response.response?.status?.status)).toBe(
+      "QueryService.Read does not support column filters.",
+    );
   });
 
   it("subscribes to task-list updates and receives projection-driven changes", async () => {
@@ -757,6 +772,22 @@ function createTaskListIdQuery(id = "task-list-query") {
           idFilter: {
             id: [packAny(StringValueSchema, create(StringValueSchema, { value: id }))],
           },
+        }),
+      },
+    }),
+    context: createActorContext(),
+  });
+}
+
+function createTaskListColumnQuery() {
+  return create(QuerySchema, {
+    id: create(QueryIdSchema, { value: "query-task-list-column" }),
+    target: create(TargetSchema, {
+      type: deriveTypeUrl(TaskListSchema),
+      criterion: {
+        case: "filters",
+        value: create(TargetFiltersSchema, {
+          filter: [create(CompositeFilterSchema)],
         }),
       },
     }),
