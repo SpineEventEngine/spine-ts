@@ -1,14 +1,16 @@
 # T-0016e Review Log
 
-Status: all required lanes clean; final verification pending
+Status: all required lanes clean; final verification passed
 
 Scope: Delivery worker integration over existing inbox and shard storage,
 focused tests, and public docs.
 
 Implementation/fix basis: original implementation `0913357`, first-round fix
-`8911166`, and second-pass fix `a1346fc`. The implementation adds the narrow
-direct shard drain requested by D-0063. First-round review, targeted re-review,
-and final reliability/documentation re-review have run clean.
+`8911166`, second-pass fix `a1346fc`, and final coverage-fix worktree changes.
+The implementation adds the narrow direct shard drain requested by D-0063.
+First-round review, targeted re-review, and final reliability/documentation
+re-review have run clean; the final coverage fix added tests only and full
+verification passed.
 
 ## Required Lanes
 
@@ -29,6 +31,9 @@ and final reliability/documentation re-review have run clean.
 - `InboxStorage.markDelivered()` is the only new status mutation. It keeps the
   inbox row and final dedup guard metadata aligned so delivered rows with live
   retention still block duplicate writes.
+- Final coverage-fix tests exercise the remaining delivery race/repair retry
+  branches and public invalid receive input branch without production behavior
+  changes.
 - The implementation intentionally does not add schedulers, broad monitors,
   transport APIs, retained attempt history, batch listeners, repository
   invocation, or catch-up behavior.

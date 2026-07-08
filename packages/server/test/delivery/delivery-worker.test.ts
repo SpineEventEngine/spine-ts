@@ -477,6 +477,61 @@ describe("Delivery worker", () => {
     await expect(dedupRecords.read(dedupKey)).resolves.toEqual(DedupRecords.writeFinal(delivered));
   });
 
+  it("retries when stale delivered-row guard repair loses a race", async () => {
+    const faultPlan: DeliveryFaultPlan = {};
+    const storageFactory = new FaultyDeliveryStorageFactory(faultPlan);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-08T09:30:00.000Z"),
+    });
+    const shard = ShardIndex.single();
+    const inboxId = targetInbox();
+    const keepUntil = new Date("2026-07-08T10:00:00.000Z");
+    const stored = await delivery.inbox.receive({
+      inboxId,
+      signalId: "signal-stale-guard-retry",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      version: 1n,
+      keepUntil,
+    });
+    const delivered = Object.freeze({
+      ...stored.message,
+      status: "DELIVERED" as const,
+    });
+
+    const inboxRecords = deliveryInboxRecords(storageFactory);
+    const dedupRecords = deliveryDedupRecords(storageFactory);
+    const inboxKey = messageKey(stored.message);
+    const pendingInbox = await inboxRecords.read(inboxKey);
+    expect(pendingInbox).toBeDefined();
+    await expect(
+      inboxRecords.compareAndSet(inboxKey, pendingInbox, InboxRecords.write(delivered)),
+    ).resolves.toBe(true);
+
+    faultPlan.skipDedupFinalizeOnce = true;
+    const duplicate = await delivery.inbox.receive({
+      inboxId,
+      signalId: "signal-stale-guard-retry",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T09:01:00.000Z"),
+      version: 2n,
+      keepUntil,
+    });
+
+    expect(faultPlan.skippedDedupFinalizations).toBe(1);
+    expect(duplicate.outcome).toBe("DUPLICATE");
+    expect(duplicate.message.status).toBe("DELIVERED");
+    await expect(dedupRecords.read(DedupRecords.guardKey(stored.message))).resolves.toEqual(
+      DedupRecords.writeFinal(delivered),
+    );
+  });
+
   it("repairs the guard-delivered row-pending race during duplicate receive", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
@@ -535,6 +590,104 @@ describe("Delivery worker", () => {
     await expect(inboxRecords.read(inboxKey)).resolves.toEqual(InboxRecords.write(delivered));
     await expect(dedupRecords.read(dedupKey)).resolves.toEqual(DedupRecords.writeFinal(delivered));
   });
+
+  it("retries when guard-delivered row repair loses a race", async () => {
+    const faultPlan: DeliveryFaultPlan = {};
+    const storageFactory = new FaultyDeliveryStorageFactory(faultPlan);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-08T09:30:00.000Z"),
+    });
+    const shard = ShardIndex.single();
+    const inboxId = targetInbox();
+    const keepUntil = new Date("2026-07-08T10:00:00.000Z");
+    const stored = await delivery.inbox.receive({
+      inboxId,
+      signalId: "signal-row-repair-retry",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      version: 1n,
+      keepUntil,
+    });
+    const delivered = Object.freeze({
+      ...stored.message,
+      status: "DELIVERED" as const,
+    });
+
+    const inboxRecords = deliveryInboxRecords(storageFactory);
+    const dedupRecords = deliveryDedupRecords(storageFactory);
+    const dedupKey = DedupRecords.guardKey(stored.message);
+    const pendingGuard = await dedupRecords.read(dedupKey);
+    expect(pendingGuard).toBeDefined();
+    await expect(
+      dedupRecords.compareAndSet(dedupKey, pendingGuard, DedupRecords.writeFinal(delivered)),
+    ).resolves.toBe(true);
+
+    faultPlan.skipInboxRepairOnce = true;
+    const duplicate = await delivery.inbox.receive({
+      inboxId,
+      signalId: "signal-row-repair-retry",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T09:01:00.000Z"),
+      version: 2n,
+      keepUntil,
+    });
+
+    expect(faultPlan.skippedInboxRepairs).toBe(1);
+    expect(duplicate.outcome).toBe("DUPLICATE");
+    expect(duplicate.message.status).toBe("DELIVERED");
+    await expect(inboxRecords.read(messageKey(stored.message))).resolves.toEqual(
+      InboxRecords.write(delivered),
+    );
+  });
+
+  it("retries when pending claim recovery finalization loses a race", async () => {
+    const faultPlan: DeliveryFaultPlan = {};
+    const storageFactory = new FaultyDeliveryStorageFactory(faultPlan);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const pending = missingMessage();
+    const dedupRecords = deliveryDedupRecords(storageFactory);
+
+    await expect(
+      dedupRecords.compareAndSet(
+        DedupRecords.guardKey(pending),
+        undefined,
+        DedupRecords.writeClaim(pending),
+      ),
+    ).resolves.toBe(true);
+
+    faultPlan.skipDedupFinalizeOnce = true;
+    const result = await delivery.inbox.receive({
+      inboxId: pending.inboxId,
+      signalId: pending.signalId,
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard: pending.shard,
+      whenReceived: new Date("2026-07-08T09:01:00.000Z"),
+      version: 100n,
+    });
+
+    expect(faultPlan.skippedDedupFinalizations).toBe(1);
+    expect(result).toMatchObject({
+      outcome: "DUPLICATE",
+      message: {
+        id: { value: "missing-message" },
+        signalId: "signal-missing",
+        status: "TO_DELIVER",
+      },
+    });
+    await expect(dedupRecords.read(DedupRecords.guardKey(pending))).resolves.toEqual(
+      DedupRecords.writeFinal(pending),
+    );
+  });
 });
 
 async function seed(delivery: Delivery, signalId: string, version: bigint): Promise<InboxMessage> {
@@ -578,15 +731,26 @@ function messageKey(message: InboxMessage): string {
   return `${message.id.shard.key()}:${message.id.value}`;
 }
 
-function deliveryInboxRecords(storageFactory: InMemoryStorageFactory) {
+function deliveryInboxRecords(storageFactory: StorageFactory) {
   return storageFactory.createRecordStorage(
     { name: "Tasks.delivery.inbox", multitenant: false },
     inboxRecordSpec,
   );
 }
 
+function deliveryDedupRecords(storageFactory: StorageFactory) {
+  return storageFactory.createRecordStorage(
+    { name: "Tasks.delivery.inbox-dedup", multitenant: false },
+    dedupRecordSpec,
+  );
+}
+
 interface DeliveryFaultPlan {
+  skipDedupFinalizeOnce?: boolean;
+  skipInboxRepairOnce?: boolean;
   throwDedupFinalizeOnce?: boolean;
+  skippedDedupFinalizations?: number;
+  skippedInboxRepairs?: number;
 }
 
 class FaultyDeliveryStorageFactory extends StorageFactory {
@@ -633,6 +797,28 @@ class FaultyDeliveryRecordStorage<I, R extends Message> extends RecordStorage<I,
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
+    if (
+      this.context.name.endsWith(".delivery.inbox") &&
+      expected !== undefined &&
+      next !== undefined &&
+      this.#plan.skipInboxRepairOnce === true
+    ) {
+      this.#plan.skipInboxRepairOnce = false;
+      this.#plan.skippedInboxRepairs = (this.#plan.skippedInboxRepairs ?? 0) + 1;
+      return Promise.resolve(false);
+    }
+
+    if (
+      this.context.name.endsWith(".delivery.inbox-dedup") &&
+      expected !== undefined &&
+      next !== undefined &&
+      this.#plan.skipDedupFinalizeOnce === true
+    ) {
+      this.#plan.skipDedupFinalizeOnce = false;
+      this.#plan.skippedDedupFinalizations = (this.#plan.skippedDedupFinalizations ?? 0) + 1;
+      return Promise.resolve(false);
+    }
+
     if (
       this.context.name.endsWith(".delivery.inbox-dedup") &&
       expected !== undefined &&
