@@ -116,3 +116,30 @@ Status: completed
 - `corepack pnpm format:check` passed.
 - `git diff --check` passed.
 - `corepack pnpm typecheck:build` passed.
+
+## Final Focused Re-Review
+
+Status: clean
+
+The focused docs/API/JVM re-review verified the final stale-wording fixes:
+
+- `docs/USER_GUIDE.md` no longer lists import buses as deferred future work.
+- Entity family, entity metadata, dispatcher, and protected entity hook docs no
+  longer frame current repository/runtime ownership as future work.
+- `ContextSpec` storage metadata wording matches current `EventStore` creation.
+- Aggregate docs align with ADR 0001: latest persisted state is the ordinary
+  aggregate source of truth; the event journal is traceability only; ordinary
+  docs no longer describe snapshot/replay loading as the current application
+  path.
+- Handler decorator JSDoc uses present-tense generated registry ownership.
+
+Root-agent verification after the clean re-review:
+
+- `corepack pnpm vitest run scripts/check-cleanup-rules.test.mjs` passed:
+  1 file, 92 tests.
+- `corepack pnpm typecheck:build` passed.
+- `corepack pnpm docs:check` passed. TypeDoc emitted the existing local warning
+  that git remote `origin` is invalid for source links.
+- `corepack pnpm lint` passed, including cleanup enforcement.
+- `corepack pnpm format:check` passed.
+- `git diff --check 0b6abf9..HEAD` passed.

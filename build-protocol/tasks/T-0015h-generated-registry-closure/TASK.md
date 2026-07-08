@@ -4,7 +4,8 @@ Status: completed
 Start: `2026-07-08 01:05 WEST`
 End: `2026-07-08 01:08 WEST`
 Baseline commit: `0b6abf9`
-Final commit: reported by implementation handoff
+Initial implementation commit: `63cf783`
+Final closure commit: `72d68fc`
 Branch: `task/T-0015h-generated-registry-closure`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0015h-generated-registry-closure`
@@ -55,10 +56,10 @@ event-sourced aggregate guidance.
   ordinary application bridge while keeping explicit metadata as a low-level
   framework/test/migration seam.
 
-## Verification Plan
+## Verification
 
 - `corepack pnpm vitest run scripts/check-cleanup-rules.test.mjs` passed:
-  1 file, 86 tests.
+  1 file, 92 tests.
 - `corepack pnpm typecheck:build` passed.
 - `corepack pnpm docs:check` passed. TypeDoc emitted the existing local
   warning that git remote `origin` is invalid for source links.
