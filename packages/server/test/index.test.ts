@@ -236,6 +236,8 @@ describe("@spine-ts/server", () => {
         "Projection",
         "Repository",
         "RepositoryIdentityError",
+        "RuntimeTransportBinding",
+        "RuntimeTransportEnvelopeError",
         "ServerRuntimeStateError",
         "ShardIndex",
         "ShardSession",

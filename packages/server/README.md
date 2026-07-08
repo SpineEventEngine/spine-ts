@@ -121,6 +121,10 @@ Current slice exposes:
   smallest immutable server/runtime wiring seam from built bounded-context
   metadata plus command/event readiness to transport topics, subscriptions,
   planner-local worker IDs, and explicit deferred routing seams.
+- `RuntimeTransportBinding` for registering those command/event routes with a
+  supplied `SignalTransport`, validating generated Spine command/event envelope
+  shape and enclosed message type URL before runtime intake, and enqueuing
+  accepted callbacks through `SingleProcessServerRuntime`.
 - `@Assign`, `@Command`, `@Subscribe`, and `@React` standard method decorators.
   Bare decorators are the ordinary application syntax; schema-bearing overloads,
   `@Apply`, and decorator materialization are compatibility/testing paths for
@@ -321,6 +325,19 @@ not open sockets, name IPC endpoints, start workers, dispatch handlers,
 validate signals, store delivery state, supervise broker or worker processes,
 run retry policy, or expose buses/services.
 
+`RuntimeTransportBinding.open({ plan, transport, runtime, onCommand, onEvent })`
+makes those command/event routes executable over the adapter-agnostic
+`SignalTransport` contract. It registers command routes with request/respond
+semantics and event routes with publish/subscribe semantics, validates inbound
+generated Spine command/event envelopes before `SingleProcessServerRuntime`
+intake, and queues accepted callbacks asynchronously. Command request handlers
+return immutable signal-intake results. Event publish handlers throw
+`RuntimeTransportEnvelopeError` for immediate envelope refusal. The returned
+handle is idempotent and closes registered transport handles before closing the
+runtime. The binding does not own the transport, choose endpoint names, expose
+ZeroMQ types, supervise processes, retry failures, store events, or create a
+server/environment owner.
+
 ## Single-Process Runtime Kernel
 
 Use `SingleProcessServerRuntime` as the small local lifecycle and asynchronous
@@ -417,6 +434,8 @@ import {
   EventRegistrationReadiness,
   HandlerMetadataRegistry,
   Repository,
+  RuntimeTransportBinding,
+  SingleProcessServerRuntime,
   createServerRuntimeRoutingPlan,
   defineEntityHandlers,
 } from "@spine-ts/server";
@@ -450,12 +469,14 @@ routingPlan.commands.topics;
 ```
 
 This assembly proves the low-level metadata and routing-plan seams fit
-together. The routing plan itself does not turn registered command/event
-metadata into runtime dispatch, delivery, handler invocation, service hosting,
-or `Ack` behavior. Route calculation remains a metadata and transport-plan
-concern; the routing plan deliberately does not create worker registrations,
-lifecycle handles, queues, buses, repositories, storage, services, or transport
-endpoints.
+together. To execute the command/event routes locally, pass that plan to
+`RuntimeTransportBinding.open()` with a `SignalTransport`, a
+`SingleProcessServerRuntime`, and framework-owned `onCommand` / `onEvent`
+callbacks. The binding still does not provide delivery, storage policy, service
+hosting, `Ack` behavior, endpoint ownership, or a process supervisor. Route
+calculation remains a metadata and transport-plan concern; the routing plan
+deliberately does not create worker registrations, lifecycle handles, queues,
+buses, repositories, storage, services, or transport endpoints.
 
 ## Bounded Context Assembly
 

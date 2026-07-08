@@ -12,6 +12,10 @@ Current scope:
 - publish/request operation contracts plus handler callback types; and
 - async close behavior for future transport implementations.
 
+`@spine-ts/server` can bind command/event runtime routes to any implementation
+of this `SignalTransport` contract, but this package still does not import
+server runtime code or expose a concrete production adapter from its root API.
+
 This package pins the maintained official `zeromq@6.5.0` package for the local
 IPC adapter foundation and keeps focused adapter-private smoke tests for
 same-host publish/subscribe and request/reply IPC behavior. The package root

@@ -365,6 +365,18 @@ they do not retain raw readiness metadata, entity names, handler method names,
 ZeroMQ endpoint data, socket topology, or duplicate full transport contracts on
 each route. Query, subscription, and system routing remain explicit deferred
 seams until concrete server readiness metadata exists.
+Runtime transport exports include `RuntimeTransportBinding`,
+`RuntimeTransportBindingInput`, `RuntimeTransportBindingHandle`,
+`CommandRuntimeTransportHandler`, `EventRuntimeTransportHandler`, and
+`RuntimeTransportEnvelopeError`. `RuntimeTransportBinding.open()` registers
+command routes with `SignalTransport.respond()` and event routes with
+`SignalTransport.subscribe()`, validates generated Spine command/event
+envelope shape and enclosed message type URL before runtime intake, and enqueues
+accepted callbacks through the supplied `SingleProcessServerRuntime`. Its close
+handle is idempotent and closes transport registrations before the runtime. It
+does not own the transport instance, open IPC endpoints, expose ZeroMQ details,
+supervise processes, retry work, store events, or create a public server
+environment.
 Server runtime exports include `SingleProcessServerRuntime`,
 `ServerRuntimeLifecycle`, `ServerRuntimeState`, `ServerRuntimeWork`,
 `ServerRuntimeStateOperation`, `ServerRuntimeRejectedState`,
@@ -469,7 +481,9 @@ production endpoint layout, frame protocols, broker topology, process
 supervision, worker registration handshakes, delivery retries, and server
 runtime wiring remain deferred. Managed sandboxes may reject ZeroMQ `ipc://`
 binds with `EPERM`, so live local IPC smoke tests can require native IPC
-filesystem/socket permissions outside the sandbox.
+filesystem/socket permissions outside the sandbox. Runtime transport smoke tests
+exercise the public `SignalTransport` contract; adapter-private ZeroMQ tests
+remain the local IPC proof until a production transport adapter is introduced.
 
 The generated Protobuf-ES implementation files themselves remain excluded from
 TypeDoc output and are not broadly re-exported from the package root.

@@ -333,6 +333,34 @@ runs, invoke repositories from inbox rows by itself, mutate read-side
 projections, run retry monitors, open transport workers, or retain attempt/error
 history beyond the returned `DeliveryRun`.
 
+## Runtime Transport Binding
+
+Framework runtime code can make command/event routing plans executable with:
+
+```typescript
+const handle = await RuntimeTransportBinding.open({
+  plan,
+  transport,
+  runtime,
+  onCommand(command, route) {
+    return frameworkCommandIntake(command, route);
+  },
+  onEvent(event, route) {
+    return frameworkEventIntake(event, route);
+  },
+});
+
+await handle.close();
+```
+
+The binding registers command routes through `SignalTransport.respond()` and
+event routes through `SignalTransport.subscribe()`. It validates incoming Spine
+command/event envelopes and the enclosed message type URL before calling
+`SingleProcessServerRuntime.enqueue()`. The returned handle closes registered
+transport handles before closing the runtime and can be closed repeatedly. It
+does not expose ZeroMQ, own endpoint naming, supervise processes, retry work,
+or create a public server/environment owner.
+
 ## Public Services
 
 The TS framework must keep the Spine gRPC services:

@@ -1,10 +1,14 @@
 # T-0016f Review Log
 
-Status: implementation pending
+Status: implementation complete; reviewer lanes pending
 
 Scope: transport-backed local command/event runtime execution over
 `SignalTransport`, local-only transport documentation, focused runtime tests,
 and public docs.
+
+Implementation note: this pass did not spawn reviewer sub-agents because the
+implementation request explicitly said not to spawn sub-agents. The required
+review lanes below remain pending for a later review pass.
 
 ## Required Lanes
 
