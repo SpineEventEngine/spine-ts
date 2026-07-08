@@ -235,6 +235,33 @@ describe("Stand", () => {
     expect(deliveries).toBe(1);
   });
 
+  it("keeps direct subscriptions local to one Stand instance", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const firstStand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const secondStand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    let firstDeliveries = 0;
+    let secondDeliveries = 0;
+    firstStand.register(ProjectionStateSchema);
+    secondStand.register(ProjectionStateSchema);
+    firstStand.subscribe(ProjectionStateSchema, () => {
+      firstDeliveries += 1;
+    });
+    secondStand.subscribe(ProjectionStateSchema, () => {
+      secondDeliveries += 1;
+    });
+
+    await firstStand.update(ProjectionStateSchema, createState("task-1", "First"));
+
+    expect(firstDeliveries).toBe(1);
+    expect(secondDeliveries).toBe(0);
+  });
+
   it("delivers to a snapshot when subscribers mutate subscriptions during delivery", async () => {
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },

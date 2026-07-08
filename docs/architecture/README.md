@@ -372,6 +372,16 @@ Service subscription delivery starts only when a client activates the opaque
 subscription ID, abandoned inactive subscriptions expire after a small
 configurable TTL, slow consumers are bounded by a small configurable update
 queue, and stream/cancel cleanup releases the direct Stand handle.
+`Subscribe` rejects unknown state targets before creating a process-local
+record. Activation and cancellation are keyed by subscription ID in the current
+`SpineServices` instance: unknown activations complete without updates, and
+duplicate activation of an already-active ID also completes without updates.
+Unknown or duplicate cancellations return OK. Cleanup is idempotent across
+cancel, stream finalization, inactive expiry, and queue-limit closure. The
+subscription registry, direct Stand subscriber sets, Stand version metadata,
+and in-memory storage adapter are local process state; this slice does not
+persist subscription positions, replay missed updates, or recover active
+subscriptions after restart.
 
 The current command service error contract remains intentionally small.
 `CommandBus` validates each accepted command payload with the existing core

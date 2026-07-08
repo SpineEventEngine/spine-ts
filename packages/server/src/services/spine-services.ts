@@ -56,6 +56,12 @@ import { CommandRefusalError } from "./command-errors.js";
  * projection-state `include_all = true` reads. Column filters, field masks,
  * ordering, limits, missing criteria, and inactive include-all criteria return
  * stable `INVALID_QUERY` responses before Stand storage is read.
+ *
+ * `SubscriptionService.Subscribe` accepts only known state targets, creates an
+ * inactive process-local record, and attaches delivery to `Stand` only when the
+ * opaque subscription ID is activated. Unknown or duplicate activation IDs
+ * complete without updates, and cancellation of unknown or already-cleaned IDs
+ * returns OK.
  */
 export class SpineServices {
   readonly #contexts: readonly BoundedContext[];
@@ -270,7 +276,16 @@ export class SpineServices {
       return;
     }
 
-    this.#activateRecord(record);
+    if (record.delivery.active) {
+      return;
+    }
+
+    try {
+      this.#activateRecord(record);
+    } catch (error) {
+      this.#removeSubscription(id);
+      throw error;
+    }
 
     try {
       while (!record.delivery.closed) {
@@ -307,10 +322,6 @@ export class SpineServices {
   }
 
   #activateRecord(record: SubscriptionRecord): void {
-    if (record.delivery.active) {
-      return;
-    }
-
     clearInactiveTimer(record);
     const tenantId = topicTenant(record.subscription.topic);
     const standSubscription = record.route.context.stand().subscribe(
@@ -341,9 +352,17 @@ export class SpineServices {
 export interface SpineServicesOptions {
   /** Contexts exposed by these service adapters. */
   readonly contexts: readonly BoundedContext[];
-  /** Milliseconds before never-activated subscriptions are discarded. Defaults to 30 seconds. */
+  /**
+   * Milliseconds before never-activated process-local subscriptions are discarded.
+   *
+   * Defaults to 30 seconds. Non-positive or non-finite values are coerced to 1.
+   */
   readonly inactiveTtlMs?: number;
-  /** Maximum queued updates per active subscription before delivery is closed. Defaults to 100. */
+  /**
+   * Maximum queued updates per active subscription before delivery is closed.
+   *
+   * Defaults to 100. Non-positive or non-finite values are coerced to 1.
+   */
   readonly queueLimit?: number;
 }
 
