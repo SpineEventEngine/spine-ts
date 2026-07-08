@@ -1,6 +1,6 @@
 # T-0016c Review Log
 
-Status: pending review
+Status: pending documentation re-review and integration
 
 Scope: query-readiness closure for `QueryService.Read`, direct `Stand` version
 metadata behavior, focused tests, and public docs.
@@ -12,19 +12,24 @@ metadata behavior, focused tests, and public docs.
 - Round 1 review-fix sub-agent:
   `unknown-current-review-fix-agent` (placeholder; this session was not given
   its own sub-agent ID).
-- Current integration status: round-1 fixes have passed required local
-  verification on `task/T-0016c-query-readiness`; the branch still needs the
-  review-fix commit, re-review, and integration.
+- Round 2 documentation log-status fix sub-agent:
+  `unknown/self` (this session was not given a distinct sub-agent ID).
+- Current integration status: round-1 fixes are committed in `e26a908`. Its
+  subject is `Fix T-0016c review findings`. Code style/maintainability and
+  TypeScript/API docs re-reviews are clean. Documentation re-review found stale
+  durable-log status text; this round-2 documentation log-status fix updates
+  that bookkeeping. Remaining state after this fix is documentation re-review
+  and integration.
 
 ## Required Lanes
 
-| Lane                       | Reviewer sub-agent                     | Status   | Required focus                                                                                     |
-| -------------------------- | -------------------------------------- | -------- | -------------------------------------------------------------------------------------------------- |
-| Code style/maintainability | `019f4140-6baf-71f3-9e6a-36ccfa7f6471` | Findings | Small JVM-shaped API, no generic query engine or broad abstractions, naming under cleanup rules.   |
-| Documentation completeness | `019f4140-93f0-7e31-8bde-e9376c6db431` | Findings | Package docs, user guide, architecture docs, task logs, and decision logs match implemented scope. |
-| TypeScript/API docs        | `019f4140-cb2a-74b2-89c6-dfeac52b8a68` | Findings | Public comments and API docs state supported/unsupported query profile and Stand version boundary. |
-| Security                   | `019f4140-f418-7690-bf64-cabab3dec714` | Clean    | Query validation rejects unsupported shapes before storage reads; no unsafe dynamic behavior.      |
-| Performance/reliability    | `019f4141-1f39-75b1-be38-9ea6c5d27d27` | Clean    | Query path stays bounded and deterministic; version metadata boundary is explicit and tested.      |
+| Lane                       | Reviewer sub-agent                     | Status                | Required focus                                                                                     |
+| -------------------------- | -------------------------------------- | --------------------- | -------------------------------------------------------------------------------------------------- |
+| Code style/maintainability | `019f4140-6baf-71f3-9e6a-36ccfa7f6471` | Clean after re-review | Small JVM-shaped API, no generic query engine or broad abstractions, naming under cleanup rules.   |
+| Documentation completeness | `019f4140-93f0-7e31-8bde-e9376c6db431` | Round 2 finding       | Package docs, user guide, architecture docs, task logs, and decision logs match implemented scope. |
+| TypeScript/API docs        | `019f4140-cb2a-74b2-89c6-dfeac52b8a68` | Clean after re-review | Public comments and API docs state supported/unsupported query profile and Stand version boundary. |
+| Security                   | `019f4140-f418-7690-bf64-cabab3dec714` | Clean                 | Query validation rejects unsupported shapes before storage reads; no unsafe dynamic behavior.      |
+| Performance/reliability    | `019f4141-1f39-75b1-be38-9ea6c5d27d27` | Clean                 | Query path stays bounded and deterministic; version metadata boundary is explicit and tested.      |
 
 ## Review Rounds
 
@@ -60,8 +65,21 @@ metadata behavior, focused tests, and public docs.
   - `SpineServices.#read()` was split into small semantic private helpers while
     keeping `QueryService` a thin router/error translator;
   - `createTaskListColumnQuery` was renamed to `createColumnFilterQuery`.
-- Round 1 outcome after fix pass: local verification passed; pending commit,
-  re-review, and integration.
+- Round 1 outcome after fix pass: local verification passed and review-fix
+  commit `e26a908` (`Fix T-0016c review findings`) is the current branch head.
+- Round 2 re-review status:
+  - Code style/maintainability re-review is clean.
+  - TypeScript/API docs re-review is clean.
+  - Documentation re-review found one remaining durable-log bookkeeping issue:
+    the work log and review log still said the branch needed the review-fix
+    commit even though `e26a908` already exists.
+- Round 2 documentation log-status fix:
+  - fix-agent ID: `unknown/self` because this session was not given a distinct
+    sub-agent ID;
+  - updates the durable logs to record that `e26a908` exists, style and
+    TypeScript/API re-reviews are clean, and documentation re-review found this
+    bookkeeping issue;
+  - remaining state after this fix is documentation re-review and integration.
 
 ## Review Policy
 
