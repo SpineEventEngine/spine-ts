@@ -417,20 +417,13 @@ export class BoundedContextBuilder {
     return this.#specSnapshot.multitenant;
   }
 
-  /** Adds a repository to the context registration list. */
-  add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
-    repository: Repository<EntityType>,
-  ): this;
   /**
-   * Adds an entity class for framework-owned generated repository assembly.
+   * Adds a repository or an entity class to the context registration list.
    *
    * Entity-class assembly loads generated handler metadata, so callers must use
    * {@link buildAsync}. Use `add(repository).build()` for explicit synchronous
    * assembly.
    */
-  add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
-    entityType: EntityType,
-  ): this;
   add<EntityType extends RepositoryEntityType & ConcreteRepositoryEntityType<EntityType>>(
     entry: Repository<EntityType> | EntityType,
   ): this {
@@ -439,8 +432,8 @@ export class BoundedContextBuilder {
       return this;
     }
 
-    requireEntityClass(entry, "BoundedContextBuilder.add(repository)");
-    this.#entityTypes.add(entry as EntityType);
+    requireEntityClass(entry, "BoundedContextBuilder.add(entry)");
+    this.#entityTypes.add(entry);
     return this;
   }
 

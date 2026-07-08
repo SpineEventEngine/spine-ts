@@ -232,3 +232,8 @@ Canonical checklist evidence:
 - `2026-07-08 04:10 WEST`: Round-3 TypeScript/API and documentation
   re-reviews reported clean. All participating implementation, fix, and
   reviewer sub-agents are closed.
+- `2026-07-08 04:15 WEST`: Full verification first failed in lint before tests
+  because `BoundedContextBuilder.add()` used combinable overloads and one
+  redundant type assertion. Collapsed the public method declaration to the
+  simpler `Repository | EntityClass` union signature before rerunning
+  verification.
