@@ -276,7 +276,10 @@ metadata roles for command assignment, command reaction, event subscription,
 event reaction, and legacy event application, `HandlerParameterCount` for
 canonical arity metadata, and `HandlerMetadataError` for registration-time
 structural failures. Handler names must refer to own prototype data methods
-declared with normal class method syntax. Decorator adapter exports
+declared with normal class method syntax. `defineEntityHandlers()` remains
+public for framework tests, generated-registry ingestion, and legacy
+non-decorator migration tooling; ordinary application code should use bare
+decorators plus generated registry assembly instead. Decorator adapter exports
 include `@Assign`, `@Command`, `@Subscribe`, `@React`, legacy/framework-only
 `@Apply`, framework-only `materializeDecoratedEntityHandlers()`,
 `HandlerMethodDecorator`, and `HandlerMethodValue`. Bare `@Assign`, `@Command`,
