@@ -2043,3 +2043,54 @@ Consequences:
 - The to-do example can assemble its context with only domain entity classes.
 - Cleanup checks can treat app imports of handler metadata registries and
   generated registry discovery as regressions.
+
+## D-0065: Add A Small Explicit Server Lifecycle Owner
+
+Status: Accepted
+
+Date: 2026-07-08
+
+Context: T-0016g needs real gRPC-compatible server lifecycle ownership for the
+framework and the to-do example. Spine JVM has `Server`, `ServerEnvironment`,
+and `BoundedContext.close()` behavior, but the human review warned against
+over-inventing server-module concepts. Current TS code duplicates HTTP/2
+listener/session lifecycle helpers in the example and service tests.
+
+Decision:
+
+- Introduce a small explicit public `Server` API around existing
+  `SpineServices` and Node HTTP/2 listener ownership.
+- Default to local-only listener binding (`127.0.0.1`); broader binding is
+  caller opt-in.
+- Make shutdown deterministic: stop network intake first, close active HTTP/2
+  sessions, then close owned contexts/resources.
+- Keep resource ownership explicit. The server closes contexts it owns for the
+  assembled application, but it must not silently close external storage,
+  delivery, transport, or environment factories that it did not create.
+- Do not introduce a JVM-style singleton `ServerEnvironment`, process
+  supervisor, worker manager, durable scheduler, or ZeroMQ-specific API in this
+  task.
+- Reuse `SpineServices` directly for Command, Query, and Subscription routes
+  rather than adding another facade.
+
+Alternatives considered:
+
+- Add a broad `ServerEnvironment` singleton now. Rejected because the current
+  framework only needs listener/resource ownership, and a singleton would add
+  policy before the storage/transport/delivery ownership model is mature.
+- Keep HTTP/2 lifecycle code in the example/tests. Rejected because lifecycle
+  ordering, local binding defaults, and close behavior are framework concerns
+  and should be verified once.
+- Hide all gRPC hosting behind `SpineServices`. Rejected because
+  `SpineServices` is a route registrar, while listener/session ownership is a
+  separate lifecycle concern.
+
+Consequences:
+
+- The to-do example should start with the framework server API and keep only
+  domain assembly code locally.
+- Service tests can use the public server lifecycle helper instead of copying
+  HTTP/2 close/session plumbing.
+- Later tasks may add an explicit environment object for storage/transport
+  factory ownership, but this server API should remain usable without a
+  process-wide singleton.
