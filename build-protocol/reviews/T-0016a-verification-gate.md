@@ -4,6 +4,8 @@ Status: implementation complete; reviewer lanes pending
 
 Scope: verification tooling normalization only.
 
+Implementation commit under review: `277a6a2`
+
 ## Required Lanes
 
 | Lane                       | Reviewer sub-agent | Status  | Required focus                                                                                           |
