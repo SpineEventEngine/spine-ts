@@ -476,6 +476,65 @@ describe("Delivery worker", () => {
     });
     await expect(dedupRecords.read(dedupKey)).resolves.toEqual(DedupRecords.writeFinal(delivered));
   });
+
+  it("repairs the guard-delivered row-pending race during duplicate receive", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-08T09:30:00.000Z"),
+    });
+    const shard = ShardIndex.single();
+    const inboxId = targetInbox();
+    const keepUntil = new Date("2026-07-08T10:00:00.000Z");
+    const stored = await delivery.inbox.receive({
+      inboxId,
+      signalId: "signal-guard-delivered",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      version: 1n,
+      keepUntil,
+    });
+    const delivered = Object.freeze({
+      ...stored.message,
+      status: "DELIVERED" as const,
+    });
+
+    const inboxRecords = deliveryInboxRecords(storageFactory);
+    const dedupRecords = storageFactory.createRecordStorage(
+      { name: "Tasks.delivery.inbox-dedup", multitenant: false },
+      dedupRecordSpec,
+    );
+    const inboxKey = messageKey(stored.message);
+    const dedupKey = DedupRecords.guardKey(stored.message);
+    const pendingGuard = await dedupRecords.read(dedupKey);
+    expect(pendingGuard).toBeDefined();
+    await expect(
+      dedupRecords.compareAndSet(dedupKey, pendingGuard, DedupRecords.writeFinal(delivered)),
+    ).resolves.toBe(true);
+
+    const duplicate = await delivery.inbox.receive({
+      inboxId,
+      signalId: "signal-guard-delivered",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T09:01:00.000Z"),
+      version: 2n,
+      keepUntil,
+    });
+
+    expect(duplicate.outcome).toBe("DUPLICATE");
+    expect(duplicate.message).toMatchObject({
+      id: stored.message.id,
+      signalId: "signal-guard-delivered",
+      status: "DELIVERED",
+    });
+    await expect(inboxRecords.read(inboxKey)).resolves.toEqual(InboxRecords.write(delivered));
+    await expect(dedupRecords.read(dedupKey)).resolves.toEqual(DedupRecords.writeFinal(delivered));
+  });
 });
 
 async function seed(delivery: Delivery, signalId: string, version: bigint): Promise<InboxMessage> {

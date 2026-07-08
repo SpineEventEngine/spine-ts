@@ -263,7 +263,14 @@ export class InboxStorage {
     const storedGuard = await this.#readGuardMessage(inboxStorage, dedupKey, current);
 
     if (storedGuard !== undefined) {
-      return this.#handleStoredGuardMessage(dedupStorage, dedupKey, current, storedGuard, message);
+      return this.#handleStoredGuardMessage(
+        inboxStorage,
+        dedupStorage,
+        dedupKey,
+        current,
+        storedGuard,
+        message,
+      );
     }
 
     if (!DedupRecords.isPending(current)) {
@@ -276,6 +283,7 @@ export class InboxStorage {
   }
 
   async #handleStoredGuardMessage(
+    inboxStorage: RecordStorage<string, Any>,
     dedupStorage: RecordStorage<string, Any>,
     dedupKey: string,
     current: Any,
@@ -308,6 +316,25 @@ export class InboxStorage {
       if (!finalized) {
         return { kind: "RETRY" };
       }
+    } else if (guard.status === "DELIVERED" && storedMessage.status === "TO_DELIVER") {
+      const delivered = Object.freeze({
+        ...storedMessage,
+        status: "DELIVERED" as const,
+      });
+      const repaired = await this.#durableCompareAndSet(
+        "Inbox record",
+        inboxStorage,
+        this.#messageKey(storedMessage.id),
+        storedGuard.record,
+        InboxRecords.write(delivered),
+      );
+      if (!repaired) {
+        return { kind: "RETRY" };
+      }
+
+      return this.#messageBlocks(delivered)
+        ? this.#duplicate(delivered)
+        : { kind: "CLAIM", expected, message };
     }
 
     return this.#messageBlocks(storedMessage)
@@ -474,7 +501,7 @@ export class InboxStorage {
       );
     }
 
-    return Object.freeze({ guard: guardState, message });
+    return Object.freeze({ guard: guardState, message, record: storedRecord });
   }
 
   #messageBlocks(message: Pick<InboxMessage, "status" | "keepUntil">): boolean {
@@ -523,8 +550,8 @@ export class InboxStorage {
   ): boolean {
     return (
       this.#sameTime(guard.keepUntil, message.keepUntil) &&
-      guard.status === "TO_DELIVER" &&
-      message.status === "DELIVERED"
+      ((guard.status === "TO_DELIVER" && message.status === "DELIVERED") ||
+        (guard.status === "DELIVERED" && message.status === "TO_DELIVER"))
     );
   }
 
@@ -651,6 +678,7 @@ interface WriteReturn {
 interface GuardMessage {
   readonly guard: DedupGuardState;
   readonly message: InboxMessage;
+  readonly record: Any;
 }
 
 type InboxConflict = "CALLER_INPUT" | "STORAGE_CORRUPTION";

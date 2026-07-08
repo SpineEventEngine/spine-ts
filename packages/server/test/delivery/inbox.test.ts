@@ -1951,6 +1951,7 @@ describe("Inbox", () => {
             shardTotal: 1,
             state: "FINAL",
             status: "DELIVERED",
+            keepUntilMs: new Date("2026-07-02T10:00:00.000Z").getTime(),
           }),
           "utf8",
         ),

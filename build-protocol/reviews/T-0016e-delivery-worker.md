@@ -1,23 +1,25 @@
 # T-0016e Review Log
 
-Status: first-round fixes applied
+Status: second-pass review fixes applied; reliability/docs re-review pending
 
 Scope: Delivery worker integration over existing inbox and shard storage,
 focused tests, and public docs.
 
-Implementation basis: `0913357`. The implementation adds the narrow direct
-shard drain requested by D-0063 and leaves all required review lanes pending for
-the orchestrating thread.
+Implementation/fix basis: original implementation `0913357`, first-round fix
+`8911166`, and the current second-pass fix. The implementation adds the narrow
+direct shard drain requested by D-0063. First-round review and targeted
+re-review have run; only the second-pass reliability and documentation fixes
+need final targeted re-review.
 
 ## Required Lanes
 
-| Lane                       | Reviewer sub-agent | Status  | Result |
-| -------------------------- | ------------------ | ------- | ------ |
-| Code style/maintainability | pending            | Pending |        |
-| Documentation completeness | pending            | Pending |        |
-| TypeScript/API docs        | pending            | Pending |        |
-| Security                   | pending            | Pending |        |
-| Performance/reliability    | pending            | Pending |        |
+| Lane                       | Reviewer sub-agent | Status                  | Result                                                                                                                                                                                                                                                                                                                                                   |
+| -------------------------- | ------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Code style/maintainability | recorded upstream  | Clean after re-review   | No remaining findings recorded for this lane.                                                                                                                                                                                                                                                                                                            |
+| Documentation completeness | recorded upstream  | Second-pass fix applied | First-round stale delivery-storage docs were fixed. Re-review then found `docs/architecture/README.md` still said delivery records were deferred; this pass updates it to durable inbox records, dedup guards, shard leases, and local `Delivery.drain()` while keeping scheduler/catch-up/transport-backed loops and retained attempt history deferred. |
+| TypeScript/API docs        | recorded upstream  | Clean after re-review   | Callback naming and public API docs fixes verified in first-round re-review.                                                                                                                                                                                                                                                                             |
+| Security                   | recorded upstream  | Clean after re-review   | Forged-marker trust issue verified fixed in first-round re-review.                                                                                                                                                                                                                                                                                       |
+| Performance/reliability    | recorded upstream  | Second-pass fix applied | First-round guard-before-row marker sequencing was fixed. Re-review then found the symmetric guard-delivered/row-pending duplicate-receive race still failed as corruption; this pass repairs that race and adds focused regression coverage.                                                                                                            |
 
 ## Implementation Notes
 
@@ -43,6 +45,16 @@ the orchestrating thread.
 | TypeScript/API docs               | P2       | `DeliveryDrainOptions.deliver` violated the callback naming rule.                                                                                                                                                                                                                                             | Renamed the public option to `onMessage` and updated tests plus public docs.                                                                                                                                                                                                                                |
 | TypeScript/API docs               | P2       | Public API docs and TypeDoc did not describe the new delivery worker surface and marker edge cases.                                                                                                                                                                                                           | Updated `docs/api/README.md`, package/developer docs, and TypeDoc for `Delivery.drain()`, `DeliveryDrainOptions`, `DeliveryEndpoint`, `DeliveryFailure`, `DeliveryRun`, `Inbox.markDelivered()`, and `InboxStorage.markDelivered()`.                                                                        |
 | Documentation completeness        | P2       | Public docs still said durable delivery storage was deferred.                                                                                                                                                                                                                                                 | Updated `docs/USER_GUIDE.md` and `docs/architecture/README.md` to state that durable inbox records, dedup guards, shard leases, and the local shard drain exist, while scheduler/catch-up/transport-backed loops and retained attempt history remain deferred.                                              |
+
+### Re-review So Far
+
+| Lane                       | Status                  | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Code style/maintainability | Clean                   | No remaining findings were returned after the first fix pass.                                                                                                                                                                                                                                                                                                                                                                                     |
+| TypeScript/API docs        | Clean                   | The `onMessage` rename and public API docs were accepted after first-round fixes.                                                                                                                                                                                                                                                                                                                                                                 |
+| Security                   | Clean                   | Exact-row marker validation and forged-marker coverage were accepted after first-round fixes.                                                                                                                                                                                                                                                                                                                                                     |
+| Performance/reliability    | Second-pass fix applied | Re-review found `markDelivered()` can persist a final `DELIVERED` dedup guard before the inbox-row CAS. A duplicate receive in that window saw guard `DELIVERED` with row `TO_DELIVER` and treated the normal race as corruption. This pass accepts the symmetric delivery-transition state only for the same guard/row identity and repairs the row to `DELIVERED` with an exact CAS; genuine identity or metadata mismatches still fail closed. |
+| Documentation completeness | Second-pass fix applied | Re-review found the architecture docs still described delivery records as deferred. This pass updates the storage-boundary text to the current durable inbox records, dedup guards, shard leases, and local `Delivery.drain()` scope, with scheduler/catch-up/transport-backed loops and retained attempt history still deferred.                                                                                                                 |
 
 ## Review Policy
 
