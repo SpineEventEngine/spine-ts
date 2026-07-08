@@ -8,6 +8,7 @@ import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-met
 
 import {
   defineEntityHandlers,
+  type DescriptorMessageSchema,
   describeEntityMetadata,
   HandlerMetadataError,
   HandlerMetadataRegistry,
@@ -196,14 +197,20 @@ describe("handler metadata", () => {
   });
 
   it("keeps explicit handler registration one-argument compatible by default", () => {
-    expectTypeOf<Parameters<HandlerRegistrationBuilder<TaskProjection>["assign"]>>().toEqualTypeOf<
-      [schema: typeof CommandSchema, methodName: HandlerMethodName<TaskProjection>]
-    >();
-    expectTypeOf<
-      Parameters<HandlerRegistrationBuilder<TaskProjection>["subscribe"]>
-    >().toEqualTypeOf<
-      [schema: typeof EventSchema, methodName: HandlerMethodName<TaskProjection>]
-    >();
+    type AssignParameters = Parameters<HandlerRegistrationBuilder<TaskProjection>["assign"]>;
+    type SubscribeParameters = Parameters<HandlerRegistrationBuilder<TaskProjection>["subscribe"]>;
+
+    expectTypeOf<AssignParameters["length"]>().toEqualTypeOf<2>();
+    expectTypeOf<AssignParameters[0]>().toExtend<DescriptorMessageSchema>();
+    expectTypeOf<typeof CommandSchema>().toExtend<AssignParameters[0]>();
+    expectTypeOf<AssignParameters[1]>().toExtend<HandlerMethodName<TaskProjection>>();
+    expectTypeOf<"assignCreate">().toExtend<AssignParameters[1]>();
+
+    expectTypeOf<SubscribeParameters["length"]>().toEqualTypeOf<2>();
+    expectTypeOf<SubscribeParameters[0]>().toExtend<DescriptorMessageSchema>();
+    expectTypeOf<typeof EventSchema>().toExtend<SubscribeParameters[0]>();
+    expectTypeOf<SubscribeParameters[1]>().toExtend<HandlerMethodName<TaskProjection>>();
+    expectTypeOf<"subscribeCreated">().toExtend<SubscribeParameters[1]>();
   });
 
   it("rejects method names that do not exist on the entity prototype", () => {

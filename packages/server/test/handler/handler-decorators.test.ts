@@ -543,10 +543,16 @@ describe("handler decorators", () => {
   });
 });
 
+type HandlerDecoratorContextOverrides = Partial<
+  Omit<ClassMethodDecoratorContext<object, HandlerFixtureMethod>, "metadata">
+> & {
+  metadata?: ClassMethodDecoratorContext<object, HandlerFixtureMethod>["metadata"] | undefined;
+};
+
 function decoratorContext(
-  overrides: Partial<ClassMethodDecoratorContext<object, HandlerFixtureMethod>>,
+  overrides: HandlerDecoratorContextOverrides,
 ): ClassMethodDecoratorContext<object, HandlerFixtureMethod> {
-  return {
+  const context = {
     kind: "method",
     name: "handler",
     static: false,
@@ -564,6 +570,8 @@ function decoratorContext(
     },
     ...overrides,
   };
+
+  return context as ClassMethodDecoratorContext<object, HandlerFixtureMethod>;
 }
 
 type HandlerFixtureMethod = () => void;

@@ -9,16 +9,26 @@ function readJson(path) {
 }
 
 describe("package metadata", () => {
-  it("runs proto generation before commands that consume generated modules", () => {
+  it("keeps standalone commands self-sufficient while verify publishes generated output once", () => {
     const rootPackage = readJson("package.json");
 
     expect(rootPackage.scripts["typecheck:build"]).toMatch(/^pnpm proto:generate && /);
-    expect(rootPackage.scripts.lint).toMatch(/^pnpm typecheck:build && /);
+    expect(rootPackage.scripts.lint).toMatch(/^pnpm proto:generate && /);
     expect(rootPackage.scripts["docs:api"]).toMatch(/^pnpm proto:generate && /);
     expect(rootPackage.scripts["docs:check"]).toMatch(/^pnpm proto:generate && /);
 
     const verify = rootPackage.scripts.verify;
-    expect(verify.indexOf("pnpm proto:generate")).toBeLessThan(verify.indexOf("pnpm typecheck"));
+    const generatedVerify = rootPackage.scripts["verify:generated"];
+
+    expect(verify.match(/pnpm proto:generate/gu)).toHaveLength(1);
+    expect(verify).toContain("pnpm verify:generated");
+    expect(generatedVerify).toContain("pnpm typecheck:generated");
+    expect(generatedVerify).toContain("pnpm lint:generated");
+    expect(generatedVerify).toContain("pnpm test:generated");
+    expect(generatedVerify).toContain("pnpm test:coverage:generated");
+    expect(generatedVerify).toContain("pnpm docs:check:generated");
+    expect(generatedVerify).toContain("pnpm proto:check-generated");
+    expect(generatedVerify).not.toContain("pnpm proto:generate");
   });
 
   it("exports generated proto modules with extensionless and .js ESM subpaths", () => {

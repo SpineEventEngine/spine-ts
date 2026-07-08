@@ -297,7 +297,7 @@ describe("generated handler registry ingestion", () => {
               record(
                 "command-assignment",
                 "assignCreate",
-                { typeName: "" } as typeof CommandSchema,
+                { typeName: "" } as unknown as typeof CommandSchema,
                 [EventSchema],
               ),
             ],
@@ -312,7 +312,7 @@ describe("generated handler registry ingestion", () => {
             stateSchema: ProjectionStateSchema,
             handlers: [
               record("command-assignment", "assignCreate", CommandSchema, [
-                { typeName: undefined } as typeof EventSchema,
+                { typeName: undefined } as unknown as typeof EventSchema,
               ]),
             ],
           },

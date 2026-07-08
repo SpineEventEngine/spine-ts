@@ -1,23 +1,15 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.mjs";
+import {
+  cleanupStagedTargets,
+  generatedTargets,
+  stageGeneratedTargets,
+} from "./proto-workflow.mjs";
 
 const defaultRepoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const generatedTargets = [
-  {
-    displayPath: "packages/proto/generated",
-    includeImports: false,
-    inputDirectory: "proto",
-  },
-  {
-    displayPath: "examples/todo/generated",
-    includeImports: true,
-    inputDirectory: "examples/todo/proto",
-  },
-];
 
 function parseArgs(argv) {
   const args = {
@@ -77,13 +69,6 @@ function runCommand(repoRoot, label, executable, args) {
   }
 
   return result;
-}
-
-function resolveBufExecutable(repoRoot) {
-  const executable = process.platform === "win32" ? "buf.cmd" : "buf";
-  const localBuf = join(repoRoot, "node_modules", ".bin", executable);
-
-  return existsSync(localBuf) ? localBuf : executable;
 }
 
 function assertGeneratedDirectorySafe(repoRoot, root, displayPath, options = {}) {
@@ -172,38 +157,6 @@ function compareGeneratedOutput(currentRoot, expectedRoot) {
   return { missing, unexpected, changed };
 }
 
-function createExpectedRoot(repoRoot, target) {
-  const tempRoot = mkdtempSync(join(tmpdir(), "spine-proto-generated-"));
-  const outputRoot = join(tempRoot, "generated");
-  const templatePath = join(tempRoot, "buf.gen.yaml");
-  const includeImports = target.includeImports ? ["    include_imports: true"] : [];
-
-  writeFileSync(
-    templatePath,
-    [
-      "version: v2",
-      "plugins:",
-      "  - local: protoc-gen-es",
-      `    out: ${outputRoot}`,
-      ...includeImports,
-      "    opt:",
-      "      - target=ts",
-      "      - import_extension=js",
-      "inputs:",
-      `  - directory: ${target.inputDirectory}`,
-      "",
-    ].join("\n"),
-  );
-
-  runCommand(repoRoot, `clean ${target.displayPath} generation`, resolveBufExecutable(repoRoot), [
-    "generate",
-    "--template",
-    templatePath,
-  ]);
-
-  return { tempRoot, outputRoot };
-}
-
 function printGeneratedDiff(diff) {
   for (const label of ["missing", "changed", "unexpected"]) {
     for (const path of diff[label].slice(0, 40)) {
@@ -227,7 +180,26 @@ function main() {
             expectedGeneratedRoot,
           },
         ];
-  const tempGenerations = [];
+  const staged =
+    expectedGeneratedRoot === undefined
+      ? stageGeneratedTargets({
+          repoRoot,
+        })
+      : {
+          stagedTargets: [],
+          status: 0,
+        };
+
+  if (staged.status !== 0) {
+    process.exit(staged.status);
+  }
+
+  const expectedRoots = new Map(
+    staged.stagedTargets.map((stagedTarget) => [
+      stagedTarget.target.displayPath,
+      stagedTarget.stagedOutputRoot,
+    ]),
+  );
 
   try {
     for (const target of targets) {
@@ -265,14 +237,10 @@ function main() {
         target.displayPath,
       );
       const generatedDirectoryNotIgnored = ignoredResult.status !== 0;
-      const tempGeneration =
-        target.expectedGeneratedRoot === undefined
-          ? createExpectedRoot(repoRoot, target)
-          : undefined;
-      const expectedRoot = target.expectedGeneratedRoot ?? tempGeneration.outputRoot;
+      const expectedRoot = target.expectedGeneratedRoot ?? expectedRoots.get(target.displayPath);
 
-      if (tempGeneration !== undefined) {
-        tempGenerations.push(tempGeneration);
+      if (expectedRoot === undefined) {
+        throw new Error(`Missing staged generated output for ${target.displayPath}.`);
       }
 
       const expectedSafetyFailures = assertGeneratedDirectorySafe(
@@ -329,9 +297,7 @@ function main() {
 
     console.log("Generated proto outputs are ignored, untracked, and freshly regenerated.");
   } finally {
-    for (const tempGeneration of tempGenerations) {
-      rmSync(tempGeneration.tempRoot, { recursive: true, force: true });
-    }
+    cleanupStagedTargets(staged.stagedTargets);
   }
 }
 

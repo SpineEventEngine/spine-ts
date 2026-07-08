@@ -563,7 +563,9 @@ function assertGeneratedRegistryFresh(): void {
   const program = ts.createProgram({
     rootNames: parsed.fileNames,
     options: parsed.options,
-    projectReferences: parsed.projectReferences,
+    ...(parsed.projectReferences === undefined
+      ? {}
+      : { projectReferences: parsed.projectReferences }),
   });
   const analysis = analyzeBuildHandlers(program);
 
@@ -591,7 +593,9 @@ function assertCompiledExampleFresh(): void {
     const program = ts.createProgram({
       rootNames: parsed.fileNames,
       options: parsed.options,
-      projectReferences: parsed.projectReferences,
+      ...(parsed.projectReferences === undefined
+        ? {}
+        : { projectReferences: parsed.projectReferences }),
     });
     const emit = program.emit();
     const diagnostics = [...ts.getPreEmitDiagnostics(program), ...emit.diagnostics];
