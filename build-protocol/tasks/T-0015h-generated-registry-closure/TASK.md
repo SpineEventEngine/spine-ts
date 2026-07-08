@@ -6,6 +6,7 @@ End: `2026-07-08 01:08 WEST`
 Baseline commit: `0b6abf9`
 Initial implementation commit: `63cf783`
 Final closure commit: `72d68fc`
+Integrated to main: `1dff3e0`
 Branch: `task/T-0015h-generated-registry-closure`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0015h-generated-registry-closure`
@@ -66,3 +67,6 @@ event-sourced aggregate guidance.
 - `corepack pnpm lint` passed, including cleanup enforcement.
 - `corepack pnpm format:check` passed.
 - `git diff --check` passed.
+- Post-merge focused cleanup-rule tests on `main` passed: 1 file, 92 tests.
+- Post-merge `corepack pnpm docs:check` and `corepack pnpm lint` passed on
+  `main`.
