@@ -4,6 +4,52 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+## D-0063: Start Delivery Worker As A Small Shard Drain
+
+Status: Accepted
+
+Date: 2026-07-08
+
+Decision: For T-0016e, add the first delivery worker as a small local shard
+drain over the existing durable inbox and shard registry. The worker claims one
+shard, reads `TO_DELIVER` inbox rows in stored order, invokes a supplied
+framework endpoint callback once per row, marks successful deliveries
+`DELIVERED`, leaves failed deliveries retryable, returns simple run statistics,
+and releases the shard in a `finally` path. The worker may add a narrow inbox
+status-update storage method, but must not introduce a broad scheduler,
+transport runtime, catch-up pipeline, delivery monitor hierarchy, batch
+listener, observer system, retained attempt-history store, or app-facing
+delivery API.
+
+Rationale: Spine JVM `Delivery.deliverMessagesFrom()` claims a shard via
+`ShardedWorkRegistry`, reads inbox pages, dispatches live messages through
+target deliveries, records delivered rows through a conveyor flush, and releases
+the shard. Spine TS already has inbox persistence and shard sessions, but not
+the worker handoff. A small shard drain completes the missing boundary while
+keeping the server module familiar and avoiding the oversized JVM delivery
+centerpiece before transport, catch-up, and scheduling tasks justify it.
+
+Alternatives considered:
+
+- Port JVM delivery stations, conveyor, monitor, observers, catch-up, and
+  maintenance now. Rejected as overbroad for the readiness slice and contrary to
+  the current simplicity guardrail.
+- Keep delivery storage-only and defer worker dispatch again. Rejected because
+  T-0016e exists to prove the durable inbox can actually hand work to framework
+  endpoints.
+- Expose direct app-facing delivery helpers. Rejected because delivery remains
+  framework-owned; end-user application code should not manage framework
+  internals.
+
+Consequences:
+
+- Documentation must state that this is a local direct worker boundary, not a
+  production scheduler or transport-backed delivery loop.
+- Later transport/runtime tasks can invoke the same drain/worker API without
+  leaking ZeroMQ or process orchestration details into delivery storage.
+- Reviewers must flag attempts to add catch-up, batching, broad monitors,
+  app-facing delivery APIs, or retained attempt stores in this task.
+
 ## D-0062: Keep T-0016d Subscriptions In-Memory And Idempotent
 
 Status: Accepted
