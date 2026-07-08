@@ -1,6 +1,6 @@
 # T-0016c Review Log
 
-Status: all required lanes clean; final verification passed; pending integration
+Status: all required lanes clean; final verification passed; integrated to `main`
 
 Scope: query-readiness closure for `QueryService.Read`, direct `Stand` version
 metadata behavior, focused tests, and public docs.
@@ -29,7 +29,7 @@ metadata behavior, focused tests, and public docs.
     clean;
   - final verification passed unsandboxed after the sandbox denied local
     HTTP/2 listen and ZeroMQ IPC operations;
-  - remaining state is integration.
+  - integrated to `main` in merge commit `220f5df`.
 
 ## Required Lanes
 
@@ -119,6 +119,10 @@ metadata behavior, focused tests, and public docs.
     coverage at 94.95% statements and 90.11% branches, TypeDoc completing with
     the existing invalid-`origin` warning, and generated proto outputs
     confirmed ignored, untracked, and freshly regenerated.
+- Main integration:
+  - `task/T-0016c-query-readiness` merged into `main` as `220f5df`;
+  - post-merge unsandboxed `corepack pnpm verify` passed with the same 50 test
+    files, 836 tests, and 94.95% statement / 90.11% branch coverage.
 
 ## Review Policy
 

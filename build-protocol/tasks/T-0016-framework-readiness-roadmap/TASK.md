@@ -211,6 +211,8 @@ when available.
 
 ### T-0016c Query Readiness And Stand Metadata
 
+Status: integrated into `main` with merge commit `220f5df`.
+
 Acceptance criteria:
 
 - Query handling supports the documented minimal Spine query profile or rejects
