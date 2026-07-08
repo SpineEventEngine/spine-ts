@@ -4,6 +4,45 @@ Navigation: [README](README.md)
 
 Future implementation must append every decision here or to a task-specific decision file linked from here.
 
+## D-0062: Keep T-0016d Subscriptions In-Memory And Idempotent
+
+Status: Accepted
+
+Date: 2026-07-08
+
+Decision: For T-0016d, keep `SubscriptionService` as a thin adapter over
+context-owned `Stand` subscriptions. A subscription is created as an inactive
+in-memory service record, activation attaches that record to the context
+`Stand`, cancellation removes the record idempotently, and slow consumers are
+closed when the bounded update queue is exceeded. Unknown subscription
+activation completes without updates, and unknown or missing-ID cancellation
+returns OK.
+
+Rationale: Current Spine JVM `SubscriptionService` delegates
+`subscribe`/`activate`/`cancel` to `Stand`; `Stand` validates topics and
+subscriptions against a subscription registry. Spine TS has the same small
+service/Stand split but does not yet have JVM's full durable/server-side
+subscription registry model. Completing unknown activation streams and treating
+unknown cancellation as OK gives the first Connect/Node surface deterministic
+client cleanup behavior without adding a speculative durable subscription
+store.
+
+Alternatives considered:
+
+- Add a durable subscription store now. Rejected as broader than T-0016d and
+  premature before delivery worker and transport-backed runtime tasks.
+- Match JVM unknown-subscription validation exactly and fail activation/cancel
+  for missing records. Rejected for this slice because the current async
+  iterator API already uses stream completion for unknown activation, and
+  idempotent cancellation is simpler for local client cleanup.
+
+Consequences:
+
+- Documentation must explicitly call subscription state process-local and
+  in-memory.
+- Later server lifecycle/runtime tasks may replace the service-local map with a
+  richer registry, but must preserve tenant checks and cleanup guarantees.
+
 ## D-0061: Keep T-0016c Query Readiness To The Minimal Explicit Profile
 
 Status: Accepted
