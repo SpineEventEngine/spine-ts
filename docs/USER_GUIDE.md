@@ -179,17 +179,19 @@ remain later slices.
   registries. The server metadata APIs preserve entity tags and explicit
   handler declarations now, but no runtime registry consumes them yet.
 - Default repository construction from entity classes, system context
-  construction, import buses, richer gRPC service execution, tenant index
+  construction, richer gRPC service execution, tenant index
   persistence, ZeroMQ endpoint topology, broker process supervision, retry
   workers, durable delivery storage, transport-backed service execution,
   durable production storage, and broader production runtime hardening.
+  Event import and `ImportBus` are removed from the plan under ADR 0001 D1,
+  rather than deferred runtime work.
 - Built bounded contexts can invoke aggregate command assignees that update
   state in framework-owned transactions and return generated domain events, then
   deliver stored aggregate-produced events to projection event subscribers that
   update read-side state through `Stand`, including tenant-scoped projection
   updates from the command tenant. Other handler/runtime execution remains
   deferred, including process-manager reactions, broader subscriber/reactor
-  delivery semantics, and import/catch-up flows.
+  delivery semantics, and catch-up/read-side recovery flows.
 
 ## Type Registry
 
@@ -376,9 +378,8 @@ state.
 
 ## Entity Family Marker Classes
 
-Extend `Aggregate`, `Projection`, or `ProcessManager` when code needs the
-server-side OOP family type now, before runtime repositories and dispatch are
-available:
+Extend `Aggregate`, `Projection`, or `ProcessManager` when code needs runtime
+identity and classification seams used by repositories and built contexts:
 
 ```ts
 import { Aggregate, Projection, ProcessManager } from "@spine-ts/server";
@@ -391,8 +392,9 @@ class TaskWorkflow extends ProcessManager<string, typeof TaskWorkflowSchema, num
 new TaskAggregate({ id, schema: TaskStateSchema, state, version: 1n }).entityFamily; // "aggregate"
 ```
 
-These classes inherit `TransactionalEntity` behavior and expose only stable
-family identity through `entityFamily`. They do not add public transaction
+These classes inherit `TransactionalEntity` behavior and expose stable family
+identity through `entityFamily` for repository and built-context assembly. They
+do not add public transaction
 mutators, Java builders, event history, snapshots, subscriptions, command
 posting, query clients, process workflow execution, handler invocation, storage,
 buses, or lifecycle events.

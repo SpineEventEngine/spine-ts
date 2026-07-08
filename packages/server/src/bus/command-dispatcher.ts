@@ -2,11 +2,11 @@ import type { Command } from "@spine-ts/proto";
 import type { MessageSchema } from "@spine-ts/core";
 
 /**
- * Small unicast command-dispatch seam for later repository/runtime owners.
+ * Small unicast command-dispatch seam for bus and repository adapters.
  *
- * Dispatchers declare the command message schemas they accept and perform the
- * actual handling behind the bus seam. The bus does not instantiate entities
- * or invoke entity methods directly.
+ * Dispatchers declare the command message schemas they accept and perform
+ * handling behind the bus seam. Repository-backed adapters own entity loading
+ * and method invocation; the bus only routes accepted command envelopes.
  */
 export interface CommandDispatcher {
   /** Generated command message schemas accepted by this dispatcher. */

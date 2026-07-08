@@ -211,8 +211,8 @@ Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field
 routing hints, field metadata, and the descriptor-derived `EntityMetadata`
-contract for handler registration, transaction validation, and later repository
-assembly. Column metadata is exposed only for projection/process-manager
+contract for handler registration, transaction validation, repository assembly,
+and bounded-context assembly. Column metadata is exposed only for projection/process-manager
 schemas, matching the underlying Spine option contract. Server transition
 validation exports include `validateEntityStateTransition()`,
 `EntityStateTransitionValidationRequest`, and

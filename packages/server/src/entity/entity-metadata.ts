@@ -55,7 +55,7 @@ export interface FirstFieldRoutingHint<Field extends DescField = DescField> {
   readonly field: DescriptorFieldMetadata<Field>;
 }
 
-/** Descriptor-derived entity metadata used by later runtime registration tasks. */
+/** Descriptor-derived entity metadata used by handler, repository, and context assembly. */
 export interface EntityMetadata<Schema extends DescriptorMessageSchema = DescriptorMessageSchema> {
   /** Generated Protobuf-ES schema describing the entity state message. */
   readonly schema: Schema;

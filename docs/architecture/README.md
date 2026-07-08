@@ -322,7 +322,8 @@ surface:
   starting context assembly;
 - `ContextSpec` is a framework-owned immutable value exposed through
   `builder.spec` and `context.spec`; it carries the validated bounded-context
-  name, tenant mode, and event-storage metadata for future runtime work;
+  name, tenant mode, and event-storage metadata used when
+  `withStorageFactory()` creates the context `EventStore`;
 - `BoundedContextBuilder.addCommandDispatcher()` /
   `removeCommandDispatcher()` and `addEventDispatcher()` /
   `removeEventDispatcher()` collect dispatchers for the context being built;

@@ -622,8 +622,9 @@ maps, sets, class instances, and proxies are rejected. The exported
 `PlainEntityVersionMetadata<T>` type helper preserves ordinary plain metadata
 interfaces at entity input boundaries while rejecting known non-plain types such
 as `Date`. State and version access return cloned snapshots so caller mutation
-does not mutate stored entity state. Protected replacement hooks exist only for
-later framework-owned subclasses; there are no public state setters, Java
+does not mutate stored entity state. Protected replacement hooks are current
+framework-owned seams used by `TransactionalEntity` and repository code to
+apply accepted drafts; there are no public state setters, Java
 builders, automatic version increments, transactions, handler invocation,
 repository writes, storage calls, lifecycle events, routing, queries, buses,
 transports, or global runtime state.

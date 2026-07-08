@@ -97,3 +97,22 @@ Status: completed
 - `corepack pnpm format:check` passed.
 - `git diff --check` passed.
 - `corepack pnpm typecheck:build` passed.
+
+## Final Stale-Wording Follow-Up
+
+Status: completed
+
+- P2 deferred import-bus wording: fixed in active user-guide deferred scope.
+  Event import / `ImportBus` is now documented as removed under ADR 0001 D1
+  rather than deferred future runtime work.
+- P2 current-runtime ownership wording: fixed across entity family guidance,
+  protected entity replacement hooks, entity metadata docs/JSDoc, dispatcher
+  JSDoc, and bounded-context storage metadata docs.
+
+### Verification
+
+- `corepack pnpm docs:check` passed. TypeDoc emitted the existing local warning
+  that git remote `origin` is invalid for source links.
+- `corepack pnpm format:check` passed.
+- `git diff --check` passed.
+- `corepack pnpm typecheck:build` passed.
