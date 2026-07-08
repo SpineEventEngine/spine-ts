@@ -417,7 +417,8 @@ The following runtime pieces are still deferred to later explicit tasks:
 - richer query filtering, event subscriptions, and durable subscription
   recovery;
 - system-context pairing and broad server/gRPC lifecycle; and
-- ZeroMQ endpoint topology and transport-backed runtime execution.
+- ZeroMQ endpoint topology and production transport-backed worker execution
+  beyond the current local `RuntimeTransportBinding`.
 
 ## Server Runtime Closure
 
@@ -452,17 +453,20 @@ arrays and planner-local worker IDs; they do not retain entity names, handler
 names, raw readiness metadata, or duplicate full transport contracts on each
 route. `RuntimeTransportBinding` is the first executable transport bridge over
 that plan: it registers command routes through `SignalTransport.respond()`,
-event routes through `SignalTransport.subscribe()`, validates incoming
-generated Spine command/event envelope shape and enclosed message type URL, and
-queues accepted callbacks through `SingleProcessServerRuntime`. Its close handle
-is idempotent and closes transport registrations before the runtime. The package
-root now exports a small executable bus layer, direct Stand, repository-backed
-handler invocation through built contexts, command payload validation and
-refusal/Ack mapping through `SpineServices`, the `SpineServices` route
-registrar, and this local runtime transport binding. It still does not export a
-broad server lifecycle, transport endpoint runner, integration broker, durable
-retry owner, process supervisor, event storage policy beyond current seams, or
-durable subscription store as part of this closure.
+event routes through `SignalTransport.subscribe()`, checks incoming generated
+Spine command/event envelope shape and enclosed message type URL, parses
+accepted envelopes into clean generated messages before enqueue, and queues
+accepted callbacks through `SingleProcessServerRuntime`. Its close handle is
+idempotent, stops binding intake before unregistering transport handles, attempts
+every transport registration close even after one rejects, and closes the
+runtime after transport registrations. The package root now exports a small
+executable bus layer, direct Stand, repository-backed handler invocation through
+built contexts, command payload validation and refusal/Ack mapping through
+`SpineServices`, the `SpineServices` route registrar, and this local runtime
+transport binding. It still does not export a broad server lifecycle, transport
+endpoint runner, integration broker, durable retry owner, process supervisor,
+event storage policy beyond current seams, or durable subscription store as part
+of this closure.
 
 The architectural consequence is that later work must add the remaining
 collaborators as explicit tasks at their own seams. Event intake and broader

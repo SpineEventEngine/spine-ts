@@ -2,7 +2,7 @@
 
 Status: DONE
 
-Commit: pending at report creation
+Commit: pending review-fix commit
 
 ## Summary
 
@@ -14,6 +14,10 @@ Implemented the narrow transport-backed local runtime binding:
   publish/subscribe semantics from `ServerRuntimeRoutingPlan`.
 - Validated generated Spine command/event envelope shape and enclosed
   `message.typeUrl` before runtime intake.
+- Review-fix pass now parses accepted generated command/event envelopes into
+  clean generated messages before enqueue, refuses command/event accept paths
+  once close starts, and makes rejected close attempts retryable after trying
+  all registered transport handles.
 - Enqueued accepted command/event callbacks through
   `SingleProcessServerRuntime`.
 - Returned an idempotent close handle that closes transport registrations before
@@ -46,6 +50,9 @@ Implemented the narrow transport-backed local runtime binding:
 - Focused runtime binding:
   `pnpm --config.verify-deps-before-run=false vitest run packages/server/test/runtime/runtime-transport.test.ts`
   passed with 1 file and 8 tests.
+- Review-fix focused runtime binding:
+  `pnpm --config.verify-deps-before-run=false vitest run packages/server/test/runtime/runtime-transport.test.ts`
+  passed with 1 file and 11 tests.
 - Focused runtime plus local IPC:
   `pnpm --config.verify-deps-before-run=false vitest run packages/server/test/runtime packages/transport/test/zeromq`
   passed natively with 6 files and 47 tests. The same command failed in the
@@ -59,6 +66,23 @@ Implemented the narrow transport-backed local runtime binding:
 - Native `pnpm --config.verify-deps-before-run=false verify`: passed. Full
   tests passed with 52 files and 868 tests. Coverage passed with 94.92%
   statements, 90.15% branches, 97.68% functions, and 94.91% lines. TypeDoc
+  completed with the existing invalid-`origin` source-link warning; API export
+  checks passed with 196 server exports; proto lint passed; generated proto
+  outputs were confirmed ignored, untracked, and freshly regenerated.
+- Review-fix required verification passed:
+  `pnpm --config.verify-deps-before-run=false vitest run packages/server/test/runtime/runtime-transport.test.ts`
+  with 1 file and 11 tests;
+  `pnpm --config.verify-deps-before-run=false typecheck`;
+  `pnpm --config.verify-deps-before-run=false lint`;
+  `pnpm --config.verify-deps-before-run=false format:check`; and
+  `pnpm --config.verify-deps-before-run=false docs:check` with the existing
+  invalid-`origin` TypeDoc source-link warning.
+- Review-fix broader sandboxed
+  `pnpm --config.verify-deps-before-run=false verify` failed only in local
+  IPC/loopback tests with ZeroMQ `Operation not permitted` and
+  `listen EPERM: operation not permitted 127.0.0.1`; native rerun passed. Plain
+  tests passed with 52 files and 871 tests. Coverage passed with 94.78%
+  statements, 90.04% branches, 97.70% functions, and 94.77% lines. TypeDoc
   completed with the existing invalid-`origin` source-link warning; API export
   checks passed with 196 server exports; proto lint passed; generated proto
   outputs were confirmed ignored, untracked, and freshly regenerated.

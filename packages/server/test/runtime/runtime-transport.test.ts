@@ -191,6 +191,50 @@ describe("RuntimeTransportBinding", () => {
     await handle.close();
   });
 
+  it("rejects malformed generated command envelopes without runtime intake", async () => {
+    const transport = new InMemorySignalTransport();
+    const runtime = new SingleProcessServerRuntime();
+    transport.bindRuntime(runtime);
+    const plan = createRuntimePlan();
+    const calls: Command[] = [];
+    const handle = await RuntimeTransportBinding.open({
+      plan,
+      runtime,
+      transport,
+      onCommand: (command) => {
+        calls.push(command);
+      },
+      onEvent: () => undefined,
+    });
+
+    const result = await transport.request({
+      topic: requireFirst(plan.commands.topics),
+      envelope: {
+        $typeName: CommandSchema.typeName,
+        message: {
+          $typeName: AnySchema.typeName,
+          typeUrl: deriveTypeUrl(CommandSchema),
+          value: "not bytes",
+        },
+      },
+    });
+
+    expect(result).toMatchObject({
+      status: "failed",
+      signalKind: "command",
+      failure: {
+        code: "MALFORMED_ENVELOPE",
+        diagnostics: {
+          reason: "malformed generated envelope",
+          messageType: deriveTypeUrl(CommandSchema),
+        },
+      },
+    });
+    expect(calls).toEqual([]);
+
+    await handle.close();
+  });
+
   it("rejects malformed event envelopes before runtime intake", async () => {
     const transport = new InMemorySignalTransport();
     const runtime = new SingleProcessServerRuntime();
@@ -281,6 +325,74 @@ describe("RuntimeTransportBinding", () => {
     });
   });
 
+  it("refuses callbacks while transport handles are closing", async () => {
+    const log: string[] = [];
+    const closeBlock = deferred();
+    const transport = new InMemorySignalTransport(
+      log,
+      (subscription, closeLog, runtimeState) =>
+        new BlockingCloseHandle(subscription, closeLog, runtimeState, closeBlock.promise),
+    );
+    const runtime = new SingleProcessServerRuntime();
+    transport.bindRuntime(runtime);
+    const plan = createRuntimePlan();
+    const calls: string[] = [];
+    const handle = await RuntimeTransportBinding.open({
+      plan,
+      runtime,
+      transport,
+      onCommand: () => {
+        calls.push("command");
+      },
+      onEvent: () => {
+        calls.push("event");
+      },
+    });
+
+    const closePromise = handle.close();
+    await Promise.resolve();
+
+    await expect(
+      transport.request({
+        topic: requireFirst(plan.commands.topics),
+        envelope: createCommandEnvelope(),
+      }),
+    ).resolves.toMatchObject({
+      status: "failed",
+      signalKind: "command",
+      failure: {
+        code: "RUNTIME_NOT_ACCEPTING",
+        diagnostics: {
+          runtimeState: "running",
+          reason: "runtime is not accepting work",
+        },
+      },
+    });
+    await expect(
+      transport.publish({
+        topic: requireFirst(plan.events.topics),
+        envelope: createEventEnvelope(),
+      }),
+    ).rejects.toMatchObject({
+      result: {
+        status: "failed",
+        signalKind: "event",
+        failure: {
+          code: "RUNTIME_NOT_ACCEPTING",
+        },
+      },
+    });
+    expect(calls).toEqual([]);
+    expect(log).toEqual([
+      `handle:${requireFirst(plan.commands.subscriptions).descriptorKey}:running`,
+    ]);
+
+    closeBlock.resolve();
+    await closePromise;
+
+    expect(runtime.state).toBe("closed");
+  });
+
   it("accepts valid envelopes and runs command and event callbacks through the runtime", async () => {
     const transport = new InMemorySignalTransport();
     const runtime = new SingleProcessServerRuntime();
@@ -356,6 +468,43 @@ describe("RuntimeTransportBinding", () => {
     expect(transport.closeCalls).toBe(0);
   });
 
+  it("continues closing handles after a close failure and allows retry", async () => {
+    const log: string[] = [];
+    const transport = new InMemorySignalTransport(log, (subscription, closeLog, runtimeState) => {
+      if (subscription.topic.signalKind === "command") {
+        return new FailOnceCloseHandle(subscription, closeLog, runtimeState);
+      }
+
+      return new InMemoryHandle(subscription, closeLog, runtimeState);
+    });
+    const runtime = new SingleProcessServerRuntime();
+    transport.bindRuntime(runtime);
+    const plan = createRuntimePlan();
+    const handle = await RuntimeTransportBinding.open({
+      plan,
+      runtime,
+      transport,
+      onCommand: () => undefined,
+      onEvent: () => undefined,
+    });
+
+    await expect(handle.close()).rejects.toThrow("test command handle close failed");
+
+    expect(log).toEqual([
+      `handle:${requireFirst(plan.commands.subscriptions).descriptorKey}:running:fail`,
+      `handle:${requireFirst(plan.events.subscriptions).descriptorKey}:running`,
+    ]);
+    expect(runtime.state).toBe("closed");
+
+    await handle.close();
+
+    expect(log).toEqual([
+      `handle:${requireFirst(plan.commands.subscriptions).descriptorKey}:running:fail`,
+      `handle:${requireFirst(plan.events.subscriptions).descriptorKey}:running`,
+      `handle:${requireFirst(plan.commands.subscriptions).descriptorKey}:closed:retry`,
+    ]);
+  });
+
   it("closes the runtime when transport registration fails during open", async () => {
     const runtime = new SingleProcessServerRuntime();
     const plan = createRuntimePlan();
@@ -426,8 +575,28 @@ function requireFirst<Value>(values: readonly Value[]): Value {
   return first;
 }
 
+function deferred() {
+  let resolve!: () => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<void>((promiseResolve, promiseReject) => {
+    resolve = () => {
+      promiseResolve();
+    };
+    reject = promiseReject;
+  });
+
+  return { promise, resolve, reject };
+}
+
+type TestHandleFactory = <Kind extends TransportSignalKind>(
+  subscription: TransportSubscription<Kind>,
+  log: string[],
+  runtimeState: () => string,
+) => TransportSubscriptionHandle<Kind>;
+
 class InMemorySignalTransport implements SignalTransport {
   readonly #log: string[];
+  readonly #handleFactory: TestHandleFactory;
   readonly #requestHandlers = new Map<string, RequestTransportHandler>();
   readonly #publishHandlers = new Map<string, PublishTransportHandler>();
   readonly #requestSubscriptions: TransportSubscription<"command">[] = [];
@@ -436,8 +605,13 @@ class InMemorySignalTransport implements SignalTransport {
 
   closeCalls = 0;
 
-  constructor(log: string[] = []) {
+  constructor(
+    log: string[] = [],
+    handleFactory: TestHandleFactory = (subscription, closeLog, runtimeState) =>
+      new InMemoryHandle(subscription, closeLog, runtimeState),
+  ) {
     this.#log = log;
+    this.#handleFactory = handleFactory;
   }
 
   bindRuntime(runtime: SingleProcessServerRuntime): void {
@@ -477,7 +651,7 @@ class InMemorySignalTransport implements SignalTransport {
     );
 
     return Promise.resolve(
-      new InMemoryHandle(subscription, this.#log, () => this.#runtime?.state ?? "unknown"),
+      this.#handleFactory(subscription, this.#log, () => this.#runtime?.state ?? "unknown"),
     );
   }
 
@@ -506,7 +680,7 @@ class InMemorySignalTransport implements SignalTransport {
     );
 
     return Promise.resolve(
-      new InMemoryHandle(subscription, this.#log, () => this.#runtime?.state ?? "unknown"),
+      this.#handleFactory(subscription, this.#log, () => this.#runtime?.state ?? "unknown"),
     );
   }
 
@@ -541,6 +715,68 @@ class InMemoryHandle<
 
     this.#closed = true;
     this.#log.push(`handle:${this.subscription.descriptorKey}:${this.#runtimeState()}`);
+    return Promise.resolve();
+  }
+}
+
+class BlockingCloseHandle<
+  Kind extends TransportSignalKind,
+> implements TransportSubscriptionHandle<Kind> {
+  readonly subscription: TransportSubscription<Kind>;
+  readonly #log: string[];
+  readonly #runtimeState: () => string;
+  readonly #block: Promise<void>;
+  #closed = false;
+
+  constructor(
+    subscription: TransportSubscription<Kind>,
+    log: string[],
+    runtimeState: () => string,
+    block: Promise<void>,
+  ) {
+    this.subscription = subscription;
+    this.#log = log;
+    this.#runtimeState = runtimeState;
+    this.#block = block;
+  }
+
+  async close(): Promise<void> {
+    if (this.#closed) {
+      return;
+    }
+
+    this.#closed = true;
+    this.#log.push(`handle:${this.subscription.descriptorKey}:${this.#runtimeState()}`);
+    await this.#block;
+  }
+}
+
+class FailOnceCloseHandle<
+  Kind extends TransportSignalKind,
+> implements TransportSubscriptionHandle<Kind> {
+  readonly subscription: TransportSubscription<Kind>;
+  readonly #log: string[];
+  readonly #runtimeState: () => string;
+  #attempt = 0;
+
+  constructor(
+    subscription: TransportSubscription<Kind>,
+    log: string[],
+    runtimeState: () => string,
+  ) {
+    this.subscription = subscription;
+    this.#log = log;
+    this.#runtimeState = runtimeState;
+  }
+
+  close(): Promise<void> {
+    this.#attempt += 1;
+    if (this.#attempt === 1) {
+      this.#log.push(`handle:${this.subscription.descriptorKey}:${this.#runtimeState()}:fail`);
+      return Promise.reject(new Error("test command handle close failed"));
+    }
+
+    this.#log.push(`handle:${this.subscription.descriptorKey}:${this.#runtimeState()}:retry`);
     return Promise.resolve();
   }
 }

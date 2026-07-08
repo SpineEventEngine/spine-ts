@@ -1,4 +1,4 @@
-import { clone } from "@bufbuild/protobuf";
+import { clone, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { CommandSchema, EventSchema, type Command, type Event } from "@spine-ts/proto";
 import type {
   SignalTransport,
@@ -48,7 +48,10 @@ export interface RuntimeTransportBindingInput {
 
 /** Idempotent close handle returned by a runtime transport binding. */
 export interface RuntimeTransportBindingHandle {
-  /** Close transport registrations first, then close the bound runtime. */
+  /**
+   * Stop transport intake, close transport registrations, then close the bound
+   * runtime.
+   */
   close(): Promise<void>;
 }
 
@@ -69,7 +72,17 @@ export class RuntimeTransportEnvelopeError extends Error {
 export const RuntimeTransportBinding: Readonly<{
   /** Create the immutable runtime routing plan used by this binding. */
   plan(input: ServerRuntimeRoutingPlanInput): ServerRuntimeRoutingPlan;
-  /** Register command and event routes with the supplied transport. */
+  /**
+   * Register command and event routes with a same-host/local-only supplied
+   * transport.
+   *
+   * The binding does not own endpoint names, filesystem placement, or remote
+   * access policy; those remain adapter-owned behind `SignalTransport`.
+   * Inbound generated Spine command/event envelopes are parsed into clean
+   * generated messages and validated before handler callbacks are enqueued.
+   * Closing first stops binding intake, then closes transport registrations,
+   * and finally closes the runtime after already accepted work drains.
+   */
   open(input: RuntimeTransportBindingInput): Promise<RuntimeTransportBindingHandle>;
 }> = Object.freeze({
   plan(input: ServerRuntimeRoutingPlanInput): ServerRuntimeRoutingPlan {
@@ -86,6 +99,7 @@ export const RuntimeTransportBinding: Readonly<{
 class RuntimeTransportBinder {
   readonly #input: RuntimeTransportBindingInput;
   readonly #handles: TransportSubscriptionHandle[] = [];
+  readonly #gate = new RuntimeTransportBindingGate();
 
   constructor(input: RuntimeTransportBindingInput) {
     this.#input = input;
@@ -97,9 +111,9 @@ class RuntimeTransportBinder {
       await this.#registerCommands();
       await this.#registerEvents();
 
-      return new RuntimeTransportHandle(this.#handles, this.#input.runtime);
+      return new RuntimeTransportHandle(this.#handles, this.#input.runtime, this.#gate);
     } catch (error) {
-      await new RuntimeTransportHandle(this.#handles, this.#input.runtime).close();
+      await new RuntimeTransportHandle(this.#handles, this.#input.runtime, this.#gate).close();
       throw error;
     }
   }
@@ -134,6 +148,10 @@ class RuntimeTransportBinder {
   }
 
   #acceptCommand(route: CommandRuntimeRoutingRoute, envelope: unknown): SignalIntakeResult {
+    if (!this.#gate.isAccepting) {
+      return runtimeFailure("command", this.#input);
+    }
+
     const command = validateCommandEnvelope(envelope, route.message.typeUrl, this.#input);
 
     if (command.status === "failed") {
@@ -155,6 +173,10 @@ class RuntimeTransportBinder {
   }
 
   #acceptEvent(route: EventRuntimeRoutingRoute, envelope: unknown): void {
+    if (!this.#gate.isAccepting) {
+      throw new RuntimeTransportEnvelopeError(runtimeFailure("event", this.#input));
+    }
+
     const event = validateEventEnvelope(envelope, route.message.typeUrl, this.#input);
 
     if (event.status === "failed") {
@@ -174,34 +196,72 @@ class RuntimeTransportBinder {
   }
 }
 
+class RuntimeTransportBindingGate {
+  #state: "open" | "closing" | "closed" = "open";
+
+  get isAccepting(): boolean {
+    return this.#state === "open";
+  }
+
+  beginClose(): void {
+    if (this.#state === "open") {
+      this.#state = "closing";
+    }
+  }
+
+  finishClose(): void {
+    this.#state = "closed";
+  }
+}
+
 class RuntimeTransportHandle implements RuntimeTransportBindingHandle {
   readonly #handles: readonly TransportSubscriptionHandle[];
   readonly #runtime: SingleProcessServerRuntime;
+  readonly #gate: RuntimeTransportBindingGate;
   #close: Promise<void> | undefined;
 
   constructor(
     handles: readonly TransportSubscriptionHandle[],
     runtime: SingleProcessServerRuntime,
+    gate: RuntimeTransportBindingGate,
   ) {
     this.#handles = Object.freeze([...handles]);
     this.#runtime = runtime;
+    this.#gate = gate;
   }
 
   close(): Promise<void> {
     if (this.#close === undefined) {
-      this.#close = this.#closeAll();
+      this.#close = this.#closeAll().catch((error: unknown) => {
+        this.#close = undefined;
+        throw error;
+      });
     }
 
     return this.#close;
   }
 
   async #closeAll(): Promise<void> {
-    try {
-      for (const handle of this.#handles) {
+    this.#gate.beginClose();
+    const failures: Error[] = [];
+
+    for (const handle of this.#handles) {
+      try {
         await handle.close();
+      } catch (error) {
+        failures.push(toError(error));
       }
-    } finally {
+    }
+
+    try {
       await this.#runtime.close();
+      this.#gate.finishClose();
+    } catch (error) {
+      failures.push(toError(error));
+    }
+
+    if (failures.length > 0) {
+      throw closeFailure(failures);
     }
   }
 }
@@ -214,7 +274,14 @@ function validateCommandEnvelope(
   expectedTypeUrl: string,
   input: RuntimeTransportBindingInput,
 ): EnvelopeResult<"command", Command> {
-  return validateEnvelope("command", CommandSchema.typeName, envelope, expectedTypeUrl, input);
+  return validateEnvelope(
+    "command",
+    CommandSchema.typeName,
+    envelope,
+    expectedTypeUrl,
+    input,
+    (record) => parseCommandEnvelope(record),
+  );
 }
 
 function validateEventEnvelope(
@@ -222,7 +289,14 @@ function validateEventEnvelope(
   expectedTypeUrl: string,
   input: RuntimeTransportBindingInput,
 ): EnvelopeResult<"event", Event> {
-  return validateEnvelope("event", EventSchema.typeName, envelope, expectedTypeUrl, input);
+  return validateEnvelope(
+    "event",
+    EventSchema.typeName,
+    envelope,
+    expectedTypeUrl,
+    input,
+    (record) => parseEventEnvelope(record),
+  );
 }
 
 function validateEnvelope<Kind extends "command" | "event", Envelope>(
@@ -231,6 +305,7 @@ function validateEnvelope<Kind extends "command" | "event", Envelope>(
   envelope: unknown,
   expectedTypeUrl: string,
   input: RuntimeTransportBindingInput,
+  parse: (envelope: Record<string, unknown>) => Envelope | undefined,
 ): EnvelopeResult<Kind, Envelope> {
   if (!isRecord(envelope)) {
     return envelopeFailure(signalKind, input, "envelope must be an object");
@@ -255,10 +330,40 @@ function validateEnvelope<Kind extends "command" | "event", Envelope>(
     return envelopeFailure(signalKind, input, "unexpected message type URL", messageType);
   }
 
+  const parsed = parse(envelope);
+
+  if (parsed === undefined) {
+    return envelopeFailure(signalKind, input, "malformed generated envelope", messageType);
+  }
+
   return {
     status: "accepted",
-    envelope: envelope as Envelope,
+    envelope: parsed,
   };
+}
+
+function parseCommandEnvelope(envelope: Record<string, unknown>): Command | undefined {
+  try {
+    return fromBinary(
+      CommandSchema,
+      toBinary(CommandSchema, envelope as Command, { writeUnknownFields: false }),
+      { readUnknownFields: false },
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+function parseEventEnvelope(envelope: Record<string, unknown>): Event | undefined {
+  try {
+    return fromBinary(
+      EventSchema,
+      toBinary(EventSchema, envelope as Event, { writeUnknownFields: false }),
+      { readUnknownFields: false },
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 function subscriptionMap<Kind extends "command" | "event">(
@@ -313,6 +418,24 @@ function formatEnvelopeError(result: SignalIntakeFailure): string {
   }
 
   return `Runtime transport ${result.signalKind} envelope refused.`;
+}
+
+function toError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+
+  return new Error(String(error));
+}
+
+function closeFailure(failures: readonly Error[]): Error {
+  const [failure] = failures;
+
+  if (failures.length === 1 && failure !== undefined) {
+    return failure;
+  }
+
+  return new Error(`Runtime transport close failed in ${String(failures.length)} operations.`);
 }
 
 function readTypeUrl(message: unknown): string | undefined {
