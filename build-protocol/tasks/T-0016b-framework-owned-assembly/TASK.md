@@ -1,6 +1,6 @@
 # T-0016b: Framework-Owned Generated Repository Assembly
 
-Status: implementation in progress
+Status: implemented; round 2 documentation/API fixes in progress
 Start: `2026-07-08 03:00 WEST`
 Baseline commit: `08d8f0e`
 Task log path:
@@ -20,14 +20,15 @@ without importing handler-registry internals or manually constructing
 repositories from generated metadata.
 
 The intended end-user shape is JVM-familiar and small. Generated registry
-discovery uses dynamic module import, so this generated-assembly path uses the
-async build method while the existing synchronous `build()` remains for
-explicit repository assembly:
+discovery uses dynamic module import from an explicit trusted compiled package
+root, so this generated-assembly path uses the async build method while the
+existing synchronous `build()` remains for explicit repository assembly:
 
 ```ts
 return await BoundedContext.singleTenant("Tasks")
   .add(TaskAggregate)
   .add(TaskListProjection)
+  .withGeneratedRegistryRoot(compiledPackageRoot)
   .buildAsync();
 ```
 
@@ -224,3 +225,7 @@ Canonical checklist evidence:
   result remains pending. Commit metadata: branch
   `task/T-0016b-framework-owned-assembly`, planned message
   `Fix generated registry assembly review findings`.
+- `2026-07-08 04:03 WEST`: Applied round-2 documentation/API cleanup after
+  re-review found stale default-repository/deferred wording. Public docs, task
+  notes, and the implementation report now consistently describe
+  `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`.

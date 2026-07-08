@@ -178,8 +178,7 @@ remain later slices.
 - Semantic tag registration from `(is)` and `(every_is)` into handler/routing
   registries. The server metadata APIs preserve entity tags and explicit
   handler declarations now, but no runtime registry consumes them yet.
-- Default repository construction from entity classes, system context
-  construction, richer gRPC service execution, tenant index
+- System context construction, richer gRPC service execution, tenant index
   persistence, ZeroMQ endpoint topology, broker process supervision, retry
   workers, durable delivery storage, transport-backed service execution,
   durable production storage, and broader production runtime hardening.
@@ -492,10 +491,11 @@ opened for repositories, and `registeredRepositories()` returns a copy-safe
 list of frozen snapshot-backed `RepositoryView` values. The built context also
 owns `stand()`, and repository state schemas are registered with that stand as
 known state types.
-This slice still does not create default repositories, write inboxes, manage
-delivery, emit lifecycle events, or start transport. Repositories with
-authentic explicit handler metadata do contribute dispatcher adapters to the
-built context's buses; aggregate repositories can therefore execute command
+Synchronous explicit repository assembly still does not create repositories for
+you. Generated entity-class assembly does create default repositories through
+`add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. Repositories
+with authentic handler metadata contribute dispatcher adapters to the built
+context's buses; aggregate repositories can therefore execute command
 assignees, persist latest managed state and internal traceability events through
 `AggregateStorage`, and queue already-stored events for event-bus delivery.
 Aggregate command completion is not failed by later redispatch errors, but

@@ -528,10 +528,11 @@ dispatcher execution, projection subscribers, or `Stand` updates, the owning
 context records a copy-safe diagnostic snapshot through
 `storedEventDispatchFailures()`; it does not retry or run catch-up delivery.
 
-This slice deliberately does not create default repositories from entity
-classes, invoke query/process handlers, construct system contexts, start
-query/subscription buses, write tenant indexes, expose a broad server
-lifecycle, or integrate transports.
+Generated entity-class assembly creates default repositories through
+`add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This slice
+still does not invoke query/process handlers, construct system contexts, start
+query/subscription buses, write tenant indexes, expose a broad server lifecycle,
+or integrate transports.
 
 ## Direct Stand
 

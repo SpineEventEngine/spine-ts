@@ -1,15 +1,15 @@
 # T-0016b Review Log
 
-Status: round 1 fixes applied; integration result pending
+Status: round 2 documentation/API fixes in progress; integration result pending
 
 Scope: framework-owned generated repository assembly, to-do example assembly
 cleanup, and related docs/tests.
 
 ## Required Lanes
 
-| Lane                       | Reviewer sub-agent | Status  | Required focus                                                                                         |
-| -------------------------- | ------------------ | ------- | ------------------------------------------------------------------------------------------------------ |
-| Code style/maintainability | `019f3f8b-a395-7363-80cb-b2a9a9b7cc9f` | Clean                 | Small JVM-familiar API, no new broad factory hierarchy, names under the cleanup rules.                  |
+| Lane                       | Reviewer sub-agent                     | Status                     | Required focus                                                                                          |
+| -------------------------- | -------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Code style/maintainability | `019f3f8b-a395-7363-80cb-b2a9a9b7cc9f` | Clean                      | Small JVM-familiar API, no new broad factory hierarchy, names under the cleanup rules.                  |
 | Documentation completeness | `019f3f8b-a444-72b3-aab7-2b1a97467754` | Fixed, pending integration | Package docs, user guides, task/decision logs, and example instructions describe entity-class assembly. |
 | TypeScript/API docs        | `019f3f8b-a4b4-7d12-9c67-542df0ad5b15` | Fixed, pending integration | Public overloads/comments are clear; internals stay internal; app code avoids registry internals.       |
 | Security                   | `019f3f8b-a548-7602-b6e4-299ae1fc579f` | Fixed, pending integration | Dynamic import path handling remains file-URL/path constrained; cleanup guard blocks app internals.     |
@@ -60,3 +60,19 @@ cleanup, and related docs/tests.
     warning, sandboxed full tests failed only on local HTTP/2 listener and
     ZeroMQ IPC permission errors, and escalated `corepack pnpm test` passed
     (50 files / 829 tests).
+- Round 2 re-review:
+  - performance/reliability `019f3f9b-c97f-7b10-80e2-7030b364d12c`: clean;
+  - security `019f3f9b-c8f8-7790-8fda-11fae5c56130`: clean;
+  - TypeScript/API docs `019f3f9b-c88c-7660-a200-6e9a9e63b1a4`: one stale
+    API README sentence still claimed default repository construction from
+    entity classes was unsupported;
+  - documentation completeness `019f3f9b-c7ec-7ce0-a691-58e4776affcb`: stale
+    task/report/public-doc text still omitted the explicit trusted registry root
+    or claimed default repository construction was deferred.
+- Round 2 documentation/API fix:
+  - task and implementation report examples now include the explicit trusted
+    generated registry root requirement;
+  - public docs no longer claim generated entity-class default repositories are
+    deferred or unsupported;
+  - example README states that the registry is loaded from the compiled example
+    package root configured with `withGeneratedRegistryRoot(...)`.

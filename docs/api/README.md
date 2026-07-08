@@ -78,11 +78,11 @@ mutation or storage. Aggregate command completion resolves after traceability
 event-journal append and latest persisted state write; later already-stored
 event redispatch failures are observable through the copy-safe
 `storedEventDispatchFailures()` diagnostic snapshot on the owning
-`BoundedContext`. This slice does not create
-default repositories from entity classes,
-invoke query/process handlers, manage inboxes/delivery, run cache catch-up,
-create system contexts, write tenant indexes, expose a broad server lifecycle,
-or integrate transports.
+`BoundedContext`. Generated entity-class assembly creates default repositories
+through `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This
+slice does not invoke query/process handlers, manage inboxes/delivery, run
+cache catch-up, create system contexts, write tenant indexes, expose a broad
+server lifecycle, or integrate transports.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `EntityScopeReason`,

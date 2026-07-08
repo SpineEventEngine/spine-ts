@@ -27,9 +27,9 @@ and included in the branch state.
   entity class.
 - Synchronous `build()` keeps explicit repository behavior and fails clearly if
   entity classes are queued, telling callers to use `buildAsync()`.
-- `buildAsync()` loads the conventional generated registry module from
-  `process.cwd()` by default, with `withGeneratedRegistryRoot(root)` for package
-  roots such as the to-do example's compiled `dist/` directory.
+- Entity-class assembly requires an explicit trusted compiled package or app
+  root through `withGeneratedRegistryRoot(root)`, and `buildAsync()` loads the
+  conventional generated registry module below that root.
 - Generated registry loading and metadata ingestion stay framework-owned through
   `GeneratedRegistryDiscovery`, `HandlerRegistryIngestor`, and
   `HandlerMetadataRegistry`.
@@ -110,7 +110,7 @@ Verification:
   - Passed: 2 files, 123 tests.
 - `corepack pnpm vitest run examples/todo/src/index.test.ts`
   - Sandboxed run failed only on `listen EPERM: operation not permitted
-    127.0.0.1`.
+127.0.0.1`.
   - Escalated rerun passed: 1 file, 18 tests.
 - `corepack pnpm typecheck`
   - Passed.
