@@ -22,6 +22,7 @@ const forbiddenEndUserServerApis = new Set([
   "HandlerMetadataRegistry",
   "HandlerRegistryIngestor",
   "materializeDecoratedEntityHandlers",
+  "Repository",
 ]);
 const eventSuffixes = [
   "Accepted",

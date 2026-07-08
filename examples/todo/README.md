@@ -20,6 +20,9 @@ and `TaskListProjection`.
 
 Generate protobuf output and build the workspace first:
 
+Install workspace dependencies with `pnpm install` before running these
+commands.
+
 ```bash
 pnpm typecheck:build
 ```
@@ -39,6 +42,155 @@ The server listens on `http://127.0.0.1:8080` and exposes the copied Spine
 existing `SpineServices` adapters. Each process keeps its own in-memory state;
 restart the process to clear tasks.
 
+The server is intentionally local-only in this example. Keep the default
+`127.0.0.1` binding for development and tests unless you add your own
+production transport, authentication, persistence, and deployment controls.
+
+## Focused Tests
+
+Run the example readiness suite from the repository root:
+
+```bash
+pnpm typecheck:build
+pnpm vitest run examples/todo/src/index.test.ts --passWithNoTests
+```
+
+The focused suite starts a real loopback server and verifies command, query,
+and subscription clients. Some managed sandboxes block `127.0.0.1` listener
+binding with `EPERM`; rerun the focused test with native loopback approval if
+that happens.
+
+## Client Smoke
+
+After building and starting the server, this copy-pasteable script posts a
+`CreateTask` command, reads the resulting `TaskList` projection, receives one
+subscription update, and cancels the subscription:
+
+```bash
+pnpm --filter @spine-ts/example-todo exec node --input-type=module <<'EOF'
+import { create } from "@bufbuild/protobuf";
+import { createClient } from "@connectrpc/connect";
+import { createGrpcTransport } from "@connectrpc/connect-node";
+import { deriveTypeUrl, packAny, unpackAny } from "@spine-ts/core";
+import {
+  ActorContextSchema,
+  CommandContextSchema,
+  CommandIdSchema,
+  CommandSchema,
+  UserIdSchema,
+} from "@spine-ts/proto";
+import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
+import { TargetSchema } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
+import {
+  QueryIdSchema,
+  QuerySchema,
+} from "@spine-ts/proto/generated/spine/client/query_pb.js";
+import { QueryService } from "@spine-ts/proto/generated/spine/client/query_service_pb.js";
+import {
+  TopicIdSchema,
+  TopicSchema,
+} from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
+import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
+import { CreateTaskSchema } from "./dist/generated/spine/example/todo/v1/task_commands_pb.js";
+import { TaskIdSchema } from "./dist/generated/spine/example/todo/v1/task_id_pb.js";
+import { TaskListSchema } from "./dist/generated/spine/example/todo/v1/task_list_pb.js";
+
+const transport = createGrpcTransport({ baseUrl: "http://127.0.0.1:8080" });
+const commands = createClient(CommandService, transport);
+const queries = createClient(QueryService, transport);
+const subscriptions = createClient(SubscriptionService, transport);
+const suffix = Date.now().toString();
+const taskId = `readme-${suffix}`;
+const target = create(TargetSchema, {
+  type: deriveTypeUrl(TaskListSchema),
+  criterion: { case: "includeAll", value: true },
+});
+const subscription = await subscriptions.subscribe(
+  create(TopicSchema, {
+    id: create(TopicIdSchema, { value: `topic-${suffix}` }),
+    target,
+    context: create(ActorContextSchema, {
+      actor: create(UserIdSchema, { value: "readme-user" }),
+    }),
+  }),
+);
+const iterator = subscriptions.activate(subscription)[Symbol.asyncIterator]();
+let nextUpdate;
+
+try {
+  nextUpdate = withTimeout(iterator.next(), "subscription update");
+
+  const ack = await commands.post(
+    create(CommandSchema, {
+      id: create(CommandIdSchema, { uuid: `command-${suffix}` }),
+      context: create(CommandContextSchema, {
+        actorContext: create(ActorContextSchema, {
+          actor: create(UserIdSchema, { value: "readme-user" }),
+        }),
+      }),
+      message: packAny(
+        CreateTaskSchema,
+        create(CreateTaskSchema, {
+          id: create(TaskIdSchema, { value: taskId }),
+          title: "Read the README",
+        }),
+      ),
+    }),
+  );
+  console.log("command", ack.status?.status.case);
+
+  const list = await readUntilTaskAppears(taskId, target);
+  console.log("query", list.id, list.tasks[0]?.title);
+
+  const update = await nextUpdate;
+  const entityUpdate =
+    update.value?.update.case === "entityUpdates"
+      ? update.value.update.value.update[0]
+      : undefined;
+  const state = entityUpdate?.kind.case === "state" ? entityUpdate.kind.value : undefined;
+  console.log("subscription", state ? unpackAny(state, TaskListSchema).id : "no state");
+} finally {
+  await subscriptions.cancel(subscription);
+  await iterator.return?.();
+  await nextUpdate?.catch(() => undefined);
+}
+
+async function readUntilTaskAppears(id, queryTarget) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const response = await queries.read(
+      create(QuerySchema, {
+        id: create(QueryIdSchema, { value: `query-${id}-${attempt}` }),
+        target: queryTarget,
+      }),
+    );
+    const list = response.message
+      .map((row) => row.state)
+      .filter((state) => state !== undefined)
+      .map((state) => unpackAny(state, TaskListSchema))
+      .find((candidate) => candidate.id === id);
+    if (list) {
+      return list;
+    }
+    await delay(50);
+  }
+  throw new Error(`TaskList ${id} did not appear.`);
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function withTimeout(promise, label) {
+  return Promise.race([
+    promise,
+    delay(1000).then(() => {
+      throw new Error(`Timed out waiting for ${label}.`);
+    }),
+  ]);
+}
+EOF
+```
+
 ## What It Demonstrates
 
 - `CreateTask`, `RenameTask`, `CompleteTask`, and `ReopenTask` commands posted
@@ -55,4 +207,5 @@ restart the process to clear tasks.
 - Business refusal acknowledgements for completing an already completed task or
   reopening an open task.
 
-See [USER_GUIDE.md](USER_GUIDE.md) for client snippets and the full workflow.
+See [USER_GUIDE.md](USER_GUIDE.md) for the full workflow, additional command
+variants, ID-filter queries, and more detailed shutdown notes.
