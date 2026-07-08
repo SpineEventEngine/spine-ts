@@ -263,3 +263,11 @@ Canonical checklist evidence:
     `git diff --check` passed.
 - `2026-07-08 04:28 WEST`: Integrated into `main` with merge commit
   `d7ee7e8`.
+- `2026-07-08 04:36 WEST`: Post-merge checks on `main` passed:
+  `corepack pnpm typecheck`, `corepack pnpm lint`, `corepack pnpm docs:check`,
+  `corepack pnpm format:check`, focused bounded-context/cleanup tests (123
+  tests), `corepack pnpm proto:lint`, `corepack pnpm proto:check-generated`,
+  and `git diff --check`. The first post-merge check attempt ran multiple
+  generation-owning commands in parallel and temporarily caused an ignored
+  generated-output race; a sequential `corepack pnpm proto:generate` repaired
+  generated output before the passing checks.

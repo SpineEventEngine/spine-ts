@@ -88,3 +88,7 @@ cleanup, and related docs/tests.
   - escalated full verification could not be rerun because the environment
     rejected the escalation request for `corepack pnpm verify`.
 - Integrated into `main` with merge commit `d7ee7e8`.
+- Post-merge `main` checks passed for typecheck, lint, docs, format, focused
+  bounded-context/cleanup tests, proto lint, generated-clean, and whitespace.
+  A parallel post-merge command attempt caused an ignored generated-output race;
+  sequential generation repaired it before final checks passed.
