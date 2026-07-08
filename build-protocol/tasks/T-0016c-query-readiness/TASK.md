@@ -97,6 +97,13 @@ Unavailable requested sources:
   absent before this implementation pass.
 - `build-protocol/DECISION_LOG.md` does not contain `D-0061` in this checkout.
 
+Post-implementation orchestration note:
+
+- The root orchestrator added `D-0061` and
+  `build-protocol/reviews/T-0016c-query-readiness.md` after implementation
+  commit `4341202`, restoring the durable decision/review records required by
+  the build protocol.
+
 ## JVM Inspection
 
 Read local JVM research notes:
@@ -117,4 +124,3 @@ Impact:
 - The TS slice should support ID filters and projection include-all reads only,
   and explicitly reject field/column filters and response-format features until
   a later query task implements them.
-
