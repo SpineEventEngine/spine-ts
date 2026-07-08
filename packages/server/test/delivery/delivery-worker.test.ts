@@ -239,12 +239,12 @@ describe("Delivery worker", () => {
     });
     const deliveredRows = await delivery.inbox.read(shard, { statuses: ["DELIVERED"] });
 
-    await expect(delivery.inbox.markDelivered(deliveredRows[0] ?? delivered)).resolves.toMatchObject(
-      {
-        signalId: "signal-delivered",
-        status: "DELIVERED",
-      },
-    );
+    await expect(
+      delivery.inbox.markDelivered(deliveredRows[0] ?? delivered),
+    ).resolves.toMatchObject({
+      signalId: "signal-delivered",
+      status: "DELIVERED",
+    });
 
     const scheduled = await delivery.inbox.receive({
       inboxId: targetInbox(),

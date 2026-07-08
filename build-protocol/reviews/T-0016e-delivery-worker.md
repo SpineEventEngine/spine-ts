@@ -5,9 +5,9 @@ Status: ready for review
 Scope: Delivery worker integration over existing inbox and shard storage,
 focused tests, and public docs.
 
-Implementation basis: pending commit. The implementation adds the narrow
-direct shard drain requested by D-0063 and leaves all required review lanes
-pending for the orchestrating thread.
+Implementation basis: `0913357`. The implementation adds the narrow direct
+shard drain requested by D-0063 and leaves all required review lanes pending for
+the orchestrating thread.
 
 ## Required Lanes
 
