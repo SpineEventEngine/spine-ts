@@ -49,3 +49,24 @@ migration seams.
 - `corepack pnpm lint` passed, including cleanup enforcement.
 - `corepack pnpm format:check` passed.
 - `git diff --check` passed.
+
+## Review-Fix Follow-Up
+
+Status: completed
+
+- Applied the complete T-0015h review-fix list:
+  generated-registry README security/API sample fixes, stale import cleanup,
+  focused cleanup-rule assertions for `defineEntityHandlers()`, current
+  `allowImport`/transaction/family documentation wording, and durable log
+  updates.
+
+### Verification
+
+- `corepack pnpm vitest run scripts/check-cleanup-rules.test.mjs` passed:
+  1 file, 92 tests.
+- `corepack pnpm docs:check` passed. TypeDoc emitted the existing local warning
+  that git remote `origin` is invalid for source links.
+- `corepack pnpm lint` passed, including cleanup enforcement.
+- `corepack pnpm typecheck:build` passed.
+- `corepack pnpm format:check` passed.
+- `git diff --check` passed.

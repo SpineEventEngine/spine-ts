@@ -1101,7 +1101,7 @@ function forbiddenApiName(node, importState) {
     ) {
       return node.text;
     }
-    if (node.text === "materializeDecoratedEntityHandlers") {
+    if (isForbiddenEndUserServerApi(node.text)) {
       return node.text;
     }
 

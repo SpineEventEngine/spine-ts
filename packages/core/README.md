@@ -85,10 +85,10 @@ structured repo-local violations.
 
 Stateful checks such as Spine `(set_once)` require previous and proposed state.
 They are intentionally separate from single-message validation and use the
-framework-owned `validateTransition()` seam. Full entity transaction enforcement
-will attach transition rules in a later runtime task. Rule-returned violations
-are sanitized before aggregation, and throwing transition rules are isolated
-into structured violations so later rules still run in order.
+framework-owned `validateTransition()` seam consumed by current server entity
+transaction validation. Rule-returned violations are sanitized before
+aggregation, and throwing transition rules are isolated into structured
+violations so later rules still run in order.
 
 ## Envelope Packing
 

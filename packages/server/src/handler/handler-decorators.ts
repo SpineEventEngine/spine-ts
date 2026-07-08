@@ -121,8 +121,8 @@ export function React(
  * New application aggregates must not use `@Apply`; managed aggregates are no
  * longer event-sourced and the framework owns state transactions. This
  * decorator is kept only for compatibility code that still needs explicit
- * schema-bearing event application metadata. The optional `allowImport` flag is
- * preserved in that legacy metadata for later import/replay machinery.
+ * schema-bearing event application metadata. The optional `allowImport` flag
+ * is preserved only as part of that legacy metadata shape.
  */
 export function Apply(
   schema: DescriptorMessageSchema,

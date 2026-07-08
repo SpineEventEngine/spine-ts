@@ -139,7 +139,10 @@ Current slice exposes:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
+  Aggregate,
   Assign,
   BoundedContext,
   CommandRegistrationReadiness,
@@ -152,7 +155,7 @@ import {
 import { CreateTaskSchema, type CreateTask } from "./generated/task_commands_pb.js";
 import { TaskCreatedSchema, TaskStateSchema, type TaskCreated } from "./generated/tasks_pb.js";
 
-class TaskAggregate {
+export class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {
   @Assign
   create(command: CreateTask): TaskCreated {
     void command;
@@ -171,8 +174,10 @@ class TaskAggregate {
   }
 }
 
+const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const compiledPackageRoot = resolve(appRoot, "dist");
 const registry = await new GeneratedRegistryDiscovery().register({
-  modules: [GeneratedRegistryDiscovery.conventionalModulePath("./dist")],
+  modules: [GeneratedRegistryDiscovery.conventionalModulePath(compiledPackageRoot)],
 });
 registry.findCommandAssignment(CreateTaskSchema.typeName)?.handler.methodName; // "create"
 
@@ -620,8 +625,8 @@ builders, automatic version increments, transactions, handler invocation,
 repository writes, storage calls, lifecycle events, routing, queries, buses,
 transports, or global runtime state.
 
-`TransactionalEntity` is the small protected draft layer for future
-framework-owned entity families. Subclasses can start one active transaction,
+`TransactionalEntity` is the small protected draft layer used by the current
+entity family base classes. Subclasses can start one active transaction,
 read/update the draft state snapshot, replace explicit draft version metadata,
 adjust draft lifecycle flags, and then commit or roll back. Accepted commits
 apply state, version metadata, and lifecycle flags back into the entity through
@@ -640,7 +645,7 @@ family base classes. They are thin abstract subclasses of `TransactionalEntity`
 with the same `<Id, Schema, Version>` generic pattern and a stable
 readonly `entityFamily` property returning `"aggregate"`, `"projection"`, or
 `"process-manager"`. Use them when application or framework-owned code needs
-the right OOP family type before repositories and dispatch runtime exist:
+the right OOP family type for repositories and built contexts:
 
 ```ts
 import { Aggregate } from "@spine-ts/server";
@@ -776,11 +781,11 @@ if (result.status === "rejected") {
 }
 ```
 
-Compatibility note: `EntityTransaction` is the public draft/result shape that
-future framework-owned entity bases can use around handler execution. It is not
-a storage-backed transaction, a unit-of-work implementation, or a process-wide
-runtime context; applications should treat its returned snapshots as evidence
-for later runtime layers rather than as persisted state.
+Compatibility note: `EntityTransaction` is the public draft/result shape used
+by framework-owned entity bases around state mutation. It is not a
+storage-backed transaction, a unit-of-work implementation, or a process-wide
+runtime context; applications should treat its returned snapshots as validation
+and commit evidence rather than as persisted state.
 
 `rollback()` releases the transaction and returns previous/draft evidence
 without accepting state. `archive()`, `unarchive()`, `markDeleted()`, and
@@ -793,7 +798,7 @@ accepted commit or rollback, active-only helpers throw
 `EntityTransactionStateError` deterministically; archived/deleted active drafts
 throw `EntityTransactionDraftStateError` without embedding entity state payloads.
 
-This is only an in-memory commit boundary for future entity base classes. It
-does not instantiate entities, invoke handlers, write repositories or storage,
-apply snapshots, dispatch messages, register buses, start transport, or provide
-async-local/global transaction state.
+This is only an in-memory commit boundary for entity base classes and
+repository-owned execution. It does not instantiate entities, invoke handlers,
+write repositories or storage, apply snapshots, dispatch messages, register
+buses, start transport, or provide async-local/global transaction state.

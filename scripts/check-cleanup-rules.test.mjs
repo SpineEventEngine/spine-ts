@@ -288,9 +288,8 @@ describe("check-cleanup-rules", () => {
       [
         'import { packCommand, packEvent } from "@spine-ts/core";',
         'import { EventIdSchema, type Command, type Event } from "@spine-ts/proto";',
-        "import { Apply, Assign, Command, React, Subscribe, defineEntityHandlers,",
+        "import { Apply, Assign, Command, React, Subscribe,",
         '  materializeDecoratedEntityHandlers } from "@spine-ts/server";',
-        'import * as server from "@spine-ts/server";',
         'import type { TaskCreated, TaskCommand } from "../generated/example_pb.js";',
         "",
         "class DemoAggregate {",
@@ -320,8 +319,6 @@ describe("check-cleanup-rules", () => {
         "  applyTask(event: TaskCreated): void {}",
         "}",
         "",
-        "defineEntityHandlers(DemoAggregate);",
-        "server.defineEntityHandlers(DemoAggregate);",
         "materializeDecoratedEntityHandlers(DemoAggregate);",
         "",
       ].join("\n"),
@@ -344,11 +341,153 @@ describe("check-cleanup-rules", () => {
     expect(result.stderr).toContain("packEvent");
     expect(result.stderr).toContain("packCommand");
     expect(result.stderr).toContain("EventIdSchema");
-    expect(result.stderr).toContain("defineEntityHandlers");
     expect(result.stderr).toContain("materializeDecoratedEntityHandlers");
     expect(result.stderr).toContain("handler return type Event");
     expect(result.stderr).toContain("handler return type Command");
     expect(result.stderr).toContain('command target validation "id"');
+  });
+
+  it("rejects direct defineEntityHandlers imports in example source", () => {
+    const repoRoot = createFixture();
+    writeExampleSource(
+      repoRoot,
+      [
+        'import { defineEntityHandlers } from "@spine-ts/server";',
+        "",
+        "class DemoAggregate {}",
+        "defineEntityHandlers(DemoAggregate);",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "direct define handlers"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("end-user example source uses forbidden API patterns");
+    expect(result.stderr).toContain("defineEntityHandlers");
+    expect(result.stderr).not.toContain("materializeDecoratedEntityHandlers");
+  });
+
+  it("rejects namespace defineEntityHandlers access in example source", () => {
+    const repoRoot = createFixture();
+    writeExampleSource(
+      repoRoot,
+      [
+        'import * as server from "@spine-ts/server";',
+        "",
+        "class DemoAggregate {}",
+        "server.defineEntityHandlers(DemoAggregate);",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "namespace define handlers"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("end-user example source uses forbidden API patterns");
+    expect(result.stderr).toContain("defineEntityHandlers");
+    expect(result.stderr).not.toContain("materializeDecoratedEntityHandlers");
+  });
+
+  it("rejects aliased defineEntityHandlers imports in example source", () => {
+    const repoRoot = createFixture();
+    writeExampleSource(
+      repoRoot,
+      [
+        'import { defineEntityHandlers as defineHandlers } from "@spine-ts/server";',
+        "",
+        "class DemoAggregate {}",
+        "defineHandlers(DemoAggregate);",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "aliased define handlers"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("end-user example source uses forbidden API patterns");
+    expect(result.stderr).toContain("defineEntityHandlers");
+    expect(result.stderr).not.toContain("materializeDecoratedEntityHandlers");
+  });
+
+  it("rejects destructured defineEntityHandlers aliases in example source", () => {
+    const repoRoot = createFixture();
+    writeExampleSource(
+      repoRoot,
+      [
+        'import * as server from "@spine-ts/server";',
+        "",
+        "const { defineEntityHandlers: defineHandlers } = server;",
+        "class DemoAggregate {}",
+        "defineHandlers(DemoAggregate);",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "destructured define handlers"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("end-user example source uses forbidden API patterns");
+    expect(result.stderr).toContain("defineEntityHandlers");
+    expect(result.stderr).not.toContain("materializeDecoratedEntityHandlers");
+  });
+
+  it("rejects import-equals defineEntityHandlers aliases in .cts example source", () => {
+    const repoRoot = createFixture();
+    mkdirSync(join(repoRoot, "examples/todo/src"), { recursive: true });
+    writeFileSync(
+      join(repoRoot, "examples/todo/src/state.cts"),
+      [
+        'import Server = require("@spine-ts/server");',
+        "import DefineHandlers = Server.defineEntityHandlers;",
+        "",
+        "class DemoAggregate {}",
+        "DefineHandlers(DemoAggregate);",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "commonjs define handlers"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("end-user example source uses forbidden API patterns");
+    expect(result.stderr).toContain("defineEntityHandlers");
+    expect(result.stderr).not.toContain("materializeDecoratedEntityHandlers");
+  });
+
+  it("rejects local bare defineEntityHandlers calls in example source", () => {
+    const repoRoot = createFixture();
+    writeExampleSource(
+      repoRoot,
+      [
+        "function defineEntityHandlers(entityType: unknown): void {",
+        "  void entityType;",
+        "}",
+        "",
+        "class DemoAggregate {}",
+        "defineEntityHandlers(DemoAggregate);",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "local define handlers"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("end-user example source uses forbidden API patterns");
+    expect(result.stderr).toContain("defineEntityHandlers");
+    expect(result.stderr).not.toContain("materializeDecoratedEntityHandlers");
   });
 
   it("accepts bare decorators with generated-message return types in example source", () => {

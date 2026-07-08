@@ -161,8 +161,8 @@ integrations. It accepts an entity class, a state schema, and a builder callback
 whose methods record command assignment, command reaction, event subscription,
 event reaction, and event application metadata. Each handler record keeps the
 generated Protobuf-ES schema, message full type name, handler kind, and entity
-method name. Event application metadata also records `allowImport` for future
-import/replay machinery.
+method name. Event application metadata also records `allowImport` only for
+legacy schema-bearing `@Apply` compatibility metadata.
 
 Handler metadata is deterministic and frozen. The all-handlers array preserves
 the user declaration order, and role-specific arrays preserve the same relative
