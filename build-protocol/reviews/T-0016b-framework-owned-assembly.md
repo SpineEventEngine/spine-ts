@@ -1,19 +1,19 @@
 # T-0016b Review Log
 
-Status: round 2 documentation/API fixes in progress; integration result pending
+Status: all required lanes clean; integration result pending
 
 Scope: framework-owned generated repository assembly, to-do example assembly
 cleanup, and related docs/tests.
 
 ## Required Lanes
 
-| Lane                       | Reviewer sub-agent                     | Status                     | Required focus                                                                                          |
-| -------------------------- | -------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------- |
-| Code style/maintainability | `019f3f8b-a395-7363-80cb-b2a9a9b7cc9f` | Clean                      | Small JVM-familiar API, no new broad factory hierarchy, names under the cleanup rules.                  |
-| Documentation completeness | `019f3f8b-a444-72b3-aab7-2b1a97467754` | Fixed, pending integration | Package docs, user guides, task/decision logs, and example instructions describe entity-class assembly. |
-| TypeScript/API docs        | `019f3f8b-a4b4-7d12-9c67-542df0ad5b15` | Fixed, pending integration | Public overloads/comments are clear; internals stay internal; app code avoids registry internals.       |
-| Security                   | `019f3f8b-a548-7602-b6e4-299ae1fc579f` | Fixed, pending integration | Dynamic import path handling remains file-URL/path constrained; cleanup guard blocks app internals.     |
-| Performance/reliability    | `019f3f8b-a5c0-7fa0-b564-1f4ea125b1b8` | Fixed, pending integration | Registry discovery is cached/one-shot per build path; errors are deterministic; verification passes.    |
+| Lane                       | Reviewer sub-agent                     | Status              | Required focus                                                                                          |
+| -------------------------- | -------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------- |
+| Code style/maintainability | `019f3f8b-a395-7363-80cb-b2a9a9b7cc9f` | Clean               | Small JVM-familiar API, no new broad factory hierarchy, names under the cleanup rules.                  |
+| Documentation completeness | `019f3f8b-a444-72b3-aab7-2b1a97467754` | Clean after round 3 | Package docs, user guides, task/decision logs, and example instructions describe entity-class assembly. |
+| TypeScript/API docs        | `019f3f8b-a4b4-7d12-9c67-542df0ad5b15` | Clean after round 3 | Public overloads/comments are clear; internals stay internal; app code avoids registry internals.       |
+| Security                   | `019f3f8b-a548-7602-b6e4-299ae1fc579f` | Clean after round 2 | Dynamic import path handling remains file-URL/path constrained; cleanup guard blocks app internals.     |
+| Performance/reliability    | `019f3f8b-a5c0-7fa0-b564-1f4ea125b1b8` | Clean after round 2 | Registry discovery is cached/one-shot per build path; errors are deterministic; verification passes.    |
 
 ## Rounds
 
@@ -76,3 +76,6 @@ cleanup, and related docs/tests.
     deferred or unsupported;
   - example README states that the registry is loaded from the compiled example
     package root configured with `withGeneratedRegistryRoot(...)`.
+- Round 3 re-review:
+  - TypeScript/API docs `019f3fa2-19e8-7152-903e-60f198a768b2`: clean;
+  - documentation completeness `019f3fa2-192b-7c73-8905-92147754b8ce`: clean.

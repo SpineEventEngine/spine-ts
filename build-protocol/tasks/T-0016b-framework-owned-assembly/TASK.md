@@ -1,6 +1,6 @@
 # T-0016b: Framework-Owned Generated Repository Assembly
 
-Status: implemented; round 2 documentation/API fixes in progress
+Status: implemented; all required review lanes clean; integration pending
 Start: `2026-07-08 03:00 WEST`
 Baseline commit: `08d8f0e`
 Task log path:
@@ -229,3 +229,6 @@ Canonical checklist evidence:
   re-review found stale default-repository/deferred wording. Public docs, task
   notes, and the implementation report now consistently describe
   `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`.
+- `2026-07-08 04:10 WEST`: Round-3 TypeScript/API and documentation
+  re-reviews reported clean. All participating implementation, fix, and
+  reviewer sub-agents are closed.
