@@ -30,6 +30,13 @@ Current slice exposes:
   context registration over one entity constructor and matching entity state
   schema;
   and
+- `BoundedContext.singleTenant(name).add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`
+  for framework-owned generated repository assembly. The explicit trusted root
+  points at the compiled package/app output that contains the conventional
+  generated registry module. The builder finds metadata for each entity class,
+  constructs default repositories, and preserves synchronous `build()` for
+  explicit `add(repository)` assembly;
+  and
 - `new Repository({ entityType, schema, handlers })` route calculation through
   `routeCommand()` and `routeEvent()` when explicit handler metadata is supplied.
   Direct route calls only calculate routes and do not invoke handlers; built
@@ -122,7 +129,8 @@ Current slice exposes:
   emitted schemas inferred from explicit return types. Event reactors may
   declare no emitted schemas. Generated registry files live under ignored
   `generated/` output and are not committed.
-- `GeneratedRegistryDiscovery` for loading explicit generated registry
+- `GeneratedRegistryDiscovery` for framework/tooling loading of explicit
+  generated registry
   filesystem paths or clean `file:` URLs, or the conventional runtime file
   location
   `generated/handler/generated-handler-registry.js`, then ingesting those
@@ -139,20 +147,8 @@ Current slice exposes:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import {
-  Aggregate,
-  Assign,
-  BoundedContext,
-  CommandRegistrationReadiness,
-  EventRegistrationReadiness,
-  GeneratedRegistryDiscovery,
-  React,
-  Subscribe,
-  createServerRuntimeRoutingPlan,
-} from "@spine-ts/server";
-import { CreateTaskSchema, type CreateTask } from "./generated/task_commands_pb.js";
+import { Aggregate, Assign, BoundedContext, React, Subscribe } from "@spine-ts/server";
+import type { CreateTask } from "./generated/task_commands_pb.js";
 import { TaskCreatedSchema, TaskStateSchema, type TaskCreated } from "./generated/tasks_pb.js";
 
 export class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, number> {
@@ -174,43 +170,23 @@ export class TaskAggregate extends Aggregate<string, typeof TaskStateSchema, num
   }
 }
 
-const appRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const compiledPackageRoot = resolve(appRoot, "dist");
-const registry = await new GeneratedRegistryDiscovery().register({
-  modules: [GeneratedRegistryDiscovery.conventionalModulePath(compiledPackageRoot)],
-});
-registry.findCommandAssignment(CreateTaskSchema.typeName)?.handler.methodName; // "create"
+const tasks = await BoundedContext.singleTenant("Tasks")
+  .add(TaskAggregate)
+  .withGeneratedRegistryRoot(new URL("..", import.meta.url))
+  .buildAsync();
 
-const readiness = CommandRegistrationReadiness.fromRegistry(registry);
-readiness.registeredCommandMessageFullTypeNames(); // [CreateTaskSchema.typeName]
-readiness.findCommandAssignee(CreateTaskSchema.typeName)?.handler.methodName; // "create"
-
-const eventReadiness = EventRegistrationReadiness.fromRegistry(registry);
-eventReadiness.registeredEventMessageFullTypeNames(); // [TaskCreatedSchema.typeName]
-eventReadiness.findEventSubscribers(TaskCreatedSchema.typeName)[0]?.handler.methodName;
-// "noteCreated"
-eventReadiness.findEventReactors(TaskCreatedSchema.typeName)[0]?.handler.methodName;
-// "reactToCreated"
-
-const routingPlan = createServerRuntimeRoutingPlan({
-  context: BoundedContext.singleTenant("Tasks").build(),
-  commands: readiness,
-  events: eventReadiness,
-});
-routingPlan.commands.workerIds[0]; // "command-worker-1"
-routingPlan.commands.routes[0]?.message.typeUrl; // "type.spine.io/..."
-routingPlan.commands.routes[0]?.receiverGroup; // "command-assignee"
-routingPlan.events.subscriberRoutes[0]?.subscriptionDescriptorKey; // correlate to top-level subscriptions
-routingPlan.events.subscriberRoutes[0]?.workerId; // planner-local event worker id
-routingPlan.deferred.map(({ signalKind }) => signalKind);
-// ["query", "subscription", "system"]
-
-registry.findHandlersByKind("event-reaction")[0]?.handler.methodName; // "reactToCreated"
+tasks.commandBus().acceptedCommandTypes(); // generated command schemas
+tasks.registeredRepositories().map((repository) => repository.entityType.name);
 ```
 
-Generated registry discovery is the ordinary application bridge from bare
-decorators to canonical handler metadata. The low-level explicit registration
-API records command assignments, command reactions, event subscriptions, event
+`buildAsync()` is the ordinary application bridge from bare decorators to
+default repositories. Entity-class assembly requires
+`withGeneratedRegistryRoot(compiledPackageRoot)` so the framework imports only
+the conventional generated registry module under an explicit trusted root.
+Generated registry discovery and ingestion stay inside the framework-owned
+assembly path; application code adds entity classes, not
+`HandlerMetadataRegistry` values. The low-level explicit registration API
+records command assignments, command reactions, event subscriptions, event
 reactions, and legacy event applications in
 declaration order. Handler names must refer to own prototype data methods
 declared with normal class method syntax; accessors, `constructor`, inherited
@@ -552,10 +528,11 @@ dispatcher execution, projection subscribers, or `Stand` updates, the owning
 context records a copy-safe diagnostic snapshot through
 `storedEventDispatchFailures()`; it does not retry or run catch-up delivery.
 
-This slice deliberately does not create default repositories from entity
-classes, invoke query/process handlers, construct system contexts, start
-query/subscription buses, write tenant indexes, expose a broad server
-lifecycle, or integrate transports.
+Generated entity-class assembly creates default repositories through
+`add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This slice
+still does not invoke query/process handlers, construct system contexts, start
+query/subscription buses, write tenant indexes, expose a broad server lifecycle,
+or integrate transports.
 
 ## Direct Stand
 

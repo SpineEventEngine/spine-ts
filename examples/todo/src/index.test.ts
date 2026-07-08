@@ -92,6 +92,15 @@ describe("@spine-ts/example-todo", () => {
     ).toEqual(["TaskAggregate", "TaskListProjection"]);
   });
 
+  it("keeps generated registry discovery out of application context assembly", () => {
+    const source = readFileSync(fileURLToPath(new URL("index.ts", import.meta.url)), "utf8");
+
+    expect(source).not.toContain("GeneratedRegistryDiscovery");
+    expect(source).not.toContain("HandlerMetadataRegistry");
+    expect(source).not.toContain("EntityHandlersMetadata");
+    expect(source).not.toContain("new Repository");
+  });
+
   it("runs as a standalone gRPC-compatible server for command, query, and subscription clients", async () => {
     const server = await startTodoServer({ host: "127.0.0.1", port: 0 });
 

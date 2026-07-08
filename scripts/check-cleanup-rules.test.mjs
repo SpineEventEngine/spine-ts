@@ -1068,6 +1068,59 @@ describe("check-cleanup-rules", () => {
     expect(result.stderr).toContain("materializeDecoratedEntityHandlers");
   });
 
+  it("rejects generated registry discovery and metadata imports in example source", () => {
+    const repoRoot = createFixture();
+    writeExampleSource(
+      repoRoot,
+      [
+        'import { GeneratedRegistryDiscovery } from "@spine-ts/server";',
+        'import type { EntityHandlersMetadata, HandlerMetadataRegistry } from "@spine-ts/server";',
+        "",
+        "type LocalMetadata = EntityHandlersMetadata;",
+        "type LocalRegistry = HandlerMetadataRegistry;",
+        "void LocalMetadata;",
+        "void LocalRegistry;",
+        "void GeneratedRegistryDiscovery;",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "generated registry imports"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("GeneratedRegistryDiscovery");
+    expect(result.stderr).toContain("EntityHandlersMetadata");
+    expect(result.stderr).toContain("HandlerMetadataRegistry");
+  });
+
+  it("rejects string-literal access to generated registry internals through server namespaces", () => {
+    const repoRoot = createFixture();
+    writeExampleSource(
+      repoRoot,
+      [
+        'import * as server from "@spine-ts/server";',
+        "",
+        'const Discovery = server["GeneratedRegistryDiscovery"];',
+        'const Registry = server["HandlerMetadataRegistry"];',
+        'void server["EntityHandlersMetadata"];',
+        "void Discovery;",
+        "void Registry;",
+        "",
+      ].join("\n"),
+    );
+    run("git", ["add", "."], repoRoot);
+    run("git", ["commit", "-m", "string literal internals"], repoRoot);
+
+    const result = runChecker(repoRoot);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("GeneratedRegistryDiscovery");
+    expect(result.stderr).toContain("EntityHandlersMetadata");
+    expect(result.stderr).toContain("HandlerMetadataRegistry");
+  });
+
   it("rejects destructured framework helpers from local namespace aliases", () => {
     const repoRoot = createFixture();
     writeExampleSource(

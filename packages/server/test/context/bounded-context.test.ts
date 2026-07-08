@@ -1,3 +1,8 @@
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
+
 import { create, type Message } from "@bufbuild/protobuf";
 import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
@@ -96,7 +101,30 @@ const ProcessManagerStateSchema = messageDesc(
 
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
 class DuplicateTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, number> {}
-class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {}
+class GeneratedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  assignProjection(command: ProjectionState): ProjectionState {
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: command.id,
+        name: command.name,
+        archived: false,
+      }),
+    );
+
+    return create(ProjectionStateSchema, command);
+  }
+}
+class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
+  onProjection(event: ProjectionState): void {
+    this.updateDraftState(() =>
+      create(ProjectionStateSchema, {
+        id: event.id,
+        name: event.name,
+        priority: event.priority,
+      }),
+    );
+  }
+}
 class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {}
 
 describe("BoundedContext assembly", () => {
@@ -302,6 +330,125 @@ describe("BoundedContext assembly", () => {
     expect(secondRepositories[0]).not.toBe(firstRepositories[0]);
     expect(storageFactory.creations).toHaveLength(2);
     expect(stateTypeName(storageFactory.creations[1])).toBe(AggregateStateSchema.typeName);
+  });
+
+  it("builds generated repositories from entity classes with buildAsync", async () => {
+    const registryRoot = createGeneratedRegistryRoot([
+      {
+        entityType: GeneratedTaskAggregate,
+        stateSchema: AggregateStateSchema,
+        handlers: [
+          {
+            kind: "command-assignment",
+            methodName: "assignProjection",
+            signalSchema: ProjectionStateSchema,
+            emittedSchemas: [ProjectionStateSchema],
+            parameterCount: 1,
+          },
+        ],
+      },
+      {
+        entityType: TaskProjection,
+        stateSchema: ProjectionStateSchema,
+        handlers: [
+          {
+            kind: "event-subscription",
+            methodName: "onProjection",
+            signalSchema: ProjectionStateSchema,
+            emittedSchemas: [],
+            parameterCount: 1,
+          },
+        ],
+      },
+    ]);
+    const context = await BoundedContext.singleTenant("Tasks")
+      .withGeneratedRegistryRoot(registryRoot)
+      .add(GeneratedTaskAggregate)
+      .add(TaskProjection)
+      .buildAsync();
+
+    expect(context.registeredRepositories().map((repository) => repository.entityType)).toEqual([
+      GeneratedTaskAggregate,
+      TaskProjection,
+    ]);
+    expect(context.commandBus().acceptedCommandTypes()).toEqual([
+      deriveTypeUrl(ProjectionStateSchema),
+    ]);
+
+    await expect(context.commandBus().post(createProjectionCommand("command-4"))).resolves.toBe(
+      undefined,
+    );
+  });
+
+  it("requires an explicit generated registry root for entity-class assembly", async () => {
+    await expect(
+      BoundedContext.singleTenant("Tasks").add(GeneratedTaskAggregate).buildAsync(),
+    ).rejects.toThrow("requires withGeneratedRegistryRoot(root)");
+  });
+
+  it("rejects generated registry modules that resolve outside the trusted root", async () => {
+    const fixture = createGeneratedRegistryFixture([
+      {
+        entityType: GeneratedTaskAggregate,
+        stateSchema: AggregateStateSchema,
+        handlers: [],
+      },
+    ]);
+    const root = mkdtempSync(join(tmpdir(), "spine-context-generated-registry-root-"));
+    const moduleDir = join(root, "generated/handler");
+
+    mkdirSync(moduleDir, { recursive: true });
+    symlinkSync(fixture.registryPath, join(moduleDir, "generated-handler-registry.js"));
+
+    await expect(
+      BoundedContext.singleTenant("Tasks")
+        .withGeneratedRegistryRoot(pathToFileURL(root))
+        .add(GeneratedTaskAggregate)
+        .buildAsync(),
+    ).rejects.toThrow("must resolve within the configured generated registry root");
+  });
+
+  it("checks the generated registry file before each import instead of using a stale module cache", async () => {
+    const fixture = createGeneratedRegistryFixture([
+      {
+        entityType: GeneratedTaskAggregate,
+        stateSchema: AggregateStateSchema,
+        handlers: [],
+      },
+    ]);
+
+    await expect(
+      BoundedContext.singleTenant("Tasks")
+        .withGeneratedRegistryRoot(fixture.root)
+        .add(GeneratedTaskAggregate)
+        .buildAsync(),
+    ).resolves.toBeInstanceOf(BoundedContext);
+
+    rmSync(fixture.registryPath);
+
+    await expect(
+      BoundedContext.singleTenant("Tasks")
+        .withGeneratedRegistryRoot(fixture.root)
+        .add(GeneratedTaskAggregate)
+        .buildAsync(),
+    ).rejects.toThrow("must exist and be readable");
+  });
+
+  it("fails clearly when generated metadata is missing for an entity class", async () => {
+    const registryRoot = createGeneratedRegistryRoot([]);
+
+    await expect(
+      BoundedContext.singleTenant("Tasks")
+        .withGeneratedRegistryRoot(registryRoot)
+        .add(GeneratedTaskAggregate)
+        .buildAsync(),
+    ).rejects.toThrow("Generated handler registry is missing metadata for GeneratedTaskAggregate.");
+  });
+
+  it("fails clearly when sync build sees entity-class generated assembly", () => {
+    expect(() => BoundedContext.singleTenant("Tasks").add(GeneratedTaskAggregate).build()).toThrow(
+      "Use buildAsync().",
+    );
   });
 
   it("does not register repositories removed before build", () => {
@@ -730,6 +877,46 @@ function createProjectionEvent(id: string) {
       priority: 1,
     }),
   });
+}
+
+function createGeneratedRegistryFixture(
+  entities: readonly {
+    readonly entityType: object;
+    readonly stateSchema: GenMessage<Message>;
+    readonly handlers: readonly {
+      readonly kind:
+        "command-assignment" | "command-reaction" | "event-subscription" | "event-reaction";
+      readonly methodName: string;
+      readonly signalSchema: GenMessage<Message>;
+      readonly emittedSchemas: readonly GenMessage<Message>[];
+      readonly parameterCount: 1 | 2;
+    }[];
+  }[],
+): { readonly root: URL; readonly registryPath: string } {
+  const slot = `__spineContextGeneratedRegistry_${Math.random().toString(36).slice(2)}`;
+  const root = mkdtempSync(join(tmpdir(), "spine-context-generated-registry-"));
+  const moduleDir = join(root, "generated/handler");
+  const registryPath = join(moduleDir, "generated-handler-registry.js");
+  const values = globalThis as Record<string, unknown>;
+
+  mkdirSync(moduleDir, { recursive: true });
+  values[slot] = Object.freeze({ version: 1, entities });
+  writeFileSync(
+    registryPath,
+    `export const generatedHandlerRegistry = globalThis[${JSON.stringify(slot)}];\n`,
+    "utf8",
+  );
+
+  return Object.freeze({
+    root: pathToFileURL(root),
+    registryPath,
+  });
+}
+
+function createGeneratedRegistryRoot(
+  entities: Parameters<typeof createGeneratedRegistryFixture>[0],
+): URL {
+  return createGeneratedRegistryFixture(entities).root;
 }
 
 interface StorageCreation {

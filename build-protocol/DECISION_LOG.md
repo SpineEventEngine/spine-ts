@@ -1820,3 +1820,55 @@ Consequences:
 - The current runtime supports the de-event-sourced aggregate direction while
   preserving enough legacy handler metadata behavior for existing framework
   tests to keep passing.
+
+## D-0060: Bounded Context Builder Owns Default Generated Repository Assembly
+
+Status: Accepted
+
+Date: 2026-07-08
+
+Context: T-0016b removes ordinary application ownership of generated handler
+registry discovery and repository construction. Spine JVM assembly supports
+`BoundedContext.singleTenant(name).add(EntityClass)` and
+`BoundedContextBuilder.add(repository)`, while `DefaultRepository.of(Class)`
+selects a family-appropriate default repository from the entity class. In Spine
+TS, the generated handler registry is the available framework-owned metadata
+source for bare-decorator handler schemas and emitted message schemas.
+
+Decision:
+
+- Add a framework-owned entity-class assembly path to `BoundedContextBuilder`.
+- Keep `add(repository)` for custom repositories and tests, but ordinary
+  application code should use `add(EntityClass)` when generated metadata exists.
+- Keep existing synchronous `build()` behavior for explicit repository and
+  dispatcher assembly.
+- Add an async build path for entity-class generated assembly, letting the
+  builder load the conventional compiled generated handler registry module and
+  construct `Repository` instances internally with the matching entity metadata.
+- Avoid a new default-repository factory hierarchy until separate repository
+  families need genuinely different public construction behavior.
+- Preserve the generated registry contract exactly as generated and ingested:
+  declaration order, handler kind, `parameterCount`, `emittedSchemas`, and
+  generated-message schema metadata.
+
+Alternatives considered:
+
+- Keep example-owned `GeneratedRegistryDiscovery` plus `new Repository(...)`.
+  Rejected because handler discovery/materialization is framework-owned and
+  application code must not import registry internals.
+- Add a public `DefaultRepository` facade now. Rejected because the current
+  `Repository` implementation already owns the needed runtime behavior, and a
+  facade would add another name without reducing caller complexity beyond
+  `BoundedContextBuilder.add(EntityClass)`.
+- Require applications to pass schema arguments to `add()`. Rejected because it
+  reintroduces schema-bearing app assembly and duplicates information already
+  present in generated metadata.
+
+Consequences:
+
+- Existing synchronous `build()` call sites continue to work when they only add
+  explicit repositories and dispatchers.
+- Callers using entity-class generated assembly must use the async build path.
+- The to-do example can assemble its context with only domain entity classes.
+- Cleanup checks can treat app imports of handler metadata registries and
+  generated registry discovery as regressions.

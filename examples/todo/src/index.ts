@@ -1,7 +1,5 @@
 import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
-import { dirname } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { clone, create } from "@bufbuild/protobuf";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
@@ -10,13 +8,7 @@ import {
   Assign,
   BoundedContext,
   CommandRefusalError,
-  type DescriptorMessageSchema,
-  type EntityClass,
-  type EntityHandlersMetadata,
-  GeneratedRegistryDiscovery,
-  type HandlerMetadataRegistry,
   Projection,
-  Repository,
   SpineServices,
   Subscribe,
 } from "@spine-ts/server";
@@ -214,12 +206,11 @@ export class TaskListProjection extends Projection<string, typeof TaskListSchema
 
 /** Assemble the in-memory single-tenant Tasks bounded context. */
 export async function createTodoContext(): Promise<BoundedContext> {
-  const handlerMetadata = await loadTodoHandlerMetadata();
-
   return BoundedContext.singleTenant("Tasks")
-    .add(createTaskRepository(handlerMetadata))
-    .add(createTaskListRepository(handlerMetadata))
-    .build();
+    .withGeneratedRegistryRoot(new URL("..", import.meta.url))
+    .add(TaskAggregate)
+    .add(TaskListProjection)
+    .buildAsync();
 }
 
 /** Options for the standalone to-do example server. */
@@ -271,73 +262,6 @@ export async function startTodoServer(options: TodoServerOptions = {}): Promise<
   };
 }
 
-function createTaskRepository(
-  handlerMetadata: HandlerMetadataRegistry,
-): Repository<typeof TaskAggregate> {
-  return new Repository({
-    entityType: TaskAggregate,
-    schema: TaskSchema,
-    handlers: generatedHandlersFor(handlerMetadata, TaskAggregate, TaskSchema),
-    events: [TaskCreatedSchema, TaskRenamedSchema, TaskCompletedSchema, TaskReopenedSchema],
-  });
-}
-
-function createTaskListRepository(
-  handlerMetadata: HandlerMetadataRegistry,
-): Repository<typeof TaskListProjection> {
-  return new Repository({
-    entityType: TaskListProjection,
-    schema: TaskListSchema,
-    handlers: generatedHandlersFor(handlerMetadata, TaskListProjection, TaskListSchema),
-  });
-}
-
-let loadedTodoHandlerMetadata: Promise<HandlerMetadataRegistry> | undefined;
-let todoHandlerMetadataLoadAttempt = 0;
-
-function loadTodoHandlerMetadata(): Promise<HandlerMetadataRegistry> {
-  const discoveryOptions =
-    todoHandlerMetadataLoadAttempt === 0
-      ? {
-          modules: [GeneratedRegistryDiscovery.conventionalModulePath(compiledPackageRoot())],
-        }
-      : {
-          modules: [GeneratedRegistryDiscovery.conventionalModulePath(compiledPackageRoot())],
-          cacheBust: `retry-${todoHandlerMetadataLoadAttempt.toString()}`,
-        };
-
-  loadedTodoHandlerMetadata ??= new GeneratedRegistryDiscovery()
-    .register(discoveryOptions)
-    .catch((error: unknown) => {
-      loadedTodoHandlerMetadata = undefined;
-      todoHandlerMetadataLoadAttempt += 1;
-      throw error;
-    });
-
-  return loadedTodoHandlerMetadata;
-}
-
-function compiledPackageRoot(): string {
-  return dirname(dirname(fileURLToPath(import.meta.url)));
-}
-
-function generatedHandlersFor<Instance extends object, StateSchema extends DescriptorMessageSchema>(
-  registry: HandlerMetadataRegistry,
-  entityType: EntityClass<Instance>,
-  stateSchema: StateSchema,
-): EntityHandlersMetadata<Instance, StateSchema> {
-  const matches = registry.findEntityHandlersByState(stateSchema.typeName);
-  const metadata = matches.find((candidate) => candidate.entityType === entityType);
-
-  if (metadata === undefined) {
-    const entityName = "name" in entityType ? String(entityType.name) : "entity";
-
-    throw new Error(`Generated handler registry is missing metadata for ${entityName}.`);
-  }
-
-  return metadata as EntityHandlersMetadata<Instance, StateSchema>;
-}
-
 function taskId(id: TaskId | undefined): TaskId {
   if (id === undefined) {
     throw new Error("Framework-provided task ID is missing.");
@@ -385,7 +309,9 @@ function closeServer(
 }
 
 function isEntrypoint(): boolean {
-  return process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href;
+  return (
+    process.argv[1] !== undefined && import.meta.url === new URL(process.argv[1], "file:").href
+  );
 }
 
 if (isEntrypoint()) {
