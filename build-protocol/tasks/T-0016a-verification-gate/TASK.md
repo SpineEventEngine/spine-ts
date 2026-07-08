@@ -1,6 +1,6 @@
 # T-0016a: Verification Gate Normalization
 
-Status: implementation complete; reviewer lanes pending
+Status: review complete; ready for final verification
 Start: `2026-07-08 02:13 WEST`
 Baseline commit: `f8a95d5`
 Task log path: `build-protocol/tasks/T-0016a-verification-gate/TASK.md`
@@ -9,7 +9,8 @@ Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0016a-verification-gate`
 Requirements splitter: inherited from `T-0016`
 Authoring sub-agent: `019f3f4c-09d9-74c1-bcae-133f0ba857d0` completed and closed
-Reviewer sub-agents: pending
+Reviewer sub-agents: all required lanes clean; see
+`build-protocol/reviews/T-0016a-verification-gate.md`
 Implementation commit: `277a6a2`
 
 ## Objective
@@ -156,6 +157,7 @@ Canonical checklist evidence:
   edge-case tests and documenting the build-time analyzer exclusion from the
   global runtime coverage threshold.
 - Implementation was committed as `277a6a2` (`Normalize verification gate`).
+- All required reviewer lanes reported clean against branch head `b962ba1`.
 
 ## Verification Evidence
 
