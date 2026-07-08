@@ -1,6 +1,7 @@
 # T-0016e Review Log
 
-Status: all required lanes clean; final verification passed
+Status: all required lanes clean; final verification passed; integrated to
+`main`
 
 Scope: Delivery worker integration over existing inbox and shard storage,
 focused tests, and public docs.
@@ -10,7 +11,8 @@ Implementation/fix basis: original implementation `0913357`, first-round fix
 The implementation adds the narrow direct shard drain requested by D-0063.
 First-round review, targeted re-review, and final reliability/documentation
 re-review have run clean; the final coverage fix added tests only and full
-verification passed.
+verification passed. The task branch was merged to `main` as `744462b`, and
+post-merge verification passed.
 
 ## Required Lanes
 
@@ -67,3 +69,16 @@ verification passed.
   needed.
 - Any finding must be fed back to an authoring/fix sub-agent and re-reviewed
   until clean before integration.
+
+## Final Verification
+
+- Final escalated `corepack pnpm verify` on the task branch passed after the
+  coverage fix. Full tests passed with 51 files and 860 tests. Coverage passed
+  with 94.97% statements, 90.24% branches, 97.80% functions, and 94.97% lines.
+- Merged `task/T-0016e-delivery-worker` into `main` as `744462b`.
+- Post-merge escalated `corepack pnpm verify` passed on `main` with 51 test
+  files and 860 tests. Coverage passed with 94.97% statements, 90.24% branches,
+  97.80% functions, and 94.97% lines. TypeDoc completed with the existing
+  invalid-`origin` warning, API export checks passed, proto lint passed, and
+  generated proto outputs were confirmed ignored, untracked, and freshly
+  regenerated.
