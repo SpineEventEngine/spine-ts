@@ -1,9 +1,11 @@
 # T-0016: Framework Readiness Roadmap
 
-Status: review complete; ready for final verification
+Status: integrated into `main`
 Start: `2026-07-08 01:55 WEST`
 Authoring complete: `2026-07-08 03:01 WEST`
 Baseline commit: `b5e7deb`
+Implementation commit: `b1dfe07`
+Integrated to main: `ff08c5f`
 Task log path: `build-protocol/tasks/T-0016-framework-readiness-roadmap/TASK.md`
 Branch: `task/T-0016-readiness-roadmap`
 Worktree:
@@ -422,4 +424,4 @@ Normalization` as the first non-blocked implementation slice.
 - Review rounds: all required lanes clean after round 3.
 - Coverage result: not applicable for this docs-only roadmap authoring task;
   coverage remains a gate for implementation subtasks, starting with `T-0016a`.
-- Integration result: pending orchestrator review and later integration.
+- Integration result: merged into `main` at `ff08c5f`.
