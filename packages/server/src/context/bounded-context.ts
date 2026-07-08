@@ -359,7 +359,14 @@ export class BoundedContext {
     return this.#storedEventDispatchFailures.map(cloneDispatchFailure);
   }
 
-  /** Close context-owned buses, stand, and repository storage/runtime bindings. */
+  /**
+   * Close context-owned buses, stand, and repository storage/runtime bindings.
+   *
+   * Close is idempotent and returns the same close outcome on repeated calls.
+   * The context attempts every owned close hook; when any hook fails, the
+   * returned promise rejects with an `AggregateError` after the remaining hooks
+   * have also been attempted.
+   */
   close(): Promise<void> {
     this.#closed ??= this.#closeOnce();
     return this.#closed;
@@ -370,9 +377,7 @@ export class BoundedContext {
 
     await closeContextPart(() => this.#commandBus.close(), errors);
     await closeContextPart(() => this.#eventBus.close(), errors);
-    await closeContextPart(() => {
-      this.#stand.close();
-    }, errors);
+    await closeContextPart(() => this.#stand.close(), errors);
 
     for (const repository of this.#repositoryViews) {
       await closeContextPart(() => {

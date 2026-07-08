@@ -48,7 +48,13 @@ export class EventBus {
     return this.#started.then(() => this.#runtime.enqueue(() => this.#dispatch(accepted)));
   }
 
-  /** Stop accepting new event work, drain accepted work, and close the event store. */
+  /**
+   * Stop accepting new event work, drain accepted work, and close the event store.
+   *
+   * Close is idempotent and returns the same close outcome on repeated calls.
+   * Runtime and event-store close hooks are both attempted; failures reject as
+   * an `AggregateError`.
+   */
   close(): Promise<void> {
     this.#closed ??= this.#closeOnce();
     return this.#closed;

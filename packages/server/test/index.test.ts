@@ -238,6 +238,7 @@ describe("@spine-ts/server", () => {
         "RepositoryIdentityError",
         "RuntimeTransportBinding",
         "RuntimeTransportEnvelopeError",
+        "Server",
         "ServerRuntimeStateError",
         "ShardIndex",
         "ShardSession",
@@ -466,7 +467,7 @@ describe("@spine-ts/server", () => {
       "system",
     ]);
 
-    for (const member of ["Server", "ImportBus", "GrpcServer", "ZeroMqTransport"]) {
+    for (const member of ["ImportBus", "GrpcServer", "ZeroMqTransport"]) {
       expect(Object.hasOwn(serverRoot, member)).toBe(false);
     }
 

@@ -33,6 +33,22 @@ Focused lifecycle fix completed after implementation review:
 - `Server.close()` now closes real built `BoundedContext` instances rather than
   only duck-typed close hooks.
 
+First-round review-fix pass completed:
+
+- Moved the primary `Server` declaration before supporting public
+  `ServerOptions` and `RunningServer` declarations.
+- Expanded public TypeDoc for `Server.add(context)`, `RunningServer.close()`,
+  `BoundedContext.close()`, `CommandBus.close()`, `EventBus.close()`, and
+  `Stand.close()` to describe ownership, idempotence, and failure behavior.
+- Added bounded graceful HTTP/2 session drain with `session.destroy()` fallback
+  so non-draining active streams do not keep `RunningServer.close()` pending
+  indefinitely.
+- Made direct `Stand.close()` deterministic with in-flight reads/updates: new
+  direct operations are rejected once close begins, accepted operations drain,
+  then direct subscriptions and process-local versions are cleared.
+- Updated review/work logs for first-round findings, participants, fix actions,
+  and final review-fix verification.
+
 ## Code Changes
 
 - Added `packages/server/src/server/server.ts`.
@@ -43,6 +59,8 @@ Focused lifecycle fix completed after implementation review:
 - Added focused lifecycle tests under `packages/server/test/server`.
 - Added focused bounded-context close tests in
   `packages/server/test/context/bounded-context.test.ts`.
+- Updated the package export-surface test to keep `Server` public while still
+  rejecting broader environment/transport API names.
 - Migrated `packages/server/test/services/spine-services.test.ts` from its
   duplicated HTTP/2 start/close helper to the public `Server` API.
 - Migrated `examples/todo/src/index.ts` from ad-hoc HTTP/2 lifecycle code to
@@ -65,7 +83,7 @@ sandboxes reject loopback binds with `EPERM`.
 RED captured before production code:
 
 - `pnpm --config.verify-deps-before-run=false vitest run
-  packages/server/test/server/server.test.ts`
+packages/server/test/server/server.test.ts`
 - Result: all five new lifecycle tests failed because `Server` was missing from
   the public package export surface.
 
@@ -80,24 +98,55 @@ GREEN captured after implementation:
 
 - `pnpm --config.verify-deps-before-run=false typecheck:build`: passed.
 - Native `pnpm --config.verify-deps-before-run=false vitest run
-  packages/server/test/server packages/server/test/services/spine-services.test.ts
-  examples/todo/src/index.test.ts`: passed, 3 files and 74 tests.
+packages/server/test/server packages/server/test/services/spine-services.test.ts
+examples/todo/src/index.test.ts`: passed, 3 files and 74 tests.
+- Review-fix RED:
+  - Managed sandbox focused run failed server listener tests with expected
+    `listen EPERM` and failed the new direct Stand close race test with no
+    delivery after close.
+  - Native `pnpm --config.verify-deps-before-run=false vitest run
+packages/server/test/server/server.test.ts` failed the new active stream
+    test with `timed-out`, proving the previous server close could hang.
+- Review-fix GREEN:
+  - Native `pnpm --config.verify-deps-before-run=false vitest run
+packages/server/test/context/bounded-context.test.ts
+packages/server/test/server/server.test.ts`: passed, 2 files and 38 tests.
 
 Full required verification completed successfully.
 
 ## Final Verification
 
 - Native `pnpm --config.verify-deps-before-run=false vitest run
-  packages/server/test/context/bounded-context.test.ts
-  packages/server/test/server/server.test.ts
-  packages/server/test/services/spine-services.test.ts
-  examples/todo/src/index.test.ts`: passed, 4 files and 105 tests.
+packages/server/test/context/bounded-context.test.ts
+packages/server/test/server/server.test.ts
+packages/server/test/services/spine-services.test.ts
+examples/todo/src/index.test.ts`: passed, 4 files and 105 tests.
 - `pnpm --config.verify-deps-before-run=false typecheck`: passed.
 - `pnpm --config.verify-deps-before-run=false lint`: passed.
 - `pnpm --config.verify-deps-before-run=false format:check`: passed.
 - `pnpm --config.verify-deps-before-run=false docs:check`: passed. TypeDoc
   still reports the pre-existing invalid `origin` source-link warning.
 - `git diff --check`: passed.
+
+## Review-Fix Verification
+
+- Native `pnpm --config.verify-deps-before-run=false vitest run
+packages/server/test/context/bounded-context.test.ts
+packages/server/test/server/server.test.ts
+packages/server/test/services/spine-services.test.ts
+examples/todo/src/index.test.ts`: passed, 4 files and 109 tests.
+- `pnpm --config.verify-deps-before-run=false typecheck`: passed.
+- `pnpm --config.verify-deps-before-run=false lint`: passed.
+- `pnpm --config.verify-deps-before-run=false format:check`: passed.
+- `pnpm --config.verify-deps-before-run=false docs:check`: passed. TypeDoc
+  still reports the pre-existing invalid `origin` source-link warning.
+- `git diff --check`: passed.
+- Full native `pnpm --config.verify-deps-before-run=false verify`: passed.
+  Plain tests passed with 53 files and 882 tests. Coverage passed with 94.88%
+  statements, 90.02% branches, 97.73% functions, and 94.87% lines. TypeDoc
+  completed with the existing invalid-`origin` source-link warning; API export
+  checks passed with 199 server exports; proto lint passed; generated proto
+  outputs were confirmed ignored, untracked, and freshly regenerated.
 
 ## Scope Notes
 

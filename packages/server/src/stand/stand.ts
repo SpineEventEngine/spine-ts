@@ -109,7 +109,10 @@ export class Stand {
   readonly #storageFactory: StorageFactory;
   readonly #registrations = new Map<string, Registration>();
   readonly #versions = new Map<string, Version>();
+  readonly #inFlight = new Set<Promise<void>>();
+  #closing = false;
   #closed = false;
+  #closedPromise: Promise<void> | undefined;
 
   constructor(options: StandOptions) {
     this.#context = cloneStorageContext(options.context);
@@ -164,18 +167,24 @@ export class Stand {
     id: unknown,
     options: StandReadOptions = {},
   ): Promise<StandReadResult<Schema> | undefined> {
-    const registration = this.#registration(schema, "read");
-    const tenantId = this.#tenantId(options.tenantId);
-    const storage = this.#openStorage(registration, tenantId);
+    const finish = this.#beginOperation();
 
     try {
-      const stored = await storage.read(id);
-      if (stored === undefined) {
-        return undefined;
+      const registration = this.#registration(schema, "read");
+      const tenantId = this.#tenantId(options.tenantId);
+      const storage = this.#openStorage(registration, tenantId);
+
+      try {
+        const stored = await storage.read(id);
+        if (stored === undefined) {
+          return undefined;
+        }
+        return this.#readResult(registration, stored as MessageShape<Schema>, tenantId);
+      } finally {
+        storage.close();
       }
-      return this.#readResult(registration, stored as MessageShape<Schema>, tenantId);
     } finally {
-      storage.close();
+      finish();
     }
   }
 
@@ -184,17 +193,23 @@ export class Stand {
     schema: Schema,
     options: StandReadOptions = {},
   ): Promise<readonly StandReadResult<Schema>[]> {
-    const registration = this.#registration(schema, "read");
-    const tenantId = this.#tenantId(options.tenantId);
-    const storage = this.#openStorage(registration, tenantId);
+    const finish = this.#beginOperation();
 
     try {
-      const stored = await storage.query();
-      return stored.map((state) =>
-        this.#readResult(registration, state as MessageShape<Schema>, tenantId),
-      );
+      const registration = this.#registration(schema, "read");
+      const tenantId = this.#tenantId(options.tenantId);
+      const storage = this.#openStorage(registration, tenantId);
+
+      try {
+        const stored = await storage.query();
+        return stored.map((state) =>
+          this.#readResult(registration, state as MessageShape<Schema>, tenantId),
+        );
+      } finally {
+        storage.close();
+      }
     } finally {
-      storage.close();
+      finish();
     }
   }
 
@@ -204,29 +219,35 @@ export class Stand {
     state: MessageShape<Schema>,
     options: StandUpdateOptions = {},
   ): Promise<void> {
-    const registration = this.#registration(schema, "update");
-    const tenantId = this.#tenantId(options.tenantId);
-    const stateCopy = clone(schema, state);
-    const id = readStateId(stateCopy, registration);
-    const storage = this.#openStorage(registration, tenantId);
+    const finish = this.#beginOperation();
 
     try {
-      await storage.write(stateCopy);
+      const registration = this.#registration(schema, "update");
+      const tenantId = this.#tenantId(options.tenantId);
+      const stateCopy = clone(schema, state);
+      const id = readStateId(stateCopy, registration);
+      const storage = this.#openStorage(registration, tenantId);
+
+      try {
+        await storage.write(stateCopy);
+      } finally {
+        storage.close();
+      }
+      const key = versionKey(registration.typeUrl, tenantId, id);
+      if (options.version === undefined) {
+        this.#versions.delete(key);
+      } else {
+        this.#versions.set(key, clone(VersionSchema, options.version));
+      }
+      this.#notify(registration, {
+        id,
+        state: stateCopy,
+        tenantId,
+        version: options.version,
+      });
     } finally {
-      storage.close();
+      finish();
     }
-    const key = versionKey(registration.typeUrl, tenantId, id);
-    if (options.version === undefined) {
-      this.#versions.delete(key);
-    } else {
-      this.#versions.set(key, clone(VersionSchema, options.version));
-    }
-    this.#notify(registration, {
-      id,
-      state: stateCopy,
-      tenantId,
-      version: options.version,
-    });
   }
 
   /** Subscribe directly to in-process updates for one known state schema. */
@@ -255,16 +276,26 @@ export class Stand {
     });
   }
 
-  /** Close direct subscriptions and reject later Stand operations. */
-  close(): void {
-    if (this.#closed) {
-      return;
-    }
-    this.#closed = true;
+  /**
+   * Close direct subscriptions and reject later Stand operations.
+   *
+   * Close is idempotent. New operations are rejected once close begins, and the
+   * close promise waits for already accepted direct reads/updates to finish
+   * before clearing subscriptions and version metadata.
+   */
+  close(): Promise<void> {
+    this.#closedPromise ??= this.#closeOnce();
+    return this.#closedPromise;
+  }
+
+  async #closeOnce(): Promise<void> {
+    this.#closing = true;
+    await Promise.all([...this.#inFlight]);
     this.#versions.clear();
     for (const registration of this.#registrations.values()) {
       registration.subscribers.clear();
     }
+    this.#closed = true;
   }
 
   #registration<Schema extends MessageSchema>(
@@ -363,9 +394,23 @@ export class Stand {
   }
 
   #requireOpen(): void {
-    if (this.#closed) {
+    if (this.#closing || this.#closed) {
       throw new Error("Stand is closed.");
     }
+  }
+
+  #beginOperation(): () => void {
+    this.#requireOpen();
+    let finish: (() => void) | undefined;
+    const operation = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    this.#inFlight.add(operation);
+
+    return () => {
+      this.#inFlight.delete(operation);
+      finish?.();
+    };
   }
 }
 

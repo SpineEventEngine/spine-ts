@@ -719,6 +719,51 @@ describe("BoundedContext assembly", () => {
     expect(storageFactory.isOpen()).toBe(true);
   });
 
+  it("waits for in-flight direct Stand updates before closing subscriptions", async () => {
+    const storageFactory = new DelayingStorageFactory();
+    const repository = new Repository({
+      entityType: TaskProjection,
+      schema: ProjectionStateSchema,
+    });
+    const context = BoundedContext.singleTenant("Tasks")
+      .withStorageFactory(storageFactory)
+      .add(repository)
+      .build();
+    const deliveries: string[] = [];
+    context.stand().subscribe(ProjectionStateSchema, (update) => {
+      deliveries.push(update.state.name);
+    });
+
+    const update = context.stand().update(
+      ProjectionStateSchema,
+      create(ProjectionStateSchema, {
+        id: "task-in-flight",
+        name: "In Flight",
+        priority: 1,
+      }),
+    );
+    await storageFactory.writeStarted;
+    const close = context.stand().close();
+
+    expect(() => context.stand().stateTypes()).toThrow("Stand is closed.");
+
+    storageFactory.releaseWrite();
+    await update;
+    await close;
+
+    expect(deliveries).toEqual(["In Flight"]);
+    await expect(
+      context.stand().update(
+        ProjectionStateSchema,
+        create(ProjectionStateSchema, {
+          id: "task-rejected",
+          name: "Rejected",
+          priority: 1,
+        }),
+      ),
+    ).rejects.toThrow("Stand is closed.");
+  });
+
   it("attempts every bounded-context close and reports aggregate failure", async () => {
     const storageFactory = new ObservingStorageFactory([], [1, 2]);
     const repository = new Repository({
@@ -804,6 +849,61 @@ class ObservingStorageFactory extends StorageFactory {
       : new ObservingRecordStorage(context, recordSpec, this.observed);
     this.storages.push(storage);
     return storage;
+  }
+}
+
+class DelayingStorageFactory extends StorageFactory {
+  readonly writeStarted: Promise<void>;
+  #startWrite: (() => void) | undefined;
+  #finishWrite: (() => void) | undefined;
+  #writeFinished: Promise<void>;
+  #delayed = false;
+
+  constructor() {
+    super();
+    this.writeStarted = new Promise((resolve) => {
+      this.#startWrite = resolve;
+    });
+    this.#writeFinished = new Promise((resolve) => {
+      this.#finishWrite = resolve;
+    });
+  }
+
+  releaseWrite(): void {
+    this.#finishWrite?.();
+  }
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new DelayingRecordStorage(context, recordSpec, {
+      beforeFirstWrite: async () => {
+        if (this.#delayed) {
+          return;
+        }
+        this.#delayed = true;
+        this.#startWrite?.();
+        await this.#writeFinished;
+      },
+    });
+  }
+}
+
+class DelayingRecordStorage<I, R extends Message> extends InMemoryRecordStorage<I, R> {
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    private readonly delay: { beforeFirstWrite(): Promise<void> },
+  ) {
+    super(context, recordSpec);
+  }
+
+  protected override async writeRecord(
+    record: ReturnType<RecordSpec<I, R>["materialize"]>,
+  ): Promise<void> {
+    await this.delay.beforeFirstWrite();
+    await super.writeRecord(record);
   }
 }
 

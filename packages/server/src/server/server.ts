@@ -8,37 +8,7 @@ import { SpineServices, type SpineServicesOptions } from "../services/spine-serv
 
 const defaultHost = "127.0.0.1";
 const defaultPort = 0;
-
-/** Options for building a local Spine HTTP/2 service host. */
-export interface ServerOptions {
-  /**
-   * Listener host. Defaults to local-only `127.0.0.1`.
-   *
-   * Use a broader host such as `0.0.0.0` only when callers should reach this
-   * process from outside the local machine.
-   */
-  readonly host?: string;
-  /** Listener port. Defaults to `0`, asking the OS for a free port. */
-  readonly port?: number;
-  /** Built bounded contexts owned by this server assembly. */
-  readonly contexts?: readonly BoundedContext[];
-  /** Service-level options for Command, Query, and Subscription routes. */
-  readonly services?: Omit<SpineServicesOptions, "contexts">;
-  /** Extra framework-owned closeables to close after network intake stops. */
-  readonly resources?: readonly { close(): unknown }[];
-}
-
-/** Running local Spine service host. */
-export interface RunningServer {
-  /** Host accepted by the listener. */
-  readonly host: string;
-  /** Bound listener port. */
-  readonly port: number;
-  /** Base URL for Connect gRPC-compatible clients. */
-  readonly baseUrl: string;
-  /** Stop intake, close sessions, then close owned contexts/resources. */
-  close(): Promise<void>;
-}
+const gracefulSessionDrainMs = 100;
 
 /** Small JVM-familiar owner for real local Spine Connect/gRPC-compatible services. */
 export class Server {
@@ -62,7 +32,13 @@ export class Server {
     return new Server({ ...options, port });
   }
 
-  /** Add one built bounded context to expose through the Spine services. */
+  /**
+   * Add one built bounded context to expose through the Spine services.
+   *
+   * The server owns added contexts for this assembly. When the returned
+   * {@link RunningServer} closes, it closes every added context after network
+   * intake and active HTTP/2 sessions have stopped.
+   */
   add(context: BoundedContext): this {
     this.#contexts.push(context);
     return this;
@@ -93,6 +69,43 @@ export class Server {
       closeables: [...this.#contexts, ...this.#resources],
     });
   }
+}
+
+/** Options for building a local Spine HTTP/2 service host. */
+export interface ServerOptions {
+  /**
+   * Listener host. Defaults to local-only `127.0.0.1`.
+   *
+   * Use a broader host such as `0.0.0.0` only when callers should reach this
+   * process from outside the local machine.
+   */
+  readonly host?: string;
+  /** Listener port. Defaults to `0`, asking the OS for a free port. */
+  readonly port?: number;
+  /** Built bounded contexts owned by this server assembly. */
+  readonly contexts?: readonly BoundedContext[];
+  /** Service-level options for Command, Query, and Subscription routes. */
+  readonly services?: Omit<SpineServicesOptions, "contexts">;
+  /** Extra framework-owned closeables to close after network intake stops. */
+  readonly resources?: readonly { close(): unknown }[];
+}
+
+/** Running local Spine service host. */
+export interface RunningServer {
+  /** Host accepted by the listener. */
+  readonly host: string;
+  /** Bound listener port. */
+  readonly port: number;
+  /** Base URL for Connect gRPC-compatible clients. */
+  readonly baseUrl: string;
+  /**
+   * Stop intake, close sessions, then close owned contexts/resources.
+   *
+   * Repeated calls are idempotent and return the same close outcome. Close
+   * attempts every owned context/resource and rejects with an `AggregateError`
+   * when any owned close hook fails.
+   */
+  close(): Promise<void>;
 }
 
 class RunningHttp2Server implements RunningServer {
@@ -202,14 +215,17 @@ async function closeSessions(sessions: Set<http2.ServerHttp2Session>): Promise<v
 }
 
 function closeSession(session: http2.ServerHttp2Session): Promise<void> {
-  if (session.destroyed) {
-    return Promise.resolve();
-  }
-
   return new Promise((resolve) => {
-    session.once("close", () => {
+    const timer = setTimeout(() => {
+      session.destroy();
       resolve();
-    });
+    }, gracefulSessionDrainMs);
+    const finishGracefulClose = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    timer.unref();
+    session.once("close", finishGracefulClose);
     session.close();
   });
 }
@@ -223,17 +239,11 @@ async function closeOwned(closeables: readonly unknown[]): Promise<void> {
     }
   }
   if (errors.length > 0) {
-    throw new AggregateError(
-      errors,
-      "Server close failed while closing owned contexts/resources.",
-    );
+    throw new AggregateError(errors, "Server close failed while closing owned contexts/resources.");
   }
 }
 
-async function closeOne(
-  close: () => unknown,
-  errors: unknown[],
-): Promise<void> {
+async function closeOne(close: () => unknown, errors: unknown[]): Promise<void> {
   try {
     await close();
   } catch (error) {

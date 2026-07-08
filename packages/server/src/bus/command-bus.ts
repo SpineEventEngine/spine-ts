@@ -42,7 +42,12 @@ export class CommandBus {
     return this.#started.then(() => this.#runtime.enqueue(() => this.#dispatch(accepted)));
   }
 
-  /** Stop accepting new command work and wait for accepted work to settle. */
+  /**
+   * Stop accepting new command work and wait for accepted work to settle.
+   *
+   * Close is idempotent and returns the same close outcome on repeated calls.
+   * Runtime close failures reject the returned promise.
+   */
   close(): Promise<void> {
     this.#closed ??= this.#started.then(() => this.#runtime.close());
     return this.#closed;
