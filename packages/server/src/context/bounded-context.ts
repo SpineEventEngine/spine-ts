@@ -432,7 +432,7 @@ export class BoundedContextBuilder {
       return this;
     }
 
-    requireEntityClass(entry, "BoundedContextBuilder.add(entry)");
+    requireEntityClass(entry, "BoundedContextBuilder.add(repository)");
     this.#entityTypes.add(entry);
     return this;
   }

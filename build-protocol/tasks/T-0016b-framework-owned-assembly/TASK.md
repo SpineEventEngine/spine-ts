@@ -237,3 +237,7 @@ Canonical checklist evidence:
   redundant type assertion. Collapsed the public method declaration to the
   simpler `Repository | EntityClass` union signature before rerunning
   verification.
+- `2026-07-08 04:19 WEST`: Sandboxed full verification then reached tests and
+  confirmed expected listener/IPC sandbox failures, plus one real
+  bounded-context assertion mismatch caused by changed structural-repository
+  error wording. Restored the original repository-instance operation wording.
