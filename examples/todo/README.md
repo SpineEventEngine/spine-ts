@@ -21,7 +21,7 @@ and `TaskListProjection`.
 Generate protobuf output and build the workspace first:
 
 ```bash
-pnpm typecheck:build
+pnpm --config.verify-deps-before-run=false typecheck:build
 ```
 
 This command also regenerates the to-do handler registry. Generated files under
@@ -31,7 +31,7 @@ out of Git.
 Start the standalone server:
 
 ```bash
-pnpm --filter @spine-ts/example-todo start
+pnpm --config.verify-deps-before-run=false --filter @spine-ts/example-todo start
 ```
 
 The server listens on `http://127.0.0.1:8080` and exposes the copied Spine

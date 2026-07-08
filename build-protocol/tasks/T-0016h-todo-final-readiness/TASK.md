@@ -1,6 +1,6 @@
 # T-0016h: To-Do Example Final Readiness
 
-Status: in progress
+Status: DONE
 Start: `2026-07-08T16:37:31Z`
 Baseline commit: `2966c26`
 Branch: `task/T-0016h-todo-final-readiness`
@@ -87,3 +87,14 @@ reviewer sub-agents:
 Feed every finding back to an implementation/fix sub-agent and repeat review
 rounds until all lanes are clean. Close every participating sub-agent after its
 result is recorded.
+
+## Implementation Completion Notes
+
+- `2026-07-08T17:51:36Z`: Final readiness implementation completed. The to-do
+  example already used generated framework-owned assembly and the framework
+  `Server` API; changes were limited to copy-pasteable docs and one cleanup
+  guard denylist gap.
+- Verification passed, including native focused to-do tests and native full
+  `pnpm --config.verify-deps-before-run=false verify`. The managed sandbox
+  focused-test run hit the documented `127.0.0.1` listener `EPERM`, then passed
+  with native loopback approval.

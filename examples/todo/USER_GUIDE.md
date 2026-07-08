@@ -9,7 +9,7 @@ shared across processes and disappears when the process exits.
 Run generation and TypeScript build from the repository root:
 
 ```bash
-pnpm typecheck:build
+pnpm --config.verify-deps-before-run=false typecheck:build
 ```
 
 Generated Protobuf-ES output lives under `examples/todo/generated/` and remains
@@ -24,7 +24,7 @@ including the runtime registry module at
 Start the example after building:
 
 ```bash
-pnpm --filter @spine-ts/example-todo start
+pnpm --config.verify-deps-before-run=false --filter @spine-ts/example-todo start
 ```
 
 By default the process listens at:
@@ -60,9 +60,10 @@ Use Connect clients and the generated command schemas:
 import { create } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
-import { packCommand } from "@spine-ts/core";
+import { packAny } from "@spine-ts/core";
 import {
   ActorContextSchema,
+  CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
   UserIdSchema,
@@ -73,18 +74,20 @@ import { TaskIdSchema } from "./generated/spine/example/todo/v1/task_id_pb.js";
 
 const transport = createGrpcTransport({ baseUrl: "http://127.0.0.1:8080" });
 const commands = createClient(CommandService, transport);
-const command = packCommand({
+const command = create(CommandSchema, {
   id: create(CommandIdSchema, { uuid: "command-create-1" }),
   context: create(CommandContextSchema, {
     actorContext: create(ActorContextSchema, {
       actor: create(UserIdSchema, { value: "todo-user" }),
     }),
   }),
-  schema: CreateTaskSchema,
-  message: create(CreateTaskSchema, {
-    id: create(TaskIdSchema, { value: "task-1" }),
-    title: "Write the guide",
-  }),
+  message: packAny(
+    CreateTaskSchema,
+    create(CreateTaskSchema, {
+      id: create(TaskIdSchema, { value: "task-1" }),
+      title: "Write the guide",
+    }),
+  ),
 });
 
 const ack = await commands.post(command);
@@ -94,8 +97,9 @@ console.log(ack.status?.status.case);
 `RenameTask`, `CompleteTask`, and `ReopenTask` use the same command service
 path. Invalid command payloads return an Ack error with
 `COMMAND_VALIDATION_ERROR` and packed `spine.validation.ValidationError`
-details. Completing an already completed task returns `TASK_ALREADY_DONE`;
-reopening an open task returns `TASK_NOT_DONE`.
+details when sent to the server; ordinary clients should let `packAny()`
+validate payloads locally before posting. Completing an already completed task
+returns `TASK_ALREADY_DONE`; reopening an open task returns `TASK_NOT_DONE`.
 
 ## Query Task Lists
 
@@ -181,8 +185,8 @@ client is done.
 Focused example coverage:
 
 ```bash
-pnpm typecheck:build
-pnpm exec vitest run examples/todo/src/index.test.ts --passWithNoTests
+pnpm --config.verify-deps-before-run=false typecheck:build
+pnpm --config.verify-deps-before-run=false vitest run examples/todo/src/index.test.ts --passWithNoTests
 ```
 
 The focused suite covers in-process black-box behavior and a real
@@ -193,4 +197,4 @@ handler registry is present and that the bounded context accepts commands
 through generated metadata.
 
 Some sandboxes block loopback listeners with `EPERM`; rerun the focused test
-with the required local-network approval if that happens.
+with the required native loopback approval if that happens.
