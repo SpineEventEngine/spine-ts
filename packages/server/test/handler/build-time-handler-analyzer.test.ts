@@ -231,6 +231,93 @@ describe("build-time handler analyzer", () => {
     ]);
   });
 
+  it("handles namespace imports, aliases, readonly wrappers, and computed method diagnostics", () => {
+    const result = analyzeBuildHandlers(programWithSource("src/oddball.ts", oddballSource));
+
+    expect(result.entities).toEqual([
+      {
+        className: "OddballAggregate",
+        sourceFile: "src/oddball.ts",
+        stateSchema: schema("../generated/task_pb.js", "TaskSchema"),
+        handlers: [
+          {
+            kind: "command-assignment",
+            methodName: "create",
+            signalSchema: schema("../generated/commands_pb", "CreateTaskSchema"),
+            emittedSchemas: [schema("../generated/events_pb", "TaskCreatedSchema")],
+            parameterCount: 1,
+          },
+          {
+            kind: "command-reaction",
+            methodName: "rename",
+            signalSchema: schema("../generated/commands_pb", "CreateTaskSchema"),
+            emittedSchemas: [schema("../generated/commands_pb", "RenameTaskSchema")],
+            parameterCount: 1,
+          },
+          {
+            kind: "event-reaction",
+            methodName: "fanOut",
+            signalSchema: schema("../generated/events_pb", "TaskCreatedSchema"),
+            emittedSchemas: [
+              schema("../generated/events_pb", "TaskRenamedSchema"),
+              schema("../generated/events_pb", "TaskCreatedSchema"),
+            ],
+            parameterCount: 1,
+          },
+        ],
+      },
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "INVALID_HANDLER_NAME",
+      "FRAMEWORK_ENVELOPE_RETURN",
+      "MISSING_RETURN_TYPE",
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.methodName)).toEqual([
+      undefined,
+      "envelope",
+      "missingReturn",
+    ]);
+  });
+
+  it("reports edge diagnostics for tuple members, missing generics, and proto envelopes", () => {
+    const result = analyzeBuildHandlers(programWithSource("src/edge.ts", edgeSource));
+
+    expect(result.entities).toEqual([
+      {
+        className: "EdgeAggregate",
+        sourceFile: "src/edge.ts",
+        stateSchema: schema("../generated/task_pb.js", "TaskSchema"),
+        handlers: [
+          {
+            kind: "command-assignment",
+            methodName: "parenthesized",
+            signalSchema: schema("../generated/commands_pb.js", "CreateTaskSchema"),
+            emittedSchemas: [schema("../generated/events_pb.js", "TaskCreatedSchema")],
+            parameterCount: 1,
+          },
+        ],
+      },
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "INVALID_HANDLER_NAME",
+      "UNSUPPORTED_RETURN_TYPE",
+      "UNSUPPORTED_RETURN_TYPE",
+      "UNSUPPORTED_RETURN_TYPE",
+      "INVALID_SIGNAL_TYPE",
+      "MISSING_RETURN_TYPE",
+      "FRAMEWORK_ENVELOPE_RETURN",
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.methodName)).toEqual([
+      undefined,
+      "optionalTuple",
+      "restTuple",
+      "missingArrayArgument",
+      "stringSignal",
+      "missingReturn",
+      "protoCommand",
+    ]);
+  });
+
   it("surfaces TypeScript syntax diagnostics for malformed source", () => {
     const result = analyzeBuildHandlers(programWithSource("src/malformed.ts", malformedSource));
 
@@ -453,6 +540,101 @@ const invalidRoleSource = `
     @React
     reactCommand(event: TaskCreated): RenameTask {
       throw new Error(String(event));
+    }
+  }
+`;
+
+const oddballSource = `
+  import * as spine from "@spine-ts/server";
+  import * as proto from "@spine-ts/proto";
+  import * as commands from "../generated/commands_pb";
+  import * as events from "../generated/events_pb";
+  import { TaskSchema as StateSchema } from "../generated/task_pb.js";
+
+  type State = (typeof StateSchema);
+  const computed = "computed";
+
+  export class OddballAggregate extends spine.Aggregate<string, State, bigint> {
+    @spine.Assign
+    create(command: commands.CreateTask): readonly events.TaskCreated[] {
+      throw new Error(String(command));
+    }
+
+    @spine.Command
+    rename(command: commands.CreateTask): ReadonlyArray<commands.RenameTask> {
+      throw new Error(String(command));
+    }
+
+    @spine.React
+    fanOut(event: events.TaskCreated): readonly [renamed: events.TaskRenamed, created: events.TaskCreated] {
+      throw new Error(String(event));
+    }
+
+    @spine.Assign
+    [computed](command: commands.CreateTask): events.TaskCreated {
+      throw new Error(String(command));
+    }
+
+    @spine.Assign
+    envelope(command: commands.CreateTask): proto.Event {
+      throw new Error(String(command));
+    }
+
+    @spine.Assign
+    missingReturn(command: commands.CreateTask) {
+      throw new Error(String(command));
+    }
+  }
+`;
+
+const edgeSource = `
+  import { Aggregate, Assign } from "@spine-ts/server";
+  import * as Proto from "@spine-ts/proto";
+  import { TaskSchema } from "../generated/task_pb.js";
+  import { type CreateTask } from "../generated/commands_pb.js";
+  import { type TaskCreated } from "../generated/events_pb.js";
+
+  const computed = "computed";
+
+  export class EdgeAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+    @Assign
+    [computed](command: CreateTask): TaskCreated {
+      throw new Error(String(command));
+    }
+
+    @Assign
+    optionalTuple(command: CreateTask): [created?: TaskCreated] {
+      throw new Error(String(command));
+    }
+
+    @Assign
+    restTuple(command: CreateTask): [...TaskCreated[]] {
+      throw new Error(String(command));
+    }
+
+    @Assign
+    missingArrayArgument(command: CreateTask): ReadonlyArray {
+      throw new Error(String(command));
+    }
+
+    @Assign
+    parenthesized(command: CreateTask): readonly (TaskCreated)[] {
+      throw new Error(String(command));
+    }
+
+    @Assign
+    stringSignal(command: string): TaskCreated {
+      throw new Error(String(command));
+    }
+
+    @Assign
+    missingReturn(command: CreateTask) {
+      throw new Error(String(command));
+    }
+
+    @Assign
+    protoCommand(command: CreateTask): Proto.Command {
+      throw new Error(String(command));
     }
   }
 `;

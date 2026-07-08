@@ -16,7 +16,7 @@ import { findSymlinkedAncestors, lstatIfPresent } from "./generated-path-safety.
 const protoRoot = fileURLToPath(new URL("../proto", import.meta.url));
 const todoProtoRoot = fileURLToPath(new URL("../examples/todo/proto", import.meta.url));
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
-const generatedTargets = [
+export const generatedTargets = [
   {
     displayPath: "packages/proto/generated",
     templatePath: "buf.gen.yaml",
@@ -293,6 +293,12 @@ export function publishGeneratedTargets(stagedTargets, root = repoRoot, options 
   }
 }
 
+function removeStagedTargets(stagedTargets) {
+  for (const stagedTarget of stagedTargets) {
+    rmSync(stagedTarget.stageRoot, { recursive: true, force: true });
+  }
+}
+
 function createTargetStage(target, root = repoRoot) {
   const generatedRoot = join(root, target.displayPath);
   const generatedParent = dirname(generatedRoot);
@@ -324,7 +330,7 @@ function createTargetStage(target, root = repoRoot) {
   }
 }
 
-export function generateTargets(options = {}) {
+export function stageGeneratedTargets(options = {}) {
   const root = options.repoRoot ?? repoRoot;
   const run = options.runCommand ?? runCommand;
   const stagedTargets = [];
@@ -334,7 +340,11 @@ export function generateTargets(options = {}) {
       const stagedTarget = createTargetStage(target, root);
 
       if (stagedTarget === undefined) {
-        return 1;
+        removeStagedTargets(stagedTargets);
+        return {
+          stagedTargets: [],
+          status: 1,
+        };
       }
 
       stagedTargets.push(stagedTarget);
@@ -346,17 +356,54 @@ export function generateTargets(options = {}) {
       ]);
 
       if (generateStatus !== 0) {
-        return generateStatus;
+        removeStagedTargets(stagedTargets);
+        return {
+          stagedTargets: [],
+          status: generateStatus,
+        };
       }
     }
 
     const registryStatus = generateTodoHandlerRegistry(stagedTargets, root, run);
 
     if (registryStatus !== 0) {
-      return registryStatus;
+      removeStagedTargets(stagedTargets);
+      return {
+        stagedTargets: [],
+        status: registryStatus,
+      };
     }
 
-    publishGeneratedTargets(stagedTargets, root);
+    return {
+      stagedTargets,
+      status: 0,
+    };
+  } catch (error) {
+    console.error(
+      `Failed to stage generated output: ${error instanceof Error ? error.message : String(error)}`,
+    );
+    removeStagedTargets(stagedTargets);
+    return {
+      stagedTargets: [],
+      status: 1,
+    };
+  }
+}
+
+export function cleanupStagedTargets(stagedTargets) {
+  removeStagedTargets(stagedTargets);
+}
+
+export function generateTargets(options = {}) {
+  const root = options.repoRoot ?? repoRoot;
+  const staged = stageGeneratedTargets(options);
+
+  if (staged.status !== 0) {
+    return staged.status;
+  }
+
+  try {
+    publishGeneratedTargets(staged.stagedTargets, root);
     return 0;
   } catch (error) {
     console.error(
@@ -366,9 +413,7 @@ export function generateTargets(options = {}) {
     );
     return 1;
   } finally {
-    for (const stagedTarget of stagedTargets) {
-      rmSync(stagedTarget.stageRoot, { recursive: true, force: true });
-    }
+    cleanupStagedTargets(staged.stagedTargets);
   }
 }
 
