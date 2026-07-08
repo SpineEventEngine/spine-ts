@@ -1,6 +1,6 @@
 # T-0016b Review Log
 
-Status: all required lanes clean; integration result pending
+Status: all required lanes clean; integrated into `main`
 
 Scope: framework-owned generated repository assembly, to-do example assembly
 cleanup, and related docs/tests.
@@ -87,3 +87,4 @@ cleanup, and related docs/tests.
     ZeroMQ IPC sandbox permissions after 807 tests passed;
   - escalated full verification could not be rerun because the environment
     rejected the escalation request for `corepack pnpm verify`.
+- Integrated into `main` with merge commit `d7ee7e8`.

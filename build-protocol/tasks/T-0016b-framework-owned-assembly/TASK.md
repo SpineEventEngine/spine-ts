@@ -1,6 +1,6 @@
 # T-0016b: Framework-Owned Generated Repository Assembly
 
-Status: implemented; all required review lanes clean; integration pending
+Status: integrated into `main`
 Start: `2026-07-08 03:00 WEST`
 Baseline commit: `08d8f0e`
 Task log path:
@@ -261,3 +261,5 @@ Canonical checklist evidence:
     escalation request;
   - `corepack pnpm proto:lint`, `corepack pnpm proto:check-generated`, and
     `git diff --check` passed.
+- `2026-07-08 04:28 WEST`: Integrated into `main` with merge commit
+  `d7ee7e8`.
