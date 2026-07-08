@@ -155,11 +155,13 @@ map-valued, and explicit optional `(set_once)` fields are intentionally
 unsupported in this slice, matching the JVM generation boundary; they fail
 closed with field-specific violations and no raw previous/next value leakage.
 
-`defineEntityHandlers()` is the low-level explicit metadata constructor used by
-framework tests, generated registry ingestion, and legacy non-decorator
-integrations. It accepts an entity class, a state schema, and a builder callback
-whose methods record command assignment, command reaction, event subscription,
-event reaction, and event application metadata. Each handler record keeps the
+`defineEntityHandlers()` is the low-level explicit metadata constructor that
+remains public for framework tests, generated-registry ingestion, and legacy
+non-decorator migration tooling. Ordinary application code should use bare
+decorators plus generated registry assembly instead. The explicit constructor
+accepts an entity class, a state schema, and a builder callback whose methods
+record command assignment, command reaction, event subscription, event
+reaction, and event application metadata. Each handler record keeps the
 generated Protobuf-ES schema, message full type name, handler kind, and entity
 method name. Event application metadata also records `allowImport` only for
 legacy schema-bearing `@Apply` compatibility metadata.
@@ -189,10 +191,10 @@ standard per-class decorator metadata. Schema-bearing decorator overloads,
 `@Apply`, and `materializeDecoratedEntityHandlers()` remain legacy/framework
 compatibility. Generated registry tooling owns ordinary schema inference from
 handler parameter and return types, keeps decorated classes compatible with
-`HandlerMetadataRegistry`, and preserves `defineEntityHandlers()` as the
-low-level fallback for environments that avoid decorators. The adapter does not
-use legacy `emitDecoratorMetadata`, `reflect-metadata`, parameter decorators, or
-a process-wide handler registry.
+`HandlerMetadataRegistry`, and leaves `defineEntityHandlers()` available only
+for framework tests, generated-registry ingestion, and legacy non-decorator
+migration tooling. The adapter does not use legacy `emitDecoratorMetadata`,
+`reflect-metadata`, parameter decorators, or a process-wide handler registry.
 
 `validateEntityStateTransition()` is the first high-level server validation API
 over previous and proposed entity state. It calls `describeEntityMetadata()` to
@@ -406,8 +408,7 @@ Unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
 
 The following runtime pieces are still deferred to later explicit tasks:
 
-- default repository construction from entity classes,
-  visibility/type-supplier registration, and lifecycle callbacks over the
+- visibility/type-supplier registration and lifecycle callbacks over the
   repository identity seam;
 - process-manager event handler execution, read-side catch-up, and
   query/subscription execution over repository routes;

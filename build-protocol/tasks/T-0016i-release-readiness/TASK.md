@@ -1,6 +1,6 @@
 # T-0016i: Release Readiness Audit
 
-Status: in progress
+Status: complete
 Started: `2026-07-08`
 Branch: `task/T-0016i-release-readiness`
 Worktree:
@@ -79,4 +79,68 @@ explicit follow-up tasks for any deferred release-readiness gaps.
 
 ## Completion Notes
 
-Pending.
+- Targeted public-doc/source scans were run for stale wording and forbidden
+  end-user API references. The concrete audit gap was documentation-only:
+  `defineEntityHandlers()` was still described too broadly in
+  `packages/server/README.md` and lacked an explicit narrow public outcome in
+  `docs/api/README.md`.
+- `@Apply` and `materializeDecoratedEntityHandlers()` already had a
+  legacy/framework compatibility outcome in user-facing docs. This slice kept
+  compatibility exports in place and documented the narrow legacy scope instead
+  of removing public exports.
+- Updated `packages/server/README.md` and `docs/api/README.md` so
+  `defineEntityHandlers()` remains public only for framework tests,
+  generated-registry ingestion, and legacy non-decorator migration tooling.
+  Ordinary applications are directed to bare decorators plus generated registry
+  assembly.
+- No Protobuf contracts, generated-code policy, server runtime behavior, or
+  generated output were changed. The only server source edit clarified exported
+  API TSDoc for `defineEntityHandlers()`.
+- `pnpm format:check` passed.
+- Initial `pnpm proto:check-generated` failed in a fresh worktree because
+  ignored generated proto output was absent. After `pnpm proto:generate`,
+  `pnpm proto:check-generated` passed and reported generated proto outputs are
+  ignored, untracked, and freshly regenerated.
+- Initial sandboxed `pnpm verify` failed only when native endpoint tests tried
+  to bind local HTTP/2 and ZeroMQ IPC resources:
+  `listen EPERM: operation not permitted 127.0.0.1` and ZeroMQ
+  `Operation not permitted`.
+- Native `pnpm verify` passed: 53 test files and 882 tests passed, coverage was
+  94.88% statements / 90.02% branches / 97.73% functions / 94.87% lines,
+  TypeDoc/API export checks passed with the expected invalid-remote source-link
+  warning, proto lint passed, and generated-clean passed.
+- Final review cleanup aligned the framework `USER_GUIDE.md` with the same
+  `defineEntityHandlers()` outcome, replaced stale participant wording, and
+  consolidated duplicated review findings.
+- Post-review-fix `pnpm format:check`, `pnpm docs:check`, `pnpm lint`,
+  `pnpm proto:check-generated`, `git diff --check`, and the native full
+  verification gate passed.
+- Review-fix pass tightened `docs/architecture/README.md` after reviewer
+  findings. The architecture notes no longer say default repository construction
+  from entity classes is deferred; that path is covered by generated-registry
+  assembly through
+  `BoundedContext.singleTenant(...).add(EntityClass).withGeneratedRegistryRoot(...).buildAsync()`.
+  Remaining deferred repository work is visibility/type-supplier registration
+  and lifecycle callbacks over the repository identity seam.
+- Review-fix pass also aligned the architecture `defineEntityHandlers()`
+  description with public docs and TypeScript docs: the explicit API remains
+  public only for framework tests, generated-registry ingestion, and legacy
+  non-decorator migration tooling. Ordinary application code should use bare
+  decorators plus generated registry assembly.
+- Final clearance reviews are clean across style/maintainability,
+  documentation, TypeScript/API docs, security, and performance/reliability.
+- A final working-tree clearance rerun corrected the review target from stale
+  committed `HEAD` content to `git diff 4430c9b --`; all five reviewer lanes
+  reported clean and all participating agents were closed.
+- Review-fix verification:
+  - `pnpm format:check`: passed; all matched files use Prettier code style.
+  - `pnpm docs:check`: passed; TypeDoc/API export checks passed with the
+    expected invalid `origin` remote warning, and API export coverage reported
+    100 proto / 28 core / 199 server / 17 storage / 17 transport / 3 testing
+    expected exports.
+  - `git diff --check`: passed with no whitespace errors.
+  - Targeted stale-phrase scan over public docs and server TSDoc passed with no
+    matches for the removed broad/deferred wording.
+  - Targeted positive scope scan confirmed the narrowed
+    `defineEntityHandlers()` outcome and remaining repository deferred scope in
+    architecture docs, public docs, TypeScript docs, and durable logs.

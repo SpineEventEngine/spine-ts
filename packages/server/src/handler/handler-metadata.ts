@@ -391,6 +391,10 @@ export interface HandlerArity {
 /**
  * Explicitly bind schemas to entity class method names without invoking handlers.
  *
+ * This low-level API remains public for framework tests, generated-registry
+ * ingestion, and legacy non-decorator migration tooling. Ordinary application
+ * code should use bare decorators plus generated registry assembly instead.
+ *
  * Handler names must identify own prototype data methods declared with normal
  * class method syntax. Registration rejects accessors, `constructor`, inherited
  * methods, and instance fields without invoking user code.

@@ -107,7 +107,9 @@ Current slice exposes:
   lifecycle and explicit version metadata helpers; and
 - `defineEntityHandlers(EntityClass, StateSchema, builder => [...])` for
   explicit, frozen handler metadata that binds generated Protobuf-ES schemas to
-  entity method names; and
+  entity method names in framework tests, generated-registry ingestion, and
+  legacy non-decorator migration tooling. Ordinary applications should use bare
+  decorators plus generated registry assembly instead; and
 - `HandlerMetadataRegistry` for caller-owned metadata registration, deterministic
   lookup views, and duplicate command or legacy event application validation.
 - `CommandRegistrationReadiness.fromRegistry()` /
@@ -201,14 +203,16 @@ default repositories. Entity-class assembly requires
 the conventional generated registry module under an explicit trusted root.
 Generated registry discovery and ingestion stay inside the framework-owned
 assembly path; application code adds entity classes, not
-`HandlerMetadataRegistry` values. The low-level explicit registration API
+`HandlerMetadataRegistry` values. The low-level explicit registration API,
+including `defineEntityHandlers()`, remains public only for framework tests,
+generated-registry ingestion, and legacy non-decorator migration tooling. It
 records command assignments, command reactions, event subscriptions, event
-reactions, and legacy event applications in
-declaration order. Handler names must refer to own prototype data methods
-declared with normal class method syntax; accessors, `constructor`, inherited
-methods, and instance fields are rejected without invoking user code. The API does not
-invoke handlers, enforce transactions or `(set_once)`, build repositories, write
-storage, register buses, start transport, or implement service adapters.
+reactions, and legacy event applications in declaration order. Handler names
+must refer to own prototype data methods declared with normal class method
+syntax; accessors, `constructor`, inherited methods, and instance fields are
+rejected without invoking user code. The API does not invoke handlers, enforce
+transactions or `(set_once)`, build repositories, write storage, register buses,
+start transport, or implement service adapters.
 
 The decorator API is an adapter over that explicit contract. Decorators record
 standard per-class metadata from public instance methods only. Bare

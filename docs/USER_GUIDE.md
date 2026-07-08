@@ -971,11 +971,12 @@ implement an import bus, validate transactions, assemble repositories, write
 storage, or start transport.
 
 `defineEntityHandlers()` remains available for framework tests, generated
-registry ingestion, and legacy code that cannot use decorators. It is not the
-recommended end-user workflow. The helper checks that named methods are own
-prototype data methods declared with normal class method syntax, returns frozen
-metadata arrays, and rejects accessors, `constructor`, inherited methods, and
-instance fields without invoking user code.
+registry ingestion, and legacy non-decorator migration tooling. Ordinary
+application code should use bare decorators plus generated registry assembly
+instead. The helper checks that named methods are own prototype data methods
+declared with normal class method syntax, returns frozen metadata arrays, and
+rejects accessors, `constructor`, inherited methods, and instance fields without
+invoking user code.
 
 ## Storage
 
