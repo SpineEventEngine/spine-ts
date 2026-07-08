@@ -158,6 +158,7 @@ Canonical checklist evidence:
   global runtime coverage threshold.
 - Implementation was committed as `277a6a2` (`Normalize verification gate`).
 - All required reviewer lanes reported clean against branch head `b962ba1`.
+- Final branch verification passed after review closure at `02d6bcb`.
 
 ## Verification Evidence
 
@@ -180,3 +181,12 @@ Canonical checklist evidence:
 - `corepack pnpm format:check` passed.
 - `git status --short` showed only intended staged tracked/log/config/test
   changes and no staged generated output or user-owned untracked notes.
+- Final branch verification after review closure:
+  - escalated `corepack pnpm verify` passed end-to-end;
+  - non-coverage tests passed with 50 files / 820 tests;
+  - coverage tests passed with 50 files / 820 tests;
+  - coverage summary was 95.12% statements, 90.33% branches, 98.08% functions,
+    and 95.12% lines;
+  - docs/API check, proto lint, and `proto:check-generated` passed;
+  - final `git status --short --ignored` showed no tracked changes and only
+    ignored generated/build/dependency outputs.
