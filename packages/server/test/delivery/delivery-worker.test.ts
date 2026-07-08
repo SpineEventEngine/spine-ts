@@ -1,6 +1,20 @@
+import type { Message } from "@bufbuild/protobuf";
 import { InMemoryStorageFactory } from "@spine-ts/storage";
+import {
+  type RecordQuery,
+  type RecordSpec,
+  RecordStorage,
+  StorageFactory,
+  type StorageContext,
+} from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
+import {
+  DedupRecords,
+  dedupRecordSpec,
+  InboxRecords,
+  inboxRecordSpec,
+} from "../../src/delivery/inbox-records.js";
 import { Delivery, ShardIndex, type InboxId, type InboxMessage } from "../../src/index.js";
 
 describe("Delivery worker", () => {
@@ -24,7 +38,7 @@ describe("Delivery worker", () => {
 
     const run = await second.drain(shard, {
       node: "node-b",
-      deliver(message) {
+      onMessage(message) {
         seen.push(message.signalId);
       },
     });
@@ -53,7 +67,7 @@ describe("Delivery worker", () => {
     const seen: string[] = [];
     const run = await delivery.drain(shard, {
       node: "node-a",
-      deliver(message) {
+      onMessage(message) {
         seen.push(message.signalId);
       },
     });
@@ -88,7 +102,7 @@ describe("Delivery worker", () => {
     const run = await delivery.drain(shard, {
       node: "node-a",
       limit: 2,
-      deliver(message) {
+      onMessage(message) {
         seen.push(message.signalId);
       },
     });
@@ -117,7 +131,7 @@ describe("Delivery worker", () => {
 
     const firstRun = await delivery.drain(shard, {
       node: "node-a",
-      deliver(message) {
+      onMessage(message) {
         if (message.signalId === "signal-fail") {
           throw new Error("endpoint failed");
         }
@@ -140,7 +154,7 @@ describe("Delivery worker", () => {
     const retried: string[] = [];
     const retryRun = await delivery.drain(shard, {
       node: "node-a",
-      deliver(message) {
+      onMessage(message) {
         retried.push(message.signalId);
       },
     });
@@ -165,7 +179,7 @@ describe("Delivery worker", () => {
     await seed(delivery, "signal-1", 1n);
     await delivery.drain(shard, {
       node: "node-a",
-      deliver() {
+      onMessage() {
         throw new Error("endpoint failed");
       },
     });
@@ -201,7 +215,7 @@ describe("Delivery worker", () => {
     const delivered: string[] = [];
     await delivery.drain(shard, {
       node: "node-a",
-      deliver(message) {
+      onMessage(message) {
         delivered.push(message.signalId);
       },
     });
@@ -223,6 +237,49 @@ describe("Delivery worker", () => {
     expect(duplicate.message.keepUntil).toEqual(keepUntil);
   });
 
+  it("fails duplicate retention checks when the delivery clock is not a Date", async () => {
+    const now: { value: unknown } = {
+      value: new Date("2026-07-08T09:00:00.000Z"),
+    };
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => now.value as Date,
+    });
+    const inboxId = targetInbox();
+    const shard = ShardIndex.single();
+
+    await delivery.inbox.receive({
+      inboxId,
+      signalId: "signal-clock",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      version: 1n,
+      keepUntil: new Date("2026-07-08T10:00:00.000Z"),
+    });
+    await delivery.drain(shard, {
+      node: "node-a",
+      onMessage() {
+        now.value = new Date("2026-07-08T09:10:00.000Z");
+      },
+    });
+
+    now.value = "not-a-date";
+    await expect(
+      delivery.inbox.receive({
+        inboxId,
+        signalId: "signal-clock",
+        label: "UPDATE_SUBSCRIBER",
+        status: "TO_DELIVER",
+        shard,
+        whenReceived: new Date("2026-07-08T09:01:00.000Z"),
+        version: 2n,
+      }),
+    ).rejects.toThrow("Inbox storage clock must return a Date.");
+  });
+
   it("keeps the delivered marker idempotent and ignores non-pending rows", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -233,7 +290,7 @@ describe("Delivery worker", () => {
     const delivered = await seed(delivery, "signal-delivered", 1n);
     await delivery.drain(shard, {
       node: "node-a",
-      deliver(message) {
+      onMessage(message) {
         expect(message.signalId).toBe("signal-delivered");
       },
     });
@@ -245,6 +302,14 @@ describe("Delivery worker", () => {
       signalId: "signal-delivered",
       status: "DELIVERED",
     });
+    await expect(
+      delivery.inbox.markDelivered(
+        Object.freeze({
+          ...(deliveredRows[0] ?? delivered),
+          signalId: "signal-forged",
+        }),
+      ),
+    ).resolves.toBeUndefined();
 
     const scheduled = await delivery.inbox.receive({
       inboxId: targetInbox(),
@@ -258,6 +323,158 @@ describe("Delivery worker", () => {
 
     await expect(delivery.inbox.markDelivered(scheduled.message)).resolves.toBeUndefined();
     await expect(delivery.inbox.markDelivered(missingMessage())).resolves.toBeUndefined();
+  });
+
+  it("records a marker failure when the stored row changes after dispatch", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const shard = ShardIndex.single();
+    const stored = await seed(delivery, "signal-original", 1n);
+    const inboxRecords = deliveryInboxRecords(storageFactory);
+    const inboxKey = messageKey(stored);
+    const originalRecord = await inboxRecords.read(inboxKey);
+    expect(originalRecord).toBeDefined();
+
+    const seen: string[] = [];
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      async onMessage(message) {
+        seen.push(message.signalId);
+        const tampered = Object.freeze({
+          ...message,
+          signalId: "signal-tampered",
+        });
+        await expect(
+          inboxRecords.compareAndSet(inboxKey, originalRecord, InboxRecords.write(tampered)),
+        ).resolves.toBe(true);
+      },
+    });
+
+    expect(seen).toEqual(["signal-original"]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures[0]?.message.signalId).toBe("signal-original");
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+  });
+
+  it("leaves a row pending when the dedup guard cannot be marked delivered", async () => {
+    const faultPlan: DeliveryFaultPlan = {};
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FaultyDeliveryStorageFactory(faultPlan),
+    });
+    const shard = ShardIndex.single();
+
+    await seed(delivery, "signal-guard-fails", 1n);
+    faultPlan.throwDedupFinalizeOnce = true;
+
+    const seen: string[] = [];
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(seen).toEqual(["signal-guard-fails"]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      delivered: 0,
+      failed: 1,
+    });
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-guard-fails", status: "TO_DELIVER" },
+    ]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+  });
+
+  it("rejects forged delivered markers that only reuse an inbox message id", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const shard = ShardIndex.single();
+    const stored = await seed(delivery, "signal-original", 1n);
+
+    const forged = Object.freeze({
+      ...stored,
+      signalId: "signal-forged",
+      version: 99n,
+    });
+
+    await expect(delivery.inbox.markDelivered(forged)).resolves.toBeUndefined();
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-original", status: "TO_DELIVER" },
+    ]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+  });
+
+  it("repairs the delivered-row stale-guard race during duplicate receive", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-08T09:30:00.000Z"),
+    });
+    const shard = ShardIndex.single();
+    const inboxId = targetInbox();
+    const keepUntil = new Date("2026-07-08T10:00:00.000Z");
+    const stored = await delivery.inbox.receive({
+      inboxId,
+      signalId: "signal-race",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      version: 1n,
+      keepUntil,
+    });
+    const delivered = Object.freeze({
+      ...stored.message,
+      status: "DELIVERED" as const,
+    });
+
+    const inboxRecords = deliveryInboxRecords(storageFactory);
+    const dedupRecords = storageFactory.createRecordStorage(
+      { name: "Tasks.delivery.inbox-dedup", multitenant: false },
+      dedupRecordSpec,
+    );
+    const inboxKey = messageKey(stored.message);
+    const dedupKey = DedupRecords.guardKey(stored.message);
+    const pendingInbox = await inboxRecords.read(inboxKey);
+    const staleGuard = await dedupRecords.read(dedupKey);
+    expect(pendingInbox).toBeDefined();
+    expect(staleGuard).toBeDefined();
+    await expect(
+      inboxRecords.compareAndSet(inboxKey, pendingInbox, InboxRecords.write(delivered)),
+    ).resolves.toBe(true);
+
+    const duplicate = await delivery.inbox.receive({
+      inboxId,
+      signalId: "signal-race",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T09:01:00.000Z"),
+      version: 2n,
+      keepUntil,
+    });
+
+    expect(duplicate.outcome).toBe("DUPLICATE");
+    expect(duplicate.message).toMatchObject({
+      id: stored.message.id,
+      signalId: "signal-race",
+      status: "DELIVERED",
+    });
+    await expect(dedupRecords.read(dedupKey)).resolves.toEqual(DedupRecords.writeFinal(delivered));
   });
 });
 
@@ -296,4 +513,101 @@ function missingMessage(): InboxMessage {
     whenReceived: new Date("2026-07-08T09:00:00.000Z"),
     version: 99n,
   });
+}
+
+function messageKey(message: InboxMessage): string {
+  return `${message.id.shard.key()}:${message.id.value}`;
+}
+
+function deliveryInboxRecords(storageFactory: InMemoryStorageFactory) {
+  return storageFactory.createRecordStorage(
+    { name: "Tasks.delivery.inbox", multitenant: false },
+    inboxRecordSpec,
+  );
+}
+
+interface DeliveryFaultPlan {
+  throwDedupFinalizeOnce?: boolean;
+}
+
+class FaultyDeliveryStorageFactory extends StorageFactory {
+  readonly #delegate = new InMemoryStorageFactory();
+  readonly #plan: DeliveryFaultPlan;
+
+  constructor(plan: DeliveryFaultPlan) {
+    super();
+    this.#plan = plan;
+  }
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    const storage = this.#delegate.createRecordStorage(context, recordSpec);
+
+    return new FaultyDeliveryRecordStorage(context, recordSpec, storage, this.#plan);
+  }
+}
+
+class FaultyDeliveryRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+  readonly #delegate: RecordStorage<I, R>;
+  readonly #plan: DeliveryFaultPlan;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    delegate: RecordStorage<I, R>,
+    plan: DeliveryFaultPlan,
+  ) {
+    super(context, recordSpec);
+    this.#delegate = delegate;
+    this.#plan = plan;
+  }
+
+  override close(): void {
+    this.#delegate.close();
+    super.close();
+  }
+
+  protected compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    if (
+      this.context.name.endsWith(".delivery.inbox-dedup") &&
+      expected !== undefined &&
+      next !== undefined &&
+      this.#plan.throwDedupFinalizeOnce === true
+    ) {
+      this.#plan.throwDedupFinalizeOnce = false;
+      return Promise.reject(new Error("Dedup finalize failed."));
+    }
+
+    return this.#delegate.compareAndSet(id, expected?.record, next?.record);
+  }
+
+  protected deleteRecord(id: I): Promise<boolean> {
+    return this.#delegate.delete(id);
+  }
+
+  protected override queryRecordEntries(
+    query: RecordQuery<I>,
+  ): Promise<readonly { id: I; record: R }[]> {
+    return this.#delegate.queryEntries(query);
+  }
+
+  protected readRecord(id: I): Promise<R | undefined> {
+    return this.#delegate.read(id);
+  }
+
+  protected writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    return this.#delegate.writeAll(records.map((record) => record.record));
+  }
+
+  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    return this.#delegate.write(record.record);
+  }
 }

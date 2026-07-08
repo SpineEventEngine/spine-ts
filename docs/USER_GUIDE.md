@@ -180,8 +180,10 @@ remain later slices.
   handler declarations now, but no runtime registry consumes them yet.
 - System context construction, richer gRPC service execution, tenant index
   persistence, ZeroMQ endpoint topology, broker process supervision, retry
-  workers, durable delivery storage, transport-backed service execution,
-  durable production storage, and broader production runtime hardening.
+  workers, transport-backed delivery loops, durable production storage, and
+  broader production runtime hardening. Durable inbox/shard delivery storage
+  and the direct local shard drain already exist for framework-owned delivery
+  work; scheduler/catch-up loops and retained attempt history remain deferred.
   Event import and `ImportBus` are removed from the plan under ADR 0001 D1,
   rather than deferred runtime work.
 - Built bounded contexts can invoke aggregate command assignees that update
@@ -999,8 +1001,10 @@ through `AggregateStorage`, using finite primitive or single-field Protobuf
 message `AggregateId` values for this slice. Its history-read API remains
 legacy/internal compatibility support; ordinary generated-registry aggregate
 loading uses the latest persisted state rather than snapshot-plus-replay
-loading. Delivery records, tenant indexes, diagnostics, repository storage
-policy, and read-side projection stores are deferred.
+loading. Durable inbox records, dedup guards, shard leases, and the direct
+local shard drain are available through the delivery APIs. Tenant indexes,
+diagnostics, repository storage policy, transport-backed delivery loops,
+retained attempt history, and read-side projection stores are deferred.
 
 ## First Commands
 

@@ -76,7 +76,14 @@ export class InboxStorage {
     }
   }
 
-  /** Mark one `TO_DELIVER` inbox message as `DELIVERED`. */
+  /**
+   * Mark one exact `TO_DELIVER` inbox message as `DELIVERED`.
+   *
+   * Returns `undefined` when the row is missing, is not pending, or does not
+   * match the caller-provided message snapshot. Already-delivered rows are
+   * returned idempotently only when they match the same message apart from the
+   * status transition.
+   */
   async markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
     const snapshot = InboxRecords.read(InboxRecords.write(message));
     const inboxStorage = this.#inboxStorage();
@@ -105,10 +112,16 @@ export class InboxStorage {
 
       const current = InboxRecords.read(currentRecord, key);
       if (current.status === "DELIVERED") {
+        if (!this.#sameMessageExceptStatus(current, message)) {
+          return undefined;
+        }
         await this.#syncDeliveredDedupGuard(dedupStorage, current, current);
         return current;
       }
       if (current.status !== "TO_DELIVER") {
+        return undefined;
+      }
+      if (!this.#sameRecord(currentRecord, InboxRecords.write(message))) {
         return undefined;
       }
 
@@ -116,6 +129,8 @@ export class InboxStorage {
         ...current,
         status: "DELIVERED" as const,
       });
+      await this.#syncDeliveredDedupGuard(dedupStorage, current, delivered);
+
       const nextRecord = InboxRecords.write(delivered);
       const marked = await this.#durableCompareAndSet(
         "Inbox record",
@@ -128,7 +143,6 @@ export class InboxStorage {
         continue;
       }
 
-      await this.#syncDeliveredDedupGuard(dedupStorage, current, delivered);
       return delivered;
     }
 
@@ -159,7 +173,7 @@ export class InboxStorage {
       if (this.#dedupGuardMatches(currentRecord, dedupKey, delivered)) {
         return;
       }
-      if (!this.#dedupGuardMatches(currentRecord, dedupKey, expected)) {
+      if (!this.#dedupGuardCanAdvance(currentRecord, dedupKey, expected)) {
         throw new DeliveryStorageCorruptionError(
           `Inbox dedup guard "${dedupKey}" does not match the delivered message.`,
         );
@@ -189,6 +203,25 @@ export class InboxStorage {
     const guard = DedupRecords.readGuard(record, dedupKey);
     return (
       this.#sameMessageId(guard.messageId, message.id) && this.#sameGuardMetadata(guard, message)
+    );
+  }
+
+  #dedupGuardCanAdvance(record: Any, dedupKey: string, expected: InboxMessage): boolean {
+    if (this.#dedupGuardMatches(record, dedupKey, expected)) {
+      return true;
+    }
+
+    if (expected.status !== "DELIVERED") {
+      return false;
+    }
+
+    return this.#dedupGuardMatches(
+      record,
+      dedupKey,
+      Object.freeze({
+        ...expected,
+        status: "TO_DELIVER" as const,
+      }),
     );
   }
 
@@ -263,9 +296,21 @@ export class InboxStorage {
       if (!finalized) {
         return { kind: "RETRY" };
       }
+    } else if (guard.status === "TO_DELIVER" && storedMessage.status === "DELIVERED") {
+      expected = DedupRecords.writeFinal(storedMessage);
+      const finalized = await this.#durableCompareAndSet(
+        "Inbox dedup guard",
+        dedupStorage,
+        dedupKey,
+        current,
+        expected,
+      );
+      if (!finalized) {
+        return { kind: "RETRY" };
+      }
     }
 
-    return this.#messageBlocks(guard)
+    return this.#messageBlocks(storedMessage)
       ? this.#duplicate(storedMessage)
       : { kind: "CLAIM", expected, message };
   }
@@ -419,7 +464,11 @@ export class InboxStorage {
       );
     }
 
-    if (pendingMessage === undefined && !this.#sameGuardMetadata(guardState, message)) {
+    if (
+      pendingMessage === undefined &&
+      !this.#sameGuardMetadata(guardState, message) &&
+      !this.#sameDeliveryTransitionGuard(guardState, message)
+    ) {
       throw new DeliveryStorageCorruptionError(
         `Inbox final dedup guard "${dedupKey}" does not match the visible inbox row.`,
       );
@@ -468,12 +517,33 @@ export class InboxStorage {
     return guard.status === message.status && this.#sameTime(guard.keepUntil, message.keepUntil);
   }
 
+  #sameDeliveryTransitionGuard(
+    guard: Pick<DedupGuardState, "status" | "keepUntil">,
+    message: Pick<InboxMessage, "status" | "keepUntil">,
+  ): boolean {
+    return (
+      this.#sameTime(guard.keepUntil, message.keepUntil) &&
+      guard.status === "TO_DELIVER" &&
+      message.status === "DELIVERED"
+    );
+  }
+
   #sameTime(left: Date | undefined, right: Date | undefined): boolean {
     return left?.getTime() === right?.getTime();
   }
 
   #sameMessageId(left: InboxMessage["id"], right: InboxMessage["id"]): boolean {
     return left.value === right.value && left.shard.key() === right.shard.key();
+  }
+
+  #sameMessageExceptStatus(left: InboxMessage, right: InboxMessage): boolean {
+    return this.#sameRecord(
+      InboxRecords.write({
+        ...left,
+        status: right.status,
+      }),
+      InboxRecords.write(right),
+    );
   }
 
   async #durableRead<T>(label: string, read: () => Promise<T>): Promise<T> {

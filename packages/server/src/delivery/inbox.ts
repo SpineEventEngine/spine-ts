@@ -46,7 +46,14 @@ export class Inbox {
     return this.storage.read(shard, options);
   }
 
-  /** Mark one pending inbox message delivered. */
+  /**
+   * Mark one exact pending inbox message delivered.
+   *
+   * Returns `undefined` when the durable row is missing, is not pending, or no
+   * longer matches the caller-provided message snapshot. Already-delivered
+   * matching rows are returned idempotently so concurrent worker races can
+   * converge without re-dispatching.
+   */
   markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
     return this.storage.markDelivered(message);
   }

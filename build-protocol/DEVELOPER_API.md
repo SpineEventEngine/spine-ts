@@ -254,7 +254,7 @@ small framework-owned shard drain for one bounded context. It is intentionally
 smaller than the later scheduler/retry stack:
 
 - `Delivery` groups `Inbox` and `ShardedWorkRegistry` for one storage context;
-- `Delivery.drain(shard, { node, deliver, limit })` claims one shard, reads
+- `Delivery.drain(shard, { node, onMessage, limit })` claims one shard, reads
   `TO_DELIVER` rows in inbox order, invokes the supplied framework endpoint
   callback once per row, marks successful rows `DELIVERED`, leaves callback
   failures `TO_DELIVER` for retry, returns simple `DeliveryRun` statistics, and
@@ -264,8 +264,10 @@ smaller than the later scheduler/retry stack:
 - `Inbox` is the low-level durable delivery storage primitive in this slice: it
   accepts `InboxMessageInput` with `receive()` and lets framework delivery code
   read durable inbox rows by `ShardIndex`. `markDelivered()` is the narrow
-  worker-owned status update used by `Delivery.drain()`. Its public `storage`
-  property is an
+  worker-owned exact-message status update used by `Delivery.drain()`: missing
+  rows, non-pending rows, and mismatched caller snapshots return `undefined`;
+  already-delivered matching rows are returned idempotently. Its public
+  `storage` property is an
   intentional low-level escape hatch for storage-focused tests and
   integrations, not an application-facing query facade;
 - `InboxStorage` is the lower-level durable storage seam behind `Inbox`,
@@ -318,7 +320,7 @@ const pending = await delivery.inbox.read(ShardIndex.single(), {
 const run = await delivery.drain(ShardIndex.single(), {
   node: "worker-a",
   limit: 100,
-  async deliver(message) {
+  async onMessage(message) {
     await frameworkEndpoint(message);
   },
 });

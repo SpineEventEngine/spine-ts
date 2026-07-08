@@ -33,6 +33,11 @@ export class Delivery {
   /**
    * Drain one shard by claiming it, delivering pending rows, and releasing it.
    *
+   * The `onMessage` endpoint is invoked once for each `TO_DELIVER` row read in
+   * inbox order. Callback failures leave the row pending for a later run.
+   * Successful callbacks are followed by an exact-message `Inbox.markDelivered()`
+   * update; marker failures are reported as per-message failures.
+   *
    * This is a framework-owned direct worker boundary. It does not schedule
    * later runs, open transports, or retain endpoint attempt history.
    */
@@ -52,7 +57,7 @@ export class Delivery {
 
       for (const message of messages) {
         try {
-          await options.deliver(message);
+          await options.onMessage(message);
           const marked = await this.inbox.markDelivered(message);
           if (marked === undefined) {
             throw new Error(`Inbox message "${message.id.value}" was not marked delivered.`);
@@ -89,7 +94,7 @@ export interface DeliveryDrainOptions {
   /** Optional bounded page size for one drain run. */
   readonly limit?: number;
   /** Framework endpoint callback invoked once per pending inbox row. */
-  readonly deliver: DeliveryEndpoint;
+  readonly onMessage: DeliveryEndpoint;
 }
 
 /** Framework endpoint callback for one durable inbox row. */

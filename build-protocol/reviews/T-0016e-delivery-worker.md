@@ -1,6 +1,6 @@
 # T-0016e Review Log
 
-Status: ready for review
+Status: first-round fixes applied
 
 Scope: Delivery worker integration over existing inbox and shard storage,
 focused tests, and public docs.
@@ -34,7 +34,15 @@ the orchestrating thread.
 
 ## Findings
 
-- Pending.
+### Round 1
+
+| Lane                              | Severity | Finding                                                                                                                                                                                                                                                                                                       | Fix                                                                                                                                                                                                                                                                                                         |
+| --------------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Performance/reliability, security | High/P1  | `InboxStorage.markDelivered()` advanced the inbox row to `DELIVERED` before validating/updating the dedup guard, so a guard failure could leave the row delivered with stale or missing guard state and make `Delivery.drain()` report a per-message failure after the durable row had already moved forward. | `markDelivered()` now validates the caller snapshot against the stored row, verifies/updates the dedup guard before advancing the inbox row, tolerates retry after a guard-first transient, and repairs the benign delivered-row/stale-guard race during duplicate receive. Added focused regression tests. |
+| Security                          | P1       | `markDelivered()` trusted the caller-provided message by inbox message ID only. A forged object with the same ID could mark an unrelated row delivered.                                                                                                                                                       | `markDelivered()` now requires an exact stored-row match for pending rows and only treats already-delivered rows as idempotent when they match the same message apart from the status transition. Mismatches return `undefined`. Added a forged-marker regression test and documented the contract.         |
+| TypeScript/API docs               | P2       | `DeliveryDrainOptions.deliver` violated the callback naming rule.                                                                                                                                                                                                                                             | Renamed the public option to `onMessage` and updated tests plus public docs.                                                                                                                                                                                                                                |
+| TypeScript/API docs               | P2       | Public API docs and TypeDoc did not describe the new delivery worker surface and marker edge cases.                                                                                                                                                                                                           | Updated `docs/api/README.md`, package/developer docs, and TypeDoc for `Delivery.drain()`, `DeliveryDrainOptions`, `DeliveryEndpoint`, `DeliveryFailure`, `DeliveryRun`, `Inbox.markDelivered()`, and `InboxStorage.markDelivered()`.                                                                        |
+| Documentation completeness        | P2       | Public docs still said durable delivery storage was deferred.                                                                                                                                                                                                                                                 | Updated `docs/USER_GUIDE.md` and `docs/architecture/README.md` to state that durable inbox records, dedup guards, shard leases, and the local shard drain exist, while scheduler/catch-up/transport-backed loops and retained attempt history remain deferred.                                              |
 
 ## Review Policy
 

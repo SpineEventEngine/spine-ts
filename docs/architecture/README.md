@@ -411,8 +411,9 @@ The following runtime pieces are still deferred to later explicit tasks:
   repository identity seam;
 - process-manager event handler execution, read-side catch-up, and
   query/subscription execution over repository routes;
-- inbox/delivery storage, durable storage lifecycle, entity storage/cache
-  catch-up, and tenant-index persistence;
+- delivery scheduler/catch-up loops, durable storage lifecycle, entity
+  storage/cache catch-up, and tenant-index persistence. Durable inbox records,
+  dedup guards, shard leases, and the direct local shard drain are present;
 - richer query filtering, event subscriptions, and durable subscription
   recovery;
 - system-context pairing and broad server/gRPC lifecycle; and

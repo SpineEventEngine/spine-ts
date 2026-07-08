@@ -72,7 +72,8 @@ Current slice exposes:
   seam, backed by `StorageFactory`, `RecordStorage`, and `EventStore`;
   `PrimitiveId` and `MessageId` expose the accepted public ID shapes;
   and
-- `Delivery`, `Inbox`, `InboxStorage`, `ShardIndex`, `ShardSession`, and
+- `Delivery`, `DeliveryDrainOptions`, `DeliveryEndpoint`, `DeliveryFailure`,
+  `DeliveryRun`, `Inbox`, `InboxStorage`, `ShardIndex`, `ShardSession`, and
   `ShardedWorkRegistry` for the first durable delivery slice: inbox writes with
   durable `(signalId, inboxId)` live deduplication through internal guard
   records, shard ordering metadata with an explicit inbox-message UUID
@@ -80,11 +81,11 @@ Current slice exposes:
   storage-backed shard pickup/release over atomic
   `RecordStorage.compareAndSet()` handles for one backing store, and
   framework-owned `Delivery.drain()` runs that claim one shard, invoke one
-  supplied endpoint callback per `TO_DELIVER` row, mark successful rows
-  `DELIVERED`, leave failures pending for retry, and return simple run
+  supplied `onMessage` endpoint callback per `TO_DELIVER` row, mark successful
+  rows `DELIVERED`, leave failures pending for retry, and return simple run
   statistics. This slice explicitly excludes worker loops, retry monitors,
   conveyor/stations, repository invocation, broad server lifecycle, transport
-  retries, and example app work;
+  retries, retained attempt history, and example app work;
 - and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
