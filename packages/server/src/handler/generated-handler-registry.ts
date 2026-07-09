@@ -233,7 +233,9 @@ function validateGeneratedHandler(handler: GeneratedHandlerRecordInput): void {
     return;
   }
 
-  validateEmitsSomething(handler);
+  if (handler.kind === "command-assignment" || handler.kind === "command-reaction") {
+    validateEmitsSomething(handler);
+  }
 }
 
 function validateSchema(schema: DescriptorMessageSchema, label: string): void {

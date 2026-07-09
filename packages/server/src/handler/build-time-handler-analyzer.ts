@@ -563,15 +563,23 @@ function validateEmittedReturn(
     );
     return true;
   }
-  if (
-    (decorator === "Assign" || decorator === "Command" || decorator === "React") &&
-    schemas.length === 0
-  ) {
+  if ((decorator === "Assign" || decorator === "Command") && schemas.length === 0) {
     pushDiagnostic(
       scope,
       "MISSING_EMITTED_SCHEMAS",
       node.type ?? node,
       `@${decorator} handlers must emit at least one schema.`,
+      className,
+      method,
+    );
+    return true;
+  }
+  if (decorator === "React" && schemas.length === 0 && !isExplicitVoidType(node.type)) {
+    pushDiagnostic(
+      scope,
+      "MISSING_EMITTED_SCHEMAS",
+      node.type ?? node,
+      "@React handlers must emit at least one schema unless they return explicit void.",
       className,
       method,
     );
@@ -884,6 +892,17 @@ function unwrapReadonly(typeNode: ts.TypeNode): ts.TypeNode {
   }
 
   return typeNode;
+}
+
+function isExplicitVoidType(typeNode: ts.TypeNode | undefined): boolean {
+  if (typeNode === undefined) {
+    return false;
+  }
+  if (ts.isParenthesizedTypeNode(typeNode)) {
+    return isExplicitVoidType(typeNode.type);
+  }
+
+  return typeNode.kind === ts.SyntaxKind.VoidKeyword;
 }
 
 function isArrayReferenceType(typeNode: ts.TypeReferenceNode): boolean {

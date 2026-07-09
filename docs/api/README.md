@@ -395,9 +395,11 @@ Generated handler registries are the intended ordinary bridge from bare
 decorators to canonical metadata. Their logical contract is a versioned list of
 entity handler groups with entity type, state schema, handler kind, method name,
 first-parameter signal schema, explicit one- or two-argument arity, and emitted
-schemas inferred from explicit return types. Generated `@Assign`, `@Command`,
-and `@React` producer records must declare at least one emitted schema;
-`@Subscribe` records declare none and return `void`. They are generated build
+schemas inferred from explicit return types. Generated `@Assign` and
+`@Command` producer records must declare at least one emitted schema; `@React`
+records may return generated event messages or explicit `void` with no emitted
+schemas. `@Subscribe` records return explicit `void` and declare no emitted
+schemas. They are generated build
 artifacts under ignored `generated/` directories and are not committed.
 `HandlerRegistryIngestor` preserves generated arity in canonical metadata, and
 `GeneratedRegistryDiscovery` loads explicit registry paths or clean `file:`
