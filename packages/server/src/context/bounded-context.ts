@@ -240,6 +240,7 @@ const builderBuilds = new WeakMap<
 >();
 
 interface BoundedContextAccess {
+  isBuilder(value: unknown): value is BoundedContextBuilder;
   build(
     builder: BoundedContextBuilder,
     defaultStorageFactory: StorageFactory,
@@ -595,6 +596,14 @@ export class BoundedContext {
 
 /** @internal Package-local context access used by framework service adapters. */
 export const boundedContextAccess: BoundedContextAccess = Object.freeze({
+  isBuilder(value: unknown): value is BoundedContextBuilder {
+    return (
+      typeof value === "object" &&
+      value !== null &&
+      builderBuilds.has(value as BoundedContextBuilder)
+    );
+  },
+
   build(
     builder: BoundedContextBuilder,
     defaultStorageFactory: StorageFactory,

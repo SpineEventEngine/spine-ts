@@ -1,6 +1,6 @@
 # T-0020: Server Environment Context Assembly
 
-Status: planned
+Status: complete; integrated to main
 
 Date: 2026-07-09
 

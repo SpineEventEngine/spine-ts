@@ -204,9 +204,9 @@ async function buildContexts(
   try {
     for (const entry of entries) {
       contexts.push(
-        entry instanceof BoundedContext
-          ? entry
-          : await boundedContextAccess.build(entry, defaultStorageFactory),
+        boundedContextAccess.isBuilder(entry)
+          ? await boundedContextAccess.build(entry, defaultStorageFactory)
+          : entry,
       );
     }
     return contexts;

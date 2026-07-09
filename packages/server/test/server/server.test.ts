@@ -235,7 +235,7 @@ describe("Server", () => {
       messageSchemas() {
         throw new Error("Cannot read event schemas.");
       },
-      dispatch: () => undefined,
+      dispatch: () => Promise.resolve(),
     });
 
     await expect(

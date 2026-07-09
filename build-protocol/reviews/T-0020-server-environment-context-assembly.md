@@ -1,6 +1,6 @@
 # T-0020 Review Log: Server Environment Context Assembly
 
-Status: planned
+Status: complete
 
 Date: 2026-07-09
 
@@ -56,3 +56,39 @@ Re-review:
 - TypeScript/API docs final re-review reported clean after the public
   declarations stopped exposing the private alias and TypeDoc documented
   start-time builder assembly plus storage precedence.
+
+## Post-Merge Verification Fix Review
+
+Status: complete
+
+Scope:
+
+- `packages/server/src/context/bounded-context.ts`
+- `packages/server/src/server/server.ts`
+- `packages/server/test/server/server.test.ts`
+- `build-protocol/work-logs/T-0020.md`
+
+Reason:
+
+- Full post-merge verification found one TypeScript return-type issue in a test
+  dispatcher and one runtime classification bug in `Server` context/builder
+  assembly. Both were fixed on `main` before committing the post-merge
+  verification fix.
+
+Round result:
+
+- Code style/maintainability: clean.
+- Documentation/log accuracy: clean.
+- TypeScript/API docs: changes requested for total `isBuilder(...)` guard.
+- Security: finding raised for structural non-builder context trust boundary;
+  pending re-review because this reflects pre-existing `ServerOptions.contexts`
+  behavior rather than a new boundary from the post-merge fix.
+- Performance/reliability: clean.
+
+Re-review:
+
+- TypeScript/API docs: clean after the total `isBuilder(...)` guard added an
+  object/non-null precheck before the WeakMap lookup.
+- Security: clean after re-review confirmed the structural non-builder context
+  concern is pre-existing `ServerOptions.contexts` behavior, not a new
+  post-merge regression.
