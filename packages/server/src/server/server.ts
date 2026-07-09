@@ -5,6 +5,8 @@ import { connectNodeAdapter } from "@connectrpc/connect-node";
 
 import type { BoundedContext } from "../context/bounded-context.js";
 import { SpineServices, type SpineServicesOptions } from "../services/spine-services.js";
+import { collectCloseError, RetryableCloseGroup } from "./retryable-close.js";
+import { ServerEnvironment } from "./server-environment.js";
 
 const defaultHost = "127.0.0.1";
 const defaultPort = 0;
@@ -17,14 +19,19 @@ export class Server {
   readonly #contexts: BoundedContext[] = [];
   readonly #resources: { close(): unknown }[] = [];
   readonly #services: Omit<SpineServicesOptions, "contexts">;
+  readonly #environment: ServerEnvironment;
+  readonly #ownsEnvironment: boolean;
 
   /** Create a server builder. Prefer {@link Server.atPort} for the common case. */
   constructor(options: ServerOptions = {}) {
-    this.#host = options.host ?? defaultHost;
+    this.#host = normalizeHost(options.host);
     this.#port = options.port ?? defaultPort;
     this.#contexts.push(...(options.contexts ?? []));
     this.#resources.push(...(options.resources ?? []));
     this.#services = options.services ?? {};
+    this.#environment = options.environment ?? ServerEnvironment.local();
+    this.#ownsEnvironment =
+      options.environment === undefined ? true : (options.ownsEnvironment ?? false);
   }
 
   /** Create a server builder for the passed port on local-only `127.0.0.1`. */
@@ -58,7 +65,12 @@ export class Server {
     });
     const sessions = new Set<http2.ServerHttp2Session>();
     const httpServer = createHttpServer(services, sessions);
-    const address = await listen(httpServer, this.#host, this.#port);
+    const closeables = [
+      ...this.#contexts,
+      ...this.#resources,
+      ...(this.#ownsEnvironment ? [this.#environment] : []),
+    ];
+    const address = await listenOrCleanup(httpServer, sessions, closeables, this.#host, this.#port);
     const host = typeof address.address === "string" ? address.address : this.#host;
 
     return new RunningHttp2Server({
@@ -66,7 +78,7 @@ export class Server {
       sessions,
       host,
       port: address.port,
-      closeables: [...this.#contexts, ...this.#resources],
+      closeables,
     });
   }
 }
@@ -88,6 +100,14 @@ export interface ServerOptions {
   readonly services?: Omit<SpineServicesOptions, "contexts">;
   /** Extra framework-owned closeables to close after network intake stops. */
   readonly resources?: readonly { close(): unknown }[];
+  /**
+   * Server runtime environment. Supplied environments are caller-owned unless
+   * `ownsEnvironment` is explicitly true. When omitted, the server creates and
+   * owns a local/test environment with in-memory defaults.
+   */
+  readonly environment?: ServerEnvironment;
+  /** Whether this server closes the environment after contexts and resources. */
+  readonly ownsEnvironment?: boolean;
 }
 
 /** Running local Spine service host. */
@@ -99,11 +119,12 @@ export interface RunningServer {
   /** Base URL for Connect gRPC-compatible clients. */
   readonly baseUrl: string;
   /**
-   * Stop intake, close sessions, then close owned contexts/resources.
+   * Stop intake, close sessions, then close owned contexts/resources/environment.
    *
-   * Repeated calls are idempotent and return the same close outcome. Close
-   * attempts every owned context/resource and rejects with an `AggregateError`
-   * when any owned close hook fails.
+   * Repeated calls after a successful close are idempotent. Failed closes may
+   * be retried, and retries skip owned close hooks that already succeeded.
+   * Each attempt rejects with an `AggregateError` when any remaining owned
+   * close hook fails.
    */
   close(): Promise<void>;
 }
@@ -116,6 +137,8 @@ class RunningHttp2Server implements RunningServer {
   readonly port: number;
   readonly baseUrl: string;
   #closed: Promise<void> | undefined;
+  #networkClosed = false;
+  readonly #closeGroup: RetryableCloseGroup;
 
   constructor(options: RunningHttp2ServerOptions) {
     this.#server = options.server;
@@ -124,16 +147,26 @@ class RunningHttp2Server implements RunningServer {
     this.host = options.host;
     this.port = options.port;
     this.baseUrl = `http://${formatHostForUrl(options.host)}:${options.port.toString()}`;
+    this.#closeGroup = new RetryableCloseGroup(
+      this.#closeables,
+      "Server close failed while closing owned contexts/resources.",
+    );
   }
 
   close(): Promise<void> {
-    this.#closed ??= this.#closeOnce();
+    this.#closed ??= this.#closeOnce().catch((error: unknown) => {
+      this.#closed = undefined;
+      throw error;
+    });
     return this.#closed;
   }
 
   async #closeOnce(): Promise<void> {
-    await closeNetwork(this.#server, this.#sessions);
-    await closeOwned(this.#closeables);
+    if (!this.#networkClosed) {
+      await closeNetwork(this.#server, this.#sessions);
+      this.#networkClosed = true;
+    }
+    await this.#closeGroup.close();
   }
 }
 
@@ -184,6 +217,52 @@ function listen(server: http2.Http2Server, host: string, port: number): Promise<
   });
 }
 
+async function listenOrCleanup(
+  server: http2.Http2Server,
+  sessions: Set<http2.ServerHttp2Session>,
+  closeables: readonly unknown[],
+  host: string,
+  port: number,
+): Promise<AddressInfo> {
+  try {
+    return await listen(server, host, port);
+  } catch (error) {
+    await cleanupFailedStart(server, sessions, closeables, error);
+    throw error;
+  }
+}
+
+async function cleanupFailedStart(
+  server: http2.Http2Server,
+  sessions: Set<http2.ServerHttp2Session>,
+  closeables: readonly unknown[],
+  startError: unknown,
+): Promise<void> {
+  const errors: unknown[] = [];
+
+  try {
+    await closeNetwork(server, sessions);
+  } catch (error) {
+    collectCloseError(error, errors);
+  }
+
+  try {
+    await new RetryableCloseGroup(
+      closeables,
+      "Server start cleanup failed while closing owned contexts/resources.",
+    ).close();
+  } catch (error) {
+    collectCloseError(error, errors);
+  }
+
+  if (errors.length > 0) {
+    throw new AggregateError(
+      [startError, ...errors],
+      "Server start failed while opening listener and cleanup also failed.",
+    );
+  }
+}
+
 async function closeNetwork(
   server: http2.Http2Server,
   sessions: Set<http2.ServerHttp2Session>,
@@ -230,54 +309,6 @@ function closeSession(session: http2.ServerHttp2Session): Promise<void> {
   });
 }
 
-async function closeOwned(closeables: readonly unknown[]): Promise<void> {
-  const errors: unknown[] = [];
-  for (const closeable of closeables) {
-    const close = closeMethod(closeable);
-    if (close !== undefined) {
-      await closeOne(close, errors);
-    }
-  }
-  if (errors.length > 0) {
-    throw new AggregateError(errors, "Server close failed while closing owned contexts/resources.");
-  }
-}
-
-async function closeOne(close: () => unknown, errors: unknown[]): Promise<void> {
-  try {
-    await close();
-  } catch (error) {
-    collectCloseError(error, errors);
-  }
-}
-
-function collectCloseError(error: unknown, errors: unknown[]): void {
-  if (error instanceof AggregateError) {
-    const causes = error.errors as readonly unknown[];
-    for (const cause of causes) {
-      errors.push(cause);
-    }
-    return;
-  }
-  errors.push(error);
-}
-
-function closeMethod(closeable: unknown): (() => unknown) | undefined {
-  if (typeof closeable !== "object" || closeable === null) {
-    return undefined;
-  }
-
-  const close: unknown = Reflect.get(closeable, "close");
-  if (typeof close !== "function") {
-    return undefined;
-  }
-
-  return () => {
-    const result: unknown = close.call(closeable);
-    return result;
-  };
-}
-
 function nextTurn(): Promise<void> {
   return new Promise((resolve) => {
     setImmediate(resolve);
@@ -286,4 +317,12 @@ function nextTurn(): Promise<void> {
 
 function formatHostForUrl(host: string): string {
   return host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+}
+
+function normalizeHost(host: string | undefined): string {
+  const normalized = host?.trim() ?? defaultHost;
+  if (normalized.length === 0) {
+    throw new Error("Server host must not be blank.");
+  }
+  return normalized;
 }

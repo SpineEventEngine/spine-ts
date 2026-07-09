@@ -502,14 +502,23 @@ runtime after transport registrations. The package root now exports a small
 executable bus layer, direct Stand, repository-backed handler invocation through
 built contexts, command payload validation and refusal/Ack mapping through
 `SpineServices`, the `SpineServices` route registrar, and this local runtime
-transport binding. The package now also exports `Server` as a small local
-HTTP/2 owner over `SpineServices`: it defaults to `127.0.0.1`, returns
-`host`/`port`/`baseUrl`, and closes by stopping intake, closing active sessions,
-then closing owned contexts/resources with aggregate failure reporting. It still
-does not export a broad production lifecycle, transport endpoint runner,
-integration broker, durable retry owner, process supervisor, event storage
-policy beyond current seams, durable subscription store, or process-wide
-`ServerEnvironment` as part of this closure.
+transport binding. The package now also exports `Server` as a small HTTP/2
+owner over `SpineServices`: it defaults to `127.0.0.1`, returns
+`host`/`port`/`baseUrl`, and builds its service routing once when `start()` is
+called. `ServerEnvironment` is an explicit assembly object for storage,
+transport, optional delivery, optional tracing, and facility ownership. Local
+servers get in-memory storage and same-process transport defaults; production
+environment construction requires storage and transport before any listener is
+opened. The environment selects facilities for server assembly; built contexts
+still keep the storage factory they were built with until a later builder
+integration wires context assembly through the environment. Shutdown stops
+intake, closes active sessions, closes owned contexts/resources, then closes
+environment-owned facilities when the server owns the environment. Failed close
+attempts are retryable without rerunning close hooks that already succeeded. It
+still does not export a transport endpoint runner, integration broker, durable
+retry owner, process supervisor, event storage policy beyond current seams,
+durable subscription store, worker topology, or a Java-style process-wide
+`ServerEnvironment` singleton as part of this closure.
 
 The architectural consequence is that later work must add the remaining
 collaborators as explicit tasks at their own seams. Event intake and broader

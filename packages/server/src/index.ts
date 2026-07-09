@@ -31,6 +31,14 @@ export {
 export { SpineServices, type SpineServicesOptions } from "./services/spine-services.js";
 export { CommandRefusalError } from "./services/command-errors.js";
 export { Server, type RunningServer, type ServerOptions } from "./server/server.js";
+export {
+  ServerEnvironment,
+  type ServerEnvironmentCloseable,
+  type ServerEnvironmentLocalOptions,
+  type ServerEnvironmentMode,
+  type ServerEnvironmentOwnershipOptions,
+  type ServerEnvironmentProductionOptions,
+} from "./server/server-environment.js";
 
 export { CommandBus } from "./bus/command-bus.js";
 export type { CommandDispatcher } from "./bus/command-dispatcher.js";

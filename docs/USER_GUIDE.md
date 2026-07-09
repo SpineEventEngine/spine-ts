@@ -36,8 +36,14 @@ service descriptors with Connect/Node so callers can host `CommandService.Post`,
 `QueryService.Read`, and `SubscriptionService.Subscribe/Activate/Cancel` over a
 real gRPC-compatible runtime, including durable recovery of inactive service
 subscription records when a later adapter reuses the same storage factory.
-`Server` is the small framework-owned local HTTP/2 lifecycle API around those
-services.
+`Server` is the small framework-owned HTTP/2 lifecycle API around those
+services. It assembles through an explicit `ServerEnvironment`: local/test
+defaults use in-memory storage and same-process transport, supplied
+environments are caller-owned unless `ownsEnvironment: true` is explicit, and
+production mode validates that storage and transport facilities were injected
+before network intake opens. Closing a running server stops intake, closes
+active sessions, closes owned contexts/resources, and finally closes
+environment-owned facilities when the server owns the environment.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
 deterministic in-memory adapter for tests/development. Built bounded contexts
 can now execute aggregate command assignees that update state in
@@ -105,11 +111,15 @@ remain later slices.
   subscriptions attach delivery only after explicit activation.
   Inactive subscriptions expire by default and active subscriptions use a small
   bounded update queue for slow consumers.
-- A small public `Server` API that starts real local Connect/gRPC-compatible
-  services over Node HTTP/2. It binds to `127.0.0.1` by default, exposes
-  `host`, `port`, `baseUrl`, and idempotent `close()`, and shuts down by
-  stopping network intake, closing active HTTP/2 sessions, then closing owned
-  contexts/resources with aggregate failure reporting.
+- A small public `Server` API with explicit `ServerEnvironment` assembly for
+  storage, transport, delivery, and tracing ownership. `Server` starts real
+  local Connect/gRPC-compatible services over Node HTTP/2, binds to
+  `127.0.0.1` by default, rejects blank hosts, keeps local/test in-memory
+  defaults convenient, and requires explicit storage/transport facilities for
+  production environments. Supplied environments are caller-owned unless
+  `ownsEnvironment` is set. Shutdown stops network intake, closes active HTTP/2
+  sessions, closes owned contexts/resources, then closes environment-owned
+  facilities when the server owns the environment.
 - A minimal `BoundedContextFixture` in `@spine-ts/testing` that wraps one built
   bounded context and drives generated `Command`, `Event`, `Query`, and `Topic`
   envelopes through the real in-process command, event, query, and subscription
@@ -166,6 +176,13 @@ remain later slices.
   `SingleProcessServerRuntime`, and returns an idempotent close handle. The
   binding does not own ZeroMQ endpoints, process supervision, retry policy, or a
   broad server environment.
+- A small `Server` HTTP/2 lifecycle owner over `SpineServices`, assembled
+  through `ServerEnvironment`. Local/test defaults use in-memory storage and
+  same-process transport; supplied environments are caller-owned unless
+  `ownsEnvironment: true` is explicit; production construction requires
+  caller-injected storage and transport before network intake; and shutdown
+  closes in order: network intake, active sessions, owned contexts/resources,
+  then environment-owned facilities when the server owns the environment.
 - Adapter-agnostic transport contracts in `@spine-ts/transport` for immutable
   signal topics, logical subscriptions, publish/request operations, and async
   close behavior.
@@ -745,7 +762,12 @@ Use `Server` to host one or more built contexts as real Connect/gRPC-compatible
 services in a local Node process:
 
 ```ts
-import { BoundedContext, Server } from "@spine-ts/server";
+import { BoundedContext, Server, ServerEnvironment } from "@spine-ts/server";
+import type { StorageFactory } from "@spine-ts/storage";
+import type { SignalTransport } from "@spine-ts/transport";
+
+declare const durableStorageFactory: StorageFactory;
+declare const deploymentSignalTransport: SignalTransport;
 
 const tasks = await BoundedContext.singleTenant("Tasks")
   .add(TaskAggregate)
@@ -762,13 +784,39 @@ await server.close();
 The default host is `127.0.0.1`, so local examples and tests do not expose a
 network service outside the machine by accident. Use
 `Server.atPort(8080, { host: "0.0.0.0" })` only when broader binding is
-intended. Closing a running server is idempotent and follows the JVM-familiar
-order: stop accepting requests, close active HTTP/2 sessions, then close owned
-contexts/resources. If a close hook fails, remaining close hooks still run and
-the returned promise rejects with an `AggregateError`.
+intended.
+
+`Server` uses a small explicit `ServerEnvironment`. When omitted, the server
+creates and owns a local environment with `InMemoryStorageFactory` and a
+same-process signal transport. Supplied environments are caller-owned unless
+`ownsEnvironment: true` is passed:
+
+```ts
+const environment = ServerEnvironment.production({
+  storageFactory: durableStorageFactory,
+  transport: deploymentSignalTransport,
+});
+
+const server = await Server.atPort(8080, { environment }).add(tasks).start();
+```
+
+`ServerEnvironment.production()` rejects missing `storageFactory` or
+`transport` before a listener is opened. Production mode validates explicit
+facility injection only; durable production storage adapters remain deferred,
+and `InMemoryStorageFactory` is local/test-only. The environment selects and
+owns facilities for server assembly. Built contexts still keep the storage
+factory they were built with until a later builder integration wires context
+assembly through `ServerEnvironment`. Closing a running server is idempotent
+and follows the JVM-familiar order: stop accepting requests, close active
+HTTP/2 sessions, close owned contexts/resources, then close environment-owned
+facilities when the server owns the environment. If a close hook fails,
+remaining close hooks still run and the returned promise rejects with an
+`AggregateError`; a later `close()` retry attempts only the close hooks that
+failed previously.
 
 `Server` does not expose ZeroMQ, IPC endpoint names, worker supervision,
-durable scheduling, retry ownership, or a process-wide `ServerEnvironment`.
+durable scheduling, retry ownership, or a Java-style process-wide environment
+singleton.
 Managed sandboxes may reject local listener tests with `EPERM`; rerun
 listener-based verification natively when that happens.
 
