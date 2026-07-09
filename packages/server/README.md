@@ -436,6 +436,40 @@ bus, event bus, import bus, repository dispatcher, event store, durable inbox,
 read-side stand, tenant index, integration broker, gRPC server, ZeroMQ
 transport, worker-process runtime, or storage-backed delivery mechanism.
 
+## Runtime Signal Metadata
+
+Use `SignalMetadata` when framework code or advanced local callers need a small
+shared policy for generated Spine command/event metadata:
+
+```ts
+import { FixedClock, SignalIds, SignalMetadata } from "@spine-ts/server";
+
+const metadata = new SignalMetadata({
+  clock: new FixedClock(new Date("2026-07-09T10:11:12.345Z")),
+  ids: new SignalIds(() => "signal-1"),
+});
+
+const commandId = metadata.commandId();
+const eventId = metadata.eventId();
+const timestamp = metadata.timestamp();
+```
+
+`SignalMetadata` owns the local policy for command IDs, event IDs, timestamps,
+actor/tenant command context, source-event/source-command origin chains,
+primitive producer IDs, and `Version` values. Deterministic tests inject a
+`Clock` (`SystemClock` or `FixedClock`) and `SignalIds` instance instead of
+relying on mutable global time or ID state. Repository-produced follow-up
+commands/events use this seam for timestamp/origin/producer/version metadata in
+the supported local runtime paths.
+
+This slice is intentionally small. It does not change end-user handler APIs,
+materialize application handlers, own storage or transport, register process
+globals, trace signals, or expose a broad container/service abstraction.
+Handlers still return generated domain command/event messages rather than
+framework `Command`/`Event` envelopes, `@Apply` remains absent for new
+aggregate behavior, and this metadata seam does not add manual transaction
+control for end-user code.
+
 ## Write-Side Signal Intake Results
 
 Use `SignalIntakeResult` when later command/event intake code needs to report

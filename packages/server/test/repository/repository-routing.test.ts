@@ -1329,7 +1329,9 @@ describe("repository signal routing", () => {
     expect(GeneratedReactorAggregate.contexts[0]?.origin).toEqual(
       projectionEventOrigin({ pastMessageTenantId: "tenant-b" }),
     );
-    await expect(eventStore.read()).resolves.toMatchObject([
+    const stored = await eventStore.read();
+
+    expect(stored).toMatchObject([
       { id: { value: "event-reactor-source" } },
       {
         id: { value: "event-reactor-source-1" },
@@ -1341,6 +1343,29 @@ describe("repository signal routing", () => {
         },
       },
     ]);
+    expect(stored[1]?.context?.timestamp).toBeDefined();
+    expect(readReadableProducerId(stored[1])).toBe("task-reactor");
+    expect(stored[1]?.context?.origin).toEqual({
+      case: "pastMessage",
+      value: create(OriginSchema, {
+        message: create(MessageIdSchema, {
+          id: packAny(EventIdSchema, create(EventIdSchema, { value: "event-reactor-source" })),
+          typeUrl: deriveTypeUrl(ProjectionStateSchema),
+        }),
+        actorContext: create(ActorContextSchema, {
+          tenantId: createTenantId("tenant-b"),
+        }),
+        grandOrigin: create(OriginSchema, {
+          message: create(MessageIdSchema, {
+            id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
+            typeUrl: deriveTypeUrl(AggregateStateSchema),
+          }),
+          actorContext: create(ActorContextSchema, {
+            tenantId: createTenantId("tenant-b"),
+          }),
+        }),
+      }),
+    });
     await expect(storage.readHistory("task-reactor")).resolves.toMatchObject({
       snapshot: {
         aggregateId: "task-reactor",
@@ -1445,6 +1470,7 @@ describe("repository signal routing", () => {
 
     await context.eventBus().post(sourceEvent);
 
+    expect(commands[0]?.context?.actorContext).toEqual(sourceActorContext);
     expect(commands[0]?.context?.origin).toEqual(
       create(OriginSchema, {
         message: create(MessageIdSchema, {
@@ -2642,6 +2668,21 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
   });
 
+  it("rejects blank process-manager command ids before handler or Stand write", async () => {
+    RoutingProcessManager.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .build();
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("   ", "pm-blank-id", "BlankId")),
+    ).rejects.toThrow(/command\.id/i);
+    expect(RoutingProcessManager.commandCalls).toBe(0);
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-blank-id"),
+    ).resolves.toBeUndefined();
+  });
+
   it("stores process-manager command state in the command tenant", async () => {
     RoutingProcessManager.reset();
     const context = BoundedContext.multitenant("Tasks")
@@ -2995,6 +3036,63 @@ describe("repository signal routing", () => {
     expect(ValidatingProcessManager.commandCalls).toBe(0);
   });
 
+  it("rejects idless process-manager inbox replay before handler or Stand write", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createProcessManagerAssignRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    const target = requireProcessManagerInboxTarget(repository);
+    const received = await storeProcessManagerInboxCommand(
+      delivery,
+      createIdlessAggregateCommand("pm-idless-replay", "Idless replay"),
+      new Date("2026-07-08T09:03:15.000Z"),
+      1n,
+    );
+
+    await expect(target.replay(received)).rejects.toThrow("requires command.id");
+
+    expect(RoutingProcessManager.commandCalls).toBe(0);
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-idless-replay"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("rejects blank process-manager inbox replay command ids before handler or Stand write", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createProcessManagerAssignRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    const target = requireProcessManagerInboxTarget(repository);
+    const received = await storeProcessManagerInboxCommand(
+      delivery,
+      createAggregateCommand("   ", "pm-blank-replay", "Blank replay"),
+      new Date("2026-07-08T09:03:15.000Z"),
+      1n,
+      { signalId: "pm-blank-replay-signal" },
+    );
+
+    await expect(target.replay(received)).rejects.toThrow(/command\.id/i);
+
+    expect(RoutingProcessManager.commandCalls).toBe(0);
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-blank-replay"),
+    ).resolves.toBeUndefined();
+  });
+
   it("appends process-manager command-produced events and records later dispatch failures", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
@@ -3023,9 +3121,24 @@ describe("repository signal routing", () => {
         queue: "Task assigned",
       }),
     );
-    await expect(eventStore.read()).resolves.toMatchObject([
-      { id: { value: "command-pm-dispatch-1" } },
-    ]);
+    const stored = await eventStore.read();
+
+    expect(stored).toMatchObject([{ id: { value: "command-pm-dispatch-1" } }]);
+    expect(stored[0]?.context?.timestamp).toBeDefined();
+    expect(readReadableProducerId(stored[0])).toBe("pm-dispatch");
+    expect(stored[0]?.context?.version).toEqual(create(VersionSchema, { number: 1 }));
+    expect(stored[0]?.context?.origin).toEqual({
+      case: "pastMessage",
+      value: create(OriginSchema, {
+        message: create(MessageIdSchema, {
+          id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "command-pm-dispatch" })),
+          typeUrl: deriveTypeUrl(AggregateStateSchema),
+        }),
+        actorContext: create(ActorContextSchema, {
+          actor: create(UserIdSchema, { value: "user-1" }),
+        }),
+      }),
+    });
     await withTimeout(
       dispatchAttempted.promise,
       "process-manager command produced-event dispatch attempt",
@@ -3073,12 +3186,37 @@ describe("repository signal routing", () => {
         },
       })
       .build();
+    const sourceActorContext = create(ActorContextSchema, {
+      tenantId: createTenantId("tenant-command"),
+    });
+    const sourceGrandOrigin = create(OriginSchema, {
+      message: create(MessageIdSchema, {
+        id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
+        typeUrl: deriveTypeUrl(AggregateStateSchema),
+      }),
+      actorContext: sourceActorContext,
+    });
 
-    await context.eventBus().post(createProjectionEvent("event-pm-command", "pm-event-command"));
+    await context.eventBus().post(
+      createProjectionEvent("event-pm-command", "pm-event-command", {
+        pastMessageTenantId: "tenant-command",
+      }),
+    );
 
     expect(RoutingProcessManager.commandReactionCalls).toBe(1);
     expect(commands).toHaveLength(1);
     expect(commands[0]?.id).toEqual(create(CommandIdSchema, { uuid: "event-pm-command-1" }));
+    expect(commands[0]?.context?.actorContext).toEqual(sourceActorContext);
+    expect(commands[0]?.context?.origin).toEqual(
+      create(OriginSchema, {
+        message: create(MessageIdSchema, {
+          id: packAny(EventIdSchema, create(EventIdSchema, { value: "event-pm-command" })),
+          typeUrl: deriveTypeUrl(ProjectionStateSchema),
+        }),
+        actorContext: sourceActorContext,
+        grandOrigin: sourceGrandOrigin,
+      }),
+    );
     const producedMessage = commands[0]?.message;
     if (producedMessage === undefined) {
       throw new Error("Expected a process-manager produced command message.");
@@ -3090,6 +3228,41 @@ describe("repository signal routing", () => {
         archived: false,
       }),
     );
+  });
+
+  it("rejects missing source event ids before process-manager command reactions mutate state", async () => {
+    RoutingProcessManager.reset();
+    const commands: SpineCommand[] = [];
+    const repository = createProcessManagerEventRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .addCommandDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    const eventDispatcher = repositoryAccess.eventDispatcher(repository);
+    const sourceEvent = createProjectionEvent("event-unused", "pm-event-command-missing-id");
+    const idlessEvent = create(EventSchema, {
+      context: sourceEvent.context,
+      message: sourceEvent.message,
+    });
+
+    if (eventDispatcher === undefined) {
+      throw new Error("Expected a process-manager event dispatcher.");
+    }
+
+    await expect(eventDispatcher.dispatch(idlessEvent)).rejects.toThrow(/event ID/i);
+
+    expect(RoutingProcessManager.eventCalls).toBe(0);
+    expect(RoutingProcessManager.commandReactionCalls).toBe(0);
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-event-command-missing-id"),
+    ).resolves.toBeUndefined();
+    expect(commands).toEqual([]);
   });
 
   it("routes process-manager command reactions by the first event field even when producer ID differs", async () => {
@@ -3179,6 +3352,37 @@ describe("repository signal routing", () => {
       event: { id: { value: "event-pm-produce-1" } },
       error: { name: "Error", message: "process-manager event dispatch failed" },
     });
+  });
+
+  it("rejects blank source event ids before process-manager event reactions mutate state", async () => {
+    RoutingProcessManager.reset();
+    const dispatchedEventIds: string[] = [];
+    const repository = createProcessManagerEventProducingRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .addEventDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (event) => {
+          dispatchedEventIds.push(event.id?.value ?? "");
+          return Promise.resolve();
+        },
+      })
+      .build();
+    const eventDispatcher = repositoryAccess.eventDispatcher(repository);
+
+    if (eventDispatcher === undefined) {
+      throw new Error("Expected a process-manager event dispatcher.");
+    }
+
+    await expect(
+      eventDispatcher.dispatch(createProjectionEvent("   ", "pm-event-produce-blank-id")),
+    ).rejects.toThrow(/event ID/i);
+
+    expect(RoutingProcessManager.eventCalls).toBe(0);
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-event-produce-blank-id"),
+    ).resolves.toBeUndefined();
+    expect(dispatchedEventIds).toEqual([]);
   });
 
   it("stores process-manager state and produced events when a later produced command fails", async () => {
@@ -4096,6 +4300,29 @@ describe("repository signal routing", () => {
     ).resolves.toBeUndefined();
     await expect(
       context.stand().read(ProjectionStateSchema, "task-no-id-tenant", {
+        tenantId: "tenant-b",
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("rejects aggregate commands with blank ids before tenant projection updates", async () => {
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createProjectionProducingRepository())
+      .add(createExecutingProjectionRepository())
+      .build();
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("   ", "task-blank-id-tenant", "BlankId", "tenant-a")),
+    ).rejects.toThrow(/command\.id/i);
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-blank-id-tenant", {
+        tenantId: "tenant-a",
+      }),
+    ).resolves.toBeUndefined();
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-blank-id-tenant", {
         tenantId: "tenant-b",
       }),
     ).resolves.toBeUndefined();
@@ -5309,6 +5536,7 @@ async function storeProcessManagerInboxCommand(
   whenReceived: Date,
   version: bigint,
   overrides: {
+    readonly signalId?: string;
     readonly targetId?: string;
     readonly targetTypeUrl?: string;
   } = {},
@@ -5318,7 +5546,7 @@ async function storeProcessManagerInboxCommand(
       targetId: overrides.targetId ?? readAggregateId(command),
       targetTypeUrl: overrides.targetTypeUrl ?? deriveTypeUrl(ProcessManagerStateSchema),
     },
-    signalId: command.id?.uuid ?? "missing-command-id",
+    signalId: overrides.signalId ?? command.id?.uuid ?? "missing-command-id",
     signal: packAny(CommandSchema, command, { validate: false }),
     label: "HANDLE_COMMAND",
     status: "TO_DELIVER",
