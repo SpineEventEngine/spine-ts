@@ -1,6 +1,6 @@
 # T-0018a: Runtime Signal Metadata Factories
 
-Status: complete on task branch
+Status: integrated on main
 Started: `2026-07-09`
 Branch: `task/T-0018a-runtime-signal-metadata`
 Worktree:

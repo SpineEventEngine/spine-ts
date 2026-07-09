@@ -1,6 +1,6 @@
 # T-0018a Review Log
 
-Status: clean and complete on task branch
+Status: clean, complete, and integrated on main
 
 Scope: runtime signal metadata factories and narrow integration into supported
 local runtime paths.
