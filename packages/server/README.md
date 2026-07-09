@@ -175,9 +175,11 @@ Current slice exposes:
   `HandlerMetadataRegistry`. The generated registry contract is versioned and
   contains entity type, state schema, handler kind, method name, inferred
   first-parameter signal schema, explicit one- or two-argument arity, and
-  emitted schemas inferred from explicit return types. Generated `@Assign`,
-  `@Command`, and `@React` producer records must declare at least one emitted
-  schema; `@Subscribe` records declare none and return `void`. Generated
+  emitted schemas inferred from explicit return types. Generated `@Assign` and
+  `@Command` producer records must declare at least one emitted schema; `@React`
+  records may return generated event messages or explicit `void` with no
+  emitted schemas. `@Subscribe` records return explicit `void` and declare no
+  emitted schemas. Generated
   registry files live under ignored `generated/` output and are not committed.
 - `GeneratedRegistryDiscovery` for framework/tooling loading of explicit
   generated registry
@@ -259,8 +261,9 @@ invocation.
 Generated handler registry tooling infers the signal schema from each
 handler's explicit first parameter type and emitted schemas from explicit return
 types. `@Assign` emits generated domain events, `@Command` emits
-generated domain commands, `@React` emits generated domain events, and
-`@Subscribe` returns explicit `void`. End-user handlers return generated domain
+generated domain commands, `@React` either emits generated domain events or
+returns explicit `void` with no emitted schemas, and `@Subscribe` returns
+explicit `void` and emits none. End-user handlers return generated domain
 messages; repository execution wraps returned commands/events into framework
 envelopes internally after the current transactional work succeeds.
 Both `handler(signal)` and `handler(signal, context)` are part of the public

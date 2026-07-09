@@ -66,8 +66,44 @@ describe("build-time handler analyzer", () => {
     ]);
   });
 
-  it("rejects no-emission React handlers with explicit void returns", () => {
+  it("accepts no-emission React handlers with explicit void returns", () => {
     const result = analyzeBuildHandlers(programWithSource("src/reaction.ts", noEmissionSource));
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.entities).toEqual([
+      {
+        className: "TaskProjection",
+        sourceFile: "src/reaction.ts",
+        stateSchema: schema("../generated/task_list_pb.js", "TaskListSchema"),
+        handlers: [
+          {
+            kind: "event-reaction",
+            methodName: "observe",
+            signalSchema: schema("../generated/events_pb.js", "TaskCreatedSchema"),
+            emittedSchemas: [],
+            parameterCount: 1,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("rejects void Assign and Command handlers", () => {
+    const result = analyzeBuildHandlers(programWithSource("src/void.ts", voidEmissionSource));
+
+    expect(result.entities).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "MISSING_EMITTED_SCHEMAS",
+      "MISSING_EMITTED_SCHEMAS",
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.methodName)).toEqual([
+      "silentAssign",
+      "silentCommand",
+    ]);
+  });
+
+  it("rejects no-emission React handlers with empty tuple returns", () => {
+    const result = analyzeBuildHandlers(programWithSource("src/tuple.ts", emptyTupleReactSource));
 
     expect(result.entities).toEqual([]);
     expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
@@ -655,6 +691,39 @@ const noEmissionSource = `
     @React
     observe(event: TaskCreated): void {
       void event;
+    }
+  }
+`;
+
+const voidEmissionSource = `
+  import { Aggregate, Assign, Command } from "@spine-ts/server";
+  import { TaskSchema } from "../generated/task_pb.js";
+  import { type CreateTask } from "../generated/commands_pb.js";
+  import { type TaskCreated } from "../generated/events_pb.js";
+
+  export class TaskAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+    @Assign
+    silentAssign(command: CreateTask): void {
+      void command;
+    }
+
+    @Command
+    silentCommand(event: TaskCreated): void {
+      void event;
+    }
+  }
+`;
+
+const emptyTupleReactSource = `
+  import { Projection, React } from "@spine-ts/server";
+  import { TaskListSchema } from "../generated/task_list_pb.js";
+  import { type TaskCreated } from "../generated/events_pb.js";
+
+  export class TaskProjection extends Projection<string, typeof TaskListSchema, bigint> {
+    @React
+    observe(event: TaskCreated): [] {
+      void event;
+      return [];
     }
   }
 `;

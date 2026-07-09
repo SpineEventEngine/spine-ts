@@ -164,6 +164,27 @@ describe("generated handler registry ingestion", () => {
     expect(Object.isFrozen(entity?.handlers[0])).toBe(true);
   });
 
+  it("accepts generated event reactions with no emitted schemas", () => {
+    const metadata = new HandlerRegistryIngestor().ingest({
+      version: 1,
+      entities: [
+        {
+          entityType: GeneratedProjection,
+          stateSchema: ProjectionStateSchema,
+          handlers: [record("event-reaction", "reactToCreated", EventSchema, [])],
+        },
+      ],
+    });
+    const [eventReaction] = metadata[0]?.eventReactions ?? [];
+
+    expect(metadata[0]?.handlers).toHaveLength(1);
+    if (eventReaction === undefined) {
+      throw new Error("Expected no-emission event reaction metadata.");
+    }
+    expect(eventReaction.methodName).toBe("reactToCreated");
+    expect(handlerMetadataAccess.emittedSchemas(eventReaction)).toEqual([]);
+  });
+
   it("accepts concrete entity handler groups in top-level generated registries", () => {
     const group = {
       entityType: GeneratedProjection,
@@ -356,11 +377,10 @@ describe("generated handler registry ingestion", () => {
     }
   });
 
-  it("rejects empty emitted schemas for emitting generated handler kinds", () => {
+  it("rejects empty emitted schemas for command-producing generated handler kinds", () => {
     for (const [kind, methodName, signalSchema] of [
       ["command-assignment", "assignCreate", CommandSchema],
       ["command-reaction", "commandFromCommand", CommandSchema],
-      ["event-reaction", "reactToCreated", EventSchema],
     ] as const) {
       expect(() =>
         new HandlerRegistryIngestor().ingest({

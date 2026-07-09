@@ -1038,8 +1038,8 @@ global runtime state.
 ## Handler Discovery
 
 Ordinary application code uses bare decorators on public instance methods.
-Command assignees return generated domain event messages; subscribers return
-`void`:
+Command assignees return generated domain event messages; event reactors may
+return generated event messages or explicit `void`; subscribers return `void`:
 
 ```ts
 import { create } from "@bufbuild/protobuf";
@@ -1085,11 +1085,12 @@ handler materializers or list handler schemas manually; discovery and
 materialization belong to generated framework registry tooling. Decorators do
 not instantiate the entity, invoke methods, unpack payloads, register in a
 global handler registry, validate transactions, write storage, start buses, or
-start transport. Generated producer handlers (`@Assign`, command-producing
-`@Command`, and event-producing `@React`) return generated domain messages;
-the framework wraps those returned messages into commands/events internally
-after the current transactional work succeeds. Generated `@Subscribe` handlers
-return explicit `void`.
+start transport. Generated `@Assign` and command-producing `@Command` handlers
+must return generated domain messages; `@React` handlers may return generated
+event messages or explicit `void` with no emitted schemas. The framework wraps
+returned messages into commands/events internally after the current
+transactional work succeeds. Generated `@Subscribe` handlers return explicit
+`void` and emit none.
 
 `HandlerMetadataRegistry` remains available for low-level framework tests and
 explicit metadata tooling:
