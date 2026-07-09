@@ -5,7 +5,7 @@ Started: `2026-07-09`
 Branch: `task/T-0018b-runtime-metadata-adoption`
 Worktree:
 `.worktrees/T-0018b-runtime-metadata-adoption`
-Base commit: TBD
+Base commit: `9c3ba8a`
 
 ## Objective
 
