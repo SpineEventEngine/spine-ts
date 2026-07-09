@@ -1,6 +1,6 @@
 # T-0017c: Rich Entity Subscription Matching
 
-Status: complete
+Status: complete, integrated
 Started: `2026-07-08`
 Branch: `task/T-0017c-subscription-matching`
 Worktree:

@@ -1,6 +1,6 @@
 # T-0017e: Command-Producing And Event-Reactor Execution
 
-Status: complete
+Status: complete, integrated
 Started: `2026-07-09`
 Completed: `2026-07-09`
 Branch: `task/T-0017e-reactor-commanders`

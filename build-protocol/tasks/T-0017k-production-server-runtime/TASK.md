@@ -1,6 +1,6 @@
 # T-0017k: Production Server Runtime Environment
 
-Status: complete and integrated to `main`
+Status: complete, integrated
 Started: `2026-07-09`
 Completed: `2026-07-09`
 Branch: `task/T-0017k-production-server-runtime`

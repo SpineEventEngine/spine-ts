@@ -1,6 +1,6 @@
 # T-0017f: ProcessManager Runtime Execution
 
-Status: complete
+Status: complete, integrated
 Started: `2026-07-09`
 Branch: `task/T-0017f-process-manager-runtime`
 Worktree:
