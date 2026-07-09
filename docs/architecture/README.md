@@ -456,8 +456,9 @@ The following runtime pieces are still deferred to later explicit tasks:
   cross-process subscription stream ownership;
 - full system-context runtime, command-log repositories, system event taxonomy,
   tracing/monitors/debug UI, and broad production server/gRPC lifecycle; and
-- ZeroMQ endpoint topology and production transport-backed worker execution
-  beyond the current local `RuntimeTransportBinding`.
+- remote/multi-host transport topology, broker topology, process supervision,
+  retry workers, health checks, and production transport-backed worker
+  execution beyond the current local `RuntimeTransportBinding`.
 
 ## Server Runtime Closure
 
@@ -606,27 +607,30 @@ objects and interfaces that later adapters can implement:
   adapter seam for later runtime integration and graceful async close behavior.
 
 The boundary is intentionally smaller than a bus implementation. It does not
-choose ZeroMQ socket topology, endpoint naming, durable delivery, retry loops
-or timers, process supervision, readiness probes over IPC, handler invocation,
-repository dispatch, storage lifecycle, read-side execution policy,
-participant lifecycle, worker registrations, delivery attempts/results, or
-retry classification. Those decisions remain in later transport and runtime
+choose durable delivery, retry loops or timers, process supervision, readiness
+probes over IPC, repository dispatch, storage lifecycle, read-side execution
+policy, participant lifecycle, worker registrations, delivery attempts/results,
+or retry classification. Those decisions remain in later transport and runtime
 tasks.
 
 The transport package now pins the maintained official `zeromq@6.5.0` line for
-the local IPC adapter foundation. That native dependency is adapter-private:
-current helper code validates a local IPC configuration shape and keeps native module
-typing out of the public entry point, while package-private smoke tests prove
-same-host publish/subscribe and request/reply IPC over temporary endpoints. The
-tests do not define production endpoint layout, frame protocols, broker
-topology, worker registration handshakes, delivery retries, or process
-supervision. Runtime transport binding tests use a contract-level
-`SignalTransport` test double; ZeroMQ remains adapter-private until a production
-adapter exists. The workspace explicitly approves the
-`zeromq` install script in pnpm configuration, so dependency restoration must
-run in an environment that permits native package build/install scripts.
-Managed sandboxes may reject ZeroMQ `ipc://` binds with `EPERM`, so live local
-IPC smoke tests can require native IPC filesystem/socket permissions outside
-the sandbox. Per D-0007, this adapter path is for same-host IPC only; scaling
-beyond one host remains the job of a different transport behind the same public
-contract.
+the local IPC adapter. The package root stays adapter-neutral, while the
+`@spine-ts/transport/zeromq` subpath exposes the local IPC config helper and a
+`SignalTransport` factory. The adapter derives compact deterministic IPC socket
+paths from `ZeroMqAdapterConfig` plus transport routing descriptors and keeps
+endpoint strings, multipart frames, socket classes, and native module types out
+of framework APIs. Native tests prove publish/subscribe, request/reply, and
+`RuntimeTransportBinding` command/event callbacks over the ZeroMQ transport. The
+implementation does not add remote transport, broker topology, worker
+registration handshakes, delivery retries, process supervision, or broad health
+checks. The workspace explicitly approves the `zeromq` install script in pnpm
+configuration, so dependency restoration must run in an environment that permits
+native package build/install scripts. Managed sandboxes may reject ZeroMQ
+`ipc://` binds with `EPERM`, so live local IPC tests can require native IPC
+filesystem/socket permissions outside the sandbox. Per D-0007, this adapter path
+is for same-host IPC only; scaling beyond one host remains the job of a
+different transport behind the same public contract.
+
+The ZeroMQ adapter serializes envelopes with Node's V8 serializer. Its `ipc://`
+frames are trusted same-host runtime traffic only, and `ipcDirectory` must be a
+private directory shared only by the cooperating runtime peers.

@@ -573,7 +573,7 @@ Transport exports include `TransportSignalKind`, `TransportSemanticTag`,
 `PublishTransportOperation`, `RequestTransportOperation`,
 `PublishTransportHandler`, `RequestTransportHandler`, `AsyncCloseable`,
 `TransportSubscriptionHandle`, `SignalTransport`, `createTransportTopic()`, and
-`createTransportSubscription()`. This surface is contract-only: it defines
+`createTransportSubscription()`. This root surface is contract-only: it defines
 immutable topic/subscription value objects, deterministic adapter-agnostic
 routing keys, handler callback signatures, and graceful async close behavior.
 It does not expose ZeroMQ socket types, endpoint strings, multipart frames,
@@ -582,18 +582,21 @@ participant lifecycle values, worker registrations, delivery attempt/result
 values, retry policy, durable storage, runtime handler invocation, or server
 runtime wiring.
 The transport package pins `zeromq@6.5.0` for local IPC adapter work, but that
-native dependency remains outside the public TypeDoc entry point.
-Adapter-private wiring validates local IPC configuration and native module
-typing, and package-private smoke tests prove same-host publish/subscribe and
-request/reply IPC over temporary endpoints. Socket creation, endpoint strings,
-multipart frames, and native binding types remain absent from the public API;
-production endpoint layout, frame protocols, broker topology, process
-supervision, worker registration handshakes, delivery retries, and server
-runtime wiring remain deferred. Managed sandboxes may reject ZeroMQ `ipc://`
-binds with `EPERM`, so live local IPC smoke tests can require native IPC
-filesystem/socket permissions outside the sandbox. Runtime transport smoke tests
-exercise the public `SignalTransport` contract; adapter-private ZeroMQ tests
-remain the local IPC proof until a production transport adapter is introduced.
+native dependency remains outside the root TypeDoc entry point. The
+adapter-scoped `@spine-ts/transport/zeromq` subpath exports
+`createZeroMqAdapterConfig()` and `createZeroMqSignalTransport()` for local IPC
+deployments. It derives deterministic IPC endpoints from adapter config and
+transport routing descriptors internally, then exposes only the
+`SignalTransport` contract to runtime binding code. Socket creation, endpoint
+strings, multipart frames, and native binding types remain absent from the root
+API; remote transport, broker topology, process supervision, worker
+registration handshakes, delivery retries, and broad health checks remain
+deferred. The adapter serializes envelopes with Node's V8 serializer and is for
+trusted same-host runtime peers only; `ipcDirectory` must be private to those
+peers. Managed sandboxes may reject ZeroMQ `ipc://` binds with `EPERM`, so live
+local IPC tests can require native IPC filesystem/socket permissions outside
+the sandbox. Runtime transport tests now include a native ZeroMQ-backed command
+and event callback proof through the public `SignalTransport` contract.
 
 The generated Protobuf-ES implementation files themselves remain excluded from
 TypeDoc output and are not broadly re-exported from the package root.

@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./zeromq": {
+      "types": "./dist/zeromq/index.d.ts",
+      "default": "./dist/zeromq/index.js"
     }
   },
   "files": [
