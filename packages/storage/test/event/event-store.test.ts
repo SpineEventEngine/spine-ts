@@ -1,6 +1,15 @@
 import { create } from "@bufbuild/protobuf";
 import { AnySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
-import { EventIdSchema, EventSchema } from "@spine-ts/proto";
+import {
+  ActorContextSchema,
+  EmailAddressSchema,
+  EventContextSchema,
+  EventIdSchema,
+  EventSchema,
+  InternetDomainSchema,
+  TenantIdSchema,
+  type TenantId,
+} from "@spine-ts/proto";
 import { describe, expect, it } from "vitest";
 
 import { EventStore, InMemoryStorageFactory } from "../../src/index.js";
@@ -46,6 +55,52 @@ describe("EventStore", () => {
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-a" } }]);
     currentTenantId = "tenant-b";
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-b" } }]);
+  });
+
+  it("uses event envelope tenant for single-event append and accept", async () => {
+    let currentTenantId = "fallback-tenant";
+    const factory = new InMemoryStorageFactory();
+    const store = new EventStore(
+      {
+        name: "Tasks",
+        multitenant: true,
+        get tenantId() {
+          return currentTenantId;
+        },
+      },
+      factory,
+    );
+    const event = createEvent("event-a", "type.spine.io/tasks.TaskCreated", 1n, "tenant-a");
+
+    await expect(store.accept(event)).resolves.toBeUndefined();
+    await expect(store.append(event)).resolves.toBeUndefined();
+
+    currentTenantId = "tenant-a";
+    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-a" } }]);
+    currentTenantId = "tenant-b";
+    await expect(store.read()).resolves.toEqual([]);
+
+    await expect(
+      store.append(
+        createEvent("event-domain", "type.spine.io/tasks.TaskDomain", 2n, {
+          kind: "domain",
+          value: "example.com",
+        }),
+      ),
+    ).resolves.toBeUndefined();
+    currentTenantId = "domain:example.com";
+    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-domain" } }]);
+
+    await expect(
+      store.append(
+        createEvent("event-email", "type.spine.io/tasks.TaskEmail", 3n, {
+          kind: "email",
+          value: "owner@example.com",
+        }),
+      ),
+    ).resolves.toBeUndefined();
+    currentTenantId = "email:owner@example.com";
+    await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-email" } }]);
   });
 
   it("supports empty appends and closes with the delegated record storage", async () => {
@@ -179,15 +234,49 @@ describe("EventStore", () => {
   });
 });
 
-function createEvent(id: string, typeUrl: string, seconds: bigint) {
+type TenantInput =
+  | string
+  | {
+      readonly kind: "domain" | "email";
+      readonly value: string;
+    };
+
+function createEvent(id: string, typeUrl: string, seconds: bigint, tenantId?: TenantInput) {
   return create(EventSchema, {
     id: create(EventIdSchema, { value: id }),
     message: create(AnySchema, {
       typeUrl,
       value: new Uint8Array([1, 2, 3]),
     }),
-    context: {
-      timestamp: create(TimestampSchema, { seconds }),
-    },
+    context: createEventContext(seconds, tenantId),
   });
+}
+
+function createEventContext(seconds: bigint, tenantId: TenantInput | undefined) {
+  const context = create(EventContextSchema, {
+    timestamp: create(TimestampSchema, { seconds }),
+  });
+
+  if (tenantId !== undefined) {
+    context.origin = {
+      case: "importContext",
+      value: create(ActorContextSchema, {
+        tenantId: create(TenantIdSchema, {
+          kind: tenantKind(tenantId),
+        }),
+      }),
+    };
+  }
+
+  return context;
+}
+
+function tenantKind(tenantId: TenantInput): TenantId["kind"] {
+  if (typeof tenantId === "string") {
+    return { case: "value", value: tenantId };
+  }
+  if (tenantId.kind === "domain") {
+    return { case: "domain", value: create(InternetDomainSchema, { value: tenantId.value }) };
+  }
+  return { case: "email", value: create(EmailAddressSchema, { value: tenantId.value }) };
 }

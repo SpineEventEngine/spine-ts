@@ -3,7 +3,7 @@ import { fromBinary, toBinary } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import { FileDescriptorProtoSchema, FileDescriptorSetSchema } from "@bufbuild/protobuf/wkt";
-import { packAny, packEvent } from "@spine-ts/core";
+import { deriveTypeUrl, packAny, packEvent } from "@spine-ts/core";
 import {
   EventContextSchema,
   EventIdSchema,
@@ -365,6 +365,140 @@ describe("EventBus", () => {
 
     expect(observed).toEqual(["dispatch:event-stored-dispatch"]);
     await expect(store.read()).resolves.toMatchObject([{ id: { value: "event-stored-dispatch" } }]);
+  });
+
+  it("notifies direct event subscribers after stored-event dispatch", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const bus = new EventBus(store, [
+      createEventDispatcher([ProjectionStateSchema], (event) => {
+        observed.push(`dispatch:${event.id?.value ?? "missing"}`);
+      }),
+    ]);
+    const subscription = eventBusAccess.subscribe(bus, deriveTypeUrl(ProjectionStateSchema), {
+      onEvent: (event) => {
+        observed.push(`event:${event.id?.value ?? "missing"}`);
+      },
+    });
+
+    await bus.post(createProjectionEvent("event-subscribed"));
+
+    expect(subscription.closed).toBe(false);
+    expect(observed).toEqual(["dispatch:event-subscribed", "event:event-subscribed"]);
+
+    subscription.unsubscribe();
+    await bus.post(createProjectionEvent("event-after-unsubscribe"));
+
+    expect(subscription.closed).toBe(true);
+    expect(observed).toEqual([
+      "dispatch:event-subscribed",
+      "event:event-subscribed",
+      "dispatch:event-after-unsubscribe",
+    ]);
+  });
+
+  it("isolates direct event subscriber failures and snapshots fanout", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const bus = new EventBus(store, [
+      createEventDispatcher([ProjectionStateSchema], (event) => {
+        observed.push(`dispatch:${event.id?.value ?? "missing"}`);
+      }),
+    ]);
+    const typeUrl = deriveTypeUrl(ProjectionStateSchema);
+    const secondSubscription: { current?: { unsubscribe(): void } } = {};
+
+    eventBusAccess.subscribe(bus, typeUrl, {
+      onEvent: (event) => {
+        observed.push(`first:${event.id?.value ?? "missing"}`);
+        secondSubscription.current?.unsubscribe();
+        eventBusAccess.subscribe(bus, typeUrl, {
+          onEvent: (nested) => {
+            observed.push(`late:${nested.id?.value ?? "missing"}`);
+          },
+        });
+        throw new Error("subscriber failed");
+      },
+    });
+    secondSubscription.current = eventBusAccess.subscribe(bus, typeUrl, {
+      onEvent: (event) => {
+        observed.push(`second:${event.id?.value ?? "missing"}`);
+      },
+    });
+
+    await expect(bus.post(createProjectionEvent("event-snapshot"))).resolves.toBeUndefined();
+
+    expect(observed).toEqual([
+      "dispatch:event-snapshot",
+      "first:event-snapshot",
+      "second:event-snapshot",
+    ]);
+  });
+
+  it("closes direct event subscribers when the bus closes", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const bus = new EventBus(store, [
+      createEventDispatcher([ProjectionStateSchema], (event) => {
+        observed.push(`dispatch:${event.id?.value ?? "missing"}`);
+      }),
+    ]);
+    const subscription = eventBusAccess.subscribe(bus, deriveTypeUrl(ProjectionStateSchema), {
+      onEvent: (event) => {
+        observed.push(`event:${event.id?.value ?? "missing"}`);
+      },
+    });
+
+    await bus.close();
+    subscription.unsubscribe();
+
+    expect(subscription.closed).toBe(true);
+    expect(observed).toEqual([]);
+  });
+
+  it("rejects direct event subscribers after close begins", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const bus = new EventBus(store);
+    const closing = bus.close();
+
+    expect(() =>
+      eventBusAccess.subscribe(bus, deriveTypeUrl(ProjectionStateSchema), {
+        onEvent: () => undefined,
+      }),
+    ).toThrow(/closed/i);
+
+    await closing;
+
+    expect(() =>
+      eventBusAccess.subscribe(bus, deriveTypeUrl(ProjectionStateSchema), {
+        onEvent: () => undefined,
+      }),
+    ).toThrow(/closed/i);
+  });
+
+  it("rejects internal event-bus access for non-event-bus values", () => {
+    const notBus = {} as EventBus;
+
+    expect(() =>
+      eventBusAccess.subscribe(notBus, deriveTypeUrl(ProjectionStateSchema), {
+        onEvent: () => undefined,
+      }),
+    ).toThrow("Event subscription requires an EventBus instance.");
+    expect(() => eventBusAccess.eventSchemas(notBus)).toThrow(
+      "Event schema listing requires an EventBus instance.",
+    );
   });
 
   it("runs accept hooks before dispatching already stored events", async () => {

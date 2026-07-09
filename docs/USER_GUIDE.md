@@ -144,7 +144,8 @@ remain later slices.
   `builder.spec` and `context.spec`, tenant mode metadata, dispatcher
   collection, storage-factory injection for event, repository state, and direct
   Stand/read-side state storage, internally owned built-context command/event
-  buses, post-only context bus endpoints, and copy-safe small context snapshots.
+  buses, post-only command endpoints, event listing/posting endpoints, and
+  copy-safe small context snapshots.
 - A first single-process server runtime lifecycle/queue kernel, typed
   write-side signal intake result values, and command/event
   registration-readiness metadata derived from handler metadata.
@@ -500,9 +501,11 @@ await context.eventBus().post(eventEnvelope);
 after the call. `withStorageFactory()` supplies the `StorageFactory` used to
 create the context `EventStore`, repository state storage, and direct
 Stand/read-side state storage; if omitted, the current builder uses in-memory
-storage. `commandBus()` and `eventBus()` expose only `post()`; late dispatcher
-registration stays on the builder and concrete bus classes. Event posting
-stores through that event store before dispatcher fan-out.
+storage. `commandBus()` exposes accepted command type listing and `post()`;
+`eventBus()` exposes `acceptedEventTypes()` for public event subscription
+targets plus `post()`. Late dispatcher registration stays on the builder and
+concrete bus classes. Event posting stores through that event store before
+dispatcher fan-out.
 
 `add(repository)` and `remove(repository)` maintain the builder's repository
 registration list. `build()` registers the listed repositories with the built
@@ -616,19 +619,25 @@ missing criteria, and `include_all = false` return `INVALID_QUERY` before Stand
 storage is read.
 Direct subscriptions are in-process only and must be cleaned up by calling
 `unsubscribe()`. Service subscriptions allocate IDs in `Subscribe` and attach
-Stand delivery in `Activate`; updates recorded before activation are not
-replayed by this first slice. `Subscribe` rejects unknown state targets,
-invalid criteria, unsupported comparison operators, and unknown subscription
-field paths before creating an inactive record. `Target.include_all = true`
-delivers every activated update. `Target.filters` supports an optional ID
+delivery in `Activate`; updates recorded before activation are not replayed by
+this first slice. `Subscribe` accepts known registered state targets and event
+targets exposed by built-context event dispatchers. It rejects unknown/private
+targets, invalid criteria, unsupported comparison operators, event filters,
+event field masks, and unknown subscription field paths before creating an
+inactive record or attaching a listener. State `Target.include_all = true`
+delivers every activated update. State `Target.filters` supports an optional ID
 filter plus `ALL`/`EITHER` composite `EQUAL` field filters over generated
 entity state fields, including nested message fields. Missing ID filters match
 all IDs. Filtered topics deliver matching new states and emit
 `no_longer_matching` when the previous state matched but the new state does
 not. `Topic.field_mask` is applied to delivered states, not to
-`no_longer_matching` updates. Single-tenant subscriptions reject tenant
-options; multitenant subscriptions require `tenantId`; delivery is scoped to
-that tenant slice. Subscription IDs are opaque and process-local to one
+`no_longer_matching` updates. Event topics support `include_all = true` in this
+runtime slice and stream wire-level `event_updates` containing cloned framework
+`Event` envelopes for matching event message type URLs. Application handlers
+still receive generated domain event messages; framework envelopes stay inside
+service/runtime data. Single-tenant subscriptions reject tenant options;
+multitenant subscriptions require `tenantId`; state and event delivery are
+scoped to that tenant slice. Subscription IDs are opaque and process-local to one
 `SpineServices` instance; activating the same ID against another instance,
 activating an already-active ID, or activating any missing/unknown ID completes
 without updates. `Cancel` returns OK for missing, unknown, already-canceled, or

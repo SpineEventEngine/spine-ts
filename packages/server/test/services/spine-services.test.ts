@@ -19,6 +19,7 @@ import {
   packAny,
   packCommand,
   packEvent,
+  type MessageSchema,
   unpackAny,
 } from "@spine-ts/core";
 import {
@@ -26,6 +27,7 @@ import {
   CommandSchema,
   CommandContextSchema,
   CommandIdSchema,
+  Command_SystemPropertiesSchema,
   EmailAddressSchema,
   EventContextSchema,
   EventIdSchema,
@@ -81,6 +83,7 @@ import {
   SpineServices,
   defineEntityHandlers,
   type CommandDispatcher,
+  type EventDispatcher,
   type RunningServer,
 } from "../../src/index.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
@@ -1599,6 +1602,159 @@ describe("SpineServices", () => {
     }
   });
 
+  it("delivers event_updates for activated event subscriptions", async () => {
+    const context = BoundedContext.singleTenant("Events")
+      .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+
+    const subscription = await handlers.subscribe(createEventTopic());
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const nextUpdate = withTimeout(iterator.next(), "event subscription update");
+
+    await delay(25);
+    await context.eventBus().post(createAggregateEvent("event-created", "aggregate-1", "Created"));
+
+    const delivered = await nextUpdate;
+    const update = delivered.value as SubscriptionUpdate | undefined;
+
+    expect(delivered.done).toBe(false);
+    expect(subscription.topic?.target?.type).toBe(deriveTypeUrl(AggregateStateSchema));
+    expect(update?.response?.status?.status.case).toBe("ok");
+    expect(update?.subscription?.id).toEqual(subscription.id);
+    if (update?.update.case !== "eventUpdates") {
+      throw new Error("Expected event subscription update.");
+    }
+    const event = update.update.value.event[0];
+    if (event?.message === undefined) {
+      throw new Error("Expected delivered event envelope.");
+    }
+    expect(event.id?.value).toBe("event-created");
+    expect(unpackAny(event.message, AggregateStateSchema)).toEqual(
+      create(AggregateStateSchema, {
+        id: "aggregate-1",
+        name: "Created",
+        archived: false,
+      }),
+    );
+    await iterator.return?.();
+  });
+
+  it("keeps multitenant event subscriptions isolated by tenant", async () => {
+    const context = BoundedContext.multitenant("TenantEvents")
+      .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createEventTopic("tenant-a"));
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const nextUpdate = iterator.next();
+
+    await delay(25);
+    await context
+      .eventBus()
+      .post(createAggregateEvent("event-tenant-b", "aggregate-1", "Tenant B", "tenant-b"));
+    const beforeMatchingTenant = await Promise.race([
+      nextUpdate.then(() => "delivered"),
+      delay(50).then(() => "pending"),
+    ]);
+
+    await context
+      .eventBus()
+      .post(createAggregateEvent("event-tenant-a", "aggregate-1", "Tenant A", "tenant-a"));
+    const delivered = await withTimeout(nextUpdate, "tenant event subscription update");
+    const update = delivered.value as SubscriptionUpdate | undefined;
+
+    expect(beforeMatchingTenant).toBe("pending");
+    expect(delivered.done).toBe(false);
+    if (update?.update.case !== "eventUpdates") {
+      throw new Error("Expected tenant event subscription update.");
+    }
+    expect(update.update.value.event.map((event) => event.id?.value)).toEqual(["event-tenant-a"]);
+    await iterator.return?.();
+  });
+
+  it("keeps duplicate activation and cancellation behavior for event subscriptions", async () => {
+    const context = BoundedContext.singleTenant("EventLifecycle")
+      .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createEventTopic());
+    const primaryIterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const firstUpdate = primaryIterator.next();
+
+    await delay(25);
+    const duplicateIterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const duplicateDone = await withTimeout(
+      duplicateIterator.next(),
+      "duplicate event activation close",
+    );
+
+    await context.eventBus().post(createAggregateEvent("event-primary", "aggregate-1", "Primary"));
+    const delivered = await withTimeout(firstUpdate, "primary event activation update");
+    const afterCancel = primaryIterator.next();
+    await handlers.cancel(subscription);
+
+    await context
+      .eventBus()
+      .post(createAggregateEvent("event-after-cancel", "aggregate-1", "Late"));
+    const closed = await withTimeout(afterCancel, "canceled event subscription close");
+
+    expect(duplicateDone.done).toBe(true);
+    expect(delivered.done).toBe(false);
+    expect(closed.done).toBe(true);
+  });
+
+  it("rejects unsupported event subscription filters through the service boundary", async () => {
+    const context = BoundedContext.singleTenant("FilteredEvents")
+      .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const topic = create(TopicSchema, {});
+
+    topic.id = create(TopicIdSchema, { value: "t-filtered-event" });
+    topic.context = createActorContext();
+    topic.target = create(TargetSchema, {
+      type: deriveTypeUrl(AggregateStateSchema),
+      criterion: {
+        case: "filters",
+        value: create(TargetFiltersSchema),
+      },
+    });
+
+    let thrown: unknown;
+    try {
+      await handlers.subscribe(topic);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(ConnectError);
+    expect((thrown as ConnectError).code).toBe(Code.InvalidArgument);
+    expect((thrown as ConnectError).rawMessage).toBe(
+      "SubscriptionService.Subscribe event topics support only include_all in this runtime slice.",
+    );
+  });
+
+  it("rejects internal event targets before listener attachment", () => {
+    const context = BoundedContext.singleTenant("InternalEvents")
+      .addEventDispatcher(createDomainEventDispatcher(Command_SystemPropertiesSchema))
+      .build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const topic = createEventTopic();
+    topic.target = createEventSubscriptionTarget(Command_SystemPropertiesSchema);
+
+    let thrown: unknown;
+    try {
+      void handlers.subscribe(topic);
+    } catch (error) {
+      thrown = error;
+    }
+
+    expect(thrown).toBeInstanceOf(ConnectError);
+    expect((thrown as ConnectError).code).toBe(Code.InvalidArgument);
+    expect((thrown as ConnectError).rawMessage).toBe("Unsupported subscription target.");
+  });
+
   it("delivers subscription updates from real projection event handling", async () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createProjectionRepositoryWithHandlers())
@@ -3081,6 +3237,13 @@ function createCommandDispatcher(
   };
 }
 
+function createDomainEventDispatcher(schema: MessageSchema): EventDispatcher {
+  return {
+    messageSchemas: () => [schema],
+    dispatch: () => Promise.resolve(),
+  };
+}
+
 function createValidatedCommandDispatcher(
   onDispatch: (command: ReturnType<typeof createValidatedCommand>) => void,
 ): CommandDispatcher {
@@ -3222,10 +3385,15 @@ function createValidatedCommand(id: string, aggregateId: string, name: string) {
   });
 }
 
-function createAggregateEvent(id: string, aggregateId: string, name: string) {
+function createAggregateEvent(
+  id: string,
+  aggregateId: string,
+  name: string,
+  tenantId?: TenantInput,
+) {
   return packEvent({
     id: create(EventIdSchema, { value: id }),
-    context: create(EventContextSchema),
+    context: createEventContext(tenantId),
     schema: AggregateStateSchema,
     message: create(AggregateStateSchema, {
       id: aggregateId,
@@ -3233,6 +3401,19 @@ function createAggregateEvent(id: string, aggregateId: string, name: string) {
       archived: false,
     }),
   });
+}
+
+function createEventContext(tenantId?: TenantInput) {
+  const context = create(EventContextSchema);
+
+  if (tenantId !== undefined) {
+    context.origin = {
+      case: "importContext",
+      value: createActorContext(tenantId),
+    };
+  }
+
+  return context;
 }
 
 function createValidatedEvent(id: string, aggregateId: string, name: string) {
@@ -3420,9 +3601,27 @@ function createTopic(tenantId?: TenantInput) {
   });
 }
 
+function createEventTopic(tenantId?: TenantInput) {
+  return create(TopicSchema, {
+    id: create(TopicIdSchema, { value: "t-event" }),
+    target: createEventSubscriptionTarget(),
+    context: createActorContext(tenantId),
+  });
+}
+
 function createSubscriptionTarget() {
   return create(TargetSchema, {
     type: deriveTypeUrl(ProjectionStateSchema),
+    criterion: {
+      case: "includeAll",
+      value: true,
+    },
+  });
+}
+
+function createEventSubscriptionTarget(schema: MessageSchema = AggregateStateSchema) {
+  return create(TargetSchema, {
+    type: deriveTypeUrl(schema),
     criterion: {
       case: "includeAll",
       value: true,
@@ -3707,6 +3906,7 @@ function createFakeContext(options: {
   readonly isMultitenant?: boolean;
   readonly commandTypes?: readonly string[];
   readonly entityFamily?: "aggregate" | "projection" | "process-manager";
+  readonly eventTypes?: readonly string[];
   readonly stateTypes?: readonly string[];
   readonly post?: (command: ReturnType<typeof createProjectionCommand>) => Promise<void>;
   readonly readVersioned?: (
@@ -3735,6 +3935,7 @@ function createFakeContext(options: {
   ) => { readonly closed: boolean; unsubscribe(): void };
 }) {
   const commandTypes = options.commandTypes ?? [];
+  const eventTypes = options.eventTypes ?? [];
   const stateTypes = options.stateTypes ?? [];
   const queryVersioned = options.queryVersioned ?? createFakeQueryVersioned(options);
 
@@ -3744,6 +3945,11 @@ function createFakeContext(options: {
       Object.freeze({
         acceptedCommandTypes: () => commandTypes,
         post: options.post ?? (() => Promise.resolve()),
+      }),
+    eventBus: () =>
+      Object.freeze({
+        acceptedEventTypes: () => eventTypes,
+        post: () => Promise.resolve(),
       }),
     registeredRepositories: () =>
       stateTypes.map((typeUrl) =>

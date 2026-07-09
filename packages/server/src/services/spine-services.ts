@@ -21,6 +21,8 @@ import { deriveTypeUrl, packAny, unpackAny } from "@spine-ts/core";
 import {
   CommandIdSchema,
   type Command,
+  type Event,
+  EventSchema,
   type TenantId,
   ValidationErrorSchema,
   VersionSchema,
@@ -49,6 +51,7 @@ import { QueryService } from "@spine-ts/proto/generated/spine/client/query_servi
 import {
   EntityStateUpdateSchema,
   EntityUpdatesSchema,
+  EventUpdatesSchema,
   SubscriptionIdSchema,
   SubscriptionSchema,
   SubscriptionUpdateSchema,
@@ -72,11 +75,11 @@ import {
   type RecordQuery,
 } from "@spine-ts/storage";
 
-import type { BoundedContext } from "../context/bounded-context.js";
+import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
 import { CommandValidationError } from "../bus/command-errors.js";
 import type { EntityFamily } from "../entity/entity.js";
 import { TransitionValidationError } from "../repository/command-errors.js";
-import type { StandReadResult, StandSubscription, StandUpdate } from "../stand/stand.js";
+import type { StandReadResult, StandUpdate } from "../stand/stand.js";
 import { CommandRefusalError } from "./command-errors.js";
 
 /**
@@ -93,18 +96,24 @@ import { CommandRefusalError } from "./command-errors.js";
  * before Stand storage is read.
  *
  * `SubscriptionService.Subscribe` accepts known state targets with
- * `include_all` or validated ID/field filters, creates an inactive
- * process-local record, and attaches delivery to `Stand` only when the opaque
- * subscription ID is activated. Filtered topics deliver matching states, emit
- * `no_longer_matching` when previous state matched and new state does not, and
- * apply topic masks only to delivered states. Unknown or duplicate activation
- * IDs complete without updates, and cancellation of unknown or already-cleaned
- * IDs returns OK.
+ * `include_all` or validated ID/field filters and known event targets exposed
+ * by built-context event dispatchers with `include_all = true`. It creates an
+ * inactive process-local record and attaches delivery only when the opaque
+ * subscription ID is activated: state subscriptions attach to `Stand`, while
+ * event subscriptions attach to a framework-internal `EventBus` listener.
+ * Filtered state topics deliver matching states, emit `no_longer_matching`
+ * when previous state matched and new state does not, and apply topic masks
+ * only to delivered states. Event topics stream wire-level `event_updates`
+ * containing cloned framework `Event` envelopes; application code remains on
+ * generated domain event messages through handler dispatch. Unknown or
+ * duplicate activation IDs complete without updates, and cancellation of
+ * unknown or already-cleaned IDs returns OK.
  */
 export class SpineServices {
   readonly #contexts: readonly BoundedContext[];
   readonly #commandRoutes = new Map<string, CommandRoute>();
   readonly #stateRoutes = new Map<string, StateRoute>();
+  readonly #eventRoutes = new Map<string, EventRoute>();
   readonly #subscriptions = new Map<string, SubscriptionRecord>();
   readonly #inactiveTtlMs: number;
   readonly #queueLimit: number;
@@ -130,9 +139,16 @@ export class SpineServices {
           context,
           entityFamily: repository.entityFamily,
           idField: stateRouteIdField(schema, repository.idField),
+          kind: "state",
           schema,
           typeUrl,
         });
+      }
+
+      for (const typeUrl of context.eventBus().acceptedEventTypes()) {
+        if (!this.#eventRoutes.has(typeUrl)) {
+          this.#eventRoutes.set(typeUrl, { context, kind: "event", typeUrl });
+        }
       }
     }
   }
@@ -251,7 +267,7 @@ export class SpineServices {
   #subscribe(topic: Topic): Subscription {
     const route = this.#subscriptionRoute(topic);
     validateTopic(topic);
-    const matcher = createSubscriptionMatcher(topic, route);
+    const shape = createSubscriptionShape(topic, route);
     const tenantId = topicTenant(topic);
     const tenantError = tenantMismatch(route.context.isMultitenant, tenantId, "subscription");
 
@@ -269,7 +285,7 @@ export class SpineServices {
       throw new ConnectError("Subscription ID is required.", Code.InvalidArgument);
     }
 
-    this.#storeInactiveSubscription(id, subscription, route, matcher, tenantId);
+    this.#storeInactiveSubscription(id, subscription, shape, tenantId);
 
     return clone(SubscriptionSchema, subscription);
   }
@@ -277,18 +293,16 @@ export class SpineServices {
   #storeInactiveSubscription(
     id: string,
     subscription: Subscription,
-    route: StateRoute,
-    matcher: SubscriptionMatcher,
+    shape: SubscriptionShape,
     tenantId: string | undefined,
   ): void {
     const record: SubscriptionRecord = {
       id,
       subscription: clone(SubscriptionSchema, subscription),
-      route,
-      matcher,
       tenantId,
       delivery: new SubscriptionDelivery(this.#queueLimit),
       inactiveTimer: undefined,
+      ...shape,
     };
     record.inactiveTimer = setTimeout(() => {
       this.#removeSubscription(id);
@@ -339,9 +353,12 @@ export class SpineServices {
     return okResponse();
   }
 
-  #subscriptionRoute(topic: Topic): StateRoute {
+  #subscriptionRoute(topic: Topic): SubscriptionRoute {
     const target = topic.target;
-    const route = target === undefined ? undefined : this.#stateRoutes.get(target.type);
+    const route =
+      target === undefined
+        ? undefined
+        : (this.#stateRoutes.get(target.type) ?? this.#eventRoutes.get(target.type));
 
     if (target === undefined || route === undefined) {
       throw new ConnectError("Unsupported subscription target.", Code.InvalidArgument);
@@ -352,20 +369,41 @@ export class SpineServices {
 
   #activateRecord(record: SubscriptionRecord): void {
     clearInactiveTimer(record);
-    const standSubscription = record.route.context.stand().subscribe(
-      record.route.schema,
+    if (record.kind === "event") {
+      const eventSubscription = boundedContextAccess.subscribeToEvent(
+        record.route.context,
+        record.route.typeUrl,
+        {
+          onEvent: (event) => {
+            if (!eventTenantMatches(record, event)) {
+              return;
+            }
+            record.delivery.push(createEventUpdate(record, event));
+            if (record.delivery.closed) {
+              this.#removeSubscription(record.id);
+            }
+          },
+        },
+      );
+      record.delivery.attach(eventSubscription);
+      return;
+    }
+
+    const stateRecord = record;
+    const standSubscription = stateRecord.route.context.stand().subscribe(
+      stateRecord.route.schema,
       (update) => {
-        const subscriptionUpdate = createEntityUpdate(record, update);
+        const subscriptionUpdate = createEntityUpdate(stateRecord, update);
         if (subscriptionUpdate !== undefined) {
-          record.delivery.push(subscriptionUpdate);
+          stateRecord.delivery.push(subscriptionUpdate);
         }
-        if (record.delivery.closed) {
-          this.#removeSubscription(record.id);
+        if (stateRecord.delivery.closed) {
+          this.#removeSubscription(stateRecord.id);
         }
       },
-      tenantOptions(record.tenantId),
+      tenantOptions(stateRecord.tenantId),
     );
-    record.delivery.attach(standSubscription);
+    stateRecord.delivery.attach(standSubscription);
   }
 
   #removeSubscription(id: string): void {
@@ -407,19 +445,50 @@ interface StateRoute {
   readonly context: BoundedContext;
   readonly entityFamily: EntityFamily;
   readonly idField: MessageFieldInfo;
+  readonly kind: "state";
   readonly schema: MessageSchema;
   readonly typeUrl: string;
 }
 
-interface SubscriptionRecord {
+interface EventRoute {
+  readonly context: BoundedContext;
+  readonly kind: "event";
+  readonly typeUrl: string;
+}
+
+type SubscriptionRoute = StateRoute | EventRoute;
+
+interface SubscriptionRecordBase {
   readonly id: string;
   readonly subscription: Subscription;
-  readonly route: StateRoute;
-  readonly matcher: SubscriptionMatcher;
   readonly tenantId: string | undefined;
   readonly delivery: SubscriptionDelivery;
   inactiveTimer: ReturnType<typeof setTimeout> | undefined;
 }
+
+type SubscriptionRecord = EventSubscriptionRecord | StateSubscriptionRecord;
+
+interface EventSubscriptionRecord extends SubscriptionRecordBase {
+  readonly kind: "event";
+  readonly route: EventRoute;
+}
+
+interface StateSubscriptionRecord extends SubscriptionRecordBase {
+  readonly kind: "state";
+  readonly route: StateRoute;
+  readonly matcher: SubscriptionMatcher;
+}
+
+type SubscriptionShape =
+  | {
+      readonly kind: "event";
+      readonly route: EventRoute;
+    }
+  | {
+      readonly kind: "state";
+      readonly route: StateRoute;
+      readonly matcher: SubscriptionMatcher;
+    };
 
 interface SubscriptionMatcher {
   readonly fieldMask: readonly string[] | undefined;
@@ -432,7 +501,7 @@ class SubscriptionDelivery {
   readonly #queue: SubscriptionUpdate[] = [];
   readonly #waiters: ((update: SubscriptionUpdate | undefined) => void)[] = [];
   readonly #queueLimit: number;
-  #standSubscription: StandSubscription | undefined;
+  #subscription: SubscriptionAttachment | undefined;
   #closed = false;
 
   constructor(queueLimit: number) {
@@ -440,20 +509,20 @@ class SubscriptionDelivery {
   }
 
   get active(): boolean {
-    return this.#standSubscription !== undefined;
+    return this.#subscription !== undefined;
   }
 
   get closed(): boolean {
     return this.#closed;
   }
 
-  attach(standSubscription: StandSubscription): void {
+  attach(subscription: SubscriptionAttachment): void {
     if (this.#closed) {
-      standSubscription.unsubscribe();
+      subscription.unsubscribe();
       return;
     }
 
-    this.#standSubscription = standSubscription;
+    this.#subscription = subscription;
   }
 
   push(update: SubscriptionUpdate): void {
@@ -489,13 +558,18 @@ class SubscriptionDelivery {
 
     this.#closed = true;
     this.#queue.length = 0;
-    this.#standSubscription?.unsubscribe();
-    this.#standSubscription = undefined;
+    this.#subscription?.unsubscribe();
+    this.#subscription = undefined;
 
     for (const waiter of this.#waiters.splice(0)) {
       waiter(undefined);
     }
   }
+}
+
+interface SubscriptionAttachment {
+  readonly closed: boolean;
+  unsubscribe(): void;
 }
 
 function okStatus(): Status {
@@ -817,11 +891,16 @@ function validateTopic(topic: Topic): void {
   }
 }
 
-function createSubscriptionMatcher(topic: Topic, route: StateRoute): SubscriptionMatcher {
+function createSubscriptionShape(topic: Topic, route: SubscriptionRoute): SubscriptionShape {
   const target = topic.target;
   if (target === undefined) {
     throw new ConnectError("Subscription topic target is required.", Code.InvalidArgument);
   }
+  if (route.kind === "event") {
+    validateEventSubscriptionTopic(topic, target);
+    return { kind: "event", route };
+  }
+
   const fieldMask = subscriptionFieldMask(topic, route);
 
   switch (target.criterion.case) {
@@ -833,11 +912,49 @@ function createSubscriptionMatcher(topic: Topic, route: StateRoute): Subscriptio
         );
       }
       return {
-        fieldMask,
-        match: () => "state",
+        kind: "state",
+        route,
+        matcher: {
+          fieldMask,
+          match: () => "state",
+        },
       };
     case "filters":
-      return createFilteredSubscriptionMatcher(target.criterion.value, route, fieldMask);
+      return {
+        kind: "state",
+        route,
+        matcher: createFilteredSubscriptionMatcher(target.criterion.value, route, fieldMask),
+      };
+    default:
+      throw new ConnectError(
+        "SubscriptionService.Subscribe requires filters or include_all = true.",
+        Code.InvalidArgument,
+      );
+  }
+}
+
+function validateEventSubscriptionTopic(topic: Topic, target: Target): void {
+  if ((topic.fieldMask?.paths.length ?? 0) > 0) {
+    throw new ConnectError(
+      "SubscriptionService.Subscribe event topics do not support field_mask.",
+      Code.InvalidArgument,
+    );
+  }
+
+  switch (target.criterion.case) {
+    case "includeAll":
+      if (!target.criterion.value) {
+        throw new ConnectError(
+          "SubscriptionService.Subscribe requires filters or include_all = true.",
+          Code.InvalidArgument,
+        );
+      }
+      return;
+    case "filters":
+      throw new ConnectError(
+        "SubscriptionService.Subscribe event topics support only include_all in this runtime slice.",
+        Code.InvalidArgument,
+      );
     default:
       throw new ConnectError(
         "SubscriptionService.Subscribe requires filters or include_all = true.",
@@ -1279,6 +1396,21 @@ function topicTenant(topic: Topic | undefined): string | undefined {
   return tenantValue(topic?.context?.tenantId);
 }
 
+function eventTenant(event: Event): string | undefined {
+  switch (event.context?.origin.case) {
+    case "importContext":
+      return tenantValue(event.context.origin.value.tenantId);
+    case "pastMessage":
+      return tenantValue(event.context.origin.value.actorContext?.tenantId);
+    default:
+      return undefined;
+  }
+}
+
+function eventTenantMatches(record: SubscriptionRecord, event: Event): boolean {
+  return record.tenantId === undefined || eventTenant(event) === record.tenantId;
+}
+
 function tenantValue(tenantId: TenantId | undefined): string | undefined {
   switch (tenantId?.kind.case) {
     case "value":
@@ -1384,7 +1516,7 @@ const VALUE_DECODERS = Object.freeze([
 ]);
 
 function createEntityUpdate(
-  record: SubscriptionRecord,
+  record: StateSubscriptionRecord,
   update: StandUpdate,
 ): SubscriptionUpdate | undefined {
   const match = record.matcher.match(update);
@@ -1420,7 +1552,20 @@ function createEntityUpdate(
   });
 }
 
-function maskedState(record: SubscriptionRecord, state: MessageShape<MessageSchema>): Message {
+function createEventUpdate(record: SubscriptionRecord, event: Event): SubscriptionUpdate {
+  return create(SubscriptionUpdateSchema, {
+    subscription: clone(SubscriptionSchema, record.subscription),
+    response: okResponse(),
+    update: {
+      case: "eventUpdates",
+      value: create(EventUpdatesSchema, {
+        event: [clone(EventSchema, event)],
+      }),
+    },
+  });
+}
+
+function maskedState(record: StateSubscriptionRecord, state: MessageShape<MessageSchema>): Message {
   return RecordMask.apply(clone(record.route.schema, state), record.matcher.fieldMask);
 }
 

@@ -337,9 +337,9 @@ surface:
 - `BoundedContextBuilder.build()` is the only supported path for constructing a
   built `BoundedContext`; and
 - built contexts expose name, tenant mode, spec, a copy-safe small snapshot,
-  frozen snapshot-backed `RepositoryView` values, and post-only `commandBus()` /
-  `eventBus()` endpoints backed by internally owned buses, plus a context-owned
-  direct `stand()`.
+  frozen snapshot-backed `RepositoryView` values, a post-only `commandBus()`
+  endpoint, an event listing/posting `eventBus()` endpoint backed by internally
+  owned buses, plus a context-owned direct `stand()`.
 
 This keeps the TypeScript API JVM-familiar without pretending that later
 runtime collaborators already exist. Application code does not subclass
@@ -378,18 +378,25 @@ multitenant contexts require `tenantId`.
 Service subscription delivery starts only when a client activates the opaque
 subscription ID, abandoned inactive subscriptions expire after a small
 configurable TTL, slow consumers are bounded by a small configurable update
-queue, and stream/cancel cleanup releases the direct Stand handle.
-`Subscribe` rejects unknown state targets, invalid criteria, unsupported
-comparison operators, and unknown subscription field paths before creating a
-process-local record. Include-all topics deliver each activated update. Filtered
-topics support optional ID filters plus `ALL`/`EITHER` composite `EQUAL`
-field filters over generated entity state fields, including nested message
-fields. Missing ID filters match all IDs. Filtered delivery compares previous
-and new Stand state: matching new states are delivered, and matched-to-unmatched
-transitions emit `no_longer_matching`. Topic masks are applied only to
-delivered states. Single-tenant subscriptions reject tenant options;
-multitenant subscriptions require `tenantId`; delivery is scoped to that tenant
-slice. Activation and cancellation are keyed by subscription ID in the current
+queue, and stream/cancel cleanup releases the direct Stand or event-bus
+listener handle. `Subscribe` accepts registered state targets and event targets
+exposed by built-context event dispatchers. It rejects unknown/private targets,
+invalid criteria, unsupported comparison operators, event filters, event field
+masks, and unknown subscription field paths before creating a process-local
+record or attaching a listener. State include-all topics deliver each activated
+Stand update. Filtered state topics support optional ID filters plus
+`ALL`/`EITHER` composite `EQUAL` field filters over generated entity state
+fields, including nested message fields. Missing ID filters match all IDs.
+Filtered delivery compares previous and new Stand state: matching new states
+are delivered, and matched-to-unmatched transitions emit `no_longer_matching`.
+Topic masks are applied only to delivered states. Event topics support
+`include_all = true` in this runtime slice and stream wire-level
+`event_updates` with cloned framework `Event` envelopes for matching event
+message type URLs. Application handlers remain on generated domain event
+messages; framework envelopes stay inside service/runtime data. Single-tenant
+subscriptions reject tenant options; multitenant subscriptions require
+`tenantId`; state and event delivery are scoped to that tenant slice. Activation and
+cancellation are keyed by subscription ID in the current
 `SpineServices` instance: unknown activations complete without updates, and
 duplicate activation of an already-active ID also completes without updates.
 Unknown or duplicate cancellations return OK. Cleanup is
@@ -434,7 +441,7 @@ The following runtime pieces are still deferred to later explicit tasks:
 - delivery scheduler/catch-up loops, durable storage lifecycle, entity
   storage/cache catch-up, and tenant-index persistence. Durable inbox records,
   dedup guards, shard leases, and the direct local shard drain are present;
-- richer query filtering, event subscriptions, and durable subscription
+- richer query filtering, durable event subscription recovery, and durable subscription
   recovery;
 - system-context pairing and broad production server/gRPC lifecycle; and
 - ZeroMQ endpoint topology and production transport-backed worker execution

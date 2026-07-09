@@ -2436,11 +2436,11 @@ describe("repository signal routing", () => {
       storageFactory,
     );
 
-    await eventStore.append(
+    await eventStore.appendAll([
       createProjectionEvent("event-corrupt-tenant", "task-corrupt-tenant", {
         pastMessageTenantId: "tenant-b",
       }),
-    );
+    ]);
     await context.stand().update(ProjectionStateSchema, tenantBState, { tenantId: "tenant-b" });
 
     await expect(context.catchUpReadSide({ tenantId: "tenant-a" })).rejects.toMatchObject({

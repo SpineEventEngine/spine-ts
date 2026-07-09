@@ -14,8 +14,12 @@ describe("server bus exports", () => {
     expect(serverRoot.EventBus).toBe(EventBus);
     expect("dispatch" in new CommandBus()).toBe(false);
     expect("dispatch" in new EventBus({} as never)).toBe(false);
+    expect("eventTypes" in new EventBus({} as never)).toBe(false);
+    expect("eventSchemas" in new EventBus({} as never)).toBe(false);
     expectTypeOf<CommandBus>().not.toHaveProperty("dispatch");
     expectTypeOf<EventBus>().not.toHaveProperty("dispatch");
+    expectTypeOf<EventBus>().not.toHaveProperty("eventTypes");
+    expectTypeOf<EventBus>().not.toHaveProperty("eventSchemas");
     expectTypeOf<CommandDispatcher>().toExtend<{
       messageSchemas(): readonly object[];
       dispatch(command: object): Promise<void>;

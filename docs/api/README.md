@@ -62,8 +62,9 @@ dispatchers; `withStorageFactory(factory)` selects the storage factory used for
 the context event store, repository state storage, and direct read-side stand;
 and `build()` returns a
 `BoundedContext` that owns mutable `CommandBus` and `EventBus` instances
-internally while exposing post-only `CommandEndpoint` and `EventEndpoint` values
-through `commandBus()` and `eventBus()`, plus a context-owned direct `Stand`
+internally while exposing a post-only `CommandEndpoint` and an event
+listing/posting `EventEndpoint` through `commandBus()` and `eventBus()`, plus a
+context-owned direct `Stand`
 through `stand()`. The shell validates
 non-empty/non-blank names and records tenant mode. `builder.add(repository)` /
 `builder.remove(repository)` maintain
@@ -192,27 +193,32 @@ without ordering, missing criteria, and `include_all = false` return
 `Activate` attaches delivery, and `Cancel`/stream finalization release
 in-process handles. Never-activated subscriptions have a configurable inactive
 TTL, and active delivery uses a configurable queue limit for slow consumers.
-`Subscribe` rejects unknown targets, invalid criteria, unsupported comparison
-operators, and unknown subscription field paths with `INVALID_ARGUMENT` before
-creating an inactive record. `Target.include_all = true` delivers every
-activated update. `Target.filters` supports an optional ID filter plus
+`Subscribe` accepts registered state targets and event targets exposed by
+built-context event dispatchers. It rejects unknown/private targets, invalid
+criteria, unsupported comparison operators, event filters, event field masks,
+and unknown subscription field paths with `INVALID_ARGUMENT` before creating an
+inactive record or attaching a listener. State `Target.include_all = true`
+delivers every activated update. State `Target.filters` supports an optional ID filter plus
 `ALL`/`EITHER` composite `EQUAL` field filters over generated entity state
 fields, including nested message fields; missing ID filters match all IDs.
 Filtered topics deliver matching new states and emit `no_longer_matching` when
 the previous state matched but the new state does not. `Topic.field_mask` is
-applied to delivered states, not to `no_longer_matching` updates. Activation
-is by the opaque ID in the same `SpineServices` instance. Single-tenant
-subscriptions reject tenant options; multitenant subscriptions require
-`tenantId`; delivery is scoped to that tenant slice. Unknown IDs and duplicate
+applied to delivered states, not to `no_longer_matching` updates. Event topics
+support `include_all = true` in this runtime slice and stream wire-level
+`event_updates` with cloned framework `Event` envelopes. Application handlers
+continue to receive generated domain event messages; framework envelopes remain
+service/runtime data. Activation is by the opaque ID in the same
+`SpineServices` instance. Single-tenant subscriptions reject tenant options;
+multitenant subscriptions require `tenantId`; state and event delivery are scoped to that
+tenant slice. Unknown IDs and duplicate
 activation of an already active ID complete without updates.
 Cancellation of a missing, unknown, already-canceled, or already-cleaned
 subscription returns OK. Cleanup is idempotent across cancellation,
 activation-stream finalization, inactive expiry, and slow-consumer queue
 closure. Defaults are 30 seconds for inactive expiry and 100 queued updates per
 active subscription. The service subscription registry is process-local memory,
-not durable subscription storage. It is not a client DSL, event subscription
-implementation, broad server lifecycle, durable subscription store, or
-projection catch-up loop.
+not durable subscription storage. It is not a client DSL, broad server
+lifecycle, durable subscription store, or projection catch-up loop.
 `Server`, `ServerOptions`, and `RunningServer` form the small public lifecycle
 owner for hosting those routes over Node HTTP/2. `Server.atPort(port)` defaults
 to local-only `127.0.0.1`; broader hosts are explicit through `ServerOptions`.

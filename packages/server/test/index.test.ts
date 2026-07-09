@@ -376,7 +376,11 @@ describe("@spine-ts/server", () => {
     }>();
     expect(new EventBus({} as never)).toBeInstanceOf(EventBus);
     expect("dispatch" in new EventBus({} as never)).toBe(false);
+    expect("eventTypes" in new EventBus({} as never)).toBe(false);
+    expect("eventSchemas" in new EventBus({} as never)).toBe(false);
     expectTypeOf<EventBus>().not.toHaveProperty("dispatch");
+    expectTypeOf<EventBus>().not.toHaveProperty("eventTypes");
+    expectTypeOf<EventBus>().not.toHaveProperty("eventSchemas");
     expectTypeOf<EventDispatcher>().toExtend<{
       messageSchemas(): readonly object[];
       accept?(event: object): Promise<void>;

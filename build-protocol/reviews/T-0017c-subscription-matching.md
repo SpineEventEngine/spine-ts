@@ -118,10 +118,10 @@ round reviews the complete branch diff, with particular attention to the
 post-round-3 comparison simplification, added coverage tests, and updated
 verification evidence.
 
-| Lane                       | Reviewer ID | Status  | Result  |
-| -------------------------- | ----------- | ------- | ------- |
+| Lane                       | Reviewer ID                            | Status | Result   |
+| -------------------------- | -------------------------------------- | ------ | -------- |
 | Code style/maintainability | `019f4411-2d89-7921-8011-97b8b91c665c` | Closed | FINDINGS |
-| Documentation completeness | `019f4411-4b82-7312-a966-34746700a468` | Closed | CLEAN |
+| Documentation completeness | `019f4411-4b82-7312-a966-34746700a468` | Closed | CLEAN    |
 | TypeScript/API docs        | `019f4411-6cef-7380-a040-b5ae72aafb7f` | Closed | FINDINGS |
 | Security                   | `019f4411-8aec-7c32-bc9e-39c14f0e34cc` | Closed | FINDINGS |
 | Performance/reliability    | `019f4411-a8ce-75a3-a0e5-7117e8de80fd` | Closed | FINDINGS |

@@ -3,9 +3,14 @@ import { access, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { clone, type Message } from "@bufbuild/protobuf";
+import { clone, getOption, hasOption, type Message } from "@bufbuild/protobuf";
 import { deriveTypeUrl } from "@spine-ts/core";
 import { EventSchema, type Command, type Event, type TenantId } from "@spine-ts/proto";
+import {
+  SPI_type,
+  internal_all,
+  internal_type,
+} from "@spine-ts/proto/generated/spine/options_pb.js";
 import {
   EventStore,
   InMemoryStorageFactory,
@@ -18,7 +23,12 @@ import {
 
 import { CommandBus } from "../bus/command-bus.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
-import { EventBus, eventBusAccess } from "../bus/event-bus.js";
+import {
+  EventBus,
+  eventBusAccess,
+  type EventSubscriber,
+  type EventSubscription,
+} from "../bus/event-bus.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import {
   Repository,
@@ -115,8 +125,11 @@ export interface CommandEndpoint {
   post(command: Command): Promise<void>;
 }
 
-/** Post-only event endpoint exposed by a built bounded context. */
+/** Event endpoint exposed by a built bounded context for accepted-type listing and posting. */
 export interface EventEndpoint {
+  /** Canonical public event message type URLs accepted by this endpoint. */
+  acceptedEventTypes(): readonly string[];
+
   /** Posts an event into the context-owned event bus. */
   post(event: Event): Promise<void>;
 }
@@ -195,6 +208,18 @@ const dispatchErrorStackLimit = 2_000;
 const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
 const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
 const generatedRegistryLoadAttempts = new Map<string, number>();
+const eventSubscribers = new WeakMap<
+  BoundedContext,
+  (typeUrl: string, subscriber: EventSubscriber) => EventSubscription
+>();
+
+interface BoundedContextAccess {
+  subscribeToEvent(
+    context: BoundedContext,
+    typeUrl: string,
+    subscriber: EventSubscriber,
+  ): EventSubscription;
+}
 let constructBoundedContext:
   | ((
       snapshot: BoundedContextSnapshot,
@@ -269,8 +294,12 @@ export class BoundedContext {
       post: (command: Command) => this.#commandBus.post(command),
     });
     this.#eventEndpoint = Object.freeze({
+      acceptedEventTypes: () => exposedEventTypeUrls(this.#eventBus),
       post: (event: Event) => this.#eventBus.post(event),
     });
+    eventSubscribers.set(this, (typeUrl, subscriber) =>
+      eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
+    );
     this.#registerRepositories(repositories);
     Object.freeze(this);
   }
@@ -370,7 +399,7 @@ export class BoundedContext {
     return this.#commandEndpoint;
   }
 
-  /** Post-only event endpoint owned by this context. */
+  /** Event endpoint owned by this context for accepted-type listing and posting. */
   eventBus(): EventEndpoint {
     return this.#eventEndpoint;
   }
@@ -495,6 +524,23 @@ export class BoundedContext {
     }
   }
 }
+
+/** @internal Package-local context access used by framework service adapters. */
+export const boundedContextAccess: BoundedContextAccess = Object.freeze({
+  subscribeToEvent(
+    context: BoundedContext,
+    typeUrl: string,
+    subscriber: EventSubscriber,
+  ): EventSubscription {
+    const subscribe = eventSubscribers.get(context);
+
+    if (subscribe === undefined) {
+      throw new TypeError("Event subscription requires a built BoundedContext instance.");
+    }
+
+    return subscribe(typeUrl, subscriber);
+  },
+});
 
 /** Builder for assembling a JVM-familiar {@link BoundedContext}. */
 export class BoundedContextBuilder {
@@ -844,6 +890,23 @@ function cloneContextSnapshot(snapshot: BoundedContextSnapshot): BoundedContextS
     tenantMode: snapshot.tenantMode,
     spec: cloneSpecSnapshot(snapshot.spec),
   });
+}
+
+function exposedEventTypeUrls(eventBus: EventBus): readonly string[] {
+  return Object.freeze(
+    eventBusAccess
+      .eventSchemas(eventBus)
+      .filter((schema) => !isInternalEventSchema(schema))
+      .map((schema) => deriveTypeUrl(schema)),
+  );
+}
+
+function isInternalEventSchema(schema: DescriptorMessageSchema): boolean {
+  return (
+    (hasOption(schema, internal_type) && getOption(schema, internal_type)) ||
+    (hasOption(schema, SPI_type) && getOption(schema, SPI_type)) ||
+    (hasOption(schema.file, internal_all) && getOption(schema.file, internal_all))
+  );
 }
 
 function toTenantMode(multitenant: boolean): TenantMode {

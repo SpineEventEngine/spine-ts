@@ -519,7 +519,8 @@ customers.isMultitenant; // true
 Names must be non-empty and non-blank. `ContextSpec` is a framework-owned
 immutable value exposed from the builder and built context. `build()` returns a
 `BoundedContext` that owns mutable command/event buses internally while exposing
-post-only `commandBus()` and `eventBus()` endpoints. The endpoints do not expose
+a post-only `commandBus()` endpoint and an event listing/posting `eventBus()`
+endpoint. The endpoints do not expose
 late dispatcher registration. Builders collect dispatchers and can inject the
 `StorageFactory` used to create the context `EventStore` and repository record
 storages, plus the direct stand state storage:
@@ -640,22 +641,30 @@ unsupported operators, nested/disjunctive composites, limits without ordering,
 missing criteria, and `include_all = false` return `INVALID_QUERY` before
 reading Stand storage.
 
-`SubscriptionService.Subscribe` accepts only known registered state targets and
-rejects unknown targets, invalid criteria, unsupported comparison operators,
-and unknown subscription field paths with `INVALID_ARGUMENT` before creating a
-subscription. Accepted subscriptions are inactive, opaque, process-local
-records owned by the current `SpineServices` instance; updates recorded before
-`Activate` are not replayed. `Activate` attaches the record to the context
-`Stand` by subscription ID. `Target.include_all = true` delivers every
-activated update. `Target.filters` supports an optional ID filter plus
+`SubscriptionService.Subscribe` accepts known registered state targets and
+known event targets exposed by built-context event dispatchers. Unknown or
+private targets, invalid criteria, unsupported comparison operators, event
+filters, event field masks, and unknown subscription field paths are rejected
+with `INVALID_ARGUMENT` before creating a subscription or attaching delivery.
+Accepted subscriptions are inactive, opaque, process-local records owned by the
+current `SpineServices` instance; updates recorded before `Activate` are not
+replayed. `Activate` attaches state subscriptions to the context `Stand` and
+event subscriptions to a framework-internal `EventBus` listener by subscription
+ID. State `Target.include_all = true` delivers every activated update.
+State `Target.filters` supports an optional ID filter plus
 `ALL`/`EITHER` composite `EQUAL` field filters over generated entity state
 fields, including nested message fields. Missing ID filters match all IDs. For
 filtered topics, matching new states are delivered; if the previous state
 matched and the new state no longer matches, the update carries
 `no_longer_matching` instead. `Topic.field_mask` is applied to delivered
-state updates and is not applied to `no_longer_matching` updates. Single-tenant
-subscriptions reject tenant options; multitenant subscriptions require
-`tenantId`; delivery is scoped to that tenant slice. Missing or unknown
+state updates and is not applied to `no_longer_matching` updates. Event topics
+support `include_all = true` in this runtime slice and stream wire-level
+`event_updates` containing cloned framework `Event` envelopes for matching
+event message type URLs. Application handlers continue to receive generated
+domain event messages through handler dispatch; framework `Event` envelopes are
+service/runtime data. Single-tenant subscriptions reject tenant options;
+multitenant subscriptions require `tenantId`; state and event delivery are scoped to that
+tenant slice. Missing or unknown
 activation IDs complete without updates, and duplicate activation for an
 already-active ID completes without updates while leaving the active stream
 attached. `Cancel` returns OK for unknown, missing, canceled, or
@@ -666,7 +675,7 @@ defaults to 100 queued updates. Service subscriptions, direct Stand
 subscriptions, Stand version metadata, and the in-memory storage adapter are
 process-local development/test state, not durable delivery or catch-up storage.
 Cross-context fallback, client query DSLs, comparison subscription operators,
-event subscriptions, and durable cross-process Delivery/subscription recovery
+durable event subscription recovery, and durable cross-process Delivery/subscription recovery
 catch-up remain outside this slice.
 
 ## Local Server Lifecycle

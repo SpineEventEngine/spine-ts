@@ -1,5 +1,5 @@
 import { clone } from "@bufbuild/protobuf";
-import type { Event, EventId } from "@spine-ts/proto";
+import type { Event, EventId, TenantId } from "@spine-ts/proto";
 import { EventIdSchema, EventSchema } from "@spine-ts/proto";
 
 import { RecordColumn } from "../record/record-column.js";
@@ -40,7 +40,7 @@ export class EventStore {
   /** Validate that one generated Spine event can be appended without storing it. */
   async accept(event: Event): Promise<void> {
     const record = clone(EventSchema, event);
-    const context = snapshotContext(this.#context);
+    const context = snapshotEventContext(this.#context, record);
 
     await this.checkUnique([eventId(record)], context);
   }
@@ -51,7 +51,7 @@ export class EventStore {
    */
   async acceptThenAppend(event: Event, onAccepted: OnEventAccepted): Promise<Event> {
     const record = clone(EventSchema, event);
-    const context = snapshotContext(this.#context);
+    const context = snapshotEventContext(this.#context, record);
 
     await this.checkUnique([eventId(record)], context);
     await onAccepted(clone(EventSchema, record));
@@ -61,7 +61,9 @@ export class EventStore {
 
   /** Append one generated Spine event, rejecting missing, blank, or duplicate IDs. */
   async append(event: Event): Promise<void> {
-    await this.appendUnique([clone(EventSchema, event)], snapshotContext(this.#context));
+    const record = clone(EventSchema, event);
+
+    await this.appendUnique([record], snapshotEventContext(this.#context, record));
   }
 
   /** Append generated Spine events in order, rejecting missing, blank, or duplicate IDs. */
@@ -235,6 +237,41 @@ function snapshotContext(context: StorageContext): StorageContext {
     multitenant: true,
     tenantId: requireTenantId(context.name, context.tenantId),
   });
+}
+
+function snapshotEventContext(context: StorageContext, event: Event): StorageContext {
+  if (!context.multitenant) {
+    return snapshotContext(context);
+  }
+  return Object.freeze({
+    name: context.name,
+    multitenant: true,
+    tenantId: requireTenantId(context.name, readEventTenant(event) ?? context.tenantId),
+  });
+}
+
+function readEventTenant(event: Event): string | undefined {
+  switch (event.context?.origin.case) {
+    case "importContext":
+      return tenantValue(event.context.origin.value.tenantId);
+    case "pastMessage":
+      return tenantValue(event.context.origin.value.actorContext?.tenantId);
+    default:
+      return undefined;
+  }
+}
+
+function tenantValue(tenantId: TenantId | undefined): string | undefined {
+  switch (tenantId?.kind.case) {
+    case "value":
+      return tenantId.kind.value;
+    case "domain":
+      return `domain:${tenantId.kind.value.value}`;
+    case "email":
+      return `email:${tenantId.kind.value.value}`;
+    default:
+      return undefined;
+  }
 }
 
 function requireTenantId(name: string, tenantId: string | undefined): string {

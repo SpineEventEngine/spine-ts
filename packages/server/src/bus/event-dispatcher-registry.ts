@@ -1,4 +1,4 @@
-import { deriveTypeUrl } from "@spine-ts/core";
+import { deriveTypeUrl, type MessageSchema } from "@spine-ts/core";
 
 import type { EventDispatcher } from "./event-dispatcher.js";
 
@@ -6,13 +6,14 @@ import type { EventDispatcher } from "./event-dispatcher.js";
 export class EventDispatcherRegistry {
   readonly #dispatchers = new Set<EventDispatcher>();
   readonly #byTypeUrl = new Map<string, EventDispatcher[]>();
+  readonly #schemasByTypeUrl = new Map<string, MessageSchema>();
 
   register(dispatcher: EventDispatcher): void {
     if (this.#dispatchers.has(dispatcher)) {
       return;
     }
 
-    const typeUrls = collectTypeUrls(dispatcher);
+    const registrations = collectRegistrations(dispatcher);
 
     if (this.#dispatchers.has(dispatcher)) {
       return;
@@ -20,11 +21,12 @@ export class EventDispatcherRegistry {
 
     this.#dispatchers.add(dispatcher);
 
-    for (const typeUrl of typeUrls) {
+    for (const { schema, typeUrl } of registrations) {
       const registered = this.#byTypeUrl.get(typeUrl);
 
       if (registered === undefined) {
         this.#byTypeUrl.set(typeUrl, [dispatcher]);
+        this.#schemasByTypeUrl.set(typeUrl, schema);
         continue;
       }
 
@@ -35,10 +37,14 @@ export class EventDispatcherRegistry {
   find(typeUrl: string): readonly EventDispatcher[] {
     return Object.freeze([...(this.#byTypeUrl.get(typeUrl) ?? [])]);
   }
+
+  schemas(): readonly MessageSchema[] {
+    return Object.freeze([...this.#schemasByTypeUrl.values()]);
+  }
 }
 
-function collectTypeUrls(dispatcher: EventDispatcher): readonly string[] {
-  const typeUrls: string[] = [];
+function collectRegistrations(dispatcher: EventDispatcher): readonly EventDispatcherRegistration[] {
+  const registrations: EventDispatcherRegistration[] = [];
   const seen = new Set<string>();
 
   for (const schema of dispatcher.messageSchemas()) {
@@ -46,9 +52,14 @@ function collectTypeUrls(dispatcher: EventDispatcher): readonly string[] {
 
     if (!seen.has(typeUrl)) {
       seen.add(typeUrl);
-      typeUrls.push(typeUrl);
+      registrations.push({ schema, typeUrl });
     }
   }
 
-  return Object.freeze(typeUrls);
+  return Object.freeze(registrations);
+}
+
+interface EventDispatcherRegistration {
+  readonly schema: MessageSchema;
+  readonly typeUrl: string;
 }

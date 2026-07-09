@@ -148,13 +148,15 @@ describe("BoundedContext assembly", () => {
     expect(multitenant.spec.multitenant).toBe(true);
   });
 
-  it("exposes stable post-only commandBus() and eventBus() endpoints from the built context", () => {
+  it("exposes stable commandBus() and eventBus() endpoints from the built context", () => {
     const context = BoundedContext.singleTenant("Tasks").build();
 
     expectTypeOf(context.commandBus()).toEqualTypeOf<CommandEndpoint>();
     expectTypeOf(context.eventBus()).toEqualTypeOf<EventEndpoint>();
     expect(typeof context.commandBus().post).toBe("function");
+    expect(typeof context.commandBus().acceptedCommandTypes).toBe("function");
     expect(typeof context.eventBus().post).toBe("function");
+    expect(typeof context.eventBus().acceptedEventTypes).toBe("function");
     expect("register" in context.commandBus()).toBe(false);
     expect("register" in context.eventBus()).toBe(false);
     expect(context.commandBus()).toBe(context.commandBus());
