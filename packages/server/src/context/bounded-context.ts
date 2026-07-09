@@ -31,6 +31,7 @@ import {
 } from "../bus/event-bus.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { LocalProcessManagerInbox } from "./process-manager-handoff.js";
+import { createTenantIndex, type TenantIndex } from "./tenant-index.js";
 import {
   Repository,
   repositoryAccess,
@@ -63,7 +64,7 @@ export type TenantMode = "single-tenant" | "multitenant";
 
 /** Immutable bounded context name value. */
 export interface BoundedContextName {
-  /** Non-empty, non-blank bounded context name. */
+  /** Non-empty, non-blank bounded context name that does not start with `__spine/`. */
   readonly value: string;
 }
 
@@ -85,6 +86,11 @@ export interface BoundedContextSnapshot {
   readonly tenantMode: TenantMode;
   /** Context specification used to build the context. */
   readonly spec: ContextSpecSnapshot;
+}
+
+interface SystemPairingSnapshot {
+  readonly domain: BoundedContextSnapshot;
+  readonly system: ContextSpecSnapshot;
 }
 
 /** Minimal repository owner marker retained after registration. */
@@ -199,7 +205,7 @@ export class BoundedContextNameError extends Error {
 
   /** Create a deterministic bounded-context name validation error. */
   constructor(value: unknown) {
-    super("A Bounded Context name cannot be empty or blank.");
+    super('A Bounded Context name cannot be empty, blank, or start with "__spine/".');
     this.name = "BoundedContextNameError";
     this.value = value;
     Object.setPrototypeOf(this, new.target.prototype);
@@ -218,11 +224,14 @@ const dispatchErrorMessageLimit = 500;
 const dispatchErrorStackLimit = 2_000;
 const generatedRegistryFile = "generated/handler/generated-handler-registry.js";
 const moduleSchemeRe = /^[A-Za-z][A-Za-z\d+.-]*:/;
+const internalStoragePrefix = "__spine/";
 const generatedRegistryLoadAttempts = new Map<string, number>();
 const eventSubscribers = new WeakMap<
   BoundedContext,
   (typeUrl: string, subscriber: EventSubscriber) => EventSubscription
 >();
+const contextSystemPairings = new WeakMap<BoundedContext, SystemPairingSnapshot>();
+const contextTenantIndexes = new WeakMap<BoundedContext, TenantIndex>();
 const contextStorageFactories = new WeakMap<BoundedContext, StorageFactory>();
 
 interface BoundedContextAccess {
@@ -231,6 +240,8 @@ interface BoundedContextAccess {
     typeUrl: string,
     subscriber: EventSubscriber,
   ): EventSubscription;
+  systemPairing(context: BoundedContext): SystemPairingSnapshot;
+  tenantIndex(context: BoundedContext): TenantIndex;
   storageFactory(context: BoundedContext): StorageFactory;
 }
 let constructBoundedContext:
@@ -315,8 +326,27 @@ export class BoundedContext {
     eventSubscribers.set(this, (typeUrl, subscriber) =>
       eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
     );
+    const tenantIndex = createTenantIndex({
+      contextName: this.#snapshot.name.value,
+      tenantMode: this.#snapshot.tenantMode,
+      storageFactory,
+    });
+    contextSystemPairings.set(this, createSystemPairing(this.#snapshot));
+    contextTenantIndexes.set(this, tenantIndex);
     contextStorageFactories.set(this, storageFactory);
-    this.#registerRepositories(repositories);
+    try {
+      this.#registerRepositories(repositories);
+    } catch (error) {
+      try {
+        cleanupFailedContext(this, tenantIndex);
+      } catch (cleanupError) {
+        throw new AggregateError(
+          [error, cleanupError],
+          "Bounded Context build failed, and tenant index cleanup also failed.",
+        );
+      }
+      throw error;
+    }
     Object.freeze(this);
   }
 
@@ -517,6 +547,7 @@ export class BoundedContext {
     await closeContextPart(() => commandBusAccess.finishClose(this.#commandBus), errors);
     await closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
     await closeContextPart(() => this.#stand.close(), errors);
+    await closeContextPart(() => requireTenantIndex(this).close(), errors);
 
     for (const repository of this.#repositoryViews) {
       await closeContextPart(() => {
@@ -565,6 +596,14 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     }
 
     return subscribe(typeUrl, subscriber);
+  },
+
+  systemPairing(context: BoundedContext): SystemPairingSnapshot {
+    return cloneSystemPairing(requireSystemPairing(context));
+  },
+
+  tenantIndex(context: BoundedContext): TenantIndex {
+    return requireTenantIndex(context);
   },
 
   storageFactory(context: BoundedContext): StorageFactory {
@@ -894,7 +933,11 @@ function catchUpStorageContext(
 }
 
 function createBoundedContextName(value: string): BoundedContextName {
-  if (typeof value !== "string" || value.trim().length === 0) {
+  if (
+    typeof value !== "string" ||
+    value.trim().length === 0 ||
+    value.startsWith(internalStoragePrefix)
+  ) {
     throw new BoundedContextNameError(value);
   }
   return Object.freeze({ value });
@@ -928,6 +971,24 @@ function cloneContextSnapshot(snapshot: BoundedContextSnapshot): BoundedContextS
   });
 }
 
+function createSystemPairing(snapshot: BoundedContextSnapshot): SystemPairingSnapshot {
+  return Object.freeze({
+    domain: cloneContextSnapshot(snapshot),
+    system: Object.freeze({
+      name: createBoundedContextName(`${snapshot.name.value}_System`),
+      multitenant: snapshot.spec.multitenant,
+      storesEvents: false,
+    }),
+  });
+}
+
+function cloneSystemPairing(pairing: SystemPairingSnapshot): SystemPairingSnapshot {
+  return Object.freeze({
+    domain: cloneContextSnapshot(pairing.domain),
+    system: cloneSpecSnapshot(pairing.system),
+  });
+}
+
 function exposedEventTypeUrls(eventBus: EventBus): readonly string[] {
   return Object.freeze(
     eventBusAccess
@@ -947,6 +1008,26 @@ function isInternalEventSchema(schema: DescriptorMessageSchema): boolean {
 
 function toTenantMode(multitenant: boolean): TenantMode {
   return multitenant ? "multitenant" : "single-tenant";
+}
+
+function requireSystemPairing(context: BoundedContext): SystemPairingSnapshot {
+  const pairing = contextSystemPairings.get(context);
+
+  if (pairing === undefined) {
+    throw new TypeError("System pairing requires a built BoundedContext instance.");
+  }
+
+  return pairing;
+}
+
+function requireTenantIndex(context: BoundedContext): TenantIndex {
+  const tenantIndex = contextTenantIndexes.get(context);
+
+  if (tenantIndex === undefined) {
+    throw new TypeError("Tenant index requires a built BoundedContext instance.");
+  }
+
+  return tenantIndex;
 }
 
 function requireRepositoryInstance(repository: unknown, operation: string): void {
@@ -1227,6 +1308,14 @@ function closeEventStore(eventStore: EventStore, buildError: unknown): void {
       "Bounded Context build failed, and event store cleanup also failed.",
     );
   }
+}
+
+function cleanupFailedContext(context: BoundedContext, tenantIndex: TenantIndex): void {
+  contextSystemPairings.delete(context);
+  contextTenantIndexes.delete(context);
+  contextStorageFactories.delete(context);
+  eventSubscribers.delete(context);
+  tenantIndex.close();
 }
 
 function closePreparedRepositories(

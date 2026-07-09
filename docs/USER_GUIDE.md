@@ -193,14 +193,17 @@ remain later slices.
 - Semantic tag registration from `(is)` and `(every_is)` into handler/routing
   registries. The server metadata APIs preserve entity tags and explicit
   handler declarations now, but no runtime registry consumes them yet.
-- System context construction, richer gRPC service execution, tenant index
-  persistence, ZeroMQ endpoint topology, broker process supervision, retry
-  workers, transport-backed delivery loops, durable production storage, and
-  broader production runtime hardening. Durable inbox/shard delivery storage,
-  the direct local shard drain, and the local one-shard `DeliveryLoop` already
-  exist for framework-owned delivery work; transport-backed/background
-  scheduler workers, production catch-up orchestration, and retained attempt
-  history remain deferred.
+- Full system-context runtime, command-log repositories, system event taxonomy,
+  tracing/monitors/debug UI, richer gRPC service execution, ZeroMQ endpoint
+  topology, broker process supervision, retry workers, transport-backed delivery
+  loops, durable production storage, and broader production runtime hardening.
+  Built bounded contexts now create internal system-pairing metadata and a
+  framework-owned tenant index; those internals are not exposed to end-user
+  application code. Durable inbox/shard delivery storage, the direct local shard
+  drain, and the local one-shard `DeliveryLoop` already exist for
+  framework-owned delivery work; transport-backed/background scheduler workers,
+  production catch-up orchestration, and retained attempt history remain
+  deferred.
   Event import and `ImportBus` are removed from the plan under ADR 0001 D1,
   rather than deferred runtime work.
 - Built bounded contexts can invoke aggregate command assignees that update
@@ -1118,7 +1121,8 @@ history is written. `stop()` prevents future drain starts and does not
 interrupt an in-flight `Delivery.drain()`; `close()` calls `stop()` and waits
 for the current drain, if any, to finish. Projection catch-up remains the
 existing `BoundedContext.catchUpReadSide()` coordination path and does not gain
-fake durable catch-up storage here. Tenant indexes, diagnostics, repository
+fake durable catch-up storage here. Built contexts create a framework-owned
+tenant index now; production tenant-index policy, diagnostics, repository
 storage policy, transport-backed worker supervision, retained attempt history,
 and read-side projection stores are deferred.
 

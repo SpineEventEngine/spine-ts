@@ -67,36 +67,43 @@ internally while exposing a post-only `CommandEndpoint` and an event
 listing/posting `EventEndpoint` through `commandBus()` and `eventBus()`, plus a
 context-owned direct `Stand`
 through `stand()`. The shell validates
-non-empty/non-blank names and records tenant mode. `builder.add(repository)` /
+non-empty/non-blank names outside the reserved `__spine/` framework namespace
+and records tenant mode. `builder.add(repository)` /
 `builder.remove(repository)` maintain
 the context-owned repository registration list, and `build()` registers those
 repositories with the built context after opening state record storage through
 the context `StorageFactory`; registered repositories also make their entity
-state schemas known to the context `Stand`. Repositories with authentic explicit
-handler metadata still expose route-only `routeCommand()` / `routeEvent()`
-calculations, and built contexts install internal repository dispatcher adapters
-that execute aggregate command assignees in framework-owned transactions and
-execute projection subscribers. Aggregate command execution requires `command.id` so produced
-events can carry a contract-valid command origin; missing IDs reject before
+state schemas known to the context `Stand`. Built contexts also create the
+first internal system-pairing metadata and a framework-owned tenant index:
+single-tenant contexts use a constant index, and multitenant contexts persist
+tenant IDs through the configured storage factory. These internals are not part
+of the end-user `BoundedContext` API. The full system-context runtime,
+command-log repositories, system event taxonomy, tracing/monitors/debug UI, and
+broader JVM production runtime remain deferred. Repositories with authentic
+explicit handler metadata still expose route-only `routeCommand()` /
+`routeEvent()` calculations, and built contexts install internal repository
+dispatcher adapters that execute aggregate command assignees in framework-owned
+transactions and execute projection subscribers. Aggregate command execution
+requires `command.id` so produced events can carry a contract-valid command
+origin; missing IDs reject before
 mutation or storage. Aggregate command completion resolves after traceability
 event-journal append and latest persisted state write; later already-stored
 event redispatch failures are observable through the copy-safe
 `storedEventDispatchFailures()` diagnostic snapshot on the owning
 `BoundedContext`. Generated entity-class assembly creates default repositories
 through `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This
-slice does not invoke query handlers, run durable Delivery catch-up, create
-system contexts, write tenant indexes, expose a broad server lifecycle, or
-integrate transports. The only supported durable inbox handoff is framework-owned
-process-manager command replay: the current local runtime writes the inbox row,
-drains the local shard immediately, requires tenant-safe replay in multitenant
-contexts, and resolves only after that received row is marked delivered.
-Broader inbox lifecycle management, schedulers, retries, and transport topology
-remain deferred. Process-manager repositories with authentic generated metadata
-do execute through the local command/event buses: default command routing reads
-the first command field, process-manager event routing reads the first event
-message field, state is loaded/created and stored through `Stand`, and returned
-domain commands/events are wrapped only after the current transaction and state
-write succeed.
+slice does not invoke query handlers, run durable Delivery catch-up, expose a
+broad server lifecycle, or integrate transports. The only supported durable
+inbox handoff is framework-owned process-manager command replay: the current
+local runtime writes the inbox row, drains the local shard immediately, requires
+tenant-safe replay in multitenant contexts, and resolves only after that
+received row is marked delivered. Broader inbox lifecycle management,
+schedulers, retries, and transport topology remain deferred. Process-manager
+repositories with authentic generated metadata do execute through the local
+command/event buses: default command routing reads the first command field,
+process-manager event routing reads the first event message field, state is
+loaded/created and stored through `Stand`, and returned domain commands/events
+are wrapped only after the current transaction and state write succeed.
 `BoundedContext.catchUpReadSide(options?)` is the current framework-owned
 read-side catch-up boundary. It clears registered projection rows through
 `Stand.clear()`, reads only already-stored events, and replays each event only

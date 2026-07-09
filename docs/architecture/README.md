@@ -449,12 +449,13 @@ The following runtime pieces are still deferred to later explicit tasks:
   control;
 - process-wide transport-backed delivery workers, production catch-up
   orchestration, durable storage lifecycle, entity storage/cache catch-up, and
-  tenant-index persistence. Durable inbox records, dedup guards, shard leases,
-  the direct local shard drain, and the local one-shard `DeliveryLoop` are
-  present;
+  production tenant-index policy. Durable inbox records, dedup guards, shard
+  leases, the direct local shard drain, the local one-shard `DeliveryLoop`, and
+  the internal tenant index are present;
 - richer query filtering, retained subscription update replay, and
   cross-process subscription stream ownership;
-- system-context pairing and broad production server/gRPC lifecycle; and
+- full system-context runtime, command-log repositories, system event taxonomy,
+  tracing/monitors/debug UI, and broad production server/gRPC lifecycle; and
 - ZeroMQ endpoint topology and production transport-backed worker execution
   beyond the current local `RuntimeTransportBinding`.
 
@@ -567,10 +568,14 @@ in-flight `Delivery.drain()`; `close()` calls `stop()` and waits for the
 current drain, if any, to finish. The current handoff validates replayed command
 payloads, tenant context, and routed target metadata before handler code and
 waits for the received row to reach `DELIVERED` before the posting path
-resolves. Durable catch-up storage, transport-backed worker supervision, retry
-monitor hierarchies, retained delivery-attempt history, tenant indexes,
-diagnostics, repository storage policy, read-side projection stores, and durable
-production storage adapters remain deferred.
+resolves. Bounded contexts now create internal system-pairing metadata and a
+tenant index. Single-tenant indexes are constant and reject tenant recording;
+multitenant indexes persist tenant IDs through the configured storage factory.
+Raw system contexts and tenant indexes remain internal framework details.
+Durable catch-up storage, transport-backed worker supervision, retry monitor
+hierarchies, retained delivery-attempt history, diagnostics, repository storage
+policy, read-side projection stores, and durable production storage adapters
+remain deferred.
 
 ## Transport Boundary
 
