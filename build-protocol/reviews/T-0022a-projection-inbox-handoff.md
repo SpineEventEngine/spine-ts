@@ -1,6 +1,6 @@
 # Review Log: T-0022a Projection Inbox Handoff
 
-Status: ready for merge
+Status: complete; integrated to main in `b07f3c2`
 
 Scope: live projection subscriber durable inbox handoff.
 
@@ -175,3 +175,13 @@ permitted 127.0.0.1` and ZeroMQ `Operation not permitted`); escalated rerun
   code style, documentation, TypeScript/API docs, security, or
   performance/reliability. Documentation review requested this review-log entry
   and status metadata update before merge.
+
+## Post-Merge Verification
+
+- Merged to `main` in `b07f3c2`.
+- Post-merge focused verification on `main` passed: projection/process-manager
+  handoff, repository routing, and delivery worker tests passed with 161 tests;
+  `lint:generated`, `docs:check:generated`, and `format:check` passed.
+- Escalated full post-merge `pnpm --config.verify-deps-before-run=false verify`
+  passed on `main`: 58 test files and 1112 tests passed; branch coverage was
+  `90.03%`; TypeDoc/API checks, proto lint, and generated-clean checks passed.

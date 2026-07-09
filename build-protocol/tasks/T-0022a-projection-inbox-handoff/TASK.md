@@ -1,6 +1,6 @@
 # T-0022a: Projection Inbox Handoff
 
-Status: ready for merge
+Status: complete; integrated to main in `b07f3c2`
 Start: `2026-07-09T21:21:23Z`
 Baseline commit: `7799d88`
 Branch: `task/T-0022a-projection-inbox-handoff`
