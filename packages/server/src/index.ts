@@ -44,6 +44,12 @@ export {
   type DeliveryOptions,
   type DeliveryRun,
 } from "./delivery/delivery.js";
+export {
+  DeliveryLoop,
+  type DeliveryLoopOptions,
+  type DeliveryLoopRun,
+  type DeliveryLoopStatus,
+} from "./delivery/delivery-loop.js";
 export { DeliveryStorageCorruptionError } from "./delivery/delivery-storage-error.js";
 export {
   Inbox,

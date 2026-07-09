@@ -91,7 +91,7 @@ export interface DeliveryOptions {
 export interface DeliveryDrainOptions {
   /** Worker node name used for shard pickup. */
   readonly node: string;
-  /** Optional bounded page size for one drain run. */
+  /** Optional positive page size for one drain run. */
   readonly limit?: number;
   /** Framework endpoint callback invoked once per pending inbox row. */
   readonly onMessage: DeliveryEndpoint;

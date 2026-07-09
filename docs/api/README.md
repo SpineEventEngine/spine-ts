@@ -267,8 +267,9 @@ handler invocation, delivery, catch-up, read-side indexing, subscriptions,
 system events, or aggregate repository caching.
 Delivery exports include `Delivery`, `DeliveryOptions`,
 `DeliveryDrainOptions`, `DeliveryEndpoint`, `DeliveryFailure`, `DeliveryRun`,
-`DeliveryStorageCorruptionError`, `Inbox`, `InboxId`, `InboxMessage`,
-`InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
+`DeliveryLoop`, `DeliveryLoopOptions`, `DeliveryLoopRun`,
+`DeliveryLoopStatus`, `DeliveryStorageCorruptionError`, `Inbox`, `InboxId`,
+`InboxMessage`, `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
 `InboxReadOptions`, `InboxWriteResult`, `InboxStorage`, `InboxStorageOptions`,
 `DeliveryLabel`, `DeliveryStatus`, `ShardIndex`, `ShardSession`,
 `ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`. This slice persists
@@ -285,15 +286,21 @@ shard, reads `TO_DELIVER` rows in inbox order, invokes the `DeliveryEndpoint`
 once per row, marks exact-message successes `DELIVERED`, leaves endpoint or
 marker failures pending for retry, releases the shard in `finally`, and returns
 a `DeliveryRun` with counts and per-message `DeliveryFailure` values retained
-only in that result. `DeliveryDrainOptions.limit` / `InboxReadOptions.limit`
-are the current positive page-size controls with a bounded default when
-omitted. `Inbox.markDelivered()` and `InboxStorage.markDelivered()` return
+only in that result. `DeliveryLoop` repeats this boundary for one shard until a
+drain is idle, skipped, stopped, or reaches `maxFailures`; retry is simply a
+later loop/drain seeing rows that remained `TO_DELIVER`. `stop()` prevents
+future drain starts and does not interrupt an in-flight `Delivery.drain()`; a
+run that observes the stop returns `STOPPED`. `close()` calls `stop()` and
+waits for the current drain, if any, to finish. `DeliveryDrainOptions.limit`,
+`DeliveryLoopOptions.limit`, and `InboxReadOptions.limit` are positive page-size
+controls with a bounded default when omitted. `Inbox.markDelivered()` and
+`InboxStorage.markDelivered()` return
 `undefined` for missing rows, non-pending rows, or caller snapshots that do not
 match the stored message; already-delivered matching rows are returned
-idempotently. This slice does not run scheduler loops, retry monitors,
-conveyor/stations, repository invocation, broad production lifecycle, transport
-retries, retained attempt history, example app work, or read-side catch-up
-loops.
+idempotently. This slice does not run process-wide transport-backed scheduler
+workers, retry monitors, conveyor/stations, repository invocation, broad
+production lifecycle, transport retries, retained attempt history, example app
+work, or production read-side catch-up workers.
 Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field

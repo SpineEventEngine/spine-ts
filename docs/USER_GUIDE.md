@@ -194,9 +194,11 @@ remain later slices.
 - System context construction, richer gRPC service execution, tenant index
   persistence, ZeroMQ endpoint topology, broker process supervision, retry
   workers, transport-backed delivery loops, durable production storage, and
-  broader production runtime hardening. Durable inbox/shard delivery storage
-  and the direct local shard drain already exist for framework-owned delivery
-  work; scheduler/catch-up loops and retained attempt history remain deferred.
+  broader production runtime hardening. Durable inbox/shard delivery storage,
+  the direct local shard drain, and the local one-shard `DeliveryLoop` already
+  exist for framework-owned delivery work; transport-backed/background
+  scheduler workers, production catch-up orchestration, and retained attempt
+  history remain deferred.
   Event import and `ImportBus` are removed from the plan under ADR 0001 D1,
   rather than deferred runtime work.
 - Built bounded contexts can invoke aggregate command assignees that update
@@ -213,8 +215,8 @@ remain later slices.
   durable inbox storage plus an immediate local shard drain before execution,
   while the remaining repository event paths still use the direct local runtime
   in this slice. Broader durable subscriber/reactor delivery semantics,
-  Delivery/scheduler catch-up orchestration, and cross-process read-side
-  recovery remain deferred.
+  transport-backed/background delivery worker orchestration, and cross-process
+  read-side recovery remain deferred.
 
 ## Type Registry
 
@@ -658,11 +660,11 @@ subscriptions and 100 queued updates for slow active consumers.
 The current read side is not durable subscription storage. Direct Stand
 subscriptions, service subscription records, Stand version metadata, and the
 in-memory storage adapter are all process-local development/test state.
-Durable production storage, Delivery/scheduler catch-up orchestration, and
-recovery of subscription positions remain outside this slice. The implemented
-local catch-up boundary is limited to `BoundedContext.catchUpReadSide(options?)`
-for registered projection replay from already-stored events. This direct API
-does not provide a client query DSL.
+Durable production storage, transport-backed/background delivery worker
+orchestration, and recovery of subscription positions remain outside this
+slice. The implemented local catch-up boundary is limited to
+`BoundedContext.catchUpReadSide(options?)` for registered projection replay from
+already-stored events. This direct API does not provide a client query DSL.
 
 ## Runtime Assembly Closure
 
@@ -1098,9 +1100,17 @@ message `AggregateId` values for this slice. Its history-read API remains
 legacy/internal compatibility support; ordinary generated-registry aggregate
 loading uses the latest persisted state rather than snapshot-plus-replay
 loading. Durable inbox records, dedup guards, shard leases, and the direct
-local shard drain are available through the delivery APIs. Tenant indexes,
-diagnostics, repository storage policy, transport-backed delivery loops,
-retained attempt history, and read-side projection stores are deferred.
+local shard drain are available through the delivery APIs. `DeliveryLoop`
+repeats that direct drain for one shard until the shard is idle, skipped,
+stopped, or reaches a configured failure bound. Failed rows stay pending as
+`TO_DELIVER` and are retried by a later loop/drain run; no retained attempt
+history is written. `stop()` prevents future drain starts and does not
+interrupt an in-flight `Delivery.drain()`; `close()` calls `stop()` and waits
+for the current drain, if any, to finish. Projection catch-up remains the
+existing `BoundedContext.catchUpReadSide()` coordination path and does not gain
+fake durable catch-up storage here. Tenant indexes, diagnostics, repository
+storage policy, transport-backed worker supervision, retained attempt history,
+and read-side projection stores are deferred.
 
 ## First Commands
 
