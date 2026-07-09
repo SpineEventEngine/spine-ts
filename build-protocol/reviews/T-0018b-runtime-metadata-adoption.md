@@ -1,6 +1,6 @@
 # T-0018b Review Log
 
-Status: clean and verified pending integration
+Status: clean, complete, and integrated on main
 
 Scope: runtime metadata adoption in public example, test helpers, and testing
 documentation.

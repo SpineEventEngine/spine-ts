@@ -1,11 +1,13 @@
 # T-0018b: Runtime Metadata Adoption
 
-Status: verified pending integration
+Status: integrated on main
 Started: `2026-07-09`
 Branch: `task/T-0018b-runtime-metadata-adoption`
 Worktree:
 `.worktrees/T-0018b-runtime-metadata-adoption`
 Base commit: `e62de1a`
+Task commit: `9647963`
+Merge commit: `348ff95`
 
 ## Objective
 
