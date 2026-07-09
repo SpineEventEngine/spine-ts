@@ -5,7 +5,7 @@ Started: `2026-07-09`
 Branch: `task/T-0018c-generated-registry-react-void`
 Worktree:
 `.worktrees/T-0018c-generated-registry-react-void`
-Base commit: TBD
+Base commit: `c97f6c3`
 
 ## Objective
 
