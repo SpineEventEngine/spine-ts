@@ -66,19 +66,14 @@ describe("build-time handler analyzer", () => {
     ]);
   });
 
-  it("allows no-emission React handlers with explicit void returns", () => {
+  it("rejects no-emission React handlers with explicit void returns", () => {
     const result = analyzeBuildHandlers(programWithSource("src/reaction.ts", noEmissionSource));
 
-    expect(result.diagnostics).toEqual([]);
-    expect(result.entities[0]?.handlers).toEqual([
-      {
-        kind: "event-reaction",
-        methodName: "observe",
-        signalSchema: schema("../generated/events_pb.js", "TaskCreatedSchema"),
-        emittedSchemas: [],
-        parameterCount: 1,
-      },
+    expect(result.entities).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "MISSING_EMITTED_SCHEMAS",
     ]);
+    expect(result.diagnostics[0]?.methodName).toBe("observe");
   });
 
   it("accepts string-literal handler method names", () => {

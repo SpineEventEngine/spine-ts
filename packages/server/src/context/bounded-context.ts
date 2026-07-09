@@ -21,7 +21,7 @@ import {
   type StorageFactory,
 } from "@spine-ts/storage";
 
-import { CommandBus } from "../bus/command-bus.js";
+import { CommandBus, commandBusAccess } from "../bus/command-bus.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import {
   EventBus,
@@ -102,6 +102,10 @@ interface RepositoryRegistration {
   readonly stand: Stand;
   /** Stored-event dispatch callback into the owning context event bus. */
   readonly dispatchStored: (event: Event) => Promise<void>;
+  /** Stored-event follow-up dispatch callback into the owning context event bus. */
+  readonly dispatchStoredFollowUp: (event: Event) => Promise<void>;
+  /** Command posting callback into the owning context command bus. */
+  readonly onPostCommand: (command: Command) => Promise<void>;
   /** Records post-commit stored-event dispatch failures for diagnostics. */
   readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
@@ -333,6 +337,8 @@ export class BoundedContext {
       storageFactory: this.#storageFactory,
       stand: this.#stand,
       dispatchStored: (event) => eventBusAccess.postStored(this.#eventBus, event),
+      dispatchStoredFollowUp: (event) => eventBusAccess.postStoredFollowUp(this.#eventBus, event),
+      onPostCommand: (command) => commandBusAccess.postInternal(this.#commandBus, command),
       recordDispatchFailure: (event, error) => {
         this.#recordDispatchFailure(event, error);
       },
@@ -488,8 +494,11 @@ export class BoundedContext {
   async #closeOnce(): Promise<void> {
     const errors: unknown[] = [];
 
-    await closeContextPart(() => this.#commandBus.close(), errors);
-    await closeContextPart(() => this.#eventBus.close(), errors);
+    commandBusAccess.beginClose(this.#commandBus);
+    eventBusAccess.beginClose(this.#eventBus);
+    await closeContextPart(() => drainContextBuses(this.#commandBus, this.#eventBus), errors);
+    await closeContextPart(() => commandBusAccess.finishClose(this.#commandBus), errors);
+    await closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
     await closeContextPart(() => this.#stand.close(), errors);
 
     for (const repository of this.#repositoryViews) {
@@ -712,7 +721,7 @@ export class BoundedContextBuilder {
     const discovery = new GeneratedRegistryDiscovery();
     const registryModule = await trustedGeneratedRegistryModule(root);
     const registryKey = registryModule.href;
-    const registries = await discovery
+    const registries = (await discovery
       .load({
         modules: [registryModule],
         ...generatedRegistryCacheBust(registryKey),
@@ -720,7 +729,7 @@ export class BoundedContextBuilder {
       .catch((error: unknown) => {
         recordGeneratedRegistryFailure(registryKey);
         throw error;
-      });
+      })) as readonly GeneratedHandlerRegistry[];
     const metadata = ingestGeneratedRegistries(registries);
 
     return Object.freeze(
@@ -1114,7 +1123,9 @@ function aggregateAssignedEvents(
 ): readonly DescriptorMessageSchema[] {
   return uniqueSchemas(
     generated.handlers.flatMap((handler) =>
-      handler.kind === "command-assignment" ? handler.emittedSchemas : [],
+      handler.kind === "command-assignment" || handler.kind === "event-reaction"
+        ? handler.emittedSchemas
+        : [],
     ),
   );
 }
@@ -1214,6 +1225,21 @@ async function closeContextPart(close: () => unknown, errors: unknown[]): Promis
   }
 }
 
+async function drainContextBuses(commandBus: CommandBus, eventBus: EventBus): Promise<void> {
+  let observedCommandWork = -1;
+  let observedEventWork = -1;
+
+  do {
+    observedCommandWork = commandBusAccess.acceptedWorkCount(commandBus);
+    observedEventWork = eventBusAccess.acceptedWorkCount(eventBus);
+    await commandBusAccess.drain(commandBus);
+    await eventBusAccess.drain(eventBus);
+  } while (
+    commandBusAccess.acceptedWorkCount(commandBus) !== observedCommandWork ||
+    eventBusAccess.acceptedWorkCount(eventBus) !== observedEventWork
+  );
+}
+
 function collectCloseError(error: unknown, errors: unknown[]): void {
   if (error instanceof AggregateError) {
     const causes = error.errors as readonly unknown[];
@@ -1246,6 +1272,8 @@ function prepareRepositoryForContext(
     storageFactory: registration.storageFactory,
     stand: registration.stand,
     dispatchStored: registration.dispatchStored,
+    dispatchStoredFollowUp: registration.dispatchStoredFollowUp,
+    onPostCommand: registration.onPostCommand,
     recordDispatchFailure: registration.recordDispatchFailure,
   });
 

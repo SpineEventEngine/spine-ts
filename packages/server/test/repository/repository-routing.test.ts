@@ -13,6 +13,7 @@ import {
 import { deriveTypeUrl, packAny, packCommand, packEvent, unpackAny } from "@spine-ts/core";
 import {
   ActorContextSchema,
+  type Command as SpineCommand,
   type CommandContext,
   CommandSchema,
   CommandContextSchema,
@@ -317,15 +318,35 @@ class ManagedTaskAggregate extends Aggregate<string, typeof AggregateStateSchema
 class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   static argumentCounts: number[] = [];
   static contexts: CommandContext[] = [];
+  static assigneeStarted = 0;
+  static #releaseAssignee: (() => void) | undefined;
+  static #assigneeCanFinish: Promise<void> | undefined;
 
-  static reset(): void {
+  static reset(options: { readonly pauseAssignee?: boolean } = {}): void {
     this.argumentCounts = [];
     this.contexts = [];
+    this.assigneeStarted = 0;
+    this.#releaseAssignee = undefined;
+    this.#assigneeCanFinish =
+      options.pauseAssignee === true
+        ? new Promise<void>((resolve) => {
+            this.#releaseAssignee = resolve;
+          })
+        : undefined;
   }
 
-  assignTask(command: AggregateState, context: CommandContext): AggregateState {
+  static releaseAssignee(): void {
+    const release = this.#releaseAssignee;
+    this.#releaseAssignee = undefined;
+    this.#assigneeCanFinish = undefined;
+    release?.();
+  }
+
+  async assignTask(command: AggregateState, context: CommandContext): Promise<AggregateState> {
     GeneratedTwoArgAggregate.argumentCounts.push(arguments.length);
     GeneratedTwoArgAggregate.contexts.push(context);
+    GeneratedTwoArgAggregate.assigneeStarted++;
+    await GeneratedTwoArgAggregate.#assigneeCanFinish;
     this.updateDraftState(() =>
       create(AggregateStateSchema, {
         id: command.id,
@@ -336,6 +357,73 @@ class GeneratedTwoArgAggregate extends Aggregate<string, typeof AggregateStateSc
     return create(AggregateStateSchema, {
       id: command.id,
       name: `${command.name} event`,
+      archived: false,
+    });
+  }
+}
+
+class GeneratedReactorAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  static argumentCounts: number[] = [];
+  static contexts: EventContext[] = [];
+
+  static reset(): void {
+    this.argumentCounts = [];
+    this.contexts = [];
+  }
+
+  reactProjection(event: ProjectionState, context: EventContext): AggregateState {
+    GeneratedReactorAggregate.argumentCounts.push(arguments.length);
+    GeneratedReactorAggregate.contexts.push(context);
+    this.updateDraftState(() =>
+      create(AggregateStateSchema, {
+        id: event.id,
+        name: `${event.name} (reacted)`,
+        archived: false,
+      }),
+    );
+    return create(AggregateStateSchema, {
+      id: event.id,
+      name: `${event.name} reacted event`,
+      archived: false,
+    });
+  }
+}
+
+class GeneratedCommandingAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
+  static argumentCounts: number[] = [];
+  static contexts: EventContext[] = [];
+  static commandProjectionStarted = 0;
+  static #releaseCommandProjection: (() => void) | undefined;
+  static #commandProjectionCanFinish: Promise<void> | undefined;
+
+  static reset(options: { readonly pauseCommandProjection?: boolean } = {}): void {
+    this.argumentCounts = [];
+    this.contexts = [];
+    this.commandProjectionStarted = 0;
+    this.#releaseCommandProjection = undefined;
+    this.#commandProjectionCanFinish =
+      options.pauseCommandProjection === true
+        ? new Promise<void>((resolve) => {
+            this.#releaseCommandProjection = resolve;
+          })
+        : undefined;
+  }
+
+  static releaseCommandProjection(): void {
+    const release = this.#releaseCommandProjection;
+    this.#releaseCommandProjection = undefined;
+    this.#commandProjectionCanFinish = undefined;
+    release?.();
+  }
+
+  async commandProjection(event: ProjectionState, context: EventContext): Promise<AggregateState> {
+    GeneratedCommandingAggregate.argumentCounts.push(arguments.length);
+    GeneratedCommandingAggregate.contexts.push(context);
+    GeneratedCommandingAggregate.commandProjectionStarted++;
+    await GeneratedCommandingAggregate.#commandProjectionCanFinish;
+    return create(AggregateStateSchema, {
+      id: event.id,
+      name: `${event.name} command`,
       archived: false,
     });
   }
@@ -1059,6 +1147,252 @@ describe("repository signal routing", () => {
 
     expect(GeneratedTwoArgAggregate.argumentCounts).toEqual([2]);
     expect(GeneratedTwoArgAggregate.contexts).toEqual([create(CommandContextSchema)]);
+  });
+
+  it("dispatches events committed by accepted command work before close resolves", async () => {
+    GeneratedTwoArgAggregate.reset({ pauseAssignee: true });
+    const observed: string[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedTwoArgAggregateRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (event) => {
+          observed.push(event.id?.value ?? "missing");
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(new InMemoryStorageFactory())
+      .build();
+
+    const post = context
+      .commandBus()
+      .post(createAggregateCommand("command-close-event", "task-close-event"));
+    await waitForCondition(() => GeneratedTwoArgAggregate.assigneeStarted === 1);
+
+    const close = context.close().then(() => "closed");
+
+    await expect(Promise.race([close, delay(25)])).resolves.toBe("pending");
+
+    GeneratedTwoArgAggregate.releaseAssignee();
+
+    await expect(post).resolves.toBeUndefined();
+    await expect(close).resolves.toBe("closed");
+    expect(observed).toEqual(["command-close-event-1"]);
+  });
+
+  it("runs generated aggregate event reactors and wraps returned domain events after commit", async () => {
+    GeneratedReactorAggregate.reset();
+    const factory = new InMemoryStorageFactory();
+    const observed: string[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedReactorRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (event) => {
+          observed.push(event.id?.value ?? "missing");
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await context.eventBus().post(
+      createProjectionEvent("event-reactor-source", "task-reactor", {
+        pastMessageTenantId: "tenant-b",
+      }),
+    );
+
+    expect(GeneratedReactorAggregate.argumentCounts).toEqual([2]);
+    expect(GeneratedReactorAggregate.contexts[0]?.origin).toEqual(
+      projectionEventOrigin({ pastMessageTenantId: "tenant-b" }),
+    );
+    await expect(eventStore.read()).resolves.toMatchObject([
+      { id: { value: "event-reactor-source" } },
+      {
+        id: { value: "event-reactor-source-1" },
+        context: {
+          version: { number: 1 },
+          origin: {
+            case: "pastMessage",
+          },
+        },
+      },
+    ]);
+    await expect(storage.readHistory("task-reactor")).resolves.toMatchObject({
+      snapshot: {
+        aggregateId: "task-reactor",
+        version: 1n,
+        state: {
+          id: "task-reactor",
+          name: "Task (reacted)",
+          archived: false,
+        },
+      },
+      events: [],
+    });
+    await waitForCondition(() => observed.length === 1);
+    expect(observed).toEqual(["event-reactor-source-1"]);
+  });
+
+  it("dispatches produced reactor events before later external posts and drains them on close", async () => {
+    const factory = new InMemoryStorageFactory();
+    const observed: string[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedReactorRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (event) => {
+          observed.push(event.id?.value ?? "missing");
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+
+    await context
+      .eventBus()
+      .post(createProjectionEvent("event-follow-up-source", "task-follow-up"));
+    await context
+      .eventBus()
+      .post(createAggregateEvent("event-later-external", "task-follow-up", 2));
+    await context.close();
+
+    expect(observed).toEqual(["event-follow-up-source-1", "event-later-external"]);
+  });
+
+  it("runs generated command reactions and wraps returned domain commands after event intake", async () => {
+    GeneratedCommandingAggregate.reset();
+    const commands: SpineCommand[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedCommandingRepository())
+      .addCommandDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    await context.eventBus().post(createProjectionEvent("event-command-source", "task-command"));
+
+    expect(GeneratedCommandingAggregate.argumentCounts).toEqual([2]);
+    expect(commands).toHaveLength(1);
+    const [command] = commands;
+
+    expect(command).toBeDefined();
+    expect(command?.id).toEqual(create(CommandIdSchema, { uuid: "event-command-source-1" }));
+    if (command?.message === undefined) {
+      throw new Error("Expected a produced command message.");
+    }
+    expect(unpackAny(command.message, AggregateStateSchema)).toEqual(
+      create(AggregateStateSchema, {
+        id: "task-command",
+        name: "Task command",
+        archived: false,
+      }),
+    );
+  });
+
+  it("wraps commands from generated command reactions with the source event origin", async () => {
+    const commands: SpineCommand[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedCommandingRepository())
+      .addCommandDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .build();
+    const sourceEvent = createProjectionEvent("event-command-origin", "task-command-origin", {
+      pastMessageTenantId: "tenant-command",
+    });
+    const sourceActorContext = create(ActorContextSchema, {
+      tenantId: createTenantId("tenant-command"),
+    });
+    const sourceGrandOrigin = create(OriginSchema, {
+      message: create(MessageIdSchema, {
+        id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "past-command" })),
+        typeUrl: deriveTypeUrl(AggregateStateSchema),
+      }),
+      actorContext: sourceActorContext,
+    });
+
+    await context.eventBus().post(sourceEvent);
+
+    expect(commands[0]?.context?.origin).toEqual(
+      create(OriginSchema, {
+        message: create(MessageIdSchema, {
+          id: packAny(EventIdSchema, create(EventIdSchema, { value: "event-command-origin" })),
+          typeUrl: deriveTypeUrl(ProjectionStateSchema),
+        }),
+        actorContext: sourceActorContext,
+        grandOrigin: sourceGrandOrigin,
+      }),
+    );
+  });
+
+  it("keeps command bus open until event-side command reactions drain during close", async () => {
+    GeneratedCommandingAggregate.reset({ pauseCommandProjection: true });
+    const commands: SpineCommand[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedCommandingRepository())
+      .addCommandDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    const post = context
+      .eventBus()
+      .post(createProjectionEvent("event-command-close", "task-command-close"));
+    await waitForCondition(() => GeneratedCommandingAggregate.commandProjectionStarted === 1);
+
+    const close = context.close().then(() => "closed");
+
+    await expect(Promise.race([close, delay(25)])).resolves.toBe("pending");
+
+    GeneratedCommandingAggregate.releaseCommandProjection();
+
+    await expect(post).resolves.toBeUndefined();
+    await expect(close).resolves.toBe("closed");
+    expect(commands).toHaveLength(1);
+    expect(commands[0]?.id).toEqual(create(CommandIdSchema, { uuid: "event-command-close-1" }));
+  });
+
+  it("rejects managed aggregate event reactors with unsnapshotted history", async () => {
+    const factory = new InMemoryStorageFactory();
+    const storage = new AggregateStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+      stateSchema: AggregateStateSchema,
+      eventSchemas: [AggregateStateSchema],
+    });
+    await storage.appendEvents("task-reactor-history", [
+      createAggregateEvent("event-existing-unsnapshotted", "task-reactor-history", 1),
+    ]);
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createGeneratedReactorRepository())
+      .withStorageFactory(factory)
+      .build();
+
+    await expect(
+      context
+        .eventBus()
+        .post(createProjectionEvent("event-reactor-history", "task-reactor-history")),
+    ).rejects.toThrow("Managed aggregate history has unsnapshotted events.");
   });
 
   it("uses one dispatch version for multiple managed aggregate events", async () => {
@@ -3479,6 +3813,60 @@ function createGeneratedTwoArgAggregateRepository(): Repository<typeof Generated
     schema: AggregateStateSchema,
     handlers,
     events: [AggregateStateSchema],
+  });
+}
+
+function createGeneratedReactorRepository(): Repository<typeof GeneratedReactorAggregate> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    version: 1,
+    entities: [
+      {
+        entityType: GeneratedReactorAggregate,
+        stateSchema: AggregateStateSchema,
+        handlers: [
+          {
+            kind: "event-reaction",
+            methodName: "reactProjection",
+            signalSchema: ProjectionStateSchema,
+            emittedSchemas: [AggregateStateSchema],
+            parameterCount: 2,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<GeneratedReactorAggregate, typeof AggregateStateSchema>;
+
+  return new Repository({
+    entityType: GeneratedReactorAggregate,
+    schema: AggregateStateSchema,
+    handlers,
+  });
+}
+
+function createGeneratedCommandingRepository(): Repository<typeof GeneratedCommandingAggregate> {
+  const handlers = new HandlerRegistryIngestor().ingest({
+    version: 1,
+    entities: [
+      {
+        entityType: GeneratedCommandingAggregate,
+        stateSchema: AggregateStateSchema,
+        handlers: [
+          {
+            kind: "command-reaction",
+            methodName: "commandProjection",
+            signalSchema: ProjectionStateSchema,
+            emittedSchemas: [AggregateStateSchema],
+            parameterCount: 2,
+          },
+        ],
+      },
+    ],
+  })[0] as EntityHandlersMetadata<GeneratedCommandingAggregate, typeof AggregateStateSchema>;
+
+  return new Repository({
+    entityType: GeneratedCommandingAggregate,
+    schema: AggregateStateSchema,
+    handlers,
   });
 }
 

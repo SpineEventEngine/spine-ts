@@ -986,7 +986,11 @@ handler materializers or list handler schemas manually; discovery and
 materialization belong to generated framework registry tooling. Decorators do
 not instantiate the entity, invoke methods, unpack payloads, register in a
 global handler registry, validate transactions, write storage, start buses, or
-start transport.
+start transport. Generated producer handlers (`@Assign`, command-producing
+`@Command`, and event-producing `@React`) return generated domain messages;
+the framework wraps those returned messages into commands/events internally
+after the current transactional work succeeds. Generated `@Subscribe` handlers
+return explicit `void`.
 
 `HandlerMetadataRegistry` remains available for low-level framework tests and
 explicit metadata tooling:

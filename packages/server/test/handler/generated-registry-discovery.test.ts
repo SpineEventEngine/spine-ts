@@ -69,6 +69,22 @@ describe("generated registry discovery", () => {
     expect(registries).toEqual([{ version: 1, entities: [] }]);
   });
 
+  it("loads generated registries with a custom export and cache-busting token", async () => {
+    const module = createModuleFixture(
+      "custom-export.js",
+      "export const customRegistry = { version: 1, entities: [] };\n",
+    );
+    const discovery = new GeneratedRegistryDiscovery();
+
+    const registries = await discovery.load({
+      modules: [module.modulePath],
+      exportName: "customRegistry",
+      cacheBust: "coverage",
+    });
+
+    expect(registries).toEqual([{ version: 1, entities: [] }]);
+  });
+
   it("loads the conventional generated registry module from a package root path", async () => {
     const packageRoot = createPackageFixture();
     const modulePath = GeneratedRegistryDiscovery.conventionalModulePath(packageRoot);

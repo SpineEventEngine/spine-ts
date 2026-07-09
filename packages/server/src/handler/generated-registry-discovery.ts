@@ -75,9 +75,7 @@ export class GeneratedRegistryDiscovery {
   }
 
   /** Load generated handler registries from explicit filesystem paths or file: URLs. */
-  async load(
-    options: GeneratedRegistryDiscoveryOptions,
-  ): Promise<readonly GeneratedHandlerRegistry[]> {
+  async load(options: GeneratedRegistryDiscoveryOptions): Promise<readonly unknown[]> {
     const loaded = await this.loadModules(options);
 
     return Object.freeze(loaded.map((entry) => entry.registry));

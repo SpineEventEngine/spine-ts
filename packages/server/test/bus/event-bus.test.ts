@@ -576,6 +576,68 @@ describe("EventBus", () => {
     ).rejects.toThrow(/event.message.typeUrl/);
   });
 
+  it("drains stored follow-up dispatch scheduled by active event work during close", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    let releaseDispatcher!: () => void;
+    const dispatcherCanFinish = new Promise<void>((resolve) => {
+      releaseDispatcher = resolve;
+    });
+    const context: { bus?: EventBus; resolveDispatchStarted?: () => void } = {};
+    const dispatcher = createEventDispatcher([ProjectionStateSchema], async (event) => {
+      observed.push(`dispatch:${event.id?.value ?? "missing"}`);
+      context.resolveDispatchStarted?.();
+      await dispatcherCanFinish;
+      if (event.id?.value === "event-close-source" && context.bus !== undefined) {
+        await store.append(createProjectionEvent("event-close-follow-up"));
+        void eventBusAccess.postStoredFollowUp(
+          context.bus,
+          createProjectionEvent("event-close-follow-up"),
+        );
+      }
+    });
+    const bus = new EventBus(store, [dispatcher]);
+    context.bus = bus;
+    const activeDispatchStarted = new Promise<void>((resolve) => {
+      context.resolveDispatchStarted = resolve;
+    });
+
+    const post = bus.post(createProjectionEvent("event-close-source"));
+    await activeDispatchStarted;
+
+    const close = bus.close().then(() => "closed");
+
+    await expect(Promise.race([close, delay(25)])).resolves.toBe("pending");
+
+    releaseDispatcher();
+    await expect(post).resolves.toBeUndefined();
+    await expect(close).resolves.toBe("closed");
+
+    expect(observed).toEqual(["dispatch:event-close-source", "dispatch:event-close-follow-up"]);
+  });
+
+  it("rejects public and internal event intake after close", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const bus = new EventBus(store);
+
+    await bus.close();
+    await bus.close();
+
+    await expect(bus.post(createProjectionEvent("event-after-close"))).rejects.toThrow(/closed/);
+    await expect(
+      eventBusAccess.postStored(bus, createProjectionEvent("event-stored-after-close")),
+    ).rejects.toThrow(/closed/);
+    await expect(
+      eventBusAccess.postStoredFollowUp(bus, createProjectionEvent("event-follow-up-after-close")),
+    ).rejects.toThrow(/closed/);
+  });
+
   it("rejects stored-event dispatch for non-event-bus values", () => {
     expect(() =>
       eventBusAccess.postStored({} as EventBus, createProjectionEvent("event-wrong-bus")),
@@ -586,6 +648,20 @@ describe("EventBus", () => {
     expect(() => eventBusAccess.runExclusive({} as EventBus, () => "unused")).toThrow(
       /EventBus instance/,
     );
+  });
+
+  it("rejects internal close coordination for non-event-bus values", () => {
+    const bus = {} as EventBus;
+
+    expect(() =>
+      eventBusAccess.postStoredFollowUp(bus, createProjectionEvent("event-follow-up")),
+    ).toThrow(/EventBus instance/);
+    expect(() => {
+      eventBusAccess.beginClose(bus);
+    }).toThrow(/EventBus instance/);
+    expect(() => eventBusAccess.drain(bus)).toThrow(/EventBus instance/);
+    expect(() => eventBusAccess.finishClose(bus)).toThrow(/EventBus instance/);
+    expect(() => eventBusAccess.acceptedWorkCount(bus)).toThrow(/EventBus instance/);
   });
 
   it("rejects nested posts from active event dispatch", async () => {
@@ -634,5 +710,13 @@ function createProjectionEvent(id: string) {
       name: "Task",
       priority: 1,
     }),
+  });
+}
+
+function delay(ms: number): Promise<"pending"> {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      resolve("pending");
+    }, ms);
   });
 }

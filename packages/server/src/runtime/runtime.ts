@@ -115,6 +115,11 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
   #tail: Promise<void> = Promise.resolve();
   #closePromise: Promise<void> | undefined;
 
+  constructor() {
+    followUpEnqueuers.set(this, (work) => this.#enqueueFollowUp(work));
+    runtimeDrainers.set(this, () => this.#drain());
+  }
+
   get state(): ServerRuntimeState {
     return this.#state;
   }
@@ -141,10 +146,21 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
    * reentrant enqueue during active work is rejected to avoid queue self-deadlocks.
    */
   enqueue(work: ServerRuntimeWork): Promise<void> {
-    if (this.#state !== "running") {
+    return this.#enqueue(work, false);
+  }
+
+  #enqueueFollowUp(work: ServerRuntimeWork): Promise<void> {
+    return this.#enqueue(work, true);
+  }
+
+  #enqueue(work: ServerRuntimeWork, allowRunningWork: boolean): Promise<void> {
+    const runningWork = isRunningWork(this);
+    const acceptsDrainFollowUp = allowRunningWork && runningWork && this.#state === "closing";
+
+    if (this.#state !== "running" && !acceptsDrainFollowUp) {
       throw new ServerRuntimeStateError("enqueue", this.#state);
     }
-    if (isRunningWork(this)) {
+    if (!allowRunningWork && runningWork) {
       throw new ServerRuntimeStateError("enqueue", "running-work");
     }
 
@@ -181,12 +197,58 @@ export class SingleProcessServerRuntime implements ServerRuntimeLifecycle {
     }
 
     this.#state = "closing";
-    this.#closePromise = this.#tail.then(() => {
-      this.#state = "closed";
-    });
+    this.#closePromise = this.#drainAndClose();
     return this.#closePromise;
   }
+
+  async #drainAndClose(): Promise<void> {
+    await this.#drain();
+    this.#state = "closed";
+  }
+
+  async #drain(): Promise<void> {
+    let observedTail: Promise<void>;
+
+    do {
+      observedTail = this.#tail;
+      await observedTail;
+    } while (this.#tail !== observedTail);
+  }
 }
+
+interface RuntimeAccess {
+  enqueueFollowUp(runtime: SingleProcessServerRuntime, work: ServerRuntimeWork): Promise<void>;
+  drain(runtime: SingleProcessServerRuntime): Promise<void>;
+}
+
+const followUpEnqueuers = new WeakMap<
+  SingleProcessServerRuntime,
+  (work: ServerRuntimeWork) => Promise<void>
+>();
+const runtimeDrainers = new WeakMap<SingleProcessServerRuntime, () => Promise<void>>();
+
+/** @internal Package-owned authority for framework follow-up work. */
+export const runtimeAccess: RuntimeAccess = Object.freeze({
+  enqueueFollowUp(runtime: SingleProcessServerRuntime, work: ServerRuntimeWork): Promise<void> {
+    const enqueueFollowUp = followUpEnqueuers.get(runtime);
+
+    if (enqueueFollowUp === undefined) {
+      throw new TypeError("Runtime follow-up work requires a SingleProcessServerRuntime instance.");
+    }
+
+    return enqueueFollowUp(work);
+  },
+
+  drain(runtime: SingleProcessServerRuntime): Promise<void> {
+    const drain = runtimeDrainers.get(runtime);
+
+    if (drain === undefined) {
+      throw new TypeError("Runtime drain requires a SingleProcessServerRuntime instance.");
+    }
+
+    return drain();
+  },
+});
 
 function formatStateError(
   operation: ServerRuntimeStateOperation,

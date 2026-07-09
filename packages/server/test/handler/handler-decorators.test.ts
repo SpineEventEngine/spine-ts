@@ -325,16 +325,13 @@ describe("handler decorators", () => {
   it("semantically compiles typed decorated handler methods under the repo compiler", () => {
     const diagnostics = compileSemanticTypeScriptFixture(`
       import { Assign } from "./handler/handler-decorators.js";
-      import type { DescriptorMessageSchema } from "./entity/entity-metadata.js";
-
-      declare const CommandSchema: DescriptorMessageSchema;
 
       interface CreateTask {
         readonly taskId: string;
       }
 
       class TypedAggregate {
-        @Assign(CommandSchema)
+        @Assign
         create(command: CreateTask): void {
           void command.taskId;
         }
@@ -344,6 +341,22 @@ describe("handler decorators", () => {
     `);
 
     expect(diagnostics).toEqual([]);
+  }, 15_000);
+
+  it("does not expose schema-bearing decorator overloads to public TypeScript callers", () => {
+    const diagnostics = compileSemanticTypeScriptFixture(`
+      import { Assign } from "./handler/handler-decorators.js";
+      import type { DescriptorMessageSchema } from "./entity/entity-metadata.js";
+
+      declare const CommandSchema: DescriptorMessageSchema;
+
+      const decorator = Assign(CommandSchema);
+      void decorator;
+    `);
+
+    expect(diagnostics).toEqual(
+      expect.arrayContaining([expect.stringContaining("Expected 2 arguments, but got 1.")]),
+    );
   }, 15_000);
 
   it("materializes every decorator kind into frozen handler metadata in declaration order", async () => {
@@ -402,16 +415,16 @@ describe("handler decorators", () => {
     };
 
     expect(() => {
-      Assign(CommandSchema)(method, decoratorContext({ static: true }));
+      Assign(method, decoratorContext({ static: true }));
     }).toThrow("public instance methods");
     expect(() => {
-      Assign(CommandSchema)(method, decoratorContext({ private: true }));
+      Assign(method, decoratorContext({ private: true }));
     }).toThrow("public instance methods");
     expect(() => {
-      Assign(CommandSchema)(method, decoratorContext({ name: Symbol("handler") }));
+      Assign(method, decoratorContext({ name: Symbol("handler") }));
     }).toThrow("string-named methods");
     expect(() => {
-      Assign(CommandSchema)(method, decoratorContext({ metadata: undefined }));
+      Assign(method, decoratorContext({ metadata: undefined }));
     }).toThrow("metadata support");
   });
 

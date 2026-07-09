@@ -2,14 +2,17 @@ import { clone, create } from "@bufbuild/protobuf";
 import { deriveTypeUrl, packAny, unpackAny, type MessageSchema } from "@spine-ts/core";
 import {
   ActorContextSchema,
+  type ActorContext,
   CommandContextSchema,
   CommandIdSchema,
+  CommandSchema,
   EventContextSchema,
   EventIdSchema,
   EventSchema,
   type Command,
   type Event,
   MessageIdSchema,
+  type Origin,
   OriginSchema,
   type TenantId,
   type Version,
@@ -43,9 +46,14 @@ import {
   type EventRegistrationReadinessLookup,
 } from "../handler/event-registration-readiness.js";
 import {
+  HandlerMetadataRegistry,
   handlerMetadataAccess,
+  type CommandAssignmentHandlerMetadata,
+  type CommandReactionHandlerMetadata,
   type EntityHandlersMetadata,
+  type EventReactionHandlerMetadata,
   type HandlerParameterCount,
+  type RegisteredHandlerMetadata,
 } from "../handler/handler-metadata.js";
 import { AggregateStorage } from "./aggregate-storage.js";
 import { MessageIds, PrimitiveIds } from "./primitive-id.js";
@@ -453,8 +461,12 @@ interface RepositoryRouting<Id = unknown> {
   readonly eventSchemas: readonly MessageSchema[];
   readonly eventApplicationSchemas: readonly MessageSchema[];
   readonly producedEventSchemas: readonly MessageSchema[];
+  readonly producedCommandSchemas: readonly MessageSchema[];
   readonly commandReadiness: CommandRegistrationReadinessLookup | undefined;
   readonly eventReadiness: EventRegistrationReadinessLookup | undefined;
+  commandReactions(
+    eventFullTypeName: string,
+  ): readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
   routeCommand(command: Command): RepositoryCommandRoute<Id>;
   routeEvent(event: Event): RepositoryEventRoute<Id>;
 }
@@ -464,6 +476,8 @@ interface RepositoryRuntime {
   readonly storageFactory: StorageFactory;
   readonly stand: Stand;
   readonly dispatchStored: (event: Event) => Promise<void>;
+  readonly dispatchStoredFollowUp: (event: Event) => Promise<void>;
+  readonly onPostCommand: (command: Command) => Promise<void>;
   readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
 
@@ -518,7 +532,17 @@ async function dispatchRepositoryEvent(
 ): Promise<void> {
   const runtime = repositoryRuntimes.get(repository);
 
-  if (runtime === undefined || repository.entityFamily !== "projection") {
+  if (runtime === undefined) {
+    void repository.routeEvent(event);
+    return;
+  }
+
+  if (repository.entityFamily === "aggregate") {
+    await new AggregateEventExecution(repository, routing, runtime, event).run();
+    return;
+  }
+
+  if (repository.entityFamily !== "projection") {
     void repository.routeEvent(event);
     return;
   }
@@ -543,6 +567,167 @@ async function dispatchRepositoryCommand(
   await new AggregateCommandExecution(repository, routing, runtime, command).run();
 }
 
+interface LoadedAggregate {
+  readonly entity: object;
+  readonly storage: AggregateStorage<DescriptorMessageSchema>;
+  readonly version: bigint;
+}
+
+class AggregateExecutionSupport {
+  readonly #repository: RepositoryView;
+  readonly #routing: RepositoryRouting;
+  readonly #runtime: RepositoryRuntime;
+  readonly #storageContext: StorageContext;
+
+  constructor(
+    repository: RepositoryView,
+    routing: RepositoryRouting,
+    runtime: RepositoryRuntime,
+    storageContext: StorageContext,
+  ) {
+    this.#repository = repository;
+    this.#routing = routing;
+    this.#runtime = runtime;
+    this.#storageContext = storageContext;
+  }
+
+  usesAppliers(): boolean {
+    return this.#routing.eventApplicationSchemas.length > 0;
+  }
+
+  async loadAggregate(entityId: unknown, replayAppliers: boolean): Promise<LoadedAggregate> {
+    const storage = new AggregateStorage({
+      context: this.#storageContext,
+      storageFactory: this.#runtime.storageFactory,
+      stateSchema: this.#repository.stateSchema,
+      eventSchemas: this.#routing.producedEventSchemas,
+    });
+    const history = await storage.readHistory(entityId as never);
+    if (!replayAppliers && history.events.length > 0) {
+      throw new Error("Managed aggregate history has unsnapshotted events.");
+    }
+    const entity = this.#instantiateAggregate(entityId, history.snapshot);
+
+    if (replayAppliers) {
+      await this.applyAggregateEvents(entity, history.events, "replay");
+    }
+
+    return Object.freeze({
+      entity,
+      storage,
+      version: historyVersion(history.snapshot?.version, history.events),
+    });
+  }
+
+  normalizeProducedSignals(produced: unknown): readonly unknown[] {
+    if (produced === undefined) {
+      return Object.freeze([]);
+    }
+
+    if (Array.isArray(produced)) {
+      return Object.freeze(Array.from(produced as readonly unknown[]));
+    }
+
+    return Object.freeze([produced]);
+  }
+
+  async applyAggregateEvents(
+    entity: object,
+    events: readonly Event[],
+    mode: ApplyMode,
+  ): Promise<void> {
+    for (const event of events) {
+      await this.#applyAggregateEvent(entity, event, mode);
+    }
+  }
+
+  #instantiateAggregate(
+    entityId: unknown,
+    snapshot:
+      | {
+          readonly state: unknown;
+          readonly version: bigint;
+          readonly lifecycle: {
+            readonly archived: boolean;
+            readonly deleted: boolean;
+          };
+        }
+      | undefined,
+  ): object {
+    const entityType = this.#repository.entityType as unknown as new (options: {
+      readonly id: unknown;
+      readonly schema: DescriptorMessageSchema;
+      readonly state: unknown;
+      readonly version: unknown;
+      readonly lifecycle?: {
+        readonly archived: boolean;
+        readonly deleted: boolean;
+      };
+    }) => object;
+
+    const options: {
+      id: unknown;
+      schema: DescriptorMessageSchema;
+      state: unknown;
+      version: unknown;
+      lifecycle?: {
+        readonly archived: boolean;
+        readonly deleted: boolean;
+      };
+    } = {
+      id: entityId,
+      schema: this.#repository.stateSchema,
+      state: snapshot?.state ?? this.#defaultState(entityId),
+      version: snapshot?.version ?? 0n,
+    };
+
+    if (snapshot !== undefined) {
+      options.lifecycle = snapshot.lifecycle;
+    }
+
+    return new entityType(options);
+  }
+
+  #defaultState(entityId: unknown): unknown {
+    return create(this.#repository.stateSchema, {
+      [this.#repository.idField.localName]: entityId,
+    });
+  }
+
+  async #applyAggregateEvent(entity: object, event: Event, mode: ApplyMode): Promise<void> {
+    const message = event.message;
+
+    if (message === undefined || message.typeUrl === "") {
+      throw new Error("Repository aggregate execution requires event.message.typeUrl.");
+    }
+
+    const schema = schemaForTypeUrl(
+      this.#routing.eventApplicationSchemas,
+      message.typeUrl,
+      "event",
+    );
+    const application = this.#routing.eventReadiness?.findEventApplications(schema.typeName)[0];
+
+    if (application === undefined) {
+      throw new Error(`Repository aggregate execution has no applier for "${schema.typeName}".`);
+    }
+
+    await invokeEntityMethod(
+      entity,
+      application.handler.methodName,
+      unpackRequired(message, application.handler.schema, "event"),
+    );
+    const rejectedCommit = transactionalEntityAccess.rejectedCommit(entity);
+
+    if (rejectedCommit !== undefined) {
+      if (mode === "replay") {
+        throw new ReplayError(rejectedCommit.validation.error);
+      }
+      throw new TransitionValidationError(rejectedCommit.validation.error);
+    }
+  }
+}
+
 class AggregateCommandExecution {
   readonly #repository: RepositoryView & {
     routeCommand(command: Command): RepositoryCommandRoute;
@@ -550,7 +735,7 @@ class AggregateCommandExecution {
   readonly #routing: RepositoryRouting;
   readonly #runtime: RepositoryRuntime;
   readonly #command: Command;
-  readonly #storageContext: StorageContext;
+  readonly #support: AggregateExecutionSupport;
 
   constructor(
     repository: RepositoryView & {
@@ -564,7 +749,12 @@ class AggregateCommandExecution {
     this.#routing = routing;
     this.#runtime = runtime;
     this.#command = command;
-    this.#storageContext = storageContextForCommand(this.#runtime.context, this.#command);
+    this.#support = new AggregateExecutionSupport(
+      repository,
+      routing,
+      runtime,
+      storageContextForCommand(this.#runtime.context, this.#command),
+    );
   }
 
   async run(): Promise<void> {
@@ -585,8 +775,8 @@ class AggregateCommandExecution {
       return;
     }
 
-    const loaded = await this.#loadAggregate(route.entityId);
     const usesAppliers = this.#usesAppliers();
+    const loaded = await this.#support.loadAggregate(route.entityId, usesAppliers);
     const commandContext = commandHandlerContext(this.#command);
     const produced = usesAppliers
       ? await invokeEntityMethod(
@@ -604,7 +794,7 @@ class AggregateCommandExecution {
           commandContext,
         );
     const events = this.#bindProducedEvents(
-      this.#normalizeProducedSignals(produced),
+      this.#support.normalizeProducedSignals(produced),
       route.entityId,
       loaded.version,
       usesAppliers,
@@ -615,7 +805,7 @@ class AggregateCommandExecution {
     }
 
     if (usesAppliers) {
-      await this.#applyAggregateEvents(loaded.entity, events, "command");
+      await this.#support.applyAggregateEvents(loaded.entity, events, "command");
     }
 
     const committedVersion = usesAppliers
@@ -631,7 +821,7 @@ class AggregateCommandExecution {
   }
 
   #usesAppliers(): boolean {
-    return this.#routing.eventApplicationSchemas.length > 0;
+    return this.#support.usesAppliers();
   }
 
   async #storeAggregateUpdate(
@@ -691,141 +881,6 @@ class AggregateCommandExecution {
       transactionalEntityAccess.rollback(entity);
       throw error;
     }
-  }
-
-  async #loadAggregate(entityId: unknown): Promise<{
-    readonly entity: object;
-    readonly storage: AggregateStorage<DescriptorMessageSchema>;
-    readonly version: bigint;
-  }> {
-    const storage = new AggregateStorage({
-      context: this.#storageContext,
-      storageFactory: this.#runtime.storageFactory,
-      stateSchema: this.#repository.stateSchema,
-      eventSchemas: this.#routing.producedEventSchemas,
-    });
-    const history = await storage.readHistory(entityId as never);
-    if (!this.#usesAppliers() && history.events.length > 0) {
-      throw new Error("Managed aggregate history has unsnapshotted events.");
-    }
-    const entity = this.#instantiateAggregate(entityId, history.snapshot);
-
-    if (this.#usesAppliers()) {
-      await this.#applyAggregateEvents(entity, history.events, "replay");
-    }
-    return Object.freeze({
-      entity,
-      storage,
-      version: historyVersion(history.snapshot?.version, history.events),
-    });
-  }
-
-  #instantiateAggregate(
-    entityId: unknown,
-    snapshot:
-      | {
-          readonly state: unknown;
-          readonly version: bigint;
-          readonly lifecycle: {
-            readonly archived: boolean;
-            readonly deleted: boolean;
-          };
-        }
-      | undefined,
-  ): object {
-    const entityType = this.#repository.entityType as unknown as new (options: {
-      readonly id: unknown;
-      readonly schema: DescriptorMessageSchema;
-      readonly state: unknown;
-      readonly version: unknown;
-      readonly lifecycle?: {
-        readonly archived: boolean;
-        readonly deleted: boolean;
-      };
-    }) => object;
-
-    const options: {
-      id: unknown;
-      schema: DescriptorMessageSchema;
-      state: unknown;
-      version: unknown;
-      lifecycle?: {
-        readonly archived: boolean;
-        readonly deleted: boolean;
-      };
-    } = {
-      id: entityId,
-      schema: this.#repository.stateSchema,
-      state: snapshot?.state ?? this.#defaultState(entityId),
-      version: snapshot?.version ?? 0n,
-    };
-
-    if (snapshot !== undefined) {
-      options.lifecycle = snapshot.lifecycle;
-    }
-
-    return new entityType(options);
-  }
-
-  #defaultState(entityId: unknown): unknown {
-    return create(this.#repository.stateSchema, {
-      [this.#repository.idField.localName]: entityId,
-    });
-  }
-
-  async #applyAggregateEvents(
-    entity: object,
-    events: readonly Event[],
-    mode: ApplyMode,
-  ): Promise<void> {
-    for (const event of events) {
-      await this.#applyAggregateEvent(entity, event, mode);
-    }
-  }
-
-  async #applyAggregateEvent(entity: object, event: Event, mode: ApplyMode): Promise<void> {
-    const message = event.message;
-
-    if (message === undefined || message.typeUrl === "") {
-      throw new Error("Repository aggregate execution requires event.message.typeUrl.");
-    }
-
-    const schema = schemaForTypeUrl(
-      this.#routing.eventApplicationSchemas,
-      message.typeUrl,
-      "event",
-    );
-    const application = this.#routing.eventReadiness?.findEventApplications(schema.typeName)[0];
-
-    if (application === undefined) {
-      throw new Error(`Repository aggregate execution has no applier for "${schema.typeName}".`);
-    }
-
-    await invokeEntityMethod(
-      entity,
-      application.handler.methodName,
-      unpackRequired(message, application.handler.schema, "event"),
-    );
-    const rejectedCommit = transactionalEntityAccess.rejectedCommit(entity);
-
-    if (rejectedCommit !== undefined) {
-      if (mode === "replay") {
-        throw new ReplayError(rejectedCommit.validation.error);
-      }
-      throw new TransitionValidationError(rejectedCommit.validation.error);
-    }
-  }
-
-  #normalizeProducedSignals(produced: unknown): readonly unknown[] {
-    if (produced === undefined) {
-      return Object.freeze([]);
-    }
-
-    if (Array.isArray(produced)) {
-      return Object.freeze(Array.from(produced as readonly unknown[]));
-    }
-
-    return Object.freeze([produced]);
   }
 
   #bindProducedEvents(
@@ -908,6 +963,290 @@ class AggregateCommandExecution {
   #dispatchStoredEvents(events: readonly Event[]): void {
     for (const event of events) {
       void this.#runtime.dispatchStored(event).catch((error: unknown) => {
+        this.#runtime.recordDispatchFailure(event, error);
+      });
+    }
+  }
+}
+
+class AggregateEventExecution {
+  readonly #repository: RepositoryView & {
+    routeEvent(event: Event): RepositoryEventRoute;
+  };
+  readonly #routing: RepositoryRouting;
+  readonly #runtime: RepositoryRuntime;
+  readonly #event: Event;
+  readonly #support: AggregateExecutionSupport;
+
+  constructor(
+    repository: RepositoryView & {
+      routeEvent(event: Event): RepositoryEventRoute;
+    },
+    routing: RepositoryRouting,
+    runtime: RepositoryRuntime,
+    event: Event,
+  ) {
+    this.#repository = repository;
+    this.#routing = routing;
+    this.#runtime = runtime;
+    this.#event = event;
+    this.#support = new AggregateExecutionSupport(
+      repository,
+      routing,
+      runtime,
+      storageContextForEvent(this.#runtime.context, this.#event),
+    );
+  }
+
+  async run(): Promise<void> {
+    const intake = this.#readIntake();
+
+    if (intake.reactors.length === 0 && intake.commanders.length === 0) {
+      return;
+    }
+
+    const commands: Command[] = [];
+
+    for (const entityId of intake.route.entityIds) {
+      commands.push(...(await this.#executeEntity(entityId, intake)));
+    }
+
+    await this.#postCommands(commands);
+  }
+
+  #readIntake(): {
+    readonly message: unknown;
+    readonly route: RepositoryEventRoute;
+    readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
+    readonly commanders: readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
+  } {
+    const eventMessage = requireSignalMessage(this.#event.message, "event");
+    const eventSchema = schemaForTypeUrl(this.#routing.eventSchemas, eventMessage.typeUrl, "event");
+    const message = unpackRequired(eventMessage, eventSchema, "event");
+    const route = this.#repository.routeEvent(this.#event);
+    const reactors = this.#routing.eventReadiness
+      ?.findEventReactors(route.messageFullTypeName)
+      .filter((reactor) => handlerEmittedSchemas(reactor.handler).length > 0);
+    const commanders = this.#routing.commandReactions(route.messageFullTypeName);
+
+    return Object.freeze({
+      message,
+      route,
+      reactors: Object.freeze([...(reactors ?? [])]),
+      commanders,
+    });
+  }
+
+  async #executeEntity(
+    entityId: unknown,
+    intake: {
+      readonly message: unknown;
+      readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
+      readonly commanders: readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
+    },
+  ): Promise<readonly Command[]> {
+    const usesAppliers = this.#support.usesAppliers();
+    const loaded = await this.#support.loadAggregate(entityId, usesAppliers);
+    const commands: Command[] = [];
+    const produced = await this.#invokeHandlers(entityId, loaded, intake);
+
+    for (const command of produced.commands) {
+      commands.push(command);
+    }
+
+    if (produced.events.length > 0) {
+      if (usesAppliers) {
+        await this.#support.applyAggregateEvents(loaded.entity, produced.events, "command");
+      }
+      await this.#storeAggregateUpdate(
+        loaded,
+        entityId,
+        usesAppliers ? loaded.version + BigInt(produced.events.length) : loaded.version + 1n,
+        produced.events,
+        usesAppliers,
+      );
+    }
+
+    return Object.freeze(commands);
+  }
+
+  async #invokeHandlers(
+    entityId: unknown,
+    loaded: LoadedAggregate,
+    intake: {
+      readonly message: unknown;
+      readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
+      readonly commanders: readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
+    },
+  ): Promise<{ readonly commands: readonly Command[]; readonly events: readonly Event[] }> {
+    const eventContext = eventHandlerContext(this.#event);
+    const commands: Command[] = [];
+    const events: Event[] = [];
+
+    transactionalEntityAccess.start(loaded.entity);
+    try {
+      for (const commander of intake.commanders) {
+        const produced = await invokeEntityMethod(
+          loaded.entity,
+          commander.handler.methodName,
+          intake.message,
+          commander.handler.parameterCount,
+          eventContext,
+        );
+        commands.push(
+          ...this.#bindProducedCommands(this.#support.normalizeProducedSignals(produced)),
+        );
+      }
+
+      for (const reactor of intake.reactors) {
+        const produced = await invokeEntityMethod(
+          loaded.entity,
+          reactor.handler.methodName,
+          intake.message,
+          reactor.handler.parameterCount,
+          eventContext,
+        );
+        events.push(
+          ...this.#bindProducedEvents(
+            this.#support.normalizeProducedSignals(produced),
+            entityId,
+            loaded.version,
+          ),
+        );
+      }
+
+      const commit = transactionalEntityAccess.commit(loaded.entity);
+      if (commit.status === "rejected") {
+        throw new TransitionValidationError(commit.validation.error);
+      }
+
+      return Object.freeze({
+        commands: Object.freeze(commands),
+        events: Object.freeze(events),
+      });
+    } catch (error) {
+      transactionalEntityAccess.rollback(loaded.entity);
+      throw error;
+    }
+  }
+
+  async #postCommands(commands: readonly Command[]): Promise<void> {
+    for (const command of commands) {
+      await this.#runtime.onPostCommand(command);
+    }
+  }
+
+  async #storeAggregateUpdate(
+    loaded: {
+      readonly entity: object;
+      readonly storage: AggregateStorage<DescriptorMessageSchema>;
+    },
+    entityId: unknown,
+    version: bigint,
+    events: readonly Event[],
+    usesAppliers: boolean,
+  ): Promise<void> {
+    const snapshot = {
+      aggregateId: entityId as never,
+      state: repositoryState(loaded.entity) as never,
+      version,
+      lifecycle: repositoryLifecycle(loaded.entity),
+    };
+
+    if (!usesAppliers) {
+      await loaded.storage.writeSnapshotWithEvents(snapshot, events);
+      this.#dispatchStoredEvents(events);
+      return;
+    }
+
+    await loaded.storage.appendEvents(entityId as never, events);
+    try {
+      await loaded.storage.writeSnapshot(snapshot);
+    } finally {
+      this.#dispatchStoredEvents(events);
+    }
+  }
+
+  #bindProducedEvents(
+    produced: readonly unknown[],
+    entityId: unknown,
+    lastVersion: bigint,
+  ): readonly Event[] {
+    const version = lastVersion + 1n;
+    let sequence = 0;
+
+    return Object.freeze(
+      produced.map((signal) => {
+        sequence += 1;
+        return this.#bindProducedEvent(signal, entityId, version, sequence);
+      }),
+    );
+  }
+
+  #bindProducedEvent(signal: unknown, entityId: unknown, version: bigint, sequence: number): Event {
+    const typeName = messageTypeName(signal);
+    const schema = this.#routing.producedEventSchemas.find(
+      (candidate) => candidate.typeName === typeName,
+    );
+
+    if (schema === undefined) {
+      throw new Error(`Repository aggregate execution cannot pack event message "${typeName}".`);
+    }
+
+    const context = create(EventContextSchema, {
+      ...(producerIdFor(entityId) === undefined ? {} : { producerId: producerIdFor(entityId) }),
+      version: create(VersionSchema, { number: eventVersionNumber(version) }),
+      origin: {
+        case: "pastMessage",
+        value: sourceEventOrigin(this.#event),
+      },
+    });
+
+    return create(EventSchema, {
+      id: create(EventIdSchema, {
+        value: `${requireEventId(this.#event).value}-${sequence.toString()}`,
+      }),
+      message: packAny(schema, signal as never),
+      context,
+    });
+  }
+
+  #bindProducedCommands(produced: readonly unknown[]): readonly Command[] {
+    let sequence = 0;
+
+    return Object.freeze(
+      produced.map((signal) => {
+        sequence += 1;
+        const typeName = messageTypeName(signal);
+        const schema = this.#routing.producedCommandSchemas.find(
+          (candidate) => candidate.typeName === typeName,
+        );
+
+        if (schema === undefined) {
+          throw new Error(
+            `Repository aggregate execution cannot pack command message "${typeName}".`,
+          );
+        }
+
+        return create(CommandSchema, {
+          id: create(CommandIdSchema, {
+            uuid: `${requireEventId(this.#event).value}-${sequence.toString()}`,
+          }),
+          message: packAny(schema, signal as never),
+          context: create(CommandContextSchema, {
+            ...(eventActorContext(this.#event) === undefined
+              ? {}
+              : { actorContext: eventActorContext(this.#event) }),
+            origin: sourceEventOrigin(this.#event),
+          }),
+        });
+      }),
+    );
+  }
+
+  #dispatchStoredEvents(events: readonly Event[]): void {
+    for (const event of events) {
+      void this.#runtime.dispatchStoredFollowUp(event).catch((error: unknown) => {
         this.#runtime.recordDispatchFailure(event, error);
       });
     }
@@ -1080,6 +1419,39 @@ function eventHandlerContext(event: Event): NonNullable<Event["context"]> {
     : clone(EventContextSchema, event.context);
 }
 
+function eventActorContext(event: Event): ActorContext | undefined {
+  switch (event.context?.origin.case) {
+    case "importContext":
+      return clone(ActorContextSchema, event.context.origin.value);
+    case "pastMessage":
+      return event.context.origin.value.actorContext === undefined
+        ? undefined
+        : clone(ActorContextSchema, event.context.origin.value.actorContext);
+    default:
+      return undefined;
+  }
+}
+
+function eventGrandOrigin(event: Event): Origin | undefined {
+  return event.context?.origin.case === "pastMessage"
+    ? clone(OriginSchema, event.context.origin.value)
+    : undefined;
+}
+
+function sourceEventOrigin(event: Event): Origin {
+  const actorContext = eventActorContext(event);
+  const grandOrigin = eventGrandOrigin(event);
+
+  return create(OriginSchema, {
+    message: create(MessageIdSchema, {
+      id: packAny(EventIdSchema, requireEventId(event)),
+      typeUrl: event.message?.typeUrl ?? "",
+    }),
+    ...(actorContext === undefined ? {} : { actorContext }),
+    ...(grandOrigin === undefined ? {} : { grandOrigin }),
+  });
+}
+
 function unpackRequired(
   message: NonNullable<Command["message"]>,
   schema: MessageSchema,
@@ -1150,12 +1522,39 @@ function requireCommandId(command: Command): NonNullable<Command["id"]> {
   return command.id;
 }
 
+function requireEventId(event: Event): NonNullable<Event["id"]> {
+  if (event.id === undefined || event.id.value === "") {
+    throw new Error("Repository aggregate execution requires event.id to bind signal origins.");
+  }
+
+  return event.id;
+}
+
+function producerIdFor(entityId: unknown): ReturnType<typeof PrimitiveIds.pack> | undefined {
+  const aggregateId = PrimitiveIds.read(entityId);
+
+  return aggregateId === undefined ? undefined : PrimitiveIds.pack(aggregateId);
+}
+
 function storageContextForCommand(context: StorageContext, command: Command): StorageContext {
   if (!context.multitenant) {
     return context;
   }
 
   const tenantId = readCommandTenant(command);
+  return Object.freeze({
+    name: context.name,
+    multitenant: true,
+    ...(tenantId === undefined ? {} : { tenantId }),
+  });
+}
+
+function storageContextForEvent(context: StorageContext, event: Event): StorageContext {
+  if (!context.multitenant) {
+    return context;
+  }
+
+  const tenantId = readEventTenant(event) ?? context.tenantId;
   return Object.freeze({
     name: context.name,
     multitenant: true,
@@ -1233,6 +1632,7 @@ function createRepositoryRouting<EntityType extends RepositoryEntityType>(
   );
   const eventSchemas = uniqueSchemas(
     handlers.flatMap((handler) => [
+      ...handler.commandReactions.map((reaction) => reaction.schema),
       ...handler.eventSubscriptions.map((subscription) => subscription.schema),
       ...handler.eventReactions.map((reaction) => reaction.schema),
       ...handler.eventApplications.map((application) => application.schema),
@@ -1243,15 +1643,31 @@ function createRepositoryRouting<EntityType extends RepositoryEntityType>(
       handler.eventApplications.map((application) => application.schema),
     ),
   );
-  const producedEventSchemas = uniqueSchemas([...eventApplicationSchemas, ...producedEvents]);
+  const producedEventSchemas = uniqueSchemas([
+    ...eventApplicationSchemas,
+    ...producedEvents,
+    ...handlers.flatMap((handler) => [
+      ...handler.commandAssignments.flatMap((assignment) => handlerEmittedSchemas(assignment)),
+      ...handler.eventReactions.flatMap((reaction) => handlerEmittedSchemas(reaction)),
+    ]),
+  ]);
+  const producedCommandSchemas = uniqueSchemas(
+    handlers.flatMap((handler) =>
+      handler.commandReactions.flatMap((reaction) => handlerEmittedSchemas(reaction)),
+    ),
+  );
+  const commandReactions = createCommandReactionMap(handlers);
 
   return Object.freeze({
     commandSchemas,
     eventSchemas,
     eventApplicationSchemas,
     producedEventSchemas,
+    producedCommandSchemas,
     commandReadiness,
     eventReadiness,
+    commandReactions: (eventFullTypeName: string) =>
+      Object.freeze([...(commandReactions.get(eventFullTypeName) ?? [])]),
     routeCommand: (command: Command) =>
       routeCommand<RepositoryEntityId<EntityType>>(
         command,
@@ -1263,6 +1679,7 @@ function createRepositoryRouting<EntityType extends RepositoryEntityType>(
       routeEvent<RepositoryEntityId<EntityType>>(
         event,
         eventReadiness,
+        commandReactions,
         eventSchemas,
         metadata.idField,
       ),
@@ -1279,6 +1696,31 @@ function normalizeHandlers(
     return Object.freeze([...handlersOption]);
   }
   return Object.freeze([handlersOption]);
+}
+
+function createCommandReactionMap(
+  handlers: readonly EntityHandlersMetadata[],
+): ReadonlyMap<string, readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[]> {
+  const byEvent = new Map<string, RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[]>();
+  const registry = new HandlerMetadataRegistry(handlers);
+
+  for (const entry of registry.findHandlersByKind("command-reaction")) {
+    if (handlerEmittedSchemas(entry.handler).length === 0) {
+      continue;
+    }
+    pushMapValue(byEvent, entry.handler.messageFullTypeName, entry);
+  }
+
+  return byEvent;
+}
+
+function handlerEmittedSchemas(
+  handler:
+    | CommandAssignmentHandlerMetadata
+    | CommandReactionHandlerMetadata
+    | EventReactionHandlerMetadata,
+): readonly DescriptorMessageSchema[] {
+  return handlerMetadataAccess.emittedSchemas(handler);
 }
 
 function isHandlersArray(
@@ -1314,6 +1756,17 @@ function uniqueSchemas(schemas: readonly MessageSchema[]): readonly MessageSchem
   return Object.freeze([...byTypeUrl.values()]);
 }
 
+function pushMapValue<Key, Value>(map: Map<Key, Value[]>, key: Key, value: Value): void {
+  const values = map.get(key);
+
+  if (values === undefined) {
+    map.set(key, [value]);
+    return;
+  }
+
+  values.push(value);
+}
+
 function routeCommand<Id>(
   command: Command,
   readiness: CommandRegistrationReadinessLookup | undefined,
@@ -1342,6 +1795,10 @@ function routeCommand<Id>(
 function routeEvent<Id>(
   event: Event,
   readiness: EventRegistrationReadinessLookup | undefined,
+  commandReactions: ReadonlyMap<
+    string,
+    readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[]
+  >,
   schemas: readonly MessageSchema[],
   targetIdField: DescriptorFieldMetadata,
 ): RepositoryEventRoute<Id> {
@@ -1352,6 +1809,7 @@ function routeEvent<Id>(
 
   const schema = schemaForTypeUrl(schemas, message.typeUrl, "event");
   const hasReceiver =
+    (commandReactions.get(schema.typeName)?.length ?? 0) > 0 ||
     (readiness?.findEventSubscribers(schema.typeName).length ?? 0) > 0 ||
     (readiness?.findEventReactors(schema.typeName).length ?? 0) > 0 ||
     (readiness?.findEventApplications(schema.typeName).length ?? 0) > 0;

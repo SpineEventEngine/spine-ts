@@ -30,7 +30,7 @@ describe("generated registry writer", () => {
 
     expect(source).toBe(
       [
-        'import type { GeneratedHandlerRegistry } from "@spine-ts/server";',
+        'import type { GeneratedHandlerRegistry } from "@spine-ts/server/internal/generated-handler-registry";',
         'import { TaskAggregate } from "../../src/task-aggregate.js";',
         'import { TaskProjection } from "../../src/task-projection.js";',
         'import { CreateTaskSchema, RenameTaskSchema } from "../spine/example/todo/v1/task_commands_pb.js";',
@@ -338,6 +338,87 @@ describe("generated registry writer", () => {
     ).toThrow(/ignored by Git/);
   });
 
+  it("reports git ignore verification failures before writing", async () => {
+    const repoRoot = createRepoFixture("packages/demo/generated/\n");
+    const generatedRoot = join(repoRoot, "packages/demo/generated");
+    const outputFile = join(generatedRoot, "handler/generated-handler-registry.ts");
+
+    vi.resetModules();
+    vi.doMock("node:child_process", async () => {
+      const actual =
+        await vi.importActual<typeof import("node:child_process")>("node:child_process");
+
+      return {
+        ...actual,
+        spawnSync: () =>
+          ({
+            status: 128,
+            signal: null,
+            output: [],
+            pid: 0,
+            stdout: "",
+            stderr: "fatal: not a git repository",
+          }) as ReturnType<typeof spawnSync>,
+      };
+    });
+
+    try {
+      const { GeneratedRegistryWriter: MockedWriter } =
+        await import("../../src/handler/generated-registry-writer.js");
+
+      expect(() =>
+        new MockedWriter().write(analysis(repoRoot), {
+          generatedRoot,
+          outputFile,
+          repoRoot,
+        }),
+      ).toThrow(/Failed to verify Git ignore status/);
+    } finally {
+      vi.doUnmock("node:child_process");
+      vi.resetModules();
+    }
+  });
+
+  it("propagates unexpected path validation filesystem failures", async () => {
+    const repoRoot = createRepoFixture("packages/demo/generated/\n");
+    const generatedRoot = join(repoRoot, "packages/demo/generated");
+    const outputFile = join(generatedRoot, "handler/generated-handler-registry.ts");
+
+    vi.resetModules();
+    vi.doMock("node:fs", async () => {
+      const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+
+      return {
+        ...actual,
+        lstatSync(path: string) {
+          if (path === generatedRoot) {
+            const error = new Error("permission denied") as NodeJS.ErrnoException;
+            error.code = "EACCES";
+            throw error;
+          }
+
+          return actual.lstatSync(path);
+        },
+      };
+    });
+
+    try {
+      const { GeneratedRegistryWriter: MockedWriter } =
+        await import("../../src/handler/generated-registry-writer.js");
+
+      expect(() =>
+        new MockedWriter().write(analysis(repoRoot), {
+          generatedRoot,
+          outputFile,
+          repoRoot,
+        }),
+      ).toThrow("permission denied");
+    } finally {
+      vi.doUnmock("node:fs");
+      vi.resetModules();
+    }
+  });
+
   it("rejects symlinked generated roots", () => {
     const repoRoot = createRepoFixture("packages/demo/generated/\n");
     const linkedRoot = mkdtempSync(join(tmpdir(), "spine-linked-generated-"));
@@ -622,14 +703,14 @@ function createCompileFixture(): string {
 
   mkdirSync(join(repoRoot, "packages/demo/generated/handler"), { recursive: true });
   mkdirSync(join(repoRoot, "packages/demo/src"), { recursive: true });
-  mkdirSync(join(repoRoot, "node_modules/@spine-ts/server"), { recursive: true });
+  mkdirSync(join(repoRoot, "node_modules/@spine-ts/server/internal"), { recursive: true });
   mkdirSync(join(repoRoot, "node_modules/@acme/generated"), { recursive: true });
   writeFileSync(
     join(repoRoot, "packages/demo/src/task-aggregate.ts"),
     ["export class TaskAggregate {", "  createTask(): void {}", "}", ""].join("\n"),
   );
   writeFileSync(
-    join(repoRoot, "node_modules/@spine-ts/server/index.d.ts"),
+    join(repoRoot, "node_modules/@spine-ts/server/internal/generated-handler-registry.d.ts"),
     [
       "export interface GeneratedHandlerRegistry {",
       "  readonly version: 1;",

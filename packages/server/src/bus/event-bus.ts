@@ -3,11 +3,16 @@ import type { MessageSchema } from "@spine-ts/core";
 import { EventSchema, type Event } from "@spine-ts/proto";
 import type { EventStore } from "@spine-ts/storage";
 
-import { SingleProcessServerRuntime } from "../runtime/runtime.js";
+import {
+  runtimeAccess,
+  ServerRuntimeStateError,
+  SingleProcessServerRuntime,
+} from "../runtime/runtime.js";
 import { EventDispatcherRegistry } from "./event-dispatcher-registry.js";
 import type { EventDispatcher } from "./event-dispatcher.js";
 
 const storedDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
+const storedFollowUpDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
 const exclusiveWorkers = new WeakMap<
   EventBus,
   <Result>(work: () => Result | Promise<Result>) => Promise<Result>
@@ -17,13 +22,24 @@ const subscriberRegistrars = new WeakMap<
   (typeUrl: string, subscriber: EventSubscriber) => EventSubscription
 >();
 const eventSchemaLists = new WeakMap<EventBus, () => readonly MessageSchema[]>();
+const eventBusCloseStarters = new WeakMap<EventBus, () => void>();
+const eventBusDrainers = new WeakMap<EventBus, () => Promise<void>>();
+const eventBusCloseFinishers = new WeakMap<EventBus, () => Promise<void>>();
+const eventBusWorkCounters = new WeakMap<EventBus, () => number>();
 
 interface EventBusAccess {
   postStored(eventBus: EventBus, event: Event): Promise<void>;
+  postStoredFollowUp(eventBus: EventBus, event: Event): Promise<void>;
   runExclusive<Result>(eventBus: EventBus, work: () => Result | Promise<Result>): Promise<Result>;
   subscribe(eventBus: EventBus, typeUrl: string, subscriber: EventSubscriber): EventSubscription;
   eventSchemas(eventBus: EventBus): readonly MessageSchema[];
+  beginClose(eventBus: EventBus): void;
+  drain(eventBus: EventBus): Promise<void>;
+  finishClose(eventBus: EventBus): Promise<void>;
+  acceptedWorkCount(eventBus: EventBus): number;
 }
+
+type EventBusIntakeState = "open" | "closing" | "closed";
 
 /**
  * Small single-process multicast event bus.
@@ -39,15 +55,24 @@ export class EventBus {
   readonly #subscribers = new Map<string, Set<EventSubscriberRecord>>();
   readonly #runtime = new SingleProcessServerRuntime();
   readonly #started: Promise<void>;
+  #intakeState: EventBusIntakeState = "open";
+  #acceptedWorkCount = 0;
   #closed: Promise<void> | undefined;
 
   constructor(eventStore: EventStore, dispatchers: Iterable<EventDispatcher> = []) {
     this.#eventStore = eventStore;
     this.#started = this.#runtime.start();
     storedDispatchers.set(this, (event) => this.#postStored(event));
+    storedFollowUpDispatchers.set(this, (event) => this.#postStoredFollowUp(event));
     exclusiveWorkers.set(this, (work) => this.#runExclusive(work));
     subscriberRegistrars.set(this, (typeUrl, subscriber) => this.#subscribe(typeUrl, subscriber));
     eventSchemaLists.set(this, () => this.#registry.schemas());
+    eventBusCloseStarters.set(this, () => {
+      this.#beginClose();
+    });
+    eventBusDrainers.set(this, () => this.#drain());
+    eventBusCloseFinishers.set(this, () => this.#finishClose());
+    eventBusWorkCounters.set(this, () => this.#acceptedWorkCount);
 
     for (const dispatcher of dispatchers) {
       this.register(dispatcher);
@@ -61,6 +86,10 @@ export class EventBus {
 
   post(event: Event): Promise<void> {
     const accepted = clone(EventSchema, event);
+
+    if (this.#intakeState !== "open") {
+      return Promise.reject(new ServerRuntimeStateError("enqueue", this.#intakeState));
+    }
 
     return this.#runExclusive(() => this.#dispatch(accepted));
   }
@@ -80,7 +109,9 @@ export class EventBus {
   async #closeOnce(): Promise<void> {
     const errors: unknown[] = [];
 
+    this.#beginClose();
     await closePart(() => this.#started.then(() => this.#runtime.close()), errors);
+    this.#intakeState = "closed";
     this.#clearSubscribers();
     await closePart(() => {
       this.#eventStore.close();
@@ -112,7 +143,24 @@ export class EventBus {
   #postStored(event: Event): Promise<void> {
     const accepted = clone(EventSchema, event);
 
+    if (this.#intakeState === "closed") {
+      return Promise.reject(new ServerRuntimeStateError("enqueue", "closed"));
+    }
+
     return this.#runExclusive(() => this.#dispatchStored(accepted));
+  }
+
+  #postStoredFollowUp(event: Event): Promise<void> {
+    const accepted = clone(EventSchema, event);
+
+    if (this.#intakeState === "closed") {
+      return Promise.reject(new ServerRuntimeStateError("enqueue", "closed"));
+    }
+
+    this.#acceptedWorkCount++;
+    return this.#started.then(() =>
+      runtimeAccess.enqueueFollowUp(this.#runtime, () => this.#dispatchStored(accepted)),
+    );
   }
 
   async #dispatchStored(event: Event): Promise<void> {
@@ -140,6 +188,7 @@ export class EventBus {
   #runExclusive<Result>(work: () => Result | Promise<Result>): Promise<Result> {
     let result: Result | undefined;
 
+    this.#acceptedWorkCount++;
     return this.#started
       .then(() =>
         this.#runtime.enqueue(async () => {
@@ -150,7 +199,7 @@ export class EventBus {
   }
 
   #subscribe(typeUrl: string, subscriber: EventSubscriber): EventSubscription {
-    if (this.#closed !== undefined) {
+    if (this.#intakeState !== "open") {
       throw new Error("EventBus is closed.");
     }
 
@@ -217,6 +266,21 @@ export class EventBus {
       }
     }
   }
+
+  #beginClose(): void {
+    if (this.#intakeState === "open") {
+      this.#intakeState = "closing";
+    }
+  }
+
+  #drain(): Promise<void> {
+    return this.#started.then(() => runtimeAccess.drain(this.#runtime));
+  }
+
+  #finishClose(): Promise<void> {
+    this.#closed ??= this.#closeOnce();
+    return this.#closed;
+  }
 }
 
 /** @internal Direct event subscriber used by framework service adapters. */
@@ -248,6 +312,16 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     return postStored(event);
   },
 
+  postStoredFollowUp(eventBus: EventBus, event: Event): Promise<void> {
+    const postStoredFollowUp = storedFollowUpDispatchers.get(eventBus);
+
+    if (postStoredFollowUp === undefined) {
+      throw new TypeError("Stored follow-up event dispatch requires an EventBus instance.");
+    }
+
+    return postStoredFollowUp(event);
+  },
+
   runExclusive<Result>(eventBus: EventBus, work: () => Result | Promise<Result>): Promise<Result> {
     const runExclusive = exclusiveWorkers.get(eventBus);
 
@@ -270,6 +344,46 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
 
   eventSchemas(eventBus: EventBus): readonly MessageSchema[] {
     return eventBusSchemas(eventBus);
+  },
+
+  beginClose(eventBus: EventBus): void {
+    const beginClose = eventBusCloseStarters.get(eventBus);
+
+    if (beginClose === undefined) {
+      throw new TypeError("Event-bus close coordination requires an EventBus instance.");
+    }
+
+    beginClose();
+  },
+
+  drain(eventBus: EventBus): Promise<void> {
+    const drain = eventBusDrainers.get(eventBus);
+
+    if (drain === undefined) {
+      throw new TypeError("Event-bus drain requires an EventBus instance.");
+    }
+
+    return drain();
+  },
+
+  finishClose(eventBus: EventBus): Promise<void> {
+    const finishClose = eventBusCloseFinishers.get(eventBus);
+
+    if (finishClose === undefined) {
+      throw new TypeError("Event-bus close completion requires an EventBus instance.");
+    }
+
+    return finishClose();
+  },
+
+  acceptedWorkCount(eventBus: EventBus): number {
+    const acceptedWorkCount = eventBusWorkCounters.get(eventBus);
+
+    if (acceptedWorkCount === undefined) {
+      throw new TypeError("Event-bus work counting requires an EventBus instance.");
+    }
+
+    return acceptedWorkCount();
   },
 });
 

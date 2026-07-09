@@ -377,6 +377,7 @@ export class HandlerMetadataRegistry implements HandlerMetadataRegistryLookup {
 }
 
 const authenticEntityHandlers = new WeakSet<EntityHandlersMetadata>();
+const emittedSchemasByHandler = new WeakMap<HandlerMetadata, readonly DescriptorMessageSchema[]>();
 
 /** @internal Framework-owned arity override for generated handler metadata ingestion. */
 export interface HandlerArity {
@@ -386,6 +387,8 @@ export interface HandlerArity {
   readonly methodName: string;
   /** Public method arity: `handler(signal)` or `handler(signal, context)`. */
   readonly parameterCount: HandlerParameterCount;
+  /** Generated Protobuf-ES schemas emitted by the handler return type. */
+  readonly emittedSchemas?: readonly DescriptorMessageSchema[];
 }
 
 /**
@@ -449,6 +452,8 @@ function defineEntityHandlersCore<
 /** @internal Framework-only handler metadata authority contract. */
 export interface HandlerMetadataAccess {
   isAuthentic(metadata: EntityHandlersMetadata): metadata is EntityHandlersMetadata;
+  emittedSchemas(handler: HandlerMetadata): readonly DescriptorMessageSchema[];
+  copyEmittedSchemas(source: HandlerMetadata, target: HandlerMetadata): void;
   defineArity<Instance extends object, StateSchema extends DescriptorMessageSchema>(
     entityType: EntityClass<Instance>,
     stateSchema: StateSchema,
@@ -463,6 +468,18 @@ export interface HandlerMetadataAccess {
 export const handlerMetadataAccess: HandlerMetadataAccess = Object.freeze({
   isAuthentic(metadata: EntityHandlersMetadata): metadata is EntityHandlersMetadata {
     return authenticEntityHandlers.has(metadata);
+  },
+
+  emittedSchemas(handler: HandlerMetadata): readonly DescriptorMessageSchema[] {
+    return Object.freeze([...(emittedSchemasByHandler.get(handler) ?? [])]);
+  },
+
+  copyEmittedSchemas(source: HandlerMetadata, target: HandlerMetadata): void {
+    const emittedSchemas = emittedSchemasByHandler.get(source);
+
+    if (emittedSchemas !== undefined) {
+      emittedSchemasByHandler.set(target, Object.freeze([...emittedSchemas]));
+    }
   },
 
   defineArity<Instance extends object, StateSchema extends DescriptorMessageSchema>(
@@ -480,7 +497,7 @@ export const handlerMetadataAccess: HandlerMetadataAccess = Object.freeze({
 function createHandlerRegistrationBuilder<Instance extends object>(
   entityType: EntityClass<Instance>,
   builtHandlers: WeakSet<HandlerMetadata>,
-  arities: ReadonlyMap<string, HandlerParameterCount>,
+  arities: ReadonlyMap<string, HandlerGeneratedData>,
 ): HandlerRegistrationBuilder<Instance> {
   return Object.freeze({
     assign: <Schema extends DescriptorMessageSchema>(
@@ -529,10 +546,12 @@ function createHandler<
   schema: Schema,
   methodName: HandlerMethodName<Instance>,
   builtHandlers: WeakSet<HandlerMetadata>,
-  arities: ReadonlyMap<string, HandlerParameterCount> = new Map(),
+  arities: ReadonlyMap<string, HandlerGeneratedData> = new Map(),
 ): BaseHandlerMetadata<Kind, Schema, HandlerMethodName<Instance>> {
   validateHandlerMethod(entityType, methodName);
-  const parameterCount = arities.get(handlerArityKey(kind, methodName)) ?? 1;
+  const generated = arities.get(handlerArityKey(kind, methodName));
+  const parameterCount = generated?.parameterCount ?? 1;
+  const emittedSchemas = generated?.emittedSchemas;
 
   const handler = Object.freeze({
     kind,
@@ -542,23 +561,36 @@ function createHandler<
     methodName,
     parameterCount,
   });
+  if (emittedSchemas !== undefined) {
+    emittedSchemasByHandler.set(handler as HandlerMetadata, emittedSchemas);
+  }
   builtHandlers.add(handler as HandlerMetadata);
   return handler;
 }
 
 function createHandlerArityMap(
   arities: Iterable<HandlerArity>,
-): ReadonlyMap<string, HandlerParameterCount> {
-  const byHandler = new Map<string, HandlerParameterCount>();
+): ReadonlyMap<string, HandlerGeneratedData> {
+  const byHandler = new Map<string, HandlerGeneratedData>();
 
   for (const arity of arities) {
     byHandler.set(
       handlerArityKey(arity.kind, arity.methodName),
-      readParameterCount(arity.parameterCount),
+      Object.freeze({
+        parameterCount: readParameterCount(arity.parameterCount),
+        ...(arity.emittedSchemas === undefined
+          ? {}
+          : { emittedSchemas: Object.freeze([...arity.emittedSchemas]) }),
+      }),
     );
   }
 
   return byHandler;
+}
+
+interface HandlerGeneratedData {
+  readonly parameterCount: HandlerParameterCount;
+  readonly emittedSchemas?: readonly DescriptorMessageSchema[];
 }
 
 function readParameterCount(parameterCount: unknown): HandlerParameterCount {

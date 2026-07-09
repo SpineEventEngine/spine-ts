@@ -147,17 +147,19 @@ Current slice exposes:
   shape and enclosed message type URL before runtime intake, and enqueuing
   accepted callbacks through `SingleProcessServerRuntime`.
 - `@Assign`, `@Command`, `@Subscribe`, and `@React` standard method decorators.
-  Bare decorators are the ordinary application syntax; schema-bearing overloads,
-  `@Apply`, and decorator materialization are compatibility/testing paths for
-  framework internals and migration seams, not ordinary end-user API.
+  Public decorators are bare-only ordinary application syntax. Schema-bearing
+  handler metadata belongs to generated registry artifacts, internal tooling,
+  and framework-owned materialization paths, not public decorator forms or
+  end-user handler code. `@Apply` remains framework-only legacy metadata.
 - `HandlerRegistryIngestor` for turning framework-generated handler registry
   artifacts into the same canonical `EntityHandlersMetadata` accepted by
   `HandlerMetadataRegistry`. The generated registry contract is versioned and
   contains entity type, state schema, handler kind, method name, inferred
   first-parameter signal schema, explicit one- or two-argument arity, and
-  emitted schemas inferred from explicit return types. Event reactors may
-  declare no emitted schemas. Generated registry files live under ignored
-  `generated/` output and are not committed.
+  emitted schemas inferred from explicit return types. Generated `@Assign`,
+  `@Command`, and `@React` producer records must declare at least one emitted
+  schema; `@Subscribe` records declare none and return `void`. Generated
+  registry files live under ignored `generated/` output and are not committed.
 - `GeneratedRegistryDiscovery` for framework/tooling loading of explicit
   generated registry
   filesystem paths or clean `file:` URLs, or the conventional runtime file
@@ -228,30 +230,34 @@ start transport, or implement service adapters.
 The decorator API is an adapter over that explicit contract. Decorators record
 standard per-class metadata from public instance methods only. Bare
 `@Assign`, `@Command`, `@Subscribe`, and `@React` are the ordinary application
-forms. Schema-bearing overloads and `materializeDecoratedEntityHandlers()` are
-compatibility/testing paths for framework-owned migration seams, not ordinary
-end-user API. Decorators do not use `emitDecoratorMetadata`,
+forms and are the only public decorator signatures. Schema-bearing handler
+metadata is internal/tooling input for generated registry assembly and
+framework-owned `materializeDecoratedEntityHandlers()` paths, not an
+application decorator form. Decorators do not use `emitDecoratorMetadata`,
 `reflect-metadata`, parameter decorators, a global handler registry, or handler
 invocation.
 
 Generated handler registry tooling infers the signal schema from each
 handler's explicit first parameter type and emitted schemas from explicit return
 types. `@Assign` emits generated domain events, `@Command` emits
-generated domain commands, `@React` may emit generated domain events or emit
-nothing, and `@Subscribe` returns explicit `void`.
+generated domain commands, `@React` emits generated domain events, and
+`@Subscribe` returns explicit `void`. End-user handlers return generated domain
+messages; repository execution wraps returned commands/events into framework
+envelopes internally after the current transactional work succeeds.
 Both `handler(signal)` and `handler(signal, context)` are part of the public
 signature contract. `HandlerRegistryIngestor` validates version `1`, rejects
 new generated `@Apply`/event-application records, checks generated arity and
 emitted-schema/schema-shape rules, and then routes records through
 `defineEntityHandlers()`. Canonical handler metadata records `parameterCount`;
-explicit/schema-bearing registrations default to one-argument invocation, while
-generated records preserve their declared arity. Built repository execution
+explicit internal metadata registrations default to one-argument invocation,
+while generated records preserve their declared arity. Built repository execution
 calls generated two-argument command assignees with the generated
-`CommandContext` from the command envelope, and generated two-argument event
-subscribers with the generated `EventContext` from the event envelope. If an
-envelope omits context, repository execution passes an empty generated context
-message of the proper schema. `@Apply` remains one-argument only. The internal
-build-time writer renders deterministic
+`CommandContext` from the command envelope. It calls generated two-argument
+event subscribers, command reactions, and event reactors with the generated
+`EventContext` from the event envelope. If an envelope omits context,
+repository execution passes an empty generated context message of the proper
+schema. `@Apply` remains one-argument only. The internal build-time writer
+renders deterministic
 registry modules under ignored `generated/` output only when explicitly
 invoked. `GeneratedRegistryDiscovery` is the matching runtime anchor for
 explicit file loading. It accepts caller-provided filesystem paths or clean

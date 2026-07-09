@@ -15,6 +15,7 @@ import { describe, expect, it } from "vitest";
 import { fromBinary, toBinary } from "@bufbuild/protobuf";
 
 import { CommandBus, type CommandDispatcher } from "../../src/index.js";
+import { commandBusAccess } from "../../src/bus/command-bus.js";
 import { CommandValidationError } from "../../src/bus/command-errors.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
@@ -306,6 +307,34 @@ describe("CommandBus", () => {
     await bus.post(createProjectionCommand("command-3"));
 
     expect(observed).toEqual(["outer:command-3", "after-rejection"]);
+  });
+
+  it("rejects public and internal command intake after close", async () => {
+    const bus = new CommandBus();
+
+    await bus.close();
+    await bus.close();
+
+    await expect(bus.post(createProjectionCommand("command-after-close"))).rejects.toThrow(
+      /closed/,
+    );
+    await expect(
+      commandBusAccess.postInternal(bus, createProjectionCommand("command-internal-after-close")),
+    ).rejects.toThrow(/closed/);
+  });
+
+  it("rejects internal command-bus access for non-command-bus values", () => {
+    const bus = {} as CommandBus;
+
+    expect(() =>
+      commandBusAccess.postInternal(bus, createProjectionCommand("command-internal")),
+    ).toThrow(/CommandBus instance/);
+    expect(() => {
+      commandBusAccess.beginClose(bus);
+    }).toThrow(/CommandBus instance/);
+    expect(() => commandBusAccess.drain(bus)).toThrow(/CommandBus instance/);
+    expect(() => commandBusAccess.finishClose(bus)).toThrow(/CommandBus instance/);
+    expect(() => commandBusAccess.acceptedWorkCount(bus)).toThrow(/CommandBus instance/);
   });
 });
 

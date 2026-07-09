@@ -219,13 +219,6 @@ export {
 } from "./handler/generated-registry-discovery.js";
 
 export {
-  type GeneratedEntityHandlerGroup,
-  type GeneratedEntityHandlers,
-  type GeneratedHandlerKind,
-  type GeneratedHandlerParameterCount,
-  type GeneratedHandlerRecordInput,
-  type GeneratedHandlerRecord,
-  type GeneratedHandlerRegistry,
   HandlerRegistryIngestionError,
   HandlerRegistryIngestor,
   type RegistryIngestionErrorCode,

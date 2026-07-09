@@ -9,7 +9,7 @@ import {
   type HandlerRegistrationBuilder,
 } from "./handler-metadata.js";
 
-/** Generated handler registry module shape accepted by the framework ingestor. */
+/** @internal Generated handler registry module shape accepted by the framework ingestor. */
 export interface GeneratedHandlerRegistry {
   /** Generated registry contract version. */
   readonly version: 1;
@@ -20,7 +20,8 @@ export interface GeneratedHandlerRegistry {
 /** Framework-owned ingestion adapter for generated handler registries. */
 export class HandlerRegistryIngestor {
   /** Convert generated registry records into canonical entity handler metadata. */
-  ingest(registry: GeneratedHandlerRegistry): readonly EntityHandlersMetadata[] {
+  ingest(registry: unknown): readonly EntityHandlersMetadata[] {
+    assertGeneratedHandlerRegistry(registry);
     validateRegistryVersion(registry);
 
     return Object.freeze(
@@ -30,9 +31,10 @@ export class HandlerRegistryIngestor {
 
   /** Ingest generated registry records and register them in a caller-owned metadata registry. */
   register(
-    generated: GeneratedHandlerRegistry,
+    generated: unknown,
     registry: HandlerMetadataRegistry = new HandlerMetadataRegistry(),
   ): HandlerMetadataRegistry {
+    assertGeneratedHandlerRegistry(generated);
     const entityHandlers = this.ingest(generated);
     new HandlerMetadataRegistry([...registry.listEntityHandlers(), ...entityHandlers]);
 
@@ -66,14 +68,14 @@ export class HandlerRegistryIngestionError extends Error {
   }
 }
 
-/** Handler categories supported by generated registry ingestion. */
+/** @internal Handler categories supported by generated registry ingestion. */
 export type GeneratedHandlerKind =
   "command-assignment" | "command-reaction" | "event-subscription" | "event-reaction";
 
-/** Public handler arity recorded by generated registry tooling. */
+/** @internal Public handler arity recorded by generated registry tooling. */
 export type GeneratedHandlerParameterCount = 1 | 2;
 
-/** Type-erased generated entity group accepted by a top-level generated registry. */
+/** @internal Type-erased generated entity group accepted by a top-level generated registry. */
 export interface GeneratedEntityHandlerGroup {
   /** Entity class whose prototype owns the generated handler methods. */
   readonly entityType: EntityClass;
@@ -83,7 +85,7 @@ export interface GeneratedEntityHandlerGroup {
   readonly handlers: readonly GeneratedHandlerRecordInput[];
 }
 
-/** Generated handler records for one entity class. */
+/** @internal Generated handler records for one entity class. */
 export interface GeneratedEntityHandlers<
   Instance extends object = object,
   StateSchema extends DescriptorMessageSchema = DescriptorMessageSchema,
@@ -96,7 +98,7 @@ export interface GeneratedEntityHandlers<
   readonly handlers: readonly GeneratedHandlerRecord<Instance>[];
 }
 
-/** Type-erased generated metadata for one decorated handler method. */
+/** @internal Type-erased generated metadata for one decorated handler method. */
 export interface GeneratedHandlerRecordInput {
   /** Handler role inferred from the bare decorator. */
   readonly kind: GeneratedHandlerKind;
@@ -110,7 +112,7 @@ export interface GeneratedHandlerRecordInput {
   readonly parameterCount: GeneratedHandlerParameterCount;
 }
 
-/** Generated metadata for one decorated handler method on a concrete entity class. */
+/** @internal Generated metadata for one decorated handler method on a concrete entity class. */
 export interface GeneratedHandlerRecord<
   Instance extends object = object,
 > extends GeneratedHandlerRecordInput {
@@ -119,6 +121,17 @@ export interface GeneratedHandlerRecord<
 }
 
 const registryVersion = 1;
+
+function assertGeneratedHandlerRegistry(
+  registry: unknown,
+): asserts registry is GeneratedHandlerRegistry {
+  if (registry === null || typeof registry !== "object") {
+    throw new HandlerRegistryIngestionError(
+      "UNSUPPORTED_REGISTRY_VERSION",
+      "Generated handler registry must be an object.",
+    );
+  }
+}
 
 function validateRegistryVersion(registry: GeneratedHandlerRegistry): void {
   const version: number = registry.version;
@@ -148,6 +161,9 @@ function materializeGeneratedEntityHandlers(
     entity.handlers.map((handler) => ({
       kind: handler.kind,
       methodName: handler.methodName,
+      ...(handler.kind === "event-subscription"
+        ? {}
+        : { emittedSchemas: Object.freeze([...handler.emittedSchemas]) }),
       parameterCount: handler.parameterCount,
     })),
   );
@@ -217,9 +233,7 @@ function validateGeneratedHandler(handler: GeneratedHandlerRecordInput): void {
     return;
   }
 
-  if (handler.kind === "command-assignment" || handler.kind === "command-reaction") {
-    validateEmitsSomething(handler);
-  }
+  validateEmitsSomething(handler);
 }
 
 function validateSchema(schema: DescriptorMessageSchema, label: string): void {

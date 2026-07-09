@@ -164,7 +164,7 @@ record command assignment, command reaction, event subscription, event
 reaction, and event application metadata. Each handler record keeps the
 generated Protobuf-ES schema, message full type name, handler kind, and entity
 method name. Event application metadata also records `allowImport` only for
-legacy schema-bearing `@Apply` compatibility metadata.
+legacy framework-owned `@Apply` compatibility metadata.
 
 Handler metadata is deterministic and frozen. The all-handlers array preserves
 the user declaration order, and role-specific arrays preserve the same relative
@@ -187,8 +187,10 @@ later runtime fan-out remains possible.
 The standard decorator adapter is metadata-only syntax over the same explicit
 contract. Bare `@Assign`, `@Command`, `@Subscribe`, and `@React` are the
 ordinary application syntax collected from public instance methods into
-standard per-class decorator metadata. Schema-bearing decorator overloads,
-`@Apply`, and `materializeDecoratedEntityHandlers()` remain legacy/framework
+standard per-class decorator metadata. They are the only public decorator
+signatures. Schema-bearing handler metadata is generated/internal tooling input
+and framework materialization state, not an application decorator form.
+`@Apply` and `materializeDecoratedEntityHandlers()` remain framework-only
 compatibility. Generated registry tooling owns ordinary schema inference from
 handler parameter and return types, keeps decorated classes compatible with
 `HandlerMetadataRegistry`, and leaves `defineEntityHandlers()` available only

@@ -9,6 +9,7 @@ import type {
   HandlerMetadata,
   RegisteredHandlerMetadata,
 } from "./handler-metadata.js";
+import { handlerMetadataAccess } from "./handler-metadata.js";
 
 export interface ReadinessMetadataFields<Handler extends HandlerMetadata> {
   readonly entityHandlers: EntityHandlersMetadata;
@@ -158,6 +159,7 @@ function cloneHandlerMetadata<Handler extends HandlerMetadata>(
   }) as unknown as Handler;
 
   clonedHandlers.set(handler, clone);
+  handlerMetadataAccess.copyEmittedSchemas(handler, clone);
   return clone;
 }
 

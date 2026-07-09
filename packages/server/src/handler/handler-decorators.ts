@@ -41,13 +41,11 @@ const decoratorMetadataSymbol = installDecoratorMetadataSymbol();
 /**
  * Declare a command assignee method.
  *
- * Bare `@Assign` is the ordinary application form. `@Assign(schema)` remains a
- * legacy/framework compatibility form for explicit schema-bearing metadata;
- * generated handler registries own ordinary schema discovery. The decorator
- * records metadata only; it does not register the handler, instantiate the
- * entity, or invoke the method.
+ * Bare `@Assign` is the ordinary application form. Generated handler
+ * registries own ordinary schema discovery. The decorator records metadata
+ * only; it does not register the handler, instantiate the entity, or invoke the
+ * method.
  */
-export function Assign(schema: DescriptorMessageSchema): HandlerMethodDecorator;
 export function Assign<This extends object, Parameters extends readonly unknown[], Return>(
   value: HandlerMethodValue<This, Parameters, Return>,
   context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
@@ -62,11 +60,10 @@ export function Assign(
 /**
  * Declare a command-reacting method.
  *
- * Bare `@Command` is the ordinary application form. `@Command(schema)` remains
- * a legacy/framework compatibility form. Command reactors may fan out in
- * `HandlerMetadataRegistry`; this decorator only records the declaration.
+ * Bare `@Command` is the ordinary application form. Command reactors may fan
+ * out in `HandlerMetadataRegistry`; this decorator only records the
+ * declaration.
  */
-export function Command(schema: DescriptorMessageSchema): HandlerMethodDecorator;
 export function Command<This extends object, Parameters extends readonly unknown[], Return>(
   value: HandlerMethodValue<This, Parameters, Return>,
   context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
@@ -81,11 +78,10 @@ export function Command(
 /**
  * Declare an event subscriber method.
  *
- * Bare `@Subscribe` is the ordinary application form. `@Subscribe(schema)`
- * remains a legacy/framework compatibility form. Subscribers are metadata-only
- * declarations bridged by generated registry and runtime metadata.
+ * Bare `@Subscribe` is the ordinary application form. Subscribers are
+ * metadata-only declarations bridged by generated registry and runtime
+ * metadata.
  */
-export function Subscribe(schema: DescriptorMessageSchema): HandlerMethodDecorator;
 export function Subscribe<This extends object, Parameters extends readonly unknown[], Return>(
   value: HandlerMethodValue<This, Parameters, Return>,
   context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,
@@ -100,11 +96,10 @@ export function Subscribe(
 /**
  * Declare an event reactor method.
  *
- * Bare `@React` is the ordinary application form. `@React(schema)` remains a
- * legacy/framework compatibility form. Reactors are collected as class-owned
- * metadata and may fan out through the caller-owned handler registry.
+ * Bare `@React` is the ordinary application form. Reactors are collected as
+ * class-owned metadata and may fan out through the caller-owned handler
+ * registry.
  */
-export function React(schema: DescriptorMessageSchema): HandlerMethodDecorator;
 export function React<This extends object, Parameters extends readonly unknown[], Return>(
   value: HandlerMethodValue<This, Parameters, Return>,
   context: ClassMethodDecoratorContext<This, HandlerMethodValue<This, Parameters, Return>>,

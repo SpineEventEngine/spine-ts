@@ -1,6 +1,7 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
+  runtimeAccess,
   ServerRuntimeStateError,
   SingleProcessServerRuntime,
   type RuntimeStateErrorCode,
@@ -179,23 +180,77 @@ describe("SingleProcessServerRuntime", () => {
     expect(observed).toEqual(["first-start", "first-end", "second"]);
   });
 
-  it("accepts follow-up work after active work has settled", async () => {
+  it("does not expose follow-up scheduling on the public runtime instance", () => {
+    const runtime = new SingleProcessServerRuntime();
+
+    expect("enqueueFollowUp" in runtime).toBe(false);
+    expectTypeOf<SingleProcessServerRuntime>().not.toHaveProperty("enqueueFollowUp");
+  });
+
+  it("rejects internal runtime access for non-runtime values", () => {
+    const runtime = {} as SingleProcessServerRuntime;
+
+    expect(() => runtimeAccess.enqueueFollowUp(runtime, () => undefined)).toThrow(
+      /SingleProcessServerRuntime instance/,
+    );
+    expect(() => runtimeAccess.drain(runtime)).toThrow(/SingleProcessServerRuntime instance/);
+  });
+
+  it("accepts framework follow-up work from active runtime work", async () => {
     const runtime = new SingleProcessServerRuntime();
     const observed: string[] = [];
-    let enqueueFollowUp!: () => Promise<void>;
+    let followUpCompletion!: Promise<void>;
 
     await runtime.start();
 
     await runtime.enqueue(() => {
-      enqueueFollowUp = () =>
-        runtime.enqueue(() => {
-          observed.push("follow-up");
-        });
       observed.push("outer");
+      followUpCompletion = runtimeAccess.enqueueFollowUp(runtime, () => {
+        observed.push("follow-up");
+      });
     });
-    await enqueueFollowUp();
+    await followUpCompletion;
 
     expect(observed).toEqual(["outer", "follow-up"]);
+  });
+
+  it("drains follow-up work appended while close is already draining", async () => {
+    const runtime = new SingleProcessServerRuntime();
+    const observed: string[] = [];
+    let releaseActive!: () => void;
+    const activeCanFinish = new Promise<void>((resolve) => {
+      releaseActive = resolve;
+    });
+
+    await runtime.start();
+
+    const activeStarted = new Promise<void>((resolve) => {
+      void runtime.enqueue(async () => {
+        observed.push("active-start");
+        resolve();
+        await activeCanFinish;
+        void runtimeAccess.enqueueFollowUp(runtime, () => {
+          observed.push("follow-up");
+          void runtimeAccess.enqueueFollowUp(runtime, () => {
+            observed.push("nested-follow-up");
+          });
+        });
+        observed.push("active-end");
+      });
+    });
+
+    await activeStarted;
+
+    const close = runtime.close();
+
+    expect(runtime.state).toBe("closing");
+    expect(() => runtime.enqueue(() => undefined)).toThrow(ServerRuntimeStateError);
+
+    releaseActive();
+    await close;
+
+    expect(runtime.state).toBe("closed");
+    expect(observed).toEqual(["active-start", "active-end", "follow-up", "nested-follow-up"]);
   });
 
   it("rejects close from active work", async () => {

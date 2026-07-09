@@ -12,10 +12,16 @@ import {
   HandlerMetadataRegistryError,
   HandlerRegistryIngestionError,
   HandlerRegistryIngestor,
-  type GeneratedEntityHandlers,
-  type GeneratedHandlerRecord,
-  type GeneratedHandlerRegistry,
+  type CommandAssignmentHandlerMetadata,
+  type CommandReactionHandlerMetadata,
+  type EventReactionHandlerMetadata,
 } from "../../src/index.js";
+import type {
+  GeneratedEntityHandlers,
+  GeneratedHandlerRecord,
+  GeneratedHandlerRegistry,
+} from "../../src/handler/generated-handler-registry.js";
+import { handlerMetadataAccess } from "../../src/handler/handler-metadata.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -94,7 +100,7 @@ describe("generated handler registry ingestion", () => {
             record("command-assignment", "assignCreate", CommandSchema, [EventSchema], 1),
             record("command-reaction", "commandFromCommand", CommandSchema, [CommandSchema], 2),
             record("event-subscription", "subscribeCreated", EventSchema, [], 1),
-            record("event-reaction", "reactToCreated", EventSchema, [], 2),
+            record("event-reaction", "reactToCreated", EventSchema, [EventSchema], 2),
           ],
         },
       ],
@@ -124,6 +130,30 @@ describe("generated handler registry ingestion", () => {
       "spine.core.Event",
     ]);
     expect(entity?.handlers.map((handler) => handler.parameterCount)).toEqual([1, 2, 1, 2]);
+    expect(entity?.commandAssignments[0]).not.toHaveProperty("emittedSchemas");
+    expect(entity?.commandReactions[0]).not.toHaveProperty("emittedSchemas");
+    expect(entity?.eventSubscriptions[0]).not.toHaveProperty("emittedSchemas");
+    expect(entity?.eventReactions[0]).not.toHaveProperty("emittedSchemas");
+    const [assignment] = entity?.commandAssignments ?? [];
+    const [commandReaction] = entity?.commandReactions ?? [];
+    const [subscription] = entity?.eventSubscriptions ?? [];
+    const [eventReaction] = entity?.eventReactions ?? [];
+
+    if (
+      assignment === undefined ||
+      commandReaction === undefined ||
+      subscription === undefined ||
+      eventReaction === undefined
+    ) {
+      throw new Error("Expected generated handler metadata for every handler kind.");
+    }
+    expect(handlerMetadataAccess.emittedSchemas(assignment)).toEqual([EventSchema]);
+    expect(handlerMetadataAccess.emittedSchemas(commandReaction)).toEqual([CommandSchema]);
+    expect(handlerMetadataAccess.emittedSchemas(subscription)).toEqual([]);
+    expect(handlerMetadataAccess.emittedSchemas(eventReaction)).toEqual([EventSchema]);
+    expectTypeOf<CommandAssignmentHandlerMetadata>().not.toHaveProperty("emittedSchemas");
+    expectTypeOf<CommandReactionHandlerMetadata>().not.toHaveProperty("emittedSchemas");
+    expectTypeOf<EventReactionHandlerMetadata>().not.toHaveProperty("emittedSchemas");
     expect(entity?.commandAssignments[0]).toBe(entity?.handlers[0]);
     expect(entity?.commandReactions[0]).toBe(entity?.handlers[1]);
     expect(entity?.eventSubscriptions[0]).toBe(entity?.handlers[2]);
@@ -225,13 +255,13 @@ describe("generated handler registry ingestion", () => {
       new HandlerRegistryIngestor().ingest({
         version: 2,
         entities: [],
-      } as never),
+      }),
     ).toThrow(HandlerRegistryIngestionError);
     expect(() =>
       new HandlerRegistryIngestor().ingest({
         version: 2,
         entities: [],
-      } as never),
+      }),
     ).toThrow(/version 2 is not supported/);
   });
 
@@ -251,7 +281,7 @@ describe("generated handler registry ingestion", () => {
             ],
           },
         ],
-      } as never),
+      }),
     ).toThrow(/event-application/);
   });
 
@@ -271,7 +301,7 @@ describe("generated handler registry ingestion", () => {
             ],
           },
         ],
-      } as never),
+      }),
     ).toThrow(/unsupported parameter count 3/);
   });
 
@@ -319,12 +349,10 @@ describe("generated handler registry ingestion", () => {
         ],
       },
     ]) {
-      expect(() => new HandlerRegistryIngestor().ingest(registry as never)).toThrow(
+      expect(() => new HandlerRegistryIngestor().ingest(registry)).toThrow(
         HandlerRegistryIngestionError,
       );
-      expect(() => new HandlerRegistryIngestor().ingest(registry as never)).toThrow(
-        /non-empty typeName/,
-      );
+      expect(() => new HandlerRegistryIngestor().ingest(registry)).toThrow(/non-empty typeName/);
     }
   });
 
@@ -332,6 +360,7 @@ describe("generated handler registry ingestion", () => {
     for (const [kind, methodName, signalSchema] of [
       ["command-assignment", "assignCreate", CommandSchema],
       ["command-reaction", "commandFromCommand", CommandSchema],
+      ["event-reaction", "reactToCreated", EventSchema],
     ] as const) {
       expect(() =>
         new HandlerRegistryIngestor().ingest({
@@ -346,21 +375,6 @@ describe("generated handler registry ingestion", () => {
         }),
       ).toThrow(/must declare at least one emitted schema/);
     }
-  });
-
-  it("allows zero emitted schemas on generated event reactions", () => {
-    const metadata = new HandlerRegistryIngestor().ingest({
-      version: 1,
-      entities: [
-        {
-          entityType: GeneratedProjection,
-          stateSchema: ProjectionStateSchema,
-          handlers: [record("event-reaction", "reactToCreated", EventSchema, [])],
-        },
-      ],
-    });
-
-    expect(metadata[0]?.eventReactions[0]?.methodName).toBe("reactToCreated");
   });
 
   it("rejects emitted schemas on generated event subscriptions", () => {

@@ -329,13 +329,6 @@ const expectedServerExports = [
   "EntityStateTransitionValidationRequest",
   "EntityStateTransitionValidationResult",
   "FirstFieldRoutingHint",
-  "GeneratedEntityHandlerGroup",
-  "GeneratedEntityHandlers",
-  "GeneratedHandlerKind",
-  "GeneratedHandlerParameterCount",
-  "GeneratedHandlerRecordInput",
-  "GeneratedHandlerRecord",
-  "GeneratedHandlerRegistry",
   "GeneratedRegistryDiscovery",
   "GeneratedRegistryDiscoveryError",
   "GeneratedRegistryDiscoveryOptions",
@@ -606,6 +599,26 @@ const forbiddenPublicMembers = [
     reason: "repository preparation details are not public API",
     matches: (value) => typeof value.kind === "number",
   },
+  {
+    owner: "SingleProcessServerRuntime",
+    member: "enqueueFollowUp",
+    reason: "follow-up scheduling authority is framework-internal",
+    matches: (value) => Array.isArray(value.signatures),
+  },
+  ...[
+    "GeneratedEntityHandlerGroup",
+    "GeneratedEntityHandlers",
+    "GeneratedHandlerKind",
+    "GeneratedHandlerParameterCount",
+    "GeneratedHandlerRecordInput",
+    "GeneratedHandlerRecord",
+    "GeneratedHandlerRegistry",
+  ].map((member) => ({
+    owner: undefined,
+    member,
+    reason: "generated registry contracts are internal tooling API",
+    matches: (value) => typeof value.kind === "number",
+  })),
 ];
 
 function collectForbiddenMembers(value, ownerName, matches) {
@@ -623,7 +636,13 @@ function collectForbiddenMembers(value, ownerName, matches) {
   const nextOwnerName =
     typeof value.kind === "number" &&
     typeof value.name === "string" &&
-    ["BoundedContext", "BoundedContextBuilder", "ContextSpec", "Repository"].includes(value.name)
+    [
+      "BoundedContext",
+      "BoundedContextBuilder",
+      "ContextSpec",
+      "Repository",
+      "SingleProcessServerRuntime",
+    ].includes(value.name)
       ? value.name
       : ownerName;
 

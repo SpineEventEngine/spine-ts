@@ -8,6 +8,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./internal/generated-handler-registry": {
+      "types": "./dist/handler/generated-handler-registry.d.ts",
+      "default": "./dist/handler/generated-handler-registry.js"
     }
   },
   "files": [

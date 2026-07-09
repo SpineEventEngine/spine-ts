@@ -14,6 +14,7 @@ import { InMemoryStorageFactory } from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
 import { AggregateStorage } from "../../src/index.js";
+import { MessageIds, PrimitiveIds } from "../../src/repository/primitive-id.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type AggregateState = Message<"AggregateState"> & {
@@ -45,6 +46,25 @@ const AggregateStateSchema = messageDesc(
 ) as GenMessage<AggregateState>;
 
 describe("primitive aggregate IDs", () => {
+  it("packs and unpacks primitive ID values directly", () => {
+    expect(PrimitiveIds.unpack(PrimitiveIds.pack("task-primitive"))).toBe("task-primitive");
+    expect(PrimitiveIds.unpack(PrimitiveIds.pack(42))).toBe(42);
+    expect(PrimitiveIds.unpack(PrimitiveIds.pack(true))).toBe(true);
+    expect(PrimitiveIds.unpack(undefined)).toBeUndefined();
+  });
+
+  it("reads only finite primitive message ID values", () => {
+    expect(MessageIds.read({ $typeName: "example.TaskId", value: "task-1" })).toEqual({
+      $typeName: "example.TaskId",
+      value: "task-1",
+    });
+    expect(
+      MessageIds.read({ $typeName: "example.TaskId", value: Number.POSITIVE_INFINITY }),
+    ).toBeUndefined();
+    expect(MessageIds.read({ $typeName: "example.TaskId" })).toBeUndefined();
+    expect(MessageIds.read({ $typeName: 1, value: "task-1" })).toBeUndefined();
+  });
+
   it("routes string, number, and boolean producer IDs through aggregate storage", async () => {
     const factory = new InMemoryStorageFactory();
     const storage = new AggregateStorage<typeof AggregateStateSchema, string | number | boolean>({

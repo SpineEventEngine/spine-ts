@@ -54,12 +54,8 @@ import {
   HandlerRegistryIngestor,
   GeneratedRegistryDiscovery,
   GeneratedRegistryDiscoveryError,
-  type GeneratedEntityHandlerGroup,
   type RegistryDiscoveryErrorCode,
   defineEntityHandlers,
-  type GeneratedHandlerParameterCount,
-  type GeneratedHandlerRecordInput,
-  type GeneratedHandlerRegistry,
   type HandlerParameterCount,
   type RegistryIngestionErrorCode,
   type RuntimeStateErrorCode,
@@ -305,11 +301,6 @@ describe("@spine-ts/server", () => {
     expect(
       new HandlerRegistryIngestionError("UNSUPPORTED_REGISTRY_VERSION", "Nope"),
     ).toBeInstanceOf(HandlerRegistryIngestionError);
-    expectTypeOf<GeneratedHandlerRegistry>().toExtend<{
-      readonly version: 1;
-      readonly entities: readonly object[];
-    }>();
-    expectTypeOf<GeneratedHandlerParameterCount>().toEqualTypeOf<1 | 2>();
     expectTypeOf<HandlerParameterCount>().toEqualTypeOf<1 | 2>();
     expectTypeOf<RegistryDiscoveryErrorCode>().toEqualTypeOf<
       | "MODULE_IMPORT_FAILED"
@@ -328,9 +319,6 @@ describe("@spine-ts/server", () => {
       | "MISSING_EMITTED_SCHEMAS"
       | "UNEXPECTED_EMITTED_SCHEMAS"
     >();
-    expectTypeOf<GeneratedEntityHandlerGroup>().toExtend<{
-      readonly handlers: readonly GeneratedHandlerRecordInput[];
-    }>();
     expectTypeOf<SignalKind>().toEqualTypeOf<"command" | "event">();
     expectTypeOf<SignalIntakeAcceptedFor>().toEqualTypeOf<"async-work">();
     expectTypeOf<SignalIntakeFailureCode>().toEqualTypeOf<
@@ -422,6 +410,8 @@ describe("@spine-ts/server", () => {
     expect(() => new SingleProcessServerRuntime().enqueue(() => undefined)).toThrow(
       ServerRuntimeStateError,
     );
+    expect("enqueueFollowUp" in new SingleProcessServerRuntime()).toBe(false);
+    expectTypeOf<SingleProcessServerRuntime>().not.toHaveProperty("enqueueFollowUp");
     expectTypeOf<SingleProcessServerRuntime>().toExtend<ServerRuntimeLifecycle>();
     expectTypeOf<RuntimeStateErrorCode>().toEqualTypeOf<"INVALID_RUNTIME_STATE">();
     expectTypeOf<ServerRuntimeRejectedState>().toEqualTypeOf<

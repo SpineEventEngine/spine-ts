@@ -563,7 +563,10 @@ function validateEmittedReturn(
     );
     return true;
   }
-  if ((decorator === "Assign" || decorator === "Command") && schemas.length === 0) {
+  if (
+    (decorator === "Assign" || decorator === "Command" || decorator === "React") &&
+    schemas.length === 0
+  ) {
     pushDiagnostic(
       scope,
       "MISSING_EMITTED_SCHEMAS",

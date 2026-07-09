@@ -318,10 +318,13 @@ decorators plus generated registry assembly instead. Decorator adapter exports
 include `@Assign`, `@Command`, `@Subscribe`, `@React`, legacy/framework-only
 `@Apply`, framework-only `materializeDecoratedEntityHandlers()`,
 `HandlerMethodDecorator`, and `HandlerMethodValue`. Bare `@Assign`, `@Command`,
-`@Subscribe`, and `@React` are the ordinary application syntax. Generated
-handler registries own ordinary schema inference. Schema-bearing decorator
-overloads, `@Apply`, and `materializeDecoratedEntityHandlers()` are
-legacy/framework compatibility; new application code must not use them.
+`@Subscribe`, and `@React` are the only public decorator signatures and the
+ordinary application syntax. Generated handler registries own ordinary schema
+inference. Schema-bearing handler metadata is internal/tooling input for
+generated registry assembly and framework-owned materialization; it is not a
+public decorator form. `@Apply` and `materializeDecoratedEntityHandlers()`
+remain framework-only compatibility paths; new application code must not use
+them.
 Ordinary generated assembly uses
 `await BoundedContext.singleTenant(name).add(EntityClass).withGeneratedRegistryRoot(compiledPackageRoot).buildAsync()`.
 The builder requires that explicit trusted compiled package/app root, loads the
@@ -337,18 +340,23 @@ Generated handler registries are the intended ordinary bridge from bare
 decorators to canonical metadata. Their logical contract is a versioned list of
 entity handler groups with entity type, state schema, handler kind, method name,
 first-parameter signal schema, explicit one- or two-argument arity, and emitted
-schemas inferred from explicit return types. They are generated build artifacts
-under ignored `generated/` directories and are not committed.
+schemas inferred from explicit return types. Generated `@Assign`, `@Command`,
+and `@React` producer records must declare at least one emitted schema;
+`@Subscribe` records declare none and return `void`. They are generated build
+artifacts under ignored `generated/` directories and are not committed.
 `HandlerRegistryIngestor` preserves generated arity in canonical metadata, and
 `GeneratedRegistryDiscovery` loads explicit registry paths or clean `file:`
 URLs for framework/tooling paths. Application package builds run registry
 generation after Protobuf-ES generation and before `tsc`; normal context
 assembly lets `buildAsync()` load the compiled registry module from the explicit
 trusted package output tree passed to `withGeneratedRegistryRoot(root)`.
-Repository execution calls generated two-argument command assignees and event
-subscribers with generated `CommandContext` or `EventContext` values from the
-incoming envelope; if the envelope omits context, execution supplies an empty
-generated context message of the proper schema.
+Repository execution calls generated two-argument command assignees, event
+subscribers, command reactions, and event reactors with generated
+`CommandContext` or `EventContext` values from the incoming envelope; if the
+envelope omits context, execution supplies an empty generated context message
+of the proper schema. Generated producer handlers return domain messages; the
+framework wraps returned commands/events internally and dispatches produced
+signals only after the current storage/transactional work succeeds.
 Command registration readiness exports include
 `CommandRegistrationReadiness`, `CommandRegistrationReadinessLookup`, and
 `CommandRegistrationAssigneeMetadata`. The readiness view is built from an
