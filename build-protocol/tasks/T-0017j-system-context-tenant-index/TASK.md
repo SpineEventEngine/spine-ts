@@ -1,6 +1,6 @@
 # T-0017j: System Context And Tenant Index
 
-Status: complete and integrated to `main`
+Status: complete, integrated
 Started: `2026-07-09`
 Completed: `2026-07-09`
 Branch: `task/T-0017j-system-context-tenant-index`

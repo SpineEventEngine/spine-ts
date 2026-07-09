@@ -1,6 +1,6 @@
 # T-0017: Runtime Gap Roadmap
 
-Status: in progress
+Status: complete, integrated
 Started: `2026-07-08`
 Branch: `task/T-0017-runtime-gap-roadmap`
 Worktree:

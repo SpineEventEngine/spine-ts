@@ -1,6 +1,6 @@
 # T-0017g: Delivery Inbox Handoff Integration
 
-Status: in progress
+Status: complete, integrated
 Started: `2026-07-09`
 Branch: `task/T-0017g-delivery-inbox-handoff`
 Worktree:

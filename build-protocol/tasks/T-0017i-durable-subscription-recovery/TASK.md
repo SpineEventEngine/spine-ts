@@ -1,6 +1,6 @@
 # T-0017i: Durable Subscription Recovery
 
-Status: complete, pending integration
+Status: complete, integrated
 Started: `2026-07-09`
 Branch: `task/T-0017i-durable-subscription-recovery`
 Worktree:

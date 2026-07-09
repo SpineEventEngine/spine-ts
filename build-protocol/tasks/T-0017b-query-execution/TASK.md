@@ -1,6 +1,6 @@
 # T-0017b: Query Execution Over Read-Side Columns
 
-Status: complete
+Status: complete, integrated
 Started: `2026-07-08`
 Branch: `task/T-0017b-query-execution`
 Worktree:

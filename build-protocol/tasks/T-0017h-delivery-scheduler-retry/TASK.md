@@ -1,6 +1,6 @@
 # T-0017h: Delivery Scheduler, Retry, And Catch-Up Loops
 
-Status: in progress
+Status: complete, integrated
 Started: `2026-07-09`
 Branch: `task/T-0017h-delivery-scheduler-retry`
 Worktree:
