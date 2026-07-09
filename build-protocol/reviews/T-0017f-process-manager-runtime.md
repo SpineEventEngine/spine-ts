@@ -8,8 +8,8 @@ and reliability.
 
 ## Required Lanes
 
-| Lane                       | Reviewer ID | Status  | Result  |
-| -------------------------- | ----------- | ------- | ------- |
+| Lane                       | Reviewer ID                            | Status | Result   |
+| -------------------------- | -------------------------------------- | ------ | -------- |
 | Code style/maintainability | `019f44f1-1b1c-70e2-82fc-5a4ed9d15fdf` | Closed | FINDINGS |
 | Documentation completeness | `019f44f1-42ba-7f91-805f-e0bc24227e25` | Closed | FINDINGS |
 | TypeScript/API docs        | `019f44f1-60cf-72b1-900e-62d3da7cd3be` | Closed | FINDINGS |

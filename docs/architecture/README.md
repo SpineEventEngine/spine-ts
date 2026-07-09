@@ -550,11 +550,14 @@ loading uses the latest persisted state rather than snapshot-plus-replay
 loading. Delivery now persists durable inbox rows through `RecordStorage`,
 keeps live deduplication guards beside those rows, coordinates shard ownership
 with durable shard leases, and exposes a local `Delivery.drain()` loop that
-claims one shard, invokes one framework callback per `TO_DELIVER` row, and
-marks successful rows `DELIVERED`. Scheduler/catch-up orchestration,
-transport-backed worker loops, retained delivery-attempt history, tenant
-indexes, diagnostics, repository storage policy, read-side projection stores,
-and durable production storage adapters remain deferred.
+claims one shard, replays inbox rows through a bounded-context-owned
+process-manager inbox capability, and marks successful rows `DELIVERED`. The
+current handoff validates replayed command payloads, tenant context, and routed
+target metadata before handler code and waits for the received row to reach
+`DELIVERED` before the posting path resolves. Scheduler/catch-up
+orchestration, transport-backed worker loops, retained delivery-attempt
+history, tenant indexes, diagnostics, repository storage policy, read-side
+projection stores, and durable production storage adapters remain deferred.
 
 ## Transport Boundary
 

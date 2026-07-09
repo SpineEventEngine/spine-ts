@@ -6,6 +6,7 @@ import {
   InboxMessageError,
   type DeliveryStatus,
   type InboxMessage,
+  type InboxMessageId,
   type InboxReadOptions,
   type InboxWriteResult,
 } from "./inbox.js";
@@ -53,6 +54,19 @@ export class InboxStorage {
       );
 
       return Object.freeze(records.map((entry) => InboxRecords.read(entry.record, entry.id)));
+    } finally {
+      storage.close();
+    }
+  }
+
+  /** Read one exact durable inbox message by ID. */
+  async readMessage(id: InboxMessageId): Promise<InboxMessage | undefined> {
+    const key = this.#messageKey(id);
+    const storage = this.#inboxStorage();
+
+    try {
+      const record = await this.#durableRead("Inbox record", () => storage.read(key));
+      return record === undefined ? undefined : InboxRecords.read(record, key);
     } finally {
       storage.close();
     }

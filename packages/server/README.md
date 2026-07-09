@@ -43,7 +43,9 @@ Current slice exposes:
   Direct route calls only calculate routes and do not invoke handlers; built
   contexts use the same metadata to execute aggregate command handlers,
   projection event subscribers, and process-manager command assignees, event
-  reactors, and event-commanding handlers through the command and event buses;
+  reactors, and event-commanding handlers. Process-manager command assignees
+  use the framework-owned durable inbox handoff plus immediate local shard
+  replay, while the broader delivery lifecycle remains deferred;
   and
 - `context.stand()` / `new Stand({ context, storageFactory })` for direct
   read-side entity state registration, latest-state updates, latest-state point
@@ -588,9 +590,11 @@ Generated entity-class assembly creates default repositories through
 `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This slice
 still does not invoke query handlers, construct system contexts, start
 query/subscription buses, write tenant indexes, expose a broad production
-lifecycle, or integrate transports. Durable inbox handoff, scheduler/retry
-loops, and durable cross-process recovery remain deferred even though local
-process-manager handlers run in built contexts.
+lifecycle, or integrate transports. Process-manager command assignees now
+write durable process-manager inbox rows before the current local shard drain
+replays them, and the post does not resolve until that received row is marked
+delivered. Scheduler/retry workers, cross-process durable recovery, and
+broader event/aggregate handoff remain deferred.
 
 ## Direct Stand
 
@@ -850,12 +854,13 @@ execution wraps them in framework `Command`/`Event` envelopes only after
 transaction commit and state storage. Process-manager produced events are
 posted through the event bus so they are appended to the `EventStore` before
 fan-out; post-commit dispatch failures are recorded in
-`storedEventDispatchFailures()`. Durable inbox handoff, scheduler/retry
-workers, and durable recovery are still outside this local runtime slice. This
-seam follows Spine `core-jvm` `Repository` identity and registration concepts
-closely. The direct repository API does not create, find, or store entities;
-invoke handlers; write inboxes; manage caches; emit lifecycle events; or touch
-transport.
+`storedEventDispatchFailures()`. Process-manager command assignees now use the
+framework-owned durable inbox handoff with immediate local shard replay/drain,
+while scheduler/retry workers, cross-process durable recovery, and broader
+event/aggregate handoff remain deferred. This seam follows Spine `core-jvm`
+`Repository` identity and registration concepts closely. The direct repository
+API does not create, find, or store entities; invoke handlers; write inboxes;
+manage caches; emit lifecycle events; or touch transport.
 
 ## Entity State Transition Validation
 

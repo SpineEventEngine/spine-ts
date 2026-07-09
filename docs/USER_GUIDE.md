@@ -209,7 +209,10 @@ remain later slices.
   projection subscribers on the same EventBus runtime queue, without
   re-appending those events. Built contexts also execute local process-manager
   command assignees, event reactors, and event-commanding handlers through
-  Stand-backed state. Broader durable subscriber/reactor delivery semantics,
+  Stand-backed state. Process-manager command assignees now hand off through
+  durable inbox storage plus an immediate local shard drain before execution,
+  while the remaining repository event paths still use the direct local runtime
+  in this slice. Broader durable subscriber/reactor delivery semantics,
   Delivery/scheduler catch-up orchestration, and cross-process read-side
   recovery remain deferred.
 

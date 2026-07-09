@@ -30,12 +30,15 @@ import {
   type EventSubscription,
 } from "../bus/event-bus.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
+import { LocalProcessManagerInbox } from "./process-manager-handoff.js";
 import {
   Repository,
   repositoryAccess,
   type ConcreteRepositoryEntityType,
+  type ProcessManagerInbox,
   type RepositoryEntityType,
   type RepositoryIdentitySnapshot,
+  type ProcessManagerInboxTarget,
   type RepositoryView,
 } from "../repository/repository.js";
 import type {
@@ -100,6 +103,8 @@ interface RepositoryRegistration {
   readonly storageFactory: StorageFactory;
   /** Context-owned read-side Stand used by framework repository dispatch. */
   readonly stand: Stand;
+  /** Context-owned local process-manager command inbox handoff. */
+  readonly processManagerInbox: ProcessManagerInbox;
   /** Stored-event dispatch callback into the owning context event bus. */
   readonly dispatchStored: (event: Event) => Promise<void>;
   /** Stored-event follow-up dispatch callback into the owning context event bus. */
@@ -250,6 +255,7 @@ export class BoundedContext {
   readonly #eventBus: EventBus;
   readonly #commandEndpoint: CommandEndpoint;
   readonly #eventEndpoint: EventEndpoint;
+  readonly #processManagerInbox: LocalProcessManagerInbox;
   readonly #registeredRepositories: RegistrationSnapshot[] = [];
   readonly #storedEventDispatchFailures: StoredEventDispatchFailure[] = [];
   readonly #repositoryViews = new Set<RepositoryView>();
@@ -303,6 +309,7 @@ export class BoundedContext {
       acceptedEventTypes: () => exposedEventTypeUrls(this.#eventBus),
       post: (event: Event) => this.#eventBus.post(event),
     });
+    this.#processManagerInbox = new LocalProcessManagerInbox(this.#snapshot.name.value);
     eventSubscribers.set(this, (typeUrl, subscriber) =>
       eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
     );
@@ -324,6 +331,9 @@ export class BoundedContext {
         });
         preparedRepository.commit();
         this.#registeredRepositories.push(preparedRepository.snapshot);
+        if (preparedRepository.processManagerInboxTarget !== undefined) {
+          this.#processManagerInbox.register(preparedRepository.processManagerInboxTarget);
+        }
         this.#repositoryViews.add(preparedRepository.repository);
         this.#repositoryStorages.add(preparedRepository.storage);
       }
@@ -338,6 +348,7 @@ export class BoundedContext {
       storageContext: createStorageContext(this.#snapshot.spec),
       storageFactory: this.#storageFactory,
       stand: this.#stand,
+      processManagerInbox: this.#processManagerInbox,
       dispatchStored: (event) => eventBusAccess.postStored(this.#eventBus, event),
       dispatchStoredFollowUp: (event) => eventBusAccess.postStoredFollowUp(this.#eventBus, event),
       postEventFollowUp: (event) => eventBusAccess.postFollowUp(this.#eventBus, event),
@@ -1274,6 +1285,7 @@ function prepareRepositoryForContext(
     context: registration.storageContext,
     storageFactory: registration.storageFactory,
     stand: registration.stand,
+    processManagerInbox: registration.processManagerInbox,
     dispatchStored: registration.dispatchStored,
     dispatchStoredFollowUp: registration.dispatchStoredFollowUp,
     postEventFollowUp: registration.postEventFollowUp,
@@ -1281,10 +1293,13 @@ function prepareRepositoryForContext(
     recordDispatchFailure: registration.recordDispatchFailure,
   });
 
+  const processManagerInboxTarget = repositoryAccess.processManagerInboxTarget(repository);
+
   return {
     repository,
     snapshot,
     storage,
+    ...(processManagerInboxTarget === undefined ? {} : { processManagerInboxTarget }),
     commit: () => {
       registeredRepositories.set(repository, { name: registration.name });
     },
@@ -1299,6 +1314,7 @@ interface PreparedRepository {
   readonly repository: RepositoryView;
   readonly snapshot: RegistrationSnapshot;
   readonly storage: RecordStorage<unknown, Message>;
+  readonly processManagerInboxTarget?: ProcessManagerInboxTarget;
   commit(): void;
   close(): void;
 }

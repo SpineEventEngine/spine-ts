@@ -47,17 +47,20 @@ import {
   Aggregate,
   AggregateStorage,
   BoundedContext,
+  Delivery,
   ProcessManager,
   Projection,
   Repository,
   RepositoryIdentityError,
+  ShardIndex,
   defineEntityHandlers,
   HandlerRegistryIngestor,
   type EntityHandlersMetadata,
   type EventDispatcher,
+  type InboxMessage,
 } from "../../src/index.js";
 import { handlerMetadataAccess } from "../../src/handler/handler-metadata.js";
-import { repositoryAccess } from "../../src/repository/repository.js";
+import { repositoryAccess, type RepositoryView } from "../../src/repository/repository.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -522,6 +525,33 @@ class ValidatingTaskAggregate extends Aggregate<
       }),
     );
     this.commitTransaction();
+  }
+}
+
+class ValidatingProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  static commandCalls = 0;
+
+  static reset(): void {
+    this.commandCalls = 0;
+  }
+
+  assignTask(command: ValidatedTaskCommand): ProjectionState {
+    ValidatingProcessManager.commandCalls++;
+    this.updateDraftState(() =>
+      create(ProcessManagerStateSchema, {
+        id: command.id,
+        queue: `${command.name} assigned`,
+      }),
+    );
+    return create(ProjectionStateSchema, {
+      id: command.id,
+      name: `${command.name} event`,
+      priority: 1,
+    });
   }
 }
 
@@ -2515,6 +2545,75 @@ describe("repository signal routing", () => {
     );
   });
 
+  it("writes process-manager commands to a durable inbox before local delivery", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const observed: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [ProjectionStateSchema],
+        dispatch: (event) => {
+          observed.push(event);
+          return Promise.resolve();
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    const command = createAggregateCommand("command-pm-inbox", "pm-inbox", "ProcessManager");
+
+    await context.commandBus().post(command);
+
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toEqual([]);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
+    ).resolves.toMatchObject([
+      {
+        signalId: "command-pm-inbox",
+        label: "HANDLE_COMMAND",
+        status: "DELIVERED",
+        inboxId: {
+          targetId: "pm-inbox",
+          targetTypeUrl: deriveTypeUrl(ProcessManagerStateSchema),
+        },
+      },
+    ]);
+    expect(RoutingProcessManager.commandCalls).toBe(1);
+    await expect(context.stand().read(ProcessManagerStateSchema, "pm-inbox")).resolves.toEqual(
+      create(ProcessManagerStateSchema, {
+        id: "pm-inbox",
+        queue: "ProcessManager assigned",
+      }),
+    );
+    await waitForCondition(() => observed.length === 1);
+    const stored = await delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
+    const storedCommand = stored[0]?.signal;
+    if (storedCommand === undefined) {
+      throw new Error("Expected a stored process-manager command signal.");
+    }
+    const storedEnvelope = unpackAny(storedCommand, CommandSchema);
+    if (storedEnvelope === undefined) {
+      throw new Error("Expected a readable stored process-manager command envelope.");
+    }
+    expect(storedEnvelope.id).toEqual(command.id);
+    expect(storedEnvelope.context).toEqual(command.context);
+    expect(storedEnvelope.message?.typeUrl).toBe(command.message?.typeUrl);
+    expect(
+      storedEnvelope.message === undefined
+        ? undefined
+        : unpackAny(storedEnvelope.message, AggregateStateSchema),
+    ).toEqual(
+      command.message === undefined ? undefined : unpackAny(command.message, AggregateStateSchema),
+    );
+  });
+
   it("rejects process-manager command routing with a missing first-field ID before handler code", async () => {
     RoutingProcessManager.reset();
     const context = BoundedContext.singleTenant("Tasks")
@@ -2564,6 +2663,336 @@ describe("repository signal routing", () => {
     await expect(
       context.stand().read(ProcessManagerStateSchema, "pm-tenant", { tenantId: "tenant-b" }),
     ).resolves.toBeUndefined();
+  });
+
+  it("rejects multitenant process-manager handoff without a tenant before inbox write", async () => {
+    RoutingProcessManager.reset();
+    const factory = new ObservingStorageFactory();
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .withStorageFactory(factory)
+      .build();
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("command-pm-missing-tenant", "pm-no-tenant")),
+    ).rejects.toThrow(/tenant/i);
+
+    expect(RoutingProcessManager.commandCalls).toBe(0);
+    expect(factory.operations).toEqual([]);
+  });
+
+  it("rejects process-manager handoff success when another worker already owns the shard", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .withStorageFactory(factory)
+      .build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    const shard = ShardIndex.single();
+    const session = await delivery.shards.pickUp(shard, "node-a");
+
+    try {
+      await expect(
+        context.commandBus().post(createAggregateCommand("command-pm-preclaimed", "pm-preclaimed")),
+      ).rejects.toThrow(/deliver/i);
+
+      expect(session).toBeDefined();
+      expect(RoutingProcessManager.commandCalls).toBe(0);
+      await expect(
+        delivery.inbox.read(shard, { statuses: ["TO_DELIVER"], limit: 10 }),
+      ).resolves.toMatchObject([{ signalId: "command-pm-preclaimed", status: "TO_DELIVER" }]);
+      const s = session;
+      if (s === undefined) {
+        throw new Error("Expected session.");
+      }
+    } finally {
+      if (session !== undefined) {
+        await delivery.shards.release(session);
+      }
+    }
+  });
+
+  it("keeps draining process-manager handoff backlog until the received row is delivered", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .withStorageFactory(factory)
+      .build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+
+    for (let index = 0; index < 100; index += 1) {
+      const hh = String(Math.floor(index / 60)).padStart(2, "0");
+      const mm = String(index % 60).padStart(2, "0");
+      await storeProcessManagerInboxCommand(
+        delivery,
+        createAggregateCommand(
+          `command-backlog-${String(index).padStart(3, "0")}`,
+          `pm-backlog-${String(index).padStart(3, "0")}`,
+          `Backlog ${String(index).padStart(3, "0")}`,
+        ),
+        new Date(`2026-07-08T09:${hh}:${mm}.000Z`),
+        BigInt(index + 1),
+      );
+    }
+
+    await expect(
+      context
+        .commandBus()
+        .post(createAggregateCommand("command-pm-page-target", "pm-page-target", "Page target")),
+    ).resolves.toBeUndefined();
+
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-page-target"),
+    ).resolves.toEqual(
+      create(ProcessManagerStateSchema, {
+        id: "pm-page-target",
+        queue: "Page target assigned",
+      }),
+    );
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), {
+        statuses: ["TO_DELIVER"],
+        limit: 200,
+      }),
+    ).resolves.not.toContainEqual(expect.objectContaining({ signalId: "command-pm-page-target" }));
+  });
+
+  it("rejects process-manager inbox replay when the stored command tenant mismatches delivery tenant", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createProcessManagerAssignRepository();
+    BoundedContext.multitenant("Tasks").add(repository).withStorageFactory(factory).build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      storageFactory: factory,
+    });
+    const target = requireProcessManagerInboxTarget(repository);
+    const received = await storeProcessManagerInboxCommand(
+      delivery,
+      createAggregateCommand(
+        "command-pm-tenant-mismatch",
+        "pm-tenant-mismatch",
+        "Tenant mismatch",
+        "tenant-b",
+      ),
+      new Date("2026-07-08T09:00:00.000Z"),
+      1n,
+    );
+
+    await expect(target.replay(received, "tenant-a")).rejects.toThrow(/tenant/i);
+
+    expect(RoutingProcessManager.commandCalls).toBe(0);
+  });
+
+  it("rejects process-manager inbox replay when stored target metadata does not match the routed command", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createProcessManagerAssignRepository();
+    BoundedContext.singleTenant("Tasks").add(repository).withStorageFactory(factory).build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    const target = requireProcessManagerInboxTarget(repository);
+    const command = createAggregateCommand("command-pm-route-mismatch", "pm-routed", "Routed");
+    const wrongId = await storeProcessManagerInboxCommand(
+      delivery,
+      command,
+      new Date("2026-07-08T09:01:00.000Z"),
+      1n,
+      {
+        targetId: "pm-forged",
+      },
+    );
+    const wrongType = await storeProcessManagerInboxCommand(
+      delivery,
+      command,
+      new Date("2026-07-08T09:02:00.000Z"),
+      2n,
+      {
+        targetTypeUrl: "type.example.dev/forged.ProcessManager",
+      },
+    );
+
+    await expect(target.replay(wrongId)).rejects.toThrow(/target/i);
+    await expect(target.replay(wrongType)).rejects.toThrow(/target/i);
+
+    expect(RoutingProcessManager.commandCalls).toBe(0);
+  });
+
+  it("rejects process-manager inbox replay before the repository is bound to a runtime", async () => {
+    const repository = createProcessManagerAssignRepository();
+    const target = requireProcessManagerInboxTarget(repository);
+
+    await expect(
+      target.replay({
+        id: {
+          value: "message-pm-unbound",
+          shard: ShardIndex.single(),
+        },
+        inboxId: {
+          targetId: "pm-unbound",
+          targetTypeUrl: deriveTypeUrl(ProcessManagerStateSchema),
+        },
+        signalId: "command-pm-unbound",
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+        shard: ShardIndex.single(),
+        whenReceived: new Date("2026-07-08T09:02:30.000Z"),
+        version: 1n,
+      }),
+    ).rejects.toThrow("Process-manager inbox replay requires a bound repository runtime.");
+  });
+
+  it("rejects process-manager inbox replay for UPDATE_SUBSCRIBER messages before handler code", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createProcessManagerAssignRepository();
+    BoundedContext.singleTenant("Tasks").add(repository).withStorageFactory(factory).build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    const target = requireProcessManagerInboxTarget(repository);
+    const received = await storeProcessManagerInboxCommand(
+      delivery,
+      createAggregateCommand("command-pm-update-subscriber", "pm-update-subscriber", "Update"),
+      new Date("2026-07-08T09:03:00.000Z"),
+      1n,
+    );
+
+    await expect(
+      target.replay({
+        ...received,
+        label: "UPDATE_SUBSCRIBER",
+      }),
+    ).rejects.toThrow(/does not handle/);
+
+    expect(RoutingProcessManager.commandCalls).toBe(0);
+  });
+
+  it("rejects process-manager inbox replay without a signal as invalid payload before handler code", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createProcessManagerAssignRepository();
+    BoundedContext.singleTenant("Tasks").add(repository).withStorageFactory(factory).build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    const target = requireProcessManagerInboxTarget(repository);
+    const received = await storeProcessManagerInboxCommand(
+      delivery,
+      createAggregateCommand("command-pm-no-signal", "pm-no-signal", "No signal"),
+      new Date("2026-07-08T09:03:30.000Z"),
+      1n,
+    );
+
+    const withoutSignal: InboxMessage = {
+      id: received.id,
+      inboxId: received.inboxId,
+      signalId: received.signalId,
+      label: received.label,
+      status: received.status,
+      shard: received.shard,
+      whenReceived: received.whenReceived,
+      version: received.version,
+      ...(received.keepUntil === undefined ? {} : { keepUntil: received.keepUntil }),
+    };
+
+    await expect(target.replay(withoutSignal)).rejects.toThrow(/validation/i);
+
+    expect(RoutingProcessManager.commandCalls).toBe(0);
+  });
+
+  it("rejects multitenant process-manager inbox replay without delivery tenant", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createProcessManagerAssignRepository();
+    BoundedContext.multitenant("Tasks").add(repository).withStorageFactory(factory).build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      storageFactory: factory,
+    });
+    const target = requireProcessManagerInboxTarget(repository);
+    const received = await storeProcessManagerInboxCommand(
+      delivery,
+      createAggregateCommand(
+        "command-pm-missing-delivery-tenant",
+        "pm-missing-delivery-tenant",
+        "Tenant metadata",
+        "tenant-a",
+      ),
+      new Date("2026-07-08T09:04:00.000Z"),
+      1n,
+    );
+
+    await expect(target.replay(received)).rejects.toThrow(/requires tenantId/);
+
+    expect(RoutingProcessManager.commandCalls).toBe(0);
+  });
+
+  it("rejects multitenant process-manager inbox replay when stored command tenant metadata is missing", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createProcessManagerAssignRepository();
+    BoundedContext.multitenant("Tasks").add(repository).withStorageFactory(factory).build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+      storageFactory: factory,
+    });
+    const target = requireProcessManagerInboxTarget(repository);
+    const received = await storeProcessManagerInboxCommand(
+      delivery,
+      createAggregateCommand(
+        "command-pm-missing-stored-tenant",
+        "pm-missing-stored-tenant",
+        "Missing tenant metadata",
+      ),
+      new Date("2026-07-08T09:04:30.000Z"),
+      1n,
+    );
+
+    await expect(target.replay(received, "tenant-a")).rejects.toThrow(
+      /stored command tenant metadata/,
+    );
+
+    expect(RoutingProcessManager.commandCalls).toBe(0);
+  });
+
+  it("rejects invalid stored process-manager command payloads before handler code", async () => {
+    ValidatingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createValidatingProcessManagerRepository();
+    BoundedContext.singleTenant("Tasks").add(repository).withStorageFactory(factory).build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    const target = requireProcessManagerInboxTarget(repository);
+    const received = await storeProcessManagerInboxCommand(
+      delivery,
+      createValidatedCommand("command-pm-invalid-replay", "pm-invalid-replay", ""),
+      new Date("2026-07-08T09:03:00.000Z"),
+      1n,
+      {
+        targetTypeUrl: deriveTypeUrl(ProcessManagerStateSchema),
+      },
+    );
+
+    await expect(target.replay(received)).rejects.toThrow(/validation/i);
+
+    expect(ValidatingProcessManager.commandCalls).toBe(0);
   });
 
   it("appends process-manager command-produced events and records later dispatch failures", async () => {
@@ -4361,6 +4790,28 @@ function createValidatingRepository(): Repository<typeof ValidatingTaskAggregate
   });
 }
 
+function createValidatingProcessManagerRepository(): Repository<typeof ValidatingProcessManager> {
+  const handlers = handlerMetadataAccess.defineArity(
+    ValidatingProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.assign(ValidatedTaskCommandSchema, "assignTask")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "assignTask",
+        parameterCount: 1,
+        emittedSchemas: [ProjectionStateSchema],
+      },
+    ],
+  );
+
+  return new Repository({
+    entityType: ValidatingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+  });
+}
+
 function createTransitionViolatingRepository(): Repository<typeof TransitionViolatingAggregate> {
   const handlers = defineEntityHandlers(
     TransitionViolatingAggregate,
@@ -4839,6 +5290,62 @@ function createIdlessAggregateCommand(aggregateId: string, name = "Task", tenant
       }),
     ),
   });
+}
+
+function requireProcessManagerInboxTarget(repository: RepositoryView): {
+  replay(message: InboxMessage, tenantId?: string): Promise<void>;
+} {
+  const target = repositoryAccess.processManagerInboxTarget(repository);
+  if (target === undefined) {
+    throw new Error("Expected a process-manager inbox target.");
+  }
+
+  return target;
+}
+
+async function storeProcessManagerInboxCommand(
+  delivery: Delivery,
+  command: SpineCommand,
+  whenReceived: Date,
+  version: bigint,
+  overrides: {
+    readonly targetId?: string;
+    readonly targetTypeUrl?: string;
+  } = {},
+) {
+  const message = await delivery.inbox.receive({
+    inboxId: {
+      targetId: overrides.targetId ?? readAggregateId(command),
+      targetTypeUrl: overrides.targetTypeUrl ?? deriveTypeUrl(ProcessManagerStateSchema),
+    },
+    signalId: command.id?.uuid ?? "missing-command-id",
+    signal: packAny(CommandSchema, command, { validate: false }),
+    label: "HANDLE_COMMAND",
+    status: "TO_DELIVER",
+    shard: ShardIndex.single(),
+    whenReceived,
+    version,
+  });
+
+  return message.message;
+}
+
+function readAggregateId(command: SpineCommand): string {
+  const message =
+    command.message === undefined ? undefined : unpackAny(command.message, AggregateStateSchema);
+
+  if (message === undefined) {
+    const validated =
+      command.message === undefined
+        ? undefined
+        : unpackAny(command.message, ValidatedTaskCommandSchema);
+    if (validated === undefined) {
+      throw new Error("Expected a readable process-manager command payload.");
+    }
+    return validated.id;
+  }
+
+  return message.id;
 }
 
 function createValidatedEvent(id: string, aggregateId: string, name: string): SpineEvent {
