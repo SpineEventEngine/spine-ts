@@ -6,11 +6,10 @@ Scope: live projection subscriber durable inbox handoff.
 
 ## Required Lanes
 
-| Lane | Reviewer | Status | Notes |
-| --- | --- | --- | --- |
-| Code style/maintainability | pending | pending |  |
-| Documentation completeness | pending | pending |  |
-| TypeScript/API docs | pending | pending |  |
-| Security | pending | pending |  |
-| Performance/reliability | pending | pending |  |
-
+| Lane                       | Reviewer | Status  | Notes |
+| -------------------------- | -------- | ------- | ----- |
+| Code style/maintainability | pending  | pending |       |
+| Documentation completeness | pending  | pending |       |
+| TypeScript/API docs        | pending  | pending |       |
+| Security                   | pending  | pending |       |
+| Performance/reliability    | pending  | pending |       |

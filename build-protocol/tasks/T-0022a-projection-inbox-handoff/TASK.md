@@ -102,4 +102,3 @@ Run the required independent reviewer sub-agents after implementation:
 - performance/reliability.
 
 Feed all findings to an authoring or fix sub-agent and repeat until clean.
-

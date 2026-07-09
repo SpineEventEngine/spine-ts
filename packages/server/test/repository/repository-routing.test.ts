@@ -4062,7 +4062,10 @@ describe("repository signal routing", () => {
         context
           .eventBus()
           .post(createProjectionEvent("event-catch-up-string-failure", "task-string-failure")),
-      ).rejects.toBe("projection subscriber failed without Error");
+      ).rejects.toMatchObject({
+        message: "Projection inbox replay failed.",
+        cause: "projection subscriber failed without Error",
+      });
 
       await expect(context.catchUpReadSide()).rejects.toMatchObject({
         name: "ReadCatchUpReplayError",
@@ -4166,6 +4169,84 @@ describe("repository signal routing", () => {
       },
       version: { number: 1 },
     });
+  });
+
+  it("writes live projection subscriber delivery through a durable inbox row", async () => {
+    ExecutingTaskProjection.reset();
+    const factory = new InMemoryStorageFactory();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createExecutingProjectionRepository())
+      .withStorageFactory(factory)
+      .build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+
+    await context.eventBus().post(createProjectionEvent("event-inbox", "task-inbox"));
+
+    expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+
+    const delivered = await delivery.inbox.read(ShardIndex.single(), {
+      statuses: ["DELIVERED"],
+    });
+
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0]).toMatchObject({
+      inboxId: {
+        targetId: "task-inbox",
+        targetTypeUrl: deriveTypeUrl(ProjectionStateSchema),
+      },
+      signalId: "event-inbox",
+      label: "UPDATE_SUBSCRIBER",
+      status: "DELIVERED",
+    });
+    expect(delivered[0]?.keepUntil).toBeInstanceOf(Date);
+
+    const storedEvent =
+      delivered[0]?.signal === undefined ? undefined : unpackAny(delivered[0].signal, EventSchema);
+
+    expect(storedEvent?.id?.value).toBe("event-inbox");
+  });
+
+  it("deduplicates duplicate live projection delivery by event and target inbox", async () => {
+    ExecutingTaskProjection.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createExecutingProjectionRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    const event = createProjectionEvent("event-duplicate-inbox", "task-duplicate-inbox");
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+
+    if (dispatcher === undefined) {
+      throw new Error("Expected projection repository to expose an event dispatcher.");
+    }
+
+    await dispatcher.dispatch(event);
+    await dispatcher.dispatch(event);
+
+    expect(ExecutingTaskProjection.subscriberCalls).toBe(1);
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-duplicate-inbox"),
+    ).resolves.toMatchObject({
+      name: "Task (projected)",
+      priority: 2,
+    });
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
+    ).resolves.toMatchObject([
+      {
+        signalId: "event-duplicate-inbox",
+        label: "UPDATE_SUBSCRIBER",
+        status: "DELIVERED",
+      },
+    ]);
   });
 
   it("delivers Stand subscriptions after real projection event handling", async () => {

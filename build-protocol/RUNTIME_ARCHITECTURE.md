@@ -230,6 +230,14 @@ delivery worker boundary:
 - durable inbox rows store the inbox target identity, signal identity, shard,
   status, label, receive time, version, optional signal payload, and optional
   dedup retention;
+- built bounded contexts now use this storage boundary for two narrow local
+  handoffs: process-manager command assignees with `HANDLE_COMMAND`, and live
+  projection event subscribers with `UPDATE_SUBSCRIBER`;
+- live projection subscriber rows store the original `Event` envelope as the
+  signal payload, use the original event ID as `signalId`, target the
+  projection state type URL plus routed projection ID, drain the local single
+  shard immediately, and replay only that inbox row target before running the
+  projection transaction and `Stand` update;
 - pending and final dedup guards block duplicate `(signalId, inboxId)` writes
   while allowing crash recovery from a durable inbox row;
 - shard pickup persists lease-backed shard sessions through storage
@@ -242,8 +250,10 @@ delivery worker boundary:
 - malformed, oversized, or key-mismatched inbox, dedup, and shard-session
   records fail closed as storage corruption.
 
-This slice stops at durable storage, ordered readback, and one direct drain call.
-It does not yet implement worker loops, repository invocation from the inbox,
-retry monitors, attempt counters, retained delivery error details, catch-up, or
-transport-backed delivery. Those concerns are deferred to later delivery and
-runtime tasks.
+This slice stops at durable storage, ordered readback, narrow built-context
+process-manager command and live projection subscriber handoffs, and one direct
+drain call. It does not yet implement a generic repository delivery engine,
+process-manager event reactors, aggregate event reactors/importers, projection
+catch-up through inbox storage, worker loops, retry monitors, attempt counters,
+retained delivery error details, or transport-backed delivery. Those concerns
+are deferred to later delivery and runtime tasks.

@@ -44,8 +44,11 @@ Current slice exposes:
   contexts use the same metadata to execute aggregate command handlers,
   projection event subscribers, and process-manager command assignees, event
   reactors, and event-commanding handlers. Process-manager command assignees
-  use the framework-owned durable inbox handoff plus immediate local shard
-  replay, while transport-backed/background workers, broker supervision,
+  and live projection event subscribers use framework-owned durable inbox rows
+  plus immediate local shard replay; projection subscriber rows use
+  `UPDATE_SUBSCRIBER`, keep the original `Event` envelope as the payload, and
+  replay only the routed row target before the projection transaction and
+  `Stand` update. Transport-backed/background workers, broker supervision,
   retained attempt history, and deployment hardening remain outside this local
   slice;
   and
@@ -113,10 +116,13 @@ Current slice exposes:
   remain pending for later retry through the same durable `TO_DELIVER` state.
   `stop()` prevents future drain starts and does not interrupt an in-flight
   `Delivery.drain()`; `close()` calls `stop()` and waits for the current drain,
-  if any, to finish. This slice explicitly excludes transport-backed worker
-  supervision, retry monitors, conveyor/stations, repository invocation, broad
-  production lifecycle, retained attempt history, durable catch-up storage, and
-  example app work;
+  if any, to finish. Built bounded contexts use the storage layer internally
+  for process-manager command rows and live projection subscriber rows, but
+  this slice explicitly excludes transport-backed worker supervision, retry
+  monitors, conveyor/stations, generic repository invocation, process-manager
+  event reactors, aggregate event reactors/importers, projection catch-up
+  through inbox storage, broad production lifecycle, retained attempt history,
+  durable catch-up storage, and example app work;
 - and
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;

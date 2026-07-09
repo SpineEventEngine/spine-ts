@@ -94,12 +94,15 @@ event redispatch failures are observable through the copy-safe
 `BoundedContext`. Generated entity-class assembly creates default repositories
 through `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This
 slice does not invoke query handlers, run durable Delivery catch-up, expose a
-broad server lifecycle, or integrate transports. The only supported durable
-inbox handoff is framework-owned process-manager command replay: the current
-local runtime writes the inbox row, drains the local shard immediately, requires
-tenant-safe replay in multitenant contexts, and resolves only after that
-received row is marked delivered. Broader inbox lifecycle management,
-schedulers, retries, and transport topology remain open production gaps.
+broad server lifecycle, or integrate transports. The supported durable inbox
+handoffs are framework-owned process-manager command replay and live projection
+subscriber replay. The current local runtime writes the inbox row, drains the
+local shard immediately, requires tenant-safe replay in multitenant contexts,
+and resolves only after that received row is marked delivered. Projection
+subscriber rows use `UPDATE_SUBSCRIBER`, store the original `Event` envelope,
+and replay only the routed row target before the projection transaction and
+`Stand` update. Broader inbox lifecycle management, schedulers, retries, and
+transport topology remain open production gaps.
 Process-manager
 repositories with authentic generated metadata do execute through the local
 command/event buses: default command routing reads the first command field,
@@ -175,8 +178,10 @@ also participate in those adapters: command assignees are invoked from the
 command bus through a durable process-manager inbox handoff. The current local
 runtime drains that inbox immediately, requires tenant-safe replay in
 multitenant contexts, and resolves only after the received inbox row is marked
-delivered. Event reactors and event-commanding handlers are invoked from the
-event bus, state is stored in tenant-scoped `Stand` records with numeric
+delivered. Live projection subscribers use the same local handoff shape with
+`UPDATE_SUBSCRIBER` rows, original event IDs as dedup signal IDs, and exact-row
+target replay. Process-manager event reactors and event-commanding handlers are
+invoked directly from the event bus, state is stored in tenant-scoped `Stand` records with numeric
 versions, returned commands are wrapped and posted after state storage, and
 returned event messages are wrapped with process-manager-emitted event schemas
 and appended through the event store before follow-up dispatch. The repository
@@ -325,10 +330,13 @@ controls with a bounded default when omitted. `Inbox.markDelivered()` and
 `InboxStorage.markDelivered()` return
 `undefined` for missing rows, non-pending rows, or caller snapshots that do not
 match the stored message; already-delivered matching rows are returned
-idempotently. This slice does not run process-wide transport-backed scheduler
-workers, retry monitors, conveyor/stations, repository invocation, broad
-production lifecycle, transport retries, retained attempt history, example app
-work, or production read-side catch-up workers.
+idempotently. Built contexts use this storage boundary internally for
+process-manager command rows and live projection subscriber rows. This slice
+does not run process-wide transport-backed scheduler workers, retry monitors,
+conveyor/stations, generic repository delivery, process-manager event reactors
+through inbox storage, aggregate event reactors/importers, projection catch-up
+through inbox storage, broad production lifecycle, transport retries, retained
+attempt history, example app work, or production read-side catch-up workers.
 Server metadata exports
 include `describeEntityMetadata()`, `isEntitySchema()`,
 `DescriptorMetadataError`, normalized entity kind/visibility types, first-field
