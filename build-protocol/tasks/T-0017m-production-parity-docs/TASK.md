@@ -1,6 +1,6 @@
 # T-0017m: Production Parity Docs And Example Positioning
 
-Status: complete
+Status: complete, integrated
 Started: `2026-07-09`
 Branch: `task/T-0017m-production-parity-docs`
 Worktree:

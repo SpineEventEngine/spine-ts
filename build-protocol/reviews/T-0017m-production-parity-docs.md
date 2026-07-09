@@ -7,13 +7,13 @@ runtime-gap implementation slices.
 
 ## Required Lanes
 
-| Lane                       | Reviewer ID | Status  | Result  |
-| -------------------------- | ----------- | ------- | ------- |
+| Lane                       | Reviewer ID                            | Status | Result         |
+| -------------------------- | -------------------------------------- | ------ | -------------- |
 | Code style/maintainability | `019f46d3-2ef4-7c41-9b53-41bc67f46f64` | Closed | Findings fixed |
-| Documentation completeness | `019f46d3-2fac-7413-8a71-78f3eeb84bd4` | Closed | Clean |
+| Documentation completeness | `019f46d3-2fac-7413-8a71-78f3eeb84bd4` | Closed | Clean          |
 | TypeScript/API docs        | `019f46d3-3018-7ae0-b0db-23b66c259354` | Closed | Findings fixed |
-| Security                   | `019f46d3-30ca-7ae0-a616-58d67a14a141` | Closed | Clean |
-| Performance/reliability    | `019f46d3-3169-77b3-8744-ff3270ff9d16` | Closed | Clean |
+| Security                   | `019f46d3-30ca-7ae0-a616-58d67a14a141` | Closed | Clean          |
+| Performance/reliability    | `019f46d3-3169-77b3-8744-ff3270ff9d16` | Closed | Clean          |
 
 ## Implementation Self-Check
 
