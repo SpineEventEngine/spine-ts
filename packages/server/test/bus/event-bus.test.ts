@@ -619,6 +619,48 @@ describe("EventBus", () => {
     expect(observed).toEqual(["dispatch:event-close-source", "dispatch:event-close-follow-up"]);
   });
 
+  it("appends and dispatches follow-up events before later exclusive work", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const observed: string[] = [];
+    const bus = new EventBus(store, [
+      createEventDispatcher([ProjectionStateSchema], async (event) => {
+        const stored = await store.read();
+        observed.push(`dispatch:${event.id?.value ?? "missing"}`);
+        observed.push(`stored:${stored.map((entry) => entry.id?.value ?? "missing").join(",")}`);
+      }),
+    ]);
+
+    await eventBusAccess.runExclusive(bus, () => {
+      void eventBusAccess.postFollowUp(bus, createProjectionEvent("event-follow-up-fresh"));
+      observed.push("after-schedule");
+    });
+
+    await bus.close();
+
+    expect(observed).toEqual([
+      "after-schedule",
+      "dispatch:event-follow-up-fresh",
+      "stored:event-follow-up-fresh",
+    ]);
+  });
+
+  it("rejects follow-up event intake after close", async () => {
+    const store = new EventStore(
+      { name: "Tasks", multitenant: false },
+      new InMemoryStorageFactory(),
+    );
+    const bus = new EventBus(store);
+
+    await bus.close();
+
+    await expect(
+      eventBusAccess.postFollowUp(bus, createProjectionEvent("event-follow-up-after-close")),
+    ).rejects.toThrow(/closed/);
+  });
+
   it("rejects public and internal event intake after close", async () => {
     const store = new EventStore(
       { name: "Tasks", multitenant: false },
@@ -653,6 +695,9 @@ describe("EventBus", () => {
   it("rejects internal close coordination for non-event-bus values", () => {
     const bus = {} as EventBus;
 
+    expect(() =>
+      eventBusAccess.postFollowUp(bus, createProjectionEvent("event-follow-up-post")),
+    ).toThrow(/EventBus instance/);
     expect(() =>
       eventBusAccess.postStoredFollowUp(bus, createProjectionEvent("event-follow-up")),
     ).toThrow(/EventBus instance/);

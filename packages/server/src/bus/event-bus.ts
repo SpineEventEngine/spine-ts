@@ -13,6 +13,7 @@ import type { EventDispatcher } from "./event-dispatcher.js";
 
 const storedDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
 const storedFollowUpDispatchers = new WeakMap<EventBus, (event: Event) => Promise<void>>();
+const followUpPosters = new WeakMap<EventBus, (event: Event) => Promise<void>>();
 const exclusiveWorkers = new WeakMap<
   EventBus,
   <Result>(work: () => Result | Promise<Result>) => Promise<Result>
@@ -30,6 +31,7 @@ const eventBusWorkCounters = new WeakMap<EventBus, () => number>();
 interface EventBusAccess {
   postStored(eventBus: EventBus, event: Event): Promise<void>;
   postStoredFollowUp(eventBus: EventBus, event: Event): Promise<void>;
+  postFollowUp(eventBus: EventBus, event: Event): Promise<void>;
   runExclusive<Result>(eventBus: EventBus, work: () => Result | Promise<Result>): Promise<Result>;
   subscribe(eventBus: EventBus, typeUrl: string, subscriber: EventSubscriber): EventSubscription;
   eventSchemas(eventBus: EventBus): readonly MessageSchema[];
@@ -64,6 +66,7 @@ export class EventBus {
     this.#started = this.#runtime.start();
     storedDispatchers.set(this, (event) => this.#postStored(event));
     storedFollowUpDispatchers.set(this, (event) => this.#postStoredFollowUp(event));
+    followUpPosters.set(this, (event) => this.#postFollowUp(event));
     exclusiveWorkers.set(this, (work) => this.#runExclusive(work));
     subscriberRegistrars.set(this, (typeUrl, subscriber) => this.#subscribe(typeUrl, subscriber));
     eventSchemaLists.set(this, () => this.#registry.schemas());
@@ -160,6 +163,19 @@ export class EventBus {
     this.#acceptedWorkCount++;
     return this.#started.then(() =>
       runtimeAccess.enqueueFollowUp(this.#runtime, () => this.#dispatchStored(accepted)),
+    );
+  }
+
+  #postFollowUp(event: Event): Promise<void> {
+    const accepted = clone(EventSchema, event);
+
+    if (this.#intakeState === "closed") {
+      return Promise.reject(new ServerRuntimeStateError("enqueue", "closed"));
+    }
+
+    this.#acceptedWorkCount++;
+    return this.#started.then(() =>
+      runtimeAccess.enqueueFollowUp(this.#runtime, () => this.#dispatch(accepted)),
     );
   }
 
@@ -320,6 +336,16 @@ export const eventBusAccess: EventBusAccess = Object.freeze({
     }
 
     return postStoredFollowUp(event);
+  },
+
+  postFollowUp(eventBus: EventBus, event: Event): Promise<void> {
+    const postFollowUp = followUpPosters.get(eventBus);
+
+    if (postFollowUp === undefined) {
+      throw new TypeError("Follow-up event posting requires an EventBus instance.");
+    }
+
+    return postFollowUp(event);
   },
 
   runExclusive<Result>(eventBus: EventBus, work: () => Result | Promise<Result>): Promise<Result> {

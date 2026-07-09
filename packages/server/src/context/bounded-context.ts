@@ -104,6 +104,8 @@ interface RepositoryRegistration {
   readonly dispatchStored: (event: Event) => Promise<void>;
   /** Stored-event follow-up dispatch callback into the owning context event bus. */
   readonly dispatchStoredFollowUp: (event: Event) => Promise<void>;
+  /** Follow-up event posting callback into the owning context event bus. */
+  readonly postEventFollowUp: (event: Event) => Promise<void>;
   /** Command posting callback into the owning context command bus. */
   readonly onPostCommand: (command: Command) => Promise<void>;
   /** Records post-commit stored-event dispatch failures for diagnostics. */
@@ -338,6 +340,7 @@ export class BoundedContext {
       stand: this.#stand,
       dispatchStored: (event) => eventBusAccess.postStored(this.#eventBus, event),
       dispatchStoredFollowUp: (event) => eventBusAccess.postStoredFollowUp(this.#eventBus, event),
+      postEventFollowUp: (event) => eventBusAccess.postFollowUp(this.#eventBus, event),
       onPostCommand: (command) => commandBusAccess.postInternal(this.#commandBus, command),
       recordDispatchFailure: (event, error) => {
         this.#recordDispatchFailure(event, error);
@@ -1273,6 +1276,7 @@ function prepareRepositoryForContext(
     stand: registration.stand,
     dispatchStored: registration.dispatchStored,
     dispatchStoredFollowUp: registration.dispatchStoredFollowUp,
+    postEventFollowUp: registration.postEventFollowUp,
     onPostCommand: registration.onPostCommand,
     recordDispatchFailure: registration.recordDispatchFailure,
   });

@@ -4,12 +4,15 @@ import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
+  BoolValueSchema,
   BytesValueSchema,
+  DoubleValueSchema,
   EmptySchema,
   FileDescriptorProtoSchema,
   FileDescriptorSetSchema,
   FieldMaskSchema,
   Int32ValueSchema,
+  Int64ValueSchema,
   StringValueSchema,
   type Any,
 } from "@bufbuild/protobuf/wkt";
@@ -3007,20 +3010,63 @@ describe("SpineServices", () => {
       id: anyId,
       state: createState("task-any", "Any"),
     });
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: true,
+      state: createState("task-bool", "Bool"),
+    });
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: 42,
+      state: createState("task-number", "Number"),
+    });
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: 9007199254740993n,
+      state: createState("task-bigint", "Bigint"),
+    });
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: { unsupported: true },
+      state: createState("task-object", "Object"),
+    });
 
     const firstUpdate = await withTimeout(first, "first direct subscription update");
     const secondUpdate = await withTimeout(iterator.next(), "queued direct subscription update");
     const thirdUpdate = await withTimeout(iterator.next(), "packed Any subscription update");
+    const fourthUpdate = await withTimeout(iterator.next(), "boolean ID subscription update");
+    const fifthUpdate = await withTimeout(iterator.next(), "number ID subscription update");
+    const sixthUpdate = await withTimeout(iterator.next(), "bigint ID subscription update");
+    const seventhUpdate = await withTimeout(iterator.next(), "object ID subscription update");
     const secondValue = secondUpdate.value as SubscriptionUpdate | undefined;
     const thirdValue = thirdUpdate.value as SubscriptionUpdate | undefined;
+    const fourthValue = fourthUpdate.value as SubscriptionUpdate | undefined;
+    const fifthValue = fifthUpdate.value as SubscriptionUpdate | undefined;
+    const sixthValue = sixthUpdate.value as SubscriptionUpdate | undefined;
+    const seventhValue = seventhUpdate.value as SubscriptionUpdate | undefined;
 
     expect(firstUpdate.done).toBe(false);
     expect(secondUpdate.done).toBe(false);
     expect(thirdUpdate.done).toBe(false);
+    expect(fourthUpdate.done).toBe(false);
+    expect(fifthUpdate.done).toBe(false);
+    expect(sixthUpdate.done).toBe(false);
+    expect(seventhUpdate.done).toBe(false);
     const firstId = entityUpdateId(firstUpdate.value as SubscriptionUpdate);
     const secondId = entityUpdateId(secondValue);
     const thirdId = entityUpdateId(thirdValue);
-    if (firstId === undefined || secondId === undefined || thirdId === undefined) {
+    const fourthId = entityUpdateId(fourthValue);
+    const fifthId = entityUpdateId(fifthValue);
+    const sixthId = entityUpdateId(sixthValue);
+    const seventhId = entityUpdateId(seventhValue);
+    if (
+      firstId === undefined ||
+      secondId === undefined ||
+      thirdId === undefined ||
+      fourthId === undefined ||
+      fifthId === undefined ||
+      sixthId === undefined
+    ) {
       throw new Error("Expected packed update IDs.");
     }
     expect(unpackAny(firstId, StringValueSchema)).toEqual(
@@ -3030,6 +3076,12 @@ describe("SpineServices", () => {
       create(BytesValueSchema, { value: bytesId }),
     );
     expect(thirdId).toEqual(anyId);
+    expect(unpackAny(fourthId, BoolValueSchema)).toEqual(create(BoolValueSchema, { value: true }));
+    expect(unpackAny(fifthId, DoubleValueSchema)).toEqual(create(DoubleValueSchema, { value: 42 }));
+    expect(unpackAny(sixthId, Int64ValueSchema)).toEqual(
+      create(Int64ValueSchema, { value: 9007199254740993n }),
+    );
+    expect(seventhId).toBeUndefined();
     await iterator.return?.();
   });
 

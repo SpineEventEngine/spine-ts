@@ -105,7 +105,15 @@ type RepositoryHandlersOptionFor<EntityType extends RepositoryEntityType> =
       ? [Version] extends [number]
         ? RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[]
         : never
-      : RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[];
+      : EntityType["prototype"] extends ProcessManager<
+            unknown,
+            DescriptorMessageSchema,
+            infer Version
+          >
+        ? [Version] extends [number]
+          ? RepositoryHandlers<EntityType> | readonly RepositoryHandlers<EntityType>[]
+          : never
+        : never;
 
 type IsUnion<Type, Union = Type> = Type extends unknown
   ? [Union] extends [Type]
@@ -172,9 +180,11 @@ export interface RepositoryOptions<
    * must use `bigint` version metadata, matching the persisted aggregate history version type.
    * Projection repositories with handlers can be executed by built bounded contexts and therefore
    * must use `number` version metadata, matching the protobuf event version carried into Stand.
+   * Process-manager repositories with handlers also execute through Stand-backed state and must
+   * use `number` version metadata, matching the Stand version shape used by the local runtime.
    */
   readonly handlers?: RepositoryHandlersOptionFor<EntityType>;
-  /** Generated event schemas that aggregate command handlers may emit. */
+  /** Generated event schemas that aggregate or process-manager handlers may emit. */
   readonly events?: readonly MessageSchema[];
 }
 
@@ -245,13 +255,18 @@ export class RepositoryIdentityError extends Error {
  * authentic explicit aggregate handler metadata, the built context can also
  * execute aggregate commands through repository-owned assignees and appliers,
  * persist aggregate history and snapshots through `AggregateStorage`, and hand
- * already-stored events to the event bus. Aggregate command execution requires
- * `command.id` so produced events can carry a contract-valid command origin;
- * missing IDs reject before mutation or storage. With authentic projection
+ * already-stored events to the event bus. Aggregate and process-manager command
+ * execution require `command.id` before routing or mutation so produced events
+ * can carry a contract-valid command origin. With authentic projection
  * subscriber metadata, built contexts can also execute projection subscribers
- * and write changed projection state through the context-owned `Stand`. The
- * repository surface still does not expose direct entity lookup/storage APIs,
- * inbox/delivery management, caches, lifecycle monitors, or transport startup.
+ * and write changed projection state through the context-owned `Stand`. With
+ * authentic process-manager metadata, built contexts can execute command
+ * assignees, event reactors, and event-commanding handlers, storing changed
+ * process-manager state through tenant-scoped Stand records with numeric
+ * versions. The `events` option declares generated event schemas emitted by
+ * aggregate and process-manager producer handlers. The repository surface still
+ * does not expose direct entity lookup/storage APIs, inbox/delivery management,
+ * caches, lifecycle monitors, or transport startup.
  *
  * @typeParam EntityType - A single concrete aggregate, projection, or process-manager constructor
  * with one concrete generated state schema. Broad constructor, constructor-union, broad-schema, and
@@ -316,6 +331,7 @@ export class Repository<
     this.#metadata = metadata;
     this.#routing = createRepositoryRouting(
       this.#entityType,
+      this.#entityFamily,
       this.#metadata,
       options.handlers,
       options.events ?? [],
@@ -477,6 +493,7 @@ interface RepositoryRuntime {
   readonly stand: Stand;
   readonly dispatchStored: (event: Event) => Promise<void>;
   readonly dispatchStoredFollowUp: (event: Event) => Promise<void>;
+  readonly postEventFollowUp: (event: Event) => Promise<void>;
   readonly onPostCommand: (command: Command) => Promise<void>;
   readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
@@ -484,6 +501,9 @@ interface RepositoryRuntime {
 type RepositoryHandlersOption =
   EntityHandlersMetadata | readonly EntityHandlersMetadata[] | undefined;
 type ApplyMode = "command" | "replay";
+type RepositoryCommandAssignee = NonNullable<
+  ReturnType<NonNullable<RepositoryRouting["commandReadiness"]>["findCommandAssignee"]>
+>;
 
 function createRepositoryDispatchers(
   repository: RepositoryView & {
@@ -537,17 +557,17 @@ async function dispatchRepositoryEvent(
     return;
   }
 
-  if (repository.entityFamily === "aggregate") {
-    await new AggregateEventExecution(repository, routing, runtime, event).run();
-    return;
+  switch (repository.entityFamily) {
+    case "aggregate":
+      await new AggregateEventExecution(repository, routing, runtime, event).run();
+      return;
+    case "process-manager":
+      await new ProcessManagerEventExecution(repository, routing, runtime, event).run();
+      return;
+    case "projection":
+      await new ProjectionEventExecution(repository, routing, runtime, event).run();
+      return;
   }
-
-  if (repository.entityFamily !== "projection") {
-    void repository.routeEvent(event);
-    return;
-  }
-
-  await new ProjectionEventExecution(repository, routing, runtime, event).run();
 }
 
 async function dispatchRepositoryCommand(
@@ -559,12 +579,22 @@ async function dispatchRepositoryCommand(
 ): Promise<void> {
   const runtime = repositoryRuntimes.get(repository);
 
-  if (runtime === undefined || repository.entityFamily !== "aggregate") {
+  if (runtime === undefined) {
     void repository.routeCommand(command);
     return;
   }
 
-  await new AggregateCommandExecution(repository, routing, runtime, command).run();
+  if (repository.entityFamily === "aggregate") {
+    await new AggregateCommandExecution(repository, routing, runtime, command).run();
+    return;
+  }
+
+  if (repository.entityFamily === "process-manager") {
+    await new ProcessManagerCommandExecution(repository, routing, runtime, command).run();
+    return;
+  }
+
+  void repository.routeCommand(command);
 }
 
 interface LoadedAggregate {
@@ -1367,6 +1397,421 @@ class ProjectionEventExecution {
   }
 }
 
+class ProcessManagerExecutionSupport {
+  readonly #repository: RepositoryView;
+  readonly #runtime: RepositoryRuntime;
+
+  constructor(repository: RepositoryView, runtime: RepositoryRuntime) {
+    this.#repository = repository;
+    this.#runtime = runtime;
+  }
+
+  normalizeProducedSignals(produced: unknown): readonly unknown[] {
+    if (produced === undefined) {
+      return Object.freeze([]);
+    }
+
+    if (Array.isArray(produced)) {
+      return Object.freeze(Array.from(produced as readonly unknown[]));
+    }
+
+    return Object.freeze([produced]);
+  }
+
+  async load(entityId: unknown, options: { readonly tenantId?: string }): Promise<object> {
+    const stored = await this.#runtime.stand.readVersioned(
+      this.#repository.stateSchema,
+      entityId,
+      options,
+    );
+    const entityType = this.#repository.entityType as unknown as new (options: {
+      readonly id: unknown;
+      readonly schema: DescriptorMessageSchema;
+      readonly state: unknown;
+      readonly version: unknown;
+    }) => object;
+
+    return new entityType({
+      id: entityId,
+      schema: this.#repository.stateSchema,
+      state: stored?.state ?? this.#defaultState(entityId),
+      version: projectionVersion(stored?.version),
+    });
+  }
+
+  async storeIfChanged(entity: object, options: { readonly tenantId?: string }): Promise<void> {
+    if (!repositoryChanged(entity)) {
+      return;
+    }
+
+    await this.#runtime.stand.update(
+      this.#repository.stateSchema,
+      repositoryState(entity) as never,
+      standUpdateOptions(
+        options.tenantId,
+        create(VersionSchema, { number: processManagerVersion(entity) }),
+      ),
+    );
+  }
+
+  #defaultState(entityId: unknown): unknown {
+    return create(this.#repository.stateSchema, {
+      [this.#repository.idField.localName]: entityId,
+    });
+  }
+}
+
+class ProcessManagerCommandExecution {
+  readonly #repository: RepositoryView & {
+    routeCommand(command: Command): RepositoryCommandRoute;
+  };
+  readonly #routing: RepositoryRouting;
+  readonly #runtime: RepositoryRuntime;
+  readonly #command: Command;
+  readonly #support: ProcessManagerExecutionSupport;
+
+  constructor(
+    repository: RepositoryView & {
+      routeCommand(command: Command): RepositoryCommandRoute;
+    },
+    routing: RepositoryRouting,
+    runtime: RepositoryRuntime,
+    command: Command,
+  ) {
+    this.#repository = repository;
+    this.#routing = routing;
+    this.#runtime = runtime;
+    this.#command = command;
+    this.#support = new ProcessManagerExecutionSupport(repository, runtime);
+  }
+
+  async run(): Promise<void> {
+    const commandId = requireCommandId(this.#command);
+    const commandMessage = requireSignalMessage(this.#command.message, "command");
+    const commandSchema = schemaForTypeUrl(
+      this.#routing.commandSchemas,
+      commandMessage.typeUrl,
+      "command",
+    );
+    const message = unpackRequired(commandMessage, commandSchema, "command");
+    const route = this.#repository.routeCommand(this.#command);
+    const assignee = this.#routing.commandReadiness?.findCommandAssignee(route.messageFullTypeName);
+
+    if (assignee === undefined) {
+      return;
+    }
+
+    const tenantOptions = commandStandOptions(this.#runtime.context, this.#command);
+    const entity = await this.#support.load(route.entityId, tenantOptions);
+    const eventSignals = await this.#invoke(entity, assignee, message);
+
+    await this.#support.storeIfChanged(entity, tenantOptions);
+    this.#postEvents(this.#bindProducedEvents(eventSignals, route.entityId, commandId));
+  }
+
+  async #invoke(
+    entity: object,
+    assignee: RepositoryCommandAssignee,
+    message: unknown,
+  ): Promise<readonly unknown[]> {
+    transactionalEntityAccess.start(entity);
+    try {
+      const produced = await invokeEntityMethod(
+        entity,
+        assignee.handler.methodName,
+        message,
+        assignee.handler.parameterCount,
+        commandHandlerContext(this.#command),
+      );
+      const commit = transactionalEntityAccess.commit(entity);
+      if (commit.status === "rejected") {
+        throw new TransitionValidationError(commit.validation.error);
+      }
+
+      return this.#support.normalizeProducedSignals(produced);
+    } catch (error) {
+      transactionalEntityAccess.rollback(entity);
+      throw error;
+    }
+  }
+
+  #bindProducedEvents(
+    produced: readonly unknown[],
+    entityId: unknown,
+    commandId: NonNullable<Command["id"]>,
+  ): readonly Event[] {
+    let sequence = 0;
+    return Object.freeze(
+      produced.map((signal) => {
+        sequence += 1;
+        return this.#bindProducedEvent(signal, entityId, commandId, sequence);
+      }),
+    );
+  }
+
+  #bindProducedEvent(
+    signal: unknown,
+    entityId: unknown,
+    commandId: NonNullable<Command["id"]>,
+    sequence: number,
+  ): Event {
+    const typeName = messageTypeName(signal);
+    const schema = this.#routing.producedEventSchemas.find(
+      (candidate) => candidate.typeName === typeName,
+    );
+
+    if (schema === undefined) {
+      throw new Error(
+        `Repository process-manager execution cannot pack event message "${typeName}".`,
+      );
+    }
+
+    return create(EventSchema, {
+      id: create(EventIdSchema, { value: `${commandId.uuid}-${sequence.toString()}` }),
+      message: packAny(schema, signal as never),
+      context: create(EventContextSchema, {
+        ...(producerIdFor(entityId) === undefined ? {} : { producerId: producerIdFor(entityId) }),
+        version: create(VersionSchema, { number: processManagerProducedVersion(sequence) }),
+        origin: {
+          case: "pastMessage",
+          value: create(OriginSchema, {
+            message: create(MessageIdSchema, {
+              id: packAny(CommandIdSchema, commandId),
+              typeUrl: this.#command.message?.typeUrl ?? "",
+            }),
+            ...(this.#command.context?.actorContext === undefined
+              ? {}
+              : {
+                  actorContext: clone(ActorContextSchema, this.#command.context.actorContext),
+                }),
+            ...(this.#command.context?.origin === undefined
+              ? {}
+              : { grandOrigin: clone(OriginSchema, this.#command.context.origin) }),
+          }),
+        },
+      }),
+    });
+  }
+
+  #postEvents(events: readonly Event[]): void {
+    for (const event of events) {
+      void this.#runtime.postEventFollowUp(event).catch((error: unknown) => {
+        this.#runtime.recordDispatchFailure(event, error);
+      });
+    }
+  }
+}
+
+class ProcessManagerEventExecution {
+  readonly #repository: RepositoryView & {
+    routeEvent(event: Event): RepositoryEventRoute;
+  };
+  readonly #routing: RepositoryRouting;
+  readonly #runtime: RepositoryRuntime;
+  readonly #event: Event;
+  readonly #support: ProcessManagerExecutionSupport;
+
+  constructor(
+    repository: RepositoryView & {
+      routeEvent(event: Event): RepositoryEventRoute;
+    },
+    routing: RepositoryRouting,
+    runtime: RepositoryRuntime,
+    event: Event,
+  ) {
+    this.#repository = repository;
+    this.#routing = routing;
+    this.#runtime = runtime;
+    this.#event = event;
+    this.#support = new ProcessManagerExecutionSupport(repository, runtime);
+  }
+
+  async run(): Promise<void> {
+    const intake = this.#readIntake();
+
+    if (intake.reactors.length === 0 && intake.commanders.length === 0) {
+      return;
+    }
+
+    for (const entityId of intake.route.entityIds) {
+      await this.#executeEntity(entityId, intake);
+    }
+  }
+
+  #readIntake(): {
+    readonly message: unknown;
+    readonly route: RepositoryEventRoute;
+    readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
+    readonly commanders: readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
+  } {
+    const eventMessage = requireSignalMessage(this.#event.message, "event");
+    const eventSchema = schemaForTypeUrl(this.#routing.eventSchemas, eventMessage.typeUrl, "event");
+    const message = unpackRequired(eventMessage, eventSchema, "event");
+    const route = this.#repository.routeEvent(this.#event);
+    const reactors = this.#routing.eventReadiness?.findEventReactors(route.messageFullTypeName);
+    const commanders = this.#routing.commandReactions(route.messageFullTypeName);
+
+    return Object.freeze({
+      message,
+      route,
+      reactors: Object.freeze([...(reactors ?? [])]),
+      commanders,
+    });
+  }
+
+  async #executeEntity(
+    entityId: unknown,
+    intake: {
+      readonly message: unknown;
+      readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
+      readonly commanders: readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
+    },
+  ): Promise<void> {
+    const tenantOptions = standTenantOptions(this.#runtime.context, this.#event);
+    const entity = await this.#support.load(entityId, tenantOptions);
+    const produced = await this.#invokeHandlers(entity, intake);
+
+    await this.#support.storeIfChanged(entity, tenantOptions);
+    this.#postEvents(this.#bindProducedEvents(produced.events, entityId));
+    await this.#postCommands(this.#bindProducedCommands(produced.commands));
+  }
+
+  async #invokeHandlers(
+    entity: object,
+    intake: {
+      readonly message: unknown;
+      readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
+      readonly commanders: readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
+    },
+  ): Promise<{ readonly commands: readonly unknown[]; readonly events: readonly unknown[] }> {
+    const eventContext = eventHandlerContext(this.#event);
+    const commands: unknown[] = [];
+    const events: unknown[] = [];
+
+    transactionalEntityAccess.start(entity);
+    try {
+      for (const reactor of intake.reactors) {
+        const produced = await invokeEntityMethod(
+          entity,
+          reactor.handler.methodName,
+          intake.message,
+          reactor.handler.parameterCount,
+          eventContext,
+        );
+        events.push(...this.#support.normalizeProducedSignals(produced));
+      }
+
+      for (const commander of intake.commanders) {
+        const produced = await invokeEntityMethod(
+          entity,
+          commander.handler.methodName,
+          intake.message,
+          commander.handler.parameterCount,
+          eventContext,
+        );
+        commands.push(...this.#support.normalizeProducedSignals(produced));
+      }
+
+      const commit = transactionalEntityAccess.commit(entity);
+      if (commit.status === "rejected") {
+        throw new TransitionValidationError(commit.validation.error);
+      }
+
+      return Object.freeze({
+        commands: Object.freeze(commands),
+        events: Object.freeze(events),
+      });
+    } catch (error) {
+      transactionalEntityAccess.rollback(entity);
+      throw error;
+    }
+  }
+
+  #bindProducedEvents(produced: readonly unknown[], entityId: unknown): readonly Event[] {
+    let sequence = 0;
+    return Object.freeze(
+      produced.map((signal) => {
+        sequence += 1;
+        return this.#bindProducedEvent(signal, entityId, sequence);
+      }),
+    );
+  }
+
+  #bindProducedEvent(signal: unknown, entityId: unknown, sequence: number): Event {
+    const typeName = messageTypeName(signal);
+    const schema = this.#routing.producedEventSchemas.find(
+      (candidate) => candidate.typeName === typeName,
+    );
+
+    if (schema === undefined) {
+      throw new Error(
+        `Repository process-manager execution cannot pack event message "${typeName}".`,
+      );
+    }
+
+    return create(EventSchema, {
+      id: create(EventIdSchema, {
+        value: `${requireEventId(this.#event).value}-${sequence.toString()}`,
+      }),
+      message: packAny(schema, signal as never),
+      context: create(EventContextSchema, {
+        ...(producerIdFor(entityId) === undefined ? {} : { producerId: producerIdFor(entityId) }),
+        version: create(VersionSchema, { number: processManagerProducedVersion(sequence) }),
+        origin: {
+          case: "pastMessage",
+          value: sourceEventOrigin(this.#event),
+        },
+      }),
+    });
+  }
+
+  #bindProducedCommands(produced: readonly unknown[]): readonly Command[] {
+    let sequence = 0;
+    return Object.freeze(
+      produced.map((signal) => {
+        sequence += 1;
+        const typeName = messageTypeName(signal);
+        const schema = this.#routing.producedCommandSchemas.find(
+          (candidate) => candidate.typeName === typeName,
+        );
+
+        if (schema === undefined) {
+          throw new Error(
+            `Repository process-manager execution cannot pack command message "${typeName}".`,
+          );
+        }
+
+        return create(CommandSchema, {
+          id: create(CommandIdSchema, {
+            uuid: `${requireEventId(this.#event).value}-${sequence.toString()}`,
+          }),
+          message: packAny(schema, signal as never),
+          context: create(CommandContextSchema, {
+            ...(eventActorContext(this.#event) === undefined
+              ? {}
+              : { actorContext: eventActorContext(this.#event) }),
+            origin: sourceEventOrigin(this.#event),
+          }),
+        });
+      }),
+    );
+  }
+
+  async #postCommands(commands: readonly Command[]): Promise<void> {
+    for (const command of commands) {
+      await this.#runtime.onPostCommand(command);
+    }
+  }
+
+  #postEvents(events: readonly Event[]): void {
+    for (const event of events) {
+      void this.#runtime.postEventFollowUp(event).catch((error: unknown) => {
+        this.#runtime.recordDispatchFailure(event, error);
+      });
+    }
+  }
+}
+
 function isEventEnvelope(signal: unknown): signal is Event {
   return (
     typeof signal === "object" &&
@@ -1575,6 +2020,18 @@ function standTenantOptions(context: StorageContext, event: Event): { readonly t
   return tenantId === undefined ? {} : { tenantId };
 }
 
+function commandStandOptions(
+  context: StorageContext,
+  command: Command,
+): { readonly tenantId?: string } {
+  if (!context.multitenant) {
+    return {};
+  }
+
+  const tenantId = readCommandTenant(command) ?? context.tenantId;
+  return tenantId === undefined ? {} : { tenantId };
+}
+
 function readEventTenant(event: Event): string | undefined {
   switch (event.context?.origin.case) {
     case "importContext":
@@ -1600,6 +2057,16 @@ function projectionVersion(version: Version | undefined): number {
   return version?.number ?? 0;
 }
 
+function processManagerVersion(entity: object): number {
+  const version = (entity as { readonly version?: unknown }).version;
+
+  return typeof version === "number" ? version + 1 : 1;
+}
+
+function processManagerProducedVersion(sequence: number): number {
+  return sequence;
+}
+
 function tenantValue(tenantId: TenantId | undefined): string | undefined {
   switch (tenantId?.kind.case) {
     case "value":
@@ -1615,6 +2082,7 @@ function tenantValue(tenantId: TenantId | undefined): string | undefined {
 
 function createRepositoryRouting<EntityType extends RepositoryEntityType>(
   entityType: EntityType,
+  entityFamily: EntityFamily,
   metadata: EntityMetadata,
   handlersOption: RepositoryHandlersOption,
   producedEvents: readonly MessageSchema[],
@@ -1682,6 +2150,7 @@ function createRepositoryRouting<EntityType extends RepositoryEntityType>(
         commandReactions,
         eventSchemas,
         metadata.idField,
+        entityFamily,
       ),
   });
 }
@@ -1801,6 +2270,7 @@ function routeEvent<Id>(
   >,
   schemas: readonly MessageSchema[],
   targetIdField: DescriptorFieldMetadata,
+  entityFamily: EntityFamily,
 ): RepositoryEventRoute<Id> {
   const message = event.message;
   if (message === undefined || message.typeUrl === "") {
@@ -1817,8 +2287,13 @@ function routeEvent<Id>(
     throw new Error(`Repository event routing has no receiver for "${schema.typeName}".`);
   }
 
+  const targetId =
+    entityFamily === "process-manager"
+      ? readRouteId(readFirstFieldId(message, schema, "event"), targetIdField, "event").id
+      : readEventEntityId(event, message, schema, targetIdField);
+
   return Object.freeze({
-    entityIds: Object.freeze([readEventEntityId(event, message, schema, targetIdField) as Id]),
+    entityIds: Object.freeze([targetId as Id]),
     messageFullTypeName: schema.typeName,
     invocation: "deferred",
   });

@@ -83,9 +83,14 @@ event redispatch failures are observable through the copy-safe
 `storedEventDispatchFailures()` diagnostic snapshot on the owning
 `BoundedContext`. Generated entity-class assembly creates default repositories
 through `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This
-slice does not invoke query/process handlers, manage inboxes/delivery, run
-durable Delivery catch-up, create system contexts, write tenant indexes, expose a broad
-server lifecycle, or integrate transports.
+slice does not invoke query handlers, manage inboxes/delivery, run durable
+Delivery catch-up, create system contexts, write tenant indexes, expose a broad
+server lifecycle, or integrate transports. Process-manager repositories with
+authentic generated metadata do execute through the local command/event buses:
+default command routing reads the first command field, process-manager event
+routing reads the first event message field, state is loaded/created and stored
+through `Stand`, and returned domain commands/events are wrapped only after the
+current transaction and state write succeed.
 `BoundedContext.catchUpReadSide(options?)` is the current framework-owned
 read-side catch-up boundary. It clears registered projection rows through
 `Stand.clear()`, reads only already-stored events, and replays each event only
@@ -122,8 +127,7 @@ classes over `TransactionalEntity` with the same `<Id, Schema, Version>` generic
 shape and a stable readonly `entityFamily` property typed by `EntityFamily`.
 They do not add public transaction mutators, repositories, dispatch, aggregate
 event history, snapshots, subscriptions, command posting, query clients,
-process workflow execution, handler invocation, storage, buses, or lifecycle
-events.
+storage, buses, or lifecycle events.
 `Repository`, `RepositoryOptions`, `RepositoryEntityType`,
 `ConcreteRepositoryEntityType`, `RepositoryStateSchema`,
 `RepositoryIdentitySnapshot`, `RepositoryIdentityError`,
@@ -150,12 +154,17 @@ readiness metadata, producer ID, or first-field ID. Built bounded contexts
 register repository dispatcher adapters internally so aggregate commands can
 load or create one aggregate, invoke one assignee in a framework-owned
 transaction, pack and store returned domain events, persist the latest managed
-state through `AggregateStorage`, and then queue already-stored events for event-bus
-delivery without appending them again. The repository surface still does not
-expose direct entity lookup/storage APIs, inboxes, caches, catch-up, or
-transport startup. Built bounded contexts use
-repository metadata to register known state types with their direct read-side
-`Stand`.
+state through `AggregateStorage`, and then queue already-stored events for
+event-bus delivery without appending them again. Process-manager repositories
+also participate in those adapters: command assignees are invoked from the
+command bus, event reactors and event-commanding handlers are invoked from the
+event bus, state is stored in tenant-scoped `Stand` records with numeric
+versions, returned commands are wrapped and posted after state storage, and
+returned event messages are wrapped with process-manager-emitted event schemas
+and appended through the event store before follow-up dispatch. The repository
+surface still does not expose direct entity lookup/storage APIs, inboxes,
+caches, catch-up, or transport startup. Built bounded contexts use repository
+metadata to register known state types with their direct read-side `Stand`.
 `Stand`, `StandOptions`, `StandRegisterOptions`, `StandReadOptions`,
 `StandReadResult`, `StandUpdateOptions`, `StandSubscribeOptions`,
 `StandUpdate`, `StandSubscription`, and `StandStateTypeError` form the first
@@ -327,10 +336,14 @@ remain framework-only compatibility paths; new application code must not use
 them.
 Ordinary generated assembly uses
 `await BoundedContext.singleTenant(name).add(EntityClass).withGeneratedRegistryRoot(compiledPackageRoot).buildAsync()`.
-The builder requires that explicit trusted compiled package/app root, loads the
-conventional generated registry module under it, matches entity-class metadata,
-constructs default repositories, and keeps synchronous `build()` for explicit
-`add(repository)` assembly. The server registry exports
+`withGeneratedRegistryRoot(root)` accepts a trusted compiled package/app root as
+a filesystem path, `URL`, or `file:` URL string. It rejects malformed URL
+strings, non-`file:` URL schemes, and `file:` aliases carrying query/hash
+suffixes, and it is required before `buildAsync()` can assemble entity classes
+from generated metadata. The builder loads the conventional generated registry
+module under that root, matches entity-class metadata, constructs default
+repositories, and keeps synchronous `build()` for explicit `add(repository)`
+assembly. The server registry exports
 include `HandlerMetadataRegistry`, `HandlerMetadataRegistryLookup`,
 `RegisteredHandlerMetadata`, and `HandlerMetadataRegistryError` for low-level
 lookup-only registration and duplicate-policy validation. These APIs are

@@ -41,8 +41,9 @@ Current slice exposes:
 - `new Repository({ entityType, schema, handlers })` route calculation through
   `routeCommand()` and `routeEvent()` when explicit handler metadata is supplied.
   Direct route calls only calculate routes and do not invoke handlers; built
-  contexts use the same metadata to execute aggregate command handlers and
-  projection event subscribers through the command and event buses;
+  contexts use the same metadata to execute aggregate command handlers,
+  projection event subscribers, and process-manager command assignees, event
+  reactors, and event-commanding handlers through the command and event buses;
   and
 - `context.stand()` / `new Stand({ context, storageFactory })` for direct
   read-side entity state registration, latest-state updates, latest-state point
@@ -585,9 +586,11 @@ context records a copy-safe diagnostic snapshot through
 
 Generated entity-class assembly creates default repositories through
 `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This slice
-still does not invoke query/process handlers, construct system contexts, start
+still does not invoke query handlers, construct system contexts, start
 query/subscription buses, write tenant indexes, expose a broad production
-lifecycle, or integrate transports.
+lifecycle, or integrate transports. Durable inbox handoff, scheduler/retry
+loops, and durable cross-process recovery remain deferred even though local
+process-manager handlers run in built contexts.
 
 ## Direct Stand
 
@@ -681,8 +684,8 @@ defaults to 100 queued updates. Service subscriptions, direct Stand
 subscriptions, Stand version metadata, and the in-memory storage adapter are
 process-local development/test state, not durable delivery or catch-up storage.
 Cross-context fallback, client query DSLs, comparison subscription operators,
-durable event subscription recovery, and durable cross-process Delivery/subscription recovery
-catch-up remain outside this slice.
+durable event subscription recovery, and durable cross-process
+Delivery/subscription recovery catch-up remain outside this slice.
 
 ## Local Server Lifecycle
 
@@ -831,14 +834,28 @@ attaches each listed repository to the built context. Registration state belongs
 to `BoundedContext`, which exposes `registeredRepositories()` as frozen
 snapshot-backed `RepositoryView` values. The context opens state `RecordStorage`
 using the repository state schema and the context `StorageFactory`. Repeated
-`add(repository)` calls before
-`build()` are idempotent. Registering the same repository instance with another
-built context is rejected. When explicit handler metadata is supplied,
-`routeCommand()` and `routeEvent()` calculate deferred repository routes for the
-current storage/routing slice. This seam follows Spine `core-jvm` `Repository`
-identity and registration concepts closely. This API does not create, find, or
-store entities; invoke handlers; write inboxes; manage caches; emit lifecycle
-events; or touch transport.
+`add(repository)` calls before `build()` are idempotent. Registering the same
+repository instance with another built context is rejected. When explicit
+handler metadata is supplied, `routeCommand()` and `routeEvent()` calculate
+deferred repository routes for the current storage/routing slice.
+Process-manager command routing uses the first command message field as the
+process-manager ID; process-manager event routing uses the first event message
+field, not the producer ID fallback used by aggregate/projection event routes.
+Built contexts use the same metadata to run process-manager command assignees,
+event reactors, and event-commanding handlers. Process-manager state is loaded
+or created through the context `Stand`, stored back as a tenant-scoped Stand
+record when changed, and uses numeric `Version.number` metadata. End-user
+process-manager handlers return generated domain commands/events; repository
+execution wraps them in framework `Command`/`Event` envelopes only after
+transaction commit and state storage. Process-manager produced events are
+posted through the event bus so they are appended to the `EventStore` before
+fan-out; post-commit dispatch failures are recorded in
+`storedEventDispatchFailures()`. Durable inbox handoff, scheduler/retry
+workers, and durable recovery are still outside this local runtime slice. This
+seam follows Spine `core-jvm` `Repository` identity and registration concepts
+closely. The direct repository API does not create, find, or store entities;
+invoke handlers; write inboxes; manage caches; emit lifecycle events; or touch
+transport.
 
 ## Entity State Transition Validation
 

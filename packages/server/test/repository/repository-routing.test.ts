@@ -47,6 +47,7 @@ import {
   Aggregate,
   AggregateStorage,
   BoundedContext,
+  ProcessManager,
   Projection,
   Repository,
   RepositoryIdentityError,
@@ -55,6 +56,8 @@ import {
   type EntityHandlersMetadata,
   type EventDispatcher,
 } from "../../src/index.js";
+import { handlerMetadataAccess } from "../../src/handler/handler-metadata.js";
+import { repositoryAccess } from "../../src/repository/repository.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -67,6 +70,11 @@ type AggregateState = Message<"AggregateState"> & {
   id: string;
   name: string;
   archived: boolean;
+};
+
+type ProcessManagerState = Message<"ProcessManagerState"> & {
+  id: string;
+  queue: string;
 };
 
 type ValidatedAggregateState = Message<"example.validation_refusal.ValidatedAggregateState"> & {
@@ -130,6 +138,13 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
+const fileEntityVisibilityFixture = createFixtureFileDescriptor(
+  serverEntityMetadataTestFixtures.visibility.descriptorSetBase64,
+);
+const ProcessManagerStateSchema = messageDesc(
+  fileEntityVisibilityFixture,
+  0,
+) as GenMessage<ProcessManagerState>;
 const fileValidationRefusalFixture = fileDesc(
   "CiB2YWxpZGF0aW9uLXJlZnVzYWwvY29tbWFuZC5wcm90bxIaZXhhbXBsZS52YWxpZGF0aW9uX3JlZnVz" +
     "YWwaE3NwaW5lL29wdGlvbnMucHJvdG8ibAoXVmFsaWRhdGVkQWdncmVnYXRlU3RhdGUSFAoCaWQYASAB" +
@@ -1021,6 +1036,77 @@ class ThrowingTaskProjection extends Projection<string, typeof ProjectionStateSc
   }
 }
 
+class RoutingProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  static commandCalls = 0;
+  static eventCalls = 0;
+  static commandReactionCalls = 0;
+
+  static reset(): void {
+    this.commandCalls = 0;
+    this.eventCalls = 0;
+    this.commandReactionCalls = 0;
+  }
+
+  assignTask(command: AggregateState): ProjectionState {
+    RoutingProcessManager.commandCalls++;
+    this.updateDraftState(() =>
+      create(ProcessManagerStateSchema, {
+        id: command.id,
+        queue: `${command.name} assigned`,
+      }),
+    );
+    return create(ProjectionStateSchema, {
+      id: command.id,
+      name: `${command.name} event`,
+      priority: 1,
+    });
+  }
+
+  reactTask(event: ProjectionState): void {
+    RoutingProcessManager.eventCalls++;
+    this.updateDraftState(() =>
+      create(ProcessManagerStateSchema, {
+        id: event.id,
+        queue: `${event.name} reacted`,
+      }),
+    );
+  }
+
+  commandTask(event: ProjectionState): AggregateState {
+    RoutingProcessManager.commandReactionCalls++;
+    this.updateDraftState(() =>
+      create(ProcessManagerStateSchema, {
+        id: event.id,
+        queue: `${event.name} commanded`,
+      }),
+    );
+    return create(AggregateStateSchema, {
+      id: event.id,
+      name: `${event.name} follow-up command`,
+      archived: false,
+    });
+  }
+
+  reactTaskWithEvent(event: ProjectionState): AggregateState {
+    RoutingProcessManager.eventCalls++;
+    this.updateDraftState(() =>
+      create(ProcessManagerStateSchema, {
+        id: event.id,
+        queue: `${event.name} evented`,
+      }),
+    );
+    return create(AggregateStateSchema, {
+      id: event.id,
+      name: `${event.name} produced event`,
+      archived: false,
+    });
+  }
+}
+
 describe("repository signal routing", () => {
   it("executes aggregate commands through a built bounded-context command bus", async () => {
     ExecutingTaskAggregate.reset();
@@ -1793,7 +1879,10 @@ describe("repository signal routing", () => {
       },
       events: [],
     });
-    await dispatchAttempted.promise;
+    await withTimeout(
+      dispatchAttempted.promise,
+      "process-manager command produced-event dispatch attempt",
+    );
 
     const [failure] = await waitForFailures(context, 1);
     expect(failure).toMatchObject({
@@ -2365,6 +2454,350 @@ describe("repository signal routing", () => {
         }),
       ),
     ).toThrow(/TaskId/);
+  });
+
+  it("routes direct repository dispatchers without a bound runtime", async () => {
+    ExecutingTaskAggregate.reset();
+    ExecutingTaskProjection.reset();
+    const aggregate = createExecutingRepository();
+    const projection = createExecutingProjectionRepository();
+    const commandDispatcher = repositoryAccess.commandDispatcher(aggregate);
+    const eventDispatcher = repositoryAccess.eventDispatcher(projection);
+
+    if (commandDispatcher === undefined || eventDispatcher === undefined) {
+      throw new Error("Expected repository dispatchers.");
+    }
+
+    await commandDispatcher.dispatch(createAggregateCommand("command-direct", "task-direct"));
+    await eventDispatcher.dispatch(createProjectionEvent("event-direct", "task-direct"));
+
+    expect(ExecutingTaskAggregate.assigneeCalls).toBe(0);
+    expect(ExecutingTaskProjection.subscriberCalls).toBe(0);
+  });
+
+  it("executes process-manager command handlers and stores mutated state in Stand", async () => {
+    RoutingProcessManager.reset();
+    const observed: SpineEvent[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [ProjectionStateSchema],
+        dispatch: (event) => {
+          observed.push(event);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    await context
+      .commandBus()
+      .post(createAggregateCommand("command-pm", "pm-task", "ProcessManager"));
+
+    expect(RoutingProcessManager.commandCalls).toBe(1);
+    await expect(context.stand().read(ProcessManagerStateSchema, "pm-task")).resolves.toEqual(
+      create(ProcessManagerStateSchema, {
+        id: "pm-task",
+        queue: "ProcessManager assigned",
+      }),
+    );
+    await waitForCondition(() => observed.length === 1);
+    expect(observed[0]?.id).toEqual(create(EventIdSchema, { value: "command-pm-1" }));
+    const producedMessage = observed[0]?.message;
+    if (producedMessage === undefined) {
+      throw new Error("Expected a process-manager produced event message.");
+    }
+    expect(unpackAny(producedMessage, ProjectionStateSchema)).toEqual(
+      create(ProjectionStateSchema, {
+        id: "pm-task",
+        name: "ProcessManager event",
+        priority: 1,
+      }),
+    );
+  });
+
+  it("rejects process-manager command routing with a missing first-field ID before handler code", async () => {
+    RoutingProcessManager.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .build();
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("command-pm-missing-id", "")),
+    ).rejects.toThrow("Repository command routing requires a non-empty first field.");
+    expect(RoutingProcessManager.commandCalls).toBe(0);
+    await expect(context.stand().read(ProcessManagerStateSchema, "")).resolves.toBeUndefined();
+  });
+
+  it("rejects idless process-manager commands before route, handler, or Stand write", async () => {
+    RoutingProcessManager.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .build();
+
+    await expect(
+      context.commandBus().post(createIdlessAggregateCommand("pm-idless", "Idless")),
+    ).rejects.toThrow("requires command.id");
+    expect(RoutingProcessManager.commandCalls).toBe(0);
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-idless"),
+    ).resolves.toBeUndefined();
+  });
+
+  it("stores process-manager command state in the command tenant", async () => {
+    RoutingProcessManager.reset();
+    const context = BoundedContext.multitenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .build();
+
+    await context
+      .commandBus()
+      .post(createAggregateCommand("command-pm-tenant", "pm-tenant", "Tenant PM", "tenant-a"));
+
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-tenant", { tenantId: "tenant-a" }),
+    ).resolves.toEqual(
+      create(ProcessManagerStateSchema, {
+        id: "pm-tenant",
+        queue: "Tenant PM assigned",
+      }),
+    );
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-tenant", { tenantId: "tenant-b" }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("appends process-manager command-produced events and records later dispatch failures", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const dispatchAttempted = createSignal();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerAssignRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [ProjectionStateSchema],
+        dispatch: () => {
+          dispatchAttempted.resolve();
+          return Promise.reject(new Error("process-manager command event dispatch failed"));
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context.commandBus().post(createAggregateCommand("command-pm-dispatch", "pm-dispatch")),
+    ).resolves.toBeUndefined();
+
+    expect(RoutingProcessManager.commandCalls).toBe(1);
+    await expect(context.stand().read(ProcessManagerStateSchema, "pm-dispatch")).resolves.toEqual(
+      create(ProcessManagerStateSchema, {
+        id: "pm-dispatch",
+        queue: "Task assigned",
+      }),
+    );
+    await expect(eventStore.read()).resolves.toMatchObject([
+      { id: { value: "command-pm-dispatch-1" } },
+    ]);
+    await withTimeout(
+      dispatchAttempted.promise,
+      "process-manager command produced-event dispatch attempt",
+    );
+    const [failure] = await waitForFailures(context, 1);
+    expect(failure).toMatchObject({
+      event: { id: { value: "command-pm-dispatch-1" } },
+      error: { name: "Error", message: "process-manager command event dispatch failed" },
+    });
+  });
+
+  it("executes process-manager event reactors and stores mutated state in Stand", async () => {
+    RoutingProcessManager.reset();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerReactRepository())
+      .build();
+
+    await context.eventBus().post(
+      createProjectionEvent("event-pm-react", "pm-event-react", {
+        producerId: "different-producer",
+      }),
+    );
+
+    expect(RoutingProcessManager.eventCalls).toBe(1);
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-event-react"),
+    ).resolves.toEqual(
+      create(ProcessManagerStateSchema, {
+        id: "pm-event-react",
+        queue: "Task reacted",
+      }),
+    );
+  });
+
+  it("posts commands produced by process-manager event commanding after state commit", async () => {
+    RoutingProcessManager.reset();
+    const commands: SpineCommand[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerEventRepository())
+      .addCommandDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    await context.eventBus().post(createProjectionEvent("event-pm-command", "pm-event-command"));
+
+    expect(RoutingProcessManager.commandReactionCalls).toBe(1);
+    expect(commands).toHaveLength(1);
+    expect(commands[0]?.id).toEqual(create(CommandIdSchema, { uuid: "event-pm-command-1" }));
+    const producedMessage = commands[0]?.message;
+    if (producedMessage === undefined) {
+      throw new Error("Expected a process-manager produced command message.");
+    }
+    expect(unpackAny(producedMessage, AggregateStateSchema)).toEqual(
+      create(AggregateStateSchema, {
+        id: "pm-event-command",
+        name: "Task follow-up command",
+        archived: false,
+      }),
+    );
+  });
+
+  it("routes process-manager command reactions by the first event field even when producer ID differs", async () => {
+    RoutingProcessManager.reset();
+    const commands: SpineCommand[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerCommandOnlyRepository())
+      .addCommandDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (command) => {
+          commands.push(command);
+          return Promise.resolve();
+        },
+      })
+      .build();
+
+    await context.eventBus().post(
+      createProjectionEvent("event-pm-command-producer", "pm-first-field", {
+        producerId: "different-producer",
+      }),
+    );
+
+    expect(RoutingProcessManager.eventCalls).toBe(0);
+    expect(RoutingProcessManager.commandReactionCalls).toBe(1);
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-first-field"),
+    ).resolves.toEqual(
+      create(ProcessManagerStateSchema, {
+        id: "pm-first-field",
+        queue: "Task commanded",
+      }),
+    );
+    expect(commands).toHaveLength(1);
+    const producedMessage = commands[0]?.message;
+    if (producedMessage === undefined) {
+      throw new Error("Expected a process-manager produced command message.");
+    }
+    expect(unpackAny(producedMessage, AggregateStateSchema)).toEqual(
+      create(AggregateStateSchema, {
+        id: "pm-first-field",
+        name: "Task follow-up command",
+        archived: false,
+      }),
+    );
+  });
+
+  it("appends process-manager event-produced events and records later dispatch failures", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const dispatchAttempted = createSignal();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerEventProducingRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: () => {
+          dispatchAttempted.resolve();
+          return Promise.reject(new Error("process-manager event dispatch failed"));
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context.eventBus().post(createProjectionEvent("event-pm-produce", "pm-event-produce")),
+    ).resolves.toBeUndefined();
+
+    expect(RoutingProcessManager.eventCalls).toBe(1);
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-event-produce"),
+    ).resolves.toEqual(
+      create(ProcessManagerStateSchema, {
+        id: "pm-event-produce",
+        queue: "Task evented",
+      }),
+    );
+    await withTimeout(
+      dispatchAttempted.promise,
+      "process-manager event produced-event dispatch attempt",
+    );
+    await expect(eventStore.read()).resolves.toMatchObject([
+      { id: { value: "event-pm-produce" } },
+      { id: { value: "event-pm-produce-1" } },
+    ]);
+    const [failure] = await waitForFailures(context, 1);
+    expect(failure).toMatchObject({
+      event: { id: { value: "event-pm-produce-1" } },
+      error: { name: "Error", message: "process-manager event dispatch failed" },
+    });
+  });
+
+  it("stores process-manager state and produced events when a later produced command fails", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const eventDispatches: string[] = [];
+    const commandDispatches: string[] = [];
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createProcessManagerMixedEventRepository())
+      .addEventDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (event) => {
+          eventDispatches.push(event.id?.value ?? "");
+          return Promise.resolve();
+        },
+      })
+      .addCommandDispatcher({
+        messageSchemas: () => [AggregateStateSchema],
+        dispatch: (command) => {
+          commandDispatches.push(command.id?.uuid ?? "");
+          return Promise.reject(new Error("mixed process-manager command dispatch failed"));
+        },
+      })
+      .withStorageFactory(factory)
+      .build();
+    const eventStore = new EventStore({ name: "Tasks", multitenant: false }, factory);
+
+    await expect(
+      context.eventBus().post(createProjectionEvent("event-pm-mixed", "pm-event-mixed")),
+    ).rejects.toThrow("mixed process-manager command dispatch failed");
+
+    expect(RoutingProcessManager.eventCalls).toBe(1);
+    expect(RoutingProcessManager.commandReactionCalls).toBe(1);
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-event-mixed"),
+    ).resolves.toEqual(
+      create(ProcessManagerStateSchema, {
+        id: "pm-event-mixed",
+        queue: "Task commanded",
+      }),
+    );
+    expect(commandDispatches).toEqual(["event-pm-mixed-1"]);
+    await waitForCondition(() => eventDispatches.includes("event-pm-mixed-1"));
+    await expect(eventStore.read()).resolves.toMatchObject([
+      { id: { value: "event-pm-mixed" } },
+      { id: { value: "event-pm-mixed-1" } },
+    ]);
+    expect(context.storedEventDispatchFailures()).toHaveLength(0);
   });
 
   it("executes projection event subscribers and records latest state in Stand", async () => {
@@ -4090,6 +4523,147 @@ function createTenantProjectionRepo(): Repository<
   });
 }
 
+function createProcessManagerAssignRepository(): Repository<typeof RoutingProcessManager> {
+  const handlers = handlerMetadataAccess.defineArity(
+    RoutingProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.assign(AggregateStateSchema, "assignTask")],
+    [
+      {
+        kind: "command-assignment",
+        methodName: "assignTask",
+        parameterCount: 1,
+        emittedSchemas: [ProjectionStateSchema],
+      },
+    ],
+  );
+
+  return new Repository({
+    entityType: RoutingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+  });
+}
+
+function createProcessManagerReactRepository(): Repository<typeof RoutingProcessManager> {
+  const handlers = defineEntityHandlers(
+    RoutingProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
+  );
+
+  return new Repository({
+    entityType: RoutingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+  });
+}
+
+function createProcessManagerEventRepository(): Repository<typeof RoutingProcessManager> {
+  const handlers = handlerMetadataAccess.defineArity(
+    RoutingProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [
+      builder.react(ProjectionStateSchema, "reactTask"),
+      builder.command(ProjectionStateSchema, "commandTask"),
+    ],
+    [
+      {
+        kind: "event-reaction",
+        methodName: "reactTask",
+        parameterCount: 1,
+      },
+      {
+        kind: "command-reaction",
+        methodName: "commandTask",
+        parameterCount: 1,
+        emittedSchemas: [AggregateStateSchema],
+      },
+    ],
+  );
+
+  return new Repository({
+    entityType: RoutingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+  });
+}
+
+function createProcessManagerEventProducingRepository(): Repository<typeof RoutingProcessManager> {
+  const handlers = handlerMetadataAccess.defineArity(
+    RoutingProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.react(ProjectionStateSchema, "reactTaskWithEvent")],
+    [
+      {
+        kind: "event-reaction",
+        methodName: "reactTaskWithEvent",
+        parameterCount: 1,
+        emittedSchemas: [AggregateStateSchema],
+      },
+    ],
+  );
+
+  return new Repository({
+    entityType: RoutingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+  });
+}
+
+function createProcessManagerCommandOnlyRepository(): Repository<typeof RoutingProcessManager> {
+  const handlers = handlerMetadataAccess.defineArity(
+    RoutingProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.command(ProjectionStateSchema, "commandTask")],
+    [
+      {
+        kind: "command-reaction",
+        methodName: "commandTask",
+        parameterCount: 1,
+        emittedSchemas: [AggregateStateSchema],
+      },
+    ],
+  );
+
+  return new Repository({
+    entityType: RoutingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+  });
+}
+
+function createProcessManagerMixedEventRepository(): Repository<typeof RoutingProcessManager> {
+  const handlers = handlerMetadataAccess.defineArity(
+    RoutingProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [
+      builder.react(ProjectionStateSchema, "reactTaskWithEvent"),
+      builder.command(ProjectionStateSchema, "commandTask"),
+    ],
+    [
+      {
+        kind: "event-reaction",
+        methodName: "reactTaskWithEvent",
+        parameterCount: 1,
+        emittedSchemas: [AggregateStateSchema],
+      },
+      {
+        kind: "command-reaction",
+        methodName: "commandTask",
+        parameterCount: 1,
+        emittedSchemas: [AggregateStateSchema],
+      },
+    ],
+  );
+
+  return new Repository({
+    entityType: RoutingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+  });
+}
+
 function createMissingSubscriberRepo(): Repository<typeof MissingSubscriberMethodProjection> {
   const handlers = defineEntityHandlers(
     MissingSubscriberMethodProjection,
@@ -4490,6 +5064,23 @@ async function waitForFailures(
     await new Promise((resolve) => setTimeout(resolve, 5));
   }
   return context.storedEventDispatchFailures();
+}
+
+async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {
+  let timeout: NodeJS.Timeout | undefined;
+  const timer = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => {
+      reject(new Error(`Timed out waiting for ${label}.`));
+    }, 1_000);
+  });
+
+  try {
+    return await Promise.race([promise, timer]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
 }
 
 async function waitForFailure(

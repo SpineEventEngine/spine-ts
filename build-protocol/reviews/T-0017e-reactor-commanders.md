@@ -8,13 +8,13 @@ boundary, security, and reliability.
 
 ## Required Lanes
 
-| Lane                       | Reviewer ID                            | Status | Result                         |
-| -------------------------- | -------------------------------------- | ------ | ------------------------------ |
-| Code style/maintainability | `019f448f-015a-7a71-b4c2-dfcf11eb81b6` | Closed | FINDINGS, addressed            |
-| Documentation completeness | `019f448f-2217-79c0-a17f-9c80f438c91f` | Closed | FINDINGS, addressed            |
-| TypeScript/API docs        | `019f448f-3ba5-77f1-98ad-5f08189ae848` | Closed | FINDINGS, addressed            |
-| Security                   | `019f448f-56a8-7dd0-9a0d-857ecac66dfa` | Closed | FINDINGS, addressed            |
-| Performance/reliability    | `019f448f-7503-7921-916d-14ea75a0ff04` | Closed | FINDINGS, addressed            |
+| Lane                       | Reviewer ID                            | Status | Result              |
+| -------------------------- | -------------------------------------- | ------ | ------------------- |
+| Code style/maintainability | `019f448f-015a-7a71-b4c2-dfcf11eb81b6` | Closed | FINDINGS, addressed |
+| Documentation completeness | `019f448f-2217-79c0-a17f-9c80f438c91f` | Closed | FINDINGS, addressed |
+| TypeScript/API docs        | `019f448f-3ba5-77f1-98ad-5f08189ae848` | Closed | FINDINGS, addressed |
+| Security                   | `019f448f-56a8-7dd0-9a0d-857ecac66dfa` | Closed | FINDINGS, addressed |
+| Performance/reliability    | `019f448f-7503-7921-916d-14ea75a0ff04` | Closed | FINDINGS, addressed |
 
 ## First-Round Findings Closure
 

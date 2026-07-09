@@ -207,10 +207,11 @@ remain later slices.
   `catchUpReadSide(options?)` boundary that clears registered projection rows
   for one tenant slice and replays already-stored events only to matching
   projection subscribers on the same EventBus runtime queue, without
-  re-appending those events. Other handler/runtime execution remains deferred,
-  including process-manager reactions, broader subscriber/reactor delivery
-  semantics, Delivery/scheduler catch-up orchestration, and cross-process
-  read-side recovery.
+  re-appending those events. Built contexts also execute local process-manager
+  command assignees, event reactors, and event-commanding handlers through
+  Stand-backed state. Broader durable subscriber/reactor delivery semantics,
+  Delivery/scheduler catch-up orchestration, and cross-process read-side
+  recovery remain deferred.
 
 ## Type Registry
 
@@ -523,6 +524,11 @@ with authentic handler metadata contribute dispatcher adapters to the built
 context's buses; aggregate repositories can therefore execute command
 assignees, persist latest managed state and internal traceability events through
 `AggregateStorage`, and queue already-stored events for event-bus delivery.
+Process-manager repositories can execute generated command assignees, event
+reactors, and event-commanding handlers through the same buses. They load or
+create state through the context `Stand`, mutate only inside the existing
+transaction helpers, write changed state back to `Stand` with tenant scoping,
+and wrap returned domain commands/events only after commit and state storage.
 Aggregate command completion is not failed by later redispatch errors, but
 those errors are visible for diagnostics and tests via
 `context.storedEventDispatchFailures()`.

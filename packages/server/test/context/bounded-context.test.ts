@@ -16,6 +16,7 @@ import {
   type Event,
   EventContextSchema,
   EventIdSchema,
+  EventSchema,
   UserIdSchema,
   VersionSchema,
   file_spine_options,
@@ -43,6 +44,7 @@ import {
   type EventDispatcher,
   type RepositoryView,
 } from "../../src/index.js";
+import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -126,6 +128,26 @@ class TaskProjection extends Projection<string, typeof ProjectionStateSchema, nu
   }
 }
 class TaskProcessManager extends ProcessManager<string, typeof ProcessManagerStateSchema, number> {}
+class GeneratedTaskProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  assignTask(command: AggregateState): ProjectionState {
+    this.updateDraftState(() =>
+      create(ProcessManagerStateSchema, {
+        id: command.id,
+        queue: `${command.name} assigned`,
+      }),
+    );
+
+    return create(ProjectionStateSchema, {
+      id: command.id,
+      name: `${command.name} event`,
+      priority: 1,
+    });
+  }
+}
 
 describe("BoundedContext assembly", () => {
   it("rejects empty or blank context names", () => {
@@ -224,6 +246,23 @@ describe("BoundedContext assembly", () => {
     await context.eventBus().post(createProjectionEvent("event-1"));
 
     expect(observed).toEqual(["event-1"]);
+  });
+
+  it("does not expose internal event types accepted by framework dispatchers", () => {
+    const dispatcher = createEventDispatcher([EventSchema, ProjectionStateSchema], () => undefined);
+    const context = BoundedContext.singleTenant("Tasks").addEventDispatcher(dispatcher).build();
+
+    expect(context.eventBus().acceptedEventTypes()).toEqual([deriveTypeUrl(ProjectionStateSchema)]);
+  });
+
+  it("rejects package-local event subscriptions for non-context values", () => {
+    expect(() =>
+      boundedContextAccess.subscribeToEvent(
+        {} as BoundedContext,
+        deriveTypeUrl(ProjectionStateSchema),
+        { onEvent: () => undefined },
+      ),
+    ).toThrow("Event subscription requires a built BoundedContext instance.");
   });
 
   it("does not register event dispatchers removed before build", async () => {
@@ -382,10 +421,140 @@ describe("BoundedContext assembly", () => {
     );
   });
 
+  it("executes a generated process-manager repository assembled through buildAsync", async () => {
+    const observed: Event[] = [];
+    const registryRoot = createGeneratedRegistryRoot([
+      {
+        entityType: GeneratedTaskProcessManager,
+        stateSchema: ProcessManagerStateSchema,
+        handlers: [
+          {
+            kind: "command-assignment",
+            methodName: "assignTask",
+            signalSchema: AggregateStateSchema,
+            emittedSchemas: [ProjectionStateSchema],
+            parameterCount: 1,
+          },
+        ],
+      },
+    ]);
+    const context = await BoundedContext.singleTenant("Tasks")
+      .withGeneratedRegistryRoot(registryRoot)
+      .add(GeneratedTaskProcessManager)
+      .addEventDispatcher(
+        createEventDispatcher([ProjectionStateSchema], (event) => {
+          observed.push(event);
+        }),
+      )
+      .buildAsync();
+
+    await expect(
+      context.commandBus().post(
+        packCommand({
+          id: create(CommandIdSchema, { uuid: "command-generated-pm" }),
+          context: create(CommandContextSchema, {
+            actorContext: create(ActorContextSchema, {
+              actor: create(UserIdSchema, { value: "user-1" }),
+            }),
+          }),
+          schema: AggregateStateSchema,
+          message: create(AggregateStateSchema, {
+            id: "generated-pm",
+            name: "Generated PM",
+            archived: false,
+          }),
+        }),
+      ),
+    ).resolves.toBeUndefined();
+
+    await expect(context.stand().read(ProcessManagerStateSchema, "generated-pm")).resolves.toEqual(
+      create(ProcessManagerStateSchema, {
+        id: "generated-pm",
+        queue: "Generated PM assigned",
+      }),
+    );
+    await waitForCondition(
+      () => observed.length === 1,
+      "generated process-manager produced event dispatch",
+    );
+    expect(observed).toHaveLength(1);
+    expect(observed[0]?.id).toEqual(create(EventIdSchema, { value: "command-generated-pm-1" }));
+    const message = observed[0]?.message;
+    if (message === undefined) {
+      throw new Error("Expected a generated process-manager produced event.");
+    }
+    expect(message.typeUrl).toBe(deriveTypeUrl(ProjectionStateSchema));
+  });
+
   it("requires an explicit generated registry root for entity-class assembly", async () => {
     await expect(
       BoundedContext.singleTenant("Tasks").add(GeneratedTaskAggregate).buildAsync(),
     ).rejects.toThrow("requires withGeneratedRegistryRoot(root)");
+  });
+
+  it("accepts generated registry roots passed as file URL strings", async () => {
+    const registryRoot = createGeneratedRegistryRoot([
+      {
+        entityType: GeneratedTaskAggregate,
+        stateSchema: AggregateStateSchema,
+        handlers: [],
+      },
+    ]);
+
+    await expect(
+      BoundedContext.singleTenant("Tasks")
+        .withGeneratedRegistryRoot(registryRoot.href)
+        .add(GeneratedTaskAggregate)
+        .buildAsync(),
+    ).resolves.toBeInstanceOf(BoundedContext);
+  });
+
+  it("rejects malformed generated registry root URLs", async () => {
+    await expect(
+      BoundedContext.singleTenant("Tasks")
+        .withGeneratedRegistryRoot("file://%")
+        .add(GeneratedTaskAggregate)
+        .buildAsync(),
+    ).rejects.toThrow('Generated registry root "file://%" is not a valid URL.');
+  });
+
+  it("rejects generated registry roots outside file URLs", async () => {
+    await expect(
+      BoundedContext.singleTenant("Tasks")
+        .withGeneratedRegistryRoot("https://example.com/generated")
+        .add(GeneratedTaskAggregate)
+        .buildAsync(),
+    ).rejects.toThrow("must use the file: URL scheme");
+  });
+
+  it("rejects generated registry root URL aliases with query or hash", async () => {
+    const registryRoot = createGeneratedRegistryRoot([
+      {
+        entityType: GeneratedTaskAggregate,
+        stateSchema: AggregateStateSchema,
+        handlers: [],
+      },
+    ]);
+    const aliasedRoot = new URL(registryRoot.href);
+
+    aliasedRoot.search = "cache=1";
+
+    await expect(
+      BoundedContext.singleTenant("Tasks")
+        .withGeneratedRegistryRoot(aliasedRoot)
+        .add(GeneratedTaskAggregate)
+        .buildAsync(),
+    ).rejects.toThrow("must not include a query or hash");
+
+    aliasedRoot.search = "";
+    aliasedRoot.hash = "generated";
+
+    await expect(
+      BoundedContext.singleTenant("Tasks")
+        .withGeneratedRegistryRoot(aliasedRoot)
+        .add(GeneratedTaskAggregate)
+        .buildAsync(),
+    ).rejects.toThrow("must not include a query or hash");
   });
 
   it("rejects generated registry modules that resolve outside the trusted root", async () => {
@@ -1079,6 +1248,17 @@ function createGeneratedRegistryRoot(
   entities: Parameters<typeof createGeneratedRegistryFixture>[0],
 ): URL {
   return createGeneratedRegistryFixture(entities).root;
+}
+
+async function waitForCondition(predicate: () => boolean, label: string): Promise<void> {
+  const deadline = Date.now() + 500;
+  while (Date.now() < deadline) {
+    if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  throw new Error(`Timed out waiting for ${label}.`);
 }
 
 interface StorageCreation {
