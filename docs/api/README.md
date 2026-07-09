@@ -250,14 +250,26 @@ or restart. This is not a client DSL, broad server lifecycle, projection
 catch-up loop, cross-process stream ownership, or durable retained update
 queue.
 `Server`, `ServerOptions`, and `RunningServer` form the small public lifecycle
-owner for hosting those routes over Node HTTP/2. `Server.atPort(port)` defaults
-to local-only `127.0.0.1`; broader hosts are explicit through `ServerOptions`.
-`RunningServer` exposes `host`, `port`, `baseUrl`, and idempotent `close()`.
-Close stops network intake, closes active HTTP/2 sessions, then closes owned
-contexts/resources. Cleanup continues after individual close failures and
-reports them as one `AggregateError`. The API deliberately hides ZeroMQ, IPC
-endpoint names, worker/process supervision, durable scheduling, and any
-process-wide `ServerEnvironment`.
+owner for hosting those routes over Node HTTP/2. `ServerEnvironment`,
+`ServerEnvironmentLocalOptions`, and `ServerEnvironmentProductionOptions` select
+storage, transport, optional delivery, optional tracing, and facility ownership
+for server assembly without introducing a process-wide singleton. Built
+contexts still keep the storage factory they were built with until a later
+builder integration wires context assembly through the environment.
+`Server.atPort(port)` defaults to local-only `127.0.0.1`; broader hosts are
+explicit through `ServerOptions`. When no environment is supplied, `Server`
+creates and owns a local environment with in-memory storage and same-process
+transport defaults. Supplied environments are caller-owned unless
+`ownsEnvironment` is true. Production environment construction requires
+`storageFactory` and `transport` and rejects missing facilities before a
+listener is opened. `RunningServer` exposes `host`, `port`, `baseUrl`, and
+idempotent `close()`. Close stops network intake, closes active HTTP/2
+sessions, closes owned contexts/resources, then closes environment-owned
+facilities when the server owns the environment. Cleanup continues after
+individual close failures and reports them as one `AggregateError`; a later
+close retry attempts only previously failed close hooks. The API deliberately
+hides ZeroMQ, IPC endpoint names, worker/process supervision, durable
+scheduling, and Java-style global environment configuration.
 `@spine-ts/testing` exports `BoundedContextFixture`,
 `BoundedContextFixtureOptions`, and `FixtureSubscription`. The fixture wraps one
 built `BoundedContext`, captures the in-process `SpineServices` handlers, and

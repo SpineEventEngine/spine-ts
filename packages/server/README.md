@@ -156,6 +156,13 @@ Current slice exposes:
   supplied `SignalTransport`, validating generated Spine command/event envelope
   shape and enclosed message type URL before runtime intake, and enqueuing
   accepted callbacks through `SingleProcessServerRuntime`.
+- `ServerEnvironment` for a small explicit runtime environment boundary around
+  storage, transport, optional delivery, optional tracing, and facility
+  ownership during server assembly. Local environments use in-memory storage
+  and same-process transport defaults; production environments require
+  caller-supplied storage and transport before a server opens network intake.
+  Built contexts keep the storage factory they were built with until a later
+  builder integration wires context assembly through the environment.
 - `@Assign`, `@Command`, `@Subscribe`, and `@React` standard method decorators.
   Public decorators are bare-only ordinary application syntax. Schema-bearing
   handler metadata belongs to generated registry artifacts, internal tooling,
@@ -715,7 +722,12 @@ Use `Server` when a local Node process should host the built Spine services over
 HTTP/2:
 
 ```ts
-import { BoundedContext, Server } from "@spine-ts/server";
+import { BoundedContext, Server, ServerEnvironment } from "@spine-ts/server";
+import type { StorageFactory } from "@spine-ts/storage";
+import type { SignalTransport } from "@spine-ts/transport";
+
+declare const durableStorageFactory: StorageFactory;
+declare const deploymentSignalTransport: SignalTransport;
 
 const tasks = await BoundedContext.singleTenant("Tasks")
   .add(TaskAggregate)
@@ -731,18 +743,42 @@ await server.close();
 ```
 
 `Server` reuses `SpineServices` directly and keeps ZeroMQ, local IPC endpoints,
-worker supervision, retry policy, and process-wide environment configuration out
-of the public API. `Server.atPort(port)` binds to `127.0.0.1`; pass
-`{ host: "0.0.0.0" }` only when this process should accept non-local clients.
-The returned `RunningServer` exposes `host`, `port`, `baseUrl`, and an
-idempotent `close()`.
+worker supervision, and retry policy out of the public API.
+`Server.atPort(port)` binds to `127.0.0.1`; pass `{ host: "0.0.0.0" }` only
+when this process should accept non-local clients. The returned `RunningServer`
+exposes `host`, `port`, `baseUrl`, and an idempotent `close()`.
+
+The server uses a small explicit `ServerEnvironment`. Omitting it creates a
+server-owned local environment with `InMemoryStorageFactory` and same-process
+transport defaults. Supplying one leaves it caller-owned unless
+`ownsEnvironment: true` is explicit:
+
+```ts
+const environment = ServerEnvironment.production({
+  storageFactory: durableStorageFactory,
+  transport: deploymentSignalTransport,
+});
+
+await Server.atPort(8080, { environment }).add(tasks).start();
+```
+
+Production construction rejects missing `storageFactory` or `transport` before
+network intake opens. Production mode validates explicit facility injection
+only; durable production storage adapters remain deferred, and
+`InMemoryStorageFactory` is local/test-only. The environment selects and owns
+facilities for server assembly. Built contexts still keep the storage factory
+they were built with until a later builder integration wires context assembly
+through `ServerEnvironment`. This object is not a Java-style process-wide
+singleton, and it does not introduce endpoint topology or worker execution.
 
 Shutdown is deterministic: the listener stops accepting new requests first,
 then active HTTP/2 sessions close, then owned contexts and explicit
-framework-owned resources close. Resource cleanup continues after failures and
-throws one `AggregateError` containing every close failure. Listener-based tests
-may fail with `EPERM` in managed sandboxes that block loopback binds; rerun
-those checks natively when verifying this lifecycle.
+framework-owned resources close, then environment-owned facilities close when
+the server owns the environment. Resource cleanup continues after failures and
+throws one `AggregateError` containing every close failure. A later `close()`
+retry attempts only the close hooks that failed previously. Listener-based
+tests may fail with `EPERM` in managed sandboxes that block loopback binds;
+rerun those checks natively when verifying this lifecycle.
 
 ## Entity State Shell
 
