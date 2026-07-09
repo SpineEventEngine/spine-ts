@@ -1,6 +1,6 @@
 # T-0016e: Delivery Worker Integration
 
-Status: in progress
+Status: complete; integrated to main
 Start: `2026-07-08T11:54:09Z`
 Baseline commit: `f226fda`
 Branch: `task/T-0016e-delivery-worker`

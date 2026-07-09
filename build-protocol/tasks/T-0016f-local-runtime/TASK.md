@@ -1,6 +1,6 @@
 # T-0016f: Transport-Backed Local Runtime
 
-Status: in progress
+Status: complete; integrated to main
 Start: `2026-07-08T13:37:58Z`
 Baseline commit: `f86bd6a`
 Branch: `task/T-0016f-local-runtime`

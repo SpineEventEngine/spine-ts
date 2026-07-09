@@ -2315,3 +2315,42 @@ Consequences:
   production storage defaults come from the selected environment.
 - Failed builder assembly must reject before listener open and clean up any
   contexts already built for that start attempt.
+
+## D-0071: Reconcile Durable Task Status Before Further Implementation
+
+Status: Accepted
+
+Date: 2026-07-09
+
+Context: After T-0020 integration and verification, the root worktree was clean
+except for the user-owned `human-review-1-jul.md`. Requirements splitting found
+that T-0016d, T-0016e, and T-0016f task headers still said `in progress`, even
+though their work logs recorded merge commits and post-merge full verification.
+The build protocol depends on durable records surviving interruption and thread
+compaction, so stale status headers can mislead the next autonomous session.
+
+Decision:
+
+- Run T-0021 as a docs/log-only reconciliation slice before the next
+  implementation task.
+- Correct only stale status headers whose existing work logs and merge records
+  already prove integration.
+- Record that T-0020 is ready, but the whole framework/example is not
+  release-complete.
+- Keep `human-review-1-jul.md` untouched.
+- Record the required independent review lanes even for this
+  documentation-only task.
+
+Alternatives considered:
+
+- Ignore stale headers and proceed directly to implementation. Rejected because
+  interruption-resistant durable logs are a build protocol requirement.
+- Broaden the task into a full historical log cleanup. Rejected because the
+  immediate recovery risk is limited to current misleading T-0016d/e/f headers.
+
+Consequences:
+
+- Future sessions can distinguish completed T-0016 slices from remaining real
+  runtime gaps.
+- The next implementation slice can start from a trustworthy roadmap instead
+  of re-investigating already integrated work.
