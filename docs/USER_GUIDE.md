@@ -27,7 +27,7 @@ bounded-context builder shell.
 `@spine-ts/transport` now exposes adapter-agnostic topics, subscriptions, and
 publish/request handler interfaces; ZeroMQ remains an adapter-private local IPC
 dependency rather than a public runtime API. `@spine-ts/server` can derive an
-immutable `createServerRuntimeRoutingPlan()` from built context metadata plus
+immutable `createRoutingPlan()` from built context metadata plus
 command/event readiness, yielding transport topics, subscriptions, and
 planner-local route descriptors without opening sockets or invoking handlers.
 The same package now also exposes a small executable `CommandBus` and
@@ -170,7 +170,7 @@ or multi-host transport example.
   appends events to `EventStore` before event fan-out.
 - A smoke-tested public assembly path that combines a built bounded context,
   handler metadata registry, command/event
-  readiness views, and `createServerRuntimeRoutingPlan()` without exposing a
+  readiness views, and `createRoutingPlan()` without exposing a
   service host, handler invocation, worker lifecycle registration, or
   production transport endpoint runner.
 - A local `RuntimeTransportBinding` that registers command/event routing plans

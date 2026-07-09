@@ -76,7 +76,7 @@ import {
   type SignalMetadataOptions,
   SingleProcessServerRuntime,
   SystemClock,
-  createServerRuntimeRoutingPlan,
+  createRoutingPlan,
 } from "../src/index.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -262,7 +262,7 @@ describe("@spine-ts/server", () => {
         "React",
         "Subscribe",
         "acceptSignalIntake",
-        "createServerRuntimeRoutingPlan",
+        "createRoutingPlan",
         "defineEntityHandlers",
         "describeEntityMetadata",
         "createEntityTransaction",
@@ -458,7 +458,7 @@ describe("@spine-ts/server", () => {
     const registry = new HandlerMetadataRegistry([handlers]);
     const commandReadiness = CommandRegistrationReadiness.fromRegistry(registry);
     const eventReadiness = EventRegistrationReadiness.fromRegistry(registry);
-    const routingPlan = createServerRuntimeRoutingPlan({
+    const routingPlan = createRoutingPlan({
       context,
       commands: commandReadiness,
       events: eventReadiness,

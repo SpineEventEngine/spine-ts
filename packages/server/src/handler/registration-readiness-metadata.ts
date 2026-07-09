@@ -193,6 +193,8 @@ function copySemanticTags(value: unknown): readonly string[] {
     throw new TypeError(semanticTagError);
   }
 
+  const tags: string[] = [];
+
   for (let index = 0; index < value.length; index += 1) {
     if (!Object.hasOwn(value, index)) {
       throw new TypeError(semanticTagError);
@@ -203,9 +205,11 @@ function copySemanticTags(value: unknown): readonly string[] {
     if (typeof tag !== "string" || tag.trim().length === 0 || tag !== tag.trim()) {
       throw new TypeError(semanticTagError);
     }
+
+    tags.push(tag);
   }
 
-  return Object.freeze([...value]);
+  return Object.freeze(tags);
 }
 
 function cloneDescriptorMessageSchema<Schema extends DescriptorMessageSchema>(

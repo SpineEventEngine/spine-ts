@@ -21,8 +21,8 @@ import {
 import { compareFullTypeNames } from "../handler/registration-readiness-metadata.js";
 const deterministicValidationErrorTag = Symbol("runtimeRoutingDeterministicValidation");
 
-/** Input accepted by {@link createServerRuntimeRoutingPlan}. */
-export interface ServerRuntimeRoutingPlanInput {
+/** Input accepted by {@link createRoutingPlan}. */
+export interface RoutingPlanInput {
   /** Built bounded-context metadata shell that owns the routing plan. */
   readonly context: BoundedContext;
   /** Optional command readiness used to derive command routing. */
@@ -32,7 +32,7 @@ export interface ServerRuntimeRoutingPlanInput {
 }
 
 /** Explicit deferred routing seam for unsupported runtime signal kinds. */
-export interface DeferredServerRuntimeRoutingSeam {
+export interface DeferredRoutingSeam {
   /** Signal kind intentionally deferred in this slice. */
   readonly signalKind: "query" | "subscription" | "system";
   /** Stable status for deferred runtime seams. */
@@ -42,14 +42,14 @@ export interface DeferredServerRuntimeRoutingSeam {
 }
 
 /** Sanitized message descriptor exposed by public routing routes. */
-export interface ServerRuntimeRouteMessageDescriptor {
+export interface RouteMessage {
   /** Fully qualified message type name owned by the route. */
   readonly fullTypeName: string;
   /** Canonical transport type URL for the routed message. */
   readonly typeUrl: string;
 }
 
-interface ServerRuntimeRouteTransportReference {
+interface RouteRef {
   /** Topic routing key that matches one entry in the plan's top-level topics array. */
   readonly topicRoutingKey: string;
   /** Subscription descriptor key that matches one top-level subscription entry. */
@@ -57,7 +57,7 @@ interface ServerRuntimeRouteTransportReference {
 }
 
 /** Stable public command route descriptor. */
-export interface CommandRuntimeRoutingRoute extends ServerRuntimeRouteTransportReference {
+export interface CommandRuntimeRoutingRoute extends RouteRef {
   /** Planner-local stable route identifier. */
   readonly routeId: string;
   /** Stable public receiver group marker. */
@@ -65,7 +65,7 @@ export interface CommandRuntimeRoutingRoute extends ServerRuntimeRouteTransportR
   /** Planner-local worker identity shared by command routes in this plan. */
   readonly workerId: string;
   /** Sanitized message descriptor for the routed command. */
-  readonly message: ServerRuntimeRouteMessageDescriptor;
+  readonly message: RouteMessage;
 }
 
 /** Command routing plan derived from command readiness. */
@@ -84,7 +84,7 @@ export interface CommandRuntimeRoutingPlan {
 export type EventRuntimeReceiverGroup = "application" | "reactor" | "subscriber";
 
 /** Stable public event route descriptor. */
-export interface EventRuntimeRoutingRoute extends ServerRuntimeRouteTransportReference {
+export interface EventRuntimeRoutingRoute extends RouteRef {
   /** Planner-local stable route identifier. */
   readonly routeId: string;
   /** Stable public receiver group marker. */
@@ -92,7 +92,7 @@ export interface EventRuntimeRoutingRoute extends ServerRuntimeRouteTransportRef
   /** Planner-local worker identity unique within this plan. */
   readonly workerId: string;
   /** Sanitized message descriptor for the routed event. */
-  readonly message: ServerRuntimeRouteMessageDescriptor;
+  readonly message: RouteMessage;
 }
 
 /** Event routing plan derived from event readiness. */
@@ -120,14 +120,14 @@ export interface ServerRuntimeRoutingPlan {
   /** Event routing metadata derived from event readiness. */
   readonly events: EventRuntimeRoutingPlan;
   /** Explicit deferred seams for unsupported signal kinds. */
-  readonly deferred: readonly DeferredServerRuntimeRoutingSeam[];
+  readonly deferred: readonly DeferredRoutingSeam[];
 }
 
 interface CommandRouteDraft {
   readonly routeId: string;
   readonly receiverGroup: "command-assignee";
   readonly workerId: string;
-  readonly message: ServerRuntimeRouteMessageDescriptor;
+  readonly message: RouteMessage;
   readonly topic: TransportTopic<"command">;
   readonly subscription: TransportSubscription<"command">;
 }
@@ -136,7 +136,7 @@ interface EventRouteDraft {
   readonly routeId: string;
   readonly receiverGroup: EventRuntimeReceiverGroup;
   readonly workerId: string;
-  readonly message: ServerRuntimeRouteMessageDescriptor;
+  readonly message: RouteMessage;
   readonly topic: TransportTopic<"event">;
   readonly subscription: TransportSubscription<"event">;
 }
@@ -149,12 +149,12 @@ type SemanticTaggedReadinessMetadata =
   | EventRegistrationSubscriberMetadata;
 
 interface RoutedMessageDraft {
-  readonly message: ServerRuntimeRouteMessageDescriptor;
+  readonly message: RouteMessage;
   readonly semanticTags: readonly string[];
 }
 
 const commandWorkerId = "command-worker-1";
-const eventReceiverGroupToHandlerKind = Object.freeze({
+const handlerKindByGroup = Object.freeze({
   application: "event-application",
   reactor: "event-reaction",
   subscriber: "event-subscription",
@@ -165,13 +165,11 @@ class DeterministicValidationError extends TypeError {
 }
 
 /** Create an immutable runtime routing plan from bounded-context and readiness metadata. */
-export function createServerRuntimeRoutingPlan(
-  input: ServerRuntimeRoutingPlanInput,
-): ServerRuntimeRoutingPlan {
+export function createRoutingPlan(input: RoutingPlanInput): ServerRuntimeRoutingPlan {
   const context = validateContext(input);
   const contextSnapshot = context.snapshot;
-  const commands = createCommandRuntimeRoutingPlan(input.commands);
-  const events = createEventRuntimeRoutingPlan(input.events);
+  const commands = createCommandPlan(input.commands);
+  const events = createEventPlan(input.events);
 
   return Object.freeze({
     context: contextSnapshot,
@@ -181,7 +179,7 @@ export function createServerRuntimeRoutingPlan(
   });
 }
 
-function createCommandRuntimeRoutingPlan(
+function createCommandPlan(
   readiness: CommandRegistrationReadiness | undefined,
 ): CommandRuntimeRoutingPlan {
   if (readiness === undefined) {
@@ -260,7 +258,7 @@ function createCommandRouteDraft(
   });
 }
 
-function createEventRuntimeRoutingPlan(
+function createEventPlan(
   readiness: EventRegistrationReadiness | undefined,
 ): EventRuntimeRoutingPlan {
   if (readiness === undefined) {
@@ -277,7 +275,7 @@ function createEventRuntimeRoutingPlan(
     return createEmptyEventPlan();
   }
 
-  const topicByEventFullTypeName = new Map<string, TransportTopic<"event">>();
+  const topicByEventName = new Map<string, TransportTopic<"event">>();
   const routeOrdinals = {
     application: 0,
     reactor: 0,
@@ -317,7 +315,7 @@ function createEventRuntimeRoutingPlan(
       semanticTags: collectTopicSemanticTags(subscribers, reactors, applications),
     });
 
-    topicByEventFullTypeName.set(eventFullTypeName, topic);
+    topicByEventName.set(eventFullTypeName, topic);
     subscriberDrafts.push(
       ...createEventRouteDrafts(topic, subscribers, "subscriber", routeOrdinals),
     );
@@ -341,7 +339,7 @@ function createEventRuntimeRoutingPlan(
   );
 
   return Object.freeze({
-    topics: Object.freeze([...topicByEventFullTypeName.values()]),
+    topics: Object.freeze([...topicByEventName.values()]),
     subscriptions,
     workerIds,
     subscriberRoutes,
@@ -404,7 +402,7 @@ function finalizeEventRoutes(
   );
 }
 
-function createDeferredSeams(): readonly DeferredServerRuntimeRoutingSeam[] {
+function createDeferredSeams(): readonly DeferredRoutingSeam[] {
   return Object.freeze([
     createDeferredSeam(
       "query",
@@ -422,9 +420,9 @@ function createDeferredSeams(): readonly DeferredServerRuntimeRoutingSeam[] {
 }
 
 function createDeferredSeam(
-  signalKind: DeferredServerRuntimeRoutingSeam["signalKind"],
+  signalKind: DeferredRoutingSeam["signalKind"],
   reason: string,
-): DeferredServerRuntimeRoutingSeam {
+): DeferredRoutingSeam {
   return Object.freeze({
     signalKind,
     status: "deferred",
@@ -563,7 +561,7 @@ function sanitizeEventRouteMessages(
   eventFullTypeName: string,
   receiverGroup: EventRuntimeReceiverGroup,
 ): readonly RoutedMessageDraft[] {
-  const expectedHandlerKind = eventReceiverGroupToHandlerKind[receiverGroup];
+  const expectedHandlerKind = handlerKindByGroup[receiverGroup];
   const receiverLabel = `Event ${receiverGroup} metadata for "${eventFullTypeName}"`;
 
   if (!Array.isArray(values)) {
@@ -638,7 +636,7 @@ function compareSemanticTags(left: string, right: string): number {
 
 function validateHandlerShape(
   value: unknown,
-  expectedMessageFullTypeName: string,
+  expectedMessageName: string,
   expectedKind: string,
   wrongKindMessage: string,
   wrongMessageMessage: string,
@@ -657,7 +655,7 @@ function validateHandlerShape(
     throw new DeterministicValidationError(wrongKindMessage);
   }
 
-  if (candidate.messageFullTypeName !== expectedMessageFullTypeName) {
+  if (candidate.messageFullTypeName !== expectedMessageName) {
     throw new DeterministicValidationError(wrongMessageMessage);
   }
 
@@ -667,7 +665,7 @@ function validateHandlerShape(
 
   const schema = candidate.schema as { readonly typeName?: unknown };
 
-  if (schema.typeName !== expectedMessageFullTypeName) {
+  if (schema.typeName !== expectedMessageName) {
     throw new DeterministicValidationError(wrongMessageMessage);
   }
 
@@ -680,7 +678,7 @@ function createMessageDescriptor(
   fullTypeName: string,
   schema: unknown,
   label: string,
-): ServerRuntimeRouteMessageDescriptor {
+): RouteMessage {
   const typeUrl = withDeterministicValidation(`${label} is malformed`, () =>
     deriveTypeUrl(schema as never),
   );

@@ -1,6 +1,6 @@
 # T-0019: Semantic Tag Runtime Registration
 
-Status: complete in task branch; pending integration to `main`
+Status: complete; integrated to `main`
 Started: `2026-07-09`
 Branch: `task/T-0019-semantic-tag-runtime-registration`
 Worktree:
@@ -58,7 +58,7 @@ transactions, delivery behavior, or application-owned registration APIs.
 - Splitter: `019f4849-2476-7fc0-bad6-64850236e82f`; completed and closed by
   root.
 - First non-blocked slice: plumb existing descriptor-derived semantic tags into
-  `createServerRuntimeRoutingPlan`.
+  `createRoutingPlan`.
 - Recommended design: command topics use the assignee entity tags; event topics
   use the deterministic union of all receiver entity tags.
 - No blocking questions reported.

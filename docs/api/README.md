@@ -460,10 +460,10 @@ have run. If dispatch rejects, earlier dispatchers may already have run, later
 dispatchers are skipped, and the stored event remains. The bus layer does not
 instantiate entities, invoke entity methods directly, create repositories, map
 `Ack`, or introduce delivery/inbox behavior.
-Runtime routing exports include `createServerRuntimeRoutingPlan()`,
-`ServerRuntimeRoutingPlan`, `ServerRuntimeRoutingPlanInput`,
+Runtime routing exports include `createRoutingPlan()`,
+`ServerRuntimeRoutingPlan`, `RoutingPlanInput`,
 `CommandRuntimeRoutingPlan`, `EventRuntimeRoutingPlan`, and
-`DeferredServerRuntimeRoutingSeam`. The planner requires a built
+`DeferredRoutingSeam`. The planner requires a built
 `BoundedContext`, plus optional concrete `CommandRegistrationReadiness` /
 `EventRegistrationReadiness` instances, and derives immutable
 `@spine-ts/transport` topics, subscriptions, and planner-local worker IDs plus
@@ -536,7 +536,7 @@ metadata surface.
 The public runtime closure smoke path composes these exports with
 `BoundedContext`, `Repository`, `HandlerMetadataRegistry`,
 `CommandRegistrationReadiness`, `EventRegistrationReadiness`, and
-`createServerRuntimeRoutingPlan()` to prove the metadata and lifecycle
+`createRoutingPlan()` to prove the metadata and lifecycle
 interfaces fit together. That composition produces context-scoped metadata,
 command/event readiness views, immutable runtime-routing plans, and
 deterministic runtime state only. The public `Server` export added later is a

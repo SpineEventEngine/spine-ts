@@ -152,7 +152,7 @@ Current slice exposes:
   matching registered `EventDispatcher`s in deterministic registration order.
   The bus runs `EventStore.acceptThenAppend()`, dispatcher `accept()` hooks,
   append, and then `dispatch()`; events with no dispatcher are still stored.
-- `createServerRuntimeRoutingPlan({ context, commands, events })` for the
+- `createRoutingPlan({ context, commands, events })` for the
   smallest immutable server/runtime wiring seam from built bounded-context
   metadata plus command/event readiness to transport topics, subscriptions,
   planner-local worker IDs, and explicit reserved routing seams.
@@ -363,7 +363,7 @@ The current TypeScript event-dispatch contract is message-type-based only;
 domestic/external filtering remains outside the current surface until handler
 metadata exposes that distinction.
 
-`createServerRuntimeRoutingPlan()` is the first server-owned runtime-wiring seam
+`createRoutingPlan()` is the first server-owned runtime-wiring seam
 over that metadata. It requires a built `BoundedContext` and accepts optional
 concrete `CommandRegistrationReadiness` / `EventRegistrationReadiness`
 instances. When readiness is present, it derives command topics plus one
@@ -535,7 +535,7 @@ import {
   Repository,
   RuntimeTransportBinding,
   SingleProcessServerRuntime,
-  createServerRuntimeRoutingPlan,
+  createRoutingPlan,
   defineEntityHandlers,
 } from "@spine-ts/server";
 import { CreateTaskSchema } from "./generated/task_commands_pb.js";
@@ -556,7 +556,7 @@ const handlers = defineEntityHandlers(TaskAggregate, TaskStateSchema, (builder) 
   builder.subscribe(TaskCreatedSchema, "onCreated"),
 ]);
 const registry = new HandlerMetadataRegistry([handlers]);
-const routingPlan = createServerRuntimeRoutingPlan({
+const routingPlan = createRoutingPlan({
   context: tasks,
   commands: CommandRegistrationReadiness.fromRegistry(registry),
   events: EventRegistrationReadiness.fromRegistry(registry),

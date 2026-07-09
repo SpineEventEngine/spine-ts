@@ -12,10 +12,10 @@ import {
   CommandRegistrationReadiness,
   EventRegistrationReadiness,
   HandlerMetadataRegistry,
-  createServerRuntimeRoutingPlan,
+  createRoutingPlan,
   defineEntityHandlers,
   type CommandRuntimeRoutingPlan,
-  type DeferredServerRuntimeRoutingSeam,
+  type DeferredRoutingSeam,
   type EventRuntimeRoutingPlan,
   type ServerRuntimeRoutingPlan,
 } from "../../src/index.js";
@@ -149,7 +149,7 @@ describe("server runtime routing", () => {
       builder.assign(CommandSchema, "assignCreate"),
       builder.assign(AggregateStateSchema, "assignArchive"),
     ]);
-    const plan = createServerRuntimeRoutingPlan({
+    const plan = createRoutingPlan({
       context: BoundedContext.singleTenant("Tasks").build(),
       commands: CommandRegistrationReadiness.fromEntityHandlers([handlers]),
     });
@@ -226,7 +226,7 @@ describe("server runtime routing", () => {
       AggregateStateSchema,
       (builder) => [builder.subscribe(EventSchema, "subscribeCreated")],
     );
-    const plan = createServerRuntimeRoutingPlan({
+    const plan = createRoutingPlan({
       context: BoundedContext.multitenant("Tasks").build(),
       events: EventRegistrationReadiness.fromEntityHandlers([
         projectionHandlers,
@@ -235,9 +235,7 @@ describe("server runtime routing", () => {
     });
 
     expectTypeOf<typeof plan.events>().toEqualTypeOf<EventRuntimeRoutingPlan>();
-    expectTypeOf<
-      (typeof plan.deferred)[number]
-    >().toEqualTypeOf<DeferredServerRuntimeRoutingSeam>();
+    expectTypeOf<(typeof plan.deferred)[number]>().toEqualTypeOf<DeferredRoutingSeam>();
     expect(
       plan.events.topics.map(({ signalKind, messageTypeUrl }) => ({ signalKind, messageTypeUrl })),
     ).toEqual([{ signalKind: "event", messageTypeUrl: deriveTypeUrl(EventSchema) }]);
@@ -305,7 +303,7 @@ describe("server runtime routing", () => {
       builder.assign(CommandSchema, "assignCreate"),
       builder.subscribe(EventSchema, "subscribeCreated"),
     ]);
-    const plan = createServerRuntimeRoutingPlan({
+    const plan = createRoutingPlan({
       context: BoundedContext.singleTenant("Tasks").build(),
       commands: CommandRegistrationReadiness.fromEntityHandlers([handlers]),
       events: EventRegistrationReadiness.fromEntityHandlers([handlers]),
@@ -348,10 +346,10 @@ describe("server runtime routing", () => {
     const emptyEventReadiness = EventRegistrationReadiness.fromRegistry(
       new HandlerMetadataRegistry(),
     );
-    const absentReadinessPlan = createServerRuntimeRoutingPlan({
+    const absentReadinessPlan = createRoutingPlan({
       context,
     });
-    const emptyReadinessPlan = createServerRuntimeRoutingPlan({
+    const emptyReadinessPlan = createRoutingPlan({
       context,
       commands: emptyCommandReadiness,
       events: emptyEventReadiness,
@@ -389,13 +387,13 @@ describe("server runtime routing", () => {
     }
 
     expect(() =>
-      createServerRuntimeRoutingPlan({
+      createRoutingPlan({
         context: {} as BoundedContext,
       }),
     ).toThrow(/requires a built BoundedContext/);
 
     expect(() =>
-      createServerRuntimeRoutingPlan({
+      createRoutingPlan({
         context: BoundedContext.singleTenant("Tasks").build(),
         commands: {
           registeredCommandMessageFullTypeNames: () => Object.freeze([CommandSchema.typeName]),
@@ -405,7 +403,7 @@ describe("server runtime routing", () => {
     ).toThrow(/must be an authentic CommandRegistrationReadiness instance/);
 
     expect(() =>
-      createServerRuntimeRoutingPlan({
+      createRoutingPlan({
         context: BoundedContext.singleTenant("Tasks").build(),
         events: {
           registeredEventMessageFullTypeNames: () => Object.freeze([EventSchema.typeName]),
@@ -444,7 +442,7 @@ describe("server runtime routing", () => {
     });
 
     expect(() =>
-      createServerRuntimeRoutingPlan({
+      createRoutingPlan({
         context: BoundedContext.singleTenant("Tasks").build(),
         commands: forgedCommandReadiness,
       }),
@@ -481,7 +479,7 @@ describe("server runtime routing", () => {
     });
 
     expect(() =>
-      createServerRuntimeRoutingPlan({
+      createRoutingPlan({
         context: BoundedContext.singleTenant("Tasks").build(),
         events: forgedEventReadiness,
       }),
@@ -508,7 +506,7 @@ describe("server runtime routing", () => {
     });
 
     expect(() =>
-      createServerRuntimeRoutingPlan({
+      createRoutingPlan({
         context: BoundedContext.singleTenant("Tasks").build(),
         commands: proxiedReadiness,
       }),
@@ -539,7 +537,7 @@ describe("server runtime routing", () => {
     });
 
     expect(() =>
-      createServerRuntimeRoutingPlan({
+      createRoutingPlan({
         context: BoundedContext.singleTenant("Tasks").build(),
         events: proxiedReadiness,
       }),
@@ -562,7 +560,7 @@ describe("server runtime routing", () => {
       AggregateStateSchema,
       (builder) => [builder.subscribe(EventSchema, "subscribeCreated")],
     );
-    const plan = createServerRuntimeRoutingPlan({
+    const plan = createRoutingPlan({
       context: BoundedContext.singleTenant("Tasks").build(),
       events: EventRegistrationReadiness.fromEntityHandlers([
         projectionHandlers,
@@ -600,14 +598,14 @@ describe("server runtime routing", () => {
     });
 
     expect(() =>
-      createServerRuntimeRoutingPlan({
+      createRoutingPlan({
         context: BoundedContext.singleTenant("Tasks").build(),
         commands: forgedCommandReadiness,
       }),
     ).toThrow(/must be an authentic CommandRegistrationReadiness instance/);
 
     expect(() =>
-      createServerRuntimeRoutingPlan({
+      createRoutingPlan({
         context: BoundedContext.singleTenant("Tasks").build(),
         events: forgedEventReadiness,
       }),
@@ -634,7 +632,7 @@ describe("server runtime routing", () => {
         () => value,
         () => {
           expect(() =>
-            createServerRuntimeRoutingPlan({
+            createRoutingPlan({
               context: BoundedContext.singleTenant("Tasks").build(),
               commands: commandReadiness,
             }),
@@ -721,7 +719,7 @@ describe("server runtime routing", () => {
         () => value,
         () => {
           expect(() =>
-            createServerRuntimeRoutingPlan({
+            createRoutingPlan({
               context: BoundedContext.singleTenant("Tasks").build(),
               events: eventReadiness,
             }),

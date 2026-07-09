@@ -481,7 +481,7 @@ than a server graph. Its verified public composition is:
 T-0011.6 and T-0011.7 then close the metadata-only runtime-routing/transport
 foundation layer. That later closure derives an immutable runtime-routing plan
 from the built context plus command and event readiness using
-`createServerRuntimeRoutingPlan()`.
+`createRoutingPlan()`.
 
 This is intentionally enough for later runtime tasks to share vocabulary and
 tests around "context metadata plus lifecycle plus readiness." It is not an

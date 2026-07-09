@@ -12,11 +12,11 @@ import {
   type SignalIntakeResult,
 } from "./signal-intake.js";
 import {
-  createServerRuntimeRoutingPlan,
+  createRoutingPlan,
   type CommandRuntimeRoutingRoute,
   type EventRuntimeRoutingRoute,
   type ServerRuntimeRoutingPlan,
-  type ServerRuntimeRoutingPlanInput,
+  type RoutingPlanInput,
 } from "./runtime-routing.js";
 import { ServerRuntimeStateError, SingleProcessServerRuntime } from "./runtime.js";
 
@@ -83,7 +83,7 @@ export class RuntimeTransportEnvelopeError extends Error {
  */
 export const RuntimeTransportBinding: Readonly<{
   /** Create the immutable runtime routing plan used by this binding. */
-  plan(input: ServerRuntimeRoutingPlanInput): ServerRuntimeRoutingPlan;
+  plan(input: RoutingPlanInput): ServerRuntimeRoutingPlan;
   /**
    * Register command and event routes with a same-host/local-only supplied
    * transport.
@@ -97,8 +97,8 @@ export const RuntimeTransportBinding: Readonly<{
    */
   open(input: RuntimeTransportBindingInput): Promise<RuntimeTransportBindingHandle>;
 }> = Object.freeze({
-  plan(input: ServerRuntimeRoutingPlanInput): ServerRuntimeRoutingPlan {
-    return createServerRuntimeRoutingPlan(input);
+  plan(input: RoutingPlanInput): ServerRuntimeRoutingPlan {
+    return createRoutingPlan(input);
   },
 
   async open(input: RuntimeTransportBindingInput): Promise<RuntimeTransportBindingHandle> {

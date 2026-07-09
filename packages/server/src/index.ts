@@ -185,12 +185,12 @@ export {
 } from "./handler/event-registration-readiness.js";
 
 export {
-  createServerRuntimeRoutingPlan,
+  createRoutingPlan,
   type CommandRuntimeRoutingPlan,
-  type DeferredServerRuntimeRoutingSeam,
+  type DeferredRoutingSeam,
   type EventRuntimeRoutingPlan,
   type ServerRuntimeRoutingPlan,
-  type ServerRuntimeRoutingPlanInput,
+  type RoutingPlanInput,
 } from "./runtime/runtime-routing.js";
 
 export {
