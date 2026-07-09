@@ -810,9 +810,10 @@ const server = await Server.atPort(8080, { environment }).add(tasks).start();
 `transport` before a listener is opened. Production mode validates explicit
 facility injection only. Durable production storage adapters remain an open
 production gap, and `InMemoryStorageFactory` is local/test-only. The environment
-selects and owns facilities for server assembly. Built contexts still keep the
-storage factory they were built with until a later builder integration wires
-context assembly through `ServerEnvironment`. Closing a running server is idempotent
+selects and owns facilities for server assembly. `Server` accepts built
+contexts and bounded-context builders; builders added through `Server` use
+`ServerEnvironment.storageFactory` unless `withStorageFactory()` selected a
+more specific local factory first. Closing a running server is idempotent
 and follows the JVM-familiar order: stop accepting requests, close active
 HTTP/2 sessions, close owned contexts/resources, then close environment-owned
 facilities when the server owns the environment. If a close hook fails,

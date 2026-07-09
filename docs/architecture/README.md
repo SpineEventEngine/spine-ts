@@ -514,9 +514,9 @@ called. `ServerEnvironment` is an explicit assembly object for storage,
 transport, optional delivery, optional tracing, and facility ownership. Local
 servers get in-memory storage and same-process transport defaults; production
 environment construction requires storage and transport before any listener is
-opened. The environment selects facilities for server assembly; built contexts
-still keep the storage factory they were built with until a later builder
-integration wires context assembly through the environment. Shutdown stops
+opened. The environment selects facilities for server assembly; `Server` now
+builds added `BoundedContextBuilder` values before listener open and uses the
+environment storage factory unless the builder chose one explicitly. Shutdown stops
 intake, closes active sessions, closes owned contexts/resources, then closes
 environment-owned facilities when the server owns the environment. Failed close
 attempts are retryable without rerunning close hooks that already succeeded. It

@@ -255,9 +255,10 @@ queue.
 owner for hosting those routes over Node HTTP/2. `ServerEnvironment`,
 `ServerEnvironmentLocalOptions`, and `ServerEnvironmentProductionOptions` select
 storage, transport, optional delivery, optional tracing, and facility ownership
-for server assembly without introducing a process-wide singleton. Built
-contexts still keep the storage factory they were built with until a later
-builder integration wires context assembly through the environment.
+for server assembly without introducing a process-wide singleton. `Server`
+accepts built contexts and `BoundedContextBuilder` values; builders added
+through `Server` use the environment storage factory unless
+`withStorageFactory()` already selected a more specific local factory.
 `Server.atPort(port)` defaults to local-only `127.0.0.1`; broader hosts are
 explicit through `ServerOptions`. When no environment is supplied, `Server`
 creates and owns a local environment with in-memory storage and same-process
