@@ -1,6 +1,6 @@
 # T-0018e Review Log
 
-Status: review complete; all lanes clean after re-review
+Status: complete; all lanes clean after re-review and post-merge verification
 
 Scope: runtime metadata and generated-registry documentation closure.
 
@@ -79,3 +79,20 @@ Scope: runtime metadata and generated-registry documentation closure.
   wording now describes descriptor-derived role inference and validation as
   build-time analyzer behavior, while generated registry records are documented
   with their actual fields.
+
+## Post-Merge Verification
+
+- `pnpm --config.verify-deps-before-run=false verify` first failed inside the
+  sandbox with local listener and ZeroMQ IPC permission errors:
+  `listen EPERM: operation not permitted 127.0.0.1` and IPC
+  `Operation not permitted`.
+- The same command was rerun with explicit escalation for the allowed loopback
+  and local IPC checks. It passed:
+  - 57 test files passed.
+  - 1088 tests passed.
+  - Coverage passed at 95.05% statements, 90.13% branches, 98.19% functions,
+    and 95.07% lines.
+  - TypeDoc/API export checks passed with the existing invalid `origin` source
+    link warning only.
+  - Proto lint passed.
+  - Generated proto outputs were ignored, untracked, and freshly regenerated.

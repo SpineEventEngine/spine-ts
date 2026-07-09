@@ -1,6 +1,6 @@
 # T-0018e: Runtime Metadata And Registry Docs Closure
 
-Status: complete in task branch; pending integration to `main`
+Status: complete; integrated to `main`
 Started: `2026-07-09`
 Branch: `task/T-0018e-runtime-metadata-registry-docs-closure`
 Worktree:
