@@ -92,7 +92,7 @@ export class Delivery {
 
     try {
       const pending = await this.inbox.readMessage(message.id);
-      if (pending === undefined || pending.status !== "TO_DELIVER") {
+      if (pending?.status !== "TO_DELIVER") {
         return deliveryRun("DRAINED", 0, 0, 0, []);
       }
 
