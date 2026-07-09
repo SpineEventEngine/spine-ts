@@ -2268,3 +2268,50 @@ Consequences:
 - Event-topic tag order must remain deterministic and copy-safe.
 - Later runtime slices can match by concrete event type URL and semantic tags
   without inventing another metadata source.
+
+## D-0070: Build Server-Added Context Builders With Environment Storage Defaults
+
+Status: Accepted
+
+Date: 2026-07-09
+
+Context: `T-0017k` introduced a small explicit `ServerEnvironment` for storage,
+transport, delivery, tracing, and ownership, but intentionally deferred wiring
+that environment into bounded-context builder assembly. Current docs say built
+contexts keep whatever storage factory they were built with. Spine JVM server
+assembly accepts `BoundedContextBuilder` instances and builds contexts lazily as
+part of server assembly; JVM repositories obtain default storage through
+`ServerEnvironment`.
+
+Decision:
+
+- Run `T-0020` as the next implementation slice.
+- Let `Server` accept `BoundedContextBuilder` values in addition to built
+  `BoundedContext` values.
+- Build server-added builders during `Server.start()` before opening the
+  listener.
+- Use `ServerEnvironment.storageFactory` as the default storage factory for
+  builders that did not explicitly choose one.
+- Preserve `BoundedContextBuilder.withStorageFactory(...)` as the stronger
+  local choice when it is present.
+- Keep the TypeScript environment explicit and instance-based; do not introduce
+  a Java-style process-wide singleton or broad assembly facade.
+
+Alternatives considered:
+
+- Keep requiring callers to build contexts before adding them to `Server`.
+  Rejected because it leaves the recorded environment assembly gap open and
+  differs from Spine JVM server-builder assembly.
+- Add a global `ServerEnvironment.instance()` default. Rejected because prior
+  TS design deliberately chose explicit environment instances for Node
+  embedding and tests.
+- Add a separate assembly manager/facade. Rejected as overengineered for a
+  one-step storage-default integration.
+
+Consequences:
+
+- Existing `Server.add(builtContext)` callers continue to work.
+- Applications can assemble contexts through `Server` so local/test and
+  production storage defaults come from the selected environment.
+- Failed builder assembly must reject before listener open and clean up any
+  contexts already built for that start attempt.
