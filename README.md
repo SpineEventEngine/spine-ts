@@ -2,18 +2,25 @@
 
 This repository is the TypeScript/Node.js implementation workspace for a Spine-inspired server-side framework.
 
-Current status: workspace/toolchain bootstrap, copied Spine Protobuf contract
-intake, core validation facades, descriptor-backed server metadata, a
-server-owned set-once state-transition validator, and a non-durable in-memory
-storage adapter. The server package includes entity transactions, entity
-families, repository registration, aggregate snapshot/event storage, command
-and event route calculation, delivery inbox storage, generated handler registry
-ingestion/discovery, and real Connect/Node `CommandService`, `QueryService`,
-and `SubscriptionService` wiring. The runnable `examples/todo` package uses
-bare handler decorators plus generated Protobuf and handler-registry artifacts
-from `pnpm proto:generate`; production storage adapters, import bus,
-scheduler, process supervision, richer query planning, and durable
-subscription recovery remain future work.
+Current status: verified local/example readiness over copied Spine Protobuf
+contracts, core validation/envelope helpers, descriptor-backed server metadata,
+bare decorator ingestion through generated handler registries, framework-owned
+entity transactions, repository-backed aggregate/projection/process-manager
+execution, read-side catch-up, durable delivery inbox primitives, durable
+inactive subscription recovery, adapter-neutral transport contracts,
+adapter-private same-host ZeroMQ IPC, and real Connect/Node `CommandService`,
+`QueryService`, and `SubscriptionService` wiring hosted by a small local HTTP/2
+`Server`.
+
+The runnable `examples/todo` package is a real local Connect/Node
+gRPC-compatible app. It uses generated Protobuf and handler-registry artifacts
+from the build workflow, bare application handler decorators, and process-local
+in-memory storage. It is not a production persistence, deployment,
+authentication, tracing, health-check, process-supervision, or multi-host
+transport recipe. Remaining production gaps include durable production storage
+adapters, remote/multi-host transport adapters, broker or worker process
+supervision, deployment/authentication/tracing/health hardening, retained
+attempt/update replay policy, and broader production verification.
 
 ## Workspace
 
@@ -34,10 +41,14 @@ subscription recovery remain future work.
 ## Useful Commands
 
 - `pnpm install`
+- `pnpm proto:generate`
+- `pnpm typecheck:build`
+- `pnpm docs:check`
+- `pnpm vitest run examples/todo/src/index.test.ts --passWithNoTests`
+- `pnpm --filter @spine-ts/example-todo start`
 - `pnpm lint`
 - `pnpm verify`
 - `pnpm docs:api`
-- `pnpm proto:generate`
 
 See [docs/USER_GUIDE.md](docs/USER_GUIDE.md) for the framework user guide and
 runnable API examples, and [build-protocol](build-protocol/README.md) for the

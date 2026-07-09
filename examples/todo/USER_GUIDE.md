@@ -2,7 +2,10 @@
 
 This guide shows the runnable server-side to-do example. The server is intended
 for local development and tests; it uses in-memory storage, so state is not
-shared across processes and disappears when the process exits.
+shared across processes and disappears when the process exits. It is a real
+local Connect/Node gRPC-compatible app, not a production persistence,
+deployment, authentication, tracing, health-check, process-supervision, or
+multi-host transport example.
 
 ## Generate And Build
 

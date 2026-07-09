@@ -1,13 +1,14 @@
 # Spine TS User Guide
 
-Current status: early framework guide for the descriptor registry,
-single-message validation facade, core envelope construction helpers, the first
-server entity, handler, repository, and bounded-context metadata
-layers, the first command/event bus seam, the first server runtime routing
-seam, the real Connect/Node `SpineServices` route registrar for the raw Spine
-command/query/subscription services, adapter-agnostic transport contracts, the
-first storage contracts with an in-memory adapter, and a minimal in-process
-bounded-context testing fixture.
+Current status: framework guide for the descriptor registry, single-message
+validation facade, core envelope construction helpers, server entity, handler,
+repository, and bounded-context metadata, executable aggregate/projection/
+process-manager paths, read-side catch-up, delivery inbox primitives, server
+runtime routing, local runtime transport binding, real Connect/Node
+`SpineServices` routes for the Spine command/query/subscription services, a
+small local HTTP/2 `Server`, adapter-agnostic transport contracts,
+adapter-private same-host ZeroMQ IPC, storage contracts with an in-memory
+adapter, and an in-process bounded-context testing fixture.
 
 This guide covers the behavior and contracts available now: Spine proto
 descriptors are exposed through curated packages, `@spine-ts/core` can derive
@@ -50,9 +51,10 @@ can now execute aggregate command assignees that update state in
 framework-owned transactions and return generated domain events, then dispatch
 stored aggregate events to projection subscribers that update `Stand`. The
 runnable `examples/todo` package uses this path with bare decorators and
-generated handler registry loading; broader entity runtime dispatch, transport
-endpoint execution, durable production storage, and broader production lifecycle
-remain later slices.
+generated handler registry loading. It is a real local Connect/Node
+gRPC-compatible app backed by process-local in-memory storage, not a production
+persistence, deployment, authentication, tracing, health, process-supervision,
+or multi-host transport example.
 
 ## What Exists Now
 
@@ -168,8 +170,8 @@ remain later slices.
 - A smoke-tested public assembly path that combines a built bounded context,
   handler metadata registry, command/event
   readiness views, and `createServerRuntimeRoutingPlan()` without exposing a
-  server facade, services, handler invocation, worker lifecycle registration,
-  or transport endpoint execution.
+  service host, handler invocation, worker lifecycle registration, or
+  production transport endpoint runner.
 - A local `RuntimeTransportBinding` that registers command/event routing plans
   with a supplied `SignalTransport`, validates incoming generated Spine
   command/event envelopes before runtime intake, enqueues accepted work through
@@ -199,10 +201,11 @@ remain later slices.
   keep tenant slices separate, clone stored values, return independently
   closeable handles, and are not durable across process restarts.
 - A runnable `examples/todo` package with generated Protobuf output, generated
-  handler registry loading, bare `@Assign`/`@Subscribe` handlers, in-memory
-  storage, and Connect/Node command, query, and subscription service routes.
+  handler registry loading, bare `@Assign`/`@Subscribe` handlers, process-local
+  in-memory storage, and real local Connect/Node command, query, and
+  subscription service routes.
 
-## What Is Deferred
+## Remaining Gaps
 
 - Runtime ID generation, timestamp factories, actor/tenant context factories,
   event producer/version/origin policy, command system properties, and runtime
@@ -211,19 +214,19 @@ remain later slices.
   registries. The server metadata APIs preserve entity tags and explicit
   handler declarations now, but no runtime registry consumes them yet.
 - Full system-context runtime, command-log repositories, system event taxonomy,
-  tracing/monitors/debug UI, richer gRPC service execution, remote/multi-host
-  transport topology, broker topology/process supervision, retry workers,
-  transport-backed delivery loops, durable production storage, and broader
-  production runtime hardening.
+  tracing/monitors/debug UI, production deployment/authentication/tracing/health
+  hardening, remote/multi-host transport topology, broker topology/process
+  supervision, retry monitors/workers, production storage adapters, and broader
+  production runtime verification.
   Built bounded contexts now create internal system-pairing metadata and a
   framework-owned tenant index; those internals are not exposed to end-user
   application code. Durable inbox/shard delivery storage, the direct local shard
   drain, and the local one-shard `DeliveryLoop` already exist for
   framework-owned delivery work; transport-backed/background scheduler workers,
-  production catch-up orchestration, and retained attempt history remain
-  deferred.
+  production catch-up orchestration, and retained attempt history remain open
+  production gaps.
   Event import and `ImportBus` are removed from the plan under ADR 0001 D1,
-  rather than deferred runtime work.
+  rather than pending runtime work.
 - Built bounded contexts can invoke aggregate command assignees that update
   state in framework-owned transactions and return generated domain events, then
   deliver stored aggregate-produced events to projection event subscribers that
@@ -237,9 +240,9 @@ remain later slices.
   Stand-backed state. Process-manager command assignees now hand off through
   durable inbox storage plus an immediate local shard drain before execution,
   while the remaining repository event paths still use the direct local runtime
-  in this slice. Broader durable subscriber/reactor delivery semantics,
-  transport-backed/background delivery worker orchestration, and cross-process
-  read-side recovery remain deferred.
+  in this slice. Broader cross-process subscriber/reactor delivery semantics,
+  transport-backed/background delivery worker orchestration, retained update
+  replay, and cross-process read-side recovery remain open production gaps.
 
 ## Type Registry
 
@@ -387,7 +390,8 @@ Use `archive()`, `unarchive()`, `markDeleted()`, and `restore()` only for
 buffered draft lifecycle metadata. They do not write storage, emit lifecycle
 events, or filter queries. Use `updateVersionMetadata()` only when caller-owned
 draft version metadata should be replaced explicitly; automatic version
-increments, clocks, event versions, and producer metadata remain deferred.
+increments, clocks, event versions, and producer metadata remain open runtime
+policy gaps.
 `requireActive()` is the active-state guard framework-owned entity base classes
 call before state mutation: it rejects committed/rolled-back transactions and
 active drafts already marked archived or deleted with deterministic errors that
@@ -742,7 +746,7 @@ ordinary application code does not import `GeneratedRegistryDiscovery`,
 
 Advanced framework/runtime planning can still consume built context metadata,
 transport-owned command/event topics, subscriptions, planner-local worker IDs,
-and deferred query/subscription/system routing seams. A routing plan is
+and reserved query/subscription/system routing seams. A routing plan is
 metadata:
 route descriptors expose sanitized message type names/type URLs, receiver
 groups, planner-local route/worker IDs, and correlation keys back to plan-level
@@ -803,11 +807,11 @@ const server = await Server.atPort(8080, { environment }).add(tasks).start();
 
 `ServerEnvironment.production()` rejects missing `storageFactory` or
 `transport` before a listener is opened. Production mode validates explicit
-facility injection only; durable production storage adapters remain deferred,
-and `InMemoryStorageFactory` is local/test-only. The environment selects and
-owns facilities for server assembly. Built contexts still keep the storage
-factory they were built with until a later builder integration wires context
-assembly through `ServerEnvironment`. Closing a running server is idempotent
+facility injection only. Durable production storage adapters remain an open
+production gap, and `InMemoryStorageFactory` is local/test-only. The environment
+selects and owns facilities for server assembly. Built contexts still keep the
+storage factory they were built with until a later builder integration wires
+context assembly through `ServerEnvironment`. Closing a running server is idempotent
 and follows the JVM-familiar order: stop accepting requests, close active
 HTTP/2 sessions, close owned contexts/resources, then close environment-owned
 facilities when the server owns the environment. If a close hook fails,
@@ -1195,16 +1199,19 @@ existing `BoundedContext.catchUpReadSide()` coordination path and does not gain
 fake durable catch-up storage here. Built contexts create a framework-owned
 tenant index now; production tenant-index policy, diagnostics, repository
 storage policy, transport-backed worker supervision, retained attempt history,
-and read-side projection stores are deferred.
+and read-side projection stores remain open production gaps.
 
-## First Commands
+## Developer Path
 
 ```shell
 pnpm install
-pnpm proto:verify
 pnpm proto:generate
+pnpm typecheck:build
 pnpm docs:check
-pnpm verify
+pnpm vitest run examples/todo/src/index.test.ts --passWithNoTests
+pnpm --filter @spine-ts/example-todo start
 ```
 
 Generated API docs are written to `docs/api/reference` and are ignored by Git.
+The focused example test starts the real local gRPC-compatible to-do server;
+managed sandboxes can require native loopback approval for that command.

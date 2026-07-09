@@ -43,8 +43,9 @@ existing `SpineServices` adapters. Each process keeps its own in-memory state;
 restart the process to clear tasks.
 
 The server is intentionally local-only in this example. Keep the default
-`127.0.0.1` binding for development and tests unless you add your own
-production transport, authentication, persistence, and deployment controls.
+`127.0.0.1` binding for development and tests. The example does not provide
+production persistence, authentication, tracing, health checks, deployment
+automation, process supervision, or remote/multi-host transport.
 
 ## Focused Tests
 
@@ -206,6 +207,7 @@ EOF
 - Validation failure acknowledgements with packed Spine validation details.
 - Business refusal acknowledgements for completing an already completed task or
   reopening an open task.
+- Local process-only state backed by the framework's in-memory storage adapter.
 
 See [USER_GUIDE.md](USER_GUIDE.md) for the full workflow, additional command
 variants, ID-filter queries, and more detailed shutdown notes.
