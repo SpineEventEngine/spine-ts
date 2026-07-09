@@ -2,7 +2,7 @@ import type { StorageContext, StorageFactory } from "@spine-ts/storage";
 
 import { Inbox, InboxMessageError, type InboxMessage } from "./inbox.js";
 import { InboxStorage } from "./inbox-storage.js";
-import type { ShardIndex } from "./shard-index.js";
+import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry } from "./sharded-work-registry.js";
 
 /** Delivery owner for inbox storage and shard registry. */
@@ -84,16 +84,28 @@ export class Delivery {
     message: InboxMessage,
     options: DeliveryMessageDrainOptions,
   ): Promise<DeliveryRun> {
-    assertMessageShardMatchesId(message);
-    const session = await this.shards.pickUp(message.shard, options.node);
+    const shard = requireMessageShard(message);
+    const id = Object.freeze({
+      value: message.id.value,
+      shard,
+    });
+    const session = await this.shards.pickUp(shard, options.node);
     if (session === undefined) {
       return deliveryRun("SKIPPED", 0, 0, 0, []);
     }
 
     try {
-      const pending = await this.inbox.readMessage(message.id);
+      if (!sameShard(session.shard, shard)) {
+        throw new InboxMessageError("Inbox message lease shard does not match message shard.");
+      }
+
+      const pending = await this.inbox.readMessage(id);
       if (pending?.status !== "TO_DELIVER") {
         return deliveryRun("DRAINED", 0, 0, 0, []);
+      }
+      const pendingShard = requireMessageShard(pending);
+      if (!sameShard(pendingShard, shard)) {
+        throw new InboxMessageError("Inbox message row shard does not match message shard.");
       }
 
       try {
@@ -186,8 +198,35 @@ function deliveryRun(
   });
 }
 
-function assertMessageShardMatchesId(message: InboxMessage): void {
-  if (message.id.shard.key() !== message.shard.key()) {
+function requireMessageShard(message: InboxMessage): ShardIndex {
+  const idShard = readShard(message.id.shard, "Inbox message ID shard");
+  const rowShard = readShard(message.shard, "Inbox message shard");
+
+  if (!sameShard(idShard, rowShard)) {
     throw new InboxMessageError("Inbox message ID shard does not match message shard.");
   }
+
+  return idShard;
+}
+
+function readShard(value: unknown, label: string): ShardIndex {
+  try {
+    if (typeof value !== "object" || value === null) {
+      throw new Error(`${label} is invalid.`);
+    }
+    const shard = value as { readonly index?: unknown; readonly ofTotal?: unknown };
+    const index = shard.index;
+    const ofTotal = shard.ofTotal;
+
+    return new ShardIndex(index as number, ofTotal as number);
+  } catch (error) {
+    throw new InboxMessageError(`${label} is invalid.`, { cause: error });
+  }
+}
+
+function sameShard(
+  left: Pick<ShardIndex, "index" | "ofTotal">,
+  right: Pick<ShardIndex, "index" | "ofTotal">,
+): boolean {
+  return left.index === right.index && left.ofTotal === right.ofTotal;
 }

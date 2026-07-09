@@ -242,8 +242,10 @@ or multi-host transport example.
   event subscribers now hand off through durable inbox storage plus an immediate
   local shard drain before execution. Projection subscriber rows use
   `UPDATE_SUBSCRIBER`, store the original `Event` envelope, and replay only the
-  routed row target before the projection transaction and `Stand` update. The
-  remaining repository event paths still use the direct local runtime in this
+  routed row target before the projection transaction and `Stand` update.
+  Process-manager event reactors remain direct local `EventBus` execution and
+  are not yet routed through durable inbox storage. The remaining repository
+  event paths still use the direct local runtime in this
   slice. Broader cross-process subscriber/reactor delivery semantics,
   transport-backed/background delivery worker orchestration, retained update
   replay, and cross-process read-side recovery remain open production gaps.
@@ -1209,7 +1211,8 @@ history is written. `stop()` prevents future drain starts and does not
 interrupt an in-flight `Delivery.drain()`; `close()` calls `stop()` and waits
 for the current drain, if any, to finish. Projection catch-up remains the
 existing `BoundedContext.catchUpReadSide()` coordination path and does not gain
-fake durable catch-up storage here; process-manager event reactors, aggregate
+fake durable catch-up storage here; process-manager event reactors are still
+direct local `EventBus` execution rather than durable inbox rows, and aggregate
 event reactors/importers, retry workers, and generic repository delivery remain
 deferred. Built contexts create a framework-owned tenant index now; production
 tenant-index policy, diagnostics, repository storage policy, transport-backed

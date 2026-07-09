@@ -122,10 +122,9 @@ Current slice exposes:
   for process-manager command rows and live projection subscriber rows, but
   this slice explicitly excludes transport-backed worker supervision, retry
   monitors, conveyor/stations, generic repository invocation, process-manager
-  event reactors, aggregate event reactors/importers, projection catch-up
-  through inbox storage, broad production lifecycle, retained attempt history,
-  durable catch-up storage, and example app work;
-- and
+  event reactors through inbox storage, aggregate event reactors/importers,
+  projection catch-up through inbox storage, broad production lifecycle,
+  retained attempt history, durable catch-up storage, and example app work;
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
 - first-field routing hints from descriptor order;
@@ -671,11 +670,10 @@ invoke query handlers, construct the full system-context runtime, provide
 command-log repositories, emit the full system event taxonomy, provide
 tracing/monitors/debug UI, start query/subscription buses, expose a broad
 production lifecycle, or integrate transports. Process-manager command assignees
-now write durable process-manager
-inbox rows before the current local shard drain replays them, and the post does
-not resolve until that received row is marked delivered. Scheduler/retry
-workers, cross-process recovery, and broader event/aggregate handoff remain
-open production gaps.
+and live projection subscribers now write durable inbox rows before the current
+local shard drain replays them, and the post does not resolve until that
+received row is marked delivered. Scheduler/retry workers, cross-process
+recovery, and broader event/aggregate handoff remain open production gaps.
 
 ## Direct Stand
 
@@ -970,10 +968,12 @@ execution wraps them in framework `Command`/`Event` envelopes only after
 transaction commit and state storage. Process-manager produced events are
 posted through the event bus so they are appended to the `EventStore` before
 fan-out; post-commit dispatch failures are recorded in
-`storedEventDispatchFailures()`. Process-manager command assignees now use the
-framework-owned durable inbox handoff with immediate local shard replay/drain,
-while scheduler/retry workers, cross-process recovery, and broader
-event/aggregate handoff remain open production gaps. This seam follows Spine `core-jvm`
+`storedEventDispatchFailures()`. Process-manager command assignees and live
+projection subscribers now use the framework-owned durable inbox handoff with
+immediate local shard replay/drain, while process-manager event reactors remain
+direct local `EventBus` execution rather than durable inbox rows.
+Scheduler/retry workers, cross-process recovery, and broader event/aggregate
+handoff remain open production gaps. This seam follows Spine `core-jvm`
 `Repository` identity and registration concepts closely. The direct repository
 API does not create, find, or store entities; invoke handlers; write inboxes;
 manage caches; emit lifecycle events; or touch transport.

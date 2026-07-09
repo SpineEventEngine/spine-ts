@@ -1,6 +1,6 @@
 # Review Log: T-0022a Projection Inbox Handoff
 
-Status: second re-review fixes implemented
+Status: remaining review findings fixed
 
 Scope: live projection subscriber durable inbox handoff.
 
@@ -30,3 +30,39 @@ Scope: live projection subscriber durable inbox handoff.
 - Added focused delivery regression/type coverage for the mismatched-shard
   guard and exact-message options shape.
 - Updated API/developer docs and export checks for `DeliveryMessageDrainOptions`.
+
+## Remaining Findings Fix Pass
+
+- Security Important: tightened `Delivery.drainMessage()` so exact-row shard
+  equality comes from `index`/`ofTotal`, not a caller-supplied `key()`. The
+  method now leases a normalized ID shard, reads by that normalized message ID,
+  and checks the leased/session and pending-row shards before replay. Added a
+  forged structural shard regression where `key()` lies while `index`/`ofTotal`
+  point elsewhere.
+- Reliability Important: moved the duplicated exact-row local handoff loop into
+  a narrow shared helper. Duplicate `TO_DELIVER` rows that skip exact drain
+  because the original local drain owns the shard now poll briefly for that
+  exact row to become `DELIVERED`; non-duplicate skipped rows still fail fast.
+  Added concurrent duplicate projection coverage and matching process-manager
+  coverage for the shared helper path.
+- Docs Important: corrected runtime/user/developer/package docs so
+  process-manager event reactors are direct local `EventBus` execution and are
+  not yet routed through durable inbox storage. README handoff sections now
+  mention both process-manager command rows and live projection subscriber rows.
+- Minor cleanup: removed the stray README `- and` bullet.
+- Cleanup rule: replaced the overlong `assertMessageShardMatchesId` helper name
+  with smaller shard-normalization helpers that satisfy semantic-name cleanup.
+
+## Remaining Findings Verification
+
+- `pnpm --config.verify-deps-before-run=false vitest run packages/server/test/delivery/delivery-worker.test.ts packages/server/test/context/projection-handoff.test.ts packages/server/test/context/process-manager-handoff.test.ts`:
+  passed; 3 test files, 33 tests.
+- `pnpm --config.verify-deps-before-run=false lint:generated`: first
+  remaining-findings run failed on two ESLint unsafe-assignment findings in the
+  new shard normalizer; after replacing those reads, passed with `tsc -b`,
+  ESLint, and cleanup enforcement.
+- `pnpm --config.verify-deps-before-run=false docs:check:generated`: passed;
+  TypeDoc emitted the existing invalid `origin` remote source-link warning, then
+  API export checks passed.
+- `pnpm --config.verify-deps-before-run=false format:check`: passed.
+- `git diff --check`: passed.

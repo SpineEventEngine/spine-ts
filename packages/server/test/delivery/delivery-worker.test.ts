@@ -457,6 +457,41 @@ describe("Delivery worker", () => {
     ]);
   });
 
+  it("rejects exact-message drains when a forged message shard key lies", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const stored = await seed(delivery, "signal-original", 1n);
+    const forgedShard = Object.freeze({
+      index: 1,
+      ofTotal: 2,
+      key() {
+        return stored.id.shard.key();
+      },
+    }) as ShardIndex;
+    const forged = Object.freeze({
+      ...stored,
+      shard: forgedShard,
+    });
+    const seen: string[] = [];
+
+    await expect(
+      delivery.drainMessage(forged, {
+        node: "node-a",
+        onMessage(message) {
+          seen.push(message.signalId);
+        },
+      }),
+    ).rejects.toThrow("Inbox message ID shard does not match message shard.");
+
+    expect(seen).toEqual([]);
+    await expect(delivery.inbox.read(stored.shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([
+      stored,
+    ]);
+    await expect(delivery.shards.pickUp(new ShardIndex(1, 2), "node-b")).resolves.toBeDefined();
+  });
+
   it("repairs the delivered-row stale-guard race during duplicate receive", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({

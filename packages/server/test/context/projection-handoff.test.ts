@@ -54,6 +54,60 @@ describe("LocalProjectionInbox", () => {
     ]);
   });
 
+  it("waits for a concurrent duplicate while the original projection drain owns the shard", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inbox = new LocalProjectionInbox("Tasks");
+    const targetTypeUrl = "type.example.dev/Tasks.Projection";
+    const shard = ShardIndex.single();
+    const seen: InboxMessage[] = [];
+    let startReplay!: () => void;
+    let releaseReplay!: () => void;
+    const replayStarted = new Promise<void>((resolve) => {
+      startReplay = resolve;
+    });
+    const replayReleased = new Promise<void>((resolve) => {
+      releaseReplay = resolve;
+    });
+    const input = {
+      inboxId: { targetId: "projection-duplicate", targetTypeUrl },
+      signalId: "event-duplicate",
+      label: "UPDATE_SUBSCRIBER" as const,
+      status: "TO_DELIVER" as const,
+      shard,
+    };
+
+    inbox.register({
+      targetTypeUrl,
+      async replay(message) {
+        seen.push(message);
+        startReplay();
+        await replayReleased;
+      },
+    });
+
+    const first = inbox.receive(delivery, input);
+    await replayStarted;
+    const duplicate = inbox.receive(delivery, input);
+
+    await pause(20);
+    releaseReplay();
+
+    const [firstMessage, duplicateMessage] = await Promise.all([first, duplicate]);
+
+    expect(duplicateMessage.id).toEqual(firstMessage.id);
+    expect(seen).toHaveLength(1);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
+      {
+        signalId: "event-duplicate",
+        label: "UPDATE_SUBSCRIBER",
+        status: "DELIVERED",
+      },
+    ]);
+  });
+
   it("rejects when the inbox label is not UPDATE_SUBSCRIBER", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -177,3 +231,9 @@ describe("LocalProjectionInbox", () => {
     ]);
   });
 });
+
+function pause(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}

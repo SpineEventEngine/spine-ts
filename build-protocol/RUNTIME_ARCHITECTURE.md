@@ -228,7 +228,9 @@ delivery worker boundary:
   `Delivery.drain()` run can drain one shard by callback. Built bounded
   contexts integrate `CommandBus` intake for process-manager command assignees
   and live `EventBus` intake for projection subscribers with durable local
-  inbox handoff; other event endpoint kinds remain deferred;
+  inbox handoff. Process-manager event reactors remain direct local `EventBus`
+  execution and are not yet routed through durable inbox storage; other
+  inbox-routed event endpoint kinds remain deferred;
 - durable inbox rows store the inbox target identity, signal identity, shard,
   status, label, receive time, version, optional signal payload, and optional
   dedup retention;
@@ -256,7 +258,8 @@ delivery worker boundary:
 This slice stops at durable storage, ordered readback, narrow built-context
 process-manager command and live projection subscriber handoffs, and one direct
 drain call. It does not yet implement a generic repository delivery engine,
-process-manager event reactors, aggregate event reactors/importers, projection
-catch-up through inbox storage, worker loops, retry monitors, attempt counters,
-retained delivery error details, or transport-backed delivery. Those concerns
-are deferred to later delivery and runtime tasks.
+process-manager event reactors through inbox storage, aggregate event
+reactors/importers, projection catch-up through inbox storage, worker loops,
+retry monitors, attempt counters, retained delivery error details, or
+transport-backed delivery. Those concerns are deferred to later delivery and
+runtime tasks.

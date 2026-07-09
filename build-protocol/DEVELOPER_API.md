@@ -340,9 +340,9 @@ target before running the projection transaction and `Stand` update.
 `InboxStorage` remains the durable dedup authority.
 
 The current API does not schedule repeated runs, expose a generic repository
-delivery engine, run process-manager event reactors, run aggregate event
-reactors/importers, run projection catch-up through inbox storage, run retry
-monitors, open transport workers, or retain attempt/error history beyond the
+delivery engine, route process-manager event reactors through inbox storage,
+run aggregate event reactors/importers, run projection catch-up through inbox
+storage, run retry monitors, open transport workers, or retain attempt/error history beyond the
 returned `DeliveryRun`.
 
 ## Runtime Transport Binding

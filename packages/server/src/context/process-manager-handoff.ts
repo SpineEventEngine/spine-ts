@@ -1,8 +1,7 @@
 import { Delivery } from "../delivery/delivery.js";
 import type { InboxMessage } from "../delivery/inbox.js";
 import type { ProcessManagerInbox, ProcessManagerInboxTarget } from "../repository/repository.js";
-
-const processManagerDrainLimit = 8;
+import { drainLocalInboxMessage } from "./local-inbox-handoff.js";
 
 export class LocalProcessManagerInbox implements ProcessManagerInbox {
   readonly #contextName: string;
@@ -45,51 +44,24 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
       ...(input.keepUntil === undefined ? {} : { keepUntil: input.keepUntil }),
     });
 
-    await this.#drainUntilDelivered(delivery, written.message, deliveryTenantId);
+    await drainLocalInboxMessage({
+      delivery,
+      received: written.message,
+      node: this.#contextName,
+      replay: (message) => this.#replay(message, deliveryTenantId),
+      duplicate: written.outcome === "DUPLICATE",
+      replayFailureMessage: "Process-manager inbox replay failed.",
+      skippedMessage:
+        "Process-manager inbox delivery was skipped before the target row was delivered.",
+      unfinishedMessage:
+        "Process-manager inbox delivery did not reach the target row before the local drain finished.",
+    });
     return written.message;
   }
 
   #takeVersion(): bigint {
     this.#nextVersion += 1n;
     return this.#nextVersion;
-  }
-
-  async #drainUntilDelivered(
-    delivery: Delivery,
-    received: InboxMessage,
-    deliveryTenantId?: string,
-  ): Promise<void> {
-    for (let attempt = 0; attempt < processManagerDrainLimit; attempt += 1) {
-      const run = await delivery.drainMessage(received, {
-        node: this.#contextName,
-        onMessage: (message) => this.#replay(message, deliveryTenantId),
-      });
-      const target = await delivery.inbox.readMessage(received.id);
-
-      if (target?.status === "DELIVERED") {
-        return;
-      }
-
-      const failure = run.failures.find(({ message }) => sameMessageId(message.id, received.id));
-
-      if (failure !== undefined) {
-        throw failure.error instanceof Error
-          ? failure.error
-          : new Error("Process-manager inbox replay failed.", { cause: failure.error });
-      }
-      if (run.status === "SKIPPED") {
-        throw new Error(
-          "Process-manager inbox delivery was skipped before the target row was delivered.",
-        );
-      }
-      if (run.processed === 0) {
-        break;
-      }
-    }
-
-    throw new Error(
-      "Process-manager inbox delivery did not reach the target row before the local drain finished.",
-    );
   }
 
   async #replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
@@ -107,21 +79,4 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
 
     await target.replay(message, deliveryTenantId);
   }
-}
-
-function sameMessageId(
-  left: {
-    readonly value: string;
-    readonly shard: { readonly index: number; readonly ofTotal: number };
-  },
-  right: {
-    readonly value: string;
-    readonly shard: { readonly index: number; readonly ofTotal: number };
-  },
-): boolean {
-  return (
-    left.value === right.value &&
-    left.shard.index === right.shard.index &&
-    left.shard.ofTotal === right.shard.ofTotal
-  );
 }

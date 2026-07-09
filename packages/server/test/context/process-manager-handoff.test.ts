@@ -58,6 +58,60 @@ describe("LocalProcessManagerInbox", () => {
     ]);
   });
 
+  it("waits for a concurrent duplicate while the original command drain owns the shard", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inbox = new LocalProcessManagerInbox("Tasks");
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const shard = ShardIndex.single();
+    const seen: InboxMessage[] = [];
+    let startReplay!: () => void;
+    let releaseReplay!: () => void;
+    const replayStarted = new Promise<void>((resolve) => {
+      startReplay = resolve;
+    });
+    const replayReleased = new Promise<void>((resolve) => {
+      releaseReplay = resolve;
+    });
+    const input = {
+      inboxId: { targetId: "pm-duplicate", targetTypeUrl },
+      signalId: "signal-duplicate",
+      label: "HANDLE_COMMAND" as const,
+      status: "TO_DELIVER" as const,
+      shard,
+    };
+
+    inbox.register({
+      targetTypeUrl,
+      async replay(message) {
+        seen.push(message);
+        startReplay();
+        await replayReleased;
+      },
+    });
+
+    const first = inbox.receive(delivery, input);
+    await replayStarted;
+    const duplicate = inbox.receive(delivery, input);
+
+    await pause(20);
+    releaseReplay();
+
+    const [firstMessage, duplicateMessage] = await Promise.all([first, duplicate]);
+
+    expect(duplicateMessage.id).toEqual(firstMessage.id);
+    expect(seen).toHaveLength(1);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
+      {
+        signalId: "signal-duplicate",
+        label: "HANDLE_COMMAND",
+        status: "DELIVERED",
+      },
+    ]);
+  });
+
   it("stores optional signal and keepUntil while scheduled rows do not replay", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -432,3 +486,9 @@ describe("LocalProcessManagerInbox", () => {
     ]);
   });
 });
+
+function pause(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
