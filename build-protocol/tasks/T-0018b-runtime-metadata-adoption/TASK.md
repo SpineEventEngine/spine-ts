@@ -1,11 +1,11 @@
 # T-0018b: Runtime Metadata Adoption
 
-Status: planned
+Status: verified pending integration
 Started: `2026-07-09`
 Branch: `task/T-0018b-runtime-metadata-adoption`
 Worktree:
 `.worktrees/T-0018b-runtime-metadata-adoption`
-Base commit: `9c3ba8a`
+Base commit: `e62de1a`
 
 ## Objective
 
@@ -62,9 +62,9 @@ example or test code.
 ## Verification Plan
 
 - `pnpm --config.verify-deps-before-run=false exec vitest run
-  examples/todo/src/index.test.ts
-  packages/testing/test/index.test.ts
-  packages/server/test/runtime/signal-metadata.test.ts`.
+examples/todo/src/index.test.ts
+packages/testing/test/index.test.ts
+packages/server/test/runtime/signal-metadata.test.ts`.
 - `pnpm --config.verify-deps-before-run=false typecheck:build`.
 - `pnpm --config.verify-deps-before-run=false docs:check`.
 - `pnpm --config.verify-deps-before-run=false format:check`.

@@ -3,13 +3,7 @@ import { Int32ValueSchema, StringValueSchema, type Any } from "@bufbuild/protobu
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { deriveTypeUrl, packAny, packCommand, unpackAny } from "@spine-ts/core";
-import {
-  ActorContextSchema,
-  CommandContextSchema,
-  CommandIdSchema,
-  UserIdSchema,
-  ValidationErrorSchema,
-} from "@spine-ts/proto";
+import { UserIdSchema, ValidationErrorSchema } from "@spine-ts/proto";
 import {
   CompositeFilter_CompositeOperator,
   CompositeFilterSchema,
@@ -33,6 +27,7 @@ import {
   type SubscriptionUpdate,
 } from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
 import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
+import { SignalMetadata } from "@spine-ts/server";
 import { BoundedContextFixture } from "@spine-ts/testing";
 import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -57,6 +52,7 @@ type TodoModule = typeof import("../dist/src/index.js");
 
 let createTodoContext: TodoModule["createTodoContext"];
 let startTodoServer: TodoModule["startTodoServer"];
+const signalMetadata = new SignalMetadata();
 
 describe("@spine-ts/example-todo", () => {
   beforeAll(async () => {
@@ -753,10 +749,7 @@ function formatDiagnostics(diagnostics: readonly ts.Diagnostic[]): string {
 
 function createTaskCommand(commandId: string, taskId: string, title: string) {
   return packCommand({
-    id: create(CommandIdSchema, { uuid: commandId }),
-    context: create(CommandContextSchema, {
-      actorContext: createActorContext(),
-    }),
+    ...createCommandMetadata(commandId),
     schema: CreateTaskSchema,
     message: create(CreateTaskSchema, {
       id: create(TaskIdSchema, { value: taskId }),
@@ -772,10 +765,7 @@ function createRenameCommand(
   options: { readonly validate?: boolean } = {},
 ) {
   return packCommand({
-    id: create(CommandIdSchema, { uuid: commandId }),
-    context: create(CommandContextSchema, {
-      actorContext: createActorContext(),
-    }),
+    ...createCommandMetadata(commandId),
     schema: RenameTaskSchema,
     message: create(RenameTaskSchema, {
       id: create(TaskIdSchema, { value: taskId }),
@@ -787,10 +777,7 @@ function createRenameCommand(
 
 function createCompleteCommand(commandId: string, taskId: string) {
   return packCommand({
-    id: create(CommandIdSchema, { uuid: commandId }),
-    context: create(CommandContextSchema, {
-      actorContext: createActorContext(),
-    }),
+    ...createCommandMetadata(commandId),
     schema: CompleteTaskSchema,
     message: create(CompleteTaskSchema, {
       id: create(TaskIdSchema, { value: taskId }),
@@ -800,15 +787,21 @@ function createCompleteCommand(commandId: string, taskId: string) {
 
 function createReopenCommand(commandId: string, taskId: string) {
   return packCommand({
-    id: create(CommandIdSchema, { uuid: commandId }),
-    context: create(CommandContextSchema, {
-      actorContext: createActorContext(),
-    }),
+    ...createCommandMetadata(commandId),
     schema: ReopenTaskSchema,
     message: create(ReopenTaskSchema, {
       id: create(TaskIdSchema, { value: taskId }),
     }),
   });
+}
+
+function createCommandMetadata(commandId: string) {
+  return {
+    id: signalMetadata.commandId(commandId),
+    context: signalMetadata.commandContext({
+      actorContext: createActorContext(),
+    }),
+  };
 }
 
 function createTaskListQuery() {
@@ -888,7 +881,7 @@ function createTaskListTopic() {
 }
 
 function createActorContext() {
-  return create(ActorContextSchema, {
+  return signalMetadata.actorContext({
     actor: create(UserIdSchema, { value: "todo-user" }),
   });
 }

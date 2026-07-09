@@ -8,9 +8,6 @@ import {
 } from "@bufbuild/protobuf/wkt";
 import { deriveTypeUrl, packAny, packCommand, packEvent, unpackAny } from "@spine-ts/core";
 import {
-  ActorContextSchema,
-  CommandContextSchema,
-  CommandIdSchema,
   EventContextSchema,
   EventIdSchema,
   UserIdSchema,
@@ -31,6 +28,7 @@ import {
   BoundedContext,
   Projection,
   Repository,
+  SignalMetadata,
   defineEntityHandlers,
 } from "@spine-ts/server";
 import { describe, expect, it } from "vitest";
@@ -59,6 +57,7 @@ const AggregateStateSchema = messageDesc(
   fileEntityMetadataFixture,
   1,
 ) as GenMessage<AggregateState>;
+const signalMetadata = new SignalMetadata();
 
 class TaskAggregate extends Aggregate<string, typeof AggregateStateSchema, bigint> {
   assignTask(command: AggregateState) {
@@ -288,8 +287,8 @@ function createTaskProjectionRepository(): Repository<typeof TaskProjection> {
 
 function createTaskCommand(commandId: string, taskId: string, name: string) {
   return packCommand({
-    id: create(CommandIdSchema, { uuid: commandId }),
-    context: create(CommandContextSchema, {
+    id: signalMetadata.commandId(commandId),
+    context: signalMetadata.commandContext({
       actorContext: createActorContext(),
     }),
     schema: AggregateStateSchema,
@@ -345,7 +344,7 @@ function createTaskTopic() {
 }
 
 function createActorContext() {
-  return create(ActorContextSchema, {
+  return signalMetadata.actorContext({
     actor: create(UserIdSchema, { value: "user-1" }),
   });
 }
