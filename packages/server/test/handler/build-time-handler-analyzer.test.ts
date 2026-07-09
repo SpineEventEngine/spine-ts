@@ -1,3 +1,7 @@
+import { Buffer } from "node:buffer";
+
+import { create, toBinary } from "@bufbuild/protobuf";
+import { FileDescriptorProtoSchema } from "@bufbuild/protobuf/wkt";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
@@ -64,6 +68,202 @@ describe("build-time handler analyzer", () => {
         ],
       },
     ]);
+  });
+
+  it("classifies command schemas from descriptors when generated module paths are neutral", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/neutral-command.ts", {
+        "src/neutral-command.ts": neutralCommandSource,
+        "generated/domain_pb.ts": generatedModule(
+          "spine/example/todo/v1/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedModule(
+          "spine/example/todo/v1/task_events.proto",
+          "TaskCreated",
+        ),
+        "generated/task_pb.ts": generatedModule("spine/example/todo/v1/tasks.proto", "Task"),
+      }),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.entities[0]?.handlers[0]).toEqual({
+      kind: "command-assignment",
+      methodName: "create",
+      signalSchema: schema("../generated/domain_pb.js", "CreateTaskSchema"),
+      emittedSchemas: [schema("../generated/events_pb.js", "TaskCreatedSchema")],
+      parameterCount: 1,
+    });
+  });
+
+  it("classifies event schemas from descriptors when generated module paths are neutral", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/neutral-event.ts", {
+        "src/neutral-event.ts": neutralEventSource,
+        "generated/domain_pb.ts": generatedModule(
+          "spine/example/todo/v1/task_events.proto",
+          "TaskCreated",
+        ),
+        "generated/task_list_pb.ts": generatedModule(
+          "spine/example/todo/v1/task_list.proto",
+          "TaskList",
+        ),
+      }),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.entities[0]?.handlers[0]).toEqual({
+      kind: "event-subscription",
+      methodName: "observe",
+      signalSchema: schema("../generated/domain_pb.js", "TaskCreatedSchema"),
+      emittedSchemas: [],
+      parameterCount: 1,
+    });
+  });
+
+  it("does not classify neutral descriptors from misleading command module paths", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/misleading.ts", {
+        "src/misleading.ts": misleadingCommandPathSource,
+        "generated/commands_pb.ts": generatedModule(
+          "spine/example/todo/v1/audit.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedModule(
+          "spine/example/todo/v1/task_events.proto",
+          "TaskCreated",
+        ),
+        "generated/task_pb.ts": generatedModule("spine/example/todo/v1/tasks.proto", "Task"),
+      }),
+    );
+
+    expect(result.entities).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "INVALID_SIGNAL_TYPE",
+    ]);
+    expect(result.diagnostics[0]?.methodName).toBe("create");
+  });
+
+  it("ties descriptor roles to the imported schema export", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/mixed-descriptors.ts", {
+        "src/mixed-descriptors.ts": mixedDescriptorSource,
+        "generated/domain_pb.ts": generatedModuleWithMixedDescriptors(),
+        "generated/events_pb.ts": generatedModule(
+          "spine/example/todo/v1/task_events.proto",
+          "TaskCreated",
+        ),
+        "generated/task_pb.ts": generatedModule("spine/example/todo/v1/tasks.proto", "Task"),
+      }),
+    );
+
+    expect(result.entities).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "INVALID_SIGNAL_TYPE",
+    ]);
+    expect(result.diagnostics[0]?.methodName).toBe("audit");
+  });
+
+  it("fails closed for forged command and event descriptors with mismatched message names", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/forged.ts", {
+        "src/forged.ts": forgedDescriptorSource,
+        "generated/commands_pb.ts": generatedModuleWithDescriptorMessages(
+          "spine/example/todo/v1/task_commands.proto",
+          [{ exportName: "CreateTask", descriptorName: "RenameTask" }],
+        ),
+        "generated/events_pb.ts": generatedModuleWithDescriptorMessages(
+          "spine/example/todo/v1/task_events.proto",
+          [{ exportName: "TaskCreated", descriptorName: "TaskRenamed" }],
+        ),
+        "generated/task_pb.ts": generatedModule("spine/example/todo/v1/tasks.proto", "Task"),
+      }),
+    );
+
+    expect(result.entities).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "INVALID_SIGNAL_TYPE",
+      "INVALID_EMITTED_SCHEMA",
+      "INVALID_SIGNAL_TYPE",
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.methodName)).toEqual([
+      "forgedCommand",
+      "forgedCommand",
+      "forgedEvent",
+    ]);
+  });
+
+  it("fails closed for missing or malformed descriptor data", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/bad-descriptor.ts", {
+        "src/bad-descriptor.ts": badDescriptorSource,
+        "generated/missing_pb.ts": generatedModuleWithoutDescriptor("CreateTask"),
+        "generated/malformed_pb.ts": generatedModuleWithMalformedDescriptor("RenameTask"),
+        "generated/events_pb.ts": generatedModule(
+          "spine/example/todo/v1/task_events.proto",
+          "TaskCreated",
+        ),
+        "generated/task_pb.ts": generatedModule("spine/example/todo/v1/tasks.proto", "Task"),
+      }),
+    );
+
+    expect(result.entities).toEqual([]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.code)).toEqual([
+      "INVALID_SIGNAL_TYPE",
+      "INVALID_SIGNAL_TYPE",
+    ]);
+    expect(result.diagnostics.map((diagnostic) => diagnostic.methodName)).toEqual([
+      "missing",
+      "malformed",
+    ]);
+  });
+
+  it("keeps neutral generated modules usable as entity state schemas", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/neutral-state.ts", {
+        "src/neutral-state.ts": neutralStateSource,
+        "generated/commands_pb.ts": generatedModule(
+          "spine/example/todo/v1/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedModule(
+          "spine/example/todo/v1/task_events.proto",
+          "TaskCreated",
+        ),
+        "generated/state_pb.ts": generatedModule("spine/example/todo/v1/task_state.proto", "Task"),
+      }),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.entities[0]?.stateSchema).toEqual(
+      schema("../generated/state_pb.js", "TaskSchema"),
+    );
+  });
+
+  it("prefers executable generated source over declarations for descriptor inspection", () => {
+    const result = analyzeBuildHandlers(
+      programWithSources("src/source-preference.ts", {
+        "src/source-preference.ts": sourcePreferenceSource,
+        "generated/domain_pb.d.ts": [
+          "export interface CreateTask {}",
+          "export declare const CreateTaskSchema: unknown;",
+        ].join("\n"),
+        "generated/domain_pb.ts": generatedModule(
+          "spine/example/todo/v1/task_commands.proto",
+          "CreateTask",
+        ),
+        "generated/events_pb.ts": generatedModule(
+          "spine/example/todo/v1/task_events.proto",
+          "TaskCreated",
+        ),
+        "generated/task_pb.ts": generatedModule("spine/example/todo/v1/tasks.proto", "Task"),
+      }),
+    );
+
+    expect(result.diagnostics).toEqual([]);
+    expect(result.entities[0]?.handlers[0]?.signalSchema).toEqual(
+      schema("../generated/domain_pb.js", "CreateTaskSchema"),
+    );
   });
 
   it("accepts no-emission React handlers with explicit void returns", () => {
@@ -220,7 +420,10 @@ describe("build-time handler analyzer", () => {
     const result = analyzeBuildHandlers(
       programWithSources("src/type-schema.ts", {
         "src/type-schema.ts": typeOnlySchemaSource,
-        "generated/commands_pb.ts": generatedModule("CreateTask"),
+        "generated/commands_pb.ts": generatedModule(
+          "spine/example/todo/v1/task_commands.proto",
+          "CreateTask",
+        ),
         "generated/events_pb.ts": [
           "export interface TaskCreated {}",
           "export interface TaskCreatedSchema {}",
@@ -363,21 +566,38 @@ describe("build-time handler analyzer", () => {
 function programWithSource(fileName: string, source: string): ts.Program {
   return programWithSources(fileName, {
     [fileName]: source,
-    "generated/audit_pb.ts": generatedModule("AuditRecord"),
-    "generated/commands_pb.ts": generatedModule("CreateTask", "RenameTask", "MissingSchemaCommand"),
-    "generated/events_pb.ts": generatedModule("TaskCreated", "TaskRenamed"),
-    "generated/task_list_pb.ts": "export const TaskListSchema = {};",
-    "generated/task_pb.ts": "export const TaskSchema = {};",
+    "generated/audit_pb.ts": generatedModule("spine/example/todo/v1/audit.proto", "AuditRecord"),
+    "generated/commands_pb.ts": generatedModule(
+      "spine/example/todo/v1/task_commands.proto",
+      "CreateTask",
+      "RenameTask",
+      "MissingSchemaCommand",
+    ),
+    "generated/events_pb.ts": generatedModule(
+      "spine/example/todo/v1/task_events.proto",
+      "TaskCreated",
+      "TaskRenamed",
+    ),
+    "generated/task_list_pb.ts": generatedModule(
+      "spine/example/todo/v1/task_list.proto",
+      "TaskList",
+    ),
+    "generated/task_pb.ts": generatedModule("spine/example/todo/v1/tasks.proto", "Task"),
     "generated/spine/example/todo/v1/task_commands_pb.ts": generatedModule(
+      "spine/example/todo/v1/task_commands.proto",
       "CreateTask",
       "RenameTask",
     ),
     "generated/spine/example/todo/v1/task_events_pb.ts": generatedModule(
+      "spine/example/todo/v1/task_events.proto",
       "TaskCompleted",
       "TaskCreated",
       "TaskRenamed",
     ),
-    "generated/spine/example/todo/v1/tasks_pb.ts": "export const TaskSchema = {};",
+    "generated/spine/example/todo/v1/tasks_pb.ts": generatedModule(
+      "spine/example/todo/v1/tasks.proto",
+      "Task",
+    ),
   });
 }
 
@@ -404,14 +624,92 @@ function schema(moduleSpecifier: string, exportName: string) {
   return { moduleSpecifier, exportName };
 }
 
-function generatedModule(...names: string[]): string {
-  return names
-    .map((name) =>
-      name === "MissingSchemaCommand"
-        ? `export interface ${name} {}`
-        : `export interface ${name} {}\nexport const ${name}Schema = {};`,
+function generatedModule(protoSource: string, ...names: string[]): string {
+  return generatedModuleWithDescriptorMessages(
+    protoSource,
+    names.map((name) => ({ exportName: name, descriptorName: name })),
+  );
+}
+
+function generatedModuleWithDescriptorMessages(
+  protoSource: string,
+  messages: readonly { readonly exportName: string; readonly descriptorName: string }[],
+): string {
+  const file = "file_spine_example_todo_v1_test";
+  const schemas = messages
+    .map(({ exportName }, index) =>
+      exportName === "MissingSchemaCommand"
+        ? `export interface ${exportName} {}`
+        : [
+            `export interface ${exportName} {}`,
+            `export const ${exportName}Schema = messageDesc(${file}, ${String(index)});`,
+          ].join("\n"),
     )
     .join("\n");
+
+  return [
+    "declare function fileDesc(source: string): unknown;",
+    "declare function messageDesc(file: unknown, index: number): unknown;",
+    `export const ${file} = fileDesc("${fileDescriptor(protoSource, messages)}");`,
+    schemas,
+  ].join("\n");
+}
+
+function generatedModuleWithoutDescriptor(...names: string[]): string {
+  return names
+    .map((name) => [`export interface ${name} {}`, `export const ${name}Schema = {};`].join("\n"))
+    .join("\n");
+}
+
+function generatedModuleWithMalformedDescriptor(...names: string[]): string {
+  const file = "file_spine_example_todo_v1_malformed";
+  const schemas = names
+    .map((name, index) =>
+      [
+        `export interface ${name} {}`,
+        `export const ${name}Schema = messageDesc(${file}, ${String(index)});`,
+      ].join("\n"),
+    )
+    .join("\n");
+
+  return [
+    "declare function fileDesc(source: string): unknown;",
+    "declare function messageDesc(file: unknown, index: number): unknown;",
+    `export const ${file} = fileDesc("not-a-file-descriptor");`,
+    schemas,
+  ].join("\n");
+}
+
+function generatedModuleWithMixedDescriptors(): string {
+  const commandDescriptor = fileDescriptor("spine/example/todo/v1/task_commands.proto", [
+    { descriptorName: "CreateTask" },
+  ]);
+  const neutralDescriptor = fileDescriptor("spine/example/todo/v1/audit.proto", [
+    { descriptorName: "AuditRecord" },
+  ]);
+
+  return [
+    "declare function fileDesc(source: string): unknown;",
+    "declare function messageDesc(file: unknown, index: number): unknown;",
+    `export const command_file = fileDesc("${commandDescriptor}");`,
+    `export const neutral_file = fileDesc("${neutralDescriptor}");`,
+    "export interface CreateTask {}",
+    "export const CreateTaskSchema = messageDesc(command_file, 0);",
+    "export interface AuditRecord {}",
+    "export const AuditRecordSchema = messageDesc(neutral_file, 0);",
+  ].join("\n");
+}
+
+function fileDescriptor(
+  protoSource: string,
+  messages: readonly { readonly descriptorName: string }[],
+): string {
+  const descriptor = create(FileDescriptorProtoSchema, {
+    name: protoSource,
+    messageType: messages.map(({ descriptorName }) => ({ name: descriptorName })),
+  });
+
+  return Buffer.from(toBinary(FileDescriptorProtoSchema, descriptor)).toString("base64");
 }
 
 const validTaskSource = `
@@ -440,6 +738,128 @@ const validTaskSource = `
     @Subscribe
     onRenamed(event: events.TaskRenamed): void {
       void event;
+    }
+  }
+`;
+
+const neutralCommandSource = `
+  import { Aggregate, Assign } from "@spine-ts/server";
+  import { TaskSchema } from "../generated/task_pb.js";
+  import { type CreateTask } from "../generated/domain_pb.js";
+  import { type TaskCreated } from "../generated/events_pb.js";
+
+  export class NeutralCommandAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+    @Assign
+    create(command: CreateTask): TaskCreated {
+      throw new Error(String(command));
+    }
+  }
+`;
+
+const neutralEventSource = `
+  import { Projection, Subscribe } from "@spine-ts/server";
+  import { TaskListSchema } from "../generated/task_list_pb.js";
+  import { type TaskCreated } from "../generated/domain_pb.js";
+
+  export class NeutralEventProjection extends Projection<string, typeof TaskListSchema, bigint> {
+    @Subscribe
+    observe(event: TaskCreated): void {
+      void event;
+    }
+  }
+`;
+
+const misleadingCommandPathSource = `
+  import { Aggregate, Assign } from "@spine-ts/server";
+  import { TaskSchema } from "../generated/task_pb.js";
+  import { type CreateTask } from "../generated/commands_pb.js";
+  import { type TaskCreated } from "../generated/events_pb.js";
+
+  export class MisleadingAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+    @Assign
+    create(command: CreateTask): TaskCreated {
+      throw new Error(String(command));
+    }
+  }
+`;
+
+const mixedDescriptorSource = `
+  import { Aggregate, Assign } from "@spine-ts/server";
+  import { TaskSchema } from "../generated/task_pb.js";
+  import { type AuditRecord } from "../generated/domain_pb.js";
+  import { type TaskCreated } from "../generated/events_pb.js";
+
+  export class MixedDescriptorAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+    @Assign
+    audit(command: AuditRecord): TaskCreated {
+      throw new Error(String(command));
+    }
+  }
+`;
+
+const forgedDescriptorSource = `
+  import { Aggregate, Assign, Subscribe } from "@spine-ts/server";
+  import { TaskSchema } from "../generated/task_pb.js";
+  import { type CreateTask } from "../generated/commands_pb.js";
+  import { type TaskCreated } from "../generated/events_pb.js";
+
+  export class ForgedDescriptorAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+    @Assign
+    forgedCommand(command: CreateTask): TaskCreated {
+      throw new Error(String(command));
+    }
+
+    @Subscribe
+    forgedEvent(event: TaskCreated): void {
+      void event;
+    }
+  }
+`;
+
+const badDescriptorSource = `
+  import { Aggregate, Assign } from "@spine-ts/server";
+  import { TaskSchema } from "../generated/task_pb.js";
+  import { type CreateTask } from "../generated/missing_pb.js";
+  import { type RenameTask } from "../generated/malformed_pb.js";
+  import { type TaskCreated } from "../generated/events_pb.js";
+
+  export class BadDescriptorAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+    @Assign
+    missing(command: CreateTask): TaskCreated {
+      throw new Error(String(command));
+    }
+
+    @Assign
+    malformed(command: RenameTask): TaskCreated {
+      throw new Error(String(command));
+    }
+  }
+`;
+
+const sourcePreferenceSource = `
+  import { Aggregate, Assign } from "@spine-ts/server";
+  import { TaskSchema } from "../generated/task_pb.js";
+  import { type CreateTask } from "../generated/domain_pb.js";
+  import { type TaskCreated } from "../generated/events_pb.js";
+
+  export class SourcePreferenceAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+    @Assign
+    create(command: CreateTask): TaskCreated {
+      throw new Error(String(command));
+    }
+  }
+`;
+
+const neutralStateSource = `
+  import { Aggregate, Assign } from "@spine-ts/server";
+  import { TaskSchema } from "../generated/state_pb.js";
+  import { type CreateTask } from "../generated/commands_pb.js";
+  import { type TaskCreated } from "../generated/events_pb.js";
+
+  export class NeutralStateAggregate extends Aggregate<string, typeof TaskSchema, bigint> {
+    @Assign
+    create(command: CreateTask): TaskCreated {
+      throw new Error(String(command));
     }
   }
 `;
