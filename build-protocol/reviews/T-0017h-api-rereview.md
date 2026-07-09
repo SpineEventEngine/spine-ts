@@ -101,7 +101,7 @@ FINDINGS
   checker allowlist also includes `DeliveryLoopOptions`, `DeliveryLoopRun`, and
   `DeliveryLoopStatus`.
 - No generated-code regression found: `git ls-files packages | rg
-  '/generated/'` returned no tracked generated package files.
+'/generated/'` returned no tracked generated package files.
 - No schema-decorator or end-user `Event` envelope regression found in the
   reviewed delivery-loop/API-doc changes. The new public API surface is limited
   to framework delivery loop exports and does not introduce end-user handler

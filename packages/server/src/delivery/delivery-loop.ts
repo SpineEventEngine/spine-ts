@@ -19,10 +19,7 @@ export class DeliveryLoop {
     this.#node = options.node;
     this.#limit =
       options.limit === undefined ? undefined : requirePositiveSafeInteger("limit", options.limit);
-    this.#maxFailures = requirePositiveSafeInteger(
-      "maxFailures",
-      options.maxFailures ?? 1,
-    );
+    this.#maxFailures = requirePositiveSafeInteger("maxFailures", options.maxFailures ?? 1);
     this.#onMessage = options.onMessage;
     Object.freeze(this);
   }

@@ -181,7 +181,7 @@ packages/server/test/index.test.ts --passWithNoTests` — 3 files, 32 tests.
 - Sandboxed `pnpm --config.verify-deps-before-run=false verify` passed
   typecheck, lint, and format, then failed only where sandboxed native IPC and
   listener tests cannot bind (`listen EPERM 127.0.0.1` and ZeroMQ `Operation
-  not permitted`): 51 files and 995 tests passed; 4 files and 30 tests failed.
+not permitted`): 51 files and 995 tests passed; 4 files and 30 tests failed.
 - Escalated `pnpm --config.verify-deps-before-run=false verify` passed end to
   end: 55 test files and 1025 tests passed in both normal and coverage runs,
   coverage was 95.32% statements / 90.16% branches / 98.36% functions / 95.28%

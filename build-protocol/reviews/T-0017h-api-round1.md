@@ -114,7 +114,7 @@ FINDINGS
   the reviewed `DeliveryLoop` public API/docs surface.
 - No generated-code policy violation found in the reviewed changes. Generated
   Protobuf files exist in ignored/generated output locations, but `git ls-files
-  packages | rg '/generated/'` returned no tracked generated files.
+packages | rg '/generated/'` returned no tracked generated files.
 
 ## Verification
 

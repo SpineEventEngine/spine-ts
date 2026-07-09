@@ -29,6 +29,7 @@ Branch: `task/T-0017h-delivery-scheduler-retry`
 ### [P2] Deferred-scheduler wording contradicts the new public `DeliveryLoop`
 
 Files/lines:
+
 - `docs/USER_GUIDE.md:194-199`
 - `docs/api/README.md:289-301`
 - `docs/architecture/README.md:443-445`
@@ -42,6 +43,7 @@ Replace the broad wording with narrower production-language, for example "transp
 ### [P2] Public docs do not consistently document `DeliveryLoop.stop()` behavior
 
 Files/lines:
+
 - `docs/api/README.md:289-292`
 - `docs/USER_GUIDE.md:1101-1104`
 - `packages/server/README.md:106-109`
@@ -55,6 +57,7 @@ Add one consistent sentence to the delivery docs: "`stop()` prevents future drai
 ### [P2] Review log verification snapshot is stale and no longer interruption-safe
 
 File/line:
+
 - `build-protocol/reviews/T-0017h-delivery-scheduler-retry.md:64-66`
 
 Rationale:
