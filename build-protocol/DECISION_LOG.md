@@ -2402,3 +2402,49 @@ Consequences:
   storage.
 - Remaining event endpoint kinds stay explicit future tasks instead of hidden
   in a large abstraction.
+
+## D-0073: Continue Event Inbox Handoff With Process-Manager Reactors
+
+Status: Accepted
+
+Date: 2026-07-10
+
+Context: T-0022a integrated live projection subscriber inbox handoff using
+`UPDATE_SUBSCRIBER`. The next smallest remaining event endpoint is the
+process-manager event reactor path. Current Spine JVM
+`ProcessManagerRepository.dispatchTo(ids, event)` sends each routed process
+manager ID through `inbox().send(event).toReactor(id)`, which stores
+`REACT_UPON_EVENT` event inbox rows. The TS runtime already executes
+process-manager event reactors directly and already has local inbox handoff
+machinery for process-manager commands and projection subscribers.
+
+Decision:
+
+- Run T-0022b as the next implementation slice.
+- Move only live process-manager event reactors and event-commanding handlers
+  behind durable local inbox handoff.
+- Use `REACT_UPON_EVENT`, `TO_DELIVER`, the original event ID, the
+  process-manager state type URL, and the routed process-manager ID.
+- Drain locally and replay only the exact inbox row target.
+- Preserve current process-manager state mutation/storage, produced event,
+  produced command, tenant, and failure behavior.
+- Keep aggregate event reactors/importers, projection catch-up, schedulers,
+  retries, transport workers, and retained attempt history deferred.
+
+Alternatives considered:
+
+- Build one generic repository event delivery engine. Rejected again as broader
+  than the next JVM endpoint shape and contrary to the human reset against
+  overengineering.
+- Jump to aggregate event reactors/importers. Rejected because process-manager
+  event reactors reuse the existing process-manager handoff and execution
+  machinery and are the next smallest endpoint after projection subscribers.
+- Leave process-manager event reactors as direct `EventBus` execution. Rejected
+  because D-0072 explicitly left their durable inbox routing as a future task.
+
+Consequences:
+
+- Process-manager event reactions gain the same durable local handoff shape as
+  process-manager commands and live projection subscribers.
+- Remaining event endpoint kinds stay explicit later tasks instead of being
+  hidden behind a generalized delivery abstraction.
