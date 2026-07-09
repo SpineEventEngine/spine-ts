@@ -1,6 +1,6 @@
 # T-0019: Semantic Tag Runtime Registration
 
-Status: planned on `main`; pending task branch
+Status: complete in task branch; pending integration to `main`
 Started: `2026-07-09`
 Branch: `task/T-0019-semantic-tag-runtime-registration`
 Worktree:

@@ -11,6 +11,9 @@ import type {
 } from "./handler-metadata.js";
 import { handlerMetadataAccess } from "./handler-metadata.js";
 
+const semanticTagError =
+  "Registration readiness entity semanticTags must be a dense array of non-empty strings.";
+
 export interface ReadinessMetadataFields<Handler extends HandlerMetadata> {
   readonly entityHandlers: EntityHandlersMetadata;
   readonly entityType: EntityClass;
@@ -181,8 +184,28 @@ function cloneEntityMetadata(
     setOnceFields: Object.freeze(
       entity.setOnceFields.map((field) => cloneFieldMetadata(field, clonedFields)),
     ),
-    semanticTags: Object.freeze([...entity.semanticTags]),
+    semanticTags: copySemanticTags(entity.semanticTags),
   });
+}
+
+function copySemanticTags(value: unknown): readonly string[] {
+  if (!Array.isArray(value)) {
+    throw new TypeError(semanticTagError);
+  }
+
+  for (let index = 0; index < value.length; index += 1) {
+    if (!Object.hasOwn(value, index)) {
+      throw new TypeError(semanticTagError);
+    }
+
+    const tag = value[index] as unknown;
+
+    if (typeof tag !== "string" || tag.trim().length === 0 || tag !== tag.trim()) {
+      throw new TypeError(semanticTagError);
+    }
+  }
+
+  return Object.freeze([...value]);
 }
 
 function cloneDescriptorMessageSchema<Schema extends DescriptorMessageSchema>(
