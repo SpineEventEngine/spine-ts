@@ -2960,8 +2960,12 @@ describe("SpineServices", () => {
       expect(unpackAny(state.value, ProjectionStateSchema)).toEqual(
         createState("task-local-activated", "Activated"),
       );
+      const subscriptionId = subscription.id;
+      if (subscriptionId === undefined) {
+        throw new Error("Expected durable subscription id.");
+      }
       expect(
-        await readDurableSubscriptionRecord(storageFactory, contextName, subscription.id!.value),
+        await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId.value),
       ).toBe(undefined);
     } finally {
       await secondIterator.return?.();
@@ -3988,13 +3992,45 @@ class SeededSubscriptionStorageFactory extends StorageFactory {
     context: StorageContext,
     recordSpec: RecordSpec<I, R>,
   ): RecordStorage<I, R> {
-    const storage = this.#delegate.createRecordStorage(context, recordSpec);
+    if (
+      context.name === this.#subscriptionContextName &&
+      isDurableSubscriptionRecordSpec(recordSpec)
+    ) {
+      return asRequestedRecordStorage<I, R>(
+        recordSpec,
+        createSeededDurableSubscriptionStorage(context, this.#delegate, this.#seededRecords),
+      );
+    }
 
-    return context.name === this.#subscriptionContextName &&
-      recordSpec === durableSubscriptionRecordSpec
-      ? new SeededRecordStorage(context, recordSpec, storage, this.#seededRecords)
-      : storage;
+    return this.#delegate.createRecordStorage(context, recordSpec);
   }
+}
+
+function isDurableSubscriptionRecordSpec(
+  recordSpec: unknown,
+): recordSpec is RecordSpec<string, Any> {
+  return recordSpec === durableSubscriptionRecordSpec;
+}
+
+function createSeededDurableSubscriptionStorage(
+  context: StorageContext,
+  delegate: StorageFactory,
+  seededRecords: Map<string, Any>,
+): RecordStorage<string, Any> {
+  const storage = delegate.createRecordStorage(context, durableSubscriptionRecordSpec);
+
+  return new SeededRecordStorage(context, durableSubscriptionRecordSpec, storage, seededRecords);
+}
+
+function asRequestedRecordStorage<I, R extends Message>(
+  recordSpec: RecordSpec<I, R>,
+  storage: RecordStorage<string, Any>,
+): RecordStorage<I, R> {
+  if (!isDurableSubscriptionRecordSpec(recordSpec)) {
+    throw new Error("Seeded subscription storage requires the durable subscription record spec.");
+  }
+
+  return storage as unknown as RecordStorage<I, R>;
 }
 
 class SeededRecordStorage<I, R extends Message> extends RecordStorage<I, R> {

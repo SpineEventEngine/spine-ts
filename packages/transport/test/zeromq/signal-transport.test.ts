@@ -5,7 +5,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import { createTransportSubscription, createTransportTopic } from "../../src/index.js";
-import { createZeroMqAdapterConfig, createZeroMqSignalTransport } from "../../src/zeromq/index.js";
+import { createZeroMqAdapterConfig, createZeroMqTransport } from "../../src/zeromq/index.js";
 
 const receiveTimeoutMs = 2_000;
 const publishCadenceMs = 20;
@@ -96,8 +96,8 @@ describe("ZeroMQ SignalTransport", () => {
     });
 
     await withSharedZeroMqTransports(async (firstTransport, secondTransport) => {
-      const firstHandle = await firstTransport.subscribe(subscriberOne, () => {});
-      const secondHandle = await secondTransport.subscribe(subscriberTwo, () => {});
+      const firstHandle = await firstTransport.subscribe(subscriberOne, () => undefined);
+      const secondHandle = await secondTransport.subscribe(subscriberTwo, () => undefined);
 
       await firstHandle.close();
       await secondHandle.close();
@@ -115,7 +115,7 @@ describe("ZeroMQ SignalTransport", () => {
         topic,
       });
 
-      const handle = await transport.subscribe(subscription, () => {});
+      const handle = await transport.subscribe(subscription, () => undefined);
 
       expect(await readdir(ipcDirectory)).toEqual([]);
 
@@ -304,10 +304,10 @@ describe("ZeroMQ SignalTransport", () => {
 
   it("rejects unsafe IPC directories before publish, request, or response work", async () => {
     const ipcDirectory = await mkdtemp(path.join(tmpdir(), "sz-transport-open-"));
-    const transport = createZeroMqSignalTransport(
+    const transport = createZeroMqTransport(
       createZeroMqAdapterConfig({
         ipcDirectory,
-        adapterIdentity: `open-${process.pid}-${Date.now()}`,
+        adapterIdentity: `open-${String(process.pid)}-${String(Date.now())}`,
       }),
     );
     const topic = createTransportTopic({
@@ -372,18 +372,18 @@ describe("ZeroMQ SignalTransport", () => {
 
 async function withZeroMqTransport<T>(
   runTest: (
-    transport: ReturnType<typeof createZeroMqSignalTransport>,
+    transport: ReturnType<typeof createZeroMqTransport>,
     ipcDirectory: string,
   ) => Promise<T>,
-  options: Parameters<typeof createZeroMqSignalTransport>[1] & {
+  options: Parameters<typeof createZeroMqTransport>[1] & {
     readonly onBackgroundFailure?: (error: Error) => void;
   } = {},
 ): Promise<T> {
   const ipcDirectory = await mkdtemp(path.join(tmpdir(), "sz-transport-"));
-  const transport = createZeroMqSignalTransport(
+  const transport = createZeroMqTransport(
     createZeroMqAdapterConfig({
       ipcDirectory,
-      adapterIdentity: `test-${process.pid}-${Date.now()}`,
+      adapterIdentity: `test-${String(process.pid)}-${String(Date.now())}`,
     }),
     options,
   );
@@ -398,17 +398,17 @@ async function withZeroMqTransport<T>(
 
 async function withSharedZeroMqTransports<T>(
   runTest: (
-    firstTransport: ReturnType<typeof createZeroMqSignalTransport>,
-    secondTransport: ReturnType<typeof createZeroMqSignalTransport>,
+    firstTransport: ReturnType<typeof createZeroMqTransport>,
+    secondTransport: ReturnType<typeof createZeroMqTransport>,
   ) => Promise<T>,
 ): Promise<T> {
   const ipcDirectory = await mkdtemp(path.join(tmpdir(), "sz-transport-"));
   const config = createZeroMqAdapterConfig({
     ipcDirectory,
-    adapterIdentity: `test-${process.pid}-${Date.now()}`,
+    adapterIdentity: `test-${String(process.pid)}-${String(Date.now())}`,
   });
-  const firstTransport = createZeroMqSignalTransport(config);
-  const secondTransport = createZeroMqSignalTransport(config);
+  const firstTransport = createZeroMqTransport(config);
+  const secondTransport = createZeroMqTransport(config);
 
   try {
     return await runTest(firstTransport, secondTransport);

@@ -9,12 +9,12 @@ type TenantRecord = Message<"google.protobuf.StringValue"> & { value: string };
 export interface TenantIndex {
   readonly tenantMode: TenantMode;
   all(): Promise<readonly string[]>;
-  keep(tenantId: string): Promise<void>;
+  keep(_tenantId: string): Promise<void>;
   close(): void;
 }
 
 const tenantRecordSpec = new RecordSpec<string, TenantRecord>({
-  schema: StringValueSchema as GenMessage<TenantRecord>,
+  schema: StringValueSchema,
   extractId: (record) => record.value,
 });
 
@@ -34,15 +34,21 @@ class SingleTenantIndex implements TenantIndex {
 
   constructor(private readonly contextName: string) {}
 
-  async all(): Promise<readonly string[]> {
-    this.requireOpen();
-    return Object.freeze([]);
+  all(): Promise<readonly string[]> {
+    const closed = this.closedError();
+    if (closed !== undefined) {
+      return Promise.reject(closed);
+    }
+    return Promise.resolve(Object.freeze([]));
   }
 
-  async keep(_tenantId: string): Promise<void> {
-    this.requireOpen();
-    throw new Error(
-      `Single-tenant context "${this.contextName}" does not accept tenant recording.`,
+  keep(): Promise<void> {
+    const closed = this.closedError();
+    if (closed !== undefined) {
+      return Promise.reject(closed);
+    }
+    return Promise.reject(
+      new Error(`Single-tenant context "${this.contextName}" does not accept tenant recording.`),
     );
   }
 
@@ -50,10 +56,11 @@ class SingleTenantIndex implements TenantIndex {
     this.#open = false;
   }
 
-  private requireOpen(): void {
+  private closedError(): Error | undefined {
     if (!this.#open) {
-      throw new Error("TenantIndex is closed.");
+      return new Error("TenantIndex is closed.");
     }
+    return undefined;
   }
 }
 

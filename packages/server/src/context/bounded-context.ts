@@ -547,7 +547,9 @@ export class BoundedContext {
     await closeContextPart(() => commandBusAccess.finishClose(this.#commandBus), errors);
     await closeContextPart(() => eventBusAccess.finishClose(this.#eventBus), errors);
     await closeContextPart(() => this.#stand.close(), errors);
-    await closeContextPart(() => requireTenantIndex(this).close(), errors);
+    await closeContextPart(() => {
+      requireTenantIndex(this).close();
+    }, errors);
 
     for (const repository of this.#repositoryViews) {
       await closeContextPart(() => {

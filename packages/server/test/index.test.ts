@@ -237,6 +237,7 @@ describe("@spine-ts/server", () => {
         "RuntimeTransportBinding",
         "RuntimeTransportEnvelopeError",
         "Server",
+        "ServerEnvironment",
         "ServerRuntimeStateError",
         "ShardIndex",
         "ShardSession",

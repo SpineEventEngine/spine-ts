@@ -386,7 +386,7 @@ handle is idempotent and closes registered transport handles before closing the
 runtime. The binding does not own the transport, choose endpoint names, expose
 ZeroMQ types, supervise processes, retry failures, store events, or create a
 server/environment owner. Local IPC deployments may supply the adapter-scoped
-`createZeroMqSignalTransport()` from `@spine-ts/transport/zeromq`, but the
+`createZeroMqTransport()` from `@spine-ts/transport/zeromq`, but the
 server API continues to depend only on `SignalTransport`.
 
 ## Single-Process Runtime Kernel

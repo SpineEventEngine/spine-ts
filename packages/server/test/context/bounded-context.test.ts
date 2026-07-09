@@ -48,7 +48,7 @@ import {
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
-type InternalSystemPairing = {
+interface InternalSystemPairing {
   readonly domain: {
     readonly name: { readonly value: string };
     readonly tenantMode: "single-tenant" | "multitenant";
@@ -58,13 +58,13 @@ type InternalSystemPairing = {
     readonly multitenant: boolean;
     readonly storesEvents: boolean;
   };
-};
+}
 
-type InternalTenantIndex = {
+interface InternalTenantIndex {
   readonly tenantMode: "single-tenant" | "multitenant";
   all(): Promise<readonly string[]>;
   keep(tenantId: string): Promise<void>;
-};
+}
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -239,6 +239,16 @@ describe("BoundedContext assembly", () => {
     );
   });
 
+  it("rejects single-tenant index access after context close", async () => {
+    const context = BoundedContext.singleTenant("Tasks").build();
+    const tenantIndex = internalTenantIndex(context);
+
+    await context.close();
+
+    await expect(tenantIndex.all()).rejects.toThrow("TenantIndex is closed.");
+    await expect(tenantIndex.keep("tenant-a")).rejects.toThrow("TenantIndex is closed.");
+  });
+
   it("stores multitenant index entries through the configured storage factory", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const first = BoundedContext.multitenant("Customers")
@@ -260,6 +270,15 @@ describe("BoundedContext assembly", () => {
     const recoveredIndex = internalTenantIndex(recovered);
 
     await expect(recoveredIndex.all()).resolves.toEqual(["tenant-a", "tenant-b"]);
+  });
+
+  it("rejects blank multitenant index entries", async () => {
+    const context = BoundedContext.multitenant("Customers").build();
+    const tenantIndex = internalTenantIndex(context);
+
+    await expect(tenantIndex.keep(" \t ")).rejects.toThrow(
+      "Tenant index requires a non-blank tenant ID.",
+    );
   });
 
   it("keeps tenant-index storage in an internal namespace", async () => {

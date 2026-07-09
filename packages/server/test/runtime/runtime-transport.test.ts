@@ -25,7 +25,7 @@ import type {
   TransportSubscription,
   TransportSubscriptionHandle,
 } from "@spine-ts/transport";
-import { createZeroMqAdapterConfig, createZeroMqSignalTransport } from "@spine-ts/transport/zeromq";
+import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-ts/transport/zeromq";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
@@ -450,10 +450,10 @@ describe("RuntimeTransportBinding", () => {
 
   it("runs command and event callbacks over the ZeroMQ-backed transport", async () => {
     const ipcDirectory = await mkdtemp(path.join(tmpdir(), "sz-runtime-"));
-    const transport = createZeroMqSignalTransport(
+    const transport = createZeroMqTransport(
       createZeroMqAdapterConfig({
         ipcDirectory,
-        adapterIdentity: `runtime-${process.pid}-${Date.now()}`,
+        adapterIdentity: `runtime-${String(process.pid)}-${String(Date.now())}`,
       }),
     );
     const runtime = new SingleProcessServerRuntime();

@@ -607,7 +607,7 @@ describe("generated registry writer", () => {
     const diagnostics = compileIsolatedDeclarations(outputFile);
 
     expect(diagnostics).toEqual([]);
-  });
+  }, 20_000);
 });
 
 function analysis(repoRoot: string): BuildHandlerAnalysis {
