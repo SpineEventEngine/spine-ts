@@ -1,6 +1,6 @@
 # Review Log: T-0022a Projection Inbox Handoff
 
-Status: remaining review findings fixed
+Status: final review findings fixed
 
 Scope: live projection subscriber durable inbox handoff.
 
@@ -66,3 +66,50 @@ Scope: live projection subscriber durable inbox handoff.
   API export checks passed.
 - `pnpm --config.verify-deps-before-run=false format:check`: passed.
 - `git diff --check`: passed.
+
+## Final Reliability/Docs/Coverage Fix Pass
+
+- Reliability Important: replaced the duplicate local inbox handoff's
+  time-bounded delivered-row polling with a framework-local in-flight drain map
+  keyed by inbox message ID and scoped per `Delivery` instance. A duplicate now
+  awaits the original exact-row drain when the original replay is still running,
+  while skipped drains without a matching local in-flight drain still fail
+  immediately.
+- Added projection and process-manager duplicate regressions that hold the
+  original replay past the old `20 * 5ms` polling window. The red run failed
+  both tests on the old skipped-delivery path; the green run passed after the
+  in-flight drain map fix.
+- Docs Important: corrected D-0072 and the task acceptance wording so
+  process-manager event reactors are described as implemented through direct
+  local `EventBus` execution, with durable inbox routing for those reactors
+  deferred.
+- Minor cleanup: renamed the stale process-manager repository test to describe
+  exact-row delivery despite older pending backlog.
+- Coverage: added focused delivery worker branch tests for exact-message drain
+  malformed-shard and marker-failure paths plus public
+  `InboxRecords`/`DedupRecords` corrupted record decode guards. These moved
+  full generated coverage branch percentage from `89.55%`/`89.61%` failed runs
+  to a passing `90.03%`.
+
+## Final Verification
+
+- `pnpm --config.verify-deps-before-run=false vitest run packages/server/test/context/projection-handoff.test.ts packages/server/test/context/process-manager-handoff.test.ts`
+  during final reliability fix pass: first red run failed the extended
+  duplicate tests after the old `20 * 5ms` wait; after the in-flight drain map
+  fix, passed; 2 test files, 14 tests.
+- `pnpm --config.verify-deps-before-run=false test:coverage:generated` in the
+  sandbox failed on native localhost/ZeroMQ IPC `EPERM`; escalated rerun before
+  extra coverage tests passed all native tests but failed branch threshold at
+  `89.55%`.
+- Escalated `pnpm --config.verify-deps-before-run=false test:coverage:generated`
+  after exact-message delivery tests passed all 1108 tests but still failed
+  branch threshold at `89.61%`.
+- Escalated `pnpm --config.verify-deps-before-run=false test:coverage:generated`
+  after delivery record decode coverage: passed; 58 files, 1110 tests,
+  statements `94.97%`, branches `90.03%`, functions `98.24%`, lines `94.97%`.
+- `pnpm --config.verify-deps-before-run=false vitest run packages/server/test/context/projection-handoff.test.ts packages/server/test/context/process-manager-handoff.test.ts packages/server/test/repository/repository-routing.test.ts packages/server/test/delivery/delivery-worker.test.ts`:
+  passed; 4 test files, 159 tests.
+- `pnpm --config.verify-deps-before-run=false lint:generated`: first final run
+  failed on two `@typescript-eslint/restrict-template-expressions` findings in
+  the inbox message key helper; after explicit numeric string conversion, the
+  rerun passed with `tsc -b`, ESLint, and cleanup enforcement.

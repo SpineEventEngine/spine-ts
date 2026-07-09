@@ -1,4 +1,5 @@
-import type { Message } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
+import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { InMemoryStorageFactory } from "@spine-ts/storage";
 import {
   type RecordQuery,
@@ -338,6 +339,146 @@ describe("Delivery worker", () => {
     await expect(delivery.inbox.markDelivered(missingMessage())).resolves.toBeUndefined();
   });
 
+  it("rejects corrupted inbox record snapshots at decode boundaries", () => {
+    const valid = InboxRecords.write(missingMessage());
+    const stored = unpackStoredRecord(valid);
+    const cases: readonly (readonly [Any, string])[] = [
+      [
+        create(AnySchema, {
+          typeUrl: "type.example.dev/InvalidInboxRecord",
+          value: valid.value,
+        }),
+        "Inbox message record type URL",
+      ],
+      [
+        Object.freeze({
+          ...valid,
+          value: "not-bytes" as unknown as Uint8Array,
+        }),
+        "Inbox message record value must be a Uint8Array.",
+      ],
+      [packStoredRecord(valid, "{"), "Inbox message record contains malformed JSON."],
+      [packStoredRecord(valid, []), "Inbox message record is not a JSON object."],
+      [
+        packStoredRecord(valid, {
+          ...stored,
+          key: "wrong-key",
+        }),
+        "Inbox message record key does not match message identity.",
+      ],
+      [
+        packStoredRecord(valid, {
+          ...stored,
+          shard: "1/1",
+        }),
+        "Inbox message record shard key does not match shard.",
+      ],
+      [
+        packStoredRecord(valid, {
+          ...stored,
+          inbox: "wrong-inbox",
+        }),
+        "Inbox message record inbox key does not match target identity.",
+      ],
+      [
+        packStoredRecord(valid, {
+          ...stored,
+          inboxId: null,
+        }),
+        "Inbox target identity is invalid.",
+      ],
+      [
+        packStoredRecord(valid, {
+          ...stored,
+          signal: null,
+        }),
+        "Inbox signal payload is invalid.",
+      ],
+      [
+        packStoredRecord(valid, {
+          ...stored,
+          signal: { typeUrl: "type.example.dev/Signal", valueBase64: "not-base64!" },
+        }),
+        "Inbox signal payload base64 is invalid.",
+      ],
+      [
+        packStoredRecord(valid, {
+          ...stored,
+          label: "UNKNOWN",
+        }),
+        'Inbox delivery label "UNKNOWN" is invalid.',
+      ],
+      [
+        packStoredRecord(valid, {
+          ...stored,
+          status: "UNKNOWN",
+        }),
+        'Inbox delivery status "UNKNOWN" is invalid.',
+      ],
+    ];
+
+    for (const [record, message] of cases) {
+      expect(() => InboxRecords.read(record)).toThrow(message);
+    }
+  });
+
+  it("rejects corrupted dedup record snapshots at decode boundaries", () => {
+    const message = missingMessage();
+    const pending = DedupRecords.writeClaim(message);
+    const final = DedupRecords.writeFinal(message);
+    const pendingStored = unpackStoredRecord(pending);
+    const finalStored = unpackStoredRecord(final);
+    const cases: readonly (readonly [Any, string])[] = [
+      [
+        packStoredRecord(pending, {
+          ...pendingStored,
+          state: "UNKNOWN",
+        }),
+        'Inbox dedup state "UNKNOWN" is invalid.',
+      ],
+      [
+        packStoredRecord(pending, {
+          ...pendingStored,
+          message: {
+            ...(pendingStored.message as Record<string, unknown>),
+            signalId: "different-signal",
+          },
+        }),
+        "Inbox dedup pending message does not match the guard key.",
+      ],
+      [
+        packStoredRecord(final, {
+          ...finalStored,
+          signalId: "different-signal",
+        }),
+        "Inbox dedup final record does not match the guard key.",
+      ],
+      [
+        packStoredRecord(final, {
+          ...finalStored,
+          shardIndex: "0",
+        }),
+        "Inbox dedup shard index must be a finite integer.",
+      ],
+      [
+        packStoredRecord(final, {
+          ...finalStored,
+          keepUntilMs: Number.POSITIVE_INFINITY,
+        }),
+        "Inbox dedup keep-until time must be a finite integer.",
+      ],
+    ];
+
+    for (const [record, message] of cases) {
+      expect(() => DedupRecords.readGuard(record)).toThrow(message);
+    }
+
+    expect(() => DedupRecords.readGuard(final, "wrong-key")).toThrow(
+      'Inbox dedup guard "wrong-key" does not match its storage key.',
+    );
+    expect(DedupRecords.readPendingMessage(final)).toBeUndefined();
+  });
+
   it("records a marker failure when the stored row changes after dispatch", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
@@ -490,6 +631,136 @@ describe("Delivery worker", () => {
       stored,
     ]);
     await expect(delivery.shards.pickUp(new ShardIndex(1, 2), "node-b")).resolves.toBeDefined();
+  });
+
+  it("rejects exact-message drains with invalid structural ID shards", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const stored = await seed(delivery, "signal-invalid-id-shard", 1n);
+    const forged = Object.freeze({
+      ...stored,
+      id: Object.freeze({
+        ...stored.id,
+        shard: null as unknown as ShardIndex,
+      }),
+    });
+
+    await expect(
+      delivery.drainMessage(forged, {
+        node: "node-a",
+        onMessage() {
+          throw new Error("invalid shard should fail before replay");
+        },
+      }),
+    ).rejects.toThrow("Inbox message ID shard is invalid.");
+  });
+
+  it("rejects exact-message drains with invalid structural row shards", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const stored = await seed(delivery, "signal-invalid-row-shard", 1n);
+    const forged = Object.freeze({
+      ...stored,
+      shard: { index: "0", ofTotal: 1 } as unknown as ShardIndex,
+    });
+
+    await expect(
+      delivery.drainMessage(forged, {
+        node: "node-a",
+        onMessage() {
+          throw new Error("invalid shard should fail before replay");
+        },
+      }),
+    ).rejects.toThrow("Inbox message shard is invalid.");
+  });
+
+  it("rejects exact-message drains when the stored row no longer matches its key", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const stored = await seed(delivery, "signal-row-shard-tampered", 1n);
+    const inboxRecords = deliveryInboxRecords(storageFactory);
+    const inboxKey = messageKey(stored);
+    const originalRecord = await inboxRecords.read(inboxKey);
+    const otherShard = Object.freeze({
+      index: 1,
+      ofTotal: 2,
+      key() {
+        return stored.shard.key();
+      },
+    }) as ShardIndex;
+    const tampered = Object.freeze({
+      ...stored,
+      id: Object.freeze({
+        ...stored.id,
+        shard: otherShard,
+      }),
+      shard: otherShard,
+    });
+    const seen: string[] = [];
+    expect(originalRecord).toBeDefined();
+    await expect(
+      inboxRecords.compareAndSet(inboxKey, originalRecord, InboxRecords.write(tampered)),
+    ).resolves.toBe(true);
+
+    await expect(
+      delivery.drainMessage(stored, {
+        node: "node-a",
+        onMessage(message) {
+          seen.push(message.signalId);
+        },
+      }),
+    ).rejects.toThrow("does not match storage key");
+
+    expect(seen).toEqual([]);
+    await expect(delivery.shards.pickUp(stored.shard, "node-b")).resolves.toBeDefined();
+  });
+
+  it("records an exact-message marker failure when the stored row changes after replay", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const stored = await seed(delivery, "signal-exact-marker-original", 1n);
+    const inboxRecords = deliveryInboxRecords(storageFactory);
+    const inboxKey = messageKey(stored);
+    const originalRecord = await inboxRecords.read(inboxKey);
+    const seen: string[] = [];
+    expect(originalRecord).toBeDefined();
+
+    const run = await delivery.drainMessage(stored, {
+      node: "node-a",
+      async onMessage(message) {
+        seen.push(message.signalId);
+        const tampered = Object.freeze({
+          ...message,
+          signalId: "signal-exact-marker-tampered",
+        });
+        await expect(
+          inboxRecords.compareAndSet(inboxKey, originalRecord, InboxRecords.write(tampered)),
+        ).resolves.toBe(true);
+      },
+    });
+
+    expect(seen).toEqual(["signal-exact-marker-original"]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures[0]?.message.signalId).toBe("signal-exact-marker-original");
+    expect(run.failures[0]?.error).toBeInstanceOf(Error);
+    await expect(delivery.inbox.read(stored.shard, { statuses: ["DELIVERED"] })).resolves.toEqual(
+      [],
+    );
   });
 
   it("repairs the delivered-row stale-guard race during duplicate receive", async () => {
@@ -804,6 +1075,17 @@ function missingMessage(): InboxMessage {
 
 function messageKey(message: InboxMessage): string {
   return `${message.id.shard.key()}:${message.id.value}`;
+}
+
+function unpackStoredRecord(record: Any): Record<string, unknown> {
+  return JSON.parse(Buffer.from(record.value).toString("utf8")) as Record<string, unknown>;
+}
+
+function packStoredRecord(template: Any, value: unknown): Any {
+  return create(AnySchema, {
+    typeUrl: template.typeUrl,
+    value: Buffer.from(typeof value === "string" ? value : JSON.stringify(value), "utf8"),
+  });
 }
 
 function deliveryInboxRecords(storageFactory: StorageFactory) {

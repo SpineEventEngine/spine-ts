@@ -2378,9 +2378,10 @@ Decision:
 - Use `UPDATE_SUBSCRIBER`, `TO_DELIVER`, the original event ID, the projection
   state type URL, and the routed projection ID.
 - Drain locally and replay only the exact inbox row target.
-- Keep process-manager event reactors, aggregate event reactors/importers,
-  projection catch-up, schedulers, retries, transport workers, and retained
-  attempt history deferred.
+- Keep process-manager event reactors as direct local `EventBus` execution for
+  this slice. Defer durable inbox routing for those reactors, aggregate event
+  reactors/importers, projection catch-up, schedulers, retries, transport
+  workers, and retained attempt history.
 
 Alternatives considered:
 
@@ -2396,5 +2397,8 @@ Consequences:
 
 - Projection live updates gain the same durable local handoff shape as the
   first process-manager command handoff.
+- Process-manager event reactors remain implemented through direct local
+  `EventBus` execution until a later task routes them through durable inbox
+  storage.
 - Remaining event endpoint kinds stay explicit future tasks instead of hidden
   in a large abstraction.

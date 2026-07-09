@@ -1,19 +1,36 @@
-import { setTimeout as wait } from "node:timers/promises";
-
 import { Delivery } from "../delivery/delivery.js";
 import type { InboxMessage } from "../delivery/inbox.js";
 
 const drainLimit = 8;
-const duplicatePollLimit = 20;
-const duplicatePollDelayMs = 5;
+const inFlightDrains = new WeakMap<Delivery, Map<string, Promise<void>>>();
 
 export async function drainLocalInboxMessage(options: LocalInboxDrainOptions): Promise<void> {
+  const messageKey = inboxMessageKey(options.received);
+  const drains = localInFlightDrains(options.delivery);
+  const inFlightDrain = drains.get(messageKey);
+
+  if (options.duplicate && inFlightDrain !== undefined) {
+    await inFlightDrain;
+    return;
+  }
+
+  const drain = runLocalInboxDrain(options);
+  drains.set(messageKey, drain);
+  try {
+    await drain;
+  } finally {
+    if (drains.get(messageKey) === drain) {
+      drains.delete(messageKey);
+    }
+  }
+}
+
+async function runLocalInboxDrain(options: LocalInboxDrainOptions): Promise<void> {
   const {
     delivery,
     received,
     node,
     replay,
-    duplicate,
     replayFailureMessage,
     skippedMessage,
     unfinishedMessage,
@@ -38,13 +55,6 @@ export async function drainLocalInboxMessage(options: LocalInboxDrainOptions): P
         : new Error(replayFailureMessage, { cause: failure.error });
     }
     if (run.status === "SKIPPED") {
-      if (
-        duplicate &&
-        received.status === "TO_DELIVER" &&
-        (await waitUntilDelivered(delivery, received))
-      ) {
-        return;
-      }
       throw new Error(skippedMessage);
     }
     if (run.processed === 0) {
@@ -66,19 +76,6 @@ export interface LocalInboxDrainOptions {
   readonly unfinishedMessage: string;
 }
 
-async function waitUntilDelivered(delivery: Delivery, received: InboxMessage): Promise<boolean> {
-  for (let attempt = 0; attempt < duplicatePollLimit; attempt += 1) {
-    await wait(duplicatePollDelayMs);
-    const target = await delivery.inbox.readMessage(received.id);
-
-    if (target?.status === "DELIVERED") {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 function sameMessageId(
   left: {
     readonly value: string;
@@ -94,4 +91,19 @@ function sameMessageId(
     left.shard.index === right.shard.index &&
     left.shard.ofTotal === right.shard.ofTotal
   );
+}
+
+function localInFlightDrains(delivery: Delivery): Map<string, Promise<void>> {
+  let drains = inFlightDrains.get(delivery);
+
+  if (drains === undefined) {
+    drains = new Map();
+    inFlightDrains.set(delivery, drains);
+  }
+
+  return drains;
+}
+
+function inboxMessageKey(message: InboxMessage): string {
+  return `${message.id.value}:${String(message.id.shard.index)}/${String(message.id.shard.ofTotal)}`;
 }

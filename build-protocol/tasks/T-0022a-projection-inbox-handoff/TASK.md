@@ -28,7 +28,9 @@ generic delivery engine.
 
 ## Out Of Scope
 
-- Process-manager event reactors and event-commanding methods.
+- Durable inbox routing for process-manager event reactors and event-commanding
+  methods; those reactors remain implemented as direct local `EventBus`
+  execution in this slice.
 - Aggregate event reactors or importers.
 - Projection catch-up (`CATCH_UP`).
 - Generic repository event delivery engines.
@@ -87,9 +89,10 @@ Observed behavior to preserve:
 - Duplicate delivery of the same event to the same projection target does not
   double-invoke the projection.
 - Existing process-manager command handoff still works.
-- Documentation records the implemented projection handoff and the deferred
-  process-manager reactor, catch-up, scheduler, retry, and transport-worker
-  behavior.
+- Documentation records the implemented projection handoff, direct local
+  `EventBus` execution for process-manager event reactors, and the deferred
+  durable inbox routing for those reactors plus catch-up, scheduler, retry, and
+  transport-worker behavior.
 
 ## Review Plan
 

@@ -2759,7 +2759,7 @@ describe("repository signal routing", () => {
     }
   });
 
-  it("keeps draining process-manager handoff backlog until the received row is delivered", async () => {
+  it("delivers the exact process-manager row despite older pending backlog", async () => {
     RoutingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
     const context = BoundedContext.singleTenant("Tasks")

@@ -54,7 +54,7 @@ describe("LocalProjectionInbox", () => {
     ]);
   });
 
-  it("waits for a concurrent duplicate while the original projection drain owns the shard", async () => {
+  it("waits for a concurrent duplicate when the original projection replay exceeds the old poll window", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -92,7 +92,7 @@ describe("LocalProjectionInbox", () => {
     await replayStarted;
     const duplicate = inbox.receive(delivery, input);
 
-    await pause(20);
+    await pause(150);
     releaseReplay();
 
     const [firstMessage, duplicateMessage] = await Promise.all([first, duplicate]);
