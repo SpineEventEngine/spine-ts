@@ -510,6 +510,20 @@ surface is a server-runtime kernel only; it is not a process-wide singleton,
 process supervisor, generic job framework, command/event/import bus, durable
 storage or inbox, read-side stand, repository dispatcher, integration broker,
 broad gRPC server lifecycle, ZeroMQ transport, or worker-process runtime.
+Runtime metadata exports include `SignalMetadata`, `SignalIds`, `Clock`,
+`SystemClock`, `FixedClock`, `SignalMetadataOptions`, `ActorContextInput`,
+`CommandContextInput`, and `EventContextInput`. `SignalMetadata` creates
+generated command IDs, event IDs, timestamps, actor/tenant command context,
+source-command/source-event origin chains, primitive (`string | number |
+boolean`) producer IDs, and validated int32 `Version` metadata through one
+small shared policy surface. Deterministic tests inject `Clock` and
+`SignalIds` instances instead of mutating process-wide globals. This seam is
+local runtime metadata only; it does not discover handlers, load generated
+registries, materialize application handlers, own transport, storage, tracing,
+or end-user envelope APIs.
+It does not broaden end-user APIs into framework `Command`/`Event` envelopes,
+does not reintroduce `@Apply`, and does not expose manual transaction-control
+APIs.
 The public runtime closure smoke path composes these exports with
 `BoundedContext`, `Repository`, `HandlerMetadataRegistry`,
 `CommandRegistrationReadiness`, `EventRegistrationReadiness`, and

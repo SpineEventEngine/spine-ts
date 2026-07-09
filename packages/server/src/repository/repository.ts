@@ -8,19 +8,12 @@ import {
   type MessageSchema,
 } from "@spine-ts/core";
 import {
-  ActorContextSchema,
-  type ActorContext,
   CommandContextSchema,
-  CommandIdSchema,
   CommandSchema,
   EventContextSchema,
-  EventIdSchema,
   EventSchema,
   type Command,
   type Event,
-  MessageIdSchema,
-  type Origin,
-  OriginSchema,
   type TenantId,
   type Version,
   VersionSchema,
@@ -56,6 +49,7 @@ import {
   EventRegistrationReadiness,
   type EventRegistrationReadinessLookup,
 } from "../handler/event-registration-readiness.js";
+import { SignalMetadata } from "../runtime/signal-metadata.js";
 import {
   HandlerMetadataRegistry,
   handlerMetadataAccess,
@@ -531,6 +525,7 @@ interface RepositoryRuntime {
   readonly context: StorageContext;
   readonly storageFactory: StorageFactory;
   readonly stand: Stand;
+  readonly signalMetadata: SignalMetadata;
   readonly processManagerInbox: ProcessManagerInbox;
   readonly dispatchStored: (event: Event) => Promise<void>;
   readonly dispatchStoredFollowUp: (event: Event) => Promise<void>;
@@ -1056,40 +1051,23 @@ class AggregateCommandExecution {
     allowEnvelopes: boolean,
     sequence: number,
   ): Event {
+    const producerId = runtimeProducerId(entityId);
+    const metadata = this.#runtime.signalMetadata.eventFromCommand(this.#command, sequence, {
+      ...(producerId === undefined ? {} : { producerId }),
+      version: eventVersionNumber(version),
+    });
     const bound =
       allowEnvelopes && isEventEnvelope(signal)
         ? clone(EventSchema, signal)
-        : this.#packDomainEvent(signal, version, sequence);
-    const context = clone(EventContextSchema, bound.context ?? create(EventContextSchema));
-    const commandId = requireCommandId(this.#command);
-    const aggregateId = PrimitiveIds.read(entityId);
-
-    if (aggregateId !== undefined) {
-      context.producerId = PrimitiveIds.pack(aggregateId);
-    }
-    context.version = create(VersionSchema, { number: eventVersionNumber(version) });
-    if (this.#command.context !== undefined) {
-      context.origin = {
-        case: "pastMessage",
-        value: create(OriginSchema, {
-          message: create(MessageIdSchema, {
-            id: packAny(CommandIdSchema, commandId),
-            typeUrl: this.#command.message?.typeUrl ?? "",
-          }),
-          ...(this.#command.context.actorContext === undefined
-            ? {}
-            : { actorContext: clone(ActorContextSchema, this.#command.context.actorContext) }),
-          ...(this.#command.context.origin === undefined
-            ? {}
-            : { grandOrigin: clone(OriginSchema, this.#command.context.origin) }),
-        }),
-      };
-    }
-    bound.context = context;
+        : this.#packDomainEvent(signal, metadata);
+    bound.context = metadata.context;
     return bound;
   }
 
-  #packDomainEvent(message: unknown, version: bigint, sequence: number): Event {
+  #packDomainEvent(
+    message: unknown,
+    metadata: ReturnType<SignalMetadata["eventFromCommand"]>,
+  ): Event {
     const typeName = messageTypeName(message);
     const schema = this.#routing.producedEventSchemas.find(
       (candidate) => candidate.typeName === typeName,
@@ -1100,11 +1078,9 @@ class AggregateCommandExecution {
     }
 
     return create(EventSchema, {
-      id: create(EventIdSchema, {
-        value: `${requireCommandId(this.#command).uuid}-${sequence.toString()}`,
-      }),
+      id: metadata.id,
       message: packAny(schema, message as never),
-      context: create(EventContextSchema),
+      context: metadata.context,
     });
   }
 
@@ -1341,21 +1317,16 @@ class AggregateEventExecution {
       throw new Error(`Repository aggregate execution cannot pack event message "${typeName}".`);
     }
 
-    const context = create(EventContextSchema, {
-      ...(producerIdFor(entityId) === undefined ? {} : { producerId: producerIdFor(entityId) }),
-      version: create(VersionSchema, { number: eventVersionNumber(version) }),
-      origin: {
-        case: "pastMessage",
-        value: sourceEventOrigin(this.#event),
-      },
+    const producerId = runtimeProducerId(entityId);
+    const metadata = this.#runtime.signalMetadata.eventFromEvent(this.#event, sequence, {
+      ...(producerId === undefined ? {} : { producerId }),
+      version: eventVersionNumber(version),
     });
 
     return create(EventSchema, {
-      id: create(EventIdSchema, {
-        value: `${requireEventId(this.#event).value}-${sequence.toString()}`,
-      }),
+      id: metadata.id,
       message: packAny(schema, signal as never),
-      context,
+      context: metadata.context,
     });
   }
 
@@ -1376,17 +1347,12 @@ class AggregateEventExecution {
           );
         }
 
+        const metadata = this.#runtime.signalMetadata.commandFromEvent(this.#event, sequence);
+
         return create(CommandSchema, {
-          id: create(CommandIdSchema, {
-            uuid: `${requireEventId(this.#event).value}-${sequence.toString()}`,
-          }),
+          id: metadata.id,
           message: packAny(schema, signal as never),
-          context: create(CommandContextSchema, {
-            ...(eventActorContext(this.#event) === undefined
-              ? {}
-              : { actorContext: eventActorContext(this.#event) }),
-            origin: sourceEventOrigin(this.#event),
-          }),
+          context: metadata.context,
         });
       }),
     );
@@ -1604,7 +1570,7 @@ class ProcessManagerCommandExecution {
   }
 
   async run(): Promise<void> {
-    const commandId = requireCommandId(this.#command);
+    requireCommandId(this.#command);
     const commandMessage = requireSignalMessage(this.#command.message, "command");
     const commandSchema = schemaForTypeUrl(
       this.#routing.commandSchemas,
@@ -1624,7 +1590,7 @@ class ProcessManagerCommandExecution {
     const eventSignals = await this.#invoke(entity, assignee, message);
 
     await this.#support.storeIfChanged(entity, tenantOptions);
-    this.#postEvents(this.#bindProducedEvents(eventSignals, route.entityId, commandId));
+    this.#postEvents(this.#bindProducedEvents(eventSignals, route.entityId));
   }
 
   async #invoke(
@@ -1653,26 +1619,17 @@ class ProcessManagerCommandExecution {
     }
   }
 
-  #bindProducedEvents(
-    produced: readonly unknown[],
-    entityId: unknown,
-    commandId: NonNullable<Command["id"]>,
-  ): readonly Event[] {
+  #bindProducedEvents(produced: readonly unknown[], entityId: unknown): readonly Event[] {
     let sequence = 0;
     return Object.freeze(
       produced.map((signal) => {
         sequence += 1;
-        return this.#bindProducedEvent(signal, entityId, commandId, sequence);
+        return this.#bindProducedEvent(signal, entityId, sequence);
       }),
     );
   }
 
-  #bindProducedEvent(
-    signal: unknown,
-    entityId: unknown,
-    commandId: NonNullable<Command["id"]>,
-    sequence: number,
-  ): Event {
+  #bindProducedEvent(signal: unknown, entityId: unknown, sequence: number): Event {
     const typeName = messageTypeName(signal);
     const schema = this.#routing.producedEventSchemas.find(
       (candidate) => candidate.typeName === typeName,
@@ -1684,30 +1641,16 @@ class ProcessManagerCommandExecution {
       );
     }
 
+    const producerId = runtimeProducerId(entityId);
+    const metadata = this.#runtime.signalMetadata.eventFromCommand(this.#command, sequence, {
+      ...(producerId === undefined ? {} : { producerId }),
+      version: processManagerProducedVersion(sequence),
+    });
+
     return create(EventSchema, {
-      id: create(EventIdSchema, { value: `${commandId.uuid}-${sequence.toString()}` }),
+      id: metadata.id,
       message: packAny(schema, signal as never),
-      context: create(EventContextSchema, {
-        ...(producerIdFor(entityId) === undefined ? {} : { producerId: producerIdFor(entityId) }),
-        version: create(VersionSchema, { number: processManagerProducedVersion(sequence) }),
-        origin: {
-          case: "pastMessage",
-          value: create(OriginSchema, {
-            message: create(MessageIdSchema, {
-              id: packAny(CommandIdSchema, commandId),
-              typeUrl: this.#command.message?.typeUrl ?? "",
-            }),
-            ...(this.#command.context?.actorContext === undefined
-              ? {}
-              : {
-                  actorContext: clone(ActorContextSchema, this.#command.context.actorContext),
-                }),
-            ...(this.#command.context?.origin === undefined
-              ? {}
-              : { grandOrigin: clone(OriginSchema, this.#command.context.origin) }),
-          }),
-        },
-      }),
+      context: metadata.context,
     });
   }
 
@@ -1751,6 +1694,8 @@ class ProcessManagerEventExecution {
       return;
     }
 
+    this.#validateSourceEventIdForFollowUps(intake);
+
     for (const entityId of intake.route.entityIds) {
       await this.#executeEntity(entityId, intake);
     }
@@ -1792,6 +1737,21 @@ class ProcessManagerEventExecution {
     await this.#support.storeIfChanged(entity, tenantOptions);
     this.#postEvents(this.#bindProducedEvents(produced.events, entityId));
     await this.#postCommands(this.#bindProducedCommands(produced.commands));
+  }
+
+  #validateSourceEventIdForFollowUps(intake: {
+    readonly reactors: readonly RegisteredHandlerMetadata<EventReactionHandlerMetadata>[];
+    readonly commanders: readonly RegisteredHandlerMetadata<CommandReactionHandlerMetadata>[];
+  }): void {
+    const emitsFollowUpEvents = intake.reactors.some(
+      (reactor) => handlerEmittedSchemas(reactor.handler).length > 0,
+    );
+
+    if (!emitsFollowUpEvents && intake.commanders.length === 0) {
+      return;
+    }
+
+    void this.#runtime.signalMetadata.originFromEvent(this.#event);
   }
 
   async #invokeHandlers(
@@ -1867,19 +1827,16 @@ class ProcessManagerEventExecution {
       );
     }
 
+    const producerId = runtimeProducerId(entityId);
+    const metadata = this.#runtime.signalMetadata.eventFromEvent(this.#event, sequence, {
+      ...(producerId === undefined ? {} : { producerId }),
+      version: processManagerProducedVersion(sequence),
+    });
+
     return create(EventSchema, {
-      id: create(EventIdSchema, {
-        value: `${requireEventId(this.#event).value}-${sequence.toString()}`,
-      }),
+      id: metadata.id,
       message: packAny(schema, signal as never),
-      context: create(EventContextSchema, {
-        ...(producerIdFor(entityId) === undefined ? {} : { producerId: producerIdFor(entityId) }),
-        version: create(VersionSchema, { number: processManagerProducedVersion(sequence) }),
-        origin: {
-          case: "pastMessage",
-          value: sourceEventOrigin(this.#event),
-        },
-      }),
+      context: metadata.context,
     });
   }
 
@@ -1899,17 +1856,12 @@ class ProcessManagerEventExecution {
           );
         }
 
+        const metadata = this.#runtime.signalMetadata.commandFromEvent(this.#event, sequence);
+
         return create(CommandSchema, {
-          id: create(CommandIdSchema, {
-            uuid: `${requireEventId(this.#event).value}-${sequence.toString()}`,
-          }),
+          id: metadata.id,
           message: packAny(schema, signal as never),
-          context: create(CommandContextSchema, {
-            ...(eventActorContext(this.#event) === undefined
-              ? {}
-              : { actorContext: eventActorContext(this.#event) }),
-            origin: sourceEventOrigin(this.#event),
-          }),
+          context: metadata.context,
         });
       }),
     );
@@ -1982,39 +1934,6 @@ function eventHandlerContext(event: Event): NonNullable<Event["context"]> {
     : clone(EventContextSchema, event.context);
 }
 
-function eventActorContext(event: Event): ActorContext | undefined {
-  switch (event.context?.origin.case) {
-    case "importContext":
-      return clone(ActorContextSchema, event.context.origin.value);
-    case "pastMessage":
-      return event.context.origin.value.actorContext === undefined
-        ? undefined
-        : clone(ActorContextSchema, event.context.origin.value.actorContext);
-    default:
-      return undefined;
-  }
-}
-
-function eventGrandOrigin(event: Event): Origin | undefined {
-  return event.context?.origin.case === "pastMessage"
-    ? clone(OriginSchema, event.context.origin.value)
-    : undefined;
-}
-
-function sourceEventOrigin(event: Event): Origin {
-  const actorContext = eventActorContext(event);
-  const grandOrigin = eventGrandOrigin(event);
-
-  return create(OriginSchema, {
-    message: create(MessageIdSchema, {
-      id: packAny(EventIdSchema, requireEventId(event)),
-      typeUrl: event.message?.typeUrl ?? "",
-    }),
-    ...(actorContext === undefined ? {} : { actorContext }),
-    ...(grandOrigin === undefined ? {} : { grandOrigin }),
-  });
-}
-
 function unpackRequired(
   message: NonNullable<Command["message"]>,
   schema: MessageSchema,
@@ -2077,26 +1996,16 @@ function eventVersionNumber(version: bigint): number {
   return Number(version);
 }
 
+function runtimeProducerId(entityId: unknown): string | number | boolean | undefined {
+  return PrimitiveIds.readFinite(entityId);
+}
+
 function requireCommandId(command: Command): NonNullable<Command["id"]> {
-  if (command.id === undefined) {
+  if (command.id === undefined || command.id.uuid.trim().length === 0) {
     throw new Error("Repository aggregate execution requires command.id to bind event origins.");
   }
 
   return command.id;
-}
-
-function requireEventId(event: Event): NonNullable<Event["id"]> {
-  if (event.id === undefined || event.id.value === "") {
-    throw new Error("Repository aggregate execution requires event.id to bind signal origins.");
-  }
-
-  return event.id;
-}
-
-function producerIdFor(entityId: unknown): ReturnType<typeof PrimitiveIds.pack> | undefined {
-  const aggregateId = PrimitiveIds.read(entityId);
-
-  return aggregateId === undefined ? undefined : PrimitiveIds.pack(aggregateId);
 }
 
 function inboxTargetId(entityId: unknown): string {

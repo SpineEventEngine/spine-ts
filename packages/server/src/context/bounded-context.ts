@@ -57,6 +57,7 @@ import {
   HandlerMetadataRegistry,
   type EntityHandlersMetadata,
 } from "../handler/handler-metadata.js";
+import { SignalMetadata } from "../runtime/signal-metadata.js";
 import { Stand } from "../stand/stand.js";
 
 /** Tenant isolation mode declared by a bounded context specification. */
@@ -1389,6 +1390,7 @@ function prepareRepositoryForContext(
     context: registration.storageContext,
     storageFactory: registration.storageFactory,
     stand: registration.stand,
+    signalMetadata: new SignalMetadata(),
     processManagerInbox: registration.processManagerInbox,
     dispatchStored: registration.dispatchStored,
     dispatchStoredFollowUp: registration.dispatchStoredFollowUp,

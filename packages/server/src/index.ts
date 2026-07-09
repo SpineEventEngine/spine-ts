@@ -135,6 +135,18 @@ export {
 } from "./entity/entity-transition-validation.js";
 
 export {
+  type ActorContextInput,
+  type Clock,
+  type CommandContextInput,
+  FixedClock,
+  type EventContextInput,
+  SignalIds,
+  SignalMetadata,
+  type SignalMetadataOptions,
+  SystemClock,
+} from "./runtime/signal-metadata.js";
+
+export {
   type ServerRuntimeLifecycle,
   type ServerRuntimeRejectedState,
   type ServerRuntimeState,

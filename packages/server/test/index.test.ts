@@ -21,11 +21,13 @@ import {
   type CommandRegistrationReadinessLookup,
   EventBus,
   type EventDispatcher,
+  type EventContextInput,
   EventRegistrationReadiness,
   type EventRegistrationApplicationMetadata,
   type EventRegistrationReadinessLookup,
   type EventRegistrationReactorMetadata,
   type EventRegistrationSubscriberMetadata,
+  FixedClock,
   describeEntityMetadata,
   DescriptorMetadataError,
   isEntitySchema,
@@ -46,6 +48,7 @@ import {
   Inbox,
   InboxStorage,
   type PlainEntityVersionMetadata,
+  type PrimitiveId,
   Repository,
   ShardIndex,
   ShardSession,
@@ -68,7 +71,11 @@ import {
   type SignalIntakeFailureCode,
   type SignalIntakeResult,
   type SignalKind,
+  SignalIds,
+  SignalMetadata,
+  type SignalMetadataOptions,
   SingleProcessServerRuntime,
+  SystemClock,
   createServerRuntimeRoutingPlan,
 } from "../src/index.js";
 
@@ -219,6 +226,7 @@ describe("@spine-ts/server", () => {
         "EventBus",
         "EventRegistrationReadiness",
         "DeliveryLoop",
+        "FixedClock",
         "HandlerMetadataError",
         "HandlerMetadataRegistry",
         "HandlerMetadataRegistryError",
@@ -242,10 +250,13 @@ describe("@spine-ts/server", () => {
         "ShardIndex",
         "ShardSession",
         "ShardedWorkRegistry",
+        "SignalIds",
+        "SignalMetadata",
         "SingleProcessServerRuntime",
         "SpineServices",
         "Stand",
         "StandStateTypeError",
+        "SystemClock",
         "TransactionalEntity",
         "TransactionalEntityScopeError",
         "React",
@@ -295,6 +306,10 @@ describe("@spine-ts/server", () => {
     expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
     expect(new StandStateTypeError("Unknown", "read")).toBeInstanceOf(StandStateTypeError);
     expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);
+    expect(new SignalMetadata()).toBeInstanceOf(SignalMetadata);
+    expect(new SignalIds()).toBeInstanceOf(SignalIds);
+    expect(new FixedClock(new Date(0))).toBeInstanceOf(FixedClock);
+    expect(new SystemClock()).toBeInstanceOf(SystemClock);
     expect(new GeneratedRegistryDiscovery()).toBeInstanceOf(GeneratedRegistryDiscovery);
     expect(new HandlerRegistryIngestor()).toBeInstanceOf(HandlerRegistryIngestor);
     expect(
@@ -326,6 +341,11 @@ describe("@spine-ts/server", () => {
     expectTypeOf<SignalIntakeFailureCode>().toEqualTypeOf<
       "RUNTIME_NOT_ACCEPTING" | "MALFORMED_ENVELOPE" | "UNSUPPORTED_SIGNAL_KIND"
     >();
+    expectTypeOf<SignalMetadataOptions>().toExtend<{
+      readonly ids?: SignalIds;
+      readonly clock?: SystemClock | FixedClock | undefined;
+    }>();
+    expectTypeOf<EventContextInput["producerId"]>().toEqualTypeOf<PrimitiveId | undefined>();
     expectTypeOf(acceptSignalIntake("command")).toExtend<SignalIntakeResult>();
     expectTypeOf(failSignalIntake("event", "MALFORMED_ENVELOPE")).toExtend<SignalIntakeResult>();
     expect(acceptSignalIntake("command").acceptedFor).toBe("async-work");

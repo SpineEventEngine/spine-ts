@@ -523,6 +523,18 @@ current seams, retained active-stream/update replay storage, worker topology,
 or a Java-style process-wide
 `ServerEnvironment` singleton as part of this closure.
 
+The same local runtime boundary now owns a narrow generated-signal metadata
+policy through `SignalMetadata`. Repository-produced follow-up commands/events
+share one policy for command/event IDs, timestamps, actor/tenant command
+context, event origin chains, primitive producer IDs, and validated int32
+version metadata. Tests inject `SignalIds` and `Clock` instead of mutating
+process-global time or ID state. This seam is still metadata-only: end-user
+handlers continue to accept generated domain messages instead of framework
+`Event` envelopes, `@Apply` remains absent, manual transaction controls are
+not introduced, and the seam does not discover handlers, load generated
+registries, materialize application handlers, or widen into transport,
+storage, tracing, or application-owned handler APIs.
+
 The architectural consequence is that later work must add the remaining
 collaborators as explicit tasks at their own seams. Event intake and broader
 transport integration can consume the existing readiness views and
