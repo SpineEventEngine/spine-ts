@@ -79,7 +79,8 @@ single-tenant contexts use a constant index, and multitenant contexts persist
 tenant IDs through the configured storage factory. These internals are not part
 of the end-user `BoundedContext` API. The full system-context runtime,
 command-log repositories, system event taxonomy, tracing/monitors/debug UI, and
-broader JVM production runtime remain deferred. Repositories with authentic
+broader JVM production runtime remain outside the current public surface.
+Repositories with authentic
 explicit handler metadata still expose route-only `routeCommand()` /
 `routeEvent()` calculations, and built contexts install internal repository
 dispatcher adapters that execute aggregate command assignees in framework-owned
@@ -98,7 +99,8 @@ inbox handoff is framework-owned process-manager command replay: the current
 local runtime writes the inbox row, drains the local shard immediately, requires
 tenant-safe replay in multitenant contexts, and resolves only after that
 received row is marked delivered. Broader inbox lifecycle management,
-schedulers, retries, and transport topology remain deferred. Process-manager
+schedulers, retries, and transport topology remain open production gaps.
+Process-manager
 repositories with authentic generated metadata do execute through the local
 command/event buses: default command routing reads the first command field,
 process-manager event routing reads the first event message field, state is
@@ -433,8 +435,8 @@ frozen copy-safe metadata for event subscribers, event reactors, and event
 applications grouped by event type. Subscriber and reactor lookups preserve
 Spine fan-out semantics and do not reject multiple receivers for the same event
 type. Domestic/external event classification and integration-broker
-wanted-event publication are deferred because the current TypeScript handler
-metadata has no external-event marker. It is not an event bus, integration
+wanted-event publication remain outside the current surface because TypeScript
+handler metadata has no external-event marker. It is not an event bus, integration
 broker, import bus, event store, delivery mechanism, stand, subscription
 service, command-result subscription, dispatcher, router, event posting API,
 validator, repository dispatcher, storage writer, transport adapter, handler
@@ -466,13 +468,13 @@ command-worker competing-consumer subscription over registered command topics.
 Event routing produces fan-out subscriptions and event-worker IDs
 for subscriber, reactor, and application receiver groups while keeping handler
 invocation from runtime workers, integrated runtime wiring, service hosting,
-IPC endpoint naming, and process supervision deferred. Public route descriptors
+IPC endpoint naming, and process supervision outside the planner. Public route descriptors
 expose only planner-local route and worker IDs, message full type names/type
 URLs, stable receiver groups, and transport correlation keys back to the
 top-level topics/subscriptions;
 they do not retain raw readiness metadata, entity names, handler method names,
 ZeroMQ endpoint data, socket topology, or duplicate full transport contracts on
-each route. Query, subscription, and system routing remain explicit deferred
+each route. Query, subscription, and system routing remain explicit reserved
 seams until concrete server readiness metadata exists.
 Runtime transport exports include `RuntimeTransportBinding`,
 `RuntimeTransportBindingInput`, `RuntimeTransportBindingHandle`,
@@ -590,8 +592,8 @@ transport routing descriptors internally, then exposes only the
 `SignalTransport` contract to runtime binding code. Socket creation, endpoint
 strings, multipart frames, and native binding types remain absent from the root
 API; remote transport, broker topology, process supervision, worker
-registration handshakes, delivery retries, and broad health checks remain
-deferred. The adapter serializes envelopes with Node's V8 serializer and is for
+registration handshakes, delivery retries, and broad health checks remain open
+production gaps. The adapter serializes envelopes with Node's V8 serializer and is for
 trusted same-host runtime peers only; `ipcDirectory` must be private to those
 peers. Managed sandboxes may reject ZeroMQ `ipc://` binds with `EPERM`, so live
 local IPC tests can require native IPC filesystem/socket permissions outside
@@ -612,8 +614,8 @@ Generated output is written to `docs/api/reference`.
 
 `docs:check` also emits temporary TypeDoc JSON, verifies that expected
 `@spine-ts/proto`, `@spine-ts/core`, `@spine-ts/server`,
-`@spine-ts/storage`, and `@spine-ts/transport` entry-point exports are present
-in the API model, checks
+`@spine-ts/storage`, `@spine-ts/transport`, and `@spine-ts/testing`
+entry-point exports are present in the API model, checks
 `@spine-ts/server` and `@spine-ts/storage` root exports against source
 allowlists, and rejects broad generated wildcard re-exports from the proto
 package root.

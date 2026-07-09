@@ -45,7 +45,9 @@ Current slice exposes:
   projection event subscribers, and process-manager command assignees, event
   reactors, and event-commanding handlers. Process-manager command assignees
   use the framework-owned durable inbox handoff plus immediate local shard
-  replay, while the broader delivery lifecycle remains deferred;
+  replay, while transport-backed/background workers, broker supervision,
+  retained attempt history, and deployment hardening remain outside this local
+  slice;
   and
 - `context.stand()` / `new Stand({ context, storageFactory })` for direct
   read-side entity state registration, latest-state updates, latest-state point
@@ -151,7 +153,7 @@ Current slice exposes:
 - `createServerRuntimeRoutingPlan({ context, commands, events })` for the
   smallest immutable server/runtime wiring seam from built bounded-context
   metadata plus command/event readiness to transport topics, subscriptions,
-  planner-local worker IDs, and explicit deferred routing seams.
+  planner-local worker IDs, and explicit reserved routing seams.
 - `RuntimeTransportBinding` for registering those command/event routes with a
   supplied `SignalTransport`, validating generated Spine command/event envelope
   shape and enclosed message type URL before runtime intake, and enqueuing
@@ -314,8 +316,9 @@ event type. Subscriber and reactor lookups preserve Spine event fan-out, so mult
 entities may receive the same event type. Event application uniqueness remains
 the registry policy: one entity state may apply a given event type once, while
 multiple entity states may apply the same event type. Domestic/external event
-classification and integration-broker wanted-event publication are deferred
-because the current TypeScript handler metadata has no external-event marker.
+classification and integration-broker wanted-event publication remain outside
+the current surface because TypeScript handler metadata has no external-event
+marker.
 This surface is not an event bus, integration broker, import bus, event store,
 delivery mechanism, stand, subscription service, command-result subscription,
 dispatcher, router, validator, repository runtime registration hook, storage
@@ -347,8 +350,8 @@ invoked, and the stored event remains. The `EventStore` remains storage-only:
 delegating to it, while `EventStore`
 continues to avoid fan-out, retries, inbox, or delivery behavior on its own.
 The current TypeScript event-dispatch contract is message-type-based only;
-domestic/external filtering remains deferred until handler metadata exposes that
-distinction.
+domestic/external filtering remains outside the current surface until handler
+metadata exposes that distinction.
 
 `createServerRuntimeRoutingPlan()` is the first server-owned runtime-wiring seam
 over that metadata. It requires a built `BoundedContext` and accepts optional
@@ -365,7 +368,7 @@ groups, transport correlation keys for the topic/subscription arrays, and
 planner-local worker IDs; they do not expose handler methods, entity type names, raw
 readiness metadata, ZeroMQ endpoints, socket topology, or duplicate full
 transport contracts on each route.
-Query, subscription, and system routing remain explicit deferred seams because
+Query, subscription, and system routing remain explicit reserved seams because
 this slice has no concrete server readiness metadata for them. The planner does
 not open sockets, name IPC endpoints, start workers, dispatch handlers,
 validate signals, store delivery state, supervise broker or worker processes,
@@ -615,8 +618,8 @@ production lifecycle, or integrate transports. Process-manager command assignees
 now write durable process-manager
 inbox rows before the current local shard drain replays them, and the post does
 not resolve until that received row is marked delivered. Scheduler/retry
-workers, cross-process durable recovery, and broader event/aggregate handoff
-remain deferred.
+workers, cross-process recovery, and broader event/aggregate handoff remain
+open production gaps.
 
 ## Direct Stand
 
@@ -766,7 +769,7 @@ await Server.atPort(8080, { environment }).add(tasks).start();
 
 Production construction rejects missing `storageFactory` or `transport` before
 network intake opens. Production mode validates explicit facility injection
-only; durable production storage adapters remain deferred, and
+only; durable production storage adapters remain an open production gap, and
 `InMemoryStorageFactory` is local/test-only. The environment selects and owns
 facilities for server assembly. Built contexts still keep the storage factory
 they were built with until a later builder integration wires context assembly
@@ -897,7 +900,7 @@ using the repository state schema and the context `StorageFactory`. Repeated
 `add(repository)` calls before `build()` are idempotent. Registering the same
 repository instance with another built context is rejected. When explicit
 handler metadata is supplied, `routeCommand()` and `routeEvent()` calculate
-deferred repository routes for the current storage/routing slice.
+repository routes for the current storage/routing slice.
 Process-manager command routing uses the first command message field as the
 process-manager ID; process-manager event routing uses the first event message
 field, not the producer ID fallback used by aggregate/projection event routes.
@@ -912,8 +915,8 @@ posted through the event bus so they are appended to the `EventStore` before
 fan-out; post-commit dispatch failures are recorded in
 `storedEventDispatchFailures()`. Process-manager command assignees now use the
 framework-owned durable inbox handoff with immediate local shard replay/drain,
-while scheduler/retry workers, cross-process durable recovery, and broader
-event/aggregate handoff remain deferred. This seam follows Spine `core-jvm`
+while scheduler/retry workers, cross-process recovery, and broader
+event/aggregate handoff remain open production gaps. This seam follows Spine `core-jvm`
 `Repository` identity and registration concepts closely. The direct repository
 API does not create, find, or store entities; invoke handlers; write inboxes;
 manage caches; emit lifecycle events; or touch transport.

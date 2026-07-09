@@ -25,8 +25,10 @@ root remains adapter-agnostic. ZeroMQ socket classes, endpoint strings,
 multipart frames, native binding types, broker processes, participant lifecycle
 values, worker registrations, delivery attempts/results, retry policy, durable
 delivery, and handler materialization are not exported from the public transport
-API. Delivery, inbox, participant lifecycle, and retry concepts belong to later
-roadmap tasks.
+API. Delivery and inbox concepts are implemented in `@spine-ts/server`;
+participant lifecycle, broker supervision, retained retry history,
+remote/multi-host transport, and production health policy remain outside this
+package.
 
 ZeroMQ is reserved for local IPC on one host. The native binding install script
 is explicitly approved in the workspace pnpm configuration, and development or
@@ -36,11 +38,12 @@ adapter derives compact deterministic IPC socket paths from the
 descriptors, then keeps those paths private. Publish/subscribe and
 request/reply tests open sockets only under temporary IPC directories and clean
 them up within the test process. The implementation does not define remote
-transport, retries, durable delivery, process supervision, broker topology,
-worker registration handshakes, or broad health checks. Managed sandboxes may
-reject ZeroMQ `ipc://` binds with `EPERM`, so live local IPC runs can require
-native IPC filesystem/socket permissions outside the sandbox. Scaling beyond
-one host must use another adapter behind the same public transport contracts.
+transport, transport-owned retry loops, durable delivery policy, process
+supervision, broker topology, worker registration handshakes, or broad health
+checks. Managed sandboxes may reject ZeroMQ `ipc://` binds with `EPERM`, so live
+local IPC runs can require native IPC filesystem/socket permissions outside the
+sandbox. Scaling beyond one host must use another adapter behind the same
+public transport contracts.
 
 The adapter serializes envelopes with Node's V8 serializer. Treat every
 `ipc://` frame as trusted runtime data, not as an untrusted network protocol:

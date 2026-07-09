@@ -435,12 +435,12 @@ sanitized as `COMMAND_POST_ERROR`; ordinary generated-registry aggregate loading
 uses the latest persisted state instead of replaying stored events.
 Unexpected command-bus failures remain sanitized as `COMMAND_POST_ERROR`.
 
-The following runtime pieces are still deferred to later explicit tasks:
+The following runtime pieces remain outside the verified local/example slice:
 
 - visibility/type-supplier registration and lifecycle callbacks over the
   repository identity seam;
-- process-manager event handler execution and query/subscription execution over
-  repository routes. A limited local read-side catch-up slice now exists on
+- query/subscription execution over repository routes. A limited local
+  read-side catch-up slice now exists on
   `BoundedContext.catchUpReadSide(options?)`: it clears registered projection
   state rows for one tenant slice, replays already-stored events only to
   matching projection subscribers through the same EventBus runtime queue as
@@ -448,17 +448,18 @@ The following runtime pieces are still deferred to later explicit tasks:
   worker orchestration, inbox lifecycle, retries, and cross-process catch-up
   control;
 - process-wide transport-backed delivery workers, production catch-up
-  orchestration, durable storage lifecycle, entity storage/cache catch-up, and
-  production tenant-index policy. Durable inbox records, dedup guards, shard
-  leases, the direct local shard drain, the local one-shard `DeliveryLoop`, and
-  the internal tenant index are present;
+  orchestration, durable production storage adapters, entity storage/cache
+  catch-up, and production tenant-index policy. Durable inbox records, dedup
+  guards, shard leases, the direct local shard drain, the local one-shard
+  `DeliveryLoop`, and the internal tenant index are present;
 - richer query filtering, retained subscription update replay, and
   cross-process subscription stream ownership;
 - full system-context runtime, command-log repositories, system event taxonomy,
-  tracing/monitors/debug UI, and broad production server/gRPC lifecycle; and
+  tracing/monitors/debug UI, deployment/authentication/tracing/health
+  hardening, and broader production server verification; and
 - remote/multi-host transport topology, broker topology, process supervision,
-  retry workers, health checks, and production transport-backed worker
-  execution beyond the current local `RuntimeTransportBinding`.
+  retry monitors/workers, and production transport-backed worker execution
+  beyond the current local `RuntimeTransportBinding`.
 
 ## Server Runtime Closure
 
@@ -486,7 +487,7 @@ The readiness views remain metadata-only and do not dispatch or invoke
 handlers. The runtime-routing plan does not open transport endpoints, expose
 ZeroMQ details, or start workers; it only turns existing metadata into
 transport-owned topics, subscriptions, planner-local worker IDs, explicit
-deferred seams, and sanitized route descriptors. Those route descriptors expose
+reserved seams, and sanitized route descriptors. Those route descriptors expose
 message type names/type URLs plus stable receiver-group and local route/worker
 identities, along with transport correlation keys back to topic/subscription
 arrays and planner-local worker IDs; they do not retain entity names, handler
@@ -516,9 +517,10 @@ integration wires context assembly through the environment. Shutdown stops
 intake, closes active sessions, closes owned contexts/resources, then closes
 environment-owned facilities when the server owns the environment. Failed close
 attempts are retryable without rerunning close hooks that already succeeded. It
-still does not export a transport endpoint runner, integration broker, durable
-retry owner, process supervisor, event storage policy beyond current seams,
-durable subscription store, worker topology, or a Java-style process-wide
+still does not export a production transport endpoint runner, integration
+broker, durable retry owner, process supervisor, event storage policy beyond
+current seams, retained active-stream/update replay storage, worker topology,
+or a Java-style process-wide
 `ServerEnvironment` singleton as part of this closure.
 
 The architectural consequence is that later work must add the remaining
@@ -585,7 +587,7 @@ Raw system contexts and tenant indexes remain internal framework details.
 Durable catch-up storage, transport-backed worker supervision, retry monitor
 hierarchies, retained delivery-attempt history, diagnostics, repository storage
 policy, read-side projection stores, and durable production storage adapters
-remain deferred.
+remain open production gaps.
 
 ## Transport Boundary
 
