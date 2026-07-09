@@ -1,5 +1,9 @@
+import { Buffer } from "node:buffer";
+import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 
+import type * as Protobuf from "@bufbuild/protobuf";
+import type * as ProtobufWkt from "@bufbuild/protobuf/wkt";
 import ts from "typescript";
 
 import type {
@@ -140,12 +144,12 @@ interface MutableImportState {
 
 interface GeneratedNamespace {
   readonly exports: GeneratedExports;
-  readonly kind: SignalKind | undefined;
   readonly moduleSpecifier: string;
 }
 
 interface GeneratedSymbol extends GeneratedNamespace {
   readonly exportName: string;
+  readonly kind: SignalKind | undefined;
   readonly schemaExportName: string | undefined;
   readonly schemaValue: boolean;
 }
@@ -158,6 +162,17 @@ interface SchemaUse {
 interface GeneratedExports {
   readonly types: Set<string>;
   readonly values: Set<string>;
+  readonly schemaRoles: Map<string, SignalKind | undefined>;
+}
+
+interface GeneratedFile {
+  readonly sourceFile: string;
+  readonly messages: readonly DescriptorMessage[];
+}
+
+interface DescriptorMessage {
+  readonly name: string;
+  readonly nested: readonly DescriptorMessage[];
 }
 
 interface TypeWalk {
@@ -182,6 +197,8 @@ interface HandlerDecoratorUse extends DecoratorUse {
 const handlerDecorators = new Set<HandlerDecorator>(["Assign", "Command", "React", "Subscribe"]);
 const entityBaseNames = new Set(["Aggregate", "Projection", "ProcessManager"]);
 const maxAliasDepth = 50;
+const protobuf = requirePackage("@bufbuild/protobuf") as typeof Protobuf;
+const protobufWkt = requirePackage("@bufbuild/protobuf/wkt") as typeof ProtobufWkt;
 
 function appSourceFiles(program: ts.Program): readonly ts.SourceFile[] {
   return program.getSourceFiles().filter((source) => !source.isDeclarationFile);
@@ -825,7 +842,7 @@ function schemaUseFromName(name: ts.QualifiedName, imports: ImportState): Schema
     !namespace.exports.values.has(schemaName)
     ? undefined
     : {
-        kind: namespace.kind,
+        kind: namespace.exports.schemaRoles.get(schemaName),
         reference: { moduleSpecifier: namespace.moduleSpecifier, exportName: schemaName },
       };
 }
@@ -1079,14 +1096,13 @@ function recordGeneratedImport(
   program: ts.Program,
   state: MutableImportState,
 ): void {
-  const kind = generatedModuleKind(moduleSpecifier);
   const exported = generatedModuleExports(source, moduleSpecifier, program);
   if (exported === undefined) {
     return;
   }
 
   if (ts.isNamespaceImport(bindings)) {
-    state.generatedNamespaces.set(bindings.name.text, { exports: exported, moduleSpecifier, kind });
+    state.generatedNamespaces.set(bindings.name.text, { exports: exported, moduleSpecifier });
     return;
   }
 
@@ -1101,7 +1117,7 @@ function recordGeneratedImport(
       exports: exported,
       moduleSpecifier,
       exportName,
-      kind,
+      kind: exported.schemaRoles.get(schemaExportName),
       schemaExportName: exported.values.has(schemaExportName) ? schemaExportName : undefined,
       schemaValue: valueImport && !element.isTypeOnly && exported.values.has(exportName),
     });
@@ -1110,17 +1126,6 @@ function recordGeneratedImport(
 
 function isGeneratedModule(moduleSpecifier: string): boolean {
   return /(^|\/)generated\/.+_pb(\.js)?$/.test(moduleSpecifier);
-}
-
-function generatedModuleKind(moduleSpecifier: string): SignalKind | undefined {
-  if (/(^|\/)[^/]*commands?_pb(\.js)?$/.test(moduleSpecifier)) {
-    return "command";
-  }
-  if (/(^|\/)[^/]*events?_pb(\.js)?$/.test(moduleSpecifier)) {
-    return "event";
-  }
-
-  return undefined;
 }
 
 function generatedModuleExports(
@@ -1139,37 +1144,234 @@ function generatedModuleSource(
   program: ts.Program,
 ): ts.SourceFile | undefined {
   const base = resolve(dirname(source.fileName), moduleSpecifier);
-  const candidates = new Set([
-    base,
+  const candidates = uniqueStrings([
     base.replace(/\.js$/, ".ts"),
-    base.replace(/\.js$/, ".d.ts"),
     `${base}.ts`,
+    base,
+    base.replace(/\.js$/, ".d.ts"),
+    `${base}.d.ts`,
   ]);
+  const sourceFiles = new Map(
+    program.getSourceFiles().map((candidate) => [resolve(candidate.fileName), candidate]),
+  );
 
-  return program.getSourceFiles().find((candidate) => candidates.has(resolve(candidate.fileName)));
+  for (const candidate of candidates) {
+    const sourceFile = sourceFiles.get(candidate);
+    if (sourceFile !== undefined) {
+      return sourceFile;
+    }
+  }
+
+  return undefined;
+}
+
+function uniqueStrings(values: readonly string[]): readonly string[] {
+  return [...new Set(values)];
 }
 
 function exportedNames(source: ts.SourceFile): GeneratedExports {
-  const exports = { types: new Set<string>(), values: new Set<string>() };
+  const files = generatedFiles(source);
+  const schemaRoles = new Map<string, SignalKind | undefined>();
+  const exports = { types: new Set<string>(), values: new Set<string>(), schemaRoles };
 
   for (const statement of source.statements) {
-    recordExportedNames(statement, exports);
+    recordExportedNames(statement, exports, files);
   }
 
   return exports;
 }
 
-function recordExportedNames(statement: ts.Statement, exports: GeneratedExports): void {
+function generatedFiles(source: ts.SourceFile): ReadonlyMap<string, GeneratedFile> {
+  const files = new Map<string, GeneratedFile>();
+
+  for (const statement of source.statements) {
+    if (!ts.isVariableStatement(statement)) {
+      continue;
+    }
+    for (const declaration of statement.declarationList.declarations) {
+      if (!ts.isIdentifier(declaration.name)) {
+        continue;
+      }
+      const descriptor = fileDescriptor(declaration.initializer);
+      if (descriptor !== undefined) {
+        files.set(declaration.name.text, descriptor);
+      }
+    }
+  }
+
+  return files;
+}
+
+function recordExportedNames(
+  statement: ts.Statement,
+  exports: GeneratedExports,
+  files: ReadonlyMap<string, GeneratedFile>,
+): void {
   if (ts.isVariableStatement(statement) && hasModifier(statement, ts.SyntaxKind.ExportKeyword)) {
     for (const declaration of statement.declarationList.declarations) {
       if (ts.isIdentifier(declaration.name)) {
         exports.values.add(declaration.name.text);
+        const schemaRole = schemaRoleFromInitializer(
+          declaration.name.text,
+          declaration.initializer,
+          files,
+        );
+        if (schemaRole.found) {
+          exports.schemaRoles.set(declaration.name.text, schemaRole.kind);
+        }
       }
     }
   }
 
   if (hasModifier(statement, ts.SyntaxKind.ExportKeyword)) {
     recordNamedExport(statement, exports);
+  }
+}
+
+function schemaRoleFromInitializer(
+  schemaExportName: string,
+  initializer: ts.Expression | undefined,
+  files: ReadonlyMap<string, GeneratedFile>,
+): { readonly found: boolean; readonly kind: SignalKind | undefined } {
+  const call = callExpression(initializer, "messageDesc");
+  if (call === undefined) {
+    return { found: false, kind: undefined };
+  }
+  const fileName = call.arguments[0];
+  if (fileName === undefined || !ts.isIdentifier(fileName)) {
+    return { found: false, kind: undefined };
+  }
+  const file = files.get(fileName.text);
+  if (file === undefined) {
+    return { found: true, kind: undefined };
+  }
+  const messageName = descriptorMessageName(file, messageDescIndexes(call));
+  const expectedName = schemaExportName.replace(/Schema$/, "");
+  if (messageName === undefined || messageName !== expectedName) {
+    return { found: true, kind: undefined };
+  }
+
+  return { found: true, kind: signalKindFromProto(file.sourceFile) };
+}
+
+function messageDescIndexes(call: ts.CallExpression): readonly number[] | undefined {
+  const indexes: number[] = [];
+  for (const argument of call.arguments.slice(1)) {
+    if (!ts.isNumericLiteral(argument)) {
+      return undefined;
+    }
+    const index = Number(argument.text);
+    if (!Number.isInteger(index) || index < 0) {
+      return undefined;
+    }
+    indexes.push(index);
+  }
+
+  return indexes.length === 0 ? undefined : indexes;
+}
+
+function descriptorMessageName(
+  file: GeneratedFile,
+  indexes: readonly number[] | undefined,
+): string | undefined {
+  if (indexes === undefined) {
+    return undefined;
+  }
+  const path: string[] = [];
+  let messages = file.messages;
+
+  for (const index of indexes) {
+    const message = messages[index];
+    if (message === undefined) {
+      return undefined;
+    }
+    path.push(message.name);
+    messages = message.nested;
+  }
+
+  return path.join("_");
+}
+
+function fileDescriptor(initializer: ts.Expression | undefined): GeneratedFile | undefined {
+  const call = callExpression(initializer, "fileDesc");
+  const descriptor = call?.arguments[0];
+  if (descriptor === undefined || !ts.isStringLiteralLike(descriptor)) {
+    return undefined;
+  }
+
+  try {
+    const file = protobuf.fromBinary(
+      protobufWkt.FileDescriptorProtoSchema,
+      Buffer.from(descriptor.text, "base64"),
+    );
+    return file.name === ""
+      ? undefined
+      : { sourceFile: file.name, messages: file.messageType.map(descriptorMessage) };
+  } catch {
+    return undefined;
+  }
+}
+
+function callExpression(
+  expression: ts.Expression | undefined,
+  functionName: string,
+): ts.CallExpression | undefined {
+  if (expression === undefined) {
+    return undefined;
+  }
+  const unwrapped = unwrapExpression(expression);
+  if (!ts.isCallExpression(unwrapped) || !ts.isIdentifier(unwrapped.expression)) {
+    return undefined;
+  }
+
+  return unwrapped.expression.text === functionName ? unwrapped : undefined;
+}
+
+function unwrapExpression(expression: ts.Expression): ts.Expression {
+  if (ts.isParenthesizedExpression(expression)) {
+    return unwrapExpression(expression.expression);
+  }
+  if (ts.isAsExpression(expression) || ts.isSatisfiesExpression(expression)) {
+    return unwrapExpression(expression.expression);
+  }
+
+  return expression;
+}
+
+function signalKindFromProto(sourceFile: string): SignalKind | undefined {
+  if (sourceFile.endsWith("commands.proto")) {
+    return "command";
+  }
+  if (sourceFile.endsWith("events.proto")) {
+    return "event";
+  }
+
+  return undefined;
+}
+
+function descriptorMessage(message: {
+  name: string;
+  nestedType: readonly unknown[];
+}): DescriptorMessage {
+  return {
+    name: message.name,
+    nested: message.nestedType.map((nested) =>
+      descriptorMessage(nested as { name: string; nestedType: readonly unknown[] }),
+    ),
+  };
+}
+
+function requirePackage(specifier: string): unknown {
+  const directRequire = createRequire(import.meta.url);
+  try {
+    return directRequire(specifier);
+  } catch (error) {
+    const packageRequire = createRequire(resolve(process.cwd(), "packages/server/package.json"));
+    try {
+      return packageRequire(specifier);
+    } catch {
+      throw error;
+    }
   }
 }
 

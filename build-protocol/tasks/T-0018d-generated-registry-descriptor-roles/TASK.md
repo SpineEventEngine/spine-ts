@@ -1,11 +1,11 @@
 # T-0018d: Generated Registry Descriptor Roles
 
-Status: planned
+Status: complete
 Started: `2026-07-09`
 Branch: `task/T-0018d-generated-registry-descriptor-roles`
 Worktree:
 `.worktrees/T-0018d-generated-registry-descriptor-roles`
-Base commit: `48a0eab`
+Base commit: `f761ca4`
 
 ## Objective
 

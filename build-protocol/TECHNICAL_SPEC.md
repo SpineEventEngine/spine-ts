@@ -140,10 +140,12 @@ from TypeScript signatures:
 
 T-0015c verifies imported generated message names and companion schema runtime
 value exports by inspecting generated module source. Command/event role
-classification currently comes from generated module file names containing
-`command(s)_pb` or `event(s)_pb`; neutral generated modules fail closed for
-handler signal and emitted-schema roles until a later slice adds deeper
-descriptor-based role inspection.
+classification comes from descriptor-backed `.proto` identity tied to the
+specific imported schema export. Source files ending in `commands.proto` are
+commands, source files ending in `events.proto` are events, and neutral source
+file names have no handler signal/emitted role. Neutral schemas remain usable
+for entity state, and neutral, missing, malformed, or unrelated descriptor data
+fails closed for handler signal and emitted-schema roles.
 
 The generated module must export a registry value with this logical shape:
 
