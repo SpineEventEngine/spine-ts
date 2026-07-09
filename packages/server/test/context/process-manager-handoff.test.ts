@@ -115,18 +115,14 @@ describe("LocalProcessManagerInbox", () => {
     expect(Array.from(seen[0]?.signal?.value ?? [])).toEqual([1]);
     const scheduled = await delivery.inbox.read(shard, { statuses: ["SCHEDULED"] });
 
-    await expect(
-      delivery.inbox.read(shard, { statuses: ["DELIVERED"] }),
-    ).resolves.toMatchObject([
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
       {
         signalId: "signal-0",
         label: "HANDLE_COMMAND",
         status: "DELIVERED",
       },
     ]);
-    await expect(
-      delivery.inbox.read(shard, { statuses: ["SCHEDULED"] }),
-    ).resolves.toMatchObject([
+    await expect(delivery.inbox.read(shard, { statuses: ["SCHEDULED"] })).resolves.toMatchObject([
       {
         signalId: "signal-1",
         label: "HANDLE_COMMAND",
@@ -301,7 +297,9 @@ describe("LocalProcessManagerInbox", () => {
         status: "TO_DELIVER",
         shard: ShardIndex.single(),
       }),
-    ).rejects.toThrow('BoundedContext delivery has no handler for inbox label "UPDATE_SUBSCRIBER".');
+    ).rejects.toThrow(
+      'BoundedContext delivery has no handler for inbox label "UPDATE_SUBSCRIBER".',
+    );
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
     ).resolves.toMatchObject([

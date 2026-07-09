@@ -218,6 +218,7 @@ describe("@spine-ts/server", () => {
         "Command",
         "EventBus",
         "EventRegistrationReadiness",
+        "DeliveryLoop",
         "HandlerMetadataError",
         "HandlerMetadataRegistry",
         "HandlerMetadataRegistryError",

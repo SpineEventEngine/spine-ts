@@ -438,11 +438,14 @@ The following runtime pieces are still deferred to later explicit tasks:
   `BoundedContext.catchUpReadSide(options?)`: it clears registered projection
   state rows for one tenant slice, replays already-stored events only to
   matching projection subscribers through the same EventBus runtime queue as
-  live intake, does not re-append events, and excludes Delivery/scheduler
-  orchestration, inbox lifecycle, retries, and cross-process catch-up control;
-- delivery scheduler/catch-up loops, durable storage lifecycle, entity
-  storage/cache catch-up, and tenant-index persistence. Durable inbox records,
-  dedup guards, shard leases, and the direct local shard drain are present;
+  live intake, does not re-append events, and excludes production delivery
+  worker orchestration, inbox lifecycle, retries, and cross-process catch-up
+  control;
+- process-wide transport-backed delivery workers, production catch-up
+  orchestration, durable storage lifecycle, entity storage/cache catch-up, and
+  tenant-index persistence. Durable inbox records, dedup guards, shard leases,
+  the direct local shard drain, and the local one-shard `DeliveryLoop` are
+  present;
 - richer query filtering, durable event subscription recovery, and durable subscription
   recovery;
 - system-context pairing and broad production server/gRPC lifecycle; and
@@ -549,15 +552,19 @@ legacy/internal compatibility support; ordinary generated-registry aggregate
 loading uses the latest persisted state rather than snapshot-plus-replay
 loading. Delivery now persists durable inbox rows through `RecordStorage`,
 keeps live deduplication guards beside those rows, coordinates shard ownership
-with durable shard leases, and exposes a local `Delivery.drain()` loop that
-claims one shard, replays inbox rows through a bounded-context-owned
-process-manager inbox capability, and marks successful rows `DELIVERED`. The
-current handoff validates replayed command payloads, tenant context, and routed
-target metadata before handler code and waits for the received row to reach
-`DELIVERED` before the posting path resolves. Scheduler/catch-up
-orchestration, transport-backed worker loops, retained delivery-attempt
-history, tenant indexes, diagnostics, repository storage policy, read-side
-projection stores, and durable production storage adapters remain deferred.
+with durable shard leases, and exposes `Delivery.drain()` plus `DeliveryLoop`
+for local framework-owned shard draining. `DeliveryLoop` repeats one-shard
+drains until idle, skipped, stopped, or a configured failure bound; failed rows
+remain `TO_DELIVER` for later retry rather than being copied into a separate
+attempt log. `stop()` prevents future drain starts and does not interrupt an
+in-flight `Delivery.drain()`; `close()` calls `stop()` and waits for the
+current drain, if any, to finish. The current handoff validates replayed command
+payloads, tenant context, and routed target metadata before handler code and
+waits for the received row to reach `DELIVERED` before the posting path
+resolves. Durable catch-up storage, transport-backed worker supervision, retry
+monitor hierarchies, retained delivery-attempt history, tenant indexes,
+diagnostics, repository storage policy, read-side projection stores, and durable
+production storage adapters remain deferred.
 
 ## Transport Boundary
 
