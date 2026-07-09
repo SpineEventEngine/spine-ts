@@ -2140,3 +2140,45 @@ Consequences:
 - Low-level envelope APIs remain available for framework internals and advanced
   tests.
 - The next registry-discovery task remains separately planned and unblocked.
+
+## D-0067: Fix No-Emission React Analyzer Drift Before Role Discovery
+
+Status: Accepted
+
+Date: 2026-07-09
+
+Context: The generated-registry contract says `@React` handlers may either
+return generated event messages or explicitly return `void` when they react
+without emitting follow-up events. The build-time analyzer currently rejects
+explicit `void` `@React` handlers as missing emitted schemas. This is a direct
+contract drift and should be corrected before broader descriptor-based signal
+role discovery.
+
+Decision:
+
+- Run T-0018c as the next implementation slice.
+- Accept explicit `void` return types for `@React` and produce an
+  `event-reaction` metadata record with `emittedSchemas: []`.
+- Keep `@Assign` and `@Command` strict: they must emit at least one generated
+  message schema and must reject `void`.
+- Keep `@Subscribe` strict: it must explicitly return `void` and never emits.
+- Do not broaden this slice into runtime invocation changes, registry writer
+  shape changes, app examples, or descriptor role classification.
+
+Alternatives considered:
+
+- Move directly to descriptor-based command/event role classification. Rejected
+  for this slice because the `@React` `void` contradiction is smaller, more
+  direct, and independently testable.
+- Make all handler kinds tolerate empty emitted schemas. Rejected because
+  aggregate assignment and command-producing handlers require emitted domain
+  messages by contract.
+- Require no-emission reactions to use `@Subscribe` instead. Rejected because
+  reactions and subscriptions have different routing/semantic roles.
+
+Consequences:
+
+- Build-time generated registries can represent no-emission event reactions
+  without forcing artificial event returns.
+- The later descriptor-role-discovery task can start from a handler contract
+  that already matches the documented API.
