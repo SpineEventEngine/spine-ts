@@ -58,13 +58,13 @@ Verification before final review:
   statements, 90.01% branches, 98.22% functions, and 95.07% lines. TypeDoc
   emitted the known invalid `origin` source-link warning with zero errors.
 
-| Lane                       | Reviewer ID                            | Status | Result                |
-| -------------------------- | -------------------------------------- | ------ | --------------------- |
-| Code style/maintainability | `019f4716-7332-7981-81c3-038364f30df1` | Closed | Minor finding fixed   |
-| Documentation completeness | `019f4716-9b75-7383-9dcf-5ade645d95ef` | Closed | Findings fixed        |
-| TypeScript/API docs        | `019f4716-bc02-7bd3-affe-2e318349fae9` | Closed | Clean                 |
-| Security                   | `019f4716-e5d8-7481-9e96-91f0a3260dac` | Closed | Clean                 |
-| Performance/reliability    | `019f4717-03ee-7853-912f-f8a9ae15ad32` | Closed | Findings fixed        |
+| Lane                       | Reviewer ID                            | Status | Result              |
+| -------------------------- | -------------------------------------- | ------ | ------------------- |
+| Code style/maintainability | `019f4716-7332-7981-81c3-038364f30df1` | Closed | Minor finding fixed |
+| Documentation completeness | `019f4716-9b75-7383-9dcf-5ade645d95ef` | Closed | Findings fixed      |
+| TypeScript/API docs        | `019f4716-bc02-7bd3-affe-2e318349fae9` | Closed | Clean               |
+| Security                   | `019f4716-e5d8-7481-9e96-91f0a3260dac` | Closed | Clean               |
+| Performance/reliability    | `019f4717-03ee-7853-912f-f8a9ae15ad32` | Closed | Findings fixed      |
 
 ## Final-Round Findings
 
@@ -103,13 +103,13 @@ Verification before final review:
 
 ## Clean Re-Review
 
-| Lane                       | Reviewer ID                            | Status | Result                  |
-| -------------------------- | -------------------------------------- | ------ | ----------------------- |
-| Code style/maintainability | `019f4727-863f-7e93-a870-93246d9e9bdb` | Closed | Log wording fixed       |
-| Documentation completeness | `019f4727-aa5f-7051-aac6-5c35cdfe39f3` | Closed | Clean                   |
-| TypeScript/API docs        | `019f4727-c91a-7dd1-acb7-f5d8da1ab3a4` | Closed | Clean                   |
-| Security                   | `019f4727-e645-7be2-af36-7fc5b37d1ccf` | Closed | Clean                   |
-| Performance/reliability    | `019f4728-04a0-7451-ad76-2fa3d82d77c3` | Closed | Clean                   |
+| Lane                       | Reviewer ID                            | Status | Result            |
+| -------------------------- | -------------------------------------- | ------ | ----------------- |
+| Code style/maintainability | `019f4727-863f-7e93-a870-93246d9e9bdb` | Closed | Log wording fixed |
+| Documentation completeness | `019f4727-aa5f-7051-aac6-5c35cdfe39f3` | Closed | Clean             |
+| TypeScript/API docs        | `019f4727-c91a-7dd1-acb7-f5d8da1ab3a4` | Closed | Clean             |
+| Security                   | `019f4727-e645-7be2-af36-7fc5b37d1ccf` | Closed | Clean             |
+| Performance/reliability    | `019f4728-04a0-7451-ad76-2fa3d82d77c3` | Closed | Clean             |
 
 - Style re-review found only stale review-log wording about the removed
   ZeroMQ wrapper. This log now describes the final loop shape accurately.
