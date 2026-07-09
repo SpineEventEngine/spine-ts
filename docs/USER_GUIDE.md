@@ -189,7 +189,7 @@ remain later slices.
 - A pinned adapter-private `zeromq@6.5.0` dependency and local IPC smoke tests
   for same-host publish/subscribe and request/reply behavior. The public
   transport API still hides ZeroMQ sockets, endpoint strings, multipart frames,
-  native binding types, and production endpoint topology.
+  native binding types, and remote/multi-host production endpoint topology.
 - Storage contracts in `@spine-ts/storage` for `StorageFactory`,
   `RecordStorage`, `RecordSpec`, deterministic record queries, and the first
   storage-only `EventStore` delegate.
@@ -211,9 +211,10 @@ remain later slices.
   registries. The server metadata APIs preserve entity tags and explicit
   handler declarations now, but no runtime registry consumes them yet.
 - Full system-context runtime, command-log repositories, system event taxonomy,
-  tracing/monitors/debug UI, richer gRPC service execution, ZeroMQ endpoint
-  topology, broker process supervision, retry workers, transport-backed delivery
-  loops, durable production storage, and broader production runtime hardening.
+  tracing/monitors/debug UI, richer gRPC service execution, remote/multi-host
+  transport topology, broker topology/process supervision, retry workers,
+  transport-backed delivery loops, durable production storage, and broader
+  production runtime hardening.
   Built bounded contexts now create internal system-pairing metadata and a
   framework-owned tenant index; those internals are not exposed to end-user
   application code. Durable inbox/shard delivery storage, the direct local shard
@@ -881,13 +882,35 @@ storage. Those concepts belong to later delivery and lifecycle tasks.
 
 ZeroMQ is present only as the current adapter-private local IPC foundation. The
 workspace pins `zeromq@6.5.0` and explicitly allows its native install script.
-Package-private smoke tests prove same-host `ipc://` publish/subscribe and
-request/reply behavior over temporary endpoints. Public package exports do not
+Use the adapter-scoped subpath when a local runtime needs a ZeroMQ-backed
+`SignalTransport`:
+
+```ts
+import { createZeroMqAdapterConfig, createZeroMqSignalTransport } from "@spine-ts/transport/zeromq";
+
+const transport = createZeroMqSignalTransport(
+  createZeroMqAdapterConfig({
+    ipcDirectory: "/tmp/spine-ts-ipc",
+    adapterIdentity: "todo-runtime",
+  }),
+);
+```
+
+The adapter derives local IPC endpoints from that config and the neutral
+transport routing descriptors internally. Public package root exports do not
 include ZeroMQ socket classes, endpoint strings, multipart frame layouts, native
-binding types, production endpoint naming, broker topology, process
-supervision, delivery retries, or server runtime wiring. Managed sandboxes may
-reject `ipc://` binds with `EPERM`, so live IPC smoke verification can require
-native filesystem/socket permissions outside the sandbox.
+binding types, broker topology, process supervision, delivery retries, or
+server-owned handler materialization. Native tests prove same-host `ipc://`
+publish/subscribe, request/reply, and runtime command/event callback behavior
+over temporary endpoints. Managed sandboxes may reject `ipc://` binds with
+`EPERM`, so live IPC verification can require native filesystem/socket
+permissions outside the sandbox.
+
+The ZeroMQ `SignalTransport` uses Node's V8 serializer internally, so its local
+IPC frames are trusted runtime data, not an untrusted network protocol. Use this
+adapter only between same-host Spine TS runtime peers that already trust each
+other, and configure `ipcDirectory` as a private directory writable only by
+those peers.
 
 ## Envelope Packing
 

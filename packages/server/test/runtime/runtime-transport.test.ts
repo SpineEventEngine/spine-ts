@@ -1,3 +1,7 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+
 import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
@@ -21,6 +25,7 @@ import type {
   TransportSubscription,
   TransportSubscriptionHandle,
 } from "@spine-ts/transport";
+import { createZeroMqAdapterConfig, createZeroMqSignalTransport } from "@spine-ts/transport/zeromq";
 import { describe, expect, expectTypeOf, it } from "vitest";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
@@ -443,6 +448,53 @@ describe("RuntimeTransportBinding", () => {
     ]);
   });
 
+  it("runs command and event callbacks over the ZeroMQ-backed transport", async () => {
+    const ipcDirectory = await mkdtemp(path.join(tmpdir(), "sz-runtime-"));
+    const transport = createZeroMqSignalTransport(
+      createZeroMqAdapterConfig({
+        ipcDirectory,
+        adapterIdentity: `runtime-${process.pid}-${Date.now()}`,
+      }),
+    );
+    const runtime = new SingleProcessServerRuntime();
+    const plan = createRuntimePlan();
+    const observed: string[] = [];
+
+    try {
+      const handle = await RuntimeTransportBinding.open({
+        plan,
+        runtime,
+        transport,
+        onCommand: (accepted) => {
+          observed.push(`command:${accepted.message?.typeUrl ?? "missing"}`);
+        },
+        onEvent: (accepted) => {
+          observed.push(`event:${accepted.message?.typeUrl ?? "missing"}`);
+        },
+      });
+
+      const result = await transport.request({
+        topic: requireFirst(plan.commands.topics),
+        envelope: createCommandEnvelope(),
+      });
+      await publishRuntimeEventUntilObserved(transport, plan, observed);
+      await waitForRuntimeObservation(observed, "command:type.spine.io/spine.core.Command");
+
+      expect(result).toEqual({
+        status: "accepted",
+        signalKind: "command",
+        acceptedFor: "async-work",
+      });
+      expect(observed).toContain("command:type.spine.io/spine.core.Command");
+      expect(observed).toContain("event:type.spine.io/spine.core.Event");
+
+      await handle.close();
+    } finally {
+      await transport.close();
+      await rm(ipcDirectory, { recursive: true, force: true });
+    }
+  });
+
   it("closes transport registrations before the runtime and keeps close idempotent", async () => {
     const log: string[] = [];
     const transport = new InMemorySignalTransport(log);
@@ -586,6 +638,50 @@ function deferred() {
   });
 
   return { promise, resolve, reject };
+}
+
+async function publishRuntimeEventUntilObserved(
+  transport: SignalTransport,
+  plan: ReturnType<typeof createRuntimePlan>,
+  observed: readonly string[],
+): Promise<void> {
+  const expected = "event:type.spine.io/spine.core.Event";
+
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    await transport.publish({
+      topic: requireFirst(plan.events.topics),
+      envelope: createEventEnvelope(),
+    });
+
+    if (observed.includes(expected)) {
+      return;
+    }
+
+    await waitForRuntimeTransport(20);
+  }
+
+  expect(observed).toContain(expected);
+}
+
+async function waitForRuntimeObservation(
+  observed: readonly string[],
+  expected: string,
+): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (observed.includes(expected)) {
+      return;
+    }
+
+    await waitForRuntimeTransport(20);
+  }
+
+  expect(observed).toContain(expected);
+}
+
+async function waitForRuntimeTransport(milliseconds: number): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
 }
 
 type TestHandleFactory = <Kind extends TransportSignalKind>(
