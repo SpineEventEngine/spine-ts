@@ -1,6 +1,6 @@
 # T-0018d Review Log
 
-Status: complete; ready to commit
+Status: complete on main
 
 Scope: descriptor-based command/event role discovery for generated-registry
 analysis.
@@ -200,6 +200,18 @@ Verification after fixes:
   chronology fix: clean; reviewers `019f4825-e640-7f62-8e46-69949bfc4f76`
   and `019f4826-0def-71d2-b613-f5534c298c8c` completed and were closed by
   root.
+
+## Integration
+
+- Task branch commit `5dbe06a` was merged into `main` by merge commit
+  `14a788a`.
+- Post-merge full verification first failed at `format:check` because
+  `build-protocol/work-logs/T-0018d.md` needed Prettier formatting.
+- After formatting, escalated post-merge
+  `pnpm --config.verify-deps-before-run=false verify` passed: 57 test files,
+  1088 tests, coverage 95.05% statements, 90.13% branches, 98.19% functions,
+  95.07% lines; docs check passed with the existing TypeDoc origin warnings;
+  proto lint and generated-clean checks passed.
 
 ## Round 2 Review Results
 
