@@ -54,7 +54,7 @@ describe("LocalProjectionInbox", () => {
     ]);
   });
 
-  it("waits for a concurrent duplicate when the original projection replay exceeds the old poll window", async () => {
+  it("waits for a concurrent duplicate while the original projection replay is in flight", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -106,6 +106,73 @@ describe("LocalProjectionInbox", () => {
         status: "DELIVERED",
       },
     ]);
+  });
+
+  it("rejects a fresh-delivery duplicate with the original replay failure", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const firstDelivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const duplicateDelivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+    });
+    const inbox = new LocalProjectionInbox("Tasks");
+    const targetTypeUrl = "type.example.dev/Tasks.Projection";
+    const shard = ShardIndex.single();
+    const failure = new Error("projection replay failed");
+    let startReplay!: () => void;
+    let releaseReplay!: () => void;
+    const replayStarted = new Promise<void>((resolve) => {
+      startReplay = resolve;
+    });
+    const replayReleased = new Promise<void>((resolve) => {
+      releaseReplay = resolve;
+    });
+    const input = {
+      inboxId: { targetId: "projection-failing-duplicate", targetTypeUrl },
+      signalId: "event-failing-duplicate",
+      label: "UPDATE_SUBSCRIBER" as const,
+      status: "TO_DELIVER" as const,
+      shard,
+    };
+
+    inbox.register({
+      targetTypeUrl,
+      async replay() {
+        startReplay();
+        await replayReleased;
+        throw failure;
+      },
+    });
+
+    const first = inbox.receive(firstDelivery, input);
+    const firstResult = first.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    await replayStarted;
+
+    const duplicate = inbox.receive(duplicateDelivery, input);
+    const duplicateResult = duplicate.then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    await pause(150);
+    releaseReplay();
+
+    await expect(firstResult).resolves.toBe(failure);
+    await expect(duplicateResult).resolves.toBe(failure);
+    await expect(firstDelivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([
+      expect.objectContaining({
+        signalId: "event-failing-duplicate",
+        label: "UPDATE_SUBSCRIBER",
+        status: "TO_DELIVER",
+      }),
+    ]);
+    await expect(firstDelivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
   });
 
   it("rejects when the inbox label is not UPDATE_SUBSCRIBER", async () => {

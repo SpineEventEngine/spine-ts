@@ -113,3 +113,48 @@ Scope: live projection subscriber durable inbox handoff.
   failed on two `@typescript-eslint/restrict-template-expressions` findings in
   the inbox message key helper; after explicit numeric string conversion, the
   rerun passed with `tsc -b`, ESLint, and cleanup enforcement.
+
+## Production Duplicate-Race Fix Pass
+
+- Reliability Blocking: production repository projection handoff creates a
+  fresh `Delivery` per call, so the previous duplicate in-flight map scoped per
+  `Delivery` instance did not join concurrent duplicate handoffs. The fix moved
+  coordination to the long-lived local inbox instance and keys it by tenant plus
+  inbox target/signal/shard identity. Projection and process-manager handoffs
+  now share that stable local inbox coordination while keeping the delivery
+  worker exact-row focused.
+- Added repository-level concurrent duplicate projection coverage using the
+  real repository event dispatcher path. The subscriber is held beyond 150ms;
+  the duplicate stays pending until the original replay finishes, the
+  subscriber is invoked once, and the durable inbox row is delivered once.
+- Added projection context failure propagation coverage using two fresh
+  `Delivery` instances. A concurrent duplicate now rejects with the original
+  replay error, and the row remains `TO_DELIVER` with no delivered row written.
+- Minor cleanup: renamed stale duplicate test names, clarified the
+  `DeliveryLoop` API-doc sentence to name the shard-level `Delivery.drain()`
+  boundary, and corrected the earlier work-log phrase to "deferred
+  process-manager event reactor inbox routing".
+
+## Production Duplicate-Race Verification
+
+- `pnpm --config.verify-deps-before-run=false vitest run packages/server/test/context/projection-handoff.test.ts packages/server/test/repository/repository-routing.test.ts`:
+  red run failed as expected on skipped-delivery for the fresh-delivery context
+  duplicate and the repository duplicate while the original replay was still in
+  flight.
+- `pnpm --config.verify-deps-before-run=false vitest run packages/server/test/context/projection-handoff.test.ts packages/server/test/repository/repository-routing.test.ts`:
+  green run passed; 2 test files, 126 tests.
+- `pnpm --config.verify-deps-before-run=false vitest run packages/server/test/context/projection-handoff.test.ts packages/server/test/context/process-manager-handoff.test.ts packages/server/test/repository/repository-routing.test.ts packages/server/test/delivery/delivery-worker.test.ts`:
+  passed after formatting; 4 test files, 161 tests.
+- `pnpm --config.verify-deps-before-run=false lint:generated`: first run failed
+  cleanup enforcement on one overlong test-name line and one overlong semantic
+  type name; after cleanup, rerun passed with `tsc -b`, ESLint, and cleanup
+  enforcement.
+- `pnpm --config.verify-deps-before-run=false format:check`: first run failed
+  on `packages/server/src/context/local-inbox-handoff.ts`; after
+  `pnpm --config.verify-deps-before-run=false format`, rerun passed.
+- `git diff --check`: passed.
+- `pnpm --config.verify-deps-before-run=false test:coverage:generated` failed
+  in the sandbox on native IPC restrictions (`listen EPERM: operation not
+permitted 127.0.0.1` and ZeroMQ `Operation not permitted`); escalated rerun
+  passed with 58 files, 1112 tests, statements `94.96%`, branches `90.03%`,
+  functions `98.24%`, lines `94.97%`.

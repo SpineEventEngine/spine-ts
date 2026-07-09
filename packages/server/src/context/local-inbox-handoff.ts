@@ -2,27 +2,31 @@ import { Delivery } from "../delivery/delivery.js";
 import type { InboxMessage } from "../delivery/inbox.js";
 
 const drainLimit = 8;
-const inFlightDrains = new WeakMap<Delivery, Map<string, Promise<void>>>();
 
-export async function drainLocalInboxMessage(options: LocalInboxDrainOptions): Promise<void> {
-  const messageKey = inboxMessageKey(options.received);
-  const drains = localInFlightDrains(options.delivery);
-  const inFlightDrain = drains.get(messageKey);
+export async function coordinateLocalInboxHandoff(options: {
+  readonly handoffs: Map<string, Promise<InboxMessage>>;
+  readonly key: string;
+  readonly handoff: () => Promise<InboxMessage>;
+}): Promise<InboxMessage> {
+  const inFlightHandoff = options.handoffs.get(options.key);
 
-  if (options.duplicate && inFlightDrain !== undefined) {
-    await inFlightDrain;
-    return;
+  if (inFlightHandoff !== undefined) {
+    return await inFlightHandoff;
   }
 
-  const drain = runLocalInboxDrain(options);
-  drains.set(messageKey, drain);
+  const handoff = options.handoff();
+  options.handoffs.set(options.key, handoff);
   try {
-    await drain;
+    return await handoff;
   } finally {
-    if (drains.get(messageKey) === drain) {
-      drains.delete(messageKey);
+    if (options.handoffs.get(options.key) === handoff) {
+      options.handoffs.delete(options.key);
     }
   }
+}
+
+export async function drainLocalInboxMessage(options: LocalInboxDrainOptions): Promise<void> {
+  await runLocalInboxDrain(options);
 }
 
 async function runLocalInboxDrain(options: LocalInboxDrainOptions): Promise<void> {
@@ -76,6 +80,28 @@ export interface LocalInboxDrainOptions {
   readonly unfinishedMessage: string;
 }
 
+export interface LocalInboxKeyInput {
+  readonly inboxId: {
+    readonly targetId: string;
+    readonly targetTypeUrl: string;
+  };
+  readonly signalId: string;
+  readonly label: InboxMessage["label"];
+  readonly shard: InboxMessage["shard"];
+}
+
+export function localInboxHandoffKey(input: LocalInboxKeyInput, deliveryTenantId?: string): string {
+  return JSON.stringify([
+    deliveryTenantId ?? "",
+    input.label,
+    input.signalId,
+    input.inboxId.targetTypeUrl,
+    input.inboxId.targetId,
+    input.shard.index,
+    input.shard.ofTotal,
+  ]);
+}
+
 function sameMessageId(
   left: {
     readonly value: string;
@@ -91,19 +117,4 @@ function sameMessageId(
     left.shard.index === right.shard.index &&
     left.shard.ofTotal === right.shard.ofTotal
   );
-}
-
-function localInFlightDrains(delivery: Delivery): Map<string, Promise<void>> {
-  let drains = inFlightDrains.get(delivery);
-
-  if (drains === undefined) {
-    drains = new Map();
-    inFlightDrains.set(delivery, drains);
-  }
-
-  return drains;
-}
-
-function inboxMessageKey(message: InboxMessage): string {
-  return `${message.id.value}:${String(message.id.shard.index)}/${String(message.id.shard.ofTotal)}`;
 }

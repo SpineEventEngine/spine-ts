@@ -1,11 +1,16 @@
 import { Delivery } from "../delivery/delivery.js";
 import type { InboxMessage } from "../delivery/inbox.js";
 import type { ProjectionInbox, ProjectionInboxTarget } from "../repository/repository.js";
-import { drainLocalInboxMessage } from "./local-inbox-handoff.js";
+import {
+  coordinateLocalInboxHandoff,
+  drainLocalInboxMessage,
+  localInboxHandoffKey,
+} from "./local-inbox-handoff.js";
 
 export class LocalProjectionInbox implements ProjectionInbox {
   readonly #contextName: string;
   readonly #targets = new Map<string, ProjectionInboxTarget>();
+  readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   #nextVersion = 0n;
 
   constructor(contextName: string) {
@@ -17,6 +22,29 @@ export class LocalProjectionInbox implements ProjectionInbox {
   }
 
   async receive(
+    delivery: Delivery,
+    input: {
+      readonly inboxId: {
+        readonly targetId: string;
+        readonly targetTypeUrl: string;
+      };
+      readonly signalId: string;
+      readonly signal?: InboxMessage["signal"];
+      readonly label: InboxMessage["label"];
+      readonly status: InboxMessage["status"];
+      readonly shard: InboxMessage["shard"];
+      readonly keepUntil?: Date;
+    },
+    deliveryTenantId?: string,
+  ): Promise<InboxMessage> {
+    return await coordinateLocalInboxHandoff({
+      handoffs: this.#inFlightHandoffs,
+      key: localInboxHandoffKey(input, deliveryTenantId),
+      handoff: () => this.#receiveAndDrain(delivery, input, deliveryTenantId),
+    });
+  }
+
+  async #receiveAndDrain(
     delivery: Delivery,
     input: {
       readonly inboxId: {

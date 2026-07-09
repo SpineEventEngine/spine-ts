@@ -58,7 +58,7 @@ describe("LocalProcessManagerInbox", () => {
     ]);
   });
 
-  it("waits for a concurrent duplicate when the original command replay exceeds the old poll window", async () => {
+  it("waits for a concurrent duplicate while the original command replay is in flight", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),

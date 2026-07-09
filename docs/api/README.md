@@ -323,7 +323,7 @@ a `DeliveryRun` with counts and per-message `DeliveryFailure` values retained
 only in that result. `Delivery.drainMessage(message, { node, onMessage })`
 claims the message shard only when `message.id.shard` matches `message.shard`,
 then replays that exact pending row without accepting a page limit. `DeliveryLoop`
-repeats this boundary for one shard until a
+repeats the shard-level `Delivery.drain()` boundary for one shard until a
 drain is idle, skipped, stopped, or reaches `maxFailures`; retry is simply a
 later loop/drain seeing rows that remained `TO_DELIVER`. `stop()` prevents
 future drain starts and does not interrupt an in-flight `Delivery.drain()`; a

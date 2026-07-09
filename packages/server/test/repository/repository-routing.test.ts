@@ -4249,6 +4249,57 @@ describe("repository signal routing", () => {
     ]);
   });
 
+  it("waits for concurrent duplicate live projection delivery on the repository handoff path", async () => {
+    BlockingCatchUpProjection.reset(1);
+    const factory = new InMemoryStorageFactory();
+    const repository = createBlockingCatchUpProjectionRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    const event = createProjectionEvent("event-concurrent-inbox", "task-concurrent-inbox");
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+
+    if (dispatcher === undefined) {
+      throw new Error("Expected projection repository to expose an event dispatcher.");
+    }
+
+    const first = dispatcher.dispatch(event);
+    await waitForCondition(() => BlockingCatchUpProjection.startedCalls === 1);
+
+    const duplicate = dispatcher.dispatch(event);
+
+    await expect(Promise.race([duplicate.then(() => "resolved"), delay(150)])).resolves.toBe(
+      "pending",
+    );
+    expect(BlockingCatchUpProjection.completedCalls).toBe(0);
+
+    BlockingCatchUpProjection.release(0);
+
+    await expect(Promise.all([first, duplicate])).resolves.toEqual([undefined, undefined]);
+    expect(BlockingCatchUpProjection.startedCalls).toBe(1);
+    expect(BlockingCatchUpProjection.completedCalls).toBe(1);
+    await expect(
+      context.stand().read(ProjectionStateSchema, "task-concurrent-inbox"),
+    ).resolves.toMatchObject({
+      name: "Task (blocking)",
+      priority: 2,
+    });
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
+    ).resolves.toMatchObject([
+      {
+        signalId: "event-concurrent-inbox",
+        label: "UPDATE_SUBSCRIBER",
+        status: "DELIVERED",
+      },
+    ]);
+  });
+
   it("delivers Stand subscriptions after real projection event handling", async () => {
     const context = BoundedContext.singleTenant("Tasks")
       .add(createExecutingProjectionRepository())
