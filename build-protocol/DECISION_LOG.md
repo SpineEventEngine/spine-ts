@@ -2094,3 +2094,49 @@ Consequences:
 - Later tasks may add an explicit environment object for storage/transport
   factory ownership, but this server API should remain usable without a
   process-wide singleton.
+
+## D-0066: Adopt Runtime Metadata In Public Example Paths Before Registry Polish
+
+Status: Accepted
+
+Date: 2026-07-09
+
+Context: T-0018a introduced `SignalMetadata` as the framework-owned runtime
+metadata seam for generated command/event IDs, timestamps, actor/tenant command
+context, event origin, producer IDs, and versions. That task deliberately left
+public example and testing adoption as follow-up work. The current to-do
+example docs and tests still assemble ordinary command IDs and
+actor/tenant command contexts by hand, which makes the public surface look more
+framework-internal than intended.
+
+Decision:
+
+- Run T-0018b as the next implementation slice.
+- Use the existing `SignalMetadata` API in to-do example docs, to-do tests, and
+  testing documentation for routine command metadata construction.
+- Add a small helper only if direct `SignalMetadata` use remains repetitive and
+  the helper clearly improves the caller.
+- Keep `packCommand()` and `packEvent()` available as low-level helpers.
+- Do not broaden this task into generated-registry hardening, client DSLs,
+  transport changes, auth, handler discovery, or runtime redesign.
+
+Alternatives considered:
+
+- Move directly to descriptor-based generated-registry classification. Rejected
+  for this slice because the public drift left by T-0018a is smaller, ready,
+  and should be closed before deeper registry polish.
+- Add a broad app-client command-posting DSL now. Rejected because it would
+  hide too much policy behind a new abstraction and is not required to make the
+  current callers clearer.
+- Leave docs/tests hand-rolling metadata because envelope packing is still a
+  low-level API. Rejected because routine command context metadata is now owned
+  by `SignalMetadata`, and public examples should teach that seam.
+
+Consequences:
+
+- Public example code should stop showing manual
+  `CommandIdSchema` / `CommandContextSchema` / `ActorContextSchema` assembly
+  for ordinary command posts.
+- Low-level envelope APIs remain available for framework internals and advanced
+  tests.
+- The next registry-discovery task remains separately planned and unblocked.
