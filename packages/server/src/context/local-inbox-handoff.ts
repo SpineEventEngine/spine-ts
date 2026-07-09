@@ -74,7 +74,6 @@ export interface LocalInboxDrainOptions {
   readonly received: InboxMessage;
   readonly node: string;
   readonly replay: (message: InboxMessage) => Promise<void> | void;
-  readonly duplicate: boolean;
   readonly replayFailureMessage: string;
   readonly skippedMessage: string;
   readonly unfinishedMessage: string;

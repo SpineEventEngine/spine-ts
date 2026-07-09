@@ -77,7 +77,6 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
       received: written.message,
       node: this.#contextName,
       replay: (message) => this.#replay(message, deliveryTenantId),
-      duplicate: written.outcome === "DUPLICATE",
       replayFailureMessage: "Process-manager inbox replay failed.",
       skippedMessage:
         "Process-manager inbox delivery was skipped before the target row was delivered.",

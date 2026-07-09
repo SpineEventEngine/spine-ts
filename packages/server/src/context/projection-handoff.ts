@@ -77,7 +77,6 @@ export class LocalProjectionInbox implements ProjectionInbox {
       received: written.message,
       node: this.#contextName,
       replay: (message) => this.#replay(message, deliveryTenantId),
-      duplicate: written.outcome === "DUPLICATE",
       replayFailureMessage: "Projection inbox replay failed.",
       skippedMessage: "Projection inbox delivery was skipped before the target row was delivered.",
       unfinishedMessage:
