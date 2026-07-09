@@ -2182,3 +2182,47 @@ Consequences:
   without forcing artificial event returns.
 - The later descriptor-role-discovery task can start from a handler contract
   that already matches the documented API.
+
+## D-0068: Discover Generated Signal Roles From Descriptors
+
+Status: Accepted
+
+Date: 2026-07-09
+
+Context: The generated-registry analyzer currently infers command/event roles
+from generated module filenames such as `commands_pb` and `events_pb`. This is
+convenient but not a stable semantic contract. Protobuf-ES generated modules
+carry descriptor-backed metadata tying schema exports to source `.proto` files,
+and the framework should use that metadata for command/event role decisions.
+
+Decision:
+
+- Run T-0018d as the next implementation slice.
+- Infer generated command/event roles from descriptor-backed `.proto` identity
+  for the imported schema export.
+- Keep neutral generated modules usable for entity state schemas but fail
+  closed when neutral schemas are used as handler signal or emitted command/event
+  roles.
+- Do not change generated registry output shape, runtime ingestion, runtime
+  invocation, or public handler APIs in this slice.
+
+Alternatives considered:
+
+- Keep filename-based role inference. Rejected because module names can be
+  misleading or neutral and should not define domain semantics.
+- Add explicit role annotations to handlers or generated registries. Rejected
+  because role information already exists in the generated Protobuf descriptor
+  surface and explicit schema/role annotations would reintroduce error-prone app
+  code.
+- Broaden this task into descriptor-based entity metadata or registry output
+  redesign. Rejected because the documented gap is analyzer role discovery and
+  should stay local.
+
+Consequences:
+
+- Generated app modules can use neutral filenames without losing command/event
+  role discovery when descriptors identify the source proto role.
+- Misleading generated filenames no longer grant command/event roles by
+  accident.
+- Truly neutral generated message schemas continue to fail closed in handler
+  signal/emitted positions.
