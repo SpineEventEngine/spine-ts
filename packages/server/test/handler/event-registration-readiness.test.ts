@@ -426,6 +426,39 @@ describe("event registration readiness", () => {
     });
   });
 
+  it("rejects malformed caller-supplied entity semantic tags before routing", () => {
+    const handler: EventSubscriptionHandlerMetadata = {
+      kind: "event-subscription",
+      schema: EventSchema,
+      descriptor: EventSchema,
+      messageFullTypeName: EventSchema.typeName,
+      methodName: "subscribeCreated",
+      parameterCount: 1,
+    };
+    const entityHandlers: EntityHandlersMetadata = {
+      entityType: TaskProjection,
+      entity: metadataWithTags(Object.freeze([null])),
+      handlers: [handler],
+      commandAssignments: [],
+      commandReactions: [],
+      eventSubscriptions: [handler],
+      eventReactions: [],
+      eventApplications: [],
+    };
+    const registeredHandler: RegisteredHandlerMetadata<EventSubscriptionHandlerMetadata> = {
+      entityHandlers,
+      entityType: TaskProjection,
+      entity: entityHandlers.entity,
+      handler,
+    };
+
+    expect(() =>
+      EventRegistrationReadiness.fromRegistry(
+        createRegistryLookupForEventHandlers([registeredHandler]),
+      ),
+    ).toThrow(/Registration readiness entity semanticTags must be a dense array/);
+  });
+
   it("preserves entity field metadata identity in returned event metadata", () => {
     const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.subscribe(EventSchema, "subscribeCreated"),
@@ -553,4 +586,11 @@ function createRegisteredEventHandler<Handler extends EventHandlerMetadata>(
 
 function createProjectionEntityMetadata(): EntityHandlersMetadata["entity"] {
   return defineEntityHandlers(TaskProjection, ProjectionStateSchema, () => []).entity;
+}
+
+function metadataWithTags(semanticTags: unknown): EntityHandlersMetadata["entity"] {
+  return Object.freeze({
+    ...createProjectionEntityMetadata(),
+    semanticTags,
+  }) as EntityHandlersMetadata["entity"];
 }

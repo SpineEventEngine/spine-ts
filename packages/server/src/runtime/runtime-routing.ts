@@ -9,10 +9,14 @@ import { BoundedContext, type BoundedContextSnapshot } from "../context/bounded-
 import {
   CommandRegistrationReadiness,
   isAuthenticCommandRegistrationReadiness,
+  type CommandRegistrationAssigneeMetadata,
 } from "../handler/command-registration-readiness.js";
 import {
   EventRegistrationReadiness,
   isAuthenticEventRegistrationReadiness,
+  type EventRegistrationApplicationMetadata,
+  type EventRegistrationReactorMetadata,
+  type EventRegistrationSubscriberMetadata,
 } from "../handler/event-registration-readiness.js";
 import { compareFullTypeNames } from "../handler/registration-readiness-metadata.js";
 const deterministicValidationErrorTag = Symbol("runtimeRoutingDeterministicValidation");
@@ -138,6 +142,16 @@ interface EventRouteDraft {
 }
 
 type EventHandlerKind = "event-application" | "event-reaction" | "event-subscription";
+type SemanticTaggedReadinessMetadata =
+  | CommandRegistrationAssigneeMetadata
+  | EventRegistrationApplicationMetadata
+  | EventRegistrationReactorMetadata
+  | EventRegistrationSubscriberMetadata;
+
+interface RoutedMessageDraft {
+  readonly message: ServerRuntimeRouteMessageDescriptor;
+  readonly semanticTags: readonly string[];
+}
 
 const commandWorkerId = "command-worker-1";
 const eventReceiverGroupToHandlerKind = Object.freeze({
@@ -221,13 +235,14 @@ function createCommandRouteDraft(
   commandFullTypeName: string,
   routeOrdinal: number,
 ): CommandRouteDraft {
-  const message = sanitizeCommandRouteMessage(
+  const routedMessage = sanitizeCommandRouteMessage(
     readiness.findCommandAssignee(commandFullTypeName),
     commandFullTypeName,
   );
   const topic = createTransportTopic({
     signalKind: "command",
-    messageTypeUrl: message.typeUrl,
+    messageTypeUrl: routedMessage.message.typeUrl,
+    semanticTags: routedMessage.semanticTags,
   });
   const subscription = createTransportSubscription({
     subscriberId: commandWorkerId,
@@ -239,7 +254,7 @@ function createCommandRouteDraft(
     routeId: `command-route-${String(routeOrdinal)}`,
     receiverGroup: "command-assignee",
     workerId: commandWorkerId,
-    message,
+    message: routedMessage.message,
     topic,
     subscription,
   });
@@ -298,7 +313,8 @@ function createEventRuntimeRoutingPlan(
 
     const topic = createTransportTopic({
       signalKind: "event",
-      messageTypeUrl: firstMessage.typeUrl,
+      messageTypeUrl: firstMessage.message.typeUrl,
+      semanticTags: collectTopicSemanticTags(subscribers, reactors, applications),
     });
 
     topicByEventFullTypeName.set(eventFullTypeName, topic);
@@ -336,7 +352,7 @@ function createEventRuntimeRoutingPlan(
 
 function createEventRouteDrafts(
   topic: TransportTopic<"event">,
-  messages: readonly ServerRuntimeRouteMessageDescriptor[],
+  messages: readonly RoutedMessageDraft[],
   receiverGroup: EventRuntimeReceiverGroup,
   routeOrdinals: Record<EventRuntimeReceiverGroup, number>,
 ): readonly EventRouteDraft[] {
@@ -361,7 +377,7 @@ function createEventRouteDrafts(
         routeId: `event-${receiverGroup}-route-${String(ordinal)}`,
         receiverGroup,
         workerId,
-        message,
+        message: message.message,
         topic,
         subscription,
       }),
@@ -501,7 +517,7 @@ function normalizeMessageName(value: unknown, label: "command" | "event"): strin
 function sanitizeCommandRouteMessage(
   assignee: unknown,
   commandFullTypeName: string,
-): ServerRuntimeRouteMessageDescriptor {
+): RoutedMessageDraft {
   const label = `Command assignee metadata for "${commandFullTypeName}"`;
 
   return withDeterministicValidation(
@@ -532,8 +548,12 @@ function sanitizeCommandRouteMessage(
         `${label} must expose a command-assignment handler.`,
         `${label} must preserve the requested command message type.`,
       );
+      const semanticTags = copySemanticTags(candidate as CommandRegistrationAssigneeMetadata);
 
-      return createMessageDescriptor(commandFullTypeName, handler.schema, label);
+      return Object.freeze({
+        message: createMessageDescriptor(commandFullTypeName, handler.schema, label),
+        semanticTags,
+      });
     },
   );
 }
@@ -542,7 +562,7 @@ function sanitizeEventRouteMessages(
   values: unknown,
   eventFullTypeName: string,
   receiverGroup: EventRuntimeReceiverGroup,
-): readonly ServerRuntimeRouteMessageDescriptor[] {
+): readonly RoutedMessageDraft[] {
   const expectedHandlerKind = eventReceiverGroupToHandlerKind[receiverGroup];
   const receiverLabel = `Event ${receiverGroup} metadata for "${eventFullTypeName}"`;
 
@@ -577,11 +597,43 @@ function sanitizeEventRouteMessages(
           `${receiverLabel} must expose an ${expectedHandlerKind} handler.`,
           `${receiverLabel} must preserve the requested event message type.`,
         );
+        const semanticTags = copySemanticTags(candidate as SemanticTaggedReadinessMetadata);
 
-        return createMessageDescriptor(eventFullTypeName, handler.schema, receiverLabel);
+        return Object.freeze({
+          message: createMessageDescriptor(eventFullTypeName, handler.schema, receiverLabel),
+          semanticTags,
+        });
       }),
     ),
   );
+}
+
+function collectTopicSemanticTags(
+  ...groups: readonly (readonly RoutedMessageDraft[])[]
+): readonly string[] {
+  const semanticTags = new Set<string>();
+
+  for (const group of groups) {
+    for (const entry of group) {
+      for (const tag of entry.semanticTags) {
+        semanticTags.add(tag);
+      }
+    }
+  }
+
+  return Object.freeze([...semanticTags].sort(compareSemanticTags));
+}
+
+function compareSemanticTags(left: string, right: string): number {
+  if (left < right) {
+    return -1;
+  }
+
+  if (left > right) {
+    return 1;
+  }
+
+  return 0;
 }
 
 function validateHandlerShape(
@@ -637,6 +689,10 @@ function createMessageDescriptor(
     fullTypeName,
     typeUrl,
   });
+}
+
+function copySemanticTags(metadata: SemanticTaggedReadinessMetadata): readonly string[] {
+  return Object.freeze([...metadata.entity.semanticTags]);
 }
 
 function withDeterministicValidation<Value>(

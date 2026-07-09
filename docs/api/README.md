@@ -528,9 +528,11 @@ or end-user envelope APIs.
 It does not broaden end-user APIs into framework `Command`/`Event` envelopes,
 does not reintroduce `@Apply`, and does not expose manual transaction-control
 APIs.
-Semantic tags remain outside the runtime registration path in this slice:
-descriptor-derived metadata preserves them and transport topics can carry them,
-but handler/readiness/routing registries do not yet consume them.
+Semantic tags now flow into runtime routing topics in this slice:
+command topics copy command-assignee entity tags, and event topics copy the
+deduplicated union of receiver entity tags. Broader handler materialization and
+application-owned semantic-tag registration remain outside this runtime
+metadata surface.
 The public runtime closure smoke path composes these exports with
 `BoundedContext`, `Repository`, `HandlerMetadataRegistry`,
 `CommandRegistrationReadiness`, `EventRegistrationReadiness`, and

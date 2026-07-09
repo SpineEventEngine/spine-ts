@@ -54,7 +54,8 @@ Descriptor-backed metadata currently includes:
 Semantic tag lookup is available as an API shape, but this core registry still
 does not register tags. The current copied proto set defines the Spine `(is)`
 and `(every_is)` options; descriptor-derived entity metadata preserves them,
-while runtime handler/readiness/routing registries still do not consume them.
+and server runtime routing now copies those tags into command and event
+transport topics.
 
 ## Core Validation Facade
 
@@ -143,7 +144,8 @@ Current server metadata is pure and deterministic:
   projections and process managers, `(set_once) = true` fields are surfaced for
   every entity kind, and
 - semantic tags from message `(is)` and file `(every_is)` options are
-  preserved in deterministic sorted order for later runtime consumers.
+  preserved in deterministic sorted order and consumed by server runtime
+  routing topics.
 
 The entity extractor throws typed `DescriptorMetadataError` failures for non-entity
 schemas, unknown entity kinds, repeated/map column declarations, empty semantic

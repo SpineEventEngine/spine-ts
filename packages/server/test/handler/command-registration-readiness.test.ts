@@ -345,6 +345,39 @@ describe("command registration readiness", () => {
     });
   });
 
+  it("rejects malformed caller-supplied entity semantic tags before routing", () => {
+    const handler: CommandAssignmentHandlerMetadata = {
+      kind: "command-assignment",
+      schema: CommandSchema,
+      descriptor: CommandSchema,
+      messageFullTypeName: CommandSchema.typeName,
+      methodName: "assignCreate",
+      parameterCount: 1,
+    };
+    const entityHandlers: EntityHandlersMetadata = {
+      entityType: TaskProjection,
+      entity: metadataWithTags(Object.freeze([null])),
+      handlers: [handler],
+      commandAssignments: [handler],
+      commandReactions: [],
+      eventSubscriptions: [],
+      eventReactions: [],
+      eventApplications: [],
+    };
+    const registeredHandler: RegisteredHandlerMetadata<CommandAssignmentHandlerMetadata> = {
+      entityHandlers,
+      entityType: TaskProjection,
+      entity: entityHandlers.entity,
+      handler,
+    };
+
+    expect(() =>
+      CommandRegistrationReadiness.fromRegistry(
+        createRegistryLookupForAssignments([registeredHandler]),
+      ),
+    ).toThrow(/Registration readiness entity semanticTags must be a dense array/);
+  });
+
   it("preserves entity field metadata identity in returned assignee metadata", () => {
     const handlers = defineEntityHandlers(TaskProjection, ProjectionStateSchema, (builder) => [
       builder.assign(CommandSchema, "assignCreate"),
@@ -453,4 +486,11 @@ function createRegisteredCommandAssignment(
 
 function createProjectionEntityMetadata(): EntityHandlersMetadata["entity"] {
   return defineEntityHandlers(TaskProjection, ProjectionStateSchema, () => []).entity;
+}
+
+function metadataWithTags(semanticTags: unknown): EntityHandlersMetadata["entity"] {
+  return Object.freeze({
+    ...createProjectionEntityMetadata(),
+    semanticTags,
+  }) as EntityHandlersMetadata["entity"];
 }

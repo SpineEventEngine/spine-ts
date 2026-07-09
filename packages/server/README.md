@@ -122,8 +122,9 @@ Current slice exposes:
 - `isEntitySchema(schema)` for pure descriptor checks;
 - first-field routing hints from descriptor order;
 - `(column)` discovery for projections/process managers, `(set_once)` field discovery for all entity kinds; and
-- semantic tags from `(is)` and `(every_is)` with clear extraction errors, kept
-  for later runtime consumers; and
+- semantic tags from `(is)` and `(every_is)` with clear extraction errors,
+  consumed by runtime routing topics through command-assignee tags and
+  event-receiver tag unions; and
 - `validateEntityStateTransition({ schema, previous, next })` for built-in
   `(set_once)` transition validation over descriptor-backed entity state; and
 - `EntityTransaction` and `createEntityTransaction()` for a framework-owned,
@@ -478,9 +479,10 @@ Handlers still return generated domain command/event messages rather than
 framework `Command`/`Event` envelopes, `@Apply` remains absent for new
 aggregate behavior, and this metadata seam does not add manual transaction
 control for end-user code.
-Descriptor-derived semantic tags are preserved elsewhere in server metadata and
-transport topics can carry them, but the runtime handler/readiness/routing
-registries do not yet consume those tags in this slice.
+Descriptor-derived semantic tags now flow into runtime routing topics:
+command topics copy command-assignee entity tags, and event topics copy the
+deduplicated union of receiver entity tags. Broader handler materialization and
+application-owned semantic-tag registration remain outside this slice.
 
 ## Write-Side Signal Intake Results
 

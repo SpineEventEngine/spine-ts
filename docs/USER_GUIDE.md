@@ -209,11 +209,11 @@ or multi-host transport example.
 
 ## Remaining Gaps
 
-- Semantic tag registration from `(is)` and `(every_is)` into handler/routing
-  registries. The server metadata APIs preserve entity tags, transport topics
-  can carry semantic tags, and generated registry tooling derives handler
-  roles, but no runtime handler/readiness/routing registry consumes those tags
-  yet.
+- Broader semantic tag consumers beyond runtime routing topics. The server
+  metadata APIs preserve entity tags, command topics now use assignee tags,
+  event topics now use the deduplicated union of receiver tags, and transport
+  topics carry those tags, but no wider handler materialization or
+  application-owned registration API consumes them yet.
 - Full system-context runtime, command-log repositories, system event taxonomy,
   tracing/monitors/debug UI, production deployment/authentication/tracing/health
   hardening, remote/multi-host transport topology, broker topology/process
