@@ -1,6 +1,6 @@
 # Review Log: T-0022a Projection Inbox Handoff
 
-Status: final review findings fixed
+Status: ready for merge
 
 Scope: live projection subscriber durable inbox handoff.
 
@@ -158,3 +158,20 @@ Scope: live projection subscriber durable inbox handoff.
 permitted 127.0.0.1` and ZeroMQ `Operation not permitted`); escalated rerun
   passed with 58 files, 1112 tests, statements `94.96%`, branches `90.03%`,
   functions `98.24%`, lines `94.97%`.
+
+## Stale-Option Cleanup Review
+
+- Final style and reliability reviewers found one minor stale internal option:
+  `LocalInboxDrainOptions.duplicate` was still accepted by the shared local
+  drain helper but was no longer read after duplicate coordination moved to the
+  long-lived local inbox instances.
+- Removed the unused option from `LocalInboxDrainOptions` and both local inbox
+  callers in commits `e91f965` and `5f34619`, with the work log recording the
+  cleanup and verification evidence.
+- Post-cleanup focused verification passed: projection/process-manager handoff,
+  repository routing, and delivery worker tests passed with 161 tests;
+  `lint:generated`, `format:check`, and `git diff --check` passed.
+- Final post-cleanup reviewers reported no Critical or Important findings in
+  code style, documentation, TypeScript/API docs, security, or
+  performance/reliability. Documentation review requested this review-log entry
+  and status metadata update before merge.
