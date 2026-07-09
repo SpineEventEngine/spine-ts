@@ -48,11 +48,15 @@ export class Server {
   /**
    * Add one bounded context or builder to expose through the Spine services.
    *
+   * Builders added here are assembled during {@link start} before listener
+   * open. They use {@link ServerEnvironment.storageFactory} unless
+   * `withStorageFactory(...)` already selected a more specific local factory.
+   *
    * The server owns added contexts for this assembly. When the returned
    * {@link RunningServer} closes, it closes every added context after network
    * intake and active HTTP/2 sessions have stopped.
    */
-  add(context: ServerContext): this {
+  add(context: BoundedContext | BoundedContextBuilder): this {
     this.#contexts.push(context);
     return this;
   }
@@ -101,8 +105,14 @@ export interface ServerOptions {
   readonly host?: string;
   /** Listener port. Defaults to `0`, asking the OS for a free port. */
   readonly port?: number;
-  /** Built bounded contexts or builders owned by this server assembly. */
-  readonly contexts?: readonly ServerContext[];
+  /**
+   * Built bounded contexts or builders owned by this server assembly.
+   *
+   * Builders in this list are assembled during {@link Server.start} before
+   * listener open. They use {@link ServerEnvironment.storageFactory} unless
+   * `withStorageFactory(...)` already selected a more specific local factory.
+   */
+  readonly contexts?: readonly (BoundedContext | BoundedContextBuilder)[];
   /** Service-level options for Command, Query, and Subscription routes. */
   readonly services?: Omit<SpineServicesOptions, "contexts">;
   /** Extra framework-owned closeables to close after network intake stops. */

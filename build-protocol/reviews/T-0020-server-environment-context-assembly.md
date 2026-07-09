@@ -34,4 +34,25 @@ Review focus from the splitter:
 
 ## Round 1
 
-Not started.
+- Code style/maintainability: pass after follow-up fix.
+- Documentation: pass after follow-up fix.
+- TypeScript/API docs: changes requested; clean after follow-up fix and re-review.
+- Security: pass.
+- Performance/reliability: pass.
+
+Findings:
+
+- [P2] Public API declarations leaked the private `ServerContext` alias
+  through `Server.add(...)` and `ServerOptions.contexts`. Public declarations
+  should inline `BoundedContext | BoundedContextBuilder` or introduce a
+  deliberate exported type instead of exposing a private helper alias.
+- [P2] `Server.add(...)` and `ServerOptions.contexts` TypeDoc mentioned
+  builders but did not document the actual behavior: builders assemble during
+  `Server.start()` and default to `ServerEnvironment.storageFactory` unless
+  `withStorageFactory(...)` selected a more specific local factory first.
+
+Re-review:
+
+- TypeScript/API docs final re-review reported clean after the public
+  declarations stopped exposing the private alias and TypeDoc documented
+  start-time builder assembly plus storage precedence.
