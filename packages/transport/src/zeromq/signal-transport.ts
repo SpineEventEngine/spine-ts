@@ -414,7 +414,9 @@ async function ensurePrivateIpcDirectory(ipcDirectory: string): Promise<void> {
 
 async function receiveFrames(
   socket: Subscriber | Reply,
-): Promise<{ readonly status: "received"; readonly frames: Buffer[] } | { readonly status: "stopped" }> {
+): Promise<
+  { readonly status: "received"; readonly frames: Buffer[] } | { readonly status: "stopped" }
+> {
   try {
     return {
       status: "received",
