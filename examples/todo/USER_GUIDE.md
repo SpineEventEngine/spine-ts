@@ -67,25 +67,22 @@ import { create } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { packAny } from "@spine-ts/core";
-import {
-  ActorContextSchema,
-  CommandSchema,
-  CommandContextSchema,
-  CommandIdSchema,
-  UserIdSchema,
-} from "@spine-ts/proto";
+import { CommandSchema, UserIdSchema } from "@spine-ts/proto";
 import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
+import { SignalMetadata } from "@spine-ts/server";
 import { CreateTaskSchema } from "./generated/spine/example/todo/v1/task_commands_pb.js";
 import { TaskIdSchema } from "./generated/spine/example/todo/v1/task_id_pb.js";
 
 const transport = createGrpcTransport({ baseUrl: "http://127.0.0.1:8080" });
 const commands = createClient(CommandService, transport);
+const metadata = new SignalMetadata();
+const actorContext = metadata.actorContext({
+  actor: create(UserIdSchema, { value: "todo-user" }),
+});
 const command = create(CommandSchema, {
-  id: create(CommandIdSchema, { uuid: "command-create-1" }),
-  context: create(CommandContextSchema, {
-    actorContext: create(ActorContextSchema, {
-      actor: create(UserIdSchema, { value: "todo-user" }),
-    }),
+  id: metadata.commandId("command-create-1"),
+  context: metadata.commandContext({
+    actorContext,
   }),
   message: packAny(
     CreateTaskSchema,
@@ -153,17 +150,19 @@ import { create } from "@bufbuild/protobuf";
 import { createClient } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
 import { deriveTypeUrl, unpackAny } from "@spine-ts/core";
-import { ActorContextSchema, UserIdSchema } from "@spine-ts/proto";
+import { UserIdSchema } from "@spine-ts/proto";
 import { TargetSchema } from "@spine-ts/proto/generated/spine/client/filters_pb.js";
 import { SubscriptionService } from "@spine-ts/proto/generated/spine/client/subscription_service_pb.js";
 import {
   TopicIdSchema,
   TopicSchema,
 } from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
+import { SignalMetadata } from "@spine-ts/server";
 import { TaskListSchema } from "./generated/spine/example/todo/v1/task_list_pb.js";
 
 const transport = createGrpcTransport({ baseUrl: "http://127.0.0.1:8080" });
 const subscriptions = createClient(SubscriptionService, transport);
+const metadata = new SignalMetadata();
 const subscription = await subscriptions.subscribe(
   create(TopicSchema, {
     id: create(TopicIdSchema, { value: "topic-task-lists" }),
@@ -171,7 +170,7 @@ const subscription = await subscriptions.subscribe(
       type: deriveTypeUrl(TaskListSchema),
       criterion: { case: "includeAll", value: true },
     }),
-    context: create(ActorContextSchema, {
+    context: metadata.actorContext({
       actor: create(UserIdSchema, { value: "todo-user" }),
     }),
   }),
