@@ -7,13 +7,13 @@ docs/API updates, and verification evidence.
 
 ## Required Lanes
 
-| Lane                       | Reviewer ID                                    | Status | Result          |
-| -------------------------- | ---------------------------------------------- | ------ | --------------- |
-| Code style/maintainability | `019f4676-7d98-7ad0-adf9-0bc3361b14c2`         | Closed | Clean           |
-| Documentation completeness | `019f4676-988f-75b3-9979-ef4fddff987c`         | Closed | Findings to fix |
-| TypeScript/API docs        | `019f4676-b540-7540-b359-5be9d338514d`         | Closed | Findings to fix |
-| Security                   | `019f4676-c992-76d1-9540-ac7977984ea7`         | Closed | Findings to fix |
-| Performance/reliability    | `019f4676-df72-7d62-a164-f07d7ea0b751`         | Closed | Findings to fix |
+| Lane                       | Reviewer ID                            | Status | Result          |
+| -------------------------- | -------------------------------------- | ------ | --------------- |
+| Code style/maintainability | `019f4676-7d98-7ad0-adf9-0bc3361b14c2` | Closed | Clean           |
+| Documentation completeness | `019f4676-988f-75b3-9979-ef4fddff987c` | Closed | Findings to fix |
+| TypeScript/API docs        | `019f4676-b540-7540-b359-5be9d338514d` | Closed | Findings to fix |
+| Security                   | `019f4676-c992-76d1-9540-ac7977984ea7` | Closed | Findings to fix |
+| Performance/reliability    | `019f4676-df72-7d62-a164-f07d7ea0b751` | Closed | Findings to fix |
 
 ## Review Requirements
 

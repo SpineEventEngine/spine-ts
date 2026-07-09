@@ -1,12 +1,14 @@
 # T-0017k: Production Server Runtime Environment
 
-Status: complete, pending integration
+Status: complete and integrated to `main`
 Started: `2026-07-09`
 Completed: `2026-07-09`
 Branch: `task/T-0017k-production-server-runtime`
 Worktree:
 `.worktrees/T-0017k-production-server-runtime`
 Base commit: `310bc6a`
+Implementation commit: `50802e0`
+Merge commit: `fa5d406`
 
 ## Objective
 
