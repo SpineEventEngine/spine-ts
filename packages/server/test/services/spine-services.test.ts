@@ -4,6 +4,7 @@ import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
+  AnySchema,
   BoolValueSchema,
   BytesValueSchema,
   DoubleValueSchema,
@@ -74,6 +75,15 @@ import {
 } from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
 import type { Ack } from "@spine-ts/proto/generated/spine/core/ack_pb.js";
 import type { Response } from "@spine-ts/proto/generated/spine/core/response_pb.js";
+import {
+  InMemoryStorageFactory,
+  RecordStorage,
+  StorageFactory,
+  type RecordEntry,
+  type RecordQuery,
+  type RecordSpec,
+  type StorageContext,
+} from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -89,6 +99,10 @@ import {
   type EventDispatcher,
   type RunningServer,
 } from "../../src/index.js";
+import {
+  DurableSubscriptionRecords,
+  durableSubscriptionRecordSpec,
+} from "../../src/services/subscription-records.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
 
 type ProjectionState = Message<"ProjectionState"> & {
@@ -2742,49 +2756,341 @@ describe("SpineServices", () => {
     }
   });
 
-  it("keeps subscription identities process-local to one service adapter", async () => {
-    let deliverUpdate:
-      | ((update: {
-          readonly typeUrl: string;
-          readonly id: unknown;
-          readonly state: ProjectionState;
-        }) => void)
-      | undefined;
-    let subscribeCalls = 0;
-    const context = createFakeContext({
-      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
-      subscribe: (_schema, callback) => {
-        subscribeCalls += 1;
-        deliverUpdate = callback;
-        return {
-          closed: false,
-          unsubscribe: () => undefined,
-        };
-      },
-    });
-    const firstHandlers = registeredSubscriptionHandlers(context);
-    const secondHandlers = registeredSubscriptionHandlers(context);
+  it("recovers inactive state subscriptions across service adapter restart", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const firstContext = createSubscriptionContext("RecoveredStateSubscriptions", storageFactory);
+    const secondContext = createSubscriptionContext("RecoveredStateSubscriptions", storageFactory);
+    const firstHandlers = registeredSubscriptionHandlers(firstContext);
+    const secondHandlers = registeredSubscriptionHandlers(secondContext);
     const subscription = await firstHandlers.subscribe(createTopic());
 
-    const unknownNext = await withTimeout(
-      secondHandlers.activate(subscription)[Symbol.asyncIterator]().next(),
-      "other service adapter subscription close",
-    );
-    const iterator = firstHandlers.activate(subscription)[Symbol.asyncIterator]();
+    const iterator = secondHandlers.activate(subscription)[Symbol.asyncIterator]();
     const nextUpdate = iterator.next();
 
     await delay(25);
-    deliverUpdate?.({
-      typeUrl: deriveTypeUrl(ProjectionStateSchema),
-      id: "task-local",
-      state: createState("task-local", "Local"),
-    });
-    const delivered = await withTimeout(nextUpdate, "original service adapter update");
+    await secondContext
+      .stand()
+      .update(ProjectionStateSchema, createState("task-recovered", "Recovered"));
+    const delivered = await withTimeout(nextUpdate, "recovered state subscription update");
+    const update = delivered.value as SubscriptionUpdate | undefined;
 
-    expect(unknownNext.done).toBe(true);
     expect(delivered.done).toBe(false);
-    expect(subscribeCalls).toBe(1);
+    if (update?.update.case !== "entityUpdates") {
+      throw new Error("Expected recovered entity subscription update.");
+    }
+    const state = update.update.value.update[0]?.kind;
+    if (state?.case !== "state") {
+      throw new Error("Expected recovered entity state update.");
+    }
+    expect(unpackAny(state.value, ProjectionStateSchema)).toEqual(
+      createState("task-recovered", "Recovered"),
+    );
     await iterator.return?.();
+  });
+
+  it("recovers inactive event subscriptions across service adapter restart", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const firstContext = createEventSubscriptionContext(
+      "RecoveredEventSubscriptions",
+      storageFactory,
+    );
+    const secondContext = createEventSubscriptionContext(
+      "RecoveredEventSubscriptions",
+      storageFactory,
+    );
+    const firstHandlers = registeredSubscriptionHandlers(firstContext);
+    const secondHandlers = registeredSubscriptionHandlers(secondContext);
+    const subscription = await firstHandlers.subscribe(createEventTopic());
+
+    const iterator = secondHandlers.activate(subscription)[Symbol.asyncIterator]();
+    const nextUpdate = iterator.next();
+
+    await delay(25);
+    await secondContext
+      .eventBus()
+      .post(createAggregateEvent("event-recovered", "aggregate-1", "Recovered"));
+    const delivered = await withTimeout(nextUpdate, "recovered event subscription update");
+    const update = delivered.value as SubscriptionUpdate | undefined;
+
+    expect(delivered.done).toBe(false);
+    if (update?.update.case !== "eventUpdates") {
+      throw new Error("Expected recovered event subscription update.");
+    }
+    expect(update.update.value.event.map((event) => event.id?.value)).toEqual(["event-recovered"]);
+    await iterator.return?.();
+  });
+
+  it("keeps cancelled durable subscriptions removed across restart", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const firstContext = createSubscriptionContext(
+      "CancelledRecoveredSubscriptions",
+      storageFactory,
+    );
+    const secondContext = createSubscriptionContext(
+      "CancelledRecoveredSubscriptions",
+      storageFactory,
+    );
+    const firstHandlers = registeredSubscriptionHandlers(firstContext);
+    const secondHandlers = registeredSubscriptionHandlers(secondContext);
+    const subscription = await firstHandlers.subscribe(createTopic());
+
+    await firstHandlers.cancel(subscription);
+
+    const recovered = await withTimeout(
+      secondHandlers.activate(subscription)[Symbol.asyncIterator]().next(),
+      "cancelled recovered subscription close",
+    );
+
+    expect(recovered.done).toBe(true);
+  });
+
+  it("removes expired durable inactive subscriptions before recovered activation", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const firstContext = createSubscriptionContext("ExpiredRecoveredSubscriptions", storageFactory);
+    const secondContext = createSubscriptionContext(
+      "ExpiredRecoveredSubscriptions",
+      storageFactory,
+    );
+    const firstHandlers = registeredSubscriptionHandlers(firstContext, { inactiveTtlMs: 1 });
+    const secondHandlers = registeredSubscriptionHandlers(secondContext, { inactiveTtlMs: 1 });
+    const subscription = await firstHandlers.subscribe(createTopic());
+
+    await delay(25);
+
+    const recovered = await withTimeout(
+      secondHandlers.activate(subscription)[Symbol.asyncIterator]().next(),
+      "expired recovered subscription close",
+    );
+
+    expect(recovered.done).toBe(true);
+  });
+
+  it("does not let another adapter recover a durable subscription after activation", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const firstContext = createSubscriptionContext(
+      "ActivatedRecoveredSubscriptions",
+      storageFactory,
+    );
+    const secondContext = createSubscriptionContext(
+      "ActivatedRecoveredSubscriptions",
+      storageFactory,
+    );
+    const thirdContext = createSubscriptionContext(
+      "ActivatedRecoveredSubscriptions",
+      storageFactory,
+    );
+    const firstHandlers = registeredSubscriptionHandlers(firstContext);
+    const secondHandlers = registeredSubscriptionHandlers(secondContext);
+    const thirdHandlers = registeredSubscriptionHandlers(thirdContext);
+    const subscription = await firstHandlers.subscribe(createTopic());
+    const secondIterator = secondHandlers.activate(subscription)[Symbol.asyncIterator]();
+    const thirdIterator = thirdHandlers.activate(subscription)[Symbol.asyncIterator]();
+
+    try {
+      const secondUpdate = secondIterator.next();
+
+      await delay(25);
+      const duplicateClosed = await withTimeout(
+        thirdIterator.next(),
+        "cross-adapter duplicate activation close",
+      );
+
+      await secondContext
+        .stand()
+        .update(ProjectionStateSchema, createState("task-activated", "Activated"));
+      const delivered = await withTimeout(
+        secondUpdate,
+        "recovered subscription update after activation",
+      );
+      const update = delivered.value as SubscriptionUpdate | undefined;
+
+      expect(duplicateClosed.done).toBe(true);
+      expect(delivered.done).toBe(false);
+      if (update?.update.case !== "entityUpdates") {
+        throw new Error("Expected recovered entity subscription update.");
+      }
+      const state = update.update.value.update[0]?.kind;
+      if (state?.case !== "state") {
+        throw new Error("Expected recovered entity state update.");
+      }
+      expect(unpackAny(state.value, ProjectionStateSchema)).toEqual(
+        createState("task-activated", "Activated"),
+      );
+    } finally {
+      await thirdIterator.return?.();
+      await secondIterator.return?.();
+    }
+  });
+
+  it("does not let another adapter recover after original adapter activation", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const contextName = "LocallyActivatedRecoveredSubscriptions";
+    const firstContext = createSubscriptionContext(contextName, storageFactory);
+    const secondContext = createSubscriptionContext(contextName, storageFactory);
+    const firstHandlers = registeredSubscriptionHandlers(firstContext);
+    const secondHandlers = registeredSubscriptionHandlers(secondContext);
+    const subscription = await firstHandlers.subscribe(createTopic());
+    const firstIterator = firstHandlers.activate(subscription)[Symbol.asyncIterator]();
+    const secondIterator = secondHandlers.activate(subscription)[Symbol.asyncIterator]();
+
+    try {
+      const firstUpdate = firstIterator.next();
+
+      await delay(25);
+      const duplicateClosed = await withTimeout(
+        secondIterator.next(),
+        "post-local-activation duplicate close",
+      );
+
+      await firstContext
+        .stand()
+        .update(ProjectionStateSchema, createState("task-local-activated", "Activated"));
+      const delivered = await withTimeout(firstUpdate, "local activation update");
+      const update = delivered.value as SubscriptionUpdate | undefined;
+
+      expect(duplicateClosed.done).toBe(true);
+      expect(delivered.done).toBe(false);
+      if (update?.update.case !== "entityUpdates") {
+        throw new Error("Expected local entity subscription update.");
+      }
+      const state = update.update.value.update[0]?.kind;
+      if (state?.case !== "state") {
+        throw new Error("Expected local entity state update.");
+      }
+      expect(unpackAny(state.value, ProjectionStateSchema)).toEqual(
+        createState("task-local-activated", "Activated"),
+      );
+      expect(
+        await readDurableSubscriptionRecord(storageFactory, contextName, subscription.id!.value),
+      ).toBe(undefined);
+    } finally {
+      await secondIterator.return?.();
+      await firstIterator.return?.();
+    }
+  });
+
+  it("deletes malformed durable subscription records during recovery", async () => {
+    const contextName = "MalformedRecoveredSubscriptions";
+    const storageFactory = new SeededSubscriptionStorageFactory(contextName);
+    const context = createSubscriptionContext(contextName, storageFactory);
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscriptionId = "s-malformed";
+
+    storageFactory.seed(
+      subscriptionId,
+      create(AnySchema, {
+        typeUrl: "type.spine-ts.dev/internal/DurableSubscriptionRecord",
+        value: new TextEncoder().encode(JSON.stringify({ id: subscriptionId })),
+      }),
+    );
+
+    const activation = await withTimeout(
+      handlers
+        .activate(
+          create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: subscriptionId }),
+          }),
+        )
+        [Symbol.asyncIterator]()
+        .next(),
+      "malformed recovered subscription close",
+    );
+
+    expect(activation.done).toBe(true);
+    expect(await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId)).toBe(
+      undefined,
+    );
+  });
+
+  it("deletes recovered durable subscriptions whose stored target type disagrees with the topic", async () => {
+    const contextName = "InconsistentRecoveredSubscriptions";
+    const storageFactory = new InMemoryStorageFactory();
+    const subscriptionId = "s-inconsistent";
+
+    await writeDurableSubscriptionRecord(
+      storageFactory,
+      contextName,
+      DurableSubscriptionRecords.write({
+        id: subscriptionId,
+        kind: "event",
+        targetType: deriveTypeUrl(AggregateStateSchema),
+        subscription: create(SubscriptionSchema, {
+          id: create(SubscriptionIdSchema, { value: subscriptionId }),
+          topic: createTopic(),
+        }),
+        expiresAtMs: Date.now() + 60_000,
+      }),
+    );
+
+    const handlers = registeredSubscriptionHandlers(
+      createEventSubscriptionContext(contextName, storageFactory),
+    );
+    const activation = await withTimeout(
+      handlers
+        .activate(
+          create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: subscriptionId }),
+          }),
+        )
+        [Symbol.asyncIterator]()
+        .next(),
+      "inconsistent recovered subscription close",
+    );
+
+    expect(activation.done).toBe(true);
+    expect(await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId)).toBe(
+      undefined,
+    );
+  });
+
+  it("deletes recovered durable subscriptions whose stored tenant disagrees with the topic", async () => {
+    const contextName = "TenantInconsistentRecoveredSubscriptions";
+    const storageFactory = new InMemoryStorageFactory();
+    const subscriptionId = "s-tenant-inconsistent";
+
+    await writeDurableSubscriptionRecord(
+      storageFactory,
+      contextName,
+      DurableSubscriptionRecords.write({
+        id: subscriptionId,
+        kind: "state",
+        targetType: deriveTypeUrl(ProjectionStateSchema),
+        tenantId: "tenant-a",
+        subscription: create(SubscriptionSchema, {
+          id: create(SubscriptionIdSchema, { value: subscriptionId }),
+          topic: createTopic("tenant-b"),
+        }),
+        expiresAtMs: Date.now() + 60_000,
+      }),
+    );
+
+    const handlers = registeredSubscriptionHandlers(
+      BoundedContext.multitenant(contextName)
+        .withStorageFactory(storageFactory)
+        .add(
+          new Repository({
+            entityType: TaskProjection,
+            schema: ProjectionStateSchema,
+          }),
+        )
+        .build(),
+    );
+    const activation = await withTimeout(
+      handlers
+        .activate(
+          create(SubscriptionSchema, {
+            id: create(SubscriptionIdSchema, { value: subscriptionId }),
+          }),
+        )
+        [Symbol.asyncIterator]()
+        .next(),
+      "tenant-inconsistent recovered subscription close",
+    );
+
+    expect(activation.done).toBe(true);
+    expect(await readDurableSubscriptionRecord(storageFactory, contextName, subscriptionId)).toBe(
+      undefined,
+    );
   });
 
   it("releases subscription delivery when the activation iterator closes", async () => {
@@ -3645,6 +3951,112 @@ function createFormattedIncludeAllQuery(format: Query["format"], tenantId?: Tena
   return query;
 }
 
+function createSubscriptionContext(name: string, storageFactory: StorageFactory) {
+  return BoundedContext.singleTenant(name)
+    .withStorageFactory(storageFactory)
+    .add(
+      new Repository({
+        entityType: TaskProjection,
+        schema: ProjectionStateSchema,
+      }),
+    )
+    .build();
+}
+
+function createEventSubscriptionContext(name: string, storageFactory: StorageFactory) {
+  return BoundedContext.singleTenant(name)
+    .withStorageFactory(storageFactory)
+    .addEventDispatcher(createDomainEventDispatcher(AggregateStateSchema))
+    .build();
+}
+
+class SeededSubscriptionStorageFactory extends StorageFactory {
+  readonly #delegate = new InMemoryStorageFactory();
+  readonly #seededRecords = new Map<string, Any>();
+  readonly #subscriptionContextName: string;
+
+  constructor(contextName: string) {
+    super();
+    this.#subscriptionContextName = `${contextName}:subscriptions`;
+  }
+
+  seed(id: string, record: Any): void {
+    this.#seededRecords.set(id, record);
+  }
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    const storage = this.#delegate.createRecordStorage(context, recordSpec);
+
+    return context.name === this.#subscriptionContextName &&
+      recordSpec === durableSubscriptionRecordSpec
+      ? new SeededRecordStorage(context, recordSpec, storage, this.#seededRecords)
+      : storage;
+  }
+}
+
+class SeededRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+  readonly #delegate: RecordStorage<I, R>;
+  readonly #seededRecords: Map<I, R>;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    delegate: RecordStorage<I, R>,
+    seededRecords: Map<I, R>,
+  ) {
+    super(context, recordSpec);
+    this.#delegate = delegate;
+    this.#seededRecords = seededRecords;
+  }
+
+  protected override deleteRecord(id: I): Promise<boolean> {
+    const deleted = this.#seededRecords.delete(id);
+    return this.#delegate.delete(id).then((delegateDeleted) => deleted || delegateDeleted);
+  }
+
+  protected override queryRecordEntries(
+    query: RecordQuery<I>,
+  ): Promise<readonly RecordEntry<I, R>[]> {
+    return this.#delegate.queryEntries(query);
+  }
+
+  protected override readRecord(id: I): Promise<R | undefined> {
+    const seeded = this.#seededRecords.get(id);
+    return Promise.resolve(seeded ?? this.#delegate.read(id));
+  }
+
+  protected override compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    if (this.#seededRecords.has(id)) {
+      return Promise.resolve(false);
+    }
+
+    return this.#delegate.compareAndSet(id, expected?.record, next?.record);
+  }
+
+  protected override writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    records.forEach((record) => {
+      this.#seededRecords.delete(record.id);
+    });
+    return this.#delegate.writeAll(records.map((record) => record.record));
+  }
+
+  protected override writeRecord(
+    record: ReturnType<RecordSpec<I, R>["materialize"]>,
+  ): Promise<void> {
+    this.#seededRecords.delete(record.id);
+    return this.#delegate.write(record.record);
+  }
+}
+
 function createTopic(tenantId?: TenantInput) {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "t-1" }),
@@ -4144,6 +4556,47 @@ function registeredQueryHandlers(
 
 async function startServices(...contexts: BoundedContext[]): Promise<RunningServer> {
   return new Server({ contexts }).start();
+}
+
+async function writeDurableSubscriptionRecord(
+  storageFactory: StorageFactory,
+  contextName: string,
+  record: Any,
+): Promise<void> {
+  const storage = durableSubscriptionStorage(storageFactory, contextName);
+
+  try {
+    await storage.write(record);
+  } finally {
+    storage.close();
+  }
+}
+
+async function readDurableSubscriptionRecord(
+  storageFactory: StorageFactory,
+  contextName: string,
+  id: string,
+): Promise<Any | undefined> {
+  const storage = durableSubscriptionStorage(storageFactory, contextName);
+
+  try {
+    return await storage.read(id);
+  } finally {
+    storage.close();
+  }
+}
+
+function durableSubscriptionStorage(
+  storageFactory: StorageFactory,
+  contextName: string,
+): RecordStorage<string, Any> {
+  return storageFactory.createRecordStorage(
+    {
+      name: `${contextName}:subscriptions`,
+      multitenant: false,
+    },
+    durableSubscriptionRecordSpec,
+  );
 }
 
 async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {

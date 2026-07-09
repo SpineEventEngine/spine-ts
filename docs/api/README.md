@@ -10,8 +10,9 @@ set-once transition validation, explicit handler metadata APIs, the first
 command/event bus exports, the first server runtime lifecycle/async queue
 kernel, write-side signal intake result exports, the runtime-routing planner
 seam, the real Connect/Node `SpineServices` route registrar for the raw Spine
-command/query/subscription services, a small local `Server` lifecycle owner for
-real Connect/gRPC-compatible services, the first `@spine-ts/transport`
+command/query/subscription services with durable inactive subscription recovery
+over the same storage factory, a small local `Server` lifecycle owner for real
+Connect/gRPC-compatible services, the first `@spine-ts/transport`
 contracts, the first `@spine-ts/storage` contracts, and the minimal
 `@spine-ts/testing` bounded-context fixture.
 
@@ -224,18 +225,23 @@ applied to delivered states, not to `no_longer_matching` updates. Event topics
 support `include_all = true` in this runtime slice and stream wire-level
 `event_updates` with cloned framework `Event` envelopes. Application handlers
 continue to receive generated domain event messages; framework envelopes remain
-service/runtime data. Activation is by the opaque ID in the same
-`SpineServices` instance. Single-tenant subscriptions reject tenant options;
-multitenant subscriptions require `tenantId`; state and event delivery are scoped to that
-tenant slice. Unknown IDs and duplicate
-activation of an already active ID complete without updates.
+service/runtime data. Activation is by opaque ID. Inactive records are stored
+through the owning bounded context storage factory, so a new `SpineServices`
+instance over the same storage factory can activate a previously returned ID.
+Activation consumes the durable row before live attachment, so durable storage
+contains inactive records only. Single-tenant subscriptions reject tenant
+options; multitenant subscriptions require `tenantId`; state and event
+delivery are scoped to that tenant slice. Unknown, canceled, expired,
+malformed, inconsistent, and already active IDs complete without updates.
 Cancellation of a missing, unknown, already-canceled, or already-cleaned
 subscription returns OK. Cleanup is idempotent across cancellation,
-activation-stream finalization, inactive expiry, and slow-consumer queue
-closure. Defaults are 30 seconds for inactive expiry and 100 queued updates per
-active subscription. The service subscription registry is process-local memory,
-not durable subscription storage. It is not a client DSL, broad server
-lifecycle, durable subscription store, or projection catch-up loop.
+activation-stream finalization, inactive expiry, malformed/inconsistent-row
+rejection, and slow-consumer queue closure. Defaults are 30 seconds for
+inactive expiry and 100 queued updates per active subscription. Active streams
+and queued updates remain process-local and are not replayed after activation
+or restart. This is not a client DSL, broad server lifecycle, projection
+catch-up loop, cross-process stream ownership, or durable retained update
+queue.
 `Server`, `ServerOptions`, and `RunningServer` form the small public lifecycle
 owner for hosting those routes over Node HTTP/2. `Server.atPort(port)` defaults
 to local-only `127.0.0.1`; broader hosts are explicit through `ServerOptions`.
