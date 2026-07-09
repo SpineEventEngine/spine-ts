@@ -1,11 +1,13 @@
 # T-0018c: Generated Registry React Void Alignment
 
-Status: verified pending integration
+Status: integrated on main
 Started: `2026-07-09`
 Branch: `task/T-0018c-generated-registry-react-void`
 Worktree:
 `.worktrees/T-0018c-generated-registry-react-void`
 Base commit: `d3d66e6`
+Task commit: `d07e0a3`
+Merge commit: `afe530a`
 
 ## Objective
 

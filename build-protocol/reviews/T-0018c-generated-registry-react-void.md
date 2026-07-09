@@ -1,6 +1,6 @@
 # T-0018c Review Log
 
-Status: clean and verified pending integration
+Status: clean, complete, and integrated on main
 
 Scope: generated-registry analyzer alignment for explicit `void` `@React`
 handlers.
