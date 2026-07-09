@@ -22,6 +22,7 @@ import {
   file_spine_options,
 } from "@spine-ts/proto";
 import {
+  InMemoryStorageFactory,
   InMemoryRecordStorage,
   type RecordSpec,
   type RecordStorage,
@@ -46,6 +47,24 @@ import {
 } from "../../src/index.js";
 import { boundedContextAccess } from "../../src/context/bounded-context.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";
+
+type InternalSystemPairing = {
+  readonly domain: {
+    readonly name: { readonly value: string };
+    readonly tenantMode: "single-tenant" | "multitenant";
+  };
+  readonly system: {
+    readonly name: { readonly value: string };
+    readonly multitenant: boolean;
+    readonly storesEvents: boolean;
+  };
+};
+
+type InternalTenantIndex = {
+  readonly tenantMode: "single-tenant" | "multitenant";
+  all(): Promise<readonly string[]>;
+  keep(tenantId: string): Promise<void>;
+};
 
 type ProjectionState = Message<"ProjectionState"> & {
   id: string;
@@ -149,10 +168,29 @@ class GeneratedTaskProcessManager extends ProcessManager<
   }
 }
 
+function internalSystemPairing(context: BoundedContext): InternalSystemPairing {
+  return (
+    boundedContextAccess as unknown as {
+      systemPairing(context: BoundedContext): InternalSystemPairing;
+    }
+  ).systemPairing(context);
+}
+
+function internalTenantIndex(context: BoundedContext): InternalTenantIndex {
+  return (
+    boundedContextAccess as unknown as {
+      tenantIndex(context: BoundedContext): InternalTenantIndex;
+    }
+  ).tenantIndex(context);
+}
+
 describe("BoundedContext assembly", () => {
   it("rejects empty or blank context names", () => {
     expect(() => BoundedContext.singleTenant("\t\n")).toThrow(BoundedContextNameError);
     expect(() => BoundedContext.multitenant("")).toThrow(BoundedContextNameError);
+    expect(() => BoundedContext.singleTenant("__spine/Tasks/tenants")).toThrow(
+      BoundedContextNameError,
+    );
   });
 
   it("builds single-tenant and multitenant contexts with names and tenant mode", () => {
@@ -168,6 +206,85 @@ describe("BoundedContext assembly", () => {
     expect(multitenant.tenantMode).toBe("multitenant");
     expect(multitenant.isMultitenant).toBe(true);
     expect(multitenant.spec.multitenant).toBe(true);
+  });
+
+  it("derives internal system pairing metadata for built domain contexts", () => {
+    const singleTenant = BoundedContext.singleTenant("Tasks").build();
+    const multitenant = BoundedContext.multitenant("Customers").build();
+
+    const singlePairing = internalSystemPairing(singleTenant);
+    const multitenantPairing = internalSystemPairing(multitenant);
+
+    expect(singlePairing.domain.name.value).toBe("Tasks");
+    expect(singlePairing.domain.tenantMode).toBe("single-tenant");
+    expect(singlePairing.system.name.value).toBe("Tasks_System");
+    expect(singlePairing.system.multitenant).toBe(false);
+    expect(singlePairing.system.storesEvents).toBe(false);
+
+    expect(multitenantPairing.domain.name.value).toBe("Customers");
+    expect(multitenantPairing.domain.tenantMode).toBe("multitenant");
+    expect(multitenantPairing.system.name.value).toBe("Customers_System");
+    expect(multitenantPairing.system.multitenant).toBe(true);
+    expect(multitenantPairing.system.storesEvents).toBe(false);
+  });
+
+  it("exposes a constant single-tenant index through internal context access", async () => {
+    const context = BoundedContext.singleTenant("Tasks").build();
+    const tenantIndex = internalTenantIndex(context);
+
+    expect(tenantIndex.tenantMode).toBe("single-tenant");
+    await expect(tenantIndex.all()).resolves.toEqual([]);
+    await expect(tenantIndex.keep("tenant-a")).rejects.toThrow(
+      'Single-tenant context "Tasks" does not accept tenant recording.',
+    );
+  });
+
+  it("stores multitenant index entries through the configured storage factory", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const first = BoundedContext.multitenant("Customers")
+      .withStorageFactory(storageFactory)
+      .build();
+    const firstIndex = internalTenantIndex(first);
+
+    expect(firstIndex.tenantMode).toBe("multitenant");
+
+    await firstIndex.keep("tenant-b");
+    await firstIndex.keep("tenant-a");
+    await firstIndex.keep("tenant-a");
+
+    await expect(firstIndex.all()).resolves.toEqual(["tenant-a", "tenant-b"]);
+
+    const recovered = BoundedContext.multitenant("Customers")
+      .withStorageFactory(storageFactory)
+      .build();
+    const recoveredIndex = internalTenantIndex(recovered);
+
+    await expect(recoveredIndex.all()).resolves.toEqual(["tenant-a", "tenant-b"]);
+  });
+
+  it("keeps tenant-index storage in an internal namespace", async () => {
+    const storageFactory = new ObservingStorageFactory([]);
+    const customers = BoundedContext.multitenant("Customers")
+      .withStorageFactory(storageFactory)
+      .build();
+    const tenantIndex = internalTenantIndex(customers);
+
+    await tenantIndex.keep("tenant-a");
+
+    const tenantIndexCreation = storageFactory.creations.find(
+      (creation) => creation.context.name !== "Customers",
+    );
+    expect(tenantIndexCreation?.context).toMatchObject({
+      name: "__spine/Customers/tenants",
+      multitenant: false,
+    });
+
+    const publicStorage = storageFactory.createRecordStorage(
+      { name: "Customers_Tenants", multitenant: false },
+      tenantIndexCreation?.recordSpec as RecordSpec<string, Message<"google.protobuf.StringValue">>,
+    );
+
+    await expect(publicStorage.index()).resolves.toEqual([]);
   });
 
   it("exposes stable commandBus() and eventBus() endpoints from the built context", () => {
@@ -865,13 +982,13 @@ describe("BoundedContext assembly", () => {
     expect(builder).toBeInstanceOf(BoundedContextBuilder);
   });
 
-  it("closes owned buses, stand, event store, and repository storage once", async () => {
+  it("closes owned buses, stand, event store, repository storage, and tenant index once", async () => {
     const storageFactory = new ObservingStorageFactory([]);
     const repository = new Repository({
       entityType: TaskAggregate,
       schema: AggregateStateSchema,
     });
-    const context = BoundedContext.singleTenant("Tasks")
+    const context = BoundedContext.multitenant("Tasks")
       .withStorageFactory(storageFactory)
       .add(repository)
       .build();
@@ -888,6 +1005,27 @@ describe("BoundedContext assembly", () => {
     expect(() => context.stand().stateTypes()).toThrow("Stand is closed.");
     expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
     expect(storageFactory.isOpen()).toBe(true);
+  });
+
+  it("closes tenant-index storage if repository registration fails", () => {
+    const storageFactory = new FailingStorageFactory(3, AggregateStateSchema.typeName);
+    const repository = new Repository({
+      entityType: TaskAggregate,
+      schema: AggregateStateSchema,
+    });
+
+    expect(() =>
+      BoundedContext.multitenant("Tasks")
+        .withStorageFactory(storageFactory)
+        .add(repository)
+        .build(),
+    ).toThrow('Cannot open storage for "AggregateState".');
+
+    const tenantIndexCreation = storageFactory.creations.find(
+      (creation) => creation.context.name !== "Tasks",
+    );
+    expect(tenantIndexCreation?.context.name).toBe("__spine/Tasks/tenants");
+    expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
   });
 
   it("waits for in-flight direct Stand updates before closing subscriptions", async () => {

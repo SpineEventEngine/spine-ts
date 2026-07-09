@@ -532,11 +532,12 @@ tasks.tenantMode; // "single-tenant"
 customers.isMultitenant; // true
 ```
 
-Names must be non-empty and non-blank. `ContextSpec` is a framework-owned
-immutable value exposed from the builder and built context. `build()` returns a
-`BoundedContext` that owns mutable command/event buses internally while exposing
-a post-only `commandBus()` endpoint and an event listing/posting `eventBus()`
-endpoint. The endpoints do not expose
+Names must be non-empty, non-blank, and outside the reserved `__spine/`
+framework namespace. `ContextSpec` is a framework-owned immutable value exposed
+from the builder and built context. `build()` returns a `BoundedContext` that
+owns mutable command/event buses internally while exposing a post-only
+`commandBus()` endpoint and an event listing/posting `eventBus()` endpoint. The
+endpoints do not expose
 late dispatcher registration. Builders collect dispatchers and can inject the
 `StorageFactory` used to create the context `EventStore` and repository record
 storages, plus the direct stand state storage:
@@ -594,14 +595,19 @@ context records a copy-safe diagnostic snapshot through
 `storedEventDispatchFailures()`; it does not retry or run catch-up delivery.
 
 Generated entity-class assembly creates default repositories through
-`add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This slice
-still does not invoke query handlers, construct system contexts, start
-query/subscription buses, write tenant indexes, expose a broad production
-lifecycle, or integrate transports. Process-manager command assignees now
-write durable process-manager inbox rows before the current local shard drain
-replays them, and the post does not resolve until that received row is marked
-delivered. Scheduler/retry workers, cross-process durable recovery, and
-broader event/aggregate handoff remain deferred.
+`add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. Built contexts
+now create internal system-pairing metadata and a framework-owned tenant index:
+single-tenant contexts use a constant index, and multitenant contexts persist
+tenant IDs through the configured storage factory. This slice still does not
+invoke query handlers, construct the full system-context runtime, provide
+command-log repositories, emit the full system event taxonomy, provide
+tracing/monitors/debug UI, start query/subscription buses, expose a broad
+production lifecycle, or integrate transports. Process-manager command assignees
+now write durable process-manager
+inbox rows before the current local shard drain replays them, and the post does
+not resolve until that received row is marked delivered. Scheduler/retry
+workers, cross-process durable recovery, and broader event/aggregate handoff
+remain deferred.
 
 ## Direct Stand
 
