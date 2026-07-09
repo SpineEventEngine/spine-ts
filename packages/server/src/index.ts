@@ -49,6 +49,7 @@ export {
   type DeliveryDrainOptions,
   type DeliveryEndpoint,
   type DeliveryFailure,
+  type DeliveryMessageDrainOptions,
   type DeliveryOptions,
   type DeliveryRun,
 } from "./delivery/delivery.js";

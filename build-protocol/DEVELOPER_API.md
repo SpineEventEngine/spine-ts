@@ -277,10 +277,10 @@ smaller than the later scheduler/retry stack:
 - `ShardIndex` identifies one delivery shard, `ShardSession` is the durable
   lease snapshot for that shard, and `ShardedWorkRegistry` persists shard
   pickup/release across processes; and
-- `DeliveryDrainOptions`, `DeliveryEndpoint`, `DeliveryFailure`,
-  `DeliveryLabel`, `DeliveryRun`, `DeliveryStatus`, `InboxId`, `InboxMessage`,
-  `DeliveryStorageCorruptionError`, `InboxMessageError`, `InboxMessageId`,
-  `InboxMessageInput`,
+- `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`, `DeliveryEndpoint`,
+  `DeliveryFailure`, `DeliveryLabel`, `DeliveryRun`, `DeliveryStatus`,
+  `InboxId`, `InboxMessage`, `DeliveryStorageCorruptionError`,
+  `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
   `InboxReadOptions`, `InboxWriteResult`, `InboxStorageOptions`,
   `DeliveryOptions`, and `ShardedWorkRegistryOptions` describe the stable
   inputs/outputs of this slice.

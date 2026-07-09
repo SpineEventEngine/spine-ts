@@ -1,6 +1,6 @@
 import type { StorageContext, StorageFactory } from "@spine-ts/storage";
 
-import { Inbox, type InboxMessage } from "./inbox.js";
+import { Inbox, InboxMessageError, type InboxMessage } from "./inbox.js";
 import { InboxStorage } from "./inbox-storage.js";
 import type { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry } from "./sharded-work-registry.js";
@@ -80,7 +80,11 @@ export class Delivery {
    * Local framework handoffs use this when the caller has just written a durable row and must not
    * run unrelated pending rows from the same shard.
    */
-  async drainMessage(message: InboxMessage, options: DeliveryDrainOptions): Promise<DeliveryRun> {
+  async drainMessage(
+    message: InboxMessage,
+    options: DeliveryMessageDrainOptions,
+  ): Promise<DeliveryRun> {
+    assertMessageShardMatchesId(message);
     const session = await this.shards.pickUp(message.shard, options.node);
     if (session === undefined) {
       return deliveryRun("SKIPPED", 0, 0, 0, []);
@@ -133,6 +137,14 @@ export interface DeliveryDrainOptions {
   readonly onMessage: DeliveryEndpoint;
 }
 
+/** Options for one exact-message delivery drain. */
+export interface DeliveryMessageDrainOptions {
+  /** Worker node name used for shard pickup. */
+  readonly node: string;
+  /** Framework endpoint callback invoked for the pending inbox row. */
+  readonly onMessage: DeliveryEndpoint;
+}
+
 /** Framework endpoint callback for one durable inbox row. */
 export type DeliveryEndpoint = (message: InboxMessage) => Promise<void> | void;
 
@@ -172,4 +184,10 @@ function deliveryRun(
     failed,
     failures: Object.freeze([...failures]),
   });
+}
+
+function assertMessageShardMatchesId(message: InboxMessage): void {
+  if (message.id.shard.key() !== message.shard.key()) {
+    throw new InboxMessageError("Inbox message ID shard does not match message shard.");
+  }
 }

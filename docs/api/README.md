@@ -300,8 +300,8 @@ consistency, and aggregate version order before storage. It does not implement
 handler invocation, delivery, catch-up, read-side indexing, subscriptions,
 system events, or aggregate repository caching.
 Delivery exports include `Delivery`, `DeliveryOptions`,
-`DeliveryDrainOptions`, `DeliveryEndpoint`, `DeliveryFailure`, `DeliveryRun`,
-`DeliveryLoop`, `DeliveryLoopOptions`, `DeliveryLoopRun`,
+`DeliveryDrainOptions`, `DeliveryMessageDrainOptions`, `DeliveryEndpoint`,
+`DeliveryFailure`, `DeliveryRun`, `DeliveryLoop`, `DeliveryLoopOptions`, `DeliveryLoopRun`,
 `DeliveryLoopStatus`, `DeliveryStorageCorruptionError`, `Inbox`, `InboxId`,
 `InboxMessage`, `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
 `InboxReadOptions`, `InboxWriteResult`, `InboxStorage`, `InboxStorageOptions`,
@@ -320,7 +320,10 @@ shard, reads `TO_DELIVER` rows in inbox order, invokes the `DeliveryEndpoint`
 once per row, marks exact-message successes `DELIVERED`, leaves endpoint or
 marker failures pending for retry, releases the shard in `finally`, and returns
 a `DeliveryRun` with counts and per-message `DeliveryFailure` values retained
-only in that result. `DeliveryLoop` repeats this boundary for one shard until a
+only in that result. `Delivery.drainMessage(message, { node, onMessage })`
+claims the message shard only when `message.id.shard` matches `message.shard`,
+then replays that exact pending row without accepting a page limit. `DeliveryLoop`
+repeats this boundary for one shard until a
 drain is idle, skipped, stopped, or reaches `maxFailures`; retry is simply a
 later loop/drain seeing rows that remained `TO_DELIVER`. `stop()` prevents
 future drain starts and does not interrupt an in-flight `Delivery.drain()`; a

@@ -1,6 +1,6 @@
 # Review Log: T-0022a Projection Inbox Handoff
 
-Status: first-round fixes implemented
+Status: second re-review fixes implemented
 
 Scope: live projection subscriber durable inbox handoff.
 
@@ -20,3 +20,13 @@ Scope: live projection subscriber durable inbox handoff.
 - Switched local projection and process-manager handoffs from broad shard drain to exact-message drain.
 - Added mixed-backlog regressions for projection and process-manager handoffs, covering unrelated same-label targets plus opposite-label rows remaining pending.
 - Updated the stale process-manager scheduled-row test to assert isolation instead of broad shard draining.
+
+## Second Re-Review Fix Pass
+
+- Added a `Delivery.drainMessage()` guard that rejects mismatched
+  `message.id.shard` and `message.shard` snapshots before shard pickup.
+- Introduced `DeliveryMessageDrainOptions` for exact-message drains so ignored
+  `limit` options are no longer part of that API.
+- Added focused delivery regression/type coverage for the mismatched-shard
+  guard and exact-message options shape.
+- Updated API/developer docs and export checks for `DeliveryMessageDrainOptions`.

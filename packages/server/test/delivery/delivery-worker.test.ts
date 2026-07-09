@@ -7,7 +7,7 @@ import {
   StorageFactory,
   type StorageContext,
 } from "@spine-ts/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   DedupRecords,
@@ -15,7 +15,13 @@ import {
   InboxRecords,
   inboxRecordSpec,
 } from "../../src/delivery/inbox-records.js";
-import { Delivery, ShardIndex, type InboxId, type InboxMessage } from "../../src/index.js";
+import {
+  Delivery,
+  ShardIndex,
+  type DeliveryMessageDrainOptions,
+  type InboxId,
+  type InboxMessage,
+} from "../../src/index.js";
 
 describe("Delivery worker", () => {
   it("skips without dispatch when another worker owns the shard", async () => {
@@ -117,6 +123,13 @@ describe("Delivery worker", () => {
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
       { signalId: "signal-3", status: "TO_DELIVER" },
     ]);
+  });
+
+  it("uses exact-message options without a drain limit for drainMessage", () => {
+    type DrainMessageOptions = Parameters<Delivery["drainMessage"]>[1];
+
+    expectTypeOf<DrainMessageOptions>().toEqualTypeOf<DeliveryMessageDrainOptions>();
+    expectTypeOf<DrainMessageOptions>().not.toHaveProperty("limit");
   });
 
   it("leaves failed messages pending for retry and records failures", async () => {
@@ -415,6 +428,33 @@ describe("Delivery worker", () => {
       { signalId: "signal-original", status: "TO_DELIVER" },
     ]);
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+  });
+
+  it("rejects exact-message drains with mismatched message and id shards", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const stored = await seed(delivery, "signal-original", 1n);
+    const forged = Object.freeze({
+      ...stored,
+      shard: new ShardIndex(1, 2),
+    });
+    const seen: string[] = [];
+
+    await expect(
+      delivery.drainMessage(forged, {
+        node: "node-a",
+        onMessage(message) {
+          seen.push(message.signalId);
+        },
+      }),
+    ).rejects.toThrow("Inbox message ID shard does not match message shard.");
+
+    expect(seen).toEqual([]);
+    await expect(delivery.inbox.read(stored.shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([
+      stored,
+    ]);
   });
 
   it("repairs the delivered-row stale-guard race during duplicate receive", async () => {

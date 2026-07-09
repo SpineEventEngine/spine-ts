@@ -101,19 +101,21 @@ Current slice exposes:
   seam, backed by `StorageFactory`, `RecordStorage`, and `EventStore`;
   `PrimitiveId` and `MessageId` expose the accepted public ID shapes;
   and
-- `Delivery`, `DeliveryDrainOptions`, `DeliveryEndpoint`, `DeliveryFailure`,
-  `DeliveryLoop`, `DeliveryLoopOptions`, `DeliveryLoopRun`,
-  `DeliveryLoopStatus`, `DeliveryRun`, `Inbox`, `InboxStorage`, `ShardIndex`,
-  `ShardSession`, and `ShardedWorkRegistry` for the current durable delivery
+- `Delivery`, `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`,
+  `DeliveryEndpoint`, `DeliveryFailure`, `DeliveryLoop`, `DeliveryLoopOptions`,
+  `DeliveryLoopRun`, `DeliveryLoopStatus`, `DeliveryRun`, `Inbox`,
+  `InboxStorage`, `ShardIndex`, `ShardSession`, and `ShardedWorkRegistry` for the current durable delivery
   slice: inbox writes with durable `(signalId, inboxId)` live deduplication
   through internal guard records, shard ordering metadata with an explicit
   inbox-message UUID tie-breaker, bounded read paging via
   `InboxReadOptions.limit`, storage-backed shard pickup/release over atomic
   `RecordStorage.compareAndSet()` handles for one backing store,
-  framework-owned `Delivery.drain()` runs that claim one shard, and a small
-  `DeliveryLoop` that repeats those drains until idle, stopped, skipped, or a
-  configured failure bound. Successful rows are marked `DELIVERED`; failed rows
-  remain pending for later retry through the same durable `TO_DELIVER` state.
+  framework-owned `Delivery.drain()` runs that claim one shard,
+  exact-message `Delivery.drainMessage()` runs that reject mismatched
+  `message.id.shard`/`message.shard` snapshots and accept only `node` plus
+  `onMessage`, and a small `DeliveryLoop` that repeats those drains until idle,
+  stopped, skipped, or a configured failure bound. Successful rows are marked
+  `DELIVERED`; failed rows remain pending for later retry through the same durable `TO_DELIVER` state.
   `stop()` prevents future drain starts and does not interrupt an in-flight
   `Delivery.drain()`; `close()` calls `stop()` and waits for the current drain,
   if any, to finish. Built bounded contexts use the storage layer internally
