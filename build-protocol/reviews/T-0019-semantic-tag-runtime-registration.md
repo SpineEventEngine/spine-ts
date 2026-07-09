@@ -29,4 +29,4 @@ Scope: semantic tag runtime registration in server routing.
   `build-protocol/tasks/T-0019-semantic-tag-runtime-registration/TASK.md`
 - Work log:
   `build-protocol/work-logs/T-0019.md`
-- Base commit: `21d554f`
+- Base commit: `96f3b70`

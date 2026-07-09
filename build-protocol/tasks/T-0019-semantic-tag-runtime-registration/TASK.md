@@ -5,7 +5,7 @@ Started: `2026-07-09`
 Branch: `task/T-0019-semantic-tag-runtime-registration`
 Worktree:
 `.worktrees/T-0019-semantic-tag-runtime-registration`
-Base commit: `21d554f`
+Base commit: `96f3b70`
 
 ## Objective
 
