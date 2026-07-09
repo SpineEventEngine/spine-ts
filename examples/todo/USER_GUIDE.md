@@ -201,9 +201,9 @@ pnpm vitest run examples/todo/src/index.test.ts --passWithNoTests
 The focused suite covers in-process black-box behavior and a real
 gRPC-compatible smoke test that starts the standalone server, posts a
 `CreateTask` command, reads `TaskList` through `QueryService`, and receives a
-`SubscriptionService` update. It also checks that the compiled generated
-handler registry is present and that the bounded context accepts commands
-through generated metadata.
+`SubscriptionService` update. It also checks that the source and compiled
+generated handler registries are fresh and that the bounded context accepts
+commands through generated metadata.
 
 Some sandboxes block loopback listeners with `EPERM`; rerun the focused test
 with the required native loopback approval if that happens.

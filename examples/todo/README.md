@@ -57,9 +57,10 @@ pnpm vitest run examples/todo/src/index.test.ts --passWithNoTests
 ```
 
 The focused suite starts a real loopback server and verifies command, query,
-and subscription clients. Some managed sandboxes block `127.0.0.1` listener
-binding with `EPERM`; rerun the focused test with native loopback approval if
-that happens.
+and subscription clients. It also checks that the generated handler registry
+and compiled example output are fresh after `pnpm typecheck:build`. Some
+managed sandboxes block `127.0.0.1` listener binding with `EPERM`; rerun the
+focused test with native loopback approval if that happens.
 
 ## Client Smoke
 

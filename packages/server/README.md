@@ -122,7 +122,8 @@ Current slice exposes:
 - `isEntitySchema(schema)` for pure descriptor checks;
 - first-field routing hints from descriptor order;
 - `(column)` discovery for projections/process managers, `(set_once)` field discovery for all entity kinds; and
-- semantic tags from `(is)` and `(every_is)` with clear extraction errors; and
+- semantic tags from `(is)` and `(every_is)` with clear extraction errors, kept
+  for later runtime consumers; and
 - `validateEntityStateTransition({ schema, previous, next })` for built-in
   `(set_once)` transition validation over descriptor-backed entity state; and
 - `EntityTransaction` and `createEntityTransaction()` for a framework-owned,
@@ -175,12 +176,14 @@ Current slice exposes:
   `HandlerMetadataRegistry`. The generated registry contract is versioned and
   contains entity type, state schema, handler kind, method name, inferred
   first-parameter signal schema, explicit one- or two-argument arity, and
-  emitted schemas inferred from explicit return types. Generated `@Assign` and
-  `@Command` producer records must declare at least one emitted schema; `@React`
-  records may return generated event messages or explicit `void` with no
-  emitted schemas. `@Subscribe` records return explicit `void` and declare no
-  emitted schemas. Generated
-  registry files live under ignored `generated/` output and are not committed.
+  emitted schemas inferred from explicit return types. Build-time analysis
+  derives and validates command/event roles from generated descriptors before
+  writing those registry records. Generated `@Assign` and `@Command` producer
+  records must declare at least one emitted schema; `@React` records may return
+  generated event messages or explicit `void` with no emitted schemas.
+  `@Subscribe` records return explicit `void` and declare no emitted schemas.
+  Generated registry files live under ignored `generated/` output and are not
+  committed.
 - `GeneratedRegistryDiscovery` for framework/tooling loading of explicit
   generated registry
   filesystem paths or clean `file:` URLs, or the conventional runtime file
@@ -259,13 +262,16 @@ application decorator form. Decorators do not use `emitDecoratorMetadata`,
 invocation.
 
 Generated handler registry tooling infers the signal schema from each
-handler's explicit first parameter type and emitted schemas from explicit return
-types. `@Assign` emits generated domain events, `@Command` emits
-generated domain commands, `@React` either emits generated domain events or
-returns explicit `void` with no emitted schemas, and `@Subscribe` returns
-explicit `void` and emits none. End-user handlers return generated domain
-messages; repository execution wraps returned commands/events into framework
-envelopes internally after the current transactional work succeeds.
+handler's explicit first parameter type, derives command/event schema roles
+from generated descriptors, and infers emitted schemas from explicit return
+types. `@Assign` emits generated domain events, `@Command` emits generated
+domain commands, `@React` either emits generated domain events or returns
+explicit `void` with no emitted schemas, and `@Subscribe` returns explicit
+`void` and emits none. End-user handlers return generated domain messages;
+repository execution wraps returned commands/events into framework envelopes
+internally after the current transactional work succeeds. Ordinary application
+code does not use schema-bearing decorators, does not define new `@Apply`
+handlers, and does not own transactions manually.
 Both `handler(signal)` and `handler(signal, context)` are part of the public
 signature contract. `HandlerRegistryIngestor` validates version `1`, rejects
 new generated `@Apply`/event-application records, checks generated arity and
@@ -472,6 +478,9 @@ Handlers still return generated domain command/event messages rather than
 framework `Command`/`Event` envelopes, `@Apply` remains absent for new
 aggregate behavior, and this metadata seam does not add manual transaction
 control for end-user code.
+Descriptor-derived semantic tags are preserved elsewhere in server metadata and
+transport topics can carry them, but the runtime handler/readiness/routing
+registries do not yet consume those tags in this slice.
 
 ## Write-Side Signal Intake Results
 

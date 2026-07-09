@@ -141,8 +141,9 @@ or multi-host transport example.
 - Server standard method decorators in `@spine-ts/server` that collect
   class-owned handler metadata. Bare decorators are the ordinary application
   syntax; generated registry tooling owns schema inference for compiled
-  application packages. Explicit schema decorator overloads remain
-  legacy/framework compatibility only.
+  application packages, including descriptor-derived command/event schema
+  roles. Explicit schema decorator overloads remain legacy/framework
+  compatibility only.
 - Generated handler registry tooling that analyzes bare-decorated application
   source after Protobuf-ES generation, writes ignored
   `generated/handler/generated-handler-registry.ts` artifacts. Context
@@ -201,18 +202,18 @@ or multi-host transport example.
   keep tenant slices separate, clone stored values, return independently
   closeable handles, and are not durable across process restarts.
 - A runnable `examples/todo` package with generated Protobuf output, generated
-  handler registry loading, bare `@Assign`/`@Subscribe` handlers, process-local
-  in-memory storage, and real local Connect/Node command, query, and
-  subscription service routes.
+  handler registry loading, focused example/test freshness checks for the
+  generated registry and compiled output, bare `@Assign`/`@Subscribe`
+  handlers, process-local in-memory storage, and real local Connect/Node
+  command, query, and subscription service routes.
 
 ## Remaining Gaps
 
-- Runtime ID generation, timestamp factories, actor/tenant context factories,
-  event producer/version/origin policy, command system properties, and runtime
-  metadata generation.
 - Semantic tag registration from `(is)` and `(every_is)` into handler/routing
-  registries. The server metadata APIs preserve entity tags and explicit
-  handler declarations now, but no runtime registry consumes them yet.
+  registries. The server metadata APIs preserve entity tags, transport topics
+  can carry semantic tags, and generated registry tooling derives handler
+  roles, but no runtime handler/readiness/routing registry consumes those tags
+  yet.
 - Full system-context runtime, command-log repositories, system event taxonomy,
   tracing/monitors/debug UI, production deployment/authentication/tracing/health
   hardening, remote/multi-host transport topology, broker topology/process
@@ -1085,12 +1086,16 @@ handler materializers or list handler schemas manually; discovery and
 materialization belong to generated framework registry tooling. Decorators do
 not instantiate the entity, invoke methods, unpack payloads, register in a
 global handler registry, validate transactions, write storage, start buses, or
-start transport. Generated `@Assign` and command-producing `@Command` handlers
-must return generated domain messages; `@React` handlers may return generated
-event messages or explicit `void` with no emitted schemas. The framework wraps
-returned messages into commands/events internally after the current
-transactional work succeeds. Generated `@Subscribe` handlers return explicit
-`void` and emit none.
+start transport. Generated registry records are descriptor-derived: the build
+tooling infers command/event roles from generated schemas, not from
+application-owned schema materialization. Generated `@Assign` and
+command-producing `@Command` handlers must return generated domain messages;
+`@React` handlers may return generated event messages or explicit `void` with
+no emitted schemas. The framework wraps returned messages into commands/events
+internally after the current transactional work succeeds. Generated
+`@Subscribe` handlers return explicit `void` and emit none. Ordinary handlers
+do not return framework `Command`/`Event` envelopes, do not declare schema-
+bearing decorators, do not use `@Apply`, and do not own transactions manually.
 
 `HandlerMetadataRegistry` remains available for low-level framework tests and
 explicit metadata tooling:
