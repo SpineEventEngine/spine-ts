@@ -165,8 +165,8 @@ Current slice exposes:
   ownership during server assembly. Local environments use in-memory storage
   and same-process transport defaults; production environments require
   caller-supplied storage and transport before a server opens network intake.
-  Built contexts keep the storage factory they were built with until a later
-  builder integration wires context assembly through the environment.
+  `Server` builds added `BoundedContextBuilder` values with the environment
+  storage factory unless the builder already selected a local factory.
 - `@Assign`, `@Command`, `@Subscribe`, and `@React` standard method decorators.
   Public decorators are bare-only ordinary application syntax. Schema-bearing
   handler metadata belongs to generated registry artifacts, internal tooling,
@@ -819,9 +819,10 @@ Production construction rejects missing `storageFactory` or `transport` before
 network intake opens. Production mode validates explicit facility injection
 only; durable production storage adapters remain an open production gap, and
 `InMemoryStorageFactory` is local/test-only. The environment selects and owns
-facilities for server assembly. Built contexts still keep the storage factory
-they were built with until a later builder integration wires context assembly
-through `ServerEnvironment`. This object is not a Java-style process-wide
+facilities for server assembly. `Server` accepts built contexts and
+`BoundedContextBuilder` values; builders added through `Server` use
+`ServerEnvironment.storageFactory` unless `withStorageFactory()` selected a
+more specific local factory first. This object is not a Java-style process-wide
 singleton, and it does not introduce endpoint topology or worker execution.
 
 Shutdown is deterministic: the listener stops accepting new requests first,

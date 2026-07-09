@@ -234,8 +234,16 @@ const eventSubscribers = new WeakMap<
 const contextSystemPairings = new WeakMap<BoundedContext, SystemPairingSnapshot>();
 const contextTenantIndexes = new WeakMap<BoundedContext, TenantIndex>();
 const contextStorageFactories = new WeakMap<BoundedContext, StorageFactory>();
+const builderBuilds = new WeakMap<
+  BoundedContextBuilder,
+  (defaultStorageFactory: StorageFactory) => Promise<BoundedContext>
+>();
 
 interface BoundedContextAccess {
+  build(
+    builder: BoundedContextBuilder,
+    defaultStorageFactory: StorageFactory,
+  ): Promise<BoundedContext>;
   subscribeToEvent(
     context: BoundedContext,
     typeUrl: string,
@@ -587,6 +595,19 @@ export class BoundedContext {
 
 /** @internal Package-local context access used by framework service adapters. */
 export const boundedContextAccess: BoundedContextAccess = Object.freeze({
+  build(
+    builder: BoundedContextBuilder,
+    defaultStorageFactory: StorageFactory,
+  ): Promise<BoundedContext> {
+    const build = builderBuilds.get(builder);
+
+    if (build === undefined) {
+      throw new TypeError("Builder access requires a BoundedContextBuilder instance.");
+    }
+
+    return build(defaultStorageFactory);
+  },
+
   subscribeToEvent(
     context: BoundedContext,
     typeUrl: string,
@@ -642,6 +663,7 @@ export class BoundedContextBuilder {
       "BoundedContextBuilder instances are framework-owned.",
     );
     this.#specSnapshot = cloneSpecSnapshot(specSnapshot);
+    builderBuilds.set(this, (defaultStorageFactory) => this.#buildAsyncWith(defaultStorageFactory));
     Object.freeze(this);
   }
 
@@ -733,23 +755,35 @@ export class BoundedContextBuilder {
   /** Builds a bounded context that owns configured command and event buses. */
   build(): BoundedContext {
     rejectSyncEntityAssembly(this.#entityTypes);
-    return this.#buildWith([...this.#repositories]);
+    return this.#buildWith(
+      [...this.#repositories],
+      this.#storageFactory ?? new InMemoryStorageFactory(),
+    );
   }
 
   /** Builds a bounded context, loading generated metadata for entity classes added to the builder. */
   async buildAsync(): Promise<BoundedContext> {
+    return this.#buildAsyncWith();
+  }
+
+  async #buildAsyncWith(defaultStorageFactory?: StorageFactory): Promise<BoundedContext> {
     const repositories = [
       ...this.#repositories,
       ...(await this.#loadGeneratedRepositories([...this.#entityTypes])),
     ];
 
-    return this.#buildWith(repositories);
+    return this.#buildWith(
+      repositories,
+      this.#storageFactory ?? defaultStorageFactory ?? new InMemoryStorageFactory(),
+    );
   }
 
-  #buildWith(repositories: readonly RepositoryView[]): BoundedContext {
+  #buildWith(
+    repositories: readonly RepositoryView[],
+    storageFactory: StorageFactory,
+  ): BoundedContext {
     const registeredRepositories = [...repositories];
     preflightRepositories(registeredRepositories);
-    const storageFactory = this.#storageFactory ?? new InMemoryStorageFactory();
     const commandBus = new CommandBus([
       ...this.#commandDispatchers,
       ...repositoryCommandDispatchers(registeredRepositories),

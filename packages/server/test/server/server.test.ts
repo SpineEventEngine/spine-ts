@@ -1,8 +1,13 @@
 import * as http2 from "node:http2";
 
-import { create } from "@bufbuild/protobuf";
+import { create, type Message } from "@bufbuild/protobuf";
 import { CommandSchema } from "@spine-ts/proto";
-import { InMemoryStorageFactory } from "@spine-ts/storage";
+import {
+  InMemoryStorageFactory,
+  type RecordSpec,
+  type RecordStorage,
+  type StorageContext,
+} from "@spine-ts/storage";
 import type {
   PublishTransportHandler,
   PublishTransportOperation,
@@ -189,6 +194,61 @@ describe("Server", () => {
       state: "closed",
     });
     expect(() => context.stand().stateTypes()).toThrow("Stand is closed.");
+  });
+
+  it("builds added context builders with the server environment storage factory", async () => {
+    const storageFactory = new TrackingStorageFactory();
+    const server = await new Server({
+      contexts: [BoundedContext.singleTenant("Tasks")],
+      environment: ServerEnvironment.local({ storageFactory }),
+    }).start();
+
+    try {
+      expect(storageFactory.contextNames()).toContain("Tasks");
+    } finally {
+      await server.close();
+    }
+
+    expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
+  });
+
+  it("keeps explicit builder storage factories over the server environment default", async () => {
+    const environmentStorage = new TrackingStorageFactory();
+    const builderStorage = new TrackingStorageFactory();
+    const server = await Server.atPort(0, {
+      environment: ServerEnvironment.local({ storageFactory: environmentStorage }),
+    })
+      .add(BoundedContext.singleTenant("Tasks").withStorageFactory(builderStorage))
+      .start();
+
+    try {
+      expect(builderStorage.contextNames()).toContain("Tasks");
+      expect(environmentStorage.contextNames()).toEqual([]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("closes contexts built earlier in the same start attempt when a later builder fails", async () => {
+    const storageFactory = new TrackingStorageFactory();
+    const brokenBuilder = BoundedContext.singleTenant("Broken").addEventDispatcher({
+      messageSchemas() {
+        throw new Error("Cannot read event schemas.");
+      },
+      dispatch: () => undefined,
+    });
+
+    await expect(
+      Server.atPort(0, {
+        environment: ServerEnvironment.local({ storageFactory }),
+      })
+        .add(BoundedContext.singleTenant("Tasks"))
+        .add(brokenBuilder)
+        .start(),
+    ).rejects.toThrow("Cannot read event schemas.");
+
+    expect(storageFactory.contextNames()).toContain("Tasks");
+    expect(storageFactory.storages.every((storage) => !storage.isOpen())).toBe(true);
   });
 
   it("rejects production environments without required storage and transport", () => {
@@ -471,6 +531,26 @@ class CloseTrackingStorageFactory extends InMemoryStorageFactory {
   override close(): void {
     this.#closed.push("storage");
     super.close();
+  }
+}
+
+class TrackingStorageFactory extends InMemoryStorageFactory {
+  readonly contexts: StorageContext[] = [];
+  readonly storages: RecordStorage<unknown, Message>[] = [];
+
+  override createRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    this.contexts.push(context);
+    const storage = super.createRecordStorage(context, recordSpec);
+
+    this.storages.push(storage);
+    return storage;
+  }
+
+  contextNames(): readonly string[] {
+    return this.contexts.map((context) => context.name);
   }
 }
 

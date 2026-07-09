@@ -2,8 +2,13 @@ import * as http2 from "node:http2";
 import type { AddressInfo } from "node:net";
 
 import { connectNodeAdapter } from "@connectrpc/connect-node";
+import type { StorageFactory } from "@spine-ts/storage";
 
-import type { BoundedContext } from "../context/bounded-context.js";
+import {
+  BoundedContext,
+  BoundedContextBuilder,
+  boundedContextAccess,
+} from "../context/bounded-context.js";
 import { SpineServices, type SpineServicesOptions } from "../services/spine-services.js";
 import { collectCloseError, RetryableCloseGroup } from "./retryable-close.js";
 import { ServerEnvironment } from "./server-environment.js";
@@ -11,12 +16,13 @@ import { ServerEnvironment } from "./server-environment.js";
 const defaultHost = "127.0.0.1";
 const defaultPort = 0;
 const gracefulSessionDrainMs = 100;
+type ServerContext = BoundedContext | BoundedContextBuilder;
 
 /** Small JVM-familiar owner for real local Spine Connect/gRPC-compatible services. */
 export class Server {
   readonly #host: string;
   readonly #port: number;
-  readonly #contexts: BoundedContext[] = [];
+  readonly #contexts: ServerContext[] = [];
   readonly #resources: { close(): unknown }[] = [];
   readonly #services: Omit<SpineServicesOptions, "contexts">;
   readonly #environment: ServerEnvironment;
@@ -40,13 +46,13 @@ export class Server {
   }
 
   /**
-   * Add one built bounded context to expose through the Spine services.
+   * Add one bounded context or builder to expose through the Spine services.
    *
    * The server owns added contexts for this assembly. When the returned
    * {@link RunningServer} closes, it closes every added context after network
    * intake and active HTTP/2 sessions have stopped.
    */
-  add(context: BoundedContext): this {
+  add(context: ServerContext): this {
     this.#contexts.push(context);
     return this;
   }
@@ -59,14 +65,15 @@ export class Server {
 
   /** Start the HTTP/2 listener and return its running lifecycle handle. */
   async start(): Promise<RunningServer> {
+    const contexts = await buildContexts(this.#contexts, this.#environment.storageFactory);
     const services = new SpineServices({
-      contexts: this.#contexts,
+      contexts,
       ...this.#services,
     });
     const sessions = new Set<http2.ServerHttp2Session>();
     const httpServer = createHttpServer(services, sessions);
     const closeables = [
-      ...this.#contexts,
+      ...contexts,
       ...this.#resources,
       ...(this.#ownsEnvironment ? [this.#environment] : []),
     ];
@@ -94,8 +101,8 @@ export interface ServerOptions {
   readonly host?: string;
   /** Listener port. Defaults to `0`, asking the OS for a free port. */
   readonly port?: number;
-  /** Built bounded contexts owned by this server assembly. */
-  readonly contexts?: readonly BoundedContext[];
+  /** Built bounded contexts or builders owned by this server assembly. */
+  readonly contexts?: readonly ServerContext[];
   /** Service-level options for Command, Query, and Subscription routes. */
   readonly services?: Omit<SpineServicesOptions, "contexts">;
   /** Extra framework-owned closeables to close after network intake stops. */
@@ -176,6 +183,27 @@ interface RunningHttp2ServerOptions {
   readonly closeables: readonly unknown[];
   readonly host: string;
   readonly port: number;
+}
+
+async function buildContexts(
+  entries: readonly ServerContext[],
+  defaultStorageFactory: StorageFactory,
+): Promise<readonly BoundedContext[]> {
+  const contexts: BoundedContext[] = [];
+
+  try {
+    for (const entry of entries) {
+      contexts.push(
+        entry instanceof BoundedContext
+          ? entry
+          : await boundedContextAccess.build(entry, defaultStorageFactory),
+      );
+    }
+    return contexts;
+  } catch (error) {
+    await cleanupBuiltContexts(contexts, error);
+    throw error;
+  }
 }
 
 function createHttpServer(
@@ -261,6 +289,30 @@ async function cleanupFailedStart(
       "Server start failed while opening listener and cleanup also failed.",
     );
   }
+}
+
+async function cleanupBuiltContexts(
+  contexts: readonly BoundedContext[],
+  startError: unknown,
+): Promise<void> {
+  try {
+    await new RetryableCloseGroup(
+      contexts,
+      "Server start cleanup failed while closing owned contexts/resources.",
+    ).close();
+  } catch (error) {
+    throw new AggregateError(
+      [startError, ...toCleanupErrors(error)],
+      "Server start failed while building bounded contexts.",
+    );
+  }
+}
+
+function toCleanupErrors(error: unknown): readonly unknown[] {
+  if (error instanceof AggregateError) {
+    return error.errors;
+  }
+  return [error];
 }
 
 async function closeNetwork(

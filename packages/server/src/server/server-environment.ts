@@ -36,7 +36,7 @@ export interface ServerEnvironmentOwnershipOptions {
 
 /** Local/test environment options. Missing storage and transport use in-memory defaults. */
 export interface ServerEnvironmentLocalOptions extends ServerEnvironmentOwnershipOptions {
-  /** Storage facility selected for server assembly and later builder integration. */
+  /** Storage facility selected for server assembly, including server-added context builders. */
   readonly storageFactory?: StorageFactory;
   /** Local signal transport facility. */
   readonly transport?: SignalTransport;
@@ -48,7 +48,7 @@ export interface ServerEnvironmentLocalOptions extends ServerEnvironmentOwnershi
 
 /** Production environment options. Storage and transport are required. */
 export interface ServerEnvironmentProductionOptions extends ServerEnvironmentOwnershipOptions {
-  /** Durable storage facility selected for server assembly and later builder integration. */
+  /** Durable storage facility selected for server assembly, including server-added context builders. */
   readonly storageFactory: StorageFactory;
   /** Signal transport facility supplied by the deployment. */
   readonly transport: SignalTransport;
@@ -72,14 +72,13 @@ interface ServerEnvironmentConstructorOptions extends ServerEnvironmentOwnership
  * This is deliberately a small object, not a process-wide singleton. Local
  * environments use in-memory storage and same-process transport defaults.
  * Production environments require caller-supplied storage and transport before
- * a server is assembled. Built contexts keep the storage factory they were
- * built with until a later builder integration wires contexts from an
- * environment.
+ * a server is assembled. Server-added context builders use this environment's
+ * storage factory unless they selected one explicitly.
  */
 export class ServerEnvironment implements ServerEnvironmentCloseable {
   /** Environment deployment profile. */
   readonly mode: ServerEnvironmentMode;
-  /** Storage facility selected for server assembly and later builder integration. */
+  /** Storage facility selected for server assembly, including server-added context builders. */
   readonly storageFactory: StorageFactory;
   /** Transport facility selected for this environment. */
   readonly transport: SignalTransport;
