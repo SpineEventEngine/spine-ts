@@ -1,11 +1,15 @@
 # T-0017j: System Context And Tenant Index
 
-Status: in progress
+Status: complete and integrated to `main`
 Started: `2026-07-09`
+Completed: `2026-07-09`
 Branch: `task/T-0017j-system-context-tenant-index`
 Worktree:
 `.worktrees/T-0017j-system-context-tenant-index`
 Base commit: `11aef98`
+Implementation commit: `1d10036`
+Merge commit: `f5d782d`
+Post-merge verification commit: `5688bd9`
 
 ## Objective
 
