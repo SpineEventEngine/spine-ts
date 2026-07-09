@@ -20,7 +20,8 @@ authentication, tracing, health-check, process-supervision, or multi-host
 transport recipe. Remaining production gaps include durable production storage
 adapters, remote/multi-host transport adapters, broker or worker process
 supervision, deployment/authentication/tracing/health hardening, retained
-attempt/update replay policy, and broader production verification.
+attempt/update replay policy, semantic-tag consumption in runtime
+handler/routing registries, and broader production verification.
 
 ## Workspace
 

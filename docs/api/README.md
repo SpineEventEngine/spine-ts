@@ -395,7 +395,9 @@ Generated handler registries are the intended ordinary bridge from bare
 decorators to canonical metadata. Their logical contract is a versioned list of
 entity handler groups with entity type, state schema, handler kind, method name,
 first-parameter signal schema, explicit one- or two-argument arity, and emitted
-schemas inferred from explicit return types. Generated `@Assign` and
+schemas inferred from explicit return types. Build-time analysis derives and
+validates command/event roles from generated descriptors before writing those
+registry records. Generated `@Assign` and
 `@Command` producer records must declare at least one emitted schema; `@React`
 records may return generated event messages or explicit `void` with no emitted
 schemas. `@Subscribe` records return explicit `void` and declare no emitted
@@ -526,6 +528,9 @@ or end-user envelope APIs.
 It does not broaden end-user APIs into framework `Command`/`Event` envelopes,
 does not reintroduce `@Apply`, and does not expose manual transaction-control
 APIs.
+Semantic tags remain outside the runtime registration path in this slice:
+descriptor-derived metadata preserves them and transport topics can carry them,
+but handler/readiness/routing registries do not yet consume them.
 The public runtime closure smoke path composes these exports with
 `BoundedContext`, `Repository`, `HandlerMetadataRegistry`,
 `CommandRegistrationReadiness`, `EventRegistrationReadiness`, and

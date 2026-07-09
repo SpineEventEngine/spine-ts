@@ -22,8 +22,9 @@ values, and custom options. This boundary is intentionally contract-only:
   `TenantId`, `UserId`, `Version`, diagnostics, enrichment, Spine client query,
   subscription, and service contracts, and transitive time/net/UI support
   contracts are available without hand-written TypeScript shapes; and
-- buses, transport, entity runtime behavior, and runtime metadata generation
-  remain out of scope until later tasks.
+- buses, transport, and entity runtime behavior remain out of scope for this
+  package boundary. Runtime signal metadata now lives in the server/runtime
+  slice rather than the proto package.
 
 ## Core Metadata Registry
 
@@ -50,10 +51,10 @@ Descriptor-backed metadata currently includes:
 - first declared field, preserving descriptor declaration order; and
 - file option helpers for later validation/runtime tasks.
 
-Semantic tag lookup is available as an API shape, but no tags are registered in
-this slice. The current copied proto set defines the Spine `(is)` and
-`(every_is)` options but does not include registered message consumers that make
-tag extraction provable.
+Semantic tag lookup is available as an API shape, but this core registry still
+does not register tags. The current copied proto set defines the Spine `(is)`
+and `(every_is)` options; descriptor-derived entity metadata preserves them,
+while runtime handler/readiness/routing registries still do not consume them.
 
 ## Core Validation Facade
 
@@ -142,7 +143,7 @@ Current server metadata is pure and deterministic:
   projections and process managers, `(set_once) = true` fields are surfaced for
   every entity kind, and
 - semantic tags from message `(is)` and file `(every_is)` options are
-  preserved in deterministic sorted order.
+  preserved in deterministic sorted order for later runtime consumers.
 
 The entity extractor throws typed `DescriptorMetadataError` failures for non-entity
 schemas, unknown entity kinds, repeated/map column declarations, empty semantic
