@@ -83,14 +83,19 @@ event redispatch failures are observable through the copy-safe
 `storedEventDispatchFailures()` diagnostic snapshot on the owning
 `BoundedContext`. Generated entity-class assembly creates default repositories
 through `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This
-slice does not invoke query handlers, manage inboxes/delivery, run durable
-Delivery catch-up, create system contexts, write tenant indexes, expose a broad
-server lifecycle, or integrate transports. Process-manager repositories with
-authentic generated metadata do execute through the local command/event buses:
-default command routing reads the first command field, process-manager event
-routing reads the first event message field, state is loaded/created and stored
-through `Stand`, and returned domain commands/events are wrapped only after the
-current transaction and state write succeed.
+slice does not invoke query handlers, run durable Delivery catch-up, create
+system contexts, write tenant indexes, expose a broad server lifecycle, or
+integrate transports. The only supported durable inbox handoff is framework-owned
+process-manager command replay: the current local runtime writes the inbox row,
+drains the local shard immediately, requires tenant-safe replay in multitenant
+contexts, and resolves only after that received row is marked delivered.
+Broader inbox lifecycle management, schedulers, retries, and transport topology
+remain deferred. Process-manager repositories with authentic generated metadata
+do execute through the local command/event buses: default command routing reads
+the first command field, process-manager event routing reads the first event
+message field, state is loaded/created and stored through `Stand`, and returned
+domain commands/events are wrapped only after the current transaction and state
+write succeed.
 `BoundedContext.catchUpReadSide(options?)` is the current framework-owned
 read-side catch-up boundary. It clears registered projection rows through
 `Stand.clear()`, reads only already-stored events, and replays each event only
@@ -157,7 +162,10 @@ transaction, pack and store returned domain events, persist the latest managed
 state through `AggregateStorage`, and then queue already-stored events for
 event-bus delivery without appending them again. Process-manager repositories
 also participate in those adapters: command assignees are invoked from the
-command bus, event reactors and event-commanding handlers are invoked from the
+command bus through a durable process-manager inbox handoff. The current local
+runtime drains that inbox immediately, requires tenant-safe replay in
+multitenant contexts, and resolves only after the received inbox row is marked
+delivered. Event reactors and event-commanding handlers are invoked from the
 event bus, state is stored in tenant-scoped `Stand` records with numeric
 versions, returned commands are wrapped and posted after state storage, and
 returned event messages are wrapped with process-manager-emitted event schemas

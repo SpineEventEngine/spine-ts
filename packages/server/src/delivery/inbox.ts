@@ -46,6 +46,11 @@ export class Inbox {
     return this.storage.read(shard, options);
   }
 
+  /** Read one exact durable inbox message by ID. */
+  readMessage(id: InboxMessageId): Promise<InboxMessage | undefined> {
+    return this.storage.readMessage(id);
+  }
+
   /**
    * Mark one exact pending inbox message delivered.
    *

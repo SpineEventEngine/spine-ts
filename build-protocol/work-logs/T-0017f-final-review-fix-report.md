@@ -51,7 +51,7 @@ Worktree:
 - Sandbox
   `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/context/bounded-context.test.ts packages/server/test/repository/repository-routing.test.ts packages/server/test/services/spine-services.test.ts`
   failed on listener restrictions with `listen EPERM: operation not permitted
-  127.0.0.1`.
+127.0.0.1`.
 - Escalated rerun of that same 3-suite Vitest command passed with 3 test files
   and 228 tests.
 - `pnpm --config.verify-deps-before-run=false docs:check` passed with the

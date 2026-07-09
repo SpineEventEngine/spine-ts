@@ -1,5 +1,12 @@
 import { clone, create } from "@bufbuild/protobuf";
-import { deriveTypeUrl, packAny, unpackAny, type MessageSchema } from "@spine-ts/core";
+import {
+  ValidationException,
+  checkValid,
+  deriveTypeUrl,
+  packAny,
+  unpackAny,
+  type MessageSchema,
+} from "@spine-ts/core";
 import {
   ActorContextSchema,
   type ActorContext,
@@ -20,8 +27,12 @@ import {
 } from "@spine-ts/proto";
 import type { StorageContext, StorageFactory } from "@spine-ts/storage";
 
+import { CommandValidationError } from "../bus/command-errors.js";
 import type { CommandDispatcher } from "../bus/command-dispatcher.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
+import { Delivery } from "../delivery/delivery.js";
+import type { InboxMessage, InboxMessageInput } from "../delivery/inbox.js";
+import { ShardIndex } from "../delivery/shard-index.js";
 import {
   Aggregate,
   type Entity,
@@ -341,6 +352,11 @@ export class Repository<
       createRepositorySnapshot(this.#entityType, this.#entityFamily, this.#metadata),
     );
     repositoryDispatchers.set(this, createRepositoryDispatchers(this, this.#routing));
+    const pmInboxTarget = createInboxTarget(this, this.#routing);
+
+    if (pmInboxTarget !== undefined) {
+      repositoryPmInboxTargets.set(this, pmInboxTarget);
+    }
   }
 
   /** Entity constructor owned by this repository identity. */
@@ -421,8 +437,27 @@ export interface RepositoryEventRoute<Id = unknown> {
 
 const repositorySnapshots = new WeakMap<RepositoryView, RepositoryIdentitySnapshot>();
 const repositoryDispatchers = new WeakMap<RepositoryView, RepositoryDispatchers>();
+const repositoryPmInboxTargets = new WeakMap<RepositoryView, ProcessManagerInboxTarget>();
 const repositoryRuntimes = new WeakMap<RepositoryView, RepositoryRuntime>();
 Object.freeze(Repository);
+
+/** @internal Narrow framework-only replay target for process-manager command inbox handoff. */
+export interface ProcessManagerInboxTarget {
+  /** Target process-manager state type URL routed by this replay target. */
+  readonly targetTypeUrl: string;
+  /** Replays one durable inbox command under the active delivery tenant. */
+  replay(message: InboxMessage, deliveryTenantId?: string): Promise<void>;
+}
+
+/** @internal Context-owned process-manager command inbox handoff capability. */
+export interface ProcessManagerInbox {
+  /** Writes a durable inbox row and waits for that exact row to be delivered locally. */
+  receive(
+    delivery: Delivery,
+    input: Omit<InboxMessageInput, "whenReceived" | "version">,
+    deliveryTenantId?: string,
+  ): Promise<InboxMessage>;
+}
 
 /** @internal Framework-only repository authority contract. */
 export interface RepositoryAccess {
@@ -430,6 +465,7 @@ export interface RepositoryAccess {
   snapshot(repository: RepositoryView): RepositoryIdentitySnapshot;
   commandDispatcher(repository: RepositoryView): CommandDispatcher | undefined;
   eventDispatcher(repository: RepositoryView): EventDispatcher | undefined;
+  processManagerInboxTarget(repository: RepositoryView): ProcessManagerInboxTarget | undefined;
   bindRuntime(repository: RepositoryView, runtime: RepositoryRuntime): void;
   clearRuntime(repository: RepositoryView): void;
 }
@@ -456,6 +492,10 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
 
   eventDispatcher(repository: RepositoryView): EventDispatcher | undefined {
     return repositoryDispatchers.get(repository)?.event;
+  },
+
+  processManagerInboxTarget(repository: RepositoryView): ProcessManagerInboxTarget | undefined {
+    return repositoryPmInboxTargets.get(repository);
   },
 
   bindRuntime(repository: RepositoryView, runtime: RepositoryRuntime): void {
@@ -491,6 +531,7 @@ interface RepositoryRuntime {
   readonly context: StorageContext;
   readonly storageFactory: StorageFactory;
   readonly stand: Stand;
+  readonly processManagerInbox: ProcessManagerInbox;
   readonly dispatchStored: (event: Event) => Promise<void>;
   readonly dispatchStoredFollowUp: (event: Event) => Promise<void>;
   readonly postEventFollowUp: (event: Event) => Promise<void>;
@@ -530,6 +571,23 @@ function createRepositoryDispatchers(
             dispatch: (event: Event): Promise<void> =>
               dispatchRepositoryEvent(repository, routing, event),
           }),
+  });
+}
+
+function createInboxTarget(
+  repository: RepositoryView & {
+    routeCommand(command: Command): RepositoryCommandRoute;
+  },
+  routing: RepositoryRouting,
+): ProcessManagerInboxTarget | undefined {
+  if (repository.entityFamily !== "process-manager" || routing.commandSchemas.length === 0) {
+    return undefined;
+  }
+
+  return Object.freeze({
+    targetTypeUrl: deriveTypeUrl(repository.stateSchema),
+    replay: (message: InboxMessage, deliveryTenantId?: string): Promise<void> =>
+      replayProcessManagerCommand(repository, routing, message, deliveryTenantId),
   });
 }
 
@@ -590,11 +648,71 @@ async function dispatchRepositoryCommand(
   }
 
   if (repository.entityFamily === "process-manager") {
-    await new ProcessManagerCommandExecution(repository, routing, runtime, command).run();
+    await handoffProcessManagerCommand(repository, runtime, command);
     return;
   }
 
   void repository.routeCommand(command);
+}
+
+const inboxDedupMs = 30_000;
+
+async function handoffProcessManagerCommand(
+  repository: RepositoryView & {
+    routeCommand(command: Command): RepositoryCommandRoute;
+  },
+  runtime: RepositoryRuntime,
+  command: Command,
+): Promise<void> {
+  const route = repository.routeCommand(command);
+  const commandId = requireCommandId(command);
+  const whenReceived = new Date();
+  const keepUntil = new Date(whenReceived.getTime() + inboxDedupMs);
+  const deliveryTenantId = requireProcessManagerTenant(runtime.context, command);
+  const delivery = new Delivery({
+    context: processManagerDeliveryContext(runtime.context, deliveryTenantId),
+    storageFactory: runtime.storageFactory,
+  });
+
+  await runtime.processManagerInbox.receive(
+    delivery,
+    {
+      inboxId: {
+        targetId: inboxTargetId(route.entityId),
+        targetTypeUrl: deriveTypeUrl(repository.stateSchema),
+      },
+      signalId: commandId.uuid,
+      signal: packAny(CommandSchema, command),
+      label: "HANDLE_COMMAND",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+      keepUntil,
+    },
+    deliveryTenantId,
+  );
+}
+
+async function replayProcessManagerCommand(
+  repository: RepositoryView & {
+    routeCommand(command: Command): RepositoryCommandRoute;
+  },
+  routing: RepositoryRouting,
+  message: InboxMessage,
+  deliveryTenantId?: string,
+): Promise<void> {
+  const runtime = repositoryRuntimes.get(repository);
+
+  if (runtime === undefined) {
+    throw new Error("Process-manager inbox replay requires a bound repository runtime.");
+  }
+
+  const command = readInboxCommand(message);
+
+  validateReplayTenant(runtime.context, deliveryTenantId, command);
+  validateReplayedCommandPayload(routing, command);
+  validateReplayTarget(repository, message, command);
+
+  await new ProcessManagerCommandExecution(repository, routing, runtime, command).run();
 }
 
 interface LoadedAggregate {
@@ -1979,6 +2097,141 @@ function producerIdFor(entityId: unknown): ReturnType<typeof PrimitiveIds.pack> 
   const aggregateId = PrimitiveIds.read(entityId);
 
   return aggregateId === undefined ? undefined : PrimitiveIds.pack(aggregateId);
+}
+
+function inboxTargetId(entityId: unknown): string {
+  const primitive = PrimitiveIds.readFinite(entityId) ?? MessageIds.readValue(entityId);
+
+  if (primitive === undefined) {
+    throw new Error("Repository process-manager inbox handoff requires a readable target ID.");
+  }
+
+  return String(primitive);
+}
+
+function processManagerDeliveryContext(
+  context: StorageContext,
+  tenantId: string | undefined,
+): StorageContext {
+  if (!context.multitenant) {
+    return context;
+  }
+
+  const tid = tenantId;
+  if (tid === undefined) {
+    throw new Error(
+      `Multitenant process-manager inbox handoff for "${context.name}" requires tenantId.`,
+    );
+  }
+
+  return Object.freeze({
+    name: context.name,
+    multitenant: true,
+    tenantId: tid,
+  });
+}
+
+function requireProcessManagerTenant(
+  context: StorageContext,
+  command: Command,
+): string | undefined {
+  if (!context.multitenant) {
+    return undefined;
+  }
+
+  const tenantId = readCommandTenant(command);
+
+  if (tenantId === undefined || tenantId.trim() === "") {
+    throw new Error(
+      `Multitenant process-manager inbox handoff for "${context.name}" requires tenantId.`,
+    );
+  }
+
+  return tenantId;
+}
+
+function readInboxCommand(message: InboxMessage): Command {
+  if (message.label !== "HANDLE_COMMAND") {
+    throw new Error(`Process-manager inbox replay does not handle "${message.label}" messages.`);
+  }
+
+  const command =
+    message.signal === undefined ? undefined : unpackAny(message.signal, CommandSchema);
+
+  if (command === undefined) {
+    throw CommandValidationError.invalidPayload();
+  }
+
+  return command;
+}
+
+function validateReplayedCommandPayload(routing: RepositoryRouting, command: Command): void {
+  const commandMessage = requireSignalMessage(command.message, "command");
+  const commandSchema = schemaForTypeUrl(routing.commandSchemas, commandMessage.typeUrl, "command");
+  const payload = unpackAny(commandMessage, commandSchema);
+
+  if (payload === undefined) {
+    throw CommandValidationError.invalidPayload();
+  }
+
+  try {
+    checkValid(commandSchema, payload);
+  } catch (error) {
+    if (error instanceof ValidationException) {
+      throw new CommandValidationError(error.asMessage());
+    }
+    throw error;
+  }
+}
+
+function validateReplayTenant(
+  context: StorageContext,
+  deliveryTenantId: string | undefined,
+  command: Command,
+): void {
+  if (!context.multitenant) {
+    return;
+  }
+
+  if (deliveryTenantId === undefined || deliveryTenantId.trim() === "") {
+    throw new Error(
+      `Multitenant process-manager inbox replay for "${context.name}" requires tenantId.`,
+    );
+  }
+
+  const envelopeTenantId = readCommandTenant(command);
+
+  if (envelopeTenantId === undefined || envelopeTenantId.trim() === "") {
+    throw new Error("Process-manager inbox replay requires stored command tenant metadata.");
+  }
+  if (envelopeTenantId !== deliveryTenantId) {
+    throw new Error("Process-manager inbox replay stored command tenant does not match.");
+  }
+}
+
+function validateReplayTarget(
+  repository: RepositoryView & {
+    routeCommand(command: Command): RepositoryCommandRoute;
+  },
+  message: InboxMessage,
+  command: Command,
+): void {
+  const expectedTargetTypeUrl = deriveTypeUrl(repository.stateSchema);
+
+  if (message.inboxId.targetTypeUrl !== expectedTargetTypeUrl) {
+    throw new Error(
+      "Process-manager inbox replay stored target type does not match the routed repository.",
+    );
+  }
+
+  const route = repository.routeCommand(command);
+  const expectedTargetId = inboxTargetId(route.entityId);
+
+  if (message.inboxId.targetId !== expectedTargetId) {
+    throw new Error(
+      "Process-manager inbox replay stored target ID does not match the routed command.",
+    );
+  }
 }
 
 function storageContextForCommand(context: StorageContext, command: Command): StorageContext {
