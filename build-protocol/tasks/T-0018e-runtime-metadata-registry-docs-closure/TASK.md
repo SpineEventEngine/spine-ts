@@ -5,7 +5,7 @@ Started: `2026-07-09`
 Branch: `task/T-0018e-runtime-metadata-registry-docs-closure`
 Worktree:
 `.worktrees/T-0018e-runtime-metadata-registry-docs-closure`
-Base commit: pending
+Base commit: `ae4a097`
 
 ## Objective
 
