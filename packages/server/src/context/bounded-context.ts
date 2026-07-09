@@ -223,6 +223,7 @@ const eventSubscribers = new WeakMap<
   BoundedContext,
   (typeUrl: string, subscriber: EventSubscriber) => EventSubscription
 >();
+const contextStorageFactories = new WeakMap<BoundedContext, StorageFactory>();
 
 interface BoundedContextAccess {
   subscribeToEvent(
@@ -230,6 +231,7 @@ interface BoundedContextAccess {
     typeUrl: string,
     subscriber: EventSubscriber,
   ): EventSubscription;
+  storageFactory(context: BoundedContext): StorageFactory;
 }
 let constructBoundedContext:
   | ((
@@ -313,6 +315,7 @@ export class BoundedContext {
     eventSubscribers.set(this, (typeUrl, subscriber) =>
       eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
     );
+    contextStorageFactories.set(this, storageFactory);
     this.#registerRepositories(repositories);
     Object.freeze(this);
   }
@@ -562,6 +565,16 @@ export const boundedContextAccess: BoundedContextAccess = Object.freeze({
     }
 
     return subscribe(typeUrl, subscriber);
+  },
+
+  storageFactory(context: BoundedContext): StorageFactory {
+    const storageFactory = contextStorageFactories.get(context);
+
+    if (storageFactory === undefined) {
+      throw new TypeError("Storage access requires a built BoundedContext instance.");
+    }
+
+    return storageFactory;
   },
 });
 

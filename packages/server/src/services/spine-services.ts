@@ -70,9 +70,12 @@ import {
 } from "@spine-ts/proto/generated/spine/core/response_pb.js";
 import {
   RecordMask,
+  type RecordStorage,
   type RecordFilter,
   type RecordOrder,
   type RecordQuery,
+  type StorageContext,
+  type StorageFactory,
 } from "@spine-ts/storage";
 
 import { boundedContextAccess, type BoundedContext } from "../context/bounded-context.js";
@@ -81,6 +84,10 @@ import type { EntityFamily } from "../entity/entity.js";
 import { TransitionValidationError } from "../repository/command-errors.js";
 import type { StandReadResult, StandUpdate } from "../stand/stand.js";
 import { CommandRefusalError } from "./command-errors.js";
+import {
+  DurableSubscriptionRecords,
+  durableSubscriptionRecordSpec,
+} from "./subscription-records.js";
 
 /**
  * Small route registrar for the first public Spine gRPC service slice.
@@ -115,6 +122,7 @@ export class SpineServices {
   readonly #stateRoutes = new Map<string, StateRoute>();
   readonly #eventRoutes = new Map<string, EventRoute>();
   readonly #subscriptions = new Map<string, SubscriptionRecord>();
+  readonly #subscriptionStores: readonly SubscriptionStore[];
   readonly #inactiveTtlMs: number;
   readonly #queueLimit: number;
 
@@ -151,6 +159,13 @@ export class SpineServices {
         }
       }
     }
+    this.#subscriptionStores = Object.freeze(
+      uniqueContexts(this.#contexts).flatMap((context) => {
+        const store = subscriptionStore(context);
+
+        return store === undefined ? [] : [store];
+      }),
+    );
   }
 
   /** Register CommandService, QueryService, and SubscriptionService routes. */
@@ -264,7 +279,7 @@ export class SpineServices {
     });
   }
 
-  #subscribe(topic: Topic): Subscription {
+  #subscribe(topic: Topic): Subscription | Promise<Subscription> {
     const route = this.#subscriptionRoute(topic);
     validateTopic(topic);
     const shape = createSubscriptionShape(topic, route);
@@ -285,35 +300,38 @@ export class SpineServices {
       throw new ConnectError("Subscription ID is required.", Code.InvalidArgument);
     }
 
-    this.#storeInactiveSubscription(id, subscription, shape, tenantId);
+    const record = createSubscriptionRecord({
+      id,
+      subscription,
+      shape,
+      tenantId,
+      expiresAtMs: Date.now() + this.#inactiveTtlMs,
+      queueLimit: this.#queueLimit,
+    });
+    return this.#persistSubscription(record).then(() => {
+      this.#rememberSubscription(record);
 
-    return clone(SubscriptionSchema, subscription);
+      return clone(SubscriptionSchema, subscription);
+    });
   }
 
-  #storeInactiveSubscription(
-    id: string,
-    subscription: Subscription,
-    shape: SubscriptionShape,
-    tenantId: string | undefined,
-  ): void {
-    const record: SubscriptionRecord = {
-      id,
-      subscription: clone(SubscriptionSchema, subscription),
-      tenantId,
-      delivery: new SubscriptionDelivery(this.#queueLimit),
-      inactiveTimer: undefined,
-      ...shape,
-    };
-    record.inactiveTimer = setTimeout(() => {
-      this.#removeSubscription(id);
-    }, this.#inactiveTtlMs);
+  #rememberSubscription(record: SubscriptionRecord): void {
+    record.inactiveTimer = setTimeout(
+      () => {
+        void this.#removeSubscription(record.id).catch(() => undefined);
+      },
+      Math.max(1, record.expiresAtMs - Date.now()),
+    );
     record.inactiveTimer.unref();
-    this.#subscriptions.set(id, record);
+    this.#subscriptions.set(record.id, record);
   }
 
   async *#activate(subscription: Subscription): AsyncIterable<SubscriptionUpdate> {
     const id = subscription.id?.value;
-    const record = id === undefined ? undefined : this.#subscriptions.get(id);
+    const record =
+      id === undefined
+        ? undefined
+        : (this.#subscriptions.get(id) ?? (await this.#recoverSubscription(id)));
 
     if (id === undefined || record === undefined) {
       return;
@@ -323,10 +341,15 @@ export class SpineServices {
       return;
     }
 
+    if (!record.durableConsumed && !(await this.#consumeDurableSubscription(record))) {
+      await this.#removeSubscription(id);
+      return;
+    }
+
     try {
       this.#activateRecord(record);
     } catch (error) {
-      this.#removeSubscription(id);
+      await this.#removeSubscription(id);
       throw error;
     }
 
@@ -339,18 +362,18 @@ export class SpineServices {
         yield update;
       }
     } finally {
-      this.#removeSubscription(id);
+      await this.#removeSubscription(id);
     }
   }
 
-  #cancel(subscription: Subscription): Response {
+  #cancel(subscription: Subscription): Response | Promise<Response> {
     const id = subscription.id?.value;
 
-    if (id !== undefined) {
-      this.#removeSubscription(id);
+    if (id === undefined) {
+      return okResponse();
     }
 
-    return okResponse();
+    return this.#removeSubscription(id).then(() => okResponse());
   }
 
   #subscriptionRoute(topic: Topic): SubscriptionRoute {
@@ -380,7 +403,7 @@ export class SpineServices {
             }
             record.delivery.push(createEventUpdate(record, event));
             if (record.delivery.closed) {
-              this.#removeSubscription(record.id);
+              void this.#removeSubscription(record.id).catch(() => undefined);
             }
           },
         },
@@ -398,7 +421,7 @@ export class SpineServices {
           stateRecord.delivery.push(subscriptionUpdate);
         }
         if (stateRecord.delivery.closed) {
-          this.#removeSubscription(stateRecord.id);
+          void this.#removeSubscription(stateRecord.id).catch(() => undefined);
         }
       },
       tenantOptions(stateRecord.tenantId),
@@ -406,7 +429,7 @@ export class SpineServices {
     stateRecord.delivery.attach(standSubscription);
   }
 
-  #removeSubscription(id: string): void {
+  async #removeSubscription(id: string): Promise<void> {
     const record = this.#subscriptions.get(id);
 
     if (record !== undefined) {
@@ -414,6 +437,162 @@ export class SpineServices {
       record.delivery.close();
       this.#subscriptions.delete(id);
     }
+    await this.#deleteDurableSubscription(id, record?.route.context);
+  }
+
+  async #persistSubscription(record: SubscriptionRecord): Promise<void> {
+    const storage = this.#subscriptionStorage(record.route.context);
+    if (storage === undefined) {
+      return;
+    }
+
+    try {
+      await storage.write(
+        DurableSubscriptionRecords.write({
+          id: record.id,
+          kind: record.kind,
+          targetType: record.route.typeUrl,
+          ...(record.tenantId === undefined ? {} : { tenantId: record.tenantId }),
+          subscription: record.subscription,
+          expiresAtMs: record.expiresAtMs,
+        }),
+      );
+    } finally {
+      storage.close();
+    }
+  }
+
+  async #recoverSubscription(id: string): Promise<SubscriptionRecord | undefined> {
+    for (const store of this.#subscriptionStores) {
+      const storage = createSubscriptionStorage(store);
+
+      try {
+        const durable = await storage.read(id);
+        if (durable === undefined) {
+          continue;
+        }
+
+        const record = this.#restoreSubscription(durable, id);
+        if (record === undefined) {
+          await storage.delete(id);
+          return undefined;
+        }
+
+        if (!(await storage.compareAndSet(id, durable, undefined))) {
+          continue;
+        }
+
+        record.durableConsumed = true;
+        this.#rememberSubscription(record);
+        return record;
+      } finally {
+        storage.close();
+      }
+    }
+
+    return undefined;
+  }
+
+  #restoreSubscription(durable: Any, id: string): SubscriptionRecord | undefined {
+    try {
+      const stored = DurableSubscriptionRecords.read(durable, id);
+
+      if (stored.expiresAtMs <= Date.now()) {
+        return undefined;
+      }
+
+      const route =
+        stored.kind === "event"
+          ? this.#eventRoutes.get(stored.targetType)
+          : this.#stateRoutes.get(stored.targetType);
+      const topic = stored.subscription.topic;
+      const target = topic?.target;
+
+      if (
+        route === undefined ||
+        topic === undefined ||
+        target?.type !== stored.targetType ||
+        topicTenant(topic) !== stored.tenantId
+      ) {
+        return undefined;
+      }
+
+      const tenantError = tenantMismatch(
+        route.context.isMultitenant,
+        stored.tenantId,
+        "subscription",
+      );
+      if (tenantError !== undefined) {
+        return undefined;
+      }
+
+      return createSubscriptionRecord({
+        id: stored.id,
+        subscription: stored.subscription,
+        shape: createSubscriptionShape(topic, route),
+        tenantId: stored.tenantId,
+        expiresAtMs: stored.expiresAtMs,
+        queueLimit: this.#queueLimit,
+      });
+    } catch {
+      return undefined;
+    }
+  }
+
+  async #deleteDurableSubscription(id: string, context?: BoundedContext): Promise<void> {
+    const stores =
+      context === undefined
+        ? this.#subscriptionStores
+        : this.#subscriptionStores.filter((store) => store.context === context);
+
+    await Promise.all(
+      stores.map(async (store) => {
+        const storage = createSubscriptionStorage(store);
+
+        try {
+          await storage.delete(id);
+        } finally {
+          storage.close();
+        }
+      }),
+    );
+  }
+
+  async #consumeDurableSubscription(record: SubscriptionRecord): Promise<boolean> {
+    const storage = this.#subscriptionStorage(record.route.context);
+    if (storage === undefined) {
+      record.durableConsumed = true;
+      return true;
+    }
+
+    try {
+      const durable = await storage.read(record.id);
+      if (durable === undefined) {
+        return false;
+      }
+
+      const stored = this.#restoreSubscription(durable, record.id);
+      if (stored === undefined) {
+        await storage.delete(record.id);
+        return false;
+      }
+
+      const consumed = await storage.compareAndSet(record.id, durable, undefined);
+      record.durableConsumed = consumed;
+      return consumed;
+    } finally {
+      storage.close();
+    }
+  }
+
+  #subscriptionStorage(context: BoundedContext): RecordStorage<string, Any> | undefined {
+    const store = this.#subscriptionStores.find((candidate) => candidate.context === context);
+
+    if (store === undefined) {
+      return undefined;
+    }
+
+    return createSubscriptionStorage(store);
   }
 }
 
@@ -462,7 +641,9 @@ interface SubscriptionRecordBase {
   readonly id: string;
   readonly subscription: Subscription;
   readonly tenantId: string | undefined;
+  readonly expiresAtMs: number;
   readonly delivery: SubscriptionDelivery;
+  durableConsumed: boolean;
   inactiveTimer: ReturnType<typeof setTimeout> | undefined;
 }
 
@@ -570,6 +751,12 @@ class SubscriptionDelivery {
 interface SubscriptionAttachment {
   readonly closed: boolean;
   unsubscribe(): void;
+}
+
+interface SubscriptionStore {
+  readonly context: BoundedContext;
+  readonly storageContext: StorageContext;
+  readonly storageFactory: StorageFactory;
 }
 
 function okStatus(): Status {
@@ -877,6 +1064,56 @@ function clearInactiveTimer(record: SubscriptionRecord): void {
     clearTimeout(record.inactiveTimer);
     record.inactiveTimer = undefined;
   }
+}
+
+function createSubscriptionRecord(input: {
+  readonly id: string;
+  readonly subscription: Subscription;
+  readonly shape: SubscriptionShape;
+  readonly tenantId: string | undefined;
+  readonly expiresAtMs: number;
+  readonly queueLimit: number;
+}): SubscriptionRecord {
+  return {
+    id: input.id,
+    subscription: clone(SubscriptionSchema, input.subscription),
+    tenantId: input.tenantId,
+    expiresAtMs: input.expiresAtMs,
+    delivery: new SubscriptionDelivery(input.queueLimit),
+    durableConsumed: false,
+    inactiveTimer: undefined,
+    ...input.shape,
+  };
+}
+
+function uniqueContexts(contexts: readonly BoundedContext[]): readonly BoundedContext[] {
+  return [...new Set(contexts)];
+}
+
+function subscriptionStorageContext(context: BoundedContext): StorageContext {
+  return Object.freeze({
+    name: `${context.snapshot.name.value}:subscriptions`,
+    multitenant: false,
+  });
+}
+
+function subscriptionStore(context: BoundedContext): SubscriptionStore | undefined {
+  try {
+    return Object.freeze({
+      context,
+      storageContext: subscriptionStorageContext(context),
+      storageFactory: boundedContextAccess.storageFactory(context),
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+function createSubscriptionStorage(store: SubscriptionStore): RecordStorage<string, Any> {
+  return store.storageFactory.createRecordStorage(
+    store.storageContext,
+    durableSubscriptionRecordSpec,
+  );
 }
 
 function validateTopic(topic: Topic): void {

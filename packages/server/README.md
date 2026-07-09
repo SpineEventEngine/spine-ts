@@ -67,7 +67,9 @@ Current slice exposes:
   Connect/Node route registration of Spine JVM `CommandService`,
   `QueryService`, and `SubscriptionService` contracts over built bounded
   contexts, including ID-filter reads for registered state routes and
-  projection-state `Target.include_all` query reads;
+  projection-state `Target.include_all` query reads. Inactive service
+  subscription records are durable through the owning context storage factory,
+  while active streams and queued updates remain process-local;
   and
 - `Server`, `ServerOptions`, and `RunningServer` for a small framework-owned
   HTTP/2 listener lifecycle over `SpineServices`. The default host is
@@ -664,11 +666,14 @@ known event targets exposed by built-context event dispatchers. Unknown or
 private targets, invalid criteria, unsupported comparison operators, event
 filters, event field masks, and unknown subscription field paths are rejected
 with `INVALID_ARGUMENT` before creating a subscription or attaching delivery.
-Accepted subscriptions are inactive, opaque, process-local records owned by the
-current `SpineServices` instance; updates recorded before `Activate` are not
-replayed. `Activate` attaches state subscriptions to the context `Stand` and
-event subscriptions to a framework-internal `EventBus` listener by subscription
-ID. State `Target.include_all = true` delivers every activated update.
+Accepted subscriptions are inactive, opaque records stored through the owning
+bounded context storage factory; a new `SpineServices` instance over the same
+storage factory can recover and activate a previously returned ID. Activation
+consumes the durable row before live attachment, so durable storage contains
+inactive records only. Updates recorded before `Activate` are not replayed.
+`Activate` attaches state subscriptions to the context `Stand` and event
+subscriptions to a framework-internal `EventBus` listener by subscription ID. State
+`Target.include_all = true` delivers every activated update.
 State `Target.filters` supports an optional ID filter plus
 `ALL`/`EITHER` composite `EQUAL` field filters over generated entity state
 fields, including nested message fields. Missing ID filters match all IDs. For
@@ -682,19 +687,21 @@ event message type URLs. Application handlers continue to receive generated
 domain event messages through handler dispatch; framework `Event` envelopes are
 service/runtime data. Single-tenant subscriptions reject tenant options;
 multitenant subscriptions require `tenantId`; state and event delivery are scoped to that
-tenant slice. Missing or unknown
-activation IDs complete without updates, and duplicate activation for an
-already-active ID completes without updates while leaving the active stream
-attached. `Cancel` returns OK for unknown, missing, canceled, or
-already-cleaned IDs. Cleanup is idempotent when a client cancels, an activation
-iterator closes, an inactive record expires, or the active queue limit is
-exceeded. The inactive TTL defaults to 30 seconds and the active queue limit
-defaults to 100 queued updates. Service subscriptions, direct Stand
-subscriptions, Stand version metadata, and the in-memory storage adapter are
-process-local development/test state, not durable delivery or catch-up storage.
-Cross-context fallback, client query DSLs, comparison subscription operators,
-durable event subscription recovery, and durable cross-process
-Delivery/subscription recovery catch-up remain outside this slice.
+tenant slice. Missing, unknown, canceled, or expired activation IDs complete
+without updates, and duplicate activation for an already-active ID completes
+without updates while leaving the active stream attached. `Cancel` returns OK
+for unknown, missing, canceled, or already-cleaned IDs and removes matching
+durable inactive records. Cleanup is idempotent when a client cancels, an
+activation iterator closes, an inactive record expires, or the active queue
+limit is exceeded. Malformed and inconsistent durable rows are deleted instead
+of failing repeatedly. The inactive TTL defaults to 30 seconds and the active
+queue limit defaults to 100 queued updates. Active service streams, queued updates,
+direct Stand subscriptions, Stand version metadata, and the in-memory storage
+adapter's backing data remain process-local development/test state, not durable
+delivery or catch-up storage. Cross-context fallback, client query DSLs,
+comparison subscription operators, retained update replay, active-stream
+persistence, and durable cross-process Delivery/subscription recovery catch-up
+remain outside this slice.
 
 ## Local Server Lifecycle
 

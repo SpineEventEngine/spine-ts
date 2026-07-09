@@ -34,8 +34,10 @@ The same package now also exposes a small executable `CommandBus` and
 `EventStore` before event fan-out. `SpineServices` registers generated Spine
 service descriptors with Connect/Node so callers can host `CommandService.Post`,
 `QueryService.Read`, and `SubscriptionService.Subscribe/Activate/Cancel` over a
-real gRPC-compatible runtime. `Server` is the small framework-owned local
-HTTP/2 lifecycle API around those services.
+real gRPC-compatible runtime, including durable recovery of inactive service
+subscription records when a later adapter reuses the same storage factory.
+`Server` is the small framework-owned local HTTP/2 lifecycle API around those
+services.
 `@spine-ts/storage` exposes asynchronous record-oriented storage contracts and a
 deterministic in-memory adapter for tests/development. Built bounded contexts
 can now execute aggregate command assignees that update state in
@@ -648,21 +650,29 @@ runtime slice and stream wire-level `event_updates` containing cloned framework
 still receive generated domain event messages; framework envelopes stay inside
 service/runtime data. Single-tenant subscriptions reject tenant options;
 multitenant subscriptions require `tenantId`; state and event delivery are
-scoped to that tenant slice. Subscription IDs are opaque and process-local to one
-`SpineServices` instance; activating the same ID against another instance,
-activating an already-active ID, or activating any missing/unknown ID completes
+scoped to that tenant slice. Subscription IDs are opaque. Inactive service
+subscription records are stored through the bounded context storage factory, so
+a new `SpineServices` instance over the same storage factory can activate a
+previously returned ID. Activation consumes the durable inactive row before
+live attachment, so durable storage contains inactive records only. Activating
+an already-active ID in the same service instance, activating any
+missing/unknown ID, or activating an expired/canceled durable ID completes
 without updates. `Cancel` returns OK for missing, unknown, already-canceled, or
-already-cleaned IDs. Cleanup is explicit and idempotent when cancellation
-happens, an activation iterator closes, the inactive TTL expires, or the active
-queue limit is exceeded. Defaults are 30 seconds for never-activated
+already-cleaned IDs and removes any matching durable inactive record. Cleanup
+is explicit and idempotent when cancellation happens, an activation iterator
+closes, the inactive TTL expires, or the active queue limit is exceeded.
+Malformed, expired, and inconsistent durable rows are deleted instead of being
+retried indefinitely. Defaults are 30 seconds for never-activated
 subscriptions and 100 queued updates for slow active consumers.
 
-The current read side is not durable subscription storage. Direct Stand
-subscriptions, service subscription records, Stand version metadata, and the
-in-memory storage adapter are all process-local development/test state.
-Durable production storage, transport-backed/background delivery worker
-orchestration, and recovery of subscription positions remain outside this
-slice. The implemented local catch-up boundary is limited to
+The current read side persists only inactive service subscription records, not
+active stream state. Direct Stand subscriptions, active service delivery
+handles, queued subscription updates, Stand version metadata, and the in-memory
+storage adapter's backing data are process-local development/test state. Missed
+updates are not replayed on later activation or restart. Durable production
+storage adapters, transport-backed/background delivery worker orchestration,
+and recovery of subscription positions remain outside this slice. The
+implemented local catch-up boundary is limited to
 `BoundedContext.catchUpReadSide(options?)` for registered projection replay from
 already-stored events. This direct API does not provide a client query DSL.
 

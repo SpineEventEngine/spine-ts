@@ -3,7 +3,9 @@
 Current status: early implementation notes through the first command/event bus,
 runtime-routing, transport-foundation seams, and the real Connect/Node
 `SpineServices` route registrar for the raw Spine command/query/subscription
-services, plus a small local `Server` lifecycle owner over those services.
+services, including durable inactive subscription recovery over the same
+storage factory, plus a small local `Server` lifecycle owner over those
+services.
 
 Architecture documentation starts from the build protocol and specification documents under `build-protocol/`. This folder is reserved for implementation-era architecture notes that evolve with actual package boundaries and runtime behavior.
 
@@ -384,9 +386,14 @@ queue, and stream/cancel cleanup releases the direct Stand or event-bus
 listener handle. `Subscribe` accepts registered state targets and event targets
 exposed by built-context event dispatchers. It rejects unknown/private targets,
 invalid criteria, unsupported comparison operators, event filters, event field
-masks, and unknown subscription field paths before creating a process-local
-record or attaching a listener. State include-all topics deliver each activated
-Stand update. Filtered state topics support optional ID filters plus
+masks, and unknown subscription field paths before creating a service-owned
+inactive record or attaching a listener. The inactive record is stored through
+the owning bounded context storage factory, so a fresh `SpineServices` adapter
+over the same storage factory can recover it by opaque subscription ID.
+Activation consumes the durable row before live attachment, so that storage
+contains inactive records only. State
+include-all topics deliver each activated Stand update. Filtered state topics
+support optional ID filters plus
 `ALL`/`EITHER` composite `EQUAL` field filters over generated entity state
 fields, including nested message fields. Missing ID filters match all IDs.
 Filtered delivery compares previous and new Stand state: matching new states
@@ -397,16 +404,15 @@ Topic masks are applied only to delivered states. Event topics support
 message type URLs. Application handlers remain on generated domain event
 messages; framework envelopes stay inside service/runtime data. Single-tenant
 subscriptions reject tenant options; multitenant subscriptions require
-`tenantId`; state and event delivery are scoped to that tenant slice. Activation and
-cancellation are keyed by subscription ID in the current
-`SpineServices` instance: unknown activations complete without updates, and
-duplicate activation of an already-active ID also completes without updates.
-Unknown or duplicate cancellations return OK. Cleanup is
-idempotent across cancel, stream finalization, inactive expiry, and queue-limit
-closure. The subscription registry, direct Stand subscriber sets, Stand version
-metadata, and in-memory storage adapter are local process state; this slice does
-not persist subscription positions, replay missed updates, or recover active
-subscriptions after restart.
+`tenantId`; state and event delivery are scoped to that tenant slice. Activation
+and cancellation are keyed by subscription ID: unknown, canceled, expired, and
+already-active activations complete without updates, and unknown or duplicate
+cancellations return OK. Cleanup is idempotent across cancel, stream
+finalization, inactive expiry, and queue-limit closure. Direct Stand subscriber
+sets, active service delivery handles, queued updates, Stand version metadata,
+and in-memory storage adapter backing data are local process state; this slice
+does not persist subscription positions, replay missed updates, coordinate
+cross-process stream ownership, or recover active subscriptions after restart.
 
 The current command service error contract remains intentionally small.
 `CommandBus` validates each accepted command payload with the existing core
@@ -446,8 +452,8 @@ The following runtime pieces are still deferred to later explicit tasks:
   tenant-index persistence. Durable inbox records, dedup guards, shard leases,
   the direct local shard drain, and the local one-shard `DeliveryLoop` are
   present;
-- richer query filtering, durable event subscription recovery, and durable subscription
-  recovery;
+- richer query filtering, retained subscription update replay, and
+  cross-process subscription stream ownership;
 - system-context pairing and broad production server/gRPC lifecycle; and
 - ZeroMQ endpoint topology and production transport-backed worker execution
   beyond the current local `RuntimeTransportBinding`.
