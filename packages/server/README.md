@@ -44,8 +44,11 @@ Current slice exposes:
   contexts use the same metadata to execute aggregate command handlers,
   projection event subscribers, and process-manager command assignees, event
   reactors, and event-commanding handlers. Process-manager command assignees
-  use the framework-owned durable inbox handoff plus immediate local shard
-  replay, while transport-backed/background workers, broker supervision,
+  and live projection event subscribers use framework-owned durable inbox rows
+  plus immediate local shard replay; projection subscriber rows use
+  `UPDATE_SUBSCRIBER`, keep the original `Event` envelope as the payload, and
+  replay only the routed row target before the projection transaction and
+  `Stand` update. Transport-backed/background workers, broker supervision,
   retained attempt history, and deployment hardening remain outside this local
   slice;
   and
@@ -98,26 +101,30 @@ Current slice exposes:
   seam, backed by `StorageFactory`, `RecordStorage`, and `EventStore`;
   `PrimitiveId` and `MessageId` expose the accepted public ID shapes;
   and
-- `Delivery`, `DeliveryDrainOptions`, `DeliveryEndpoint`, `DeliveryFailure`,
-  `DeliveryLoop`, `DeliveryLoopOptions`, `DeliveryLoopRun`,
-  `DeliveryLoopStatus`, `DeliveryRun`, `Inbox`, `InboxStorage`, `ShardIndex`,
-  `ShardSession`, and `ShardedWorkRegistry` for the current durable delivery
+- `Delivery`, `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`,
+  `DeliveryEndpoint`, `DeliveryFailure`, `DeliveryLoop`, `DeliveryLoopOptions`,
+  `DeliveryLoopRun`, `DeliveryLoopStatus`, `DeliveryRun`, `Inbox`,
+  `InboxStorage`, `ShardIndex`, `ShardSession`, and `ShardedWorkRegistry` for the current durable delivery
   slice: inbox writes with durable `(signalId, inboxId)` live deduplication
   through internal guard records, shard ordering metadata with an explicit
   inbox-message UUID tie-breaker, bounded read paging via
   `InboxReadOptions.limit`, storage-backed shard pickup/release over atomic
   `RecordStorage.compareAndSet()` handles for one backing store,
-  framework-owned `Delivery.drain()` runs that claim one shard, and a small
-  `DeliveryLoop` that repeats those drains until idle, stopped, skipped, or a
-  configured failure bound. Successful rows are marked `DELIVERED`; failed rows
-  remain pending for later retry through the same durable `TO_DELIVER` state.
+  framework-owned `Delivery.drain()` runs that claim one shard,
+  exact-message `Delivery.drainMessage()` runs that reject mismatched
+  `message.id.shard`/`message.shard` snapshots and accept only `node` plus
+  `onMessage`, and a small `DeliveryLoop` that repeats those drains until idle,
+  stopped, skipped, or a configured failure bound. Successful rows are marked
+  `DELIVERED`; failed rows remain pending for later retry through the same durable `TO_DELIVER` state.
   `stop()` prevents future drain starts and does not interrupt an in-flight
   `Delivery.drain()`; `close()` calls `stop()` and waits for the current drain,
-  if any, to finish. This slice explicitly excludes transport-backed worker
-  supervision, retry monitors, conveyor/stations, repository invocation, broad
-  production lifecycle, retained attempt history, durable catch-up storage, and
-  example app work;
-- and
+  if any, to finish. Built bounded contexts use the storage layer internally
+  for process-manager command rows and live projection subscriber rows, but
+  this slice explicitly excludes transport-backed worker supervision, retry
+  monitors, conveyor/stations, generic repository invocation, process-manager
+  event reactors through inbox storage, aggregate event reactors/importers,
+  projection catch-up through inbox storage, broad production lifecycle,
+  retained attempt history, durable catch-up storage, and example app work;
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
 - first-field routing hints from descriptor order;
@@ -663,11 +670,10 @@ invoke query handlers, construct the full system-context runtime, provide
 command-log repositories, emit the full system event taxonomy, provide
 tracing/monitors/debug UI, start query/subscription buses, expose a broad
 production lifecycle, or integrate transports. Process-manager command assignees
-now write durable process-manager
-inbox rows before the current local shard drain replays them, and the post does
-not resolve until that received row is marked delivered. Scheduler/retry
-workers, cross-process recovery, and broader event/aggregate handoff remain
-open production gaps.
+and live projection subscribers now write durable inbox rows before the current
+local shard drain replays them, and the post does not resolve until that
+received row is marked delivered. Scheduler/retry workers, cross-process
+recovery, and broader event/aggregate handoff remain open production gaps.
 
 ## Direct Stand
 
@@ -962,10 +968,12 @@ execution wraps them in framework `Command`/`Event` envelopes only after
 transaction commit and state storage. Process-manager produced events are
 posted through the event bus so they are appended to the `EventStore` before
 fan-out; post-commit dispatch failures are recorded in
-`storedEventDispatchFailures()`. Process-manager command assignees now use the
-framework-owned durable inbox handoff with immediate local shard replay/drain,
-while scheduler/retry workers, cross-process recovery, and broader
-event/aggregate handoff remain open production gaps. This seam follows Spine `core-jvm`
+`storedEventDispatchFailures()`. Process-manager command assignees and live
+projection subscribers now use the framework-owned durable inbox handoff with
+immediate local shard replay/drain, while process-manager event reactors remain
+direct local `EventBus` execution rather than durable inbox rows.
+Scheduler/retry workers, cross-process recovery, and broader event/aggregate
+handoff remain open production gaps. This seam follows Spine `core-jvm`
 `Repository` identity and registration concepts closely. The direct repository
 API does not create, find, or store entities; invoke handlers; write inboxes;
 manage caches; emit lifecycle events; or touch transport.

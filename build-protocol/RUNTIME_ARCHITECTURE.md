@@ -225,13 +225,26 @@ delivery worker boundary:
 
 - standalone delivery writes can be recorded before the asynchronous worker
   handoff point where durability is configured, and a framework-owned
-  `Delivery.drain()` run can drain one shard by callback, but this slice does
-  not yet integrate `CommandBus` or `EventBus` intake with that handoff;
+  `Delivery.drain()` run can drain one shard by callback. Built bounded
+  contexts integrate `CommandBus` intake for process-manager command assignees
+  and live `EventBus` intake for projection subscribers with durable local
+  inbox handoff. Process-manager event reactors remain direct local `EventBus`
+  execution and are not yet routed through durable inbox storage; other
+  inbox-routed event endpoint kinds remain deferred;
 - durable inbox rows store the inbox target identity, signal identity, shard,
   status, label, receive time, version, optional signal payload, and optional
   dedup retention;
+- built bounded contexts now use this storage boundary for two narrow local
+  handoffs: process-manager command assignees with `HANDLE_COMMAND`, and live
+  projection event subscribers with `UPDATE_SUBSCRIBER`;
+- live projection subscriber rows store the original `Event` envelope as the
+  signal payload, use the original event ID as `signalId`, target the
+  projection state type URL plus routed projection ID, drain the local single
+  shard immediately, and replay only that inbox row target before running the
+  projection transaction and `Stand` update;
 - pending and final dedup guards block duplicate `(signalId, inboxId)` writes
-  while allowing crash recovery from a durable inbox row;
+  during the same 30-second local retention window as JVM local delivery while
+  allowing crash recovery from a durable inbox row;
 - shard pickup persists lease-backed shard sessions through storage
   compare-and-set rather than process-local locks; and
 - one direct drain run claims a shard through `ShardedWorkRegistry`, reads
@@ -242,8 +255,11 @@ delivery worker boundary:
 - malformed, oversized, or key-mismatched inbox, dedup, and shard-session
   records fail closed as storage corruption.
 
-This slice stops at durable storage, ordered readback, and one direct drain call.
-It does not yet implement worker loops, repository invocation from the inbox,
-retry monitors, attempt counters, retained delivery error details, catch-up, or
+This slice stops at durable storage, ordered readback, narrow built-context
+process-manager command and live projection subscriber handoffs, and one direct
+drain call. It does not yet implement a generic repository delivery engine,
+process-manager event reactors through inbox storage, aggregate event
+reactors/importers, projection catch-up through inbox storage, worker loops,
+retry monitors, attempt counters, retained delivery error details, or
 transport-backed delivery. Those concerns are deferred to later delivery and
 runtime tasks.

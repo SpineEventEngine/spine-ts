@@ -31,6 +31,7 @@ import {
 } from "../bus/event-bus.js";
 import type { EventDispatcher } from "../bus/event-dispatcher.js";
 import { LocalProcessManagerInbox } from "./process-manager-handoff.js";
+import { LocalProjectionInbox } from "./projection-handoff.js";
 import { createTenantIndex, type TenantIndex } from "./tenant-index.js";
 import {
   Repository,
@@ -40,6 +41,8 @@ import {
   type RepositoryEntityType,
   type RepositoryIdentitySnapshot,
   type ProcessManagerInboxTarget,
+  type ProjectionInbox,
+  type ProjectionInboxTarget,
   type RepositoryView,
 } from "../repository/repository.js";
 import type {
@@ -112,6 +115,8 @@ interface RepositoryRegistration {
   readonly stand: Stand;
   /** Context-owned local process-manager command inbox handoff. */
   readonly processManagerInbox: ProcessManagerInbox;
+  /** Context-owned local projection subscriber inbox handoff. */
+  readonly projectionInbox: ProjectionInbox;
   /** Stored-event dispatch callback into the owning context event bus. */
   readonly dispatchStored: (event: Event) => Promise<void>;
   /** Stored-event follow-up dispatch callback into the owning context event bus. */
@@ -279,6 +284,7 @@ export class BoundedContext {
   readonly #commandEndpoint: CommandEndpoint;
   readonly #eventEndpoint: EventEndpoint;
   readonly #processManagerInbox: LocalProcessManagerInbox;
+  readonly #projectionInbox: LocalProjectionInbox;
   readonly #registeredRepositories: RegistrationSnapshot[] = [];
   readonly #storedEventDispatchFailures: StoredEventDispatchFailure[] = [];
   readonly #repositoryViews = new Set<RepositoryView>();
@@ -333,6 +339,7 @@ export class BoundedContext {
       post: (event: Event) => this.#eventBus.post(event),
     });
     this.#processManagerInbox = new LocalProcessManagerInbox(this.#snapshot.name.value);
+    this.#projectionInbox = new LocalProjectionInbox(this.#snapshot.name.value);
     eventSubscribers.set(this, (typeUrl, subscriber) =>
       eventBusAccess.subscribe(this.#eventBus, typeUrl, subscriber),
     );
@@ -377,6 +384,9 @@ export class BoundedContext {
         if (preparedRepository.processManagerInboxTarget !== undefined) {
           this.#processManagerInbox.register(preparedRepository.processManagerInboxTarget);
         }
+        if (preparedRepository.projectionInboxTarget !== undefined) {
+          this.#projectionInbox.register(preparedRepository.projectionInboxTarget);
+        }
         this.#repositoryViews.add(preparedRepository.repository);
         this.#repositoryStorages.add(preparedRepository.storage);
       }
@@ -392,6 +402,7 @@ export class BoundedContext {
       storageFactory: this.#storageFactory,
       stand: this.#stand,
       processManagerInbox: this.#processManagerInbox,
+      projectionInbox: this.#projectionInbox,
       dispatchStored: (event) => eventBusAccess.postStored(this.#eventBus, event),
       dispatchStoredFollowUp: (event) => eventBusAccess.postStoredFollowUp(this.#eventBus, event),
       postEventFollowUp: (event) => eventBusAccess.postFollowUp(this.#eventBus, event),
@@ -1435,6 +1446,7 @@ function prepareRepositoryForContext(
     stand: registration.stand,
     signalMetadata: new SignalMetadata(),
     processManagerInbox: registration.processManagerInbox,
+    projectionInbox: registration.projectionInbox,
     dispatchStored: registration.dispatchStored,
     dispatchStoredFollowUp: registration.dispatchStoredFollowUp,
     postEventFollowUp: registration.postEventFollowUp,
@@ -1443,12 +1455,14 @@ function prepareRepositoryForContext(
   });
 
   const processManagerInboxTarget = repositoryAccess.processManagerInboxTarget(repository);
+  const projectionInboxTarget = repositoryAccess.projectionInboxTarget(repository);
 
   return {
     repository,
     snapshot,
     storage,
     ...(processManagerInboxTarget === undefined ? {} : { processManagerInboxTarget }),
+    ...(projectionInboxTarget === undefined ? {} : { projectionInboxTarget }),
     commit: () => {
       registeredRepositories.set(repository, { name: registration.name });
     },
@@ -1464,6 +1478,7 @@ interface PreparedRepository {
   readonly snapshot: RegistrationSnapshot;
   readonly storage: RecordStorage<unknown, Message>;
   readonly processManagerInboxTarget?: ProcessManagerInboxTarget;
+  readonly projectionInboxTarget?: ProjectionInboxTarget;
   commit(): void;
   close(): void;
 }
@@ -1471,6 +1486,7 @@ interface PreparedRepository {
 const registeredRepositories = new WeakMap<RepositoryView, RepositoryOwner>();
 
 interface ProjectionDispatch {
+  readonly repository: RepositoryView;
   readonly dispatcher: EventDispatcher;
   readonly eventTypeUrls: ReadonlySet<string>;
   readonly schema: DescriptorMessageSchema;
@@ -1601,6 +1617,7 @@ function projectionDispatchers(
 
     projections.push(
       Object.freeze({
+        repository,
         dispatcher,
         eventTypeUrls: new Set(dispatcher.messageSchemas().map((schema) => deriveTypeUrl(schema))),
         schema: snapshot.stateSchema,
@@ -1724,7 +1741,10 @@ async function dispatchStoredProjectionEvent(
     await projection.dispatcher.accept?.(clone(EventSchema, event));
   }
   for (const projection of matching) {
-    await projection.dispatcher.dispatch(clone(EventSchema, event));
+    await repositoryAccess.dispatchProjectionDirect(
+      projection.repository,
+      clone(EventSchema, event),
+    );
   }
 
   return matching.length > 0 ? 1 : 0;

@@ -2354,3 +2354,51 @@ Consequences:
   runtime gaps.
 - The next implementation slice can start from a trustworthy roadmap instead
   of re-investigating already integrated work.
+
+## D-0072: Start Event Inbox Handoff With Projection Subscribers
+
+Status: Accepted
+
+Date: 2026-07-09
+
+Context: T-0017g moved process-manager command assignees behind durable inbox
+handoff, but repository event paths still execute directly after event-bus
+routing. Current Spine JVM `ProjectionRepository.dispatchTo()` sends each routed
+live event target through `inbox.send(event).toSubscriber(id)`, which writes an
+`UPDATE_SUBSCRIBER` inbox row. `ProcessManagerRepository.dispatchTo()` uses
+`REACT_UPON_EVENT`, and catch-up uses its own label and status. The next event
+delivery slice should mirror one JVM endpoint path instead of inventing a
+generic event delivery engine.
+
+Decision:
+
+- Run T-0022a as the next implementation slice.
+- Move only live projection subscriber delivery behind durable local inbox
+  handoff.
+- Use `UPDATE_SUBSCRIBER`, `TO_DELIVER`, the original event ID, the projection
+  state type URL, and the routed projection ID.
+- Drain locally and replay only the exact inbox row target.
+- Keep process-manager event reactors as direct local `EventBus` execution for
+  this slice. Defer durable inbox routing for those reactors, aggregate event
+  reactors/importers, projection catch-up, schedulers, retries, transport
+  workers, and retained attempt history.
+
+Alternatives considered:
+
+- Build one generic repository event delivery engine. Rejected as too broad and
+  more abstract than the JVM endpoint model needed for the next slice.
+- Start with process-manager event reactors. Rejected because projection
+  `UPDATE_SUBSCRIBER` is the narrower read-side path and has no command
+  emission follow-up in this slice.
+- Keep direct projection dispatch. Rejected because durable event delivery is a
+  recorded runtime gap.
+
+Consequences:
+
+- Projection live updates gain the same durable local handoff shape as the
+  first process-manager command handoff.
+- Process-manager event reactors remain implemented through direct local
+  `EventBus` execution until a later task routes them through durable inbox
+  storage.
+- Remaining event endpoint kinds stay explicit future tasks instead of hidden
+  in a large abstraction.

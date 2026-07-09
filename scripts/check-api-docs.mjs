@@ -221,6 +221,7 @@ const expectedServerExports = [
   "DeliveryLoopOptions",
   "DeliveryLoopRun",
   "DeliveryLoopStatus",
+  "DeliveryMessageDrainOptions",
   "DeliveryOptions",
   "DeliveryRun",
   "DeliveryStorageCorruptionError",

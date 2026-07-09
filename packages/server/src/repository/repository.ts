@@ -1,4 +1,5 @@
-import { clone, create } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { AnySchema } from "@bufbuild/protobuf/wkt";
 import {
   ValidationException,
   checkValid,
@@ -346,10 +347,15 @@ export class Repository<
       createRepositorySnapshot(this.#entityType, this.#entityFamily, this.#metadata),
     );
     repositoryDispatchers.set(this, createRepositoryDispatchers(this, this.#routing));
-    const pmInboxTarget = createInboxTarget(this, this.#routing);
+    const pmInboxTarget = createPmInboxTarget(this, this.#routing);
+    const projectionInboxTarget = createProjectionInboxTarget(this, this.#routing);
 
     if (pmInboxTarget !== undefined) {
       repositoryPmInboxTargets.set(this, pmInboxTarget);
+    }
+    if (projectionInboxTarget !== undefined) {
+      repositoryProjectionInboxTargets.set(this, projectionInboxTarget);
+      repositoryProjectionDirect.set(this, createProjectionDirectDispatch(this, this.#routing));
     }
   }
 
@@ -432,6 +438,8 @@ export interface RepositoryEventRoute<Id = unknown> {
 const repositorySnapshots = new WeakMap<RepositoryView, RepositoryIdentitySnapshot>();
 const repositoryDispatchers = new WeakMap<RepositoryView, RepositoryDispatchers>();
 const repositoryPmInboxTargets = new WeakMap<RepositoryView, ProcessManagerInboxTarget>();
+const repositoryProjectionInboxTargets = new WeakMap<RepositoryView, ProjectionInboxTarget>();
+const repositoryProjectionDirect = new WeakMap<RepositoryView, (event: Event) => Promise<void>>();
 const repositoryRuntimes = new WeakMap<RepositoryView, RepositoryRuntime>();
 Object.freeze(Repository);
 
@@ -453,6 +461,24 @@ export interface ProcessManagerInbox {
   ): Promise<InboxMessage>;
 }
 
+/** @internal Narrow framework-only replay target for projection subscriber inbox handoff. */
+export interface ProjectionInboxTarget {
+  /** Target projection state type URL routed by this replay target. */
+  readonly targetTypeUrl: string;
+  /** Replays one durable inbox event under the active delivery tenant. */
+  replay(message: InboxMessage, deliveryTenantId?: string): Promise<void>;
+}
+
+/** @internal Context-owned projection subscriber inbox handoff capability. */
+export interface ProjectionInbox {
+  /** Writes a durable inbox row and waits for that exact row to be delivered locally. */
+  receive(
+    delivery: Delivery,
+    input: Omit<InboxMessageInput, "whenReceived" | "version">,
+    deliveryTenantId?: string,
+  ): Promise<InboxMessage>;
+}
+
 /** @internal Framework-only repository authority contract. */
 export interface RepositoryAccess {
   hasInstance(repository: unknown): repository is RepositoryView;
@@ -460,6 +486,8 @@ export interface RepositoryAccess {
   commandDispatcher(repository: RepositoryView): CommandDispatcher | undefined;
   eventDispatcher(repository: RepositoryView): EventDispatcher | undefined;
   processManagerInboxTarget(repository: RepositoryView): ProcessManagerInboxTarget | undefined;
+  projectionInboxTarget(repository: RepositoryView): ProjectionInboxTarget | undefined;
+  dispatchProjectionDirect(repository: RepositoryView, event: Event): Promise<void>;
   bindRuntime(repository: RepositoryView, runtime: RepositoryRuntime): void;
   clearRuntime(repository: RepositoryView): void;
 }
@@ -490,6 +518,20 @@ export const repositoryAccess: RepositoryAccess = Object.freeze({
 
   processManagerInboxTarget(repository: RepositoryView): ProcessManagerInboxTarget | undefined {
     return repositoryPmInboxTargets.get(repository);
+  },
+
+  projectionInboxTarget(repository: RepositoryView): ProjectionInboxTarget | undefined {
+    return repositoryProjectionInboxTargets.get(repository);
+  },
+
+  dispatchProjectionDirect(repository: RepositoryView, event: Event): Promise<void> {
+    const dispatch = repositoryProjectionDirect.get(repository);
+
+    if (dispatch === undefined) {
+      throw new TypeError("Direct projection dispatch requires a projection Repository instance.");
+    }
+
+    return dispatch(event);
   },
 
   bindRuntime(repository: RepositoryView, runtime: RepositoryRuntime): void {
@@ -527,6 +569,7 @@ interface RepositoryRuntime {
   readonly stand: Stand;
   readonly signalMetadata: SignalMetadata;
   readonly processManagerInbox: ProcessManagerInbox;
+  readonly projectionInbox: ProjectionInbox;
   readonly dispatchStored: (event: Event) => Promise<void>;
   readonly dispatchStoredFollowUp: (event: Event) => Promise<void>;
   readonly postEventFollowUp: (event: Event) => Promise<void>;
@@ -539,6 +582,9 @@ type RepositoryHandlersOption =
 type ApplyMode = "command" | "replay";
 type RepositoryCommandAssignee = NonNullable<
   ReturnType<NonNullable<RepositoryRouting["commandReadiness"]>["findCommandAssignee"]>
+>;
+type RepositoryEventSubscribers = NonNullable<
+  ReturnType<NonNullable<RepositoryRouting["eventReadiness"]>["findEventSubscribers"]>
 >;
 
 function createRepositoryDispatchers(
@@ -569,7 +615,7 @@ function createRepositoryDispatchers(
   });
 }
 
-function createInboxTarget(
+function createPmInboxTarget(
   repository: RepositoryView & {
     routeCommand(command: Command): RepositoryCommandRoute;
   },
@@ -584,6 +630,41 @@ function createInboxTarget(
     replay: (message: InboxMessage, deliveryTenantId?: string): Promise<void> =>
       replayProcessManagerCommand(repository, routing, message, deliveryTenantId),
   });
+}
+
+function createProjectionInboxTarget(
+  repository: RepositoryView & {
+    routeEvent(event: Event): RepositoryEventRoute;
+  },
+  routing: RepositoryRouting,
+): ProjectionInboxTarget | undefined {
+  if (repository.entityFamily !== "projection" || routing.eventSchemas.length === 0) {
+    return undefined;
+  }
+
+  return Object.freeze({
+    targetTypeUrl: deriveTypeUrl(repository.stateSchema),
+    replay: (message: InboxMessage, deliveryTenantId?: string): Promise<void> =>
+      replayProjectionEvent(repository, routing, message, deliveryTenantId),
+  });
+}
+
+function createProjectionDirectDispatch(
+  repository: RepositoryView & {
+    routeEvent(event: Event): RepositoryEventRoute;
+  },
+  routing: RepositoryRouting,
+): (event: Event) => Promise<void> {
+  return (event: Event): Promise<void> => {
+    const runtime = repositoryRuntimes.get(repository);
+
+    if (runtime === undefined) {
+      void repository.routeEvent(event);
+      return Promise.resolve();
+    }
+
+    return new ProjectionEventExecution(repository, routing, runtime, event).runDirect();
+  };
 }
 
 function routeRepositoryEvent(
@@ -687,6 +768,39 @@ async function handoffProcessManagerCommand(
   );
 }
 
+async function handoffProjectionEvent(
+  repository: RepositoryView,
+  runtime: RepositoryRuntime,
+  event: Event,
+  entityId: unknown,
+): Promise<void> {
+  const eventId = requireEventId(event);
+  const whenReceived = new Date();
+  const keepUntil = new Date(whenReceived.getTime() + inboxDedupMs);
+  const deliveryTenantId = requireProjectionTenant(runtime.context, event);
+  const delivery = new Delivery({
+    context: projectionDeliveryContext(runtime.context, deliveryTenantId),
+    storageFactory: runtime.storageFactory,
+  });
+
+  await runtime.projectionInbox.receive(
+    delivery,
+    {
+      inboxId: {
+        targetId: inboxTargetId(entityId),
+        targetTypeUrl: deriveTypeUrl(repository.stateSchema),
+      },
+      signalId: eventId.value,
+      signal: packAny(EventSchema, event, { validate: false }),
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+      keepUntil,
+    },
+    deliveryTenantId,
+  );
+}
+
 async function replayProcessManagerCommand(
   repository: RepositoryView & {
     routeCommand(command: Command): RepositoryCommandRoute;
@@ -708,6 +822,30 @@ async function replayProcessManagerCommand(
   validateReplayTarget(repository, message, command);
 
   await new ProcessManagerCommandExecution(repository, routing, runtime, command).run();
+}
+
+async function replayProjectionEvent(
+  repository: RepositoryView & {
+    routeEvent(event: Event): RepositoryEventRoute;
+  },
+  routing: RepositoryRouting,
+  message: InboxMessage,
+  deliveryTenantId?: string,
+): Promise<void> {
+  const runtime = repositoryRuntimes.get(repository);
+
+  if (runtime === undefined) {
+    throw new Error("Projection inbox replay requires a bound repository runtime.");
+  }
+
+  const event = readInboxEvent(message);
+
+  validateProjectionReplayTenant(runtime.context, deliveryTenantId, event);
+  validateReplayedEventPayload(routing, event);
+
+  const entityId = replayProjectionId(repository, message, event);
+
+  await new ProjectionEventExecution(repository, routing, runtime, event).runTarget(entityId);
 }
 
 interface LoadedAggregate {
@@ -1390,42 +1528,85 @@ class ProjectionEventExecution {
   }
 
   async run(): Promise<void> {
-    const route = this.#repository.routeEvent(this.#event);
-    const subscribers = this.#routing.eventReadiness?.findEventSubscribers(
-      route.messageFullTypeName,
-    );
+    const intake = this.#readIntake();
 
-    if (subscribers === undefined || subscribers.length === 0) {
+    if (intake.subscribers.length === 0) {
       return;
     }
 
+    for (const entityId of intake.route.entityIds) {
+      await handoffProjectionEvent(this.#repository, this.#runtime, this.#event, entityId);
+    }
+  }
+
+  async runTarget(entityId: unknown): Promise<void> {
+    const intake = this.#readIntake();
+
+    if (intake.subscribers.length === 0) {
+      return;
+    }
+
+    await this.#executeTarget(entityId, intake.subscribers);
+  }
+
+  async runDirect(): Promise<void> {
+    const intake = this.#readIntake();
+
+    if (intake.subscribers.length === 0) {
+      return;
+    }
+
+    for (const entityId of intake.route.entityIds) {
+      await this.#executeTarget(entityId, intake.subscribers);
+    }
+  }
+
+  async #executeTarget(entityId: unknown, subscribers: RepositoryEventSubscribers): Promise<void> {
     const message = unpackRequired(
       requireSignalMessage(this.#event.message, "event"),
       subscribers[0]?.handler.schema ?? this.#repository.stateSchema,
       "event",
     );
     const tenantOptions = standTenantOptions(this.#runtime.context, this.#event);
+    const entity = await this.#loadProjection(entityId, tenantOptions);
 
-    for (const entityId of route.entityIds) {
-      const entity = await this.#loadProjection(entityId, tenantOptions);
+    await this.#invokeSubscribers(entity, subscribers, message);
+    await this.#storeIfChanged(entity, tenantOptions);
+  }
 
-      await this.#invokeSubscribers(entity, subscribers, message);
+  #readIntake(): {
+    readonly route: RepositoryEventRoute;
+    readonly subscribers: RepositoryEventSubscribers;
+  } {
+    const route = this.#repository.routeEvent(this.#event);
+    const subscribers = this.#routing.eventReadiness?.findEventSubscribers(
+      route.messageFullTypeName,
+    );
 
-      if (repositoryChanged(entity)) {
-        await this.#runtime.stand.update(
-          this.#repository.stateSchema,
-          repositoryState(entity) as never,
-          standUpdateOptions(tenantOptions.tenantId, this.#event.context?.version),
-        );
-      }
+    return Object.freeze({
+      route,
+      subscribers: Object.freeze([...(subscribers ?? [])]),
+    });
+  }
+
+  async #storeIfChanged(
+    entity: object,
+    tenantOptions: { readonly tenantId?: string },
+  ): Promise<void> {
+    if (!repositoryChanged(entity)) {
+      return;
     }
+
+    await this.#runtime.stand.update(
+      this.#repository.stateSchema,
+      repositoryState(entity) as never,
+      standUpdateOptions(tenantOptions.tenantId, this.#event.context?.version),
+    );
   }
 
   async #invokeSubscribers(
     entity: object,
-    subscribers: NonNullable<
-      ReturnType<NonNullable<RepositoryRouting["eventReadiness"]>["findEventSubscribers"]>
-    >,
+    subscribers: RepositoryEventSubscribers,
     message: unknown,
   ): Promise<void> {
     transactionalEntityAccess.start(entity);
@@ -2008,6 +2189,14 @@ function requireCommandId(command: Command): NonNullable<Command["id"]> {
   return command.id;
 }
 
+function requireEventId(event: Event): NonNullable<Event["id"]> {
+  if (event.id === undefined || event.id.value.trim().length === 0) {
+    throw new Error("Repository projection inbox handoff requires event.id.");
+  }
+
+  return event.id;
+}
+
 function inboxTargetId(entityId: unknown): string {
   const primitive = PrimitiveIds.readFinite(entityId) ?? MessageIds.readValue(entityId);
 
@@ -2038,6 +2227,44 @@ function processManagerDeliveryContext(
     multitenant: true,
     tenantId: tid,
   });
+}
+
+function projectionDeliveryContext(
+  context: StorageContext,
+  tenantId: string | undefined,
+): StorageContext {
+  if (!context.multitenant) {
+    return context;
+  }
+
+  const tid = tenantId;
+  if (tid === undefined) {
+    throw new Error(
+      `Multitenant projection inbox handoff for "${context.name}" requires tenantId.`,
+    );
+  }
+
+  return Object.freeze({
+    name: context.name,
+    multitenant: true,
+    tenantId: tid,
+  });
+}
+
+function requireProjectionTenant(context: StorageContext, event: Event): string | undefined {
+  if (!context.multitenant) {
+    return undefined;
+  }
+
+  const tenantId = readEventTenant(event) ?? context.tenantId;
+
+  if (tenantId === undefined || tenantId.trim() === "") {
+    throw new Error(
+      `Multitenant projection inbox handoff for "${context.name}" requires tenantId.`,
+    );
+  }
+
+  return tenantId;
 }
 
 function requireProcessManagerTenant(
@@ -2074,6 +2301,23 @@ function readInboxCommand(message: InboxMessage): Command {
   return command;
 }
 
+function readInboxEvent(message: InboxMessage): Event {
+  if (message.label !== "UPDATE_SUBSCRIBER") {
+    throw new Error(`Projection inbox replay does not handle "${message.label}" messages.`);
+  }
+
+  const event =
+    message.signal === undefined
+      ? undefined
+      : unpackAny(fromBinary(AnySchema, toBinary(AnySchema, message.signal)), EventSchema);
+
+  if (event === undefined) {
+    throw new Error("Projection inbox replay requires a readable stored event.");
+  }
+
+  return event;
+}
+
 function validateReplayedCommandPayload(routing: RepositoryRouting, command: Command): void {
   const commandMessage = requireSignalMessage(command.message, "command");
   const commandSchema = schemaForTypeUrl(routing.commandSchemas, commandMessage.typeUrl, "command");
@@ -2091,6 +2335,18 @@ function validateReplayedCommandPayload(routing: RepositoryRouting, command: Com
     }
     throw error;
   }
+}
+
+function validateReplayedEventPayload(routing: RepositoryRouting, event: Event): void {
+  const eventMessage = requireSignalMessage(event.message, "event");
+  const eventSchema = schemaForTypeUrl(routing.eventSchemas, eventMessage.typeUrl, "event");
+  const payload = unpackAny(eventMessage, eventSchema);
+
+  if (payload === undefined) {
+    throw new Error("Projection inbox replay requires a readable event payload.");
+  }
+
+  checkValid(eventSchema, payload);
 }
 
 function validateReplayTenant(
@@ -2118,6 +2374,29 @@ function validateReplayTenant(
   }
 }
 
+function validateProjectionReplayTenant(
+  context: StorageContext,
+  deliveryTenantId: string | undefined,
+  event: Event,
+): void {
+  if (!context.multitenant) {
+    return;
+  }
+
+  if (deliveryTenantId === undefined || deliveryTenantId.trim() === "") {
+    throw new Error(`Multitenant projection inbox replay for "${context.name}" requires tenantId.`);
+  }
+
+  const envelopeTenantId = readEventTenant(event) ?? context.tenantId;
+
+  if (envelopeTenantId === undefined || envelopeTenantId.trim() === "") {
+    throw new Error("Projection inbox replay requires stored event tenant metadata.");
+  }
+  if (envelopeTenantId !== deliveryTenantId) {
+    throw new Error("Projection inbox replay stored event tenant does not match.");
+  }
+}
+
 function validateReplayTarget(
   repository: RepositoryView & {
     routeCommand(command: Command): RepositoryCommandRoute;
@@ -2141,6 +2420,31 @@ function validateReplayTarget(
       "Process-manager inbox replay stored target ID does not match the routed command.",
     );
   }
+}
+
+function replayProjectionId(
+  repository: RepositoryView & {
+    routeEvent(event: Event): RepositoryEventRoute;
+  },
+  message: InboxMessage,
+  event: Event,
+): unknown {
+  const expectedTargetTypeUrl = deriveTypeUrl(repository.stateSchema);
+
+  if (message.inboxId.targetTypeUrl !== expectedTargetTypeUrl) {
+    throw new Error(
+      "Projection inbox replay stored target type does not match the routed repository.",
+    );
+  }
+
+  const route = repository.routeEvent(event);
+  const entityId = route.entityIds.find((id) => inboxTargetId(id) === message.inboxId.targetId);
+
+  if (entityId === undefined) {
+    throw new Error("Projection inbox replay stored target ID does not match the routed event.");
+  }
+
+  return entityId;
 }
 
 function storageContextForCommand(context: StorageContext, command: Command): StorageContext {

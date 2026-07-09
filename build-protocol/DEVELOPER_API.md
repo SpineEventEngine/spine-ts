@@ -277,10 +277,10 @@ smaller than the later scheduler/retry stack:
 - `ShardIndex` identifies one delivery shard, `ShardSession` is the durable
   lease snapshot for that shard, and `ShardedWorkRegistry` persists shard
   pickup/release across processes; and
-- `DeliveryDrainOptions`, `DeliveryEndpoint`, `DeliveryFailure`,
-  `DeliveryLabel`, `DeliveryRun`, `DeliveryStatus`, `InboxId`, `InboxMessage`,
-  `DeliveryStorageCorruptionError`, `InboxMessageError`, `InboxMessageId`,
-  `InboxMessageInput`,
+- `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`, `DeliveryEndpoint`,
+  `DeliveryFailure`, `DeliveryLabel`, `DeliveryRun`, `DeliveryStatus`,
+  `InboxId`, `InboxMessage`, `DeliveryStorageCorruptionError`,
+  `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
   `InboxReadOptions`, `InboxWriteResult`, `InboxStorageOptions`,
   `DeliveryOptions`, and `ShardedWorkRegistryOptions` describe the stable
   inputs/outputs of this slice.
@@ -328,10 +328,22 @@ const run = await delivery.drain(ShardIndex.single(), {
 
 Keep the write/read split intact at the application/service/domain level. These
 storage primitives and the direct shard drain are framework internals; they are
-not user-facing read-side facades. The current API does not schedule repeated
-runs, invoke repositories from inbox rows by itself, mutate read-side
-projections, run retry monitors, open transport workers, or retain attempt/error
-history beyond the returned `DeliveryRun`.
+not user-facing read-side facades. Built bounded contexts use this boundary for
+two narrow local handoffs: process-manager command assignees with
+`HANDLE_COMMAND`, and live projection event subscribers with
+`UPDATE_SUBSCRIBER`. Projection subscriber rows store the original `Event`
+envelope as the signal payload, the original event ID as `signalId`, the
+projection state type URL plus routed projection ID as `inboxId`, `TO_DELIVER`
+status, `ShardIndex.single()`, and the local 30-second dedup retention window.
+The context drains the local shard immediately and replays only the exact row
+target before running the projection transaction and `Stand` update.
+`InboxStorage` remains the durable dedup authority.
+
+The current API does not schedule repeated runs, expose a generic repository
+delivery engine, route process-manager event reactors through inbox storage,
+run aggregate event reactors/importers, run projection catch-up through inbox
+storage, run retry monitors, open transport workers, or retain attempt/error history beyond the
+returned `DeliveryRun`.
 
 ## Runtime Transport Binding
 

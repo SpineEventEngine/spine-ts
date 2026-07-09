@@ -1,15 +1,15 @@
 import { Delivery } from "../delivery/delivery.js";
 import type { InboxMessage } from "../delivery/inbox.js";
-import type { ProcessManagerInbox, ProcessManagerInboxTarget } from "../repository/repository.js";
+import type { ProjectionInbox, ProjectionInboxTarget } from "../repository/repository.js";
 import {
   coordinateLocalInboxHandoff,
   drainLocalInboxMessage,
   localInboxHandoffKey,
 } from "./local-inbox-handoff.js";
 
-export class LocalProcessManagerInbox implements ProcessManagerInbox {
+export class LocalProjectionInbox implements ProjectionInbox {
   readonly #contextName: string;
-  readonly #targets = new Map<string, ProcessManagerInboxTarget>();
+  readonly #targets = new Map<string, ProjectionInboxTarget>();
   readonly #inFlightHandoffs = new Map<string, Promise<InboxMessage>>();
   #nextVersion = 0n;
 
@@ -17,7 +17,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     this.#contextName = contextName;
   }
 
-  register(target: ProcessManagerInboxTarget): void {
+  register(target: ProjectionInboxTarget): void {
     this.#targets.set(target.targetTypeUrl, target);
   }
 
@@ -77,11 +77,10 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
       received: written.message,
       node: this.#contextName,
       replay: (message) => this.#replay(message, deliveryTenantId),
-      replayFailureMessage: "Process-manager inbox replay failed.",
-      skippedMessage:
-        "Process-manager inbox delivery was skipped before the target row was delivered.",
+      replayFailureMessage: "Projection inbox replay failed.",
+      skippedMessage: "Projection inbox delivery was skipped before the target row was delivered.",
       unfinishedMessage:
-        "Process-manager inbox delivery did not reach the target row before the local drain finished.",
+        "Projection inbox delivery did not reach the target row before the local drain finished.",
     });
     return written.message;
   }
@@ -92,7 +91,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
   }
 
   async #replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
-    if (message.label !== "HANDLE_COMMAND") {
+    if (message.label !== "UPDATE_SUBSCRIBER") {
       throw new Error(`BoundedContext delivery has no handler for inbox label "${message.label}".`);
     }
 
@@ -100,7 +99,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
 
     if (target === undefined) {
       throw new Error(
-        `BoundedContext delivery has no process-manager command target for "${message.inboxId.targetTypeUrl}".`,
+        `BoundedContext delivery has no projection subscriber target for "${message.inboxId.targetTypeUrl}".`,
       );
     }
 
