@@ -60,7 +60,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
     deliveryTenantId?: string,
   ): Promise<void> {
     for (let attempt = 0; attempt < projectionDrainLimit; attempt += 1) {
-      const run = await delivery.drain(received.shard, {
+      const run = await delivery.drainMessage(received, {
         node: this.#contextName,
         onMessage: (message) => this.#replay(message, deliveryTenantId),
       });
@@ -78,7 +78,9 @@ export class LocalProjectionInbox implements ProjectionInbox {
           : new Error("Projection inbox replay failed.", { cause: failure.error });
       }
       if (run.status === "SKIPPED") {
-        throw new Error("Projection inbox delivery was skipped before the target row was delivered.");
+        throw new Error(
+          "Projection inbox delivery was skipped before the target row was delivered.",
+        );
       }
       if (run.processed === 0) {
         break;

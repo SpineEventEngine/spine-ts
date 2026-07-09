@@ -1,4 +1,4 @@
-import { clone, create } from "@bufbuild/protobuf";
+import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import {
   ValidationException,
@@ -582,6 +582,9 @@ type RepositoryHandlersOption =
 type ApplyMode = "command" | "replay";
 type RepositoryCommandAssignee = NonNullable<
   ReturnType<NonNullable<RepositoryRouting["commandReadiness"]>["findCommandAssignee"]>
+>;
+type RepositoryEventSubscribers = NonNullable<
+  ReturnType<NonNullable<RepositoryRouting["eventReadiness"]>["findEventSubscribers"]>
 >;
 
 function createRepositoryDispatchers(
@@ -1558,12 +1561,7 @@ class ProjectionEventExecution {
     }
   }
 
-  async #executeTarget(
-    entityId: unknown,
-    subscribers: NonNullable<
-      ReturnType<NonNullable<RepositoryRouting["eventReadiness"]>["findEventSubscribers"]>
-    >,
-  ): Promise<void> {
+  async #executeTarget(entityId: unknown, subscribers: RepositoryEventSubscribers): Promise<void> {
     const message = unpackRequired(
       requireSignalMessage(this.#event.message, "event"),
       subscribers[0]?.handler.schema ?? this.#repository.stateSchema,
@@ -1578,9 +1576,7 @@ class ProjectionEventExecution {
 
   #readIntake(): {
     readonly route: RepositoryEventRoute;
-    readonly subscribers: NonNullable<
-      ReturnType<NonNullable<RepositoryRouting["eventReadiness"]>["findEventSubscribers"]>
-    >;
+    readonly subscribers: RepositoryEventSubscribers;
   } {
     const route = this.#repository.routeEvent(this.#event);
     const subscribers = this.#routing.eventReadiness?.findEventSubscribers(
@@ -1610,9 +1606,7 @@ class ProjectionEventExecution {
 
   async #invokeSubscribers(
     entity: object,
-    subscribers: NonNullable<
-      ReturnType<NonNullable<RepositoryRouting["eventReadiness"]>["findEventSubscribers"]>
-    >,
+    subscribers: RepositoryEventSubscribers,
     message: unknown,
   ): Promise<void> {
     transactionalEntityAccess.start(entity);
@@ -2313,22 +2307,15 @@ function readInboxEvent(message: InboxMessage): Event {
   }
 
   const event =
-    message.signal === undefined ? undefined : unpackAny(normalizeAny(message.signal), EventSchema);
+    message.signal === undefined
+      ? undefined
+      : unpackAny(fromBinary(AnySchema, toBinary(AnySchema, message.signal)), EventSchema);
 
   if (event === undefined) {
     throw new Error("Projection inbox replay requires a readable stored event.");
   }
 
   return event;
-}
-
-function normalizeAny(
-  any: NonNullable<InboxMessage["signal"]>,
-): NonNullable<InboxMessage["signal"]> {
-  return create(AnySchema, {
-    typeUrl: any.typeUrl,
-    value: new Uint8Array(any.value),
-  });
 }
 
 function validateReplayedCommandPayload(routing: RepositoryRouting, command: Command): void {

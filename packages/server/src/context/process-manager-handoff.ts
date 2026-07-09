@@ -60,7 +60,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     deliveryTenantId?: string,
   ): Promise<void> {
     for (let attempt = 0; attempt < processManagerDrainLimit; attempt += 1) {
-      const run = await delivery.drain(received.shard, {
+      const run = await delivery.drainMessage(received, {
         node: this.#contextName,
         onMessage: (message) => this.#replay(message, deliveryTenantId),
       });

@@ -225,8 +225,10 @@ delivery worker boundary:
 
 - standalone delivery writes can be recorded before the asynchronous worker
   handoff point where durability is configured, and a framework-owned
-  `Delivery.drain()` run can drain one shard by callback, but this slice does
-  not yet integrate `CommandBus` or `EventBus` intake with that handoff;
+  `Delivery.drain()` run can drain one shard by callback. Built bounded
+  contexts integrate `CommandBus` intake for process-manager command assignees
+  and live `EventBus` intake for projection subscribers with durable local
+  inbox handoff; other event endpoint kinds remain deferred;
 - durable inbox rows store the inbox target identity, signal identity, shard,
   status, label, receive time, version, optional signal payload, and optional
   dedup retention;
@@ -239,7 +241,8 @@ delivery worker boundary:
   shard immediately, and replay only that inbox row target before running the
   projection transaction and `Stand` update;
 - pending and final dedup guards block duplicate `(signalId, inboxId)` writes
-  while allowing crash recovery from a durable inbox row;
+  during the same 30-second local retention window as JVM local delivery while
+  allowing crash recovery from a durable inbox row;
 - shard pickup persists lease-backed shard sessions through storage
   compare-and-set rather than process-local locks; and
 - one direct drain run claims a shard through `ShardedWorkRegistry`, reads

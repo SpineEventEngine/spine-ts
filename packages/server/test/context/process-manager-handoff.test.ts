@@ -58,7 +58,7 @@ describe("LocalProcessManagerInbox", () => {
     ]);
   });
 
-  it("stores optional signal and keepUntil while earlier work drains before a scheduled row stalls", async () => {
+  it("stores optional signal and keepUntil while scheduled rows do not replay", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
@@ -110,18 +110,19 @@ describe("LocalProcessManagerInbox", () => {
       "Process-manager inbox delivery did not reach the target row before the local drain finished.",
     );
 
-    expect(seen).toHaveLength(1);
-    expect(seen[0]?.signal?.typeUrl).toBe(earlierSignal.typeUrl);
-    expect(Array.from(seen[0]?.signal?.value ?? [])).toEqual([1]);
+    expect(seen).toHaveLength(0);
+    const pending = await delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] });
     const scheduled = await delivery.inbox.read(shard, { statuses: ["SCHEDULED"] });
 
-    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
+    expect(pending).toMatchObject([
       {
         signalId: "signal-0",
         label: "HANDLE_COMMAND",
-        status: "DELIVERED",
+        status: "TO_DELIVER",
       },
     ]);
+    expect(pending[0]?.signal?.typeUrl).toBe(earlierSignal.typeUrl);
+    expect(Array.from(pending[0]?.signal?.value ?? [])).toEqual([1]);
     await expect(delivery.inbox.read(shard, { statuses: ["SCHEDULED"] })).resolves.toMatchObject([
       {
         signalId: "signal-1",
@@ -132,6 +133,94 @@ describe("LocalProcessManagerInbox", () => {
     ]);
     expect(scheduled[0]?.signal?.typeUrl).toBe(laterSignal.typeUrl);
     expect(Array.from(scheduled[0]?.signal?.value ?? [])).toEqual([2]);
+  });
+
+  it("delivers only the received row when unrelated backlog is pending first", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inbox = new LocalProcessManagerInbox("Tasks");
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const unrelatedProcessManagerTypeUrl = "type.example.dev/Tasks.OtherProcessManager";
+    const shard = ShardIndex.single();
+    const seen: InboxMessage[] = [];
+    const unrelatedSeen: InboxMessage[] = [];
+
+    inbox.register({
+      targetTypeUrl,
+      replay(message) {
+        seen.push(message);
+        return Promise.resolve();
+      },
+    });
+    inbox.register({
+      targetTypeUrl: unrelatedProcessManagerTypeUrl,
+      replay(message) {
+        unrelatedSeen.push(message);
+        return Promise.reject(new Error("unrelated process-manager should not replay"));
+      },
+    });
+
+    await delivery.inbox.receive({
+      inboxId: {
+        targetId: "projection-0",
+        targetTypeUrl: "type.example.dev/Tasks.Projection",
+      },
+      signalId: "event-0",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      version: 1n,
+    });
+    await delivery.inbox.receive({
+      inboxId: {
+        targetId: "pm-0",
+        targetTypeUrl: unrelatedProcessManagerTypeUrl,
+      },
+      signalId: "signal-0",
+      label: "HANDLE_COMMAND",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T09:00:01.000Z"),
+      version: 2n,
+    });
+
+    await inbox.receive(delivery, {
+      inboxId: { targetId: "pm-1", targetTypeUrl },
+      signalId: "signal-1",
+      label: "HANDLE_COMMAND",
+      status: "TO_DELIVER",
+      shard,
+    });
+
+    expect(seen).toHaveLength(1);
+    expect(unrelatedSeen).toHaveLength(0);
+    expect(seen[0]).toMatchObject({
+      signalId: "signal-1",
+      label: "HANDLE_COMMAND",
+      status: "TO_DELIVER",
+    });
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      {
+        signalId: "event-0",
+        label: "UPDATE_SUBSCRIBER",
+        status: "TO_DELIVER",
+      },
+      {
+        signalId: "signal-0",
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+      },
+    ]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
+      {
+        signalId: "signal-1",
+        label: "HANDLE_COMMAND",
+        status: "DELIVERED",
+      },
+    ]);
   });
 
   it("rejects when replay throws an Error and leaves the row pending", async () => {

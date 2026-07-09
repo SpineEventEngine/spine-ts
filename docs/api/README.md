@@ -180,8 +180,9 @@ runtime drains that inbox immediately, requires tenant-safe replay in
 multitenant contexts, and resolves only after the received inbox row is marked
 delivered. Live projection subscribers use the same local handoff shape with
 `UPDATE_SUBSCRIBER` rows, original event IDs as dedup signal IDs, and exact-row
-target replay. Process-manager event reactors and event-commanding handlers are
-invoked directly from the event bus, state is stored in tenant-scoped `Stand` records with numeric
+target replay during the 30-second local retention window. Process-manager
+event reactors and event-commanding handlers are invoked directly from the
+event bus, state is stored in tenant-scoped `Stand` records with numeric
 versions, returned commands are wrapped and posted after state storage, and
 returned event messages are wrapped with process-manager-emitted event schemas
 and appended through the event store before follow-up dispatch. The repository

@@ -88,4 +88,92 @@ describe("LocalProjectionInbox", () => {
       },
     ]);
   });
+
+  it("delivers only the received row when unrelated backlog is pending first", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inbox = new LocalProjectionInbox("Tasks");
+    const targetTypeUrl = "type.example.dev/Tasks.Projection";
+    const unrelatedProjectionTypeUrl = "type.example.dev/Tasks.OtherProjection";
+    const shard = ShardIndex.single();
+    const seen: InboxMessage[] = [];
+    const unrelatedSeen: InboxMessage[] = [];
+
+    inbox.register({
+      targetTypeUrl,
+      replay(message) {
+        seen.push(message);
+        return Promise.resolve();
+      },
+    });
+    inbox.register({
+      targetTypeUrl: unrelatedProjectionTypeUrl,
+      replay(message) {
+        unrelatedSeen.push(message);
+        return Promise.reject(new Error("unrelated projection should not replay"));
+      },
+    });
+
+    await delivery.inbox.receive({
+      inboxId: {
+        targetId: "pm-0",
+        targetTypeUrl: "type.example.dev/Tasks.ProcessManager",
+      },
+      signalId: "signal-0",
+      label: "HANDLE_COMMAND",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      version: 1n,
+    });
+    await delivery.inbox.receive({
+      inboxId: {
+        targetId: "projection-0",
+        targetTypeUrl: unrelatedProjectionTypeUrl,
+      },
+      signalId: "event-0",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T09:00:01.000Z"),
+      version: 2n,
+    });
+
+    await inbox.receive(delivery, {
+      inboxId: { targetId: "projection-1", targetTypeUrl },
+      signalId: "event-1",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+    });
+
+    expect(seen).toHaveLength(1);
+    expect(unrelatedSeen).toHaveLength(0);
+    expect(seen[0]).toMatchObject({
+      signalId: "event-1",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+    });
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      {
+        signalId: "signal-0",
+        label: "HANDLE_COMMAND",
+        status: "TO_DELIVER",
+      },
+      {
+        signalId: "event-0",
+        label: "UPDATE_SUBSCRIBER",
+        status: "TO_DELIVER",
+      },
+    ]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
+      {
+        signalId: "event-1",
+        label: "UPDATE_SUBSCRIBER",
+        status: "DELIVERED",
+      },
+    ]);
+  });
 });

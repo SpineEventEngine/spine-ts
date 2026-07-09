@@ -73,6 +73,42 @@ export class Delivery {
       await this.shards.release(session);
     }
   }
+
+  /**
+   * Drain one exact pending inbox message by claiming its shard and replaying only that row.
+   *
+   * Local framework handoffs use this when the caller has just written a durable row and must not
+   * run unrelated pending rows from the same shard.
+   */
+  async drainMessage(message: InboxMessage, options: DeliveryDrainOptions): Promise<DeliveryRun> {
+    const session = await this.shards.pickUp(message.shard, options.node);
+    if (session === undefined) {
+      return deliveryRun("SKIPPED", 0, 0, 0, []);
+    }
+
+    try {
+      const pending = await this.inbox.readMessage(message.id);
+      if (pending === undefined || pending.status !== "TO_DELIVER") {
+        return deliveryRun("DRAINED", 0, 0, 0, []);
+      }
+
+      try {
+        await options.onMessage(pending);
+        const marked = await this.inbox.markDelivered(pending);
+        if (marked === undefined) {
+          throw new Error(`Inbox message "${pending.id.value}" was not marked delivered.`);
+        }
+
+        return deliveryRun("DRAINED", 1, 1, 0, []);
+      } catch (error) {
+        const failures = [Object.freeze({ message: pending, error })];
+
+        return deliveryRun("DRAINED", 1, 0, 1, failures);
+      }
+    } finally {
+      await this.shards.release(session);
+    }
+  }
 }
 
 /** Delivery construction options. */

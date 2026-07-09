@@ -4209,7 +4209,7 @@ describe("repository signal routing", () => {
     expect(storedEvent?.id?.value).toBe("event-inbox");
   });
 
-  it("deduplicates duplicate live projection delivery by event and target inbox", async () => {
+  it("deduplicates duplicate live projection delivery within the local retention window", async () => {
     ExecutingTaskProjection.reset();
     const factory = new InMemoryStorageFactory();
     const repository = createExecutingProjectionRepository();
