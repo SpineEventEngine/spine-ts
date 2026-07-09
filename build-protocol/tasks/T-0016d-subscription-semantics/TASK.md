@@ -1,6 +1,6 @@
 # T-0016d: Subscription Semantics Closure
 
-Status: in progress
+Status: complete; integrated to main
 Start: `2026-07-08T11:12:49Z`
 Baseline commit: `a7c3a5c`
 Branch: `task/T-0016d-subscription-semantics`
