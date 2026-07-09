@@ -586,7 +586,7 @@ runtime wiring.
 The transport package pins `zeromq@6.5.0` for local IPC adapter work, but that
 native dependency remains outside the root TypeDoc entry point. The
 adapter-scoped `@spine-ts/transport/zeromq` subpath exports
-`createZeroMqAdapterConfig()` and `createZeroMqSignalTransport()` for local IPC
+`createZeroMqAdapterConfig()` and `createZeroMqTransport()` for local IPC
 deployments. It derives deterministic IPC endpoints from adapter config and
 transport routing descriptors internally, then exposes only the
 `SignalTransport` contract to runtime binding code. Socket creation, endpoint

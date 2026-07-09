@@ -62,5 +62,8 @@ function closeMethod(closeable: unknown): (() => unknown) | undefined {
     return undefined;
   }
 
-  return () => close.call(closeable);
+  return () => {
+    const result: unknown = Reflect.apply(close, closeable, []);
+    return result;
+  };
 }

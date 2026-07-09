@@ -19,7 +19,7 @@ import type {
 import type { ZeroMqAdapterConfig } from "./adapter-config.js";
 
 /** Optional tuning for the adapter-scoped local IPC transport. */
-export interface ZeroMqSignalTransportOptions {
+export interface ZeroMqTransportOptions {
   /** Milliseconds used for bounded request/reply sends and receives. */
   readonly requestTimeoutMs?: number;
   /** Milliseconds used by background worker sockets while waiting for messages. */
@@ -28,27 +28,27 @@ export interface ZeroMqSignalTransportOptions {
   readonly onBackgroundFailure?: (error: Error) => void;
 }
 
-type ActiveHandle = TransportSubscriptionHandle<TransportSignalKind>;
-type PublishHandlerEntry = {
+type ActiveHandle = TransportSubscriptionHandle;
+interface PublishHandlerEntry {
   readonly subscription: TransportSubscription;
   readonly handler: PublishTransportHandler;
-};
-type RequestHandlerEntry = {
+}
+interface RequestHandlerEntry {
   readonly subscription: TransportSubscription;
   readonly handler: RequestTransportHandler;
-};
+}
 
 const defaultRequestTimeoutMs = 2_000;
 const defaultReceiveTimeoutMs = 250;
 const closeDelayMs = 0;
 const requestHandlerFailureMessage = "ZeroMQ request handler failed.";
 const privateDirectoryMode = 0o700;
-const groupOrOtherModeMask = 0o077;
+const unsafeModeMask = 0o077;
 
 /** Create a same-host ZeroMQ-backed `SignalTransport` over deterministic local IPC endpoints. */
-export function createZeroMqSignalTransport(
+export function createZeroMqTransport(
   config: ZeroMqAdapterConfig,
-  options: ZeroMqSignalTransportOptions = {},
+  options: ZeroMqTransportOptions = {},
 ): SignalTransport {
   return new ZeroMqSignalTransport(config, options);
 }
@@ -64,7 +64,7 @@ class ZeroMqSignalTransport implements SignalTransport {
   #closed = false;
   #close: Promise<void> | undefined;
 
-  constructor(config: ZeroMqAdapterConfig, options: ZeroMqSignalTransportOptions) {
+  constructor(config: ZeroMqAdapterConfig, options: ZeroMqTransportOptions) {
     this.#config = config;
     this.#requestTimeoutMs = options.requestTimeoutMs ?? defaultRequestTimeoutMs;
     this.#receiveTimeoutMs = options.receiveTimeoutMs ?? defaultReceiveTimeoutMs;
@@ -103,9 +103,9 @@ class ZeroMqSignalTransport implements SignalTransport {
     subscriber.connect(endpoint);
 
     const handle = new ZeroMqSubscriptionHandle(subscription, subscriber, () => {
-      this.#activeHandles.delete(handle as ActiveHandle);
+      this.#activeHandles.delete(handle);
     });
-    this.#activeHandles.add(handle as ActiveHandle);
+    this.#activeHandles.add(handle);
     void this.#runSubscriber(subscriber, entry, handle);
 
     return handle;
@@ -162,9 +162,9 @@ class ZeroMqSignalTransport implements SignalTransport {
     await replier.bind(endpointFor(this.#config, subscription.topic, "request"));
 
     const handle = new ZeroMqSubscriptionHandle(subscription, replier, () => {
-      this.#activeHandles.delete(handle as ActiveHandle);
+      this.#activeHandles.delete(handle);
     });
-    this.#activeHandles.add(handle as ActiveHandle);
+    this.#activeHandles.add(handle);
     void this.#runReplier(replier, entry, handle);
 
     return handle;
@@ -238,11 +238,14 @@ class ZeroMqSignalTransport implements SignalTransport {
     entry: PublishHandlerEntry,
     handle: ZeroMqSubscriptionHandle<TransportSignalKind>,
   ): Promise<void> {
-    while (!handle.closed) {
+    for (;;) {
+      if (handle.closed) {
+        break;
+      }
       try {
         const received = await receiveFrames(subscriber);
 
-        if (received.status === "stopped" || handle.closed || this.#closed) {
+        if (received.status === "stopped") {
           continue;
         }
 
@@ -267,11 +270,14 @@ class ZeroMqSignalTransport implements SignalTransport {
     entry: RequestHandlerEntry,
     handle: ZeroMqSubscriptionHandle<TransportSignalKind>,
   ): Promise<void> {
-    while (!handle.closed) {
+    for (;;) {
+      if (handle.closed) {
+        break;
+      }
       try {
         const received = await receiveFrames(replier);
 
-        if (received.status === "stopped" || handle.closed || this.#closed) {
+        if (received.status === "stopped") {
           continue;
         }
 
@@ -382,7 +388,9 @@ function endpointFor(
     .update(topic.routing.routingKey)
     .digest("hex")
     .slice(0, 24);
-  const fileName = `s${topic.signalKind[0]}-${channel[0]}-${digest}.sock`;
+  const signalKindPrefix = topic.signalKind[0] ?? "s";
+  const channelPrefix = channel[0] ?? "c";
+  const fileName = `s${signalKindPrefix}-${channelPrefix}-${digest}.sock`;
 
   return `ipc://${path.join(config.ipcDirectory, fileName)}`;
 }
@@ -407,7 +415,7 @@ async function ensurePrivateIpcDirectory(ipcDirectory: string): Promise<void> {
     throw new Error("ZeroMQ adapter ipcDirectory must be a directory.");
   }
 
-  if ((directory.mode & groupOrOtherModeMask) !== 0) {
+  if ((directory.mode & unsafeModeMask) !== 0) {
     throw new Error("ZeroMQ adapter ipcDirectory must be private to the current user.");
   }
 }

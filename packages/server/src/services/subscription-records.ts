@@ -59,7 +59,7 @@ export const DurableSubscriptionRecords: Readonly<{
     };
 
     return create(AnySchema, {
-      typeUrl: durableSubscriptionRecordTypeUrl,
+      typeUrl: durableRecordTypeUrl,
       value: new TextEncoder().encode(JSON.stringify(stored)),
     });
   },
@@ -74,11 +74,11 @@ interface StoredSubscriptionRecord {
   readonly expiresAtMs: number;
 }
 
-const durableSubscriptionRecordTypeUrl = "type.spine-ts.dev/internal/DurableSubscriptionRecord";
+const durableRecordTypeUrl = "type.spine-ts.dev/internal/DurableSubscriptionRecord";
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 
 function readStoredRecord(record: Any): StoredSubscriptionRecord {
-  if (record.typeUrl !== durableSubscriptionRecordTypeUrl) {
+  if (record.typeUrl !== durableRecordTypeUrl) {
     throw new Error("Durable subscription record type URL is invalid.");
   }
 

@@ -173,11 +173,8 @@ function requireProductionFacility<T>(facility: T | undefined, name: string): T 
 }
 
 class LocalSignalTransport implements SignalTransport {
-  readonly #publishHandlers = new Map<
-    string,
-    Set<PublishTransportHandler<unknown, TransportSignalKind>>
-  >();
-  readonly #requestHandlers = new Map<string, RequestTransportHandler<unknown, unknown>>();
+  readonly #publishHandlers = new Map<string, Set<PublishTransportHandler>>();
+  readonly #requestHandlers = new Map<string, RequestTransportHandler>();
   #closed = false;
 
   async publish<Envelope, Kind extends TransportSignalKind>(
@@ -190,27 +187,33 @@ class LocalSignalTransport implements SignalTransport {
       return;
     }
 
-    await Promise.all([...handlers].map((handler) => handler(operation)));
+    await Promise.all([...handlers].map(async (handler) => handler(operation)));
   }
 
-  async subscribe<Envelope, Kind extends TransportSignalKind>(
+  subscribe<Envelope, Kind extends TransportSignalKind>(
     subscription: TransportSubscription<Kind>,
     handler: PublishTransportHandler<Envelope, Kind>,
   ): Promise<TransportSubscriptionHandle<Kind>> {
-    this.#requireOpen();
-    const key = subscription.topic.routing.routingKey;
-    const handlers = this.#publishHandlers.get(key) ?? new Set();
-    const stored = handler as PublishTransportHandler<unknown, TransportSignalKind>;
+    try {
+      this.#requireOpen();
+      const key = subscription.topic.routing.routingKey;
+      const handlers = this.#publishHandlers.get(key) ?? new Set();
+      const stored = handler as PublishTransportHandler;
 
-    handlers.add(stored);
-    this.#publishHandlers.set(key, handlers);
+      handlers.add(stored);
+      this.#publishHandlers.set(key, handlers);
 
-    return new LocalTransportSubscriptionHandle(subscription, () => {
-      handlers.delete(stored);
-      if (handlers.size === 0) {
-        this.#publishHandlers.delete(key);
-      }
-    });
+      return Promise.resolve(
+        new LocalTransportSubscriptionHandle(subscription, () => {
+          handlers.delete(stored);
+          if (handlers.size === 0) {
+            this.#publishHandlers.delete(key);
+          }
+        }),
+      );
+    } catch (error: unknown) {
+      return Promise.reject(new Error(String(error)));
+    }
   }
 
   async request<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
@@ -225,26 +228,32 @@ class LocalSignalTransport implements SignalTransport {
       );
     }
 
-    return (await handler(operation)) as ResponseEnvelope;
+    return Promise.resolve(handler(operation) as ResponseEnvelope | Promise<ResponseEnvelope>);
   }
 
-  async respond<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
+  respond<RequestEnvelope, ResponseEnvelope, Kind extends TransportSignalKind>(
     subscription: TransportSubscription<Kind>,
     handler: RequestTransportHandler<RequestEnvelope, ResponseEnvelope, Kind>,
   ): Promise<TransportSubscriptionHandle<Kind>> {
-    this.#requireOpen();
-    const key = subscription.topic.routing.routingKey;
+    try {
+      this.#requireOpen();
+      const key = subscription.topic.routing.routingKey;
 
-    if (this.#requestHandlers.has(key)) {
-      throw new Error(`Local transport responder is already registered for "${key}".`);
+      if (this.#requestHandlers.has(key)) {
+        throw new Error(`Local transport responder is already registered for "${key}".`);
+      }
+
+      const stored = handler as RequestTransportHandler;
+      this.#requestHandlers.set(key, stored);
+
+      return Promise.resolve(
+        new LocalTransportSubscriptionHandle(subscription, () => {
+          this.#requestHandlers.delete(key);
+        }),
+      );
+    } catch (error: unknown) {
+      return Promise.reject(new Error(String(error)));
     }
-
-    const stored = handler as RequestTransportHandler<unknown, unknown>;
-    this.#requestHandlers.set(key, stored);
-
-    return new LocalTransportSubscriptionHandle(subscription, () => {
-      this.#requestHandlers.delete(key);
-    });
   }
 
   close(): Promise<void> {

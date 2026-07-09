@@ -20,7 +20,7 @@ server runtime code or expose a concrete production adapter from its root API.
 
 This package pins the maintained official `zeromq@6.5.0` package for local IPC.
 The adapter-scoped `@spine-ts/transport/zeromq` subpath exports
-`createZeroMqAdapterConfig()` and `createZeroMqSignalTransport()`. The package
+`createZeroMqAdapterConfig()` and `createZeroMqTransport()`. The package
 root remains adapter-agnostic. ZeroMQ socket classes, endpoint strings,
 multipart frames, native binding types, broker processes, participant lifecycle
 values, worker registrations, delivery attempts/results, retry policy, durable

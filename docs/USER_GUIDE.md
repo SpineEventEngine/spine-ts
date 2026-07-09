@@ -890,9 +890,9 @@ Use the adapter-scoped subpath when a local runtime needs a ZeroMQ-backed
 `SignalTransport`:
 
 ```ts
-import { createZeroMqAdapterConfig, createZeroMqSignalTransport } from "@spine-ts/transport/zeromq";
+import { createZeroMqAdapterConfig, createZeroMqTransport } from "@spine-ts/transport/zeromq";
 
-const transport = createZeroMqSignalTransport(
+const transport = createZeroMqTransport(
   createZeroMqAdapterConfig({
     ipcDirectory: "/tmp/spine-ts-ipc",
     adapterIdentity: "todo-runtime",
