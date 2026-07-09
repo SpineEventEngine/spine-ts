@@ -617,16 +617,25 @@ storage is read.
 Direct subscriptions are in-process only and must be cleaned up by calling
 `unsubscribe()`. Service subscriptions allocate IDs in `Subscribe` and attach
 Stand delivery in `Activate`; updates recorded before activation are not
-replayed by this first slice. `Subscribe` rejects unknown state targets before
-creating an inactive record. Subscription IDs are opaque and process-local to
-one `SpineServices` instance; activating the same ID against another instance,
+replayed by this first slice. `Subscribe` rejects unknown state targets,
+invalid criteria, unsupported comparison operators, and unknown subscription
+field paths before creating an inactive record. `Target.include_all = true`
+delivers every activated update. `Target.filters` supports an optional ID
+filter plus `ALL`/`EITHER` composite `EQUAL` field filters over generated
+entity state fields, including nested message fields. Missing ID filters match
+all IDs. Filtered topics deliver matching new states and emit
+`no_longer_matching` when the previous state matched but the new state does
+not. `Topic.field_mask` is applied to delivered states, not to
+`no_longer_matching` updates. Single-tenant subscriptions reject tenant
+options; multitenant subscriptions require `tenantId`; delivery is scoped to
+that tenant slice. Subscription IDs are opaque and process-local to one
+`SpineServices` instance; activating the same ID against another instance,
 activating an already-active ID, or activating any missing/unknown ID completes
 without updates. `Cancel` returns OK for missing, unknown, already-canceled, or
-already-cleaned IDs.
-Cleanup is explicit and idempotent when cancellation happens, an activation
-iterator closes, the inactive TTL expires, or the active queue limit is
-exceeded. Defaults are 30 seconds for never-activated subscriptions and 100
-queued updates for slow active consumers.
+already-cleaned IDs. Cleanup is explicit and idempotent when cancellation
+happens, an activation iterator closes, the inactive TTL expires, or the active
+queue limit is exceeded. Defaults are 30 seconds for never-activated
+subscriptions and 100 queued updates for slow active consumers.
 
 The current read side is not durable subscription storage. Direct Stand
 subscriptions, service subscription records, Stand version metadata, and the

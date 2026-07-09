@@ -4,6 +4,7 @@ import { create, fromBinary, toBinary, type Message } from "@bufbuild/protobuf";
 import type { GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
 import {
+  BytesValueSchema,
   EmptySchema,
   FileDescriptorProtoSchema,
   FileDescriptorSetSchema,
@@ -38,6 +39,7 @@ import {
 } from "@spine-ts/proto";
 import { CommandService } from "@spine-ts/proto/generated/spine/client/command_service_pb.js";
 import {
+  type CompositeFilter,
   CompositeFilter_CompositeOperator,
   CompositeFilterSchema,
   Filter_Operator,
@@ -66,6 +68,7 @@ import {
   TopicSchema,
 } from "@spine-ts/proto/generated/spine/client/subscription_pb.js";
 import type { Ack } from "@spine-ts/proto/generated/spine/core/ack_pb.js";
+import type { Response } from "@spine-ts/proto/generated/spine/core/response_pb.js";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -92,6 +95,16 @@ type AggregateState = Message<"AggregateState"> & {
   id: string;
   name: string;
   archived: boolean;
+};
+
+type TaskId = Message<"spine.example.todo.v1.TaskId"> & {
+  value: string;
+};
+
+type Task = Message<"spine.example.todo.v1.Task"> & {
+  id?: TaskId;
+  title: string;
+  completed: boolean;
 };
 
 type ValidatedAggregateState = Message<"example.validation_refusal.ValidatedAggregateState"> & {
@@ -150,6 +163,21 @@ const ValidatedTaskCommandSchema = messageDesc(
   fileValidationRefusalFixture,
   1,
 ) as GenMessage<ValidatedTaskCommand>;
+const fileTaskIdFixture = fileDesc(
+  "CiNzcGluZS9leGFtcGxlL3RvZG8vdjEvdGFza19pZC5wcm90bxIVc3BpbmUuZXhhbXBsZS50b2Rv" +
+    "LnYxIh0KBlRhc2tJZBITCgV2YWx1ZRgBIAEoCUIEoIUkAUIbqo0kF3R5cGUuc3BpbmUuZXhhbXBs" +
+    "ZS50b2RvYgZwcm90bzM",
+  [file_spine_options],
+);
+const fileTaskFixture = fileDesc(
+  "CiFzcGluZS9leGFtcGxlL3RvZG8vdjEvdGFza3MucHJvdG8SFXNwaW5lLmV4YW1wbGUudG9kby52" +
+    "MSJvCgRUYXNrEjcKAmlkGAEgASgLMh0uc3BpbmUuZXhhbXBsZS50b2RvLnYxLlRhc2tJZEIMoIUk" +
+    "AeiFJAGAhiQBEhMKBXRpdGxlGAIgASgJQgSghSQBEhEKCWNvbXBsZXRlZBgDIAEoCDoG+ookAggB" +
+    "QhuqjSQXdHlwZS5zcGluZS5leGFtcGxlLnRvZG9iBnByb3RvMw",
+  [fileTaskIdFixture, file_spine_options],
+);
+const TaskIdSchema = messageDesc(fileTaskIdFixture, 0) as GenMessage<TaskId>;
+const TaskSchema = messageDesc(fileTaskFixture, 0) as GenMessage<Task>;
 
 class TaskProjection extends Projection<string, typeof ProjectionStateSchema, number> {
   subscribeTask(event: ProjectionState): void {
@@ -232,6 +260,8 @@ class RollingBackTransitionTaskAggregate extends TransitionViolatingTaskAggregat
     }
   }
 }
+
+class MessageIdTaskAggregate extends Aggregate<TaskId, typeof TaskSchema, bigint> {}
 
 describe("SpineServices", () => {
   it("posts commands through CommandService over a real gRPC transport", async () => {
@@ -1599,6 +1629,909 @@ describe("SpineServices", () => {
     await iterator.return?.();
   });
 
+  it("matches subscription filters before delivering entity updates", async () => {
+    let deliverUpdate:
+      | ((update: {
+          readonly typeUrl: string;
+          readonly id: unknown;
+          readonly state: ProjectionState;
+        }) => void)
+      | undefined;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: (_schema, callback) => {
+        deliverUpdate = callback;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(
+      createFilteredTopic({ id: "task-1", name: "Open" }),
+    );
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const first = iterator.next();
+
+    await delay(25);
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "task-1",
+      state: createState("task-1", "Closed"),
+    });
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "task-2",
+      state: createState("task-2", "Open"),
+    });
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "task-1",
+      state: createState("task-1", "Open"),
+    });
+
+    const delivered = await withTimeout(first, "filtered subscription update");
+    const update = delivered.value as SubscriptionUpdate | undefined;
+
+    expect(delivered.done).toBe(false);
+    expect(unpackEntityState(update)).toEqual(createState("task-1", "Open"));
+    await iterator.return?.();
+  });
+
+  it("emits no-longer-matching when a filtered subscription stops matching", async () => {
+    let deliverUpdate:
+      | ((update: {
+          readonly typeUrl: string;
+          readonly id: unknown;
+          readonly previousState?: ProjectionState;
+          readonly state: ProjectionState;
+        }) => void)
+      | undefined;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: (_schema, callback) => {
+        deliverUpdate = callback;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createFilteredTopic({ name: "Open" }));
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = iterator.next();
+
+    await delay(25);
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "task-1",
+      previousState: createState("task-1", "Open"),
+      state: createState("task-1", "Closed"),
+    });
+
+    const delivered = await withTimeout(next, "no-longer-matching subscription update");
+    const update = delivered.value as SubscriptionUpdate | undefined;
+
+    expect(delivered.done).toBe(false);
+    expect(entityUpdateKind(update)?.case).toBe("noLongerMatching");
+    expect(entityUpdateKind(update)?.value).toBe(true);
+    expect(unpackAny(entityUpdateId(update) ?? packMissing(), StringValueSchema)?.value).toBe(
+      "task-1",
+    );
+    await iterator.return?.();
+  });
+
+  it("applies topic field masks only to delivered subscription states", async () => {
+    let deliverUpdate:
+      | ((update: {
+          readonly typeUrl: string;
+          readonly id: unknown;
+          readonly previousState?: ProjectionState;
+          readonly state: ProjectionState;
+        }) => void)
+      | undefined;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: (_schema, callback) => {
+        deliverUpdate = callback;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(
+      createFilteredTopic({ name: "Open", fieldMask: ["name"] }),
+    );
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const first = iterator.next();
+
+    await delay(25);
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "task-1",
+      state: createState("task-1", "Open", 7),
+    });
+    const deliveredState = await withTimeout(first, "masked subscription state");
+    const second = iterator.next();
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "task-1",
+      previousState: createState("task-1", "Open", 7),
+      state: createState("task-1", "Closed", 7),
+    });
+    const noLongerMatching = await withTimeout(second, "unmasked no-longer-matching update");
+
+    expect(unpackEntityState(deliveredState.value as SubscriptionUpdate | undefined)).toEqual(
+      create(ProjectionStateSchema, { name: "Open" }),
+    );
+    expect(entityUpdateKind(noLongerMatching.value as SubscriptionUpdate | undefined)?.case).toBe(
+      "noLongerMatching",
+    );
+    await iterator.return?.();
+  });
+
+  it("rejects unsupported subscription filters before activation attaches Stand delivery", async () => {
+    let subscribeCalls = 0;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: () => {
+        subscribeCalls += 1;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const topic = createFilteredTopic({ name: "Open" });
+    if (topic.target?.criterion.case !== "filters") {
+      throw new Error("Expected filtered topic.");
+    }
+    const filter = topic.target.criterion.value.filter[0]?.filter[0];
+    if (filter === undefined) {
+      throw new Error("Expected simple subscription filter.");
+    }
+    filter.operator = Filter_Operator.GREATER_THAN;
+
+    await expect(Promise.resolve().then(() => handlers.subscribe(topic))).rejects.toThrow(
+      "SubscriptionService.Subscribe supports only EQUAL field filters.",
+    );
+    expect(subscribeCalls).toBe(0);
+  });
+
+  it("rejects malformed subscription topics before activation attaches Stand delivery", () => {
+    const handlers = registeredSubscriptionHandlers(
+      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+    );
+    const cases = [
+      {
+        topic: create(TopicSchema, {
+          id: create(TopicIdSchema, { value: "" }),
+          target: createSubscriptionTarget(),
+          context: createActorContext(),
+        }),
+        message: "Subscription topic ID is required.",
+      },
+      {
+        topic: create(TopicSchema, {
+          id: create(TopicIdSchema, { value: "t-missing-context" }),
+          target: createSubscriptionTarget(),
+        }),
+        message: "Subscription topic context is required.",
+      },
+      {
+        topic: create(TopicSchema, {
+          id: create(TopicIdSchema, { value: "t-missing-criterion" }),
+          target: create(TargetSchema, { type: deriveTypeUrl(ProjectionStateSchema) }),
+          context: createActorContext(),
+        }),
+        message: "Subscription topic criterion is required.",
+      },
+      {
+        topic: create(TopicSchema, {
+          id: create(TopicIdSchema, { value: "t-include-none" }),
+          target: create(TargetSchema, {
+            type: deriveTypeUrl(ProjectionStateSchema),
+            criterion: { case: "includeAll", value: false },
+          }),
+          context: createActorContext(),
+        }),
+        message: "SubscriptionService.Subscribe requires filters or include_all = true.",
+      },
+    ];
+
+    for (const { topic, message } of cases) {
+      expect(() => handlers.subscribe(topic)).toThrow(message);
+    }
+  });
+
+  it("rejects empty subscription target filters before activation attaches Stand delivery", () => {
+    let subscribeCalls = 0;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: () => {
+        subscribeCalls += 1;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: "t-empty-filters" }),
+      target: create(TargetSchema, {
+        type: deriveTypeUrl(ProjectionStateSchema),
+        criterion: {
+          case: "filters",
+          value: create(TargetFiltersSchema),
+        },
+      }),
+      context: createActorContext(),
+    });
+
+    expect(() => handlers.subscribe(topic)).toThrow(
+      "SubscriptionService.Subscribe requires an ID filter or field filter.",
+    );
+    expect(subscribeCalls).toBe(0);
+  });
+
+  it("rejects invalid subscription field masks before activation attaches Stand delivery", () => {
+    const handlers = registeredSubscriptionHandlers(
+      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+    );
+    const cases = [
+      {
+        fieldMask: new Array(33).fill("name") as string[],
+        message: "SubscriptionService.Subscribe field_mask may contain at most 32 paths.",
+      },
+      {
+        fieldMask: ["n".repeat(129)],
+        message:
+          "SubscriptionService.Subscribe field_mask paths may contain at most 128 characters.",
+      },
+      {
+        fieldMask: [".name"],
+        message: "SubscriptionService.Subscribe field_mask path is required.",
+      },
+      {
+        fieldMask: ["name."],
+        message: "SubscriptionService.Subscribe field_mask path is required.",
+      },
+      {
+        fieldMask: ["name..value"],
+        message: "SubscriptionService.Subscribe field_mask path is required.",
+      },
+      {
+        fieldMask: ["missing"],
+        message: 'SubscriptionService.Subscribe field_mask "missing" is not a state field.',
+      },
+      {
+        fieldMask: ["name.value"],
+        message: 'SubscriptionService.Subscribe field_mask "name.value" is not a message path.',
+      },
+    ];
+
+    for (const { fieldMask, message } of cases) {
+      const topic = createTopic();
+      topic.fieldMask = create(FieldMaskSchema, { paths: fieldMask });
+
+      expect(() => handlers.subscribe(topic)).toThrow(message);
+    }
+  });
+
+  it("rejects invalid subscription field filters before activation attaches Stand delivery", () => {
+    const handlers = registeredSubscriptionHandlers(
+      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+    );
+    const cases = [
+      {
+        filter: create(FilterSchema, {
+          fieldPath: { fieldName: [] },
+          value: packStringId("Open"),
+          operator: Filter_Operator.EQUAL,
+        }),
+        message: "SubscriptionService.Subscribe field filter path is required.",
+      },
+      {
+        filter: create(FilterSchema, {
+          fieldPath: { fieldName: ["missing"] },
+          value: packStringId("Open"),
+          operator: Filter_Operator.EQUAL,
+        }),
+        message: 'SubscriptionService.Subscribe field filter "missing" is not a state field.',
+      },
+      {
+        filter: create(FilterSchema, {
+          fieldPath: { fieldName: [Array.from({ length: 129 }, () => "n").join("")] },
+          value: packStringId("Open"),
+          operator: Filter_Operator.EQUAL,
+        }),
+        message:
+          "SubscriptionService.Subscribe field filter path components may contain at most 128 characters.",
+      },
+      {
+        filter: create(FilterSchema, {
+          fieldPath: { fieldName: Array.from({ length: 17 }, () => "name") },
+          value: packStringId("Open"),
+          operator: Filter_Operator.EQUAL,
+        }),
+        message:
+          "SubscriptionService.Subscribe field filter path may contain at most 16 components.",
+      },
+      {
+        filter: create(FilterSchema, {
+          fieldPath: { fieldName: ["name"] },
+          operator: Filter_Operator.EQUAL,
+        }),
+        message: "SubscriptionService.Subscribe field filter value is required.",
+      },
+    ];
+
+    for (const { filter, message } of cases) {
+      const topic = createFilteredTopicWithCriteria({
+        filter: [
+          create(CompositeFilterSchema, {
+            filter: [filter],
+            operator: CompositeFilter_CompositeOperator.ALL,
+          }),
+        ],
+      });
+
+      expect(() => handlers.subscribe(topic)).toThrow(message);
+    }
+  });
+
+  it("rejects wrong-type Any values for message-typed subscription field filters", () => {
+    const repository = new Repository({
+      entityType: MessageIdTaskAggregate,
+      schema: TaskSchema,
+    });
+    const context = BoundedContext.singleTenant("MessageIdTasks").add(repository).build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const topic = createFilteredTopicForTask({
+      filter: [
+        create(CompositeFilterSchema, {
+          filter: [
+            create(FilterSchema, {
+              fieldPath: { fieldName: ["id"] },
+              value: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "wrong-id" })),
+              operator: Filter_Operator.EQUAL,
+            }),
+          ],
+          operator: CompositeFilter_CompositeOperator.ALL,
+        }),
+      ],
+    });
+
+    expect(() => handlers.subscribe(topic)).toThrow(
+      "SubscriptionService.Subscribe field filter value must pack spine.example.todo.v1.TaskId.",
+    );
+  });
+
+  it("keeps returned subscription mutation from changing activation tenant or topic", async () => {
+    const capturedTenantKeys: (string | undefined)[] = [];
+    let deliverUpdate:
+      | ((update: {
+          readonly typeUrl: string;
+          readonly id: unknown;
+          readonly state: ProjectionState;
+        }) => void)
+      | undefined;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      isMultitenant: true,
+      subscribe: (_schema, callback, options) => {
+        capturedTenantKeys.push(options.tenantId);
+        deliverUpdate = callback;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic("tenant-a"));
+    if (subscription.topic === undefined) {
+      throw new Error("Expected returned subscription topic.");
+    }
+    subscription.topic = createFilteredTopic({ name: "Never", tenantId: "tenant-b" });
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = iterator.next();
+
+    await delay(25);
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "task-cloned",
+      state: createState("task-cloned", "Delivered"),
+    });
+    const delivered = await withTimeout(next, "clone-isolated subscription update");
+
+    expect(capturedTenantKeys).toEqual(["tenant-a"]);
+    expect(unpackEntityState(delivered.value as SubscriptionUpdate | undefined)).toEqual(
+      createState("task-cloned", "Delivered"),
+    );
+    await iterator.return?.();
+  });
+
+  it("keeps delivered subscription metadata mutation from changing later updates", async () => {
+    let deliverUpdate:
+      | ((update: {
+          readonly typeUrl: string;
+          readonly id: unknown;
+          readonly state: ProjectionState;
+        }) => void)
+      | undefined;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: (_schema, callback) => {
+        deliverUpdate = callback;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(createTopic());
+    const originalSubscriptionId = subscription.id?.value;
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const first = iterator.next();
+
+    await delay(25);
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "first-delivered",
+      state: createState("first-delivered", "First"),
+    });
+    const firstDelivered = await withTimeout(
+      first,
+      "first clone-isolated subscription metadata update",
+    );
+    const firstUpdate = firstDelivered.value as SubscriptionUpdate | undefined;
+
+    expect(firstUpdate?.subscription?.id?.value).toBe(originalSubscriptionId);
+    if (firstUpdate?.subscription === undefined) {
+      throw new Error("Expected first delivered update to echo subscription metadata.");
+    }
+    if (firstUpdate.subscription.id === undefined) {
+      throw new Error("Expected first delivered update to echo subscription ID.");
+    }
+    firstUpdate.subscription.id.value = "mutated-subscription";
+    firstUpdate.subscription.topic = createFilteredTopic({ name: "Mutated" });
+
+    const second = iterator.next();
+    await delay(25);
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "second-delivered",
+      state: createState("second-delivered", "Second"),
+    });
+    const secondDelivered = await withTimeout(
+      second,
+      "second clone-isolated subscription metadata update",
+    );
+    const secondUpdate = secondDelivered.value as SubscriptionUpdate | undefined;
+
+    expect(secondUpdate?.subscription?.id?.value).toBe(originalSubscriptionId);
+    expect(secondUpdate?.subscription?.topic).toEqual(subscription.topic);
+    await iterator.return?.();
+  });
+
+  it("coerces non-positive subscription service options", () => {
+    const handlers = registeredSubscriptionHandlers(
+      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+      { inactiveTtlMs: 0, queueLimit: 0 },
+    );
+
+    expect(() => handlers.subscribe(createTopic())).not.toThrow();
+  });
+
+  it("keeps missing subscription IDs inert", async () => {
+    const handlers = registeredSubscriptionHandlers(
+      createFakeContext({ stateTypes: [deriveTypeUrl(ProjectionStateSchema)] }),
+    );
+    const iterator = handlers.activate(create(SubscriptionSchema))[Symbol.asyncIterator]();
+
+    await expect(
+      withTimeout(iterator.next(), "missing subscription ID activation"),
+    ).resolves.toEqual({
+      done: true,
+      value: undefined,
+    });
+    expect((handlers.cancel(create(SubscriptionSchema)) as Response).status?.status.case).toBe(
+      "ok",
+    );
+  });
+
+  it("rejects empty subscription ID filters before activation attaches Stand delivery", () => {
+    let subscribeCalls = 0;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: () => {
+        subscribeCalls += 1;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const topic = create(TopicSchema, {
+      id: create(TopicIdSchema, { value: "t-empty-id-filter" }),
+      target: create(TargetSchema, {
+        type: deriveTypeUrl(ProjectionStateSchema),
+        criterion: {
+          case: "filters",
+          value: create(TargetFiltersSchema, {
+            idFilter: { id: [] },
+          }),
+        },
+      }),
+      context: createActorContext(),
+    });
+
+    expect(() => handlers.subscribe(topic)).toThrow(
+      "SubscriptionService.Subscribe id_filter requires at least one ID.",
+    );
+    expect(subscribeCalls).toBe(0);
+  });
+
+  it("delivers subscription updates matched by EITHER filters", async () => {
+    let deliverUpdate:
+      | ((update: {
+          readonly typeUrl: string;
+          readonly id: unknown;
+          readonly state: ProjectionState;
+        }) => void)
+      | undefined;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: (_schema, callback) => {
+        deliverUpdate = callback;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const subscription = await handlers.subscribe(
+      createFilteredTopicWithCriteria({
+        filter: [
+          create(CompositeFilterSchema, {
+            filter: [
+              create(FilterSchema, {
+                fieldPath: { fieldName: ["name"] },
+                value: packStringId("Closed"),
+                operator: Filter_Operator.EQUAL,
+              }),
+              create(FilterSchema, {
+                fieldPath: { fieldName: ["priority"] },
+                value: packInt32(7),
+                operator: Filter_Operator.EQUAL,
+              }),
+            ],
+            operator: CompositeFilter_CompositeOperator.EITHER,
+          }),
+        ],
+      }),
+    );
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = iterator.next();
+
+    await delay(25);
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: "task-1",
+      state: createState("task-1", "Open", 7),
+    });
+
+    const delivered = (await withTimeout(next, "either subscription")).value as
+      SubscriptionUpdate | undefined;
+
+    expect(unpackEntityState(delivered)).toEqual(createState("task-1", "Open", 7));
+    await iterator.return?.();
+  });
+
+  it("delivers ID-only subscriptions and accepts unknown Any ID values", async () => {
+    let deliverUpdate:
+      | ((update: {
+          readonly typeUrl: string;
+          readonly id: unknown;
+          readonly state: ProjectionState;
+        }) => void)
+      | undefined;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: (_schema, callback) => {
+        deliverUpdate = callback;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const id = packAny(TopicIdSchema, create(TopicIdSchema, { value: "packed-id" }));
+    const subscription = await handlers.subscribe(
+      createFilteredTopicWithCriteria({ idFilter: { id: [id] } }),
+    );
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = iterator.next();
+
+    await delay(25);
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id,
+      state: createState("task-1", "Packed"),
+    });
+
+    const delivered = (await withTimeout(next, "id-only subscription")).value as
+      SubscriptionUpdate | undefined;
+
+    expect(unpackEntityState(delivered)).toEqual(createState("task-1", "Packed"));
+    await iterator.return?.();
+  });
+
+  it("matches byte subscription ID filters by value", async () => {
+    let deliverUpdate:
+      | ((update: {
+          readonly typeUrl: string;
+          readonly id: unknown;
+          readonly state: ProjectionState;
+        }) => void)
+      | undefined;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: (_schema, callback) => {
+        deliverUpdate = callback;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const id = new Uint8Array([1, 2, 3]);
+    const subscription = await handlers.subscribe(
+      createFilteredTopicWithCriteria({ idFilter: { id: [packBytes(id)] } }),
+    );
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = iterator.next();
+
+    await delay(25);
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: new Uint8Array([9]),
+      state: createState("task-ignored", "Ignored"),
+    });
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: new Uint8Array(id),
+      state: createState("task-1", "Bytes"),
+    });
+
+    const delivered = (await withTimeout(next, "byte-id subscription")).value as
+      SubscriptionUpdate | undefined;
+
+    expect(unpackEntityState(delivered)).toEqual(createState("task-1", "Bytes"));
+    await iterator.return?.();
+  });
+
+  it("matches message-typed subscription ID filters and packs delivered message IDs", async () => {
+    const repository = new Repository({
+      entityType: MessageIdTaskAggregate,
+      schema: TaskSchema,
+    });
+    const context = BoundedContext.singleTenant("MessageIdTasks").add(repository).build();
+    const handlers = registeredSubscriptionHandlers(context);
+    const taskId = create(TaskIdSchema, { value: "task-message-id" });
+    const subscription = await handlers.subscribe(createMessageIdFilteredTopic(taskId));
+    const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
+    const next = iterator.next();
+
+    await delay(25);
+    await context.stand().update(
+      TaskSchema,
+      create(TaskSchema, {
+        id: create(TaskIdSchema, { value: "ignored" }),
+        title: "Ignored",
+      }),
+    );
+    await context.stand().update(
+      TaskSchema,
+      create(TaskSchema, {
+        id: taskId,
+        title: "Matched",
+      }),
+    );
+
+    const delivered = (await withTimeout(next, "message-id subscription")).value as
+      SubscriptionUpdate | undefined;
+
+    expect(unpackAny(entityUpdateId(delivered) ?? packMissing(), TaskIdSchema)).toEqual(taskId);
+    expect(unpackAny(entityUpdateKind(delivered)?.value as Any, TaskSchema)).toEqual(
+      create(TaskSchema, {
+        id: taskId,
+        title: "Matched",
+      }),
+    );
+    await iterator.return?.();
+  });
+
+  it("rejects malformed subscription ID filters before activation attaches Stand delivery", () => {
+    let subscribeCalls = 0;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: () => {
+        subscribeCalls += 1;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const id = { value: "object-id" } as unknown as Any;
+    const topic = createFilteredTopicWithCriteria({
+      idFilter: { id: [packStringId("ignored")] },
+    });
+    if (
+      topic.target?.criterion.case !== "filters" ||
+      topic.target.criterion.value.idFilter === undefined
+    ) {
+      throw new Error("Expected subscription ID filter.");
+    }
+    topic.target.criterion.value.idFilter.id[0] = id;
+    expect(() => handlers.subscribe(topic)).toThrow(
+      "SubscriptionService.Subscribe id_filter values must be packed Any messages.",
+    );
+    expect(subscribeCalls).toBe(0);
+  });
+
+  it("rejects over-limit subscription ID filters before activation attaches Stand delivery", () => {
+    let subscribeCalls = 0;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: () => {
+        subscribeCalls += 1;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const topic = createFilteredTopicWithCriteria({
+      idFilter: {
+        id: Array.from({ length: 101 }, (_, index) => packStringId(`task-${String(index)}`)),
+      },
+    });
+
+    expect(() => handlers.subscribe(topic)).toThrow(
+      "SubscriptionService.Subscribe id_filter may contain at most 100 IDs.",
+    );
+    expect(subscribeCalls).toBe(0);
+  });
+
+  it("rejects over-depth subscription composites before activation attaches Stand delivery", () => {
+    let subscribeCalls = 0;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: () => {
+        subscribeCalls += 1;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const topic = createFilteredTopicWithCriteria({
+      idFilter: { id: [packStringId("task-1")] },
+      filter: [createNestedSubscriptionComposite(10)],
+    });
+
+    expect(() => handlers.subscribe(topic)).toThrow(
+      "SubscriptionService.Subscribe composite filters may nest at most 8 levels.",
+    );
+    expect(subscribeCalls).toBe(0);
+  });
+
+  it("rejects too many nested subscription composites before activation attaches Stand delivery", () => {
+    let subscribeCalls = 0;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: () => {
+        subscribeCalls += 1;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const topic = createFilteredTopicWithCriteria({
+      idFilter: { id: [packStringId("task-1")] },
+      filter: [
+        create(CompositeFilterSchema, {
+          compositeFilter: Array.from({ length: 8 }, () =>
+            create(CompositeFilterSchema, {
+              operator: CompositeFilter_CompositeOperator.ALL,
+            }),
+          ),
+          operator: CompositeFilter_CompositeOperator.ALL,
+        }),
+      ],
+    });
+
+    expect(() => handlers.subscribe(topic)).toThrow(
+      "SubscriptionService.Subscribe may contain at most 8 composite filters.",
+    );
+    expect(subscribeCalls).toBe(0);
+  });
+
+  it("rejects too many top-level subscription composites before walking fields", () => {
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: () => {
+        throw new Error("over-broad filters must not attach delivery.");
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const topic = createFilteredTopicWithCriteria({
+      filter: Array.from({ length: 9 }, () =>
+        create(CompositeFilterSchema, {
+          filter: [
+            create(FilterSchema, {
+              fieldPath: { fieldName: ["missing"] },
+              value: packStringId("Open"),
+              operator: Filter_Operator.EQUAL,
+            }),
+          ],
+          operator: CompositeFilter_CompositeOperator.ALL,
+        }),
+      ),
+    });
+
+    expect(() => handlers.subscribe(topic)).toThrow(
+      "SubscriptionService.Subscribe may contain at most 8 composite filters.",
+    );
+  });
+
+  it("rejects empty undefined-operator subscription composites before activation attaches Stand delivery", () => {
+    let subscribeCalls = 0;
+    const context = createFakeContext({
+      stateTypes: [deriveTypeUrl(ProjectionStateSchema)],
+      subscribe: () => {
+        subscribeCalls += 1;
+        return {
+          closed: false,
+          unsubscribe: () => undefined,
+        };
+      },
+    });
+    const handlers = registeredSubscriptionHandlers(context);
+    const topic = createFilteredTopicWithCriteria({
+      idFilter: { id: [packStringId("task-1")] },
+      filter: [
+        create(CompositeFilterSchema, {
+          operator: CompositeFilter_CompositeOperator.CCF_CO_UNDEFINED,
+        }),
+      ],
+    });
+
+    expect(() => handlers.subscribe(topic)).toThrow(
+      "SubscriptionService.Subscribe supports only ALL or EITHER composite filters.",
+    );
+    expect(subscribeCalls).toBe(0);
+  });
+
   it("does not deliver pre-activation updates and tolerates unknown subscription cancellation", async () => {
     const repository = new Repository({
       entityType: TaskProjection,
@@ -1877,7 +2810,7 @@ describe("SpineServices", () => {
     expect(unsubscribeCounts).toEqual([1, 1]);
   });
 
-  it("delivers post-activation queued updates and omits non-string update IDs", async () => {
+  it("packs delivered subscription update IDs for supported ID shapes", async () => {
     let deliverUpdate:
       | ((update: {
           readonly typeUrl: string;
@@ -1899,6 +2832,8 @@ describe("SpineServices", () => {
     const subscription = await handlers.subscribe(createTopic());
     const iterator = handlers.activate(subscription)[Symbol.asyncIterator]();
     const first = iterator.next();
+    const anyId = packAny(TopicIdSchema, create(TopicIdSchema, { value: "already-packed" }));
+    const bytesId = new Uint8Array([7, 8, 9]);
 
     await delay(25);
     deliverUpdate?.({
@@ -1908,20 +2843,37 @@ describe("SpineServices", () => {
     });
     deliverUpdate?.({
       typeUrl: deriveTypeUrl(ProjectionStateSchema),
-      id: { value: "task-object" },
-      state: createState("task-object", "Object"),
+      id: bytesId,
+      state: createState("task-bytes", "Bytes"),
+    });
+    deliverUpdate?.({
+      typeUrl: deriveTypeUrl(ProjectionStateSchema),
+      id: anyId,
+      state: createState("task-any", "Any"),
     });
 
     const firstUpdate = await withTimeout(first, "first direct subscription update");
     const secondUpdate = await withTimeout(iterator.next(), "queued direct subscription update");
+    const thirdUpdate = await withTimeout(iterator.next(), "packed Any subscription update");
     const secondValue = secondUpdate.value as SubscriptionUpdate | undefined;
+    const thirdValue = thirdUpdate.value as SubscriptionUpdate | undefined;
 
     expect(firstUpdate.done).toBe(false);
     expect(secondUpdate.done).toBe(false);
-    if (secondValue?.update.case !== "entityUpdates") {
-      throw new Error("Expected entity subscription update.");
+    expect(thirdUpdate.done).toBe(false);
+    const firstId = entityUpdateId(firstUpdate.value as SubscriptionUpdate);
+    const secondId = entityUpdateId(secondValue);
+    const thirdId = entityUpdateId(thirdValue);
+    if (firstId === undefined || secondId === undefined || thirdId === undefined) {
+      throw new Error("Expected packed update IDs.");
     }
-    expect(secondValue.update.value.update[0]?.id).toBeUndefined();
+    expect(unpackAny(firstId, StringValueSchema)).toEqual(
+      create(StringValueSchema, { value: "task-first" }),
+    );
+    expect(unpackAny(secondId, BytesValueSchema)).toEqual(
+      create(BytesValueSchema, { value: bytesId }),
+    );
+    expect(thirdId).toEqual(anyId);
     await iterator.return?.();
   });
 
@@ -2463,14 +3415,121 @@ function createFormattedIncludeAllQuery(format: Query["format"], tenantId?: Tena
 function createTopic(tenantId?: TenantInput) {
   return create(TopicSchema, {
     id: create(TopicIdSchema, { value: "t-1" }),
+    target: createSubscriptionTarget(),
+    context: createActorContext(tenantId),
+  });
+}
+
+function createSubscriptionTarget() {
+  return create(TargetSchema, {
+    type: deriveTypeUrl(ProjectionStateSchema),
+    criterion: {
+      case: "includeAll",
+      value: true,
+    },
+  });
+}
+
+function createFilteredTopic(options: {
+  readonly id?: string;
+  readonly name?: string;
+  readonly priority?: number;
+  readonly tenantId?: TenantInput;
+  readonly fieldMask?: readonly string[];
+}) {
+  const simpleFilters = [
+    ...(options.name === undefined
+      ? []
+      : [
+          create(FilterSchema, {
+            fieldPath: { fieldName: ["name"] },
+            value: packStringId(options.name),
+            operator: Filter_Operator.EQUAL,
+          }),
+        ]),
+    ...(options.priority === undefined
+      ? []
+      : [
+          create(FilterSchema, {
+            fieldPath: { fieldName: ["priority"] },
+            value: packInt32(options.priority),
+            operator: Filter_Operator.EQUAL,
+          }),
+        ]),
+  ];
+
+  return create(TopicSchema, {
+    id: create(TopicIdSchema, { value: "t-filtered" }),
     target: create(TargetSchema, {
       type: deriveTypeUrl(ProjectionStateSchema),
       criterion: {
-        case: "includeAll",
-        value: true,
+        case: "filters",
+        value: create(TargetFiltersSchema, {
+          ...(options.id === undefined ? {} : { idFilter: { id: [packStringId(options.id)] } }),
+          filter: [
+            create(CompositeFilterSchema, {
+              filter: simpleFilters,
+              operator: CompositeFilter_CompositeOperator.ALL,
+            }),
+          ],
+        }),
       },
     }),
-    context: createActorContext(tenantId),
+    context: createActorContext(options.tenantId),
+    ...(options.fieldMask === undefined
+      ? {}
+      : { fieldMask: create(FieldMaskSchema, { paths: [...options.fieldMask] }) }),
+  });
+}
+
+function createFilteredTopicWithCriteria(
+  filters: Partial<{
+    readonly idFilter: { readonly id: Any[] };
+    readonly filter: CompositeFilter[];
+  }>,
+) {
+  return create(TopicSchema, {
+    id: create(TopicIdSchema, { value: "t-filtered" }),
+    target: create(TargetSchema, {
+      type: deriveTypeUrl(ProjectionStateSchema),
+      criterion: {
+        case: "filters",
+        value: create(TargetFiltersSchema, filters),
+      },
+    }),
+    context: createActorContext(),
+  });
+}
+
+function createFilteredTopicForTask(
+  filters: Partial<{
+    readonly idFilter: { readonly id: Any[] };
+    readonly filter: CompositeFilter[];
+  }>,
+) {
+  return create(TopicSchema, {
+    id: create(TopicIdSchema, { value: "t-task-filtered" }),
+    target: create(TargetSchema, {
+      type: deriveTypeUrl(TaskSchema),
+      criterion: {
+        case: "filters",
+        value: create(TargetFiltersSchema, filters),
+      },
+    }),
+    context: createActorContext(),
+  });
+}
+
+function createMessageIdFilteredTopic(id: TaskId) {
+  return createFilteredTopicForTask({
+    idFilter: { id: [packAny(TaskIdSchema, id)] },
+  });
+}
+
+function createNestedSubscriptionComposite(depth: number): CompositeFilter {
+  return create(CompositeFilterSchema, {
+    compositeFilter: depth <= 0 ? [] : [createNestedSubscriptionComposite(depth - 1)],
+    operator: CompositeFilter_CompositeOperator.ALL,
   });
 }
 
@@ -2528,8 +3587,34 @@ function packInt32(value: number) {
   return packAny(Int32ValueSchema, create(Int32ValueSchema, { value }));
 }
 
+function packBytes(value: Uint8Array) {
+  return packAny(BytesValueSchema, create(BytesValueSchema, { value }));
+}
+
 function unpackProjectionState(state: Any | undefined) {
   return unpackAny(state ?? packMissing(), ProjectionStateSchema);
+}
+
+function unpackEntityState(update: SubscriptionUpdate | undefined) {
+  const kind = entityUpdateKind(update);
+
+  return kind?.case === "state" ? unpackProjectionState(kind.value) : undefined;
+}
+
+function entityUpdateKind(update: SubscriptionUpdate | undefined) {
+  if (update?.update.case !== "entityUpdates") {
+    return undefined;
+  }
+
+  return update.update.value.update[0]?.kind;
+}
+
+function entityUpdateId(update: SubscriptionUpdate | undefined) {
+  if (update?.update.case !== "entityUpdates") {
+    return undefined;
+  }
+
+  return update.update.value.update[0]?.id;
 }
 
 function packMissing() {
@@ -2643,6 +3728,7 @@ function createFakeContext(options: {
     callback: (update: {
       readonly typeUrl: string;
       readonly id: unknown;
+      readonly previousState?: ProjectionState;
       readonly state: ProjectionState;
     }) => void,
     options: { readonly tenantId?: string },

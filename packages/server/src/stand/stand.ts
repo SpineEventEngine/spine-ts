@@ -60,6 +60,13 @@ export interface StandUpdate<Schema extends MessageSchema = MessageSchema> {
   readonly typeUrl: string;
   /** Entity ID extracted from the state. */
   readonly id: unknown;
+  /**
+   * Cloned snapshot of the stored state before this update.
+   *
+   * Omitted when no previous state existed. Safe for subscribers to retain or
+   * mutate after delivery.
+   */
+  readonly previousState?: MessageShape<Schema>;
   /** Updated entity state. */
   readonly state: MessageShape<Schema>;
   /** Version associated with the updated state when supplied. */
@@ -273,8 +280,13 @@ export class Stand {
       const stateCopy = clone(schema, state);
       const id = readStateId(stateCopy, registration);
       const storage = this.#openStorage(registration, tenantId);
+      let previousState: MessageShape<Schema> | undefined;
+      const previousStateObservable = this.#hasTenantSubscribers(registration, tenantId);
 
       try {
+        if (previousStateObservable) {
+          previousState = (await storage.read(id)) as MessageShape<Schema> | undefined;
+        }
         await storage.write(stateCopy);
       } finally {
         storage.close();
@@ -287,6 +299,7 @@ export class Stand {
       }
       this.#notify(registration, {
         id,
+        previousState,
         state: stateCopy,
         tenantId,
         version: options.version,
@@ -387,6 +400,7 @@ export class Stand {
     registration: Registration<Schema>,
     input: {
       readonly id: unknown;
+      readonly previousState: MessageShape<Schema> | undefined;
       readonly state: MessageShape<Schema>;
       readonly tenantId: string | undefined;
       readonly version: Version | undefined;
@@ -394,9 +408,7 @@ export class Stand {
   ): void {
     const errors: unknown[] = [];
     const tenantKey = this.#tenantKey(input.tenantId);
-    const subscribers = [...registration.subscribers].filter(
-      (subscriber) => subscriber.tenantKey === tenantKey,
-    );
+    const subscribers = this.#tenantSubscribers(registration, tenantKey);
 
     for (const subscriber of subscribers) {
       try {
@@ -416,6 +428,25 @@ export class Stand {
 
   #tenantKey(tenantId: string | undefined): string {
     return this.#tenantId(tenantId) ?? "__single__";
+  }
+
+  #hasTenantSubscribers(registration: Registration, tenantId: string | undefined): boolean {
+    const tenantKey = this.#tenantKey(tenantId);
+
+    for (const subscriber of registration.subscribers) {
+      if (subscriber.tenantKey === tenantKey) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  #tenantSubscribers<Schema extends MessageSchema>(
+    registration: Registration<Schema>,
+    tenantKey: string,
+  ): Subscriber<Schema>[] {
+    return [...registration.subscribers].filter((subscriber) => subscriber.tenantKey === tenantKey);
   }
 
   #tenantId(tenantId: string | undefined): string | undefined {
@@ -492,6 +523,7 @@ function createUpdate<Schema extends MessageSchema>(
   registration: Registration<Schema>,
   input: {
     readonly id: unknown;
+    readonly previousState: MessageShape<Schema> | undefined;
     readonly state: MessageShape<Schema>;
     readonly tenantId: string | undefined;
     readonly version: Version | undefined;
@@ -502,6 +534,9 @@ function createUpdate<Schema extends MessageSchema>(
   return Object.freeze({
     typeUrl: registration.typeUrl,
     id: cloneValue(input.id),
+    ...(input.previousState === undefined
+      ? {}
+      : { previousState: clone(registration.schema, input.previousState) }),
     state: clone(registration.schema, input.state),
     ...(version === undefined ? {} : { version }),
     ...(input.tenantId === undefined ? {} : { tenantId: input.tenantId }),

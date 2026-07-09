@@ -135,6 +135,63 @@ describe("Stand", () => {
     expect(updates[0]?.state).not.toBe(stored);
   });
 
+  it("surfaces copy-safe previous state to direct subscribers", async () => {
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const updates: StandUpdate<typeof ProjectionStateSchema>[] = [];
+    stand.register(ProjectionStateSchema);
+    stand.subscribe(ProjectionStateSchema, (update) => {
+      updates.push(update);
+    });
+
+    await stand.update(ProjectionStateSchema, createState("task-1", "First"));
+    await stand.update(ProjectionStateSchema, createState("task-1", "Second"));
+    const current = await stand.read(ProjectionStateSchema, "task-1");
+
+    expect(updates).toHaveLength(2);
+    expect(updates[0]?.previousState).toBeUndefined();
+    const second = updates[1];
+    if (second?.previousState === undefined) {
+      throw new Error("Expected second Stand update with previous state.");
+    }
+    expect(second.previousState).toEqual(createState("task-1", "First"));
+    expect(second.previousState).not.toBe(current);
+    second.previousState.name = "Mutated previous";
+    second.state.name = "Mutated current";
+
+    await expect(stand.read(ProjectionStateSchema, "task-1")).resolves.toEqual(
+      createState("task-1", "Second"),
+    );
+  });
+
+  it("reads previous state on update only when same-tenant subscribers can observe it", async () => {
+    const storageFactory = new CountingReadStorageFactory();
+    const stand = new Stand({
+      context: { name: "Tasks", multitenant: true },
+      storageFactory,
+    });
+    stand.register(ProjectionStateSchema);
+    stand.subscribe(ProjectionStateSchema, () => undefined, { tenantId: "tenant-b" });
+
+    await stand.update(ProjectionStateSchema, createState("task-1", "Tenant A first"), {
+      tenantId: "tenant-a",
+    });
+    await stand.update(ProjectionStateSchema, createState("task-1", "Tenant A second"), {
+      tenantId: "tenant-a",
+    });
+
+    expect(storageFactory.readCount).toBe(0);
+
+    stand.subscribe(ProjectionStateSchema, () => undefined, { tenantId: "tenant-a" });
+    await stand.update(ProjectionStateSchema, createState("task-1", "Tenant A third"), {
+      tenantId: "tenant-a",
+    });
+
+    expect(storageFactory.readCount).toBe(1);
+  });
+
   it("returns undefined when a known state has no stored entity", async () => {
     const stand = new Stand({
       context: { name: "Tasks", multitenant: false },
@@ -591,6 +648,24 @@ class RejectingQueryStorageFactory extends ClosingStorageFactory {
     const storage = super.onCreateRecordStorage(context, recordSpec);
     storage.query = async () => Promise.reject(new Error("query failed"));
     storage.queryEntries = async () => Promise.reject(new Error("query failed"));
+    return storage;
+  }
+}
+
+class CountingReadStorageFactory extends InMemoryStorageFactory {
+  readCount = 0;
+
+  protected override onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    const storage = super.onCreateRecordStorage(context, recordSpec);
+    const read = storage.read.bind(storage);
+    storage.read = async (...args: Parameters<typeof storage.read>) => {
+      this.readCount += 1;
+      return read(...args);
+    };
+
     return storage;
   }
 }

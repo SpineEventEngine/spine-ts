@@ -1,9 +1,10 @@
 import { randomUUID } from "node:crypto";
 
 import { Code, ConnectError, type ConnectRouter } from "@connectrpc/connect";
-import { create } from "@bufbuild/protobuf";
+import { clone, create, toBinary, type Message, type MessageShape } from "@bufbuild/protobuf";
 import type { Any } from "@bufbuild/protobuf/wkt";
 import {
+  AnySchema,
   BoolValueSchema,
   BytesValueSchema,
   DoubleValueSchema,
@@ -51,6 +52,7 @@ import {
   SubscriptionIdSchema,
   SubscriptionSchema,
   SubscriptionUpdateSchema,
+  TopicSchema,
   type Subscription,
   type SubscriptionUpdate,
   type Topic,
@@ -63,7 +65,12 @@ import {
   type Response,
   type Status,
 } from "@spine-ts/proto/generated/spine/core/response_pb.js";
-import type { RecordFilter, RecordOrder, RecordQuery } from "@spine-ts/storage";
+import {
+  RecordMask,
+  type RecordFilter,
+  type RecordOrder,
+  type RecordQuery,
+} from "@spine-ts/storage";
 
 import type { BoundedContext } from "../context/bounded-context.js";
 import { CommandValidationError } from "../bus/command-errors.js";
@@ -85,11 +92,14 @@ import { CommandRefusalError } from "./command-errors.js";
  * query operators and shapes also return stable `INVALID_QUERY` responses
  * before Stand storage is read.
  *
- * `SubscriptionService.Subscribe` accepts only known state targets, creates an
- * inactive process-local record, and attaches delivery to `Stand` only when the
- * opaque subscription ID is activated. Unknown or duplicate activation IDs
- * complete without updates, and cancellation of unknown or already-cleaned IDs
- * returns OK.
+ * `SubscriptionService.Subscribe` accepts known state targets with
+ * `include_all` or validated ID/field filters, creates an inactive
+ * process-local record, and attaches delivery to `Stand` only when the opaque
+ * subscription ID is activated. Filtered topics deliver matching states, emit
+ * `no_longer_matching` when previous state matched and new state does not, and
+ * apply topic masks only to delivered states. Unknown or duplicate activation
+ * IDs complete without updates, and cancellation of unknown or already-cleaned
+ * IDs returns OK.
  */
 export class SpineServices {
   readonly #contexts: readonly BoundedContext[];
@@ -119,6 +129,7 @@ export class SpineServices {
           allowedColumnNames: new Set(repository.metadata.columns.map((column) => column.name)),
           context,
           entityFamily: repository.entityFamily,
+          idField: stateRouteIdField(schema, repository.idField),
           schema,
           typeUrl,
         });
@@ -240,11 +251,9 @@ export class SpineServices {
   #subscribe(topic: Topic): Subscription {
     const route = this.#subscriptionRoute(topic);
     validateTopic(topic);
-    const tenantError = tenantMismatch(
-      route.context.isMultitenant,
-      topicTenant(topic),
-      "subscription",
-    );
+    const matcher = createSubscriptionMatcher(topic, route);
+    const tenantId = topicTenant(topic);
+    const tenantError = tenantMismatch(route.context.isMultitenant, tenantId, "subscription");
 
     if (tenantError !== undefined) {
       throw new ConnectError(tenantError.message, Code.InvalidArgument);
@@ -252,7 +261,7 @@ export class SpineServices {
 
     const subscription = create(SubscriptionSchema, {
       id: create(SubscriptionIdSchema, { value: `s-${randomUUID()}` }),
-      topic,
+      topic: clone(TopicSchema, topic),
     });
     const id = subscription.id?.value;
 
@@ -260,10 +269,24 @@ export class SpineServices {
       throw new ConnectError("Subscription ID is required.", Code.InvalidArgument);
     }
 
+    this.#storeInactiveSubscription(id, subscription, route, matcher, tenantId);
+
+    return clone(SubscriptionSchema, subscription);
+  }
+
+  #storeInactiveSubscription(
+    id: string,
+    subscription: Subscription,
+    route: StateRoute,
+    matcher: SubscriptionMatcher,
+    tenantId: string | undefined,
+  ): void {
     const record: SubscriptionRecord = {
       id,
-      subscription,
+      subscription: clone(SubscriptionSchema, subscription),
       route,
+      matcher,
+      tenantId,
       delivery: new SubscriptionDelivery(this.#queueLimit),
       inactiveTimer: undefined,
     };
@@ -272,8 +295,6 @@ export class SpineServices {
     }, this.#inactiveTtlMs);
     record.inactiveTimer.unref();
     this.#subscriptions.set(id, record);
-
-    return subscription;
   }
 
   async *#activate(subscription: Subscription): AsyncIterable<SubscriptionUpdate> {
@@ -331,16 +352,18 @@ export class SpineServices {
 
   #activateRecord(record: SubscriptionRecord): void {
     clearInactiveTimer(record);
-    const tenantId = topicTenant(record.subscription.topic);
     const standSubscription = record.route.context.stand().subscribe(
       record.route.schema,
       (update) => {
-        record.delivery.push(createEntityUpdate(record, update));
+        const subscriptionUpdate = createEntityUpdate(record, update);
+        if (subscriptionUpdate !== undefined) {
+          record.delivery.push(subscriptionUpdate);
+        }
         if (record.delivery.closed) {
           this.#removeSubscription(record.id);
         }
       },
-      tenantOptions(tenantId),
+      tenantOptions(record.tenantId),
     );
     record.delivery.attach(standSubscription);
   }
@@ -383,6 +406,7 @@ interface StateRoute {
   readonly allowedColumnNames: ReadonlySet<string>;
   readonly context: BoundedContext;
   readonly entityFamily: EntityFamily;
+  readonly idField: MessageFieldInfo;
   readonly schema: MessageSchema;
   readonly typeUrl: string;
 }
@@ -391,9 +415,18 @@ interface SubscriptionRecord {
   readonly id: string;
   readonly subscription: Subscription;
   readonly route: StateRoute;
+  readonly matcher: SubscriptionMatcher;
+  readonly tenantId: string | undefined;
   readonly delivery: SubscriptionDelivery;
   inactiveTimer: ReturnType<typeof setTimeout> | undefined;
 }
+
+interface SubscriptionMatcher {
+  readonly fieldMask: readonly string[] | undefined;
+  match(update: StandUpdate): SubscriptionMatch | undefined;
+}
+
+type SubscriptionMatch = "state" | "noLongerMatching";
 
 class SubscriptionDelivery {
   readonly #queue: SubscriptionUpdate[] = [];
@@ -684,7 +717,7 @@ function criterionQuery(target: Target): RecordQuery<unknown> {
 }
 
 function filtersQuery(filters: TargetFilters): RecordQuery<unknown> {
-  const ids = filters.idFilter?.id.map(decodeAnyValue) ?? [];
+  const ids = filters.idFilter?.id.map((id) => decodeAnyValue(id)) ?? [];
   const recordFilters = filters.filter.flatMap((composite) => composite.filter.map(toRecordFilter));
 
   return {
@@ -752,6 +785,14 @@ const MAX_QUERY_ORDER_BY = 8;
 const MAX_QUERY_FIELD_MASK_PATHS = 32;
 const MAX_QUERY_FIELD_MASK_PATH_LENGTH = 128;
 const MAX_QUERY_LIMIT = 1_000;
+const MAX_SUBSCRIPTION_ID_FILTER_IDS = MAX_QUERY_ID_FILTER_IDS;
+const MAX_SUBSCRIPTION_TOTAL_COMPOSITE_FILTERS = 8;
+const MAX_SUBSCRIPTION_SIMPLE_FILTERS = 16;
+const MAX_SUBSCRIPTION_COMPOSITE_DEPTH = 8;
+const MAX_SUBSCRIPTION_FIELD_MASK_PATHS = 32;
+const MAX_SUBSCRIPTION_FIELD_MASK_PATH_LENGTH = 128;
+const MAX_SUBSCRIPTION_FIELD_PATH_COMPONENTS = 16;
+const MAX_SUBSCRIPTION_FIELD_PATH_SEGMENT_LENGTH = 128;
 
 function positiveInteger(value: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : 1;
@@ -776,9 +817,344 @@ function validateTopic(topic: Topic): void {
   }
 }
 
-function decodeAnyValue(value: Any | undefined): unknown {
+function createSubscriptionMatcher(topic: Topic, route: StateRoute): SubscriptionMatcher {
+  const target = topic.target;
+  if (target === undefined) {
+    throw new ConnectError("Subscription topic target is required.", Code.InvalidArgument);
+  }
+  const fieldMask = subscriptionFieldMask(topic, route);
+
+  switch (target.criterion.case) {
+    case "includeAll":
+      if (!target.criterion.value) {
+        throw new ConnectError(
+          "SubscriptionService.Subscribe requires filters or include_all = true.",
+          Code.InvalidArgument,
+        );
+      }
+      return {
+        fieldMask,
+        match: () => "state",
+      };
+    case "filters":
+      return createFilteredSubscriptionMatcher(target.criterion.value, route, fieldMask);
+    default:
+      throw new ConnectError(
+        "SubscriptionService.Subscribe requires filters or include_all = true.",
+        Code.InvalidArgument,
+      );
+  }
+}
+
+function createFilteredSubscriptionMatcher(
+  filters: TargetFilters,
+  route: StateRoute,
+  fieldMask: readonly string[] | undefined,
+): SubscriptionMatcher {
+  if (filters.idFilter?.id.length === 0) {
+    throw new ConnectError(
+      "SubscriptionService.Subscribe id_filter requires at least one ID.",
+      Code.InvalidArgument,
+    );
+  }
+  if (
+    filters.idFilter !== undefined &&
+    filters.idFilter.id.length > MAX_SUBSCRIPTION_ID_FILTER_IDS
+  ) {
+    throw new ConnectError(
+      "SubscriptionService.Subscribe id_filter may contain at most 100 IDs.",
+      Code.InvalidArgument,
+    );
+  }
+  if (filters.idFilter === undefined && filters.filter.length === 0) {
+    throw new ConnectError(
+      "SubscriptionService.Subscribe requires an ID filter or field filter.",
+      Code.InvalidArgument,
+    );
+  }
+
+  validateSubscriptionFilterTree(filters.filter);
+  const idValues = filters.idFilter?.id.map((id) => decodeSubscriptionIdValue(id, route));
+  const statePredicate = createSubscriptionPredicate(filters.filter, route);
+
+  return {
+    fieldMask,
+    match(update) {
+      if (
+        idValues !== undefined &&
+        !idValues.some((id) => valuesEqual(update.id, id, route.idField.message))
+      ) {
+        return undefined;
+      }
+      if (statePredicate(update.state)) {
+        return "state";
+      }
+      if (update.previousState !== undefined && statePredicate(update.previousState)) {
+        return "noLongerMatching";
+      }
+
+      return undefined;
+    },
+  };
+}
+
+function createSubscriptionPredicate(
+  filters: readonly CompositeFilter[],
+  route: StateRoute,
+): (state: Message) => boolean {
+  const predicates = filters.map((filter) => createCompositePredicate(filter, route));
+  return (state) => predicates.every((predicate) => predicate(state));
+}
+
+function validateSubscriptionFilterTree(filters: readonly CompositeFilter[]): void {
+  if (filters.length > MAX_SUBSCRIPTION_TOTAL_COMPOSITE_FILTERS) {
+    throw new ConnectError(
+      "SubscriptionService.Subscribe may contain at most 8 composite filters.",
+      Code.InvalidArgument,
+    );
+  }
+
+  const stack: SubscriptionFilterFrame[] = [];
+  for (const filter of filters) {
+    stack.push({ filter, depth: 0 });
+  }
+  const counts = {
+    compositeCount: 0,
+    simpleCount: 0,
+  };
+
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (current === undefined) {
+      continue;
+    }
+
+    validateSubscriptionFilterNode(current.filter, current.depth, counts);
+    enqueueSubscriptionFilterChildren(current.filter, current.depth, stack);
+  }
+}
+
+function validateSubscriptionFilterNode(
+  filter: CompositeFilter,
+  depth: number,
+  counts: SubscriptionFilterCounts,
+): void {
+  if (depth > MAX_SUBSCRIPTION_COMPOSITE_DEPTH) {
+    throw new ConnectError(
+      "SubscriptionService.Subscribe composite filters may nest at most 8 levels.",
+      Code.InvalidArgument,
+    );
+  }
+  switch (filter.operator) {
+    case CompositeFilter_CompositeOperator.ALL:
+    case CompositeFilter_CompositeOperator.EITHER:
+      break;
+    default:
+      throw new ConnectError(
+        "SubscriptionService.Subscribe supports only ALL or EITHER composite filters.",
+        Code.InvalidArgument,
+      );
+  }
+  if (depth === MAX_SUBSCRIPTION_COMPOSITE_DEPTH && filter.compositeFilter.length > 0) {
+    throw new ConnectError(
+      "SubscriptionService.Subscribe composite filters may nest at most 8 levels.",
+      Code.InvalidArgument,
+    );
+  }
+
+  counts.compositeCount += 1;
+  if (counts.compositeCount > MAX_SUBSCRIPTION_TOTAL_COMPOSITE_FILTERS) {
+    throw new ConnectError(
+      "SubscriptionService.Subscribe may contain at most 8 composite filters.",
+      Code.InvalidArgument,
+    );
+  }
+
+  counts.simpleCount += filter.filter.length;
+  if (counts.simpleCount > MAX_SUBSCRIPTION_SIMPLE_FILTERS) {
+    throw new ConnectError(
+      "SubscriptionService.Subscribe may contain at most 16 simple field filters.",
+      Code.InvalidArgument,
+    );
+  }
+  if (
+    (filter.compositeFilter.length > 1 || depth + 1 < MAX_SUBSCRIPTION_COMPOSITE_DEPTH) &&
+    counts.compositeCount + filter.compositeFilter.length > MAX_SUBSCRIPTION_TOTAL_COMPOSITE_FILTERS
+  ) {
+    throw new ConnectError(
+      "SubscriptionService.Subscribe may contain at most 8 composite filters.",
+      Code.InvalidArgument,
+    );
+  }
+}
+
+function enqueueSubscriptionFilterChildren(
+  filter: CompositeFilter,
+  depth: number,
+  stack: SubscriptionFilterFrame[],
+): void {
+  for (const nested of filter.compositeFilter) {
+    if (depth + 1 > MAX_SUBSCRIPTION_COMPOSITE_DEPTH) {
+      throw new ConnectError(
+        "SubscriptionService.Subscribe composite filters may nest at most 8 levels.",
+        Code.InvalidArgument,
+      );
+    }
+    stack.push({ filter: nested, depth: depth + 1 });
+  }
+}
+
+interface SubscriptionFilterFrame {
+  readonly filter: CompositeFilter;
+  readonly depth: number;
+}
+
+interface SubscriptionFilterCounts {
+  compositeCount: number;
+  simpleCount: number;
+}
+
+function createCompositePredicate(
+  filter: CompositeFilter,
+  route: StateRoute,
+): (state: Message) => boolean {
+  const children = [
+    ...filter.filter.map((simple) => createSimplePredicate(simple, route)),
+    ...filter.compositeFilter.map((nested) => createCompositePredicate(nested, route)),
+  ];
+  if (children.length === 0) {
+    return () => true;
+  }
+
+  return filter.operator === CompositeFilter_CompositeOperator.ALL
+    ? (state) => children.every((predicate) => predicate(state))
+    : (state) => children.some((predicate) => predicate(state));
+}
+
+function createSimplePredicate(filter: Filter, route: StateRoute): (state: Message) => boolean {
+  if (filter.operator !== Filter_Operator.EQUAL) {
+    throw new ConnectError(
+      "SubscriptionService.Subscribe supports only EQUAL field filters.",
+      Code.InvalidArgument,
+    );
+  }
+  if (filter.value === undefined) {
+    throw new ConnectError(
+      "SubscriptionService.Subscribe field filter value is required.",
+      Code.InvalidArgument,
+    );
+  }
+
+  validateSubscriptionPath(filter.fieldPath?.fieldName ?? [], "field filter");
+  const resolved = resolveMessagePath(
+    route.schema,
+    filter.fieldPath?.fieldName ?? [],
+    "field filter",
+  );
+  const expected = decodeFieldFilterValue(filter.value, resolved.leafSchema);
+
+  return (state) =>
+    valuesEqual(readPathValue(state, resolved.localPath), expected, resolved.leafSchema);
+}
+
+function subscriptionFieldMask(topic: Topic, route: StateRoute): readonly string[] | undefined {
+  const paths = topic.fieldMask?.paths ?? [];
+  if (paths.length === 0) {
+    return undefined;
+  }
+  if (paths.length > MAX_SUBSCRIPTION_FIELD_MASK_PATHS) {
+    throw new ConnectError(
+      "SubscriptionService.Subscribe field_mask may contain at most 32 paths.",
+      Code.InvalidArgument,
+    );
+  }
+  if (paths.some((path) => path.length > MAX_SUBSCRIPTION_FIELD_MASK_PATH_LENGTH)) {
+    throw new ConnectError(
+      "SubscriptionService.Subscribe field_mask paths may contain at most 128 characters.",
+      Code.InvalidArgument,
+    );
+  }
+
+  return paths.map((path) => {
+    const segments = path.split(".");
+    validateSubscriptionPath(segments, "field_mask");
+
+    return resolveMessagePath(route.schema, segments, "field_mask").localPath.join(".");
+  });
+}
+
+function validateSubscriptionPath(
+  fieldPath: readonly string[],
+  label: "field filter" | "field_mask",
+): void {
+  if (fieldPath.length === 0 || fieldPath.some((field) => field.trim().length === 0)) {
+    throw new ConnectError(
+      `SubscriptionService.Subscribe ${label} path is required.`,
+      Code.InvalidArgument,
+    );
+  }
+  if (fieldPath.length > MAX_SUBSCRIPTION_FIELD_PATH_COMPONENTS) {
+    throw new ConnectError(
+      `SubscriptionService.Subscribe ${label} path may contain at most 16 components.`,
+      Code.InvalidArgument,
+    );
+  }
+  if (fieldPath.some((field) => field.length > MAX_SUBSCRIPTION_FIELD_PATH_SEGMENT_LENGTH)) {
+    throw new ConnectError(
+      `SubscriptionService.Subscribe ${label} path components may contain at most 128 characters.`,
+      Code.InvalidArgument,
+    );
+  }
+}
+
+function decodeSubscriptionIdValue(value: Any, route: StateRoute): unknown {
+  if (!isAny(value)) {
+    throw new ConnectError(
+      "SubscriptionService.Subscribe id_filter values must be packed Any messages.",
+      Code.InvalidArgument,
+    );
+  }
+  if (route.idField.message === undefined) {
+    return decodeAnyValue(value);
+  }
+
+  const decoded = unpackAny(value, route.idField.message);
+  if (decoded === undefined) {
+    throw new ConnectError(
+      `SubscriptionService.Subscribe id_filter values must pack ${route.idField.message.typeName}.`,
+      Code.InvalidArgument,
+    );
+  }
+
+  return decoded;
+}
+
+function decodeFieldFilterValue(value: Any | undefined, schema: MessageSchema | undefined) {
+  if (value === undefined || schema === undefined) {
+    return decodeAnyValue(value);
+  }
+
+  const decoded = unpackAny(value, schema);
+  if (decoded === undefined) {
+    throw new ConnectError(
+      `SubscriptionService.Subscribe field filter value must pack ${schema.typeName}.`,
+      Code.InvalidArgument,
+    );
+  }
+
+  return decoded;
+}
+
+function decodeAnyValue(value: Any | undefined, schema?: MessageSchema): unknown {
   if (value === undefined) {
     return undefined;
+  }
+
+  if (schema !== undefined) {
+    const decoded = unpackAny(value, schema);
+    if (decoded !== undefined) {
+      return decoded;
+    }
   }
 
   for (const decoder of VALUE_DECODERS) {
@@ -789,6 +1165,100 @@ function decodeAnyValue(value: Any | undefined): unknown {
   }
 
   return value;
+}
+
+interface ResolvedMessagePath {
+  readonly localPath: readonly string[];
+  readonly leafSchema?: MessageSchema;
+}
+
+interface MessageFieldInfo {
+  readonly name: string;
+  readonly localName: string;
+  readonly message?: MessageSchema;
+}
+
+function resolveMessagePath(
+  schema: MessageSchema,
+  fieldPath: readonly string[],
+  label: "field filter" | "field_mask",
+): ResolvedMessagePath {
+  const localPath: string[] = [];
+  let currentSchema: MessageSchema | undefined = schema;
+  let leafSchema: MessageSchema | undefined;
+
+  for (const [index, name] of fieldPath.entries()) {
+    const field = findMessageField(currentSchema, name);
+    if (field === undefined) {
+      throw new ConnectError(
+        `SubscriptionService.Subscribe ${label} "${fieldPath.join(".")}" is not a state field.`,
+        Code.InvalidArgument,
+      );
+    }
+
+    localPath.push(field.localName);
+    leafSchema = field.message;
+    currentSchema = index === fieldPath.length - 1 ? undefined : field.message;
+    if (currentSchema === undefined && index < fieldPath.length - 1) {
+      throw new ConnectError(
+        `SubscriptionService.Subscribe ${label} "${fieldPath.join(".")}" is not a message path.`,
+        Code.InvalidArgument,
+      );
+    }
+  }
+
+  return Object.freeze({
+    localPath,
+    ...(leafSchema === undefined ? {} : { leafSchema }),
+  });
+}
+
+function findMessageField(
+  schema: MessageSchema | undefined,
+  name: string,
+): MessageFieldInfo | undefined {
+  const fields = (schema?.fields ?? []) as unknown as readonly MessageFieldInfo[];
+
+  return fields.find((field) => field.name === name || field.localName === name);
+}
+
+function readPathValue(value: unknown, path: readonly string[]): unknown {
+  let current = value;
+
+  for (const segment of path) {
+    if (typeof current !== "object" || current === null) {
+      return undefined;
+    }
+    current = Reflect.get(current, segment);
+  }
+
+  return current;
+}
+
+function valuesEqual(actual: unknown, expected: unknown, schema?: MessageSchema): boolean {
+  if (schema !== undefined && isMessage(actual) && isMessage(expected)) {
+    return bytesEqual(toBinary(schema, actual), toBinary(schema, expected));
+  }
+  if (isAny(actual) && isAny(expected)) {
+    return bytesEqual(toBinary(AnySchema, actual), toBinary(AnySchema, expected));
+  }
+  if (actual instanceof Uint8Array && expected instanceof Uint8Array) {
+    return bytesEqual(actual, expected);
+  }
+
+  return Object.is(actual, expected);
+}
+
+function isMessage(value: unknown): value is Message {
+  return typeof value === "object" && value !== null && "$typeName" in value;
+}
+
+function isAny(value: unknown): value is Any {
+  return isMessage(value) && value.$typeName === "google.protobuf.Any";
+}
+
+function bytesEqual(left: Uint8Array, right: Uint8Array): boolean {
+  return left.length === right.length && left.every((byte, index) => byte === right[index]);
 }
 
 function packVersionedState<Schema extends MessageSchema>(
@@ -820,6 +1290,23 @@ function tenantValue(tenantId: TenantId | undefined): string | undefined {
     default:
       return undefined;
   }
+}
+
+function stateRouteIdField(
+  schema: MessageSchema,
+  idField: { readonly name?: string; readonly localName?: string } | undefined,
+): MessageFieldInfo {
+  const field =
+    findMessageField(schema, idField?.name ?? "") ??
+    findMessageField(schema, idField?.localName ?? "") ??
+    (schema.fields[0] as unknown as MessageFieldInfo | undefined) ??
+    undefined;
+
+  if (field === undefined) {
+    throw new ConnectError("Subscription target ID field is not available.", Code.InvalidArgument);
+  }
+
+  return field;
 }
 
 function tenantMismatch(
@@ -896,20 +1383,36 @@ const VALUE_DECODERS = Object.freeze([
   (value: Any) => unpackAny(value, BytesValueSchema)?.value,
 ]);
 
-function createEntityUpdate(record: SubscriptionRecord, update: StandUpdate): SubscriptionUpdate {
+function createEntityUpdate(
+  record: SubscriptionRecord,
+  update: StandUpdate,
+): SubscriptionUpdate | undefined {
+  const match = record.matcher.match(update);
+  if (match === undefined) {
+    return undefined;
+  }
+
   return create(SubscriptionUpdateSchema, {
-    subscription: record.subscription,
+    subscription: clone(SubscriptionSchema, record.subscription),
     response: okResponse(),
     update: {
       case: "entityUpdates",
       value: create(EntityUpdatesSchema, {
         update: [
           create(EntityStateUpdateSchema, {
-            id: typeof update.id === "string" ? packString(update.id) : undefined,
-            kind: {
-              case: "state",
-              value: packAny(record.route.schema, update.state, { validate: false }),
-            },
+            id: packEntityId(record.route, update.id),
+            kind:
+              match === "state"
+                ? {
+                    case: "state",
+                    value: packAny(record.route.schema, maskedState(record, update.state), {
+                      validate: false,
+                    }),
+                  }
+                : {
+                    case: "noLongerMatching",
+                    value: true,
+                  },
           }),
         ],
       }),
@@ -917,6 +1420,35 @@ function createEntityUpdate(record: SubscriptionRecord, update: StandUpdate): Su
   });
 }
 
+function maskedState(record: SubscriptionRecord, state: MessageShape<MessageSchema>): Message {
+  return RecordMask.apply(clone(record.route.schema, state), record.matcher.fieldMask);
+}
+
 function packString(value: string): Any {
   return packAny(StringValueSchema, create(StringValueSchema, { value }));
+}
+
+function packEntityId(route: StateRoute, id: unknown): Any | undefined {
+  if (isAny(id)) {
+    return clone(AnySchema, id);
+  }
+  if (route.idField.message !== undefined && isMessage(id)) {
+    return packAny(route.idField.message, id, { validate: false });
+  }
+  if (id instanceof Uint8Array) {
+    return packAny(BytesValueSchema, create(BytesValueSchema, { value: id }));
+  }
+
+  switch (typeof id) {
+    case "string":
+      return packString(id);
+    case "boolean":
+      return packAny(BoolValueSchema, create(BoolValueSchema, { value: id }));
+    case "number":
+      return packAny(DoubleValueSchema, create(DoubleValueSchema, { value: id }));
+    case "bigint":
+      return packAny(Int64ValueSchema, create(Int64ValueSchema, { value: id }));
+    default:
+      return undefined;
+  }
 }

@@ -641,22 +641,32 @@ missing criteria, and `include_all = false` return `INVALID_QUERY` before
 reading Stand storage.
 
 `SubscriptionService.Subscribe` accepts only known registered state targets and
-rejects unknown targets with `INVALID_ARGUMENT` before creating a subscription.
-Accepted subscriptions are inactive, opaque, process-local records owned by the
-current `SpineServices` instance; updates recorded before `Activate` are not
-replayed. `Activate` attaches the record to the context `Stand` by subscription
-ID. Missing or unknown activation IDs complete without updates, and
-duplicate activation for an already-active ID completes without updates while
-leaving the active stream attached.
-`Cancel` returns OK for unknown, missing, canceled, or already-cleaned IDs.
-Cleanup is idempotent when a client cancels, an activation iterator closes, an
-inactive record expires, or the active queue limit is exceeded. The inactive
-TTL defaults to 30 seconds and the active queue limit defaults to 100 queued
-updates. Service subscriptions, direct Stand subscriptions, Stand version
-metadata, and the in-memory storage adapter are process-local development/test
-state, not durable delivery or catch-up storage. Cross-context fallback, client
-query DSLs, richer field expressions beyond supported field masks, event
-subscriptions, and durable cross-process Delivery/subscription recovery
+rejects unknown targets, invalid criteria, unsupported comparison operators,
+and unknown subscription field paths with `INVALID_ARGUMENT` before creating a
+subscription. Accepted subscriptions are inactive, opaque, process-local
+records owned by the current `SpineServices` instance; updates recorded before
+`Activate` are not replayed. `Activate` attaches the record to the context
+`Stand` by subscription ID. `Target.include_all = true` delivers every
+activated update. `Target.filters` supports an optional ID filter plus
+`ALL`/`EITHER` composite `EQUAL` field filters over generated entity state
+fields, including nested message fields. Missing ID filters match all IDs. For
+filtered topics, matching new states are delivered; if the previous state
+matched and the new state no longer matches, the update carries
+`no_longer_matching` instead. `Topic.field_mask` is applied to delivered
+state updates and is not applied to `no_longer_matching` updates. Single-tenant
+subscriptions reject tenant options; multitenant subscriptions require
+`tenantId`; delivery is scoped to that tenant slice. Missing or unknown
+activation IDs complete without updates, and duplicate activation for an
+already-active ID completes without updates while leaving the active stream
+attached. `Cancel` returns OK for unknown, missing, canceled, or
+already-cleaned IDs. Cleanup is idempotent when a client cancels, an activation
+iterator closes, an inactive record expires, or the active queue limit is
+exceeded. The inactive TTL defaults to 30 seconds and the active queue limit
+defaults to 100 queued updates. Service subscriptions, direct Stand
+subscriptions, Stand version metadata, and the in-memory storage adapter are
+process-local development/test state, not durable delivery or catch-up storage.
+Cross-context fallback, client query DSLs, comparison subscription operators,
+event subscriptions, and durable cross-process Delivery/subscription recovery
 catch-up remain outside this slice.
 
 ## Local Server Lifecycle

@@ -7,13 +7,13 @@ query behavior, tenant scoping, docs/API boundary, and verification evidence.
 
 ## Required Lanes
 
-| Lane                       | Status  | Result  |
-| -------------------------- | ------- | ------- |
-| Code style/maintainability | Complete | Clean |
-| Documentation completeness | Complete | Clean |
-| TypeScript/API docs        | Complete | Clean |
-| Security                   | Complete | Clean |
-| Performance/reliability    | Complete | Clean |
+| Lane                       | Status   | Result |
+| -------------------------- | -------- | ------ |
+| Code style/maintainability | Complete | Clean  |
+| Documentation completeness | Complete | Clean  |
+| TypeScript/API docs        | Complete | Clean  |
+| Security                   | Complete | Clean  |
+| Performance/reliability    | Complete | Clean  |
 
 ## Findings
 

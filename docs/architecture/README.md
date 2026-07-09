@@ -379,15 +379,24 @@ Service subscription delivery starts only when a client activates the opaque
 subscription ID, abandoned inactive subscriptions expire after a small
 configurable TTL, slow consumers are bounded by a small configurable update
 queue, and stream/cancel cleanup releases the direct Stand handle.
-`Subscribe` rejects unknown state targets before creating a process-local
-record. Activation and cancellation are keyed by subscription ID in the current
+`Subscribe` rejects unknown state targets, invalid criteria, unsupported
+comparison operators, and unknown subscription field paths before creating a
+process-local record. Include-all topics deliver each activated update. Filtered
+topics support optional ID filters plus `ALL`/`EITHER` composite `EQUAL`
+field filters over generated entity state fields, including nested message
+fields. Missing ID filters match all IDs. Filtered delivery compares previous
+and new Stand state: matching new states are delivered, and matched-to-unmatched
+transitions emit `no_longer_matching`. Topic masks are applied only to
+delivered states. Single-tenant subscriptions reject tenant options;
+multitenant subscriptions require `tenantId`; delivery is scoped to that tenant
+slice. Activation and cancellation are keyed by subscription ID in the current
 `SpineServices` instance: unknown activations complete without updates, and
 duplicate activation of an already-active ID also completes without updates.
-Unknown or duplicate cancellations return OK. Cleanup is idempotent across
-cancel, stream finalization, inactive expiry, and queue-limit closure. The
-subscription registry, direct Stand subscriber sets, Stand version metadata,
-and in-memory storage adapter are local process state; this slice does not
-persist subscription positions, replay missed updates, or recover active
+Unknown or duplicate cancellations return OK. Cleanup is
+idempotent across cancel, stream finalization, inactive expiry, and queue-limit
+closure. The subscription registry, direct Stand subscriber sets, Stand version
+metadata, and in-memory storage adapter are local process state; this slice does
+not persist subscription positions, replay missed updates, or recover active
 subscriptions after restart.
 
 The current command service error contract remains intentionally small.

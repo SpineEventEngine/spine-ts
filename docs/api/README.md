@@ -172,6 +172,9 @@ map is not persisted.
 Subscription cleanup is explicit via `unsubscribe()`, and multitenant stands
 require a `tenantId` on point reads, list reads, updates, and subscriptions
 while single-tenant stands reject tenant options.
+`StandUpdate.previousState` is a copy-safe cloned snapshot of the stored state
+before the update, omitted when no prior state existed, so subscribers may
+retain or mutate it after delivery.
 `SpineServices` adapts built-context command buses and stands to the first real
 Connect/Node `CommandService`, `QueryService`, and `SubscriptionService`
 routes. `QueryService.Read` supports ID-filter reads for any registered state
@@ -185,21 +188,31 @@ limits when ordering is present. Use proto column names such as
 Undeclared columns, unsupported operators, nested or `EITHER` composites, limits
 without ordering, missing criteria, and `include_all = false` return
 `INVALID_QUERY` before reading Stand storage.
-`Subscribe`
-allocates opaque IDs, `Activate` attaches delivery, and `Cancel`/stream
-finalization release in-process handles. Never-activated subscriptions have a
-configurable inactive TTL, and active delivery uses a configurable queue limit
-for slow consumers. `Subscribe` rejects unknown targets with `INVALID_ARGUMENT`
-before creating an inactive record. Activation is by the opaque ID in the same
-`SpineServices` instance; unknown IDs and duplicate activation of an already
-active ID complete without updates. Cancellation of a missing, unknown,
-already-canceled, or already-cleaned subscription returns OK. Cleanup is
-idempotent across cancellation, activation-stream finalization, inactive
-expiry, and slow-consumer queue closure. Defaults are 30 seconds for
-inactive expiry and 100 queued updates per active subscription. The service
-subscription registry is process-local memory, not durable subscription
-storage. It is not a client DSL, event subscription implementation, broad
-server lifecycle, durable subscription store, or projection catch-up loop.
+`Subscribe` allocates opaque IDs, validates subscription criteria,
+`Activate` attaches delivery, and `Cancel`/stream finalization release
+in-process handles. Never-activated subscriptions have a configurable inactive
+TTL, and active delivery uses a configurable queue limit for slow consumers.
+`Subscribe` rejects unknown targets, invalid criteria, unsupported comparison
+operators, and unknown subscription field paths with `INVALID_ARGUMENT` before
+creating an inactive record. `Target.include_all = true` delivers every
+activated update. `Target.filters` supports an optional ID filter plus
+`ALL`/`EITHER` composite `EQUAL` field filters over generated entity state
+fields, including nested message fields; missing ID filters match all IDs.
+Filtered topics deliver matching new states and emit `no_longer_matching` when
+the previous state matched but the new state does not. `Topic.field_mask` is
+applied to delivered states, not to `no_longer_matching` updates. Activation
+is by the opaque ID in the same `SpineServices` instance. Single-tenant
+subscriptions reject tenant options; multitenant subscriptions require
+`tenantId`; delivery is scoped to that tenant slice. Unknown IDs and duplicate
+activation of an already active ID complete without updates.
+Cancellation of a missing, unknown, already-canceled, or already-cleaned
+subscription returns OK. Cleanup is idempotent across cancellation,
+activation-stream finalization, inactive expiry, and slow-consumer queue
+closure. Defaults are 30 seconds for inactive expiry and 100 queued updates per
+active subscription. The service subscription registry is process-local memory,
+not durable subscription storage. It is not a client DSL, event subscription
+implementation, broad server lifecycle, durable subscription store, or
+projection catch-up loop.
 `Server`, `ServerOptions`, and `RunningServer` form the small public lifecycle
 owner for hosting those routes over Node HTTP/2. `Server.atPort(port)` defaults
 to local-only `127.0.0.1`; broader hosts are explicit through `ServerOptions`.
