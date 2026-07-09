@@ -1,6 +1,6 @@
 # T-0017n: Verification Gate Fix
 
-Status: complete, pending integration
+Status: complete, integrated
 Started: `2026-07-09`
 Branch: `task/T-0017n-verification-typecheck-fix`
 Worktree:
