@@ -2226,3 +2226,45 @@ Consequences:
   accident.
 - Truly neutral generated message schemas continue to fail closed in handler
   signal/emitted positions.
+
+## D-0069: Consume Semantic Tags In Runtime Routing Topics
+
+Status: Accepted
+
+Date: 2026-07-09
+
+Context: T-0018e closed stale docs around runtime metadata and generated
+registry readiness, leaving one concrete functional gap: semantic tags from
+Spine `(is)` and `(every_is)` options are extracted into server entity metadata
+and transport topics can carry tags, but runtime routing still creates command
+and event topics from signal kind plus type URL only.
+
+Decision:
+
+- Run T-0019 as the next implementation slice.
+- Keep the change local to runtime route planning and matching documentation.
+- Use existing descriptor-derived entity metadata as the source of tags.
+- For command routes, copy the command assignee entity tags into the command
+  transport topic.
+- For event routes, copy a deterministic deduplicated union of all registered
+  receiver entity tags into the shared event transport topic.
+- Do not add a new semantic-tag registry, handler materialization path, custom
+  application API, delivery behavior, or transport adapter policy in this slice.
+
+Alternatives considered:
+
+- Keep tags preserved only in metadata and transport topics. Rejected because
+  the recorded gap is that runtime routing does not consume them.
+- Use only the first event receiver's tags. Rejected because event topics are
+  shared fan-out topics; a deterministic union preserves all registered
+  receiver metadata without new selection policy.
+- Introduce a separate semantic-tag registry. Rejected as overengineered for
+  the current implemented surfaces.
+
+Consequences:
+
+- Transport routing keys for registered command/event topics will include
+  descriptor-derived semantic tags when receiver entity metadata has them.
+- Event-topic tag order must remain deterministic and copy-safe.
+- Later runtime slices can match by concrete event type URL and semantic tags
+  without inventing another metadata source.
