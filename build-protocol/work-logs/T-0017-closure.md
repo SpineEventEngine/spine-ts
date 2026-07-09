@@ -34,6 +34,16 @@ Worktree:
 - `2026-07-09`: Marked the parent runtime-gap roadmap complete because all
   staged slices `T-0017a` through `T-0017m` are accounted for in task statuses,
   slice logs, the parent log, and Git history.
+- `2026-07-09`: Implementation sub-agent
+  `019f46df-27b9-7133-ad6f-e2d23daf9e35` completed and committed the first
+  closure pass as `6682921`; the coordinator closed the agent before review.
+- `2026-07-09`: First review round completed and all reviewers were closed.
+  Documentation, TypeScript/API docs, security, and performance/reliability
+  reported clean. Style/maintainability requested accurate durable
+  implementation/reviewer agent evidence.
+- `2026-07-09`: Applied first-round fix: closure review/work logs now name the
+  actual implementation and reviewer agents, their results, and closure state.
+- `2026-07-09`: Focused style re-review reported clean and was closed.
 
 ## Decisions
 
@@ -43,14 +53,12 @@ Worktree:
 - Treat the parent log's merge/post-merge verification entries through
   `T-0017m`, plus Git containment on `main`, as sufficient evidence for
   `complete, integrated` status.
-- Do not spawn reviewer sub-agents for this closure pass because the current
-  user instruction explicitly says not to spawn sub-agents.
 
 ## Verification
 
 - Status scan before marking this closure task complete:
   `rg -n "^Status:|pending integration|in progress" build-protocol/tasks/T-0017*
-  -g TASK.md` showed all staged roadmap slices as `complete, integrated`; only
+-g TASK.md` showed all staged roadmap slices as `complete, integrated`; only
   the closure task itself still reported `Status: in progress`, with additional
   matches in its acceptance text.
 - Initial `pnpm --config.verify-deps-before-run=false format:check` could not
@@ -64,7 +72,19 @@ Worktree:
 - `pnpm --config.verify-deps-before-run=false format:check`: passed with
   `All matched files use Prettier code style!`.
 - `git diff --check`: passed.
+- After the first-round fix, `pnpm --config.verify-deps-before-run=false
+format:check`, `git diff --check`, and a stale status/protocol wording scan
+  passed.
 
 ## Participants
 
-- Implementation sub-agent: Codex in this worktree.
+- Implementation sub-agent `019f46df-27b9-7133-ad6f-e2d23daf9e35` completed
+  and was closed.
+- First review round agents closed: style
+  `019f46e6-2b53-7e82-a88d-c050682d71ef`, documentation
+  `019f46e6-2bf2-7293-b285-f02fb54dab65`, TypeScript/API docs
+  `019f46e6-2c74-7812-9cb8-4f686cf72993`, security
+  `019f46e6-2d11-7d33-9dc3-2b1ee9d038c7`, and performance/reliability
+  `019f46e6-2d8a-7182-b492-1cb624f17fde`.
+- Focused style re-review agent
+  `019f46e9-0d06-7621-8912-45c4af73a6bc` reported clean and was closed.
