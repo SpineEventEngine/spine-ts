@@ -92,7 +92,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
   }
 
   async #replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
-    if (message.label !== "HANDLE_COMMAND") {
+    if (message.label !== "HANDLE_COMMAND" && message.label !== "REACT_UPON_EVENT") {
       throw new Error(`BoundedContext delivery has no handler for inbox label "${message.label}".`);
     }
 
@@ -100,7 +100,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
 
     if (target === undefined) {
       throw new Error(
-        `BoundedContext delivery has no process-manager command target for "${message.inboxId.targetTypeUrl}".`,
+        `BoundedContext delivery has no process-manager target for "${message.inboxId.targetTypeUrl}".`,
       );
     }
 

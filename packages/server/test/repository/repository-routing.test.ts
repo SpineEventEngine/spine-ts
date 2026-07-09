@@ -1137,6 +1137,80 @@ class RoutingProcessManager extends ProcessManager<
   }
 }
 
+class InboxCheckingProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  static delivery: Delivery | undefined;
+  static sawPendingRow = false;
+  static eventCalls = 0;
+
+  static reset(delivery?: Delivery): void {
+    this.delivery = delivery;
+    this.sawPendingRow = false;
+    this.eventCalls = 0;
+  }
+
+  async reactTask(event: ProjectionState): Promise<void> {
+    const delivery = InboxCheckingProcessManager.delivery;
+
+    if (delivery === undefined) {
+      throw new Error("Expected inbox-checking process-manager delivery.");
+    }
+
+    const pending = await delivery.inbox.read(ShardIndex.single(), {
+      statuses: ["TO_DELIVER"],
+    });
+
+    InboxCheckingProcessManager.sawPendingRow = pending.some(
+      (message) =>
+        message.signalId === "event-pm-inbox-first" &&
+        message.label === "REACT_UPON_EVENT" &&
+        message.inboxId.targetId === event.id,
+    );
+    InboxCheckingProcessManager.eventCalls++;
+    this.updateDraftState(() =>
+      create(ProcessManagerStateSchema, {
+        id: event.id,
+        queue: `${event.name} checked`,
+      }),
+    );
+  }
+}
+
+class BlockingProcessManager extends ProcessManager<
+  string,
+  typeof ProcessManagerStateSchema,
+  number
+> {
+  static startedCalls = 0;
+  static completedCalls = 0;
+  static gate = createSignal();
+
+  static reset(): void {
+    this.startedCalls = 0;
+    this.completedCalls = 0;
+    this.gate = createSignal();
+  }
+
+  static release(): void {
+    this.gate.resolve();
+  }
+
+  async reactTask(event: ProjectionState): Promise<void> {
+    BlockingProcessManager.startedCalls++;
+    await BlockingProcessManager.gate.promise;
+    BlockingProcessManager.completedCalls++;
+    this.updateDraftState(() =>
+      create(ProcessManagerStateSchema, {
+        id: event.id,
+        queue: `${event.name} blocked`,
+      }),
+    );
+  }
+}
+
 describe("repository signal routing", () => {
   it("executes aggregate commands through a built bounded-context command bus", async () => {
     ExecutingTaskAggregate.reset();
@@ -3148,6 +3222,186 @@ describe("repository signal routing", () => {
       event: { id: { value: "command-pm-dispatch-1" } },
       error: { name: "Error", message: "process-manager command event dispatch failed" },
     });
+  });
+
+  it("stores process-manager event inbox rows before invoking event reactors", async () => {
+    const factory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    InboxCheckingProcessManager.reset(delivery);
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(createInboxCheckingRepository())
+      .withStorageFactory(factory)
+      .build();
+
+    await delivery.inbox.receive({
+      inboxId: {
+        targetId: "pm-older",
+        targetTypeUrl: deriveTypeUrl(ProcessManagerStateSchema),
+      },
+      signalId: "event-older",
+      signal: packAny(EventSchema, createProjectionEvent("event-older", "pm-older"), {
+        validate: false,
+      }),
+      label: "REACT_UPON_EVENT",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      version: 1n,
+    });
+
+    await context.eventBus().post(createProjectionEvent("event-pm-inbox-first", "pm-inbox-first"));
+
+    expect(InboxCheckingProcessManager.eventCalls).toBe(1);
+    expect(InboxCheckingProcessManager.sawPendingRow).toBe(true);
+    await expect(
+      context.stand().read(ProcessManagerStateSchema, "pm-inbox-first"),
+    ).resolves.toEqual(
+      create(ProcessManagerStateSchema, {
+        id: "pm-inbox-first",
+        queue: "Task checked",
+      }),
+    );
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([
+      {
+        signalId: "event-older",
+        label: "REACT_UPON_EVENT",
+        status: "TO_DELIVER",
+      },
+    ]);
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
+    ).resolves.toMatchObject([
+      {
+        signalId: "event-pm-inbox-first",
+        label: "REACT_UPON_EVENT",
+        status: "DELIVERED",
+      },
+    ]);
+  });
+
+  it("deduplicates duplicate live process-manager event delivery locally", async () => {
+    BlockingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createBlockingProcessManagerRepository();
+    const context = BoundedContext.singleTenant("Tasks")
+      .add(repository)
+      .withStorageFactory(factory)
+      .build();
+    const dispatcher = repositoryAccess.eventDispatcher(repository);
+    const event = createProjectionEvent("event-pm-duplicate", "pm-duplicate");
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+
+    if (dispatcher === undefined) {
+      throw new Error("Expected a process-manager event dispatcher.");
+    }
+
+    const first = dispatcher.dispatch(event);
+    await waitForCondition(() => BlockingProcessManager.startedCalls === 1);
+
+    const duplicate = dispatcher.dispatch(event);
+
+    await expect(Promise.race([duplicate.then(() => "resolved"), delay(150)])).resolves.toBe(
+      "pending",
+    );
+    expect(BlockingProcessManager.completedCalls).toBe(0);
+
+    BlockingProcessManager.release();
+
+    await expect(Promise.all([first, duplicate])).resolves.toEqual([undefined, undefined]);
+    expect(BlockingProcessManager.startedCalls).toBe(1);
+    expect(BlockingProcessManager.completedCalls).toBe(1);
+    await expect(context.stand().read(ProcessManagerStateSchema, "pm-duplicate")).resolves.toEqual(
+      create(ProcessManagerStateSchema, {
+        id: "pm-duplicate",
+        queue: "Task blocked",
+      }),
+    );
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
+    ).resolves.toMatchObject([
+      {
+        signalId: "event-pm-duplicate",
+        label: "REACT_UPON_EVENT",
+        status: "DELIVERED",
+      },
+    ]);
+  });
+
+  it("rejects invalid stored process-manager event rows before handler code", async () => {
+    RoutingProcessManager.reset();
+    const factory = new InMemoryStorageFactory();
+    const repository = createProcessManagerReactRepository();
+    BoundedContext.singleTenant("Tasks").add(repository).withStorageFactory(factory).build();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: factory,
+    });
+    const target = requireProcessManagerInboxTarget(repository);
+    const event = createProjectionEvent("event-pm-replay", "pm-replay");
+    const wrongId = await storeProcessManagerInboxEvent(
+      delivery,
+      event,
+      new Date("2026-07-08T09:05:00.000Z"),
+      1n,
+      { targetId: "pm-other" },
+    );
+    const wrongType = await storeProcessManagerInboxEvent(
+      delivery,
+      event,
+      new Date("2026-07-08T09:05:01.000Z"),
+      2n,
+      { signalId: "event-pm-replay-type", targetTypeUrl: "type.example.dev/OtherPm" },
+    );
+    const malformed = await storeProcessManagerInboxEvent(
+      delivery,
+      event,
+      new Date("2026-07-08T09:05:02.000Z"),
+      3n,
+      {
+        signalId: "event-pm-replay-malformed",
+        signal: packAny(
+          AggregateStateSchema,
+          create(AggregateStateSchema, {
+            id: "pm-replay",
+            name: "Wrong envelope",
+            archived: false,
+          }),
+        ),
+      },
+    );
+    const wrongLabel = await storeProcessManagerInboxEvent(
+      delivery,
+      event,
+      new Date("2026-07-08T09:05:03.000Z"),
+      4n,
+      {
+        signalId: "event-pm-replay-label",
+        label: "UPDATE_SUBSCRIBER",
+      },
+    );
+
+    await expect(target.replay(wrongId)).rejects.toThrow(
+      "Process-manager inbox replay stored target ID does not match the routed event.",
+    );
+    await expect(target.replay(wrongType)).rejects.toThrow(
+      "Process-manager inbox replay stored target type does not match the routed repository.",
+    );
+    await expect(target.replay(malformed)).rejects.toThrow(
+      "Process-manager inbox replay requires a readable stored event.",
+    );
+    await expect(target.replay(wrongLabel)).rejects.toThrow(
+      'Process-manager inbox replay does not handle "UPDATE_SUBSCRIBER" messages.',
+    );
+
+    expect(RoutingProcessManager.eventCalls).toBe(0);
   });
 
   it("executes process-manager event reactors and stores mutated state in Stand", async () => {
@@ -5369,6 +5623,34 @@ function createProcessManagerReactRepository(): Repository<typeof RoutingProcess
   });
 }
 
+function createInboxCheckingRepository(): Repository<typeof InboxCheckingProcessManager> {
+  const handlers = defineEntityHandlers(
+    InboxCheckingProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
+  );
+
+  return new Repository({
+    entityType: InboxCheckingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+  });
+}
+
+function createBlockingProcessManagerRepository(): Repository<typeof BlockingProcessManager> {
+  const handlers = defineEntityHandlers(
+    BlockingProcessManager,
+    ProcessManagerStateSchema,
+    (builder) => [builder.react(ProjectionStateSchema, "reactTask")],
+  );
+
+  return new Repository({
+    entityType: BlockingProcessManager,
+    schema: ProcessManagerStateSchema,
+    handlers,
+  });
+}
+
 function createProcessManagerEventRepository(): Repository<typeof RoutingProcessManager> {
   const handlers = handlerMetadataAccess.defineArity(
     RoutingProcessManager,
@@ -5690,6 +5972,36 @@ async function storeProcessManagerInboxCommand(
   return message.message;
 }
 
+async function storeProcessManagerInboxEvent(
+  delivery: Delivery,
+  event: SpineEvent,
+  whenReceived: Date,
+  version: bigint,
+  overrides: {
+    readonly signalId?: string;
+    readonly targetId?: string;
+    readonly targetTypeUrl?: string;
+    readonly label?: InboxMessage["label"];
+    readonly signal?: NonNullable<InboxMessage["signal"]>;
+  } = {},
+) {
+  const message = await delivery.inbox.receive({
+    inboxId: {
+      targetId: overrides.targetId ?? readProjectionId(event),
+      targetTypeUrl: overrides.targetTypeUrl ?? deriveTypeUrl(ProcessManagerStateSchema),
+    },
+    signalId: overrides.signalId ?? event.id?.value ?? "missing-event-id",
+    signal: overrides.signal ?? packAny(EventSchema, event, { validate: false }),
+    label: overrides.label ?? "REACT_UPON_EVENT",
+    status: "TO_DELIVER",
+    shard: ShardIndex.single(),
+    whenReceived,
+    version,
+  });
+
+  return message.message;
+}
+
 function readAggregateId(command: SpineCommand): string {
   const message =
     command.message === undefined ? undefined : unpackAny(command.message, AggregateStateSchema);
@@ -5703,6 +6015,17 @@ function readAggregateId(command: SpineCommand): string {
       throw new Error("Expected a readable process-manager command payload.");
     }
     return validated.id;
+  }
+
+  return message.id;
+}
+
+function readProjectionId(event: SpineEvent): string {
+  const message =
+    event.message === undefined ? undefined : unpackAny(event.message, ProjectionStateSchema);
+
+  if (message === undefined) {
+    throw new Error("Expected a readable process-manager event payload.");
   }
 
   return message.id;

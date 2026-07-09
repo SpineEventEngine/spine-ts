@@ -618,17 +618,21 @@ function createRepositoryDispatchers(
 function createPmInboxTarget(
   repository: RepositoryView & {
     routeCommand(command: Command): RepositoryCommandRoute;
+    routeEvent(event: Event): RepositoryEventRoute;
   },
   routing: RepositoryRouting,
 ): ProcessManagerInboxTarget | undefined {
-  if (repository.entityFamily !== "process-manager" || routing.commandSchemas.length === 0) {
+  if (
+    repository.entityFamily !== "process-manager" ||
+    (routing.commandSchemas.length === 0 && routing.eventSchemas.length === 0)
+  ) {
     return undefined;
   }
 
   return Object.freeze({
     targetTypeUrl: deriveTypeUrl(repository.stateSchema),
     replay: (message: InboxMessage, deliveryTenantId?: string): Promise<void> =>
-      replayProcessManagerCommand(repository, routing, message, deliveryTenantId),
+      replayProcessManagerMessage(repository, routing, message, deliveryTenantId),
   });
 }
 
@@ -801,6 +805,60 @@ async function handoffProjectionEvent(
   );
 }
 
+async function handoffProcessManagerEvent(
+  repository: RepositoryView,
+  runtime: RepositoryRuntime,
+  event: Event,
+  entityId: unknown,
+): Promise<void> {
+  const eventId = requireEventId(event);
+  const whenReceived = new Date();
+  const keepUntil = new Date(whenReceived.getTime() + inboxDedupMs);
+  const deliveryTenantId = requireProcessManagerEventTenant(runtime.context, event);
+  const delivery = new Delivery({
+    context: processManagerDeliveryContext(runtime.context, deliveryTenantId),
+    storageFactory: runtime.storageFactory,
+  });
+
+  await runtime.processManagerInbox.receive(
+    delivery,
+    {
+      inboxId: {
+        targetId: inboxTargetId(entityId),
+        targetTypeUrl: deriveTypeUrl(repository.stateSchema),
+      },
+      signalId: eventId.value,
+      signal: packAny(EventSchema, event, { validate: false }),
+      label: "REACT_UPON_EVENT",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+      keepUntil,
+    },
+    deliveryTenantId,
+  );
+}
+
+async function replayProcessManagerMessage(
+  repository: RepositoryView & {
+    routeCommand(command: Command): RepositoryCommandRoute;
+    routeEvent(event: Event): RepositoryEventRoute;
+  },
+  routing: RepositoryRouting,
+  message: InboxMessage,
+  deliveryTenantId?: string,
+): Promise<void> {
+  if (message.label === "HANDLE_COMMAND") {
+    await replayProcessManagerCommand(repository, routing, message, deliveryTenantId);
+    return;
+  }
+  if (message.label === "REACT_UPON_EVENT") {
+    await replayProcessManagerEvent(repository, routing, message, deliveryTenantId);
+    return;
+  }
+
+  throw new Error(`Process-manager inbox replay does not handle "${message.label}" messages.`);
+}
+
 async function replayProcessManagerCommand(
   repository: RepositoryView & {
     routeCommand(command: Command): RepositoryCommandRoute;
@@ -822,6 +880,34 @@ async function replayProcessManagerCommand(
   validateReplayTarget(repository, message, command);
 
   await new ProcessManagerCommandExecution(repository, routing, runtime, command).run();
+}
+
+async function replayProcessManagerEvent(
+  repository: RepositoryView & {
+    routeEvent(event: Event): RepositoryEventRoute;
+  },
+  routing: RepositoryRouting,
+  message: InboxMessage,
+  deliveryTenantId?: string,
+): Promise<void> {
+  const runtime = repositoryRuntimes.get(repository);
+
+  if (runtime === undefined) {
+    throw new Error("Process-manager inbox replay requires a bound repository runtime.");
+  }
+
+  const event = readProcessManagerInboxEvent(message);
+
+  validateProcessManagerReplayTenant(runtime.context, deliveryTenantId, event);
+  validateReplayedEventPayload(
+    routing,
+    event,
+    "Process-manager inbox replay requires a readable event payload.",
+  );
+
+  const entityId = replayProcessManagerId(repository, message, event);
+
+  await new ProcessManagerEventExecution(repository, routing, runtime, event).runTarget(entityId);
 }
 
 async function replayProjectionEvent(
@@ -1878,8 +1964,19 @@ class ProcessManagerEventExecution {
     this.#validateSourceEventIdForFollowUps(intake);
 
     for (const entityId of intake.route.entityIds) {
-      await this.#executeEntity(entityId, intake);
+      await handoffProcessManagerEvent(this.#repository, this.#runtime, this.#event, entityId);
     }
+  }
+
+  async runTarget(entityId: unknown): Promise<void> {
+    const intake = this.#readIntake();
+
+    if (intake.reactors.length === 0 && intake.commanders.length === 0) {
+      return;
+    }
+
+    this.#validateSourceEventIdForFollowUps(intake);
+    await this.#executeEntity(entityId, intake);
   }
 
   #readIntake(): {
@@ -2267,6 +2364,25 @@ function requireProjectionTenant(context: StorageContext, event: Event): string 
   return tenantId;
 }
 
+function requireProcessManagerEventTenant(
+  context: StorageContext,
+  event: Event,
+): string | undefined {
+  if (!context.multitenant) {
+    return undefined;
+  }
+
+  const tenantId = readEventTenant(event) ?? context.tenantId;
+
+  if (tenantId === undefined || tenantId.trim() === "") {
+    throw new Error(
+      `Multitenant process-manager inbox handoff for "${context.name}" requires tenantId.`,
+    );
+  }
+
+  return tenantId;
+}
+
 function requireProcessManagerTenant(
   context: StorageContext,
   command: Command,
@@ -2299,6 +2415,23 @@ function readInboxCommand(message: InboxMessage): Command {
   }
 
   return command;
+}
+
+function readProcessManagerInboxEvent(message: InboxMessage): Event {
+  if (message.label !== "REACT_UPON_EVENT") {
+    throw new Error(`Process-manager inbox replay does not handle "${message.label}" messages.`);
+  }
+
+  const event =
+    message.signal === undefined
+      ? undefined
+      : unpackAny(fromBinary(AnySchema, toBinary(AnySchema, message.signal)), EventSchema);
+
+  if (event === undefined) {
+    throw new Error("Process-manager inbox replay requires a readable stored event.");
+  }
+
+  return event;
 }
 
 function readInboxEvent(message: InboxMessage): Event {
@@ -2337,13 +2470,17 @@ function validateReplayedCommandPayload(routing: RepositoryRouting, command: Com
   }
 }
 
-function validateReplayedEventPayload(routing: RepositoryRouting, event: Event): void {
+function validateReplayedEventPayload(
+  routing: RepositoryRouting,
+  event: Event,
+  invalidPayloadMessage = "Projection inbox replay requires a readable event payload.",
+): void {
   const eventMessage = requireSignalMessage(event.message, "event");
   const eventSchema = schemaForTypeUrl(routing.eventSchemas, eventMessage.typeUrl, "event");
   const payload = unpackAny(eventMessage, eventSchema);
 
   if (payload === undefined) {
-    throw new Error("Projection inbox replay requires a readable event payload.");
+    throw new Error(invalidPayloadMessage);
   }
 
   checkValid(eventSchema, payload);
@@ -2397,6 +2534,31 @@ function validateProjectionReplayTenant(
   }
 }
 
+function validateProcessManagerReplayTenant(
+  context: StorageContext,
+  deliveryTenantId: string | undefined,
+  event: Event,
+): void {
+  if (!context.multitenant) {
+    return;
+  }
+
+  if (deliveryTenantId === undefined || deliveryTenantId.trim() === "") {
+    throw new Error(
+      `Multitenant process-manager inbox replay for "${context.name}" requires tenantId.`,
+    );
+  }
+
+  const envelopeTenantId = readEventTenant(event) ?? context.tenantId;
+
+  if (envelopeTenantId === undefined || envelopeTenantId.trim() === "") {
+    throw new Error("Process-manager inbox replay requires stored event tenant metadata.");
+  }
+  if (envelopeTenantId !== deliveryTenantId) {
+    throw new Error("Process-manager inbox replay stored event tenant does not match.");
+  }
+}
+
 function validateReplayTarget(
   repository: RepositoryView & {
     routeCommand(command: Command): RepositoryCommandRoute;
@@ -2420,6 +2582,33 @@ function validateReplayTarget(
       "Process-manager inbox replay stored target ID does not match the routed command.",
     );
   }
+}
+
+function replayProcessManagerId(
+  repository: RepositoryView & {
+    routeEvent(event: Event): RepositoryEventRoute;
+  },
+  message: InboxMessage,
+  event: Event,
+): unknown {
+  const expectedTargetTypeUrl = deriveTypeUrl(repository.stateSchema);
+
+  if (message.inboxId.targetTypeUrl !== expectedTargetTypeUrl) {
+    throw new Error(
+      "Process-manager inbox replay stored target type does not match the routed repository.",
+    );
+  }
+
+  const route = repository.routeEvent(event);
+  const entityId = route.entityIds.find((id) => inboxTargetId(id) === message.inboxId.targetId);
+
+  if (entityId === undefined) {
+    throw new Error(
+      "Process-manager inbox replay stored target ID does not match the routed event.",
+    );
+  }
+
+  return entityId;
 }
 
 function replayProjectionId(

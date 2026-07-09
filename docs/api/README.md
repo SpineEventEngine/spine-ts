@@ -95,14 +95,15 @@ event redispatch failures are observable through the copy-safe
 through `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This
 slice does not invoke query handlers, run durable Delivery catch-up, expose a
 broad server lifecycle, or integrate transports. The supported durable inbox
-handoffs are framework-owned process-manager command replay and live projection
-subscriber replay. The current local runtime writes the inbox row, drains the
-local shard immediately, requires tenant-safe replay in multitenant contexts,
-and resolves only after that received row is marked delivered. Projection
-subscriber rows use `UPDATE_SUBSCRIBER`, store the original `Event` envelope,
-and replay only the routed row target before the projection transaction and
-`Stand` update. Broader inbox lifecycle management, schedulers, retries, and
-transport topology remain open production gaps.
+handoffs are framework-owned process-manager command replay, live
+process-manager event replay, and live projection subscriber replay. The current
+local runtime writes the inbox row, drains the local shard immediately, requires
+tenant-safe replay in multitenant contexts, and resolves only after that
+received row is marked delivered. Process-manager event rows use
+`REACT_UPON_EVENT`, projection subscriber rows use `UPDATE_SUBSCRIBER`, both
+store the original `Event` envelope, and both replay only the routed row target
+before the transaction and `Stand` update. Broader inbox lifecycle management,
+schedulers, retries, and transport topology remain open production gaps.
 Process-manager
 repositories with authentic generated metadata do execute through the local
 command/event buses: default command routing reads the first command field,
@@ -335,10 +336,10 @@ controls with a bounded default when omitted. `Inbox.markDelivered()` and
 `undefined` for missing rows, non-pending rows, or caller snapshots that do not
 match the stored message; already-delivered matching rows are returned
 idempotently. Built contexts use this storage boundary internally for
-process-manager command rows and live projection subscriber rows. This slice
-does not run process-wide transport-backed scheduler workers, retry monitors,
-conveyor/stations, generic repository delivery, process-manager event reactors
-through inbox storage, aggregate event reactors/importers, projection catch-up
+process-manager command rows, process-manager event reaction rows, and live
+projection subscriber rows. This slice does not run process-wide
+transport-backed scheduler workers, retry monitors, conveyor/stations, generic
+repository delivery, aggregate event reactors/importers, projection catch-up
 through inbox storage, broad production lifecycle, transport retries, retained
 attempt history, example app work, or production read-side catch-up workers.
 Server metadata exports

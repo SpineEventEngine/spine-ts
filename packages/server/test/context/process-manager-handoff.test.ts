@@ -58,6 +58,48 @@ describe("LocalProcessManagerInbox", () => {
     ]);
   });
 
+  it("delivers an event reactor row to the registered process-manager target", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const inbox = new LocalProcessManagerInbox("Tasks");
+    const targetTypeUrl = "type.example.dev/Tasks.ProcessManager";
+    const seen: InboxMessage[] = [];
+
+    inbox.register({
+      targetTypeUrl,
+      replay(message) {
+        seen.push(message);
+        return Promise.resolve();
+      },
+    });
+
+    await inbox.receive(delivery, {
+      inboxId: { targetId: "pm-event-1", targetTypeUrl },
+      signalId: "event-1",
+      label: "REACT_UPON_EVENT",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+    });
+
+    expect(seen).toHaveLength(1);
+    expect(seen[0]).toMatchObject({
+      signalId: "event-1",
+      label: "REACT_UPON_EVENT",
+      status: "TO_DELIVER",
+    });
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["DELIVERED"] }),
+    ).resolves.toMatchObject([
+      {
+        signalId: "event-1",
+        label: "REACT_UPON_EVENT",
+        status: "DELIVERED",
+      },
+    ]);
+  });
+
   it("waits for a concurrent duplicate while the original command replay is in flight", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -473,7 +515,7 @@ describe("LocalProcessManagerInbox", () => {
         shard: ShardIndex.single(),
       }),
     ).rejects.toThrow(
-      'BoundedContext delivery has no process-manager command target for "type.example.dev/Tasks.ProcessManager".',
+      'BoundedContext delivery has no process-manager target for "type.example.dev/Tasks.ProcessManager".',
     );
     await expect(
       delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),

@@ -2399,7 +2399,7 @@ Consequences:
   first process-manager command handoff.
 - Process-manager event reactors remain implemented through direct local
   `EventBus` execution until a later task routes them through durable inbox
-  storage.
+  storage. Superseded by D-0073/T-0022b on 2026-07-10.
 - Remaining event endpoint kinds stay explicit future tasks instead of hidden
   in a large abstraction.
 
