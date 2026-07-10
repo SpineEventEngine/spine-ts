@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 73 findings recorded; fix pending
+Status: Round 74 records-only fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer        | Status           |
-| -------------------------- | --------------- | ---------------- |
-| Code style/maintainability | Plato the 3rd   | Clean            |
-| Documentation              | Meitner the 3rd | Findings pending |
-| TypeScript/API docs        | Goodall the 3rd | Clean            |
-| Security                   | Mencius the 3rd | Clean            |
-| Performance/reliability    | Carson the 3rd  | Clean            |
+| Lane                       | Reviewer | Status                  |
+| -------------------------- | -------- | ----------------------- |
+| Code style/maintainability | TBD      | Fresh re-review pending |
+| Documentation              | TBD      | Fresh re-review pending |
+| TypeScript/API docs        | TBD      | Fresh re-review pending |
+| Security                   | TBD      | Fresh re-review pending |
+| Performance/reliability    | TBD      | Fresh re-review pending |
 
 ## Review Criteria
 
@@ -2578,3 +2578,20 @@ ca8fb2b3..70cf4dcd` passed. The rejected `resetResumedCursorToHead()` method
 - Action: record the complete findings batch, dispatch one records-only fix
   worker, verify, commit, and rerun all five reviewer lanes from the fixed
   HEAD.
+
+### Round 74 Records-Only Fix - `2026-07-10T21:49:04Z`
+
+- Documentation: re-anchored the work-log Round 48-51 records to commit-backed
+  UTC from `35f48b2e` at `2026-07-10T18:35:52Z` through `a1ae8669` at
+  `2026-07-10T19:03:44Z`. This removes the local-looking `19:27Z` through
+  `20:24Z` timestamps around the Round 51/52 boundary while preserving the
+  Round 73 historical outcomes above.
+- Dashboard: reset all five required review lanes to fresh current-HEAD
+  re-review pending after this records-only fix.
+- Verification: the first `format:check` found work-log Markdown wrapping only.
+  Repository formatting normalized it, the rerun `format:check` passed, and
+  `git diff --check` passed. The targeted work-log boundary check shows the
+  Round 48-52 block is monotonic from `2026-07-10T18:35:52Z` through
+  `2026-07-10T19:03:44Z`, and the stale local-looking timestamps no longer
+  appear in that block.
+- Action: rerun all five reviewer lanes from the verified Round 74 HEAD.

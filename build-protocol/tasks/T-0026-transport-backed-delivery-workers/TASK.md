@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 73 findings recorded; fix pending
+Status: Round 74 records-only fix verified; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1244,3 +1244,16 @@ still goes backward immediately before the corrected Round 52-56 block because
 Round 51 verification remains recorded as `2026-07-10T20:24:00Z` before Round
 52 is anchored to `2026-07-10T19:03:44Z`. The next fix will anchor the Round 51
 verification record to commit-backed UTC and rerun all five lanes.
+
+Round 74 records-only fix on `2026-07-10T21:49:04Z`: re-anchored the work-log
+Round 48-51 records to commit-backed UTC from `35f48b2e` at
+`2026-07-10T18:35:52Z` through `a1ae8669` at `2026-07-10T19:03:44Z`. This
+removes the local-looking `19:27Z` through `20:24Z` timestamps around the
+Round 51/52 boundary. The task/review dashboard is reset so all five lanes
+require fresh current-HEAD re-review.
+
+Round 74 verification on `2026-07-10T21:51:51Z`: `format:check` passed after
+one allowed Markdown formatting run normalized the work log. `git diff --check`
+passed. The targeted work-log boundary check shows the Round 48-52 block is
+monotonic from `2026-07-10T18:35:52Z` through `2026-07-10T19:03:44Z`, and no
+local-looking `19:27Z` through `20:24Z` timestamps remain in that block.
