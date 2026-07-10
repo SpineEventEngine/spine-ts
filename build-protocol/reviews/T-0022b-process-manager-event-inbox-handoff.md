@@ -1,6 +1,6 @@
 # Review Log: T-0022b Process-Manager Event Inbox Handoff
 
-Status: round 1 completed; fixes required
+Status: round 2 completed; fixes required
 
 Scope: live process-manager event reactor durable inbox handoff.
 
@@ -63,3 +63,49 @@ Scope: live process-manager event reactor durable inbox handoff.
 - Clean. The reviewer found exact-row replay, duplicate in-flight handoff reuse,
   retryable failed rows, delivered successful rows, and no generic scheduler or
   worker machinery added by this slice.
+
+## Round 2 Findings
+
+### Code Style/Maintainability
+
+- Important: `validateProcessManagerReplayTenant` still violates the
+  four-component naming rule. Shorten it before the style lane can pass.
+- Clean on the rest of the round-one style scope: duplicated stored-event
+  reader logic was consolidated, the `fromBinary(...toBinary(...))` copy path
+  was removed from the new flow, and the implementation remains a narrow inbox
+  handoff.
+
+### Documentation
+
+- Important: durable task chronology is impossible. Round-one fix work and the
+  implementation report are dated before the task start and before round-one
+  findings existed. Correct the timestamps.
+- Minor: `IMPLEMENTATION_REPORT.md` omits `build-protocol/DECISION_LOG.md` and
+  `packages/server/src/context/process-manager-handoff.ts` from its changed-file
+  list.
+- Clean on active content: docs no longer describe process-manager event
+  handlers as direct `EventBus` execution, and they document `REACT_UPON_EVENT`
+  plus pre-handler tenant, payload/schema, target type URL, and routed target ID
+  validation.
+
+### TypeScript/API Docs
+
+- Clean. API docs and internal inbox JSDoc now match runtime behavior, no
+  unnecessary public API was introduced, and generated reference docs were not
+  edited as source.
+
+### Security
+
+- Clean. The reviewer found replay validation before handler code and no new
+  execution or transport/IPC exposure. The reviewer noted no dedicated
+  multitenant `REACT_UPON_EVENT` negative test, but verified the guard
+  statically and did not classify it as a finding.
+
+### Performance/Reliability
+
+- High: process-manager event targets are handed off sequentially. If replay for
+  an earlier routed target fails, later target rows may never be written to the
+  durable inbox. This violates the JVM-style requirement that each routed target
+  is sent to inbox storage first and leaves no retryable row for later targets.
+- Add a regression for multi-target process-manager event routing where one
+  target fails and another target is still durably queued or delivered.
