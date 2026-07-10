@@ -266,6 +266,9 @@ smaller than the later scheduler/retry stack:
   releases the shard in a `finally` path. If the shard is already owned by
   another live worker lease, the run returns `SKIPPED` with zero counts and does
   not invoke the callback;
+- `Delivery.drainMessage(message, { node, onMessage })` picks up the message's
+  shard and drains only that exact stored row. It has no `limit` option because
+  it never scans unrelated rows from the shard;
 - `DeliveryLoop` repeats `Delivery.drain()` for one shard until idle, skipped,
   stopped, or the configured failure bound is reached. `DeliveryWorker` is the
   closeable owner for one node's configured shard loops; it starts those loops,

@@ -1,13 +1,7 @@
 import type { StorageContext, StorageFactory } from "@spine-ts/storage";
 
 import { Inbox, InboxMessageError, type InboxMessage } from "./inbox.js";
-import {
-  claimInboxMessage,
-  clearInboxClaim as clearStoredClaim,
-  InboxStorage,
-  markClaimedDelivered,
-  renewInboxClaim,
-} from "./inbox-storage.js";
+import { inboxStorageAccess, InboxStorage } from "./inbox-storage.js";
 import type { ClaimedInboxMessage } from "./inbox-claim.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry, type ShardSession } from "./sharded-work-registry.js";
@@ -166,7 +160,7 @@ export class Delivery {
   ): Promise<DeliveryMessageResult> {
     try {
       lease.requireActive();
-      const claimed = await claimInboxMessage(this.inbox.storage, message, lease.session());
+      const claimed = await inboxStorageAccess.claim(this.inbox.storage, message, lease.session());
       if (claimed === undefined) {
         return { kind: "SKIPPED" };
       }
@@ -179,7 +173,7 @@ export class Delivery {
       lease.requireActive();
 
       const marked = await active.finalize((current) =>
-        markClaimedDelivered(this.inbox.storage, current),
+        inboxStorageAccess.markDelivered(this.inbox.storage, current),
       );
       if (marked === undefined) {
         throw new Error(`Inbox message "${message.id.value}" was not marked delivered.`);
@@ -418,7 +412,7 @@ function activeClaim(): ActiveClaim {
           return;
         }
 
-        const renewed = await renewInboxClaim(storage, claimed, session);
+        const renewed = await inboxStorageAccess.renew(storage, claimed, session);
         if (renewed === undefined) {
           throw new Error("Inbox claim was lost.");
         }
@@ -461,7 +455,7 @@ async function clearActiveClaim(
     return;
   }
 
-  await ignoreClearError(clearStoredClaim(storage, message));
+  await ignoreClearError(inboxStorageAccess.clear(storage, message));
 }
 
 function requireMessageShard(message: InboxMessage): ShardIndex {

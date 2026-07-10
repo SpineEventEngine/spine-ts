@@ -10,7 +10,7 @@ import {
   type InboxMessage,
   type DeliveryRun,
 } from "../../src/index.js";
-import { claimInboxMessage } from "../../src/delivery/inbox-storage.js";
+import { inboxStorageAccess } from "../../src/delivery/inbox-storage.js";
 
 describe("DeliveryLoop", () => {
   it("drains multiple pages and rows appended during delivery", async () => {
@@ -125,7 +125,7 @@ describe("DeliveryLoop", () => {
     const delivery = createDelivery(storageFactory);
     const shard = ShardIndex.single();
     const stored = await seed(delivery, "signal-row-claimed", 1n);
-    const claimed = await claimInboxMessage(
+    const claimed = await inboxStorageAccess.claim(
       delivery.inbox.storage,
       stored,
       new ShardSession(

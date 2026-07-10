@@ -236,6 +236,23 @@ describe("Inbox", () => {
     expect(storageFactory.opens).toBe(0);
   });
 
+  it("rejects public inbox writes with internal claim metadata", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+
+    await expect(
+      storage.write(withClaim(createMessage("message-claim", "signal-claim", 1n))),
+    ).rejects.toBeInstanceOf(InboxMessageError);
+    await expect(
+      storage.write(withClaim(createMessage("message-claim", "signal-claim", 1n))),
+    ).rejects.toThrow("Inbox message claim is internal.");
+    await expect(storage.read(ShardIndex.single(), { statuses: liveStatuses })).resolves.toEqual(
+      [],
+    );
+  });
+
   it("orders equal receive time and version ties by inbox message UUID and supports paging limits", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -2182,6 +2199,17 @@ const liveStatuses: readonly DeliveryStatus[] = Object.freeze([
   "SCHEDULED",
   "TO_CATCH_UP",
 ]);
+
+function withClaim(message: ReturnType<typeof createMessage>): ReturnType<typeof createMessage> {
+  return Object.freeze({
+    ...message,
+    claim: {
+      id: "external-claim",
+      node: "node-a",
+      expiresAt: new Date("2026-07-08T09:01:00.000Z"),
+    },
+  }) as unknown as ReturnType<typeof createMessage>;
+}
 
 function legacyImportRecord(): Any {
   return create(AnySchema, {

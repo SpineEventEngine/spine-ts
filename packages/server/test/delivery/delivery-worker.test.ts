@@ -16,9 +16,10 @@ import {
   InboxRecords,
   inboxRecordSpec,
 } from "../../src/delivery/inbox-records.js";
-import { claimInboxMessage } from "../../src/delivery/inbox-storage.js";
+import { inboxStorageAccess } from "../../src/delivery/inbox-storage.js";
 import {
   Delivery,
+  InboxMessageError,
   ShardIndex,
   ShardSession,
   type DeliveryMessageDrainOptions,
@@ -156,7 +157,7 @@ describe("Delivery worker", () => {
       await started.promise;
       await vi.advanceTimersByTimeAsync(25);
 
-      const competingClaim = await claimInboxMessage(
+      const competingClaim = await inboxStorageAccess.claim(
         second.inbox.storage,
         stored,
         new ShardSession(
@@ -255,7 +256,7 @@ describe("Delivery worker", () => {
     });
     const shard = ShardIndex.single();
     const stored = await seed(delivery, "signal-claimed", 1n);
-    const claimed = await claimInboxMessage(
+    const claimed = await inboxStorageAccess.claim(
       delivery.inbox.storage,
       stored,
       new ShardSession(
@@ -296,7 +297,7 @@ describe("Delivery worker", () => {
     });
     const shard = ShardIndex.single();
     const stored = await seed(delivery, "signal-expired-claim", 1n);
-    const claimed = await claimInboxMessage(
+    const claimed = await inboxStorageAccess.claim(
       delivery.inbox.storage,
       stored,
       new ShardSession(
@@ -692,6 +693,24 @@ describe("Delivery worker", () => {
 
     await expect(delivery.inbox.markDelivered(scheduled.message)).resolves.toBeUndefined();
     await expect(delivery.inbox.markDelivered(missingMessage())).resolves.toBeUndefined();
+  });
+
+  it("rejects public markDelivered snapshots with internal claim metadata", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const stored = await seed(delivery, "signal-mark-claim", 1n);
+
+    await expect(delivery.inbox.markDelivered(withClaim(stored))).rejects.toBeInstanceOf(
+      InboxMessageError,
+    );
+    await expect(delivery.inbox.markDelivered(withClaim(stored))).rejects.toThrow(
+      "Inbox message claim is internal.",
+    );
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toHaveLength(1);
   });
 
   it("rejects corrupted inbox record snapshots at decode boundaries", () => {
@@ -1446,6 +1465,17 @@ function missingMessage(): InboxMessage {
     whenReceived: new Date("2026-07-08T09:00:00.000Z"),
     version: 99n,
   });
+}
+
+function withClaim(message: InboxMessage): InboxMessage {
+  return Object.freeze({
+    ...message,
+    claim: {
+      id: "external-claim",
+      node: "node-a",
+      expiresAt: new Date("2026-07-08T09:01:00.000Z"),
+    },
+  }) as unknown as InboxMessage;
 }
 
 function messageKey(message: InboxMessage): string {

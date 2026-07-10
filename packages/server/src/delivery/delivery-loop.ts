@@ -107,7 +107,7 @@ export interface DeliveryLoopRun {
   readonly runs: number;
   /** Number of pending rows read across all drains. */
   readonly processed: number;
-  /** Number of rows claimed across all drains. */
+  /** Number of rows accepted for endpoint work or fail-closed validation across all drains. */
   readonly claimed: number;
   /** Number of rows delivered across all drains. */
   readonly delivered: number;

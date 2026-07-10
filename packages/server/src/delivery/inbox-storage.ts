@@ -89,7 +89,7 @@ export class InboxStorage {
   async write(message: InboxMessage): Promise<InboxWriteResult> {
     // Serialize the inbox row once so validation and all later CAS keys use
     // one immutable caller-input snapshot.
-    const snapshot = InboxRecords.read(InboxRecords.write(message));
+    const snapshot = InboxRecords.read(InboxRecords.write(requirePublicMessage(message)));
     DedupRecords.writeClaim(snapshot);
 
     const inboxStorage = this.#inboxStorage();
@@ -112,7 +112,7 @@ export class InboxStorage {
    * status transition.
    */
   async markDelivered(message: InboxMessage): Promise<InboxMessage | undefined> {
-    return this.#markDelivered(message);
+    return this.#markDelivered(requirePublicMessage(message));
   }
 
   async #markDelivered(message: InboxRecordMessage): Promise<InboxMessage | undefined> {
@@ -857,35 +857,43 @@ export class InboxStorage {
   }
 }
 
-export function claimInboxMessage(
-  storage: InboxStorage,
-  message: InboxMessage,
-  session: ShardSession,
-): Promise<ClaimedInboxMessage | undefined> {
-  return requireInternals(storage).claim(message, session);
+/** @internal Internal claim-bearing access for delivery workers. */
+export interface InboxStorageAccess {
+  readonly claim: (
+    storage: InboxStorage,
+    message: InboxMessage,
+    session: ShardSession,
+  ) => Promise<ClaimedInboxMessage | undefined>;
+  readonly renew: (
+    storage: InboxStorage,
+    message: ClaimedInboxMessage,
+    session: ShardSession,
+  ) => Promise<ClaimedInboxMessage | undefined>;
+  readonly markDelivered: (
+    storage: InboxStorage,
+    message: ClaimedInboxMessage,
+  ) => Promise<InboxMessage | undefined>;
+  readonly clear: (
+    storage: InboxStorage,
+    message: ClaimedInboxMessage,
+  ) => Promise<InboxMessage | undefined>;
 }
 
-export function renewInboxClaim(
-  storage: InboxStorage,
-  message: ClaimedInboxMessage,
-  session: ShardSession,
-): Promise<ClaimedInboxMessage | undefined> {
-  return requireInternals(storage).renew(message, session);
-}
-
-export function markClaimedDelivered(
-  storage: InboxStorage,
-  message: ClaimedInboxMessage,
-): Promise<InboxMessage | undefined> {
-  return requireInternals(storage).markDelivered(message);
-}
-
-export function clearInboxClaim(
-  storage: InboxStorage,
-  message: ClaimedInboxMessage,
-): Promise<InboxMessage | undefined> {
-  return requireInternals(storage).unclaim(message);
-}
+/** @internal Internal claim-bearing access for delivery workers. */
+export const inboxStorageAccess: InboxStorageAccess = Object.freeze({
+  claim(storage: InboxStorage, message: InboxMessage, session: ShardSession) {
+    return requireInternals(storage).claim(message, session);
+  },
+  renew(storage: InboxStorage, message: ClaimedInboxMessage, session: ShardSession) {
+    return requireInternals(storage).renew(message, session);
+  },
+  markDelivered(storage: InboxStorage, message: ClaimedInboxMessage) {
+    return requireInternals(storage).markDelivered(message);
+  },
+  clear(storage: InboxStorage, message: ClaimedInboxMessage) {
+    return requireInternals(storage).unclaim(message);
+  },
+});
 
 /** Inbox storage construction options. */
 export interface InboxStorageOptions {
@@ -961,6 +969,14 @@ function requireClaimed(message: InboxRecordMessage): ClaimedInboxMessage {
   }
 
   return message as ClaimedInboxMessage;
+}
+
+function requirePublicMessage(message: InboxMessage): InboxMessage {
+  if (typeof message === "object" && message !== null && Reflect.has(message, "claim")) {
+    throw new InboxMessageError("Inbox message claim is internal.");
+  }
+
+  return message;
 }
 
 function publicMessage(message: InboxRecordMessage): InboxMessage {

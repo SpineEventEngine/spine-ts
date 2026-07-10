@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                    | Status      |
-| -------------------------- | --------------------------- | ----------- |
-| Code style/maintainability | Review round                | Complete    |
-| Documentation              | Documentation fix sub-agent | Fixed P2/P3 |
-| TypeScript/API docs        | Review round                | Complete    |
-| Security                   | Review round                | Complete    |
-| Performance/reliability    | Reliability fix sub-agent   | Fixed P1    |
+| Lane                       | Reviewer                    | Status       |
+| -------------------------- | --------------------------- | ------------ |
+| Code style/maintainability | Review round                | Fixed MEDIUM |
+| Documentation              | Documentation fix sub-agent | Fixed MEDIUM |
+| TypeScript/API docs        | Review round                | Complete     |
+| Security                   | Review round                | Fixed MEDIUM |
+| Performance/reliability    | Reliability fix sub-agent   | Fixed P1     |
 
 ## Review Criteria
 
@@ -31,6 +31,37 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 ## Rounds
 
 Review findings fixed and verified after implementation commit `94b4c632`.
+
+### Round 9 Follow-up - `2026-07-10T06:21:29Z`
+
+- Finding: [MEDIUM] `inbox-storage.ts` exposed the row-claim worker internals as
+  several exported standalone helpers.
+- Fix: replaced those helpers with one grouped `@internal`
+  `inboxStorageAccess` object/interface containing `claim`, `renew`,
+  `markDelivered`, and `clear`. Delivery internals and storage-focused tests now
+  import that grouped object directly from `inbox-storage.ts`; the package
+  barrel still exports only public `InboxStorage` and `InboxStorageOptions`.
+- Finding: [MEDIUM] public `InboxStorage.write()` and public marker paths could
+  serialize a caller-supplied object that included optional internal `claim`
+  metadata.
+- Fix: public write and mark paths now reject snapshots containing a `claim`
+  property before serialization. Internal claim-bearing serialization remains
+  available only through `inboxStorageAccess` for worker CAS flows.
+- Evidence: added regressions proving low-level public write and public
+  `markDelivered()` reject injected claim metadata and leave the row state
+  unchanged. Focused preflight Vitest passed with 3 files and 148 tests.
+- Docs: public user-guide delivery sections now describe lease-fenced local
+  drains, skipped unavailable rows, public `InboxMessage` snapshots, and
+  future abandoned-row recovery without claim mechanics. `DeliveryLoopRun`
+  TypeDoc avoids "rows claimed"; package README deferred wording is narrowed to
+  transport topology, broker/process supervision, retained attempt history, and
+  production retry policy; Developer API now documents
+  `Delivery.drainMessage(message, { node, onMessage })` exact-row/no-limit
+  semantics.
+- Verification: requested Vitest passed with 8 files and 222 tests;
+  `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
 
 ### Round 8 Follow-up - `2026-07-10T06:05:12Z`
 
