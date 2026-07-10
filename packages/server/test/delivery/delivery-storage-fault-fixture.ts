@@ -17,66 +17,6 @@ import {
 } from "../../src/delivery/inbox-records.js";
 import type { InboxId, InboxMessage } from "../../src/index.js";
 
-type MaterializedRecord<I, R extends Message> = ReturnType<RecordSpec<I, R>["materialize"]>;
-
-export interface Deferred<T> {
-  readonly promise: Promise<T>;
-  readonly resolve: (value: T | PromiseLike<T>) => void;
-  readonly reject: (reason?: unknown) => void;
-}
-
-export interface CountedDeliveryFaultProbe {
-  readonly count: number;
-}
-
-export interface ArmableDeliveryFaultProbe extends CountedDeliveryFaultProbe {
-  arm(): void;
-}
-
-export interface BlockedDeliveryFaultProbe extends CountedDeliveryFaultProbe {
-  readonly blocked: Promise<undefined>;
-  resume(): void;
-}
-
-export interface DeliveryStorageFaultFixture {
-  readonly storageFactory: StorageFactory;
-  readonly opens: number;
-  readonly compareAndSets: number;
-  readonly inboxQueries: number;
-}
-
-interface DeliveryFaultPlan {
-  readonly probes: readonly DeliveryStorageFaultProbe[];
-  opens: number;
-  compareAndSets: number;
-  inboxQueries: number;
-}
-
-interface DeliveryStorageFaultProbe {
-  compareAndSet?<I, R extends Message>(
-    context: StorageContext,
-    id: I,
-    expected: MaterializedRecord<I, R> | undefined,
-    next: MaterializedRecord<I, R> | undefined,
-    delegate: RecordStorage<I, R>,
-  ): Promise<boolean | undefined>;
-  read?<I>(context: StorageContext, id: I): void;
-}
-
-type CompareAndSetMatcher = <I, R extends Message>(
-  context: StorageContext,
-  id: I,
-  expected: MaterializedRecord<I, R> | undefined,
-  next: MaterializedRecord<I, R> | undefined,
-) => boolean;
-
-type CompareAndSetEffect = <I, R extends Message>(
-  id: I,
-  expected: MaterializedRecord<I, R>,
-  next: MaterializedRecord<I, R>,
-  delegate: RecordStorage<I, R>,
-) => Promise<boolean | undefined>;
-
 export function deliveryStorageFaults(
   ...probes: readonly DeliveryStorageFaultProbe[]
 ): DeliveryStorageFaultFixture {
@@ -170,6 +110,102 @@ export function onInboxReadOnce(onRead: () => void): DeliveryStorageFaultProbe {
   });
 }
 
+export function deliveryDedupRecords(storageFactory: StorageFactory) {
+  return storageFactory.createRecordStorage(
+    { name: "Tasks.delivery.inbox-dedup", multitenant: false },
+    dedupRecordSpec,
+  );
+}
+
+export function deliveryInboxRecords(storageFactory: StorageFactory) {
+  return storageFactory.createRecordStorage(
+    { name: "Tasks.delivery.inbox", multitenant: false },
+    inboxRecordSpec,
+  );
+}
+
+export function messageKey(message: InboxMessage): string {
+  return `${message.id.shard.key()}:${message.id.value}`;
+}
+
+export function targetInbox(): InboxId {
+  return {
+    targetId: "projection-1",
+    targetTypeUrl: "type.example.dev/tasks.Projection",
+  };
+}
+
+export function packStoredRecord(template: Any, value: unknown): Any {
+  return create(AnySchema, {
+    typeUrl: template.typeUrl,
+    value: Buffer.from(typeof value === "string" ? value : JSON.stringify(value), "utf8"),
+  });
+}
+
+export function unpackStoredRecord(record: Any): Record<string, unknown> {
+  return JSON.parse(Buffer.from(record.value).toString("utf8")) as Record<string, unknown>;
+}
+
+type MaterializedRecord<I, R extends Message> = ReturnType<RecordSpec<I, R>["materialize"]>;
+
+interface Deferred<T> {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T | PromiseLike<T>) => void;
+  readonly reject: (reason?: unknown) => void;
+}
+
+export interface CountedDeliveryFaultProbe {
+  readonly count: number;
+}
+
+export interface ArmableDeliveryFaultProbe extends CountedDeliveryFaultProbe {
+  arm(): void;
+}
+
+export interface BlockedDeliveryFaultProbe extends CountedDeliveryFaultProbe {
+  readonly blocked: Promise<undefined>;
+  resume(): void;
+}
+
+export interface DeliveryStorageFaultFixture {
+  readonly storageFactory: StorageFactory;
+  readonly opens: number;
+  readonly compareAndSets: number;
+  readonly inboxQueries: number;
+}
+
+interface DeliveryFaultPlan {
+  readonly probes: readonly DeliveryStorageFaultProbe[];
+  opens: number;
+  compareAndSets: number;
+  inboxQueries: number;
+}
+
+interface DeliveryStorageFaultProbe {
+  compareAndSet?<I, R extends Message>(
+    context: StorageContext,
+    id: I,
+    expected: MaterializedRecord<I, R> | undefined,
+    next: MaterializedRecord<I, R> | undefined,
+    delegate: RecordStorage<I, R>,
+  ): Promise<boolean | undefined>;
+  read?<I>(context: StorageContext, id: I): void;
+}
+
+type CompareAndSetMatcher = <I, R extends Message>(
+  context: StorageContext,
+  id: I,
+  expected: MaterializedRecord<I, R> | undefined,
+  next: MaterializedRecord<I, R> | undefined,
+) => boolean;
+
+type CompareAndSetEffect = <I, R extends Message>(
+  id: I,
+  expected: MaterializedRecord<I, R>,
+  next: MaterializedRecord<I, R>,
+  delegate: RecordStorage<I, R>,
+) => Promise<boolean | undefined>;
+
 class FaultyDeliveryStorageFactory extends StorageFactory {
   readonly #delegate = new InMemoryStorageFactory();
   readonly #plan: DeliveryFaultPlan;
@@ -258,31 +294,6 @@ class FaultyDeliveryRecordStorage<I, R extends Message> extends RecordStorage<I,
   protected writeRecord(record: MaterializedRecord<I, R>): Promise<void> {
     return this.#delegate.write(record.record);
   }
-}
-
-export function deliveryDedupRecords(storageFactory: StorageFactory) {
-  return storageFactory.createRecordStorage(
-    { name: "Tasks.delivery.inbox-dedup", multitenant: false },
-    dedupRecordSpec,
-  );
-}
-
-export function deliveryInboxRecords(storageFactory: StorageFactory) {
-  return storageFactory.createRecordStorage(
-    { name: "Tasks.delivery.inbox", multitenant: false },
-    inboxRecordSpec,
-  );
-}
-
-export function messageKey(message: InboxMessage): string {
-  return `${message.id.shard.key()}:${message.id.value}`;
-}
-
-export function targetInbox(): InboxId {
-  return {
-    targetId: "projection-1",
-    targetTypeUrl: "type.example.dev/tasks.Projection",
-  };
 }
 
 function compareAndSetProbe(
@@ -486,17 +497,6 @@ function isInboxRepair<I, R extends Message>(
     current.claim === undefined &&
     repaired.status === "DELIVERED"
   );
-}
-
-export function packStoredRecord(template: Any, value: unknown): Any {
-  return create(AnySchema, {
-    typeUrl: template.typeUrl,
-    value: Buffer.from(typeof value === "string" ? value : JSON.stringify(value), "utf8"),
-  });
-}
-
-export function unpackStoredRecord(record: Any): Record<string, unknown> {
-  return JSON.parse(Buffer.from(record.value).toString("utf8")) as Record<string, unknown>;
 }
 
 function deferred<T>(): Deferred<T> {

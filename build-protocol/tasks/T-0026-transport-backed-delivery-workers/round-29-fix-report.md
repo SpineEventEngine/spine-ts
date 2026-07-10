@@ -11,11 +11,11 @@ Checklist source: `build-protocol/BUILD_PROTOCOL.md#skills-and-tooling`.
 
 Evidence gathered before edits:
 
-| Source                                     | Scope                | Evidence                                                                                              |
-| ------------------------------------------ | -------------------- | ----------------------------------------------------------------------------------------------------- |
-| Session skill inventory                    | Task-relevant subset | Implementation, TDD, review-feedback, TypeScript/testing, and verification skills were visible.       |
+| Source                                     | Scope                | Evidence                                                                                                      |
+| ------------------------------------------ | -------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Session skill inventory                    | Task-relevant subset | Implementation, TDD, review-feedback, TypeScript/testing, and verification skills were visible.               |
 | Task-provided requirements                 | Full Round 29 batch  | The assignment required red evidence, no commit, log updates, focused verification, and no human-review edit. |
-| `build-protocol/skills/EXPECTED_SKILLS.md` | Existing task record | Earlier T-0026 rounds already verified expected workflow/testing/type skills and local skill manifests. |
+| `build-protocol/skills/EXPECTED_SKILLS.md` | Existing task record | Earlier T-0026 rounds already verified expected workflow/testing/type skills and local skill manifests.       |
 
 Selected skills applied for this round:
 

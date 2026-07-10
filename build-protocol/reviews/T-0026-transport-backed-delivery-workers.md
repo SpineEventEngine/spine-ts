@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 29 fixes coordinator-verified; re-review pending
+Status: Round 30 fixes verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer    | Status   |
-| -------------------------- | ----------- | -------- |
-| Code style/maintainability | Confucius   | Findings |
-| Documentation              | Pasteur     | Findings |
-| TypeScript/API docs        | Mendel      | Clean    |
-| Security                   | Carson      | Clean    |
-| Performance/reliability    | Schrodinger | Findings |
+| Lane                       | Reviewer | Status   |
+| -------------------------- | -------- | -------- |
+| Code style/maintainability | Ampere   | Findings |
+| Documentation              | Avicenna | Clean    |
+| TypeScript/API docs        | Harvey   | Findings |
+| Security                   | Lagrange | Clean    |
+| Performance/reliability    | Newton   | Clean    |
 
 ## Review Criteria
 
@@ -217,6 +217,48 @@ head row before going idle after a later success"` failed before production
   `origin` source-link warning.
 - Coordinator verification at `2026-07-10T13:14:12Z` passed the same focused
   delivery/API Vitest batch with 6 files and 230 tests, plus
+  `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check`. `docs:check` retained only the existing invalid `origin`
+  source-link warning.
+- Fix commit: `fd563047` (`Fix delivery drain resume outcome`).
+
+### Round 30 Follow-up - `2026-07-10T13:20:32Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..fd563047.diff` from task baseline
+  `ca8fb2b3` to current HEAD `fd563047`.
+- Documentation (Avicenna): clean.
+- Security (Lagrange): clean.
+- Performance/reliability (Newton): clean.
+- TypeScript/API docs (Harvey): [Minor]
+  `DeliveryWorkerOptions.maxFailures` documents that failures stop a worker
+  loop but omits the default and cap that callers see through `DeliveryLoop`:
+  default `1`, capped at `1000`. Mirror the `DeliveryLoopOptions.maxFailures`
+  wording in `delivery-worker.ts`.
+- Code style/maintainability (Ampere): [P3]
+  `delivery-storage-fault-fixture.ts` still opens with exported support and
+  protocol types before the scenario API. Move `deliveryStorageFaults()` and
+  the named probe helpers to the top of the module, and keep purely internal
+  helpers such as the deferred type private where possible so the file reads
+  probe-first.
+- Action: dispatch one compact fix worker for the complete Round 30 batch,
+  then run focused verification and another five-lane re-review.
+
+### Round 30 Fix Implementation - `2026-07-10`
+
+- Updated `DeliveryWorkerOptions.maxFailures` TypeDoc so it mirrors the
+  `DeliveryLoopOptions.maxFailures` default/cap wording: default `1`, capped at
+  `1000`.
+- Reordered `delivery-storage-fault-fixture.ts` so `deliveryStorageFaults()`
+  and the named scenario probe helpers appear before internal support/protocol
+  types and wrapper classes. Existing public fixture helper names were
+  preserved, and the fixture-local `Deferred<T>` helper type is now private.
+- Fix-worker verification passed: focused delivery worker/loop/runtime Vitest
+  passed with 3 files and 77 tests; `typecheck:build:generated`, `docs:check`,
+  final `format:check`, and `git diff --check` passed. `docs:check` reported
+  only the existing invalid `origin` source-link warning.
+- Coordinator verification at `2026-07-10T13:28:38Z` passed the same focused
+  delivery worker/loop/runtime Vitest batch with 3 files and 77 tests, plus
   `typecheck:build:generated`, `docs:check`, `format:check`, and
   `git diff --check`. `docs:check` retained only the existing invalid `origin`
   source-link warning.

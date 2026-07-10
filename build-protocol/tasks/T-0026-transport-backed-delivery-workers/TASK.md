@@ -480,6 +480,24 @@ the focused delivery/API Vitest batch with 6 files and 230 tests, plus
 `typecheck:build:generated`, `docs:check`, `format:check`, and
 `git diff --check`. A fresh five-lane re-review is still required.
 
+Round 30 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..fd563047.diff` produced clean
+documentation, security, and performance/reliability lanes. Two minor findings
+remain: `DeliveryWorkerOptions.maxFailures` TypeDoc should mirror the
+`DeliveryLoop` default/cap wording, and `delivery-storage-fault-fixture.ts`
+should put the scenario fault API before internal support/protocol types. One
+compact fix worker will address both before another re-review.
+
+Round 30 fix implementation on `2026-07-10`: `DeliveryWorkerOptions.maxFailures`
+TypeDoc now mirrors the `DeliveryLoopOptions.maxFailures` default/cap wording,
+and the delivery storage fault fixture now opens with `deliveryStorageFaults()`
+and named scenario probe helpers before internal support/protocol types and
+classes. The fixture-local `Deferred<T>` helper type is private. Required
+focused delivery worker/loop/runtime Vitest passed with 3 files and 77 tests,
+and `typecheck:build:generated`, `docs:check`, final `format:check`, and
+`git diff --check` passed in worker and coordinator verification. A fresh
+five-lane re-review is still required.
+
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker
 will add red/green regressions before changing delivery code, preserve direct
