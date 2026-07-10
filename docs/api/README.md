@@ -319,8 +319,7 @@ inbox messages and shard lease records through `StorageFactory` /
 `(signalId, inboxId)` through small internal guard records, keeps shard
 ordering metadata on each message with receive time (`whenReceived`),
 `version`, and inbox message UUID ordering. Direct inbox writes require
-`InboxMessage.id.shard` to match `InboxMessage.shard`; public `InboxMessage`
-snapshots do not expose framework-owned claim metadata. Supported public
+`InboxMessage.id.shard` to match `InboxMessage.shard`. Supported public
 `DeliveryLabel` values are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`,
 `REACT_UPON_EVENT`, and `CATCH_UP`; `IMPORT_EVENT` is recognized only as
 deprecated legacy stored/wire data and fails closed on read/drain. Delivery also
@@ -328,18 +327,19 @@ exposes a storage-backed shard pickup/renew/release seam backed by atomic
 `RecordStorage.compareAndSet()`, plus `Delivery.drain()` as the direct local
 worker boundary. `ShardedWorkRegistry.renew(session)` is framework-owned lease
 fencing for active drains, not an application retry or supervision policy.
-`Delivery.drain(shard, { node, onMessage, limit })` claims one shard, reads
-`TO_DELIVER` rows in inbox order, claims each row durably before invoking the
-`DeliveryEndpoint`, renews the active row claim to the latest shard-session
-expiry while the endpoint is in flight, and skips rows that already have a live
-competing claim. The endpoint receives an unclaimed `InboxMessage` snapshot.
-Successful delivery marks the claimed snapshot `DELIVERED`; endpoint or marker
-failures best-effort clear the unchanged claim, leave the row pending for retry,
-release the shard in `finally`, and return a `DeliveryRun` with counts and
-per-message `DeliveryFailure` values retained only in that result.
+`Delivery.drain(shard, { node, onMessage, limit })` picks up one shard, reads
+`TO_DELIVER` rows in inbox order, skips rows unavailable to this worker before
+invoking the `DeliveryEndpoint`, and passes a public `InboxMessage` snapshot to
+the endpoint. Endpoint callbacks run only for `HANDLE_COMMAND`,
+`UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; unsupported labels fail closed
+before the callback. Successful delivery marks the row `DELIVERED`; failures
+leave the row pending for a later run, release the shard in `finally`, and
+return a `DeliveryRun` with `status`, `processed`, `claimed`, `delivered`,
+`failed`, and per-message `DeliveryFailure` values retained only in that
+result.
 `Delivery.drainMessage(message, { node, onMessage })`
-claims the message shard only when `message.id.shard` matches `message.shard`,
-then replays that exact pending row without accepting a page limit. `DeliveryLoop`
+picks up the message shard only when `message.id.shard` matches
+`message.shard`, then replays that exact pending row without accepting a page limit. `DeliveryLoop`
 repeats the shard-level `Delivery.drain()` boundary for one shard until a
 drain is idle, skipped, stopped, or reaches `maxFailures`; retry is simply a
 later loop/drain seeing rows that remained `TO_DELIVER`. `stop()` prevents

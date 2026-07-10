@@ -129,6 +129,14 @@ interface RepositoryRegistration {
   readonly recordDispatchFailure: (event: Event, error: unknown) => void;
 }
 
+interface PmInbox extends ProcessManagerInbox {
+  register(target: ProcessManagerInboxTarget): void;
+}
+
+interface PrjInbox extends ProjectionInbox {
+  register(target: ProjectionInboxTarget): void;
+}
+
 interface RegistrationSnapshot {
   readonly entityType: RepositoryEntityType;
   readonly entityFamily: RepositoryView["entityFamily"];
@@ -283,8 +291,8 @@ export class BoundedContext {
   readonly #eventBus: EventBus;
   readonly #commandEndpoint: CommandEndpoint;
   readonly #eventEndpoint: EventEndpoint;
-  readonly #processManagerInbox: LocalProcessManagerInbox;
-  readonly #projectionInbox: LocalProjectionInbox;
+  readonly #processManagerInbox: PmInbox;
+  readonly #projectionInbox: PrjInbox;
   readonly #registeredRepositories: RegistrationSnapshot[] = [];
   readonly #storedEventDispatchFailures: StoredEventDispatchFailure[] = [];
   readonly #repositoryViews = new Set<RepositoryView>();

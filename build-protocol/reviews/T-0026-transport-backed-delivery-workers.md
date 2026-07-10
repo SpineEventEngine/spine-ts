@@ -32,6 +32,42 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 Review findings fixed and verified after implementation commit `94b4c632`.
 
+### Round 8 Follow-up - `2026-07-10T06:05:12Z`
+
+- Finding: [HIGH] active row-claim renewal could race final delivery marking.
+  A renewal could update the active internal snapshot and durable row between
+  callback completion and the final marker CAS, causing delivery to report
+  failure after the endpoint already ran and making the row immediately
+  retryable.
+- Fix: active row-claim renewal, failure clearing, and final marking now share a
+  local serialization point. After a callback returns, delivery waits for any
+  in-flight shard renewal, marks delivered from the latest active internal
+  snapshot, and preserves the durable claim if final marking still fails after
+  a successful callback.
+- Evidence: added a regression in `delivery-worker.test.ts` that blocks renewal
+  until the endpoint returns. It failed before the fix with `delivered: 0` and
+  `failed: 1`, then passed after renewal/mark serialization.
+- Finding: [P1/P2] public TypeDoc-facing comments and curated API docs exposed
+  row-claim mechanics.
+- Fix: rewrote public `Delivery.drain()` / `drainMessage()` JSDoc,
+  `docs/api/README.md`, and `build-protocol/DEVELOPER_API.md` to describe
+  lease-fenced shard draining, supported worker labels, skipped unavailable
+  rows, and `DeliveryRun` stats without row-claim internals.
+- Finding: [MEDIUM] `BoundedContext` stored local inbox fields by concrete
+  classes.
+- Fix: added narrow internal `PmInbox` and `PrjInbox` interfaces that combine
+  the public inbox contracts with `register(...)`; concrete local inbox classes
+  remain construction details.
+- Docs: `InboxClaim.expiresAt` now says local/direct workers do not
+  auto-reclaim expired claims. Internal architecture docs state any existing
+  durable claim is skipped, including expired or abandoned claims, and stale
+  recovery remains future production policy. The package README keeps the
+  public-facing delivery summary at the lease-fenced worker-contract level.
+- Verification: requested Vitest batch passed with 8 files and 220 tests;
+  `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
+
 ### Round 7 Follow-up - `2026-07-10T05:48:00Z`
 
 - Finding: [HIGH] Expired row claims were treated as reclaimable, so a late or

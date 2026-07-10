@@ -43,19 +43,19 @@ export class Delivery {
   }
 
   /**
-   * Drain one shard by claiming it, delivering pending rows, and releasing it.
+   * Drain one shard through the framework-owned direct worker boundary.
    *
-   * The `onMessage` endpoint is invoked once for each `TO_DELIVER` row read in
-   * inbox order after a durable per-message claim is acquired. The active row
-   * claim is renewed to each shard-session renewal while the callback is in
-   * flight for diagnostics. Rows with any existing durable claim are skipped
-   * before endpoint invocation; this local/direct slice does not auto-reclaim
-   * expired or abandoned row claims. Callback failures leave the row pending
-   * for a later run. Successful callbacks mark the claimed snapshot delivered;
-   * failed attempts best-effort clear only the unchanged claim.
+   * The drain first picks up the shard with lease fencing, then reads
+   * `TO_DELIVER` rows in inbox order. Rows unavailable to this worker are
+   * skipped before endpoint invocation. The `onMessage` endpoint receives a
+   * public `InboxMessage` snapshot only for supported worker labels:
+   * `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`.
+   * Unsupported labels fail closed before the callback runs.
    *
-   * This is a framework-owned direct worker boundary. It does not schedule
-   * later runs, open transports, or retain endpoint attempt history.
+   * The returned `DeliveryRun` reports whether the shard was drained or
+   * skipped, how many rows were read, accepted for work, delivered, or failed,
+   * and the per-message failures observed during this run. This method does not
+   * schedule later runs, open transports, or retain endpoint attempt history.
    */
   async drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
     const session = await this.shards.pickUp(shard, options.node);
@@ -97,10 +97,17 @@ export class Delivery {
   }
 
   /**
-   * Drain one exact pending inbox message by claiming its shard and replaying only that row.
+   * Drain one exact pending inbox message through the local worker boundary.
    *
-   * Local framework handoffs use this when the caller has just written a durable row and must not
-   * run unrelated pending rows from the same shard.
+   * Local framework handoffs use this when the caller has just written a
+   * durable row and must not run unrelated pending rows from the same shard.
+   * The message shard is picked up with lease fencing; if the row is already
+   * unavailable, no endpoint callback runs. Supported callbacks are limited to
+   * `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; unsupported
+   * labels fail closed before the callback.
+   *
+   * The returned `DeliveryRun` uses the same counters as `drain()`, scoped to
+   * this single row.
    */
   async drainMessage(
     message: InboxMessage,
@@ -167,20 +174,22 @@ export class Delivery {
       active.set(claimed);
       requireEndpointLabel(claimed.label);
       await onMessage(endpointMessage(claimed));
+      active.markCallbackSucceeded();
+      await lease.awaitRenewal();
       lease.requireActive();
-      const current = active.current();
-      if (current === undefined) {
-        throw new Error(`Inbox message "${message.id.value}" claim was lost.`);
-      }
 
-      const marked = await markClaimedDelivered(this.inbox.storage, current);
+      const marked = await active.finalize((current) =>
+        markClaimedDelivered(this.inbox.storage, current),
+      );
       if (marked === undefined) {
         throw new Error(`Inbox message "${message.id.value}" was not marked delivered.`);
       }
 
       return { kind: "DELIVERED" };
     } catch (error) {
-      await clearActiveClaim(this.inbox.storage, active.current());
+      if (!active.callbackSucceeded()) {
+        await active.clearStored(this.inbox.storage);
+      }
 
       return Object.freeze({ kind: "FAILED" as const, error });
     } finally {
@@ -224,11 +233,11 @@ export type DeliveryEndpoint = (message: InboxMessage) => Promise<void> | void;
 
 /** Simple delivery worker run statistics. */
 export interface DeliveryRun {
-  /** Whether a shard was claimed and drained or skipped because another worker owns it. */
+  /** Whether a shard was picked up and drained or skipped because another worker owns it. */
   readonly status: "DRAINED" | "SKIPPED";
   /** Number of pending rows read for this run. */
   readonly processed: number;
-  /** Number of rows claimed for endpoint work or fail-closed validation. */
+  /** Number of rows accepted for endpoint work or fail-closed validation. */
   readonly claimed: number;
   /** Number of rows whose endpoint callback succeeded and were marked delivered. */
   readonly delivered: number;
@@ -247,14 +256,18 @@ export interface DeliveryFailure {
 }
 
 interface ShardLeaseKeeper {
+  readonly awaitRenewal: () => Promise<void>;
   readonly close: () => Promise<void>;
   readonly requireActive: () => void;
   readonly session: () => ShardSession;
 }
 
 interface ActiveClaim {
+  readonly callbackSucceeded: () => boolean;
   readonly clear: () => void;
-  readonly current: () => ClaimedInboxMessage | undefined;
+  readonly clearStored: (storage: InboxStorage) => Promise<void>;
+  readonly finalize: <T>(action: (message: ClaimedInboxMessage) => Promise<T>) => Promise<T>;
+  readonly markCallbackSucceeded: () => void;
   readonly renew: (storage: InboxStorage, session: ShardSession) => Promise<void>;
   readonly set: (message: ClaimedInboxMessage) => void;
 }
@@ -328,6 +341,9 @@ function keepShardLease(
   }
 
   return Object.freeze({
+    async awaitRenewal() {
+      await renewing;
+    },
     async close() {
       clearInterval(interval);
       await renewing;
@@ -349,27 +365,69 @@ function keepShardLease(
 
 function activeClaim(): ActiveClaim {
   let claimed: ClaimedInboxMessage | undefined;
+  let deliveredCallback = false;
+  let lock: Promise<void> = Promise.resolve();
+
+  async function locked<T>(action: () => Promise<T>): Promise<T> {
+    const previous = lock;
+    let release: () => void = () => undefined;
+    lock = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    await previous;
+    try {
+      return await action();
+    } finally {
+      release();
+    }
+  }
 
   return Object.freeze({
+    callbackSucceeded() {
+      return deliveredCallback;
+    },
     clear() {
       claimed = undefined;
+      deliveredCallback = false;
     },
-    current() {
-      return claimed;
+    async clearStored(storage: InboxStorage) {
+      await locked(async () => {
+        const current = claimed;
+        claimed = undefined;
+        await clearActiveClaim(storage, current);
+      });
+    },
+    async finalize<T>(action: (message: ClaimedInboxMessage) => Promise<T>) {
+      return locked(async () => {
+        const current = claimed;
+        claimed = undefined;
+        if (current === undefined) {
+          throw new Error("Inbox claim was lost.");
+        }
+
+        return action(current);
+      });
+    },
+    markCallbackSucceeded() {
+      deliveredCallback = true;
     },
     async renew(storage: InboxStorage, session: ShardSession) {
-      if (claimed === undefined) {
-        return;
-      }
+      await locked(async () => {
+        if (claimed === undefined) {
+          return;
+        }
 
-      const renewed = await renewInboxClaim(storage, claimed, session);
-      if (renewed === undefined) {
-        throw new Error("Inbox claim was lost.");
-      }
-      claimed = renewed;
+        const renewed = await renewInboxClaim(storage, claimed, session);
+        if (renewed === undefined) {
+          throw new Error("Inbox claim was lost.");
+        }
+        claimed = renewed;
+      });
     },
     set(message: ClaimedInboxMessage) {
       claimed = message;
+      deliveredCallback = false;
     },
   });
 }

@@ -254,18 +254,18 @@ small framework-owned shard drain for one bounded context. It is intentionally
 smaller than the later scheduler/retry stack:
 
 - `Delivery` groups `Inbox` and `ShardedWorkRegistry` for one storage context;
-- `Delivery.drain(shard, { node, onMessage, limit })` claims one shard, reads
-  `TO_DELIVER` rows in inbox order, claims each row with a durable
-  per-message fence before invoking the supplied framework endpoint callback,
-  renews that row claim to each renewed shard-session expiry while the callback
-  is in flight, and passes an unclaimed `InboxMessage` snapshot to the
-  endpoint. Rows with live competing claims are skipped before callback
-  invocation. Successful rows are marked `DELIVERED` from the claimed snapshot;
-  callback or marker failures best-effort clear only the unchanged claim and
-  leave the row `TO_DELIVER` for retry. The run returns simple `DeliveryRun`
-  statistics and releases the shard in a `finally` path. If the shard is already
-  owned by another live worker lease, the run returns `SKIPPED` with zero counts
-  and does not invoke the callback;
+- `Delivery.drain(shard, { node, onMessage, limit })` picks up one shard with
+  framework-owned lease fencing, reads `TO_DELIVER` rows in inbox order, skips
+  rows unavailable to this worker before callback invocation, and passes a
+  public `InboxMessage` snapshot to the supplied framework endpoint callback.
+  Callbacks run only for `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
+  `REACT_UPON_EVENT`; unsupported labels fail closed before callback
+  invocation. Successful rows are marked `DELIVERED`; failures leave the row
+  `TO_DELIVER` for a later run. The run returns simple `DeliveryRun` statistics
+  (`status`, `processed`, `claimed`, `delivered`, `failed`, and `failures`) and
+  releases the shard in a `finally` path. If the shard is already owned by
+  another live worker lease, the run returns `SKIPPED` with zero counts and does
+  not invoke the callback;
 - `DeliveryLoop` repeats `Delivery.drain()` for one shard until idle, skipped,
   stopped, or the configured failure bound is reached. `DeliveryWorker` is the
   closeable owner for one node's configured shard loops; it starts those loops,
@@ -276,9 +276,8 @@ smaller than the later scheduler/retry stack:
   read durable inbox rows by `ShardIndex`. `markDelivered()` is the narrow
   worker-owned exact-message status update used by `Delivery.drain()`: missing
   rows, non-pending rows, and mismatched caller snapshots return `undefined`;
-  already-delivered matching rows are returned idempotently. Its public
-  `InboxMessage` snapshots do not expose framework-owned claim metadata. Its
-  `storage` property is an
+  already-delivered matching rows are returned idempotently. Its `storage`
+  property is an
   intentional low-level escape hatch for storage-focused tests and
   integrations, not an application-facing query facade;
 - `InboxStorage` is the lower-level durable storage seam behind `Inbox`,

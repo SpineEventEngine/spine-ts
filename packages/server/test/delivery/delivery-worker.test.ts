@@ -184,6 +184,67 @@ describe("Delivery worker", () => {
     }
   });
 
+  it("marks delivered with the renewed row claim when renewal races final marking", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-08T09:00:00.000Z"));
+      const faultPlan: DeliveryFaultPlan = {
+        blockInboxRenewalOnce: true,
+        inboxRenewalBlocked: deferred<undefined>(),
+        resumeInboxRenewal: deferred<undefined>(),
+      };
+      const storageFactory = new FaultyDeliveryStorageFactory(faultPlan);
+      const delivery = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+        leaseMs: 20,
+        now: () => new Date(Date.now()),
+      });
+      const shard = ShardIndex.single();
+
+      await seed(delivery, "signal-renew-mark-race", 1n);
+      const started = deferred<undefined>();
+      const barrier = deferred<undefined>();
+      const seen: string[] = [];
+
+      const runPromise = delivery.drain(shard, {
+        node: "node-a",
+        onMessage(message) {
+          seen.push(message.signalId);
+          started.resolve(undefined);
+
+          return barrier.promise;
+        },
+      });
+
+      await started.promise;
+      vi.advanceTimersByTime(25);
+      await faultPlan.inboxRenewalBlocked.promise;
+
+      barrier.resolve(undefined);
+      await Promise.resolve();
+      faultPlan.resumeInboxRenewal.resolve(undefined);
+
+      const run = await runPromise;
+
+      expect(faultPlan.blockedInboxRenewals).toBe(1);
+      expect(seen).toEqual(["signal-renew-mark-race"]);
+      expect(run).toMatchObject({
+        status: "DRAINED",
+        processed: 1,
+        claimed: 1,
+        delivered: 1,
+        failed: 0,
+      });
+      await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
+      await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
+        { signalId: "signal-renew-mark-race", status: "DELIVERED" },
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("skips a row already claimed by another drain before invoking the endpoint", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
@@ -1416,10 +1477,33 @@ function deliveryDedupRecords(storageFactory: StorageFactory) {
   );
 }
 
+function isInboxClaimRenewal<I, R extends Message>(id: I, expected: R, next: R): boolean {
+  if (typeof id !== "string") {
+    return false;
+  }
+
+  const current = InboxRecords.read(expected as Any, id);
+  const renewed = InboxRecords.read(next as Any, id);
+
+  return (
+    current.status === "TO_DELIVER" &&
+    renewed.status === "TO_DELIVER" &&
+    current.claim !== undefined &&
+    renewed.claim !== undefined &&
+    current.claim.id === renewed.claim.id &&
+    current.claim.node === renewed.claim.node &&
+    current.claim.expiresAt.getTime() !== renewed.claim.expiresAt.getTime()
+  );
+}
+
 interface DeliveryFaultPlan {
+  blockInboxRenewalOnce?: boolean;
   skipDedupFinalizeOnce?: boolean;
   skipInboxRepairOnce?: boolean;
   throwDedupFinalizeOnce?: boolean;
+  inboxRenewalBlocked?: ReturnType<typeof deferred<undefined>>;
+  resumeInboxRenewal?: ReturnType<typeof deferred<undefined>>;
+  blockedInboxRenewals?: number;
   skippedDedupFinalizations?: number;
   skippedInboxRepairs?: number;
 }
@@ -1463,11 +1547,24 @@ class FaultyDeliveryRecordStorage<I, R extends Message> extends RecordStorage<I,
     super.close();
   }
 
-  protected compareAndSetRecord(
+  protected async compareAndSetRecord(
     id: I,
     expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
+    if (
+      this.context.name.endsWith(".delivery.inbox") &&
+      expected !== undefined &&
+      next !== undefined &&
+      this.#plan.blockInboxRenewalOnce === true &&
+      isInboxClaimRenewal(id, expected.record, next.record)
+    ) {
+      this.#plan.blockInboxRenewalOnce = false;
+      this.#plan.blockedInboxRenewals = (this.#plan.blockedInboxRenewals ?? 0) + 1;
+      this.#plan.inboxRenewalBlocked?.resolve(undefined);
+      await this.#plan.resumeInboxRenewal?.promise;
+    }
+
     if (
       this.context.name.endsWith(".delivery.inbox") &&
       expected !== undefined &&

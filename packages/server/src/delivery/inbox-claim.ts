@@ -6,7 +6,11 @@ export interface InboxClaim {
   readonly id: string;
   /** Worker node that owns the endpoint invocation. */
   readonly node: string;
-  /** Deadline after which another worker may claim the row. */
+  /**
+   * Framework-owned expiry metadata renewed from the owning shard session.
+   *
+   * Local/direct workers do not auto-reclaim expired claims.
+   */
   readonly expiresAt: Date;
 }
 
