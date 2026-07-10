@@ -268,6 +268,9 @@ Consequences:
   hard requirement, not taste feedback.
 - Generated Protobuf-ES output belongs under `packages/<package>/generated/`,
   is removed and regenerated during builds, and is entirely ignored by Git.
+- T-0024 later clarified that item 4's aggregate storage shape is superseded by
+  ADR 0001/T-0024: aggregates load the latest persisted state, and aggregate
+  events are retained as a traceability journal only.
 - Production source files must be grouped by package-specific semantics under
   `src/`; package-root `src` folders should contain only a few top-level entry
   files. Tests must live under `packages/<package>/test/` and mirror the
@@ -2402,6 +2405,11 @@ Consequences:
   storage. Superseded by D-0073/T-0022b on 2026-07-10.
 - Remaining event endpoint kinds stay explicit future tasks instead of hidden
   in a large abstraction.
+- T-0024 later clarified that the aggregate import/importer portion of the
+  aggregate event reactors/importers deferral is superseded by D-0075/T-0024
+  after upstream ADR 0001 D1 dropped event import. Supported reactor delivery,
+  projection catch-up, schedulers, retries, transport workers, and retained
+  attempt history remain real deferred work.
 
 ## D-0073: Continue Event Inbox Handoff With Process-Manager Reactors
 
