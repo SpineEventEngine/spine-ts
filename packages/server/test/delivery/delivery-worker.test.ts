@@ -1,6 +1,6 @@
 import { create } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
-import { InMemoryStorageFactory } from "@spine-ts/storage";
+import { InMemoryStorageFactory, type StorageFactory } from "@spine-ts/storage";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import { DedupRecords, dedupRecordSpec, InboxRecords } from "../../src/delivery/inbox-records.js";
@@ -24,6 +24,7 @@ import {
   deliveryStorageFaults,
   messageKey,
   onInboxReadOnce,
+  onInboxQuery,
   packStoredRecord,
   skipDedupFinalizeOnce,
   skipInboxClearOnce,
@@ -411,7 +412,7 @@ describe("Delivery worker", () => {
     });
   });
 
-  it("reclaims an expired row claim and delivers the row in a later drain", async () => {
+  it("treats an expired row claim as unavailable until explicit recovery exists", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -442,15 +443,17 @@ describe("Delivery worker", () => {
     });
 
     expect(claimed?.signalId).toBe("signal-expired-claim");
-    expect(seen).toEqual(["signal-expired-claim"]);
+    expect(seen).toEqual([]);
     expect(run).toMatchObject({
       status: "DRAINED",
       processed: 1,
-      accepted: 1,
-      delivered: 1,
+      accepted: 0,
+      delivered: 0,
       failed: 0,
     });
-    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-expired-claim", status: "TO_DELIVER" },
+    ]);
   });
 
   it("scans past unavailable head rows to deliver a later row in the same drain", async () => {
@@ -1011,7 +1014,7 @@ describe("Delivery worker", () => {
     ]);
   });
 
-  it("reclaims a claim that expires while the claim-row read is pending", async () => {
+  it("does not reclaim a claim that expires while the claim-row read is pending", async () => {
     const now = { value: new Date("2026-07-08T09:00:00.999Z") };
     const readProbe = onInboxReadOnce(() => {
       now.value = new Date("2026-07-08T09:00:01.001Z");
@@ -1046,8 +1049,11 @@ describe("Delivery worker", () => {
     });
 
     expect(claimed?.signalId).toBe("signal-expiry-during-read");
-    expect(seen).toEqual(["signal-expiry-during-read"]);
-    expect(run).toMatchObject({ accepted: 1, delivered: 1, failed: 0 });
+    expect(seen).toEqual([]);
+    expect(run).toMatchObject({ accepted: 0, delivered: 0, failed: 0 });
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-expiry-during-read", status: "TO_DELIVER" },
+    ]);
   });
 
   it("does not exceed the loop failure budget before a callback is accepted", async () => {
@@ -1139,7 +1145,73 @@ describe("Delivery worker", () => {
       delivered: 1,
       failed: 0,
     });
-    expect(faults.inboxQueries).toBe(2);
+    expect(faults.inboxQueries).toBe(3);
+  });
+
+  it("does not skip a supported row when skipped head rows disappear between page reads", async () => {
+    let delivery: Delivery;
+    let queries = 0;
+    let unavailable: readonly InboxMessage[] = [];
+    const faults = deliveryStorageFaults(
+      onInboxQuery(async () => {
+        queries += 1;
+        if (queries !== 2) {
+          return;
+        }
+
+        await Promise.all(
+          unavailable.map((message) => markDeliveredByRecord(faults.storageFactory, message)),
+        );
+      }),
+    );
+    delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: faults.storageFactory,
+      leaseMs: 60_000,
+      now: () => new Date("2026-07-08T09:00:00.000Z"),
+    });
+    const shard = ShardIndex.single();
+
+    const head: InboxMessage[] = [];
+    for (let index = 0; index < 1_000; index += 1) {
+      head.push(await seed(delivery, `signal-disappearing-${String(index)}`, BigInt(index + 1)));
+    }
+    unavailable = head;
+    await seed(delivery, "signal-reachable-tail", 1_001n);
+
+    for (const message of head) {
+      const claimed = await inboxStorageAccess.claim(
+        delivery.inbox.storage,
+        message,
+        new ShardSession(
+          `message-owner-${message.signalId}`,
+          shard,
+          "node-a",
+          new Date("2026-07-08T09:00:00.000Z"),
+          new Date("2026-07-08T09:01:00.000Z"),
+        ),
+      );
+      expect(claimed?.signalId).toBe(message.signalId);
+    }
+
+    const seen: string[] = [];
+    const run = await delivery.drain(shard, {
+      node: "node-b",
+      limit: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(seen).toEqual(["signal-reachable-tail"]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1_001,
+      accepted: 1,
+      delivered: 1,
+      failed: 0,
+    });
+    expect(faults.inboxQueries).toBe(3);
   });
 
   it("stops unsupported-row scanning at the storage read cap", async () => {
@@ -2082,6 +2154,31 @@ function deferred<T>(): {
   });
 
   return { promise, resolve, reject };
+}
+
+async function markDeliveredByRecord(
+  storageFactory: StorageFactory,
+  message: InboxMessage,
+): Promise<void> {
+  const storage = deliveryInboxRecords(storageFactory);
+  const key = messageKey(message);
+
+  try {
+    const current = await storage.read(key);
+    if (current === undefined) {
+      throw new Error(`Missing inbox row "${key}".`);
+    }
+
+    const pending = InboxRecords.read(current, key);
+    const { claim: _claim, ...unclaimed } = pending;
+    const delivered = Object.freeze({
+      ...unclaimed,
+      status: "DELIVERED" as const,
+    });
+    await storage.compareAndSet(key, current, InboxRecords.write(delivered));
+  } finally {
+    storage.close();
+  }
 }
 
 function missingMessage(): InboxMessage {

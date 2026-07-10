@@ -349,10 +349,10 @@ delivery-status update failures are reported in the returned
 `DeliveryRun.failures` / `DeliveryFailure` values without promising immediate
 retry. Pre-callback claim, validation, lease, cleanup, and delivery-status
 failures stay visible there, do not increment accepted work, but do increment
-failed work and count toward `DeliveryLoop.maxFailures`. A later claim attempt
-can reclaim expired per-message ownership, while
-live ownership still blocks; proactive sweeping and broader production recovery
-policy remain future work.
+failed work and count toward `DeliveryLoop.maxFailures`. Any existing
+per-message ownership, expired or live, blocks competing delivery in this
+slice; proactive sweeping and broader production recovery policy remain future
+work.
 Drains release the shard in `finally` and return
 a `DeliveryRun` with `status`, `processed`, `accepted`, `delivered`, `failed`,
 and per-message failures retained only in that result.

@@ -127,8 +127,25 @@ export class Delivery {
     let offset = cursor.offset;
     let pendingBoundaryId = cursor.pendingBoundaryId;
     let resumedHeadRescan = offset > 0;
+    let offsetRescan = false;
 
     while (progress.processed < scanBudget) {
+      if (
+        offset > 0 &&
+        pendingBoundaryId !== undefined &&
+        !offsetRescan &&
+        !(await this.#pendingBoundaryMatches(inbox, shard, offset, pendingBoundaryId))
+      ) {
+        // Offset pages are relative to the current `TO_DELIVER` set. If
+        // skipped rows disappeared, reset once instead of paging past work
+        // that moved before the old absolute offset.
+        offset = 0;
+        pendingBoundaryId = undefined;
+        offsetRescan = true;
+        resumedHeadRescan = false;
+        continue;
+      }
+
       const readLimit = Math.min(inboxStorageAccess.maxReadLimit, scanBudget - progress.processed);
       const messages = await this.#readPendingDeliveryPage(inbox, shard, readLimit, offset);
 
@@ -186,6 +203,21 @@ export class Delivery {
       limit,
       offset,
     });
+  }
+
+  async #pendingBoundaryMatches(
+    inbox: Inbox,
+    shard: ShardIndex,
+    offset: number,
+    pendingBoundaryId: string,
+  ): Promise<boolean> {
+    const [boundary] = await inbox.read(shard, {
+      statuses: ["TO_DELIVER"],
+      limit: 1,
+      offset: offset - 1,
+    });
+
+    return boundary?.id.value === pendingBoundaryId;
   }
 
   /**
@@ -421,12 +453,10 @@ export class Delivery {
       return cursor;
     }
 
-    const [boundary] = await inbox.read(shard, {
-      statuses: ["TO_DELIVER"],
-      limit: 1,
-      offset: cursor.offset - 1,
-    });
-    if (boundary?.id.value !== cursor.pendingBoundaryId) {
+    if (
+      cursor.pendingBoundaryId === undefined ||
+      !(await this.#pendingBoundaryMatches(inbox, shard, cursor.offset, cursor.pendingBoundaryId))
+    ) {
       return drainCursor(0);
     }
 

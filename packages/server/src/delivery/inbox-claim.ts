@@ -9,8 +9,9 @@ export interface InboxClaim {
   /**
    * Framework-owned expiry metadata renewed from the owning shard session.
    *
-   * Local/direct workers do not proactively sweep expired claims, but claim
-   * compare-and-set may reclaim an expired row.
+   * Local/direct workers do not proactively sweep expired claims. Claim
+   * compare-and-set treats any existing claim as unavailable until a future
+   * explicit recovery policy exists.
    */
   readonly expiresAt: Date;
 }

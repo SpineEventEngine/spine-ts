@@ -608,9 +608,9 @@ guarantee in this slice. Worker-unsupported rows such as `CATCH_UP` do not
 consume accepted work or loop failure budget. Pre-callback claim, validation,
 lease, cleanup, and delivery-status failures do not increment accepted work,
 but they do increment failed work and count toward `DeliveryLoop.maxFailures`.
-A later claim attempt can reclaim expired per-message
-ownership, while live ownership still blocks; proactive sweeping and broader
-production recovery policy remain future work. `DeliveryLoop` repeats one-shard drains until idle,
+A later claim attempt does not reclaim existing per-message ownership in this
+slice; expired and live ownership both block competing delivery until future
+explicit recovery policy exists. `DeliveryLoop` repeats one-shard drains until idle,
 skipped, stopped, paused after a bounded skipped-only scan streak, or a
 configured failure bound. A later `run()` resumes from a saved internal cursor
 and safely resets that cursor if earlier pending rows disappeared before the

@@ -585,8 +585,35 @@ re-review rather than pending Round 33 findings. Required verification passed:
 `typecheck:tooling`, `lint:generated`, focused delivery/storage Vitest with 7
 files and 248 tests, `docs:check`, `format:check`, and `git diff --check`.
 Worker and coordinator verification both passed. `docs:check` retained only the
-existing invalid-origin TypeDoc source-link warning. A fresh five-lane
-re-review is still required.
+existing invalid-origin TypeDoc source-link warning. Fix commit: `7a5378eb`
+(`Fix delivery tooling typecheck`). A fresh five-lane re-review is still
+required.
+
+Round 35 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..7a5378eb.diff` produced a clean
+TypeScript/API lane. Documentation found Round 34 records still missing the
+fix-commit breadcrumb for `7a5378eb` (`Fix delivery tooling typecheck`). Style
+found `format:check` currently fails on the Round 34 fix report. Security found
+expired row-claim reclaim can double-invoke endpoint callbacks while an
+earlier owner is still inside `onMessage`. Performance/reliability found
+absolute offset paging can falsely idle when skipped head rows disappear during
+the same drain. The next fix will record the Round 34 commit breadcrumb,
+format the report, restore already-claimed-row blocking for expired claims, fix
+the moving pending-set pagination hazard, and repeat five-lane re-review.
+
+Round 35 fix implementation on `2026-07-10`: Round 34 durable records now name
+fix commit `7a5378eb` (`Fix delivery tooling typecheck`) and the Round 34
+report is Prettier-formatted. Inbox row delivery now treats every existing
+claim as unavailable, including expired claims, until a future explicit
+abandoned-claim recovery policy exists. Direct drains now validate the pending
+boundary before offset-page reads and rescan from the head once when skipped
+rows disappear, preserving the finite scan budget while avoiding false idle or
+skipped reachable work. Required
+verification passed: focused delivery Vitest with 5 files and 223 tests,
+`typecheck:build:generated`, `docs:check`, `format:check`, and
+`git diff --check`. `docs:check` retained only the existing invalid-origin
+TypeDoc source-link warning. No commit was created by this fix worker, per
+instruction. A fresh five-lane re-review is still required.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker

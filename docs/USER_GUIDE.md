@@ -227,9 +227,9 @@ or multi-host transport example.
   unavailable to the active worker and pass independent
   `DeliveryEndpointMessage` snapshots only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; copied `Date` values and
-  `Any.value` bytes are safe to mutate in endpoint code. Expired per-message
-  ownership is reclaimable by a later claim attempt while live ownership still
-  blocks. Proactive sweeping and broader production recovery policy remain
+  `Any.value` bytes are safe to mutate in endpoint code. Any existing
+  per-message ownership, expired or live, blocks competing delivery in this
+  slice. Proactive sweeping and broader production recovery policy remain
   future work.
   Transport-backed/background scheduler workers, production catch-up
   orchestration, and retained attempt history remain open production gaps.
@@ -1216,9 +1216,9 @@ rows, and live projection subscriber rows. Lease-fenced local drains skip rows
 unavailable to the active worker and pass independent
 `DeliveryEndpointMessage` snapshots only for `HANDLE_COMMAND`,
 `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; copied `Date` values and
-`Any.value` bytes are safe to mutate in endpoint code. Expired per-message
-ownership is reclaimable by a later claim attempt while live ownership still
-blocks. Proactive sweeping and broader production recovery policy remain future
+`Any.value` bytes are safe to mutate in endpoint code. Any existing
+per-message ownership, expired or live, blocks competing delivery in this
+slice. Proactive sweeping and broader production recovery policy remain future
 work.
 In `Delivery.drain()`, `limit` caps endpoint callbacks that actually run for
 that drain, while the storage read cap plus `limit` bounds total scanning.

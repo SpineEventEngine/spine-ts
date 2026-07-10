@@ -276,9 +276,9 @@ smaller than the later scheduler/retry stack:
   immediate retry or recovery guarantee in this slice. Pre-callback claim,
   validation, lease, cleanup, and status-update failures do not increment
   `accepted`, but they do increment `failed` and count toward
-  `DeliveryLoop.maxFailures`. A later claim attempt can reclaim expired
-  per-message ownership, while live ownership still blocks; proactive sweeping
-  and broader production recovery policy remain future work.
+  `DeliveryLoop.maxFailures`. Any existing per-message ownership, expired or
+  live, blocks competing delivery in this slice; proactive sweeping and broader
+  production recovery policy remain future work.
   The run returns simple
   `DeliveryRun`
   statistics (`status`, `processed`, `accepted`, `delivered`, `failed`, and

@@ -270,9 +270,9 @@ delivery worker boundary:
   failures are reported without an immediate retry guarantee. Pre-callback
   claim, validation, lease, cleanup, and delivery-status failures do not
   increment accepted work, but they do increment failed work and count toward a
-  loop's `maxFailures` bound. A later claim attempt can reclaim expired
-  per-message ownership, while live ownership still blocks; proactive sweeping
-  and broader production recovery policy remain future work. The run returns
+  loop's `maxFailures` bound. Any existing per-message ownership, expired or
+  live, blocks competing delivery in this slice; proactive sweeping and broader
+  production recovery policy remain future work. The run returns
   simple counts plus
   per-message failures and releases the shard in a `finally` path;
 - `DeliveryLoop` repeats those direct drains for one shard, and `DeliveryWorker`

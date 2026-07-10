@@ -109,6 +109,18 @@ export function onInboxReadOnce(onRead: () => void): DeliveryStorageFaultProbe {
   });
 }
 
+export function onInboxQuery(onQuery: () => Promise<void> | void): DeliveryStorageFaultProbe {
+  return Object.freeze({
+    query(context: StorageContext) {
+      if (!context.name.endsWith(".delivery.inbox")) {
+        return undefined;
+      }
+
+      return onQuery();
+    },
+  });
+}
+
 export function deliveryDedupRecords(storageFactory: StorageFactory) {
   return storageFactory.createRecordStorage(
     { name: "Tasks.delivery.inbox-dedup", multitenant: false },
@@ -192,6 +204,7 @@ interface DeliveryStorageFaultProbe {
     next: MaterializedRecord<I, R> | undefined,
     delegate: RecordStorage<I, R>,
   ): Promise<boolean | undefined>;
+  query?(context: StorageContext): Promise<void> | void;
   read?(context: StorageContext, id: unknown): void;
 }
 
@@ -275,6 +288,14 @@ class FaultyDeliveryRecordStorage<I, R extends Message> extends RecordStorage<I,
   ): Promise<readonly { id: I; record: R }[]> {
     if (this.context.name.endsWith(".delivery.inbox")) {
       this.#plan.inboxQueries += 1;
+    }
+
+    return this.#queryRecordEntries(query);
+  }
+
+  async #queryRecordEntries(query: RecordQuery<I>): Promise<readonly { id: I; record: R }[]> {
+    for (const probe of this.#plan.probes) {
+      await probe.query?.(this.context);
     }
 
     return this.#delegate.queryEntries(query);

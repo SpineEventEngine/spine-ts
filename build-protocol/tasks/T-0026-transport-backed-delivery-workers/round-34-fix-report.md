@@ -11,28 +11,28 @@ Checklist source: `build-protocol/BUILD_PROTOCOL.md#skills-and-tooling`.
 
 Evidence gathered before edits:
 
-| Source                                     | Scope                | Evidence                                                                                                             |
-| ------------------------------------------ | -------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Session skill inventory                    | Task-relevant subset | Implementation, TypeScript/tooling cleanup, testing, and verification skills were visible in-session.                |
-| Task-provided requirements                 | Full Round 34 batch  | The assignment required tooling typecheck cleanup, Round 33 durable trace cleanup, a Round 34 report, and no commit. |
-| `build-protocol/skills/EXPECTED_SKILLS.md` | Full file            | Expected workflow/testing/type skills were recorded and local fallback guidance was available.                       |
-| `~/.agents/skills/*/SKILL.md`              | Full directory list  | `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print` succeeded.                             |
-| `~/.agents/.skill-lock.json`               | Manifest opened      | Installed-skill lock manifest was readable and confirmed expected installed skill records.                           |
+| Source                                     | Scope                | Evidence                                                                                                  |
+| ------------------------------------------ | -------------------- | --------------------------------------------------------------------------------------------------------- |
+| Session skill inventory                    | Task-relevant subset | Implementation, TypeScript/tooling cleanup, testing, and verification skills were visible in-session.     |
+| Task-provided requirements                 | Full Round 34 batch  | The assignment required tooling typecheck cleanup, Round 33 durable trace cleanup, and a Round 34 report. |
+| `build-protocol/skills/EXPECTED_SKILLS.md` | Full file            | Expected workflow/testing/type skills were recorded and local fallback guidance was available.            |
+| `~/.agents/skills/*/SKILL.md`              | Full directory list  | `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print` succeeded.                  |
+| `~/.agents/.skill-lock.json`               | Manifest opened      | Installed-skill lock manifest was readable and confirmed expected installed skill records.                |
 
 Selected skills applied for this round:
 
-| Skill                            | Round 34 use                                                                          |
-| -------------------------------- | ------------------------------------------------------------------------------------- |
-| `implement`                      | Apply the scoped tooling/docs fix without changing delivery behavior.                 |
-| `verification-before-completion` | Require fresh command evidence before reporting typecheck/lint/tests/docs status.     |
+| Skill                            | Round 34 use                                                                      |
+| -------------------------------- | --------------------------------------------------------------------------------- |
+| `implement`                      | Apply the scoped tooling/docs fix without changing delivery behavior.             |
+| `verification-before-completion` | Require fresh command evidence before reporting typecheck/lint/tests/docs status. |
 
 Skipped relevant-looking skills:
 
-| Skill                         | Reason Skipped                                                                                     |
-| ----------------------------- | -------------------------------------------------------------------------------------------------- |
-| `test-driven-development`     | Round 34 is tooling/docs cleanup only; no behavior change or new runtime regression is intended.   |
-| `typescript-advanced-types`   | The fix is local test-fixture typing, not new public type-system design.                           |
-| `javascript-testing-patterns` | Existing focused tests are the required verification; no new test strategy is needed.              |
+| Skill                         | Reason Skipped                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------------ |
+| `test-driven-development`     | Round 34 is tooling/docs cleanup only; no behavior change or new runtime regression is intended. |
+| `typescript-advanced-types`   | The fix is local test-fixture typing, not new public type-system design.                         |
+| `javascript-testing-patterns` | Existing focused tests are the required verification; no new test strategy is needed.            |
 
 Project protocol, task scope, sandbox rules, and the explicit no-commit
 instruction take precedence over advisory skill guidance.
@@ -44,7 +44,7 @@ Address every finding in the Round 34 batch:
 1. Fix `pnpm --config.verify-deps-before-run=false typecheck:tooling` errors
    without changing behavior.
 2. Ensure Round 33 trace records name fix commit `8cd57172` (`Record Round 32
-   fix evidence`) and the current review status/table no longer imply
+fix evidence`) and the current review status/table no longer imply
    unresolved Round 33 findings.
 3. Record Round 34 fix report and verification.
 
@@ -72,7 +72,7 @@ Address every finding in the Round 34 batch:
     helper using an explicit `unknown` bridge at the known inbox-record `Any`
     boundary.
 - Added the Round 33 fix-commit breadcrumb for `8cd57172` (`Record Round 32
-  fix evidence`) and updated the current review status/table so it no longer
+fix evidence`) and updated the current review status/table so it no longer
   implies unresolved Round 33 findings after the fix.
 - Ran the repository formatter after the first `format:check` reported the
   review log formatting drift introduced by the Round 34 intake table.
@@ -112,4 +112,4 @@ Address every finding in the Round 34 batch:
 
 - `.codex-review-packages/` remains an existing untracked review scratch
   directory and was left untouched.
-- No commit was created, per instruction.
+- Fix commit: `7a5378eb` (`Fix delivery tooling typecheck`).

@@ -140,10 +140,10 @@ Current slice exposes:
   recording, or failure-budget consumption. Pre-callback claim, lease, cleanup,
   validation, and status-update failures stay visible in
   `DeliveryRun.failures`, do not increment accepted endpoint work, but they do
-  increment failed work and count toward `DeliveryLoop.maxFailures`. Expired
-  per-message ownership is reclaimable by a later claim attempt while live
-  ownership still blocks; proactive sweeping and broader production recovery policy remain
-  future work. Supported public delivery labels are `HANDLE_COMMAND`,
+  increment failed work and count toward `DeliveryLoop.maxFailures`. Any
+  existing per-message ownership, expired or live, blocks competing delivery
+  in this slice; proactive sweeping and broader production recovery policy
+  remain future work. Supported public delivery labels are `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`;
   `IMPORT_EVENT` is rejected for new inbox writes before durable storage opens.
   Stored/wire legacy `IMPORT_EVENT` rows remain recognizable only as deprecated

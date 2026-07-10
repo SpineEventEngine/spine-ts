@@ -192,8 +192,10 @@ export class InboxStorage {
       if (!this.#sameMessageExceptClaim(current, message)) {
         return undefined;
       }
-      const now = this.#dedupNow();
-      if (current.claim !== undefined && current.claim.expiresAt.getTime() > now) {
+      // Any existing claim is treated as unavailable in this slice. Expired
+      // or abandoned-claim recovery needs an explicit future policy because
+      // the previous owner may still be inside its endpoint callback.
+      if (current.claim !== undefined) {
         return undefined;
       }
 

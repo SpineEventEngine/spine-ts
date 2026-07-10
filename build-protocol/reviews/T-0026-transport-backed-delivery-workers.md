@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 34 fix verified; re-review pending
+Status: Round 35 fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer    | Status |
-| -------------------------- | ----------- | ------ |
-| Code style/maintainability | Godel       | Fixed  |
-| Documentation              | Boyle       | Fixed  |
-| TypeScript/API docs        | Mill        | Clean  |
-| Security                   | Kierkegaard | Clean  |
-| Performance/reliability    | Wegener     | Clean  |
+| Lane                       | Reviewer | Status |
+| -------------------------- | -------- | ------ |
+| Code style/maintainability | Lovelace | Fixed  |
+| Documentation              | Faraday  | Fixed  |
+| TypeScript/API docs        | Pascal   | Clean  |
+| Security                   | Gibbs    | Fixed  |
+| Performance/reliability    | Dewey    | Fixed  |
 
 ## Review Criteria
 
@@ -31,6 +31,59 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 ## Rounds
 
 Review findings fixed and verified after implementation commit `94b4c632`.
+
+### Round 35 Follow-up - `2026-07-10T14:47:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..7a5378eb.diff` from task baseline
+  `ca8fb2b3` to current HEAD `7a5378eb`.
+- TypeScript/API docs (Pascal): clean.
+- Documentation (Faraday): [P2] Round 34 verification records should name fix
+  commit `7a5378eb` (`Fix delivery tooling typecheck`), and the Round 34 fix
+  report still says no commit was created.
+- Code style/maintainability (Lovelace): [P1] `format:check` currently fails
+  on `round-34-fix-report.md`; apply Prettier formatting before accepting the
+  verification record.
+- Security (Gibbs): [P1] expired row-claim reclaim can double-invoke endpoint
+  callbacks. Treat any existing row claim as unavailable until a future
+  abandoned-claim recovery policy can prove recovery is safe.
+- Performance/reliability (Dewey): [P2] absolute offset paging can falsely idle
+  when skipped head rows disappear during one drain page sequence. Avoid
+  reading later pages by an offset that is relative to a moving `TO_DELIVER`
+  set.
+- Action: dispatch one fix worker for the complete Round 35 batch, with
+  focused red/green regressions for the claim and pagination behavior, report
+  formatting, durable Round 34 commit trace, verification, and another
+  five-lane re-review.
+
+### Round 35 Fix Implementation - `2026-07-10`
+
+- Added focused red regressions before production edits. The expired-claim
+  regression failed because `signal-expired-claim` was invoked, and the moving
+  pending-set regression failed because `signal-reachable-tail` was skipped
+  when the unavailable head rows disappeared between page reads.
+- `InboxStorage` now treats any existing row claim as unavailable, including
+  expired claims. Abandoned-claim recovery remains a future explicit policy
+  because the earlier owner may still be inside `onMessage`.
+- `Delivery` now validates the pending boundary before reading an offset page.
+  If skipped rows disappeared and the boundary no longer matches, the drain
+  resets to the head once and continues inside the same scan budget rather than
+  paging or idling past reachable supported work.
+- Updated expired-claim and paused-loop tests to use explicit claim recovery
+  where recovery is intended, and added a query hook to the delivery storage
+  fault fixture for moving pending-set regressions.
+- Coordinator refinement moved the pending-boundary check before all offset
+  page reads and refreshed public docs plus the `InboxClaim` comment to state
+  that expired and live ownership both block competing delivery in this slice.
+- Round 34 durable trace now names fix commit `7a5378eb`
+  (`Fix delivery tooling typecheck`), and `round-34-fix-report.md` is
+  Prettier-formatted.
+- Fix-worker verification passed: focused delivery worker/loop/runtime/inbox/
+  shard-registry Vitest passed with 5 files and 223 tests;
+  `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing invalid
+  `origin` TypeDoc source-link warning.
+- No commit was created, per Round 35 instruction.
 
 ### Round 27 Follow-up - `2026-07-10T11:55:46Z`
 

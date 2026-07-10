@@ -2,6 +2,7 @@ import { InMemoryStorageFactory, type StorageFactory } from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
 import { deliveryAccess, type DeliveryDrainOutcome } from "../../src/delivery/delivery.js";
+import { InboxRecords } from "../../src/delivery/inbox-records.js";
 import {
   Delivery,
   DeliveryLoop,
@@ -11,7 +12,11 @@ import {
   type InboxMessage,
 } from "../../src/index.js";
 import { inboxStorageAccess } from "../../src/delivery/inbox-storage.js";
-import { deliveryStorageFaults } from "./delivery-storage-fault-fixture.js";
+import {
+  deliveryInboxRecords,
+  deliveryStorageFaults,
+  messageKey,
+} from "./delivery-storage-fault-fixture.js";
 
 describe("DeliveryLoop", () => {
   it("drains multiple pages and rows appended during delivery", async () => {
@@ -295,11 +300,12 @@ describe("DeliveryLoop", () => {
     expect(seen).toEqual(["signal-supported-tail"]);
   });
 
-  it("rescans before stopping after a resumed skipped-only drain", async () => {
+  it("rescans before stopping after a resumed skipped-only drain once a head claim is cleared", async () => {
     let now = new Date("2026-07-08T09:00:00.000Z");
+    const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new InMemoryStorageFactory(),
+      storageFactory,
       now: () => now,
     });
     const shard = ShardIndex.single();
@@ -344,6 +350,7 @@ describe("DeliveryLoop", () => {
     expect(seen).toEqual([]);
 
     now = new Date("2026-07-08T09:02:00.000Z");
+    await clearClaimByRecord(storageFactory, claimedHead);
     await seed(delivery, "signal-skipped-tail", 2_003n, "CATCH_UP");
 
     const resumed = await loop.run();
@@ -665,6 +672,27 @@ async function seed(
   });
 
   return result.message;
+}
+
+async function clearClaimByRecord(
+  storageFactory: StorageFactory,
+  message: InboxMessage,
+): Promise<void> {
+  const storage = deliveryInboxRecords(storageFactory);
+  const key = messageKey(message);
+
+  try {
+    const current = await storage.read(key);
+    if (current === undefined) {
+      throw new Error(`Missing inbox row "${key}".`);
+    }
+
+    const claimed = InboxRecords.read(current, key);
+    const { claim: _claim, ...unclaimed } = claimed;
+    await storage.compareAndSet(key, current, InboxRecords.write(unclaimed));
+  } finally {
+    storage.close();
+  }
 }
 
 function targetInbox(): InboxId {
