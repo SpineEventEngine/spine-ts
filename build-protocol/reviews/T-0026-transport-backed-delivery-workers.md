@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 51 docs/records fix verified; re-review pending
+Status: Round 52 documentation findings recorded; fix pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer            | Status                            |
-| -------------------------- | ------------------- | --------------------------------- |
-| Code style/maintainability | Ohm the 2nd         | Findings fixed; re-review pending |
-| Documentation              | Nash the 2nd        | Findings fixed; re-review pending |
-| TypeScript/API docs        | Singer the 2nd      | Clean                             |
-| Security                   | Kierkegaard the 2nd | Clean                             |
-| Performance/reliability    | Erdos the 2nd       | Clean                             |
+| Lane                       | Reviewer         | Status           |
+| -------------------------- | ---------------- | ---------------- |
+| Code style/maintainability | Feynman the 2nd  | Clean            |
+| Documentation              | Leibniz the 2nd  | Findings pending |
+| TypeScript/API docs        | Lagrange the 2nd | Clean            |
+| Security                   | Kuhn the 2nd     | Clean            |
+| Performance/reliability    | Linnaeus the 2nd | Clean            |
 
 ## Review Criteria
 
@@ -211,6 +211,39 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   TypeDoc warning; `format:check` passed after repository formatting normalized
   this review-log table; `git diff --check` passed.
 - Action: regenerate the review package and rerun all five reviewer lanes.
+
+### Round 52 Follow-up - `2026-07-10`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..a1ae8669.diff` from task baseline
+  `ca8fb2b3` to current HEAD `a1ae8669`.
+- Code style/maintainability (Feynman the 2nd): clean. The reviewer also ran
+  `git diff --check ca8fb2b3...HEAD`, which passed.
+- Documentation (Leibniz the 2nd): [P2] several API/user-facing docs still
+  omit row-label validation before handler replay even though implementation
+  and runtime architecture docs now state that replay validates the row label
+  plus pending `TO_DELIVER` status before handler/projection code. Stale docs:
+  `docs/api/README.md`, `build-protocol/DEVELOPER_API.md`,
+  `packages/server/README.md`, and `docs/USER_GUIDE.md`. [P2] the current
+  review-lane table was still ambiguous for current HEAD because some lanes
+  read simply `Clean` while the same records said five-lane re-review remained
+  pending.
+- TypeScript/API docs (Lagrange the 2nd): clean. Root server exports omit raw
+  delivery APIs, `ServerEnvironment` does not leak raw `Delivery`, callback and
+  failure message types remain narrowed to supported worker labels, API docs
+  and export checks match, no generated output appears in the diff, and Round
+  51 is docs/records-only.
+- Security (Kuhn the 2nd): clean. Fail-closed label/status validation,
+  tenant/target validation, unsupported-label skip behavior, legacy
+  `IMPORT_EVENT` fail-closed decode, snapshot isolation, CAS/lease fencing, and
+  public API exposure constraints remain intact.
+- Performance/reliability (Linnaeus the 2nd): clean. Finite scan budget,
+  limit/failure accounting, live-vs-expired claims, shard lease safety, fake
+  timer containment, and coverage/lint records remain acceptable. The reviewer
+  ran read-only baseline-to-HEAD inspection and `git diff --check
+ca8fb2b3...HEAD`, which passed.
+- Action: update the stale docs and current review-lane table, verify, and
+  rerun all five reviewer lanes.
 
 ### Round 45 Follow-up - `2026-07-10T19:15:00Z`
 

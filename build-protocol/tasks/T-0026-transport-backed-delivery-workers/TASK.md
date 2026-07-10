@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 51 docs/records fix verified; re-review pending
+Status: Round 52 documentation findings recorded; fix pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -972,3 +972,14 @@ replay wording with the implementation by naming row-label plus pending
 existing invalid-`origin` TypeDoc warning, format check passed after normalizing
 the review-log table, and `git diff --check` passed. Five-lane re-review
 remains pending.
+
+Round 52 re-review on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..a1ae8669.diff` produced clean
+style/maintainability, TypeScript/API docs, security, and
+performance/reliability lanes. Documentation found several user/API docs still
+omit row-label validation before handler replay, even though implementation and
+runtime architecture docs now state replay validates the row label plus pending
+`TO_DELIVER` status before handler code. Documentation also found the review
+lane table still too ambiguous for the just-completed Round 52 state. The next
+fix updates those docs and records, then repeats verification and five-lane
+review.
