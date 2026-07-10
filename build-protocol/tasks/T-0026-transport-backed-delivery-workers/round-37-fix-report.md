@@ -69,8 +69,9 @@ Notes:
 
 ## Commit Note
 
-No commit was created by the fix worker, per Round 37 instruction. The
-coordinator commit records this verified fix.
+No commit was created by the fix worker, per Round 37 instruction. Coordinator
+commit `1403505e` (`Fix delivery offset boundary race`) recorded this verified
+fix.
 
 ## Coordinator Verification
 
