@@ -1,5 +1,11 @@
 import { inboxStorageAccess } from "./inbox-storage.js";
-import type { Delivery, DeliveryFailure, DeliveryRun, OnDeliveryMessage } from "./delivery.js";
+import {
+  deliveryAccess,
+  type Delivery,
+  type DeliveryFailure,
+  type DeliveryRun,
+  type OnDeliveryMessage,
+} from "./delivery.js";
 import type { ShardIndex } from "./shard-index.js";
 
 /** Small local repeat loop around the direct `Delivery.drain()` worker boundary. */
@@ -65,7 +71,7 @@ export class DeliveryLoop {
         return summary.result("STOPPED");
       }
       const remainingFailures = this.#maxFailures - summary.failed;
-      const limit = this.#drainLimit(remainingFailures);
+      const limit = this.#drainLimit();
       const run = await this.#drain(limit, remainingFailures);
       summary.add(run);
       if (run.status === "SKIPPED") {
@@ -87,17 +93,23 @@ export class DeliveryLoop {
   }
 
   #drain(limit: number, remainingFailures: number): Promise<DeliveryRun> {
-    return this.#delivery.drain(this.#shard, {
-      node: this.#node,
-      onMessage: this.#onMessage,
-      limit,
-      maxFailures: remainingFailures,
-      scanOffset: this.#scanOffset,
-    });
+    return deliveryAccess.drain(
+      this.#delivery,
+      this.#shard,
+      {
+        node: this.#node,
+        onMessage: this.#onMessage,
+        limit,
+      },
+      {
+        maxFailures: remainingFailures,
+        scanOffset: this.#scanOffset,
+      },
+    );
   }
 
-  #drainLimit(remainingFailures: number): number {
-    return this.#limit === undefined ? remainingFailures : Math.min(this.#limit, remainingFailures);
+  #drainLimit(): number {
+    return this.#limit ?? inboxStorageAccess.readLimit(undefined);
   }
 
   #requireStorageBoundedLimit(): void {

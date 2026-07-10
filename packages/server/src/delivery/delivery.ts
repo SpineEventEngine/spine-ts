@@ -36,6 +36,7 @@ export class Delivery {
       leaseMs: this.#leaseMs,
       now: this.#now,
     });
+    deliveryDrainers.set(this, (shard, options, controls) => this.#drain(shard, options, controls));
     Object.freeze(this);
   }
 
@@ -60,9 +61,17 @@ export class Delivery {
    * schedule later runs, open transports, or retain endpoint attempt history.
    */
   async drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
+    return this.#drain(shard, options, {});
+  }
+
+  async #drain(
+    shard: ShardIndex,
+    options: DeliveryDrainOptions,
+    controls: DeliveryDrainControls,
+  ): Promise<DeliveryRun> {
     const limit = inboxStorageAccess.readLimit(options.limit);
-    const scanOffset = requireScanOffset(options.scanOffset);
-    const maxFailures = requireFailureLimit(options.maxFailures);
+    const scanOffset = requireScanOffset(controls.scanOffset);
+    const maxFailures = requireFailureLimit(controls.maxFailures);
     const session = await this.shards.pickUp(shard, options.node);
     if (session === undefined) {
       return deliveryRun("SKIPPED", 0, 0, 0, 0, []);
@@ -353,13 +362,49 @@ export interface DeliveryDrainOptions {
   readonly node: string;
   /** Optional positive accepted-work cap for one drain run. */
   readonly limit?: number;
-  /** @internal Loop continuation offset over still-pending rows. */
-  readonly scanOffset?: number;
-  /** @internal Maximum failures allowed in this drain. Direct drains omit it. */
-  readonly maxFailures?: number;
   /** Framework endpoint callback invoked for each available supported worker row. */
   readonly onMessage: OnDeliveryMessage;
 }
+
+interface DeliveryDrainControls {
+  readonly scanOffset?: number;
+  readonly maxFailures?: number;
+}
+
+/** @internal Framework-only access to loop-private delivery controls. */
+export interface DeliveryAccess {
+  drain(
+    delivery: Delivery,
+    shard: ShardIndex,
+    options: DeliveryDrainOptions,
+    controls: DeliveryDrainControls,
+  ): Promise<DeliveryRun>;
+}
+
+type DeliveryDrainer = (
+  shard: ShardIndex,
+  options: DeliveryDrainOptions,
+  controls: DeliveryDrainControls,
+) => Promise<DeliveryRun>;
+
+const deliveryDrainers = new WeakMap<Delivery, DeliveryDrainer>();
+
+/** @internal Framework-only access to loop-private delivery controls. */
+export const deliveryAccess: DeliveryAccess = Object.freeze({
+  drain(
+    delivery: Delivery,
+    shard: ShardIndex,
+    options: DeliveryDrainOptions,
+    controls: DeliveryDrainControls,
+  ) {
+    const drainer = deliveryDrainers.get(delivery);
+    if (drainer === undefined) {
+      return delivery.drain(shard, options);
+    }
+
+    return drainer(shard, options, controls);
+  },
+});
 
 /** Options for one exact-message delivery drain. */
 export interface DeliveryMessageDrainOptions {

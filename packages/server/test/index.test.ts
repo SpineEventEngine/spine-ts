@@ -44,6 +44,7 @@ import {
   type StandUpdate,
   Aggregate,
   Delivery,
+  type DeliveryDrainOptions,
   type OnDeliveryMessage,
   type EntityVersionMetadata,
   Inbox,
@@ -308,6 +309,21 @@ describe("@spine-ts/server", () => {
     expectTypeOf<StandUpdate>().toExtend<{ readonly typeUrl: string; readonly id: unknown }>();
     expectTypeOf<InboxMessage>().not.toHaveProperty("claim");
     expectTypeOf<Parameters<OnDeliveryMessage>[0]>().not.toHaveProperty("claim");
+    expectTypeOf<DeliveryDrainOptions>().toEqualTypeOf<Parameters<Delivery["drain"]>[1]>();
+    expectTypeOf<DeliveryDrainOptions>().not.toHaveProperty("scanOffset");
+    expectTypeOf<DeliveryDrainOptions>().not.toHaveProperty("maxFailures");
+    void ({
+      node: "node-a",
+      onMessage: () => undefined,
+      // @ts-expect-error Loop scan continuation is not part of the public API.
+      scanOffset: 1,
+    } satisfies DeliveryDrainOptions);
+    void ({
+      node: "node-a",
+      onMessage: () => undefined,
+      // @ts-expect-error Loop failure controls are not part of the public API.
+      maxFailures: 1,
+    } satisfies DeliveryDrainOptions);
     expectTypeOf<Inbox>().not.toHaveProperty("claim");
     expectTypeOf<Inbox>().not.toHaveProperty("unclaim");
     expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");

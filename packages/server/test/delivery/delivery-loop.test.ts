@@ -192,7 +192,7 @@ describe("DeliveryLoop", () => {
     }).run();
 
     expect(seen).toEqual(["signal-supported-tail"]);
-    expect(run).toMatchObject({ status: "IDLE", runs: 3, accepted: 1, delivered: 1, failed: 0 });
+    expect(run).toMatchObject({ status: "IDLE", runs: 2, accepted: 1, delivered: 1, failed: 0 });
   });
 
   it("stop prevents starting a new drain", async () => {
@@ -344,12 +344,14 @@ describe("DeliveryLoop", () => {
     expect(run.failures).toHaveLength(2);
   });
 
-  it("caps each drain by the remaining failure budget", async () => {
+  it("keeps successful callbacks in one drain while stopping at the failure bound", async () => {
     const delivery = createDelivery();
     const attempts: string[] = [];
 
-    await seed(delivery, "signal-fails-1", 1n);
-    await seed(delivery, "signal-fails-2", 2n);
+    await seed(delivery, "signal-succeeds-1", 1n);
+    await seed(delivery, "signal-succeeds-2", 2n);
+    await seed(delivery, "signal-fails-1", 3n);
+    await seed(delivery, "signal-fails-2", 4n);
 
     const run = await new DeliveryLoop({
       delivery,
@@ -357,17 +359,19 @@ describe("DeliveryLoop", () => {
       node: "node-a",
       onMessage(message) {
         attempts.push(message.signalId);
-        throw new Error("endpoint failed");
+        if (message.signalId === "signal-fails-1") {
+          throw new Error("endpoint failed");
+        }
       },
     }).run();
 
-    expect(attempts).toEqual(["signal-fails-1"]);
+    expect(attempts).toEqual(["signal-succeeds-1", "signal-succeeds-2", "signal-fails-1"]);
     expect(run).toMatchObject({
       status: "FAILED",
       runs: 1,
-      processed: 1,
-      accepted: 1,
-      delivered: 0,
+      processed: 3,
+      accepted: 3,
+      delivered: 2,
       failed: 1,
     });
     expect(run.failures).toHaveLength(1);

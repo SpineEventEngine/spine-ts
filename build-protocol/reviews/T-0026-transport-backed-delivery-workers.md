@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 25 fix verified; re-review pending
+Status: Round 26 fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status                   |
-| -------------------------- | -------- | ------------------------ |
-| Code style/maintainability | Hypatia  | Fixed; re-review pending |
-| Documentation              | Kuhn     | Fixed; re-review pending |
-| TypeScript/API docs        | Arendt   | Fixed; re-review pending |
-| Security                   | Pauli    | Fixed; re-review pending |
-| Performance/reliability    | Erdos    | Fixed; re-review pending |
+| Lane                       | Reviewer  | Status                   |
+| -------------------------- | --------- | ------------------------ |
+| Code style/maintainability | Aristotle | Minor only               |
+| Documentation              | Hilbert   | Clean                    |
+| TypeScript/API docs        | Zeno      | Fixed; re-review pending |
+| Security                   | Linnaeus  | Clean                    |
+| Performance/reliability    | Euler     | Fixed; re-review pending |
 
 ## Review Criteria
 
@@ -31,6 +31,44 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 ## Rounds
 
 Review findings fixed and verified after implementation commit `94b4c632`.
+
+### Round 26 Follow-up - `2026-07-10T11:29:35Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..2caee0d7.diff` from task baseline
+  `ca8fb2b3` to current HEAD `2caee0d7`.
+- Documentation (Hilbert): clean.
+- Security (Linnaeus): clean.
+- Code style/maintainability (Aristotle): no blocking findings; retained one
+  minor note that `FaultyDeliveryRecordStorage.compareAndSetRecord()` remains a
+  broad test-only fault-injection helper.
+- TypeScript/API docs (Zeno): [Important] `scanOffset` and `maxFailures` are
+  loop-only controls but are exported on public `DeliveryDrainOptions` and
+  rendered by TypeDoc. Split public drain options from loop-private controls
+  and add API/type coverage that public `Delivery.drain()` options exclude
+  both fields.
+- Performance/reliability (Euler): [Important] `DeliveryLoop.#drainLimit()`
+  reduces the accepted-work cap to the remaining failure budget, so healthy
+  backlogs run one shard pickup/read/release per delivered row with default
+  `maxFailures: 1`. Preserve the configured accepted-work limit and pass the
+  remaining failure budget separately.
+- Action: dispatch one fix worker for the API leak and batching regression,
+  with focused delivery-loop/API export verification before another five-lane
+  re-review.
+
+### Round 26 Fix Implementation - `2026-07-10`
+
+- Split public `DeliveryDrainOptions` from loop-private drain controls behind
+  the non-barrel `deliveryAccess` capability.
+- Preserved the configured/default accepted-work limit for loop drains while
+  passing the remaining failure budget as a separate internal control.
+- Added API type coverage proving public drain options exclude `scanOffset` and
+  `maxFailures`, and delivery-loop coverage proving multiple successful
+  callbacks can complete in one drain before the first failure stops the loop.
+- Coordinator verification passed: focused delivery/API Vitest passed with 5
+  files and 220 tests; generated build typecheck, docs check, format check,
+  and `git diff --check` passed. `docs:check` reported only the existing
+  invalid-origin TypeDoc source-link warning.
 
 ### Round 25 Follow-up - `2026-07-10T10:58:57Z`
 

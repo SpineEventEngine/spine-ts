@@ -377,6 +377,23 @@ tests), generated build typecheck, docs check, format check, and
 TypeDoc source-link warning. The fix commit is `e089963f` (`Fix delivery loop
 reliability and docs`). A fresh five-lane re-review is still required.
 
+Round 26 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..2caee0d7.diff` produced clean documentation
+and security lanes, and only a non-blocking style note about an oversized
+test-only fault-injection helper. Blocking findings remain: loop-only
+`scanOffset` and `maxFailures` must not be public `DeliveryDrainOptions`, and
+`DeliveryLoop` must preserve its configured accepted-work limit instead of
+reducing it to the remaining failure budget. One fix worker will address both
+before another re-review.
+
+Round 26 fix verification on `2026-07-10`: public `DeliveryDrainOptions` no
+longer exposes loop-only controls, and `DeliveryLoop` preserves its configured
+accepted-work limit while enforcing remaining failure budget separately.
+Coordinator verification passed with focused delivery/API Vitest (5 files, 220
+tests), generated build typecheck, docs check, format check, and
+`git diff --check`; docs check reported only the existing invalid-origin
+TypeDoc source-link warning. A fresh five-lane re-review is still required.
+
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker
 will add red/green regressions before changing delivery code, preserve direct
