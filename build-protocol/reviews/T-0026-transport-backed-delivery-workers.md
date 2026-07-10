@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 71 findings recorded; fix pending
+Status: Round 72 records-only fix verified; five-lane re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer         | Status           |
-| -------------------------- | ---------------- | ---------------- |
-| Code style/maintainability | Zeno the 3rd     | Clean            |
-| Documentation              | Beauvoir the 3rd | Findings pending |
-| TypeScript/API docs        | Averroes the 3rd | Clean            |
-| Security                   | Noether the 3rd  | Clean            |
-| Performance/reliability    | Ohm the 3rd      | Clean            |
+| Lane                       | Reviewer | Status                             |
+| -------------------------- | -------- | ---------------------------------- |
+| Code style/maintainability | TBD      | Needs fresh current-HEAD re-review |
+| Documentation              | TBD      | Needs fresh current-HEAD re-review |
+| TypeScript/API docs        | TBD      | Needs fresh current-HEAD re-review |
+| Security                   | TBD      | Needs fresh current-HEAD re-review |
+| Performance/reliability    | TBD      | Needs fresh current-HEAD re-review |
 
 ## Review Criteria
 
@@ -2525,3 +2525,20 @@ ca8fb2b3..70cf4dcd` passed. The rejected `resetResumedCursorToHead()` method
 - Action: record the complete findings batch, dispatch one records-only fix
   worker, verify, commit, and rerun all five reviewer lanes from the fixed
   HEAD.
+
+### Round 72 Records-Only Fix - `2026-07-10T21:36:02Z`
+
+- Documentation: re-anchored the work-log Round 52/53 records to the
+  commit-backed UTC window after `a1ae8669` at `2026-07-10T19:03:44Z` and
+  through `05962a3c` at `2026-07-10T19:18:10Z`. This removes the local-looking
+  `20:32Z`, `20:36Z`, and `20:38Z` entries before the Round 54 block while
+  preserving the Round 71 historical review outcomes above.
+- Dashboard: reset all five required review lanes to fresh current-HEAD
+  re-review pending after this records-only fix.
+- Verification: the first `format:check` found review-log Markdown wrapping
+  only. Repository formatting normalized it, the rerun `format:check` passed,
+  and `git diff --check` passed. A targeted stale-timestamp search found no
+  remaining `20:32:00Z`, `20:36:00Z`, or `20:38:00Z` in
+  `build-protocol/work-logs/T-0026.md`; the checked Round 52/53/54/55/56 work
+  log snippet is monotonic from `19:03:44Z` through `19:42:56Z`.
+- Action: rerun all five reviewer lanes from the verified Round 72 HEAD.

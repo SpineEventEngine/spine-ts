@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 71 findings recorded; fix pending
+Status: Round 72 records-only fix verified; five-lane re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1219,3 +1219,19 @@ preceding work-log Round 52/53 entries still use local-looking `20:xxZ`
 timestamps before the corrected `19:18:10Z` commit anchor. The next fix will
 anchor the Round 52/53 work-log entries to commit-backed UTC and rerun all five
 lanes.
+
+Round 72 records-only fix on `2026-07-10T21:36:02Z`: re-anchored the work-log
+Round 52/53 records to the commit-backed UTC window after `a1ae8669` at
+`2026-07-10T19:03:44Z` and through `05962a3c` at
+`2026-07-10T19:18:10Z`, removing the local-looking `20:32Z`, `20:36Z`, and
+`20:38Z` entries before the Round 54 block. The review dashboard is reset so
+all five lanes require fresh current-HEAD re-review after this records-only
+fix. Required verification was pending until the Round 72 verification below.
+
+Round 72 verification on `2026-07-10T21:36:02Z`: `format:check` initially
+found review-log Markdown wrapping only. Repository formatting normalized the
+review log, the rerun `format:check` passed, and `git diff --check` passed. A
+targeted stale-timestamp search found no remaining `20:32:00Z`, `20:36:00Z`,
+or `20:38:00Z` in `build-protocol/work-logs/T-0026.md`; the checked Round
+52/53/54/55/56 snippet is monotonic from `19:03:44Z` through `19:42:56Z`.
+Five-lane current-HEAD re-review remains pending.
