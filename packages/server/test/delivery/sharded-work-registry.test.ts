@@ -106,6 +106,30 @@ describe("ShardedWorkRegistry", () => {
     });
   });
 
+  it("does not release a delayed shard session after expiry", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const now = { value: new Date("2026-07-02T09:14:00.000Z") };
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      leaseMs: 500,
+      now: () => now.value,
+    });
+    const shard = new ShardIndex(0, 2);
+
+    const session = await delivery.shards.pickUp(shard, "node-a");
+    if (session === undefined) {
+      throw new Error("Expected shard pickup to create a session.");
+    }
+    now.value = new Date("2026-07-02T09:14:00.501Z");
+
+    await expect(delivery.shards.release(session)).resolves.toBe(false);
+    await expect(delivery.shards.pickUp(shard, "node-b")).resolves.toMatchObject({
+      node: "node-b",
+      shard,
+    });
+  });
+
   it("rejects invalid lease durations", () => {
     expect(
       () =>

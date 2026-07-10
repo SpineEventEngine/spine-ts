@@ -63,6 +63,16 @@ export class Inbox {
     return this.storage.markDelivered(message);
   }
 
+  /** Claim one pending message before invoking its delivery endpoint. */
+  claim(message: InboxMessage, claim: InboxClaim): Promise<InboxMessage | undefined> {
+    return this.storage.claim(message, claim);
+  }
+
+  /** Clear this worker's exact message claim after an unfinished delivery attempt. */
+  unclaim(message: InboxMessage): Promise<InboxMessage | undefined> {
+    return this.storage.unclaim(message);
+  }
+
   #inputObject(value: unknown, label: string): Record<string, unknown> {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
       throw new InboxMessageError(`${label} is invalid.`);
@@ -137,6 +147,18 @@ export interface InboxMessage {
   readonly version: bigint;
   /** Optional deduplication retention deadline. */
   readonly keepUntil?: Date;
+  /** @internal Durable delivery claim held while a framework worker invokes the endpoint. */
+  readonly claim?: InboxClaim;
+}
+
+/** @internal Durable delivery claim for one framework worker session. */
+export interface InboxClaim {
+  /** Shard session identifier that owns the endpoint invocation. */
+  readonly id: string;
+  /** Worker node that owns the endpoint invocation. */
+  readonly node: string;
+  /** Deadline after which another worker may claim the row. */
+  readonly expiresAt: Date;
 }
 
 /** Write request for one new inbox message. */

@@ -19,6 +19,7 @@ import {
 import {
   Delivery,
   ShardIndex,
+  ShardSession,
   type DeliveryMessageDrainOptions,
   type InboxId,
   type InboxMessage,
@@ -116,6 +117,45 @@ describe("Delivery worker", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("skips a row already claimed by another drain before invoking the endpoint", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      leaseMs: 60_000,
+      now: () => new Date("2026-07-08T09:00:00.000Z"),
+    });
+    const shard = ShardIndex.single();
+    const stored = await seed(delivery, "signal-claimed", 1n);
+    const claimed = await delivery.inbox.claim(
+      stored,
+      new ShardSession(
+        "message-owner",
+        shard,
+        "node-a",
+        new Date("2026-07-08T09:00:00.000Z"),
+        new Date("2026-07-08T09:01:00.000Z"),
+      ),
+    );
+
+    const duplicateSeen: string[] = [];
+    const secondRun = await delivery.drain(shard, {
+      node: "node-b",
+      onMessage(message) {
+        duplicateSeen.push(`node-b:${message.signalId}`);
+      },
+    });
+
+    expect(claimed?.signalId).toBe("signal-claimed");
+    expect(duplicateSeen).toEqual([]);
+    expect(secondRun).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      delivered: 0,
+      failed: 0,
+    });
   });
 
   it("leaves a row pending when the foreground lease check observes expiry", async () => {

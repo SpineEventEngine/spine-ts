@@ -2,7 +2,12 @@ import { DeliveryLoop, type DeliveryLoopRun, type DeliveryLoopStatus } from "./d
 import type { Delivery, DeliveryEndpoint } from "./delivery.js";
 import type { ShardIndex } from "./shard-index.js";
 
-/** Small closeable owner for one node's configured delivery shard loops. */
+/**
+ * Framework-owned local/direct wrapper over one node's configured shard loops.
+ *
+ * DeliveryWorker starts and closes caller-configured DeliveryLoop instances. It
+ * does not own production supervision, retry policy, or transport topology.
+ */
 export class DeliveryWorker {
   readonly #loops: readonly DeliveryLoop[];
   #running: Promise<DeliveryWorkerRun> | undefined;

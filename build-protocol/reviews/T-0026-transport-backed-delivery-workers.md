@@ -32,6 +32,44 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 Review findings fixed and verified after implementation commit `94b4c632`.
 
+### Round 5 Follow-up - `2026-07-10T06:10:10Z`
+
+- Finding: [P1] `Delivery.drain()` invoked `onMessage` after only a shard
+  lease pre-check. A worker that lost or outlived shard ownership could race
+  with another drain and duplicate endpoint invocation before stale
+  `markDelivered()` fencing took effect.
+- Fix: inbox rows now carry a small durable optional claim with shard-session
+  id, node, and expiry. `Delivery.drain()` and `drainMessage()` acquire the
+  claim through `Inbox`/`InboxStorage` with compare-and-set before invoking the
+  endpoint. Competing drains skip rows with a live different claim; successful
+  delivery marks with the claimed snapshot; failed attempts best-effort clear
+  the unchanged claim. Endpoint callbacks still receive unclaimed message
+  snapshots, so the fence remains framework-owned and does not expose framework
+  `Event` envelopes or add production retry/supervision/topology.
+- Evidence: focused red regression in `delivery-worker.test.ts` failed before
+  the fix because `delivery.inbox.claim` was missing, then passed after the
+  durable claim CAS. The requested focused delivery/context Vitest batch passed
+  after the fix with 182 tests.
+- Finding: [P2] `ShardedWorkRegistry.release()` could CAS-delete an
+  already-expired matching session, unlike `renew()`.
+- Fix: `release()` now reads the registry clock, returns `false` when the
+  current stored session expires at or before that time, and refreshes the
+  clock across CAS retries.
+- Evidence: focused red regression in `sharded-work-registry.test.ts` failed
+  before the fix because release resolved `true` after expiry, then passed
+  after the expiry guard.
+- Finding: [P2] internal `ProcessManagerInbox` and `ProjectionInbox` contracts
+  did not include their concrete `replay(...)` endpoint even though local
+  handoff classes and tests depend on that framework capability.
+- Fix: added `replay(...)` to both internal inbox contracts, keeping the names
+  short and avoiding concrete-class typing.
+- Finding: [P2] API comments and the delivery gap wording could be read as
+  contradicting storage-backed pickup/renew/release and caller-started
+  `DeliveryLoop`/`DeliveryWorker` loops.
+- Fix: updated `ShardedWorkRegistry` and `DeliveryWorker` class docs and
+  reworded `build-protocol/DEVELOPER_API.md` to describe no process-wide or
+  production scheduler/supervisor beyond caller-started delivery loops.
+
 ### Round 4 Follow-up - `2026-07-10T04:53:23Z`
 
 - Finding: [P1] `ShardedWorkRegistry.renew()` could renew an already-expired

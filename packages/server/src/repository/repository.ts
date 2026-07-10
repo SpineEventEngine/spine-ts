@@ -463,6 +463,8 @@ export interface ProcessManagerInboxTarget {
 
 /** @internal Context-owned process-manager inbox handoff capability. */
 export interface ProcessManagerInbox {
+  /** Replays one already-durable inbox row through registered process-manager targets. */
+  replay(message: InboxMessage, deliveryTenantId?: string): Promise<void>;
   /** Writes a durable inbox row and waits for that exact row to be delivered locally. */
   receive(
     delivery: Delivery,
@@ -487,6 +489,8 @@ export interface ProjectionInboxTarget {
 
 /** @internal Context-owned projection subscriber inbox handoff capability. */
 export interface ProjectionInbox {
+  /** Replays one already-durable inbox row through registered projection targets. */
+  replay(message: InboxMessage, deliveryTenantId?: string): Promise<void>;
   /** Writes a durable inbox row and waits for that exact row to be delivered locally. */
   receive(
     delivery: Delivery,

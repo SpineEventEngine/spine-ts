@@ -7,6 +7,7 @@ import {
   InboxMessageError,
   type DeliveryLabel,
   type DeliveryStatus,
+  type InboxClaim,
   type InboxMessage,
   type InboxMessageId,
 } from "./inbox.js";
@@ -51,6 +52,13 @@ interface StoredInboxMessage {
   readonly whenReceivedMs: number;
   readonly version: string;
   readonly keepUntilMs?: number;
+  readonly claim?: StoredInboxClaim;
+}
+
+interface StoredInboxClaim {
+  readonly id: string;
+  readonly node: string;
+  readonly expiresAtMs: number;
 }
 
 interface StoredPendingDedupRecord {
@@ -95,6 +103,7 @@ interface InboxMessageSnapshot {
   readonly whenReceivedMs: number;
   readonly version: string;
   readonly keepUntilMs?: number;
+  readonly claim?: InboxClaim;
 }
 
 type StoredDeliveryLabel = DeliveryLabel | "IMPORT_EVENT";
@@ -308,6 +317,15 @@ function storedInboxMessage(message: InboxMessage): StoredInboxMessage {
     version: snapshot.version,
     ...(snapshot.signal === undefined ? {} : { signal: snapshot.signal }),
     ...(snapshot.keepUntilMs === undefined ? {} : { keepUntilMs: snapshot.keepUntilMs }),
+    ...(snapshot.claim === undefined
+      ? {}
+      : {
+          claim: {
+            id: snapshot.claim.id,
+            node: snapshot.claim.node,
+            expiresAtMs: requireInputTimestamp(snapshot.claim.expiresAt, "Inbox claim expiry time"),
+          },
+        }),
   });
 }
 
@@ -359,6 +377,7 @@ function snapshotInboxMessage(message: InboxMessage): InboxMessageSnapshot {
   const version = requireInputVersion(readInputProperty(messageInput, "version", "Inbox version"));
   const signal = readInputProperty(messageInput, "signal", "Inbox signal") as Any | undefined;
   const keepUntil = readInputProperty(messageInput, "keepUntil", "Inbox keep-until time");
+  const claim = readInputProperty(messageInput, "claim", "Inbox claim") as InboxClaim | undefined;
 
   return Object.freeze({
     id,
@@ -375,6 +394,7 @@ function snapshotInboxMessage(message: InboxMessage): InboxMessageSnapshot {
     ...(keepUntil === undefined
       ? {}
       : { keepUntilMs: requireInputTimestamp(keepUntil, "Inbox keep-until time") }),
+    ...(claim === undefined ? {} : { claim: snapshotClaim(claim) }),
   });
 }
 
@@ -413,6 +433,33 @@ function inboxMessageFromStored(stored: StoredInboxMessage): InboxMessage {
     ...(stored.keepUntilMs === undefined
       ? {}
       : { keepUntil: storedDate(stored.keepUntilMs, "Inbox keep-until time") }),
+    ...(stored.claim === undefined ? {} : { claim: inboxClaimFromStored(stored.claim) }),
+  });
+}
+
+function snapshotClaim(claim: InboxClaim): InboxClaim {
+  const claimInput = requireInputObject(claim, "Inbox claim");
+
+  return Object.freeze({
+    id: requireInputText(readInputProperty(claimInput, "id", "Inbox claim ID"), "Inbox claim ID"),
+    node: requireInputText(
+      readInputProperty(claimInput, "node", "Inbox claim node"),
+      "Inbox claim node",
+    ),
+    expiresAt: new Date(
+      requireInputTimestamp(
+        readInputProperty(claimInput, "expiresAt", "Inbox claim expiry time"),
+        "Inbox claim expiry time",
+      ),
+    ),
+  });
+}
+
+function inboxClaimFromStored(claim: StoredInboxClaim): InboxClaim {
+  return Object.freeze({
+    id: claim.id,
+    node: claim.node,
+    expiresAt: storedDate(claim.expiresAtMs, "Inbox claim expiry time"),
   });
 }
 
@@ -967,6 +1014,17 @@ function buildStoredInboxMessage(
       : {
           keepUntilMs: requireStoredTimestampNumber(decoded.keepUntilMs, "Inbox keep-until time"),
         }),
+    ...(decoded.claim === undefined ? {} : { claim: readStoredClaim(decoded.claim) }),
+  });
+}
+
+function readStoredClaim(value: unknown): StoredInboxClaim {
+  const decoded = requireStoredObject(value, "Inbox claim");
+
+  return Object.freeze({
+    id: requireStoredText(decoded.id, "Inbox claim ID"),
+    node: requireStoredText(decoded.node, "Inbox claim node"),
+    expiresAtMs: requireStoredTimestampNumber(decoded.expiresAtMs, "Inbox claim expiry time"),
   });
 }
 

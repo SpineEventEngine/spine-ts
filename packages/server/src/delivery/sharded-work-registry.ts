@@ -14,7 +14,14 @@ import { ShardIndex } from "./shard-index.js";
 
 const casRetryLimit = 8;
 
-/** Storage-backed shard pickup registry. */
+/**
+ * Storage-backed shard registry for pickup, renewal, and release.
+ *
+ * Delivery drains use renewal as framework-owned lease fencing while endpoint
+ * callbacks are active. The registry records shard ownership durably; callers
+ * still own production scheduling, supervision, retry policy, and transport
+ * topology around these pickup/renew/release operations.
+ */
 export class ShardedWorkRegistry {
   readonly #context: StorageContext;
   readonly #leaseMs: number;
@@ -118,6 +125,7 @@ export class ShardedWorkRegistry {
   /** Release one shard session if it is still current. */
   async release(session: ShardSession): Promise<boolean> {
     const expected = snapshotSessionClaim(session);
+    let now = requireInputTime(this.#now(), "Shard release time");
     const storage = this.#storage();
 
     try {
@@ -131,10 +139,14 @@ export class ShardedWorkRegistry {
         if (current.id !== expected.id || current.node !== expected.node) {
           return false;
         }
+        if (current.expiresAt.getTime() <= now) {
+          return false;
+        }
 
         if (await casShardRecord(storage, expected.key, currentRecord, undefined)) {
           return true;
         }
+        now = requireInputTime(this.#now(), "Shard release time");
       }
 
       throw casRetriesExhausted("Shard release");

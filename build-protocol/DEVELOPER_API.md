@@ -367,13 +367,15 @@ code runs, replay validates tenant, payload/schema, target type URL, and
 routed target ID.
 `InboxStorage` remains the durable dedup authority.
 
-The current API does not schedule repeated runs, expose a generic repository
-delivery engine, run projection catch-up through inbox storage, run retry
-monitors, open transport topology, supervise worker processes, or retain
-attempt/error history beyond the returned run object. Event import and
-aggregate importers are removed from the active plan by upstream ADR 0001 D1;
-ordinary aggregate `@React` handlers are generated reactor handlers with
-current transaction semantics, not event-sourcing import/applier work.
+Beyond caller-started `DeliveryLoop` and `DeliveryWorker` loops, the current API
+does not provide a process-wide or production scheduler/supervisor, expose a
+generic repository delivery engine, run projection catch-up through inbox
+storage, run retry monitors, open transport topology, supervise worker
+processes, or retain attempt/error history beyond the returned run object.
+Event import and aggregate importers are removed from the active plan by
+upstream ADR 0001 D1; ordinary aggregate `@React` handlers are generated
+reactor handlers with current transaction semantics, not event-sourcing
+import/applier work.
 
 ## Runtime Transport Binding
 

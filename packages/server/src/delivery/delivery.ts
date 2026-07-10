@@ -62,16 +62,22 @@ export class Delivery {
       const failures: DeliveryFailure[] = [];
 
       for (const message of messages) {
+        let claimed: InboxMessage | undefined;
         try {
           lease.requireActive();
-          await options.onMessage(message);
+          claimed = await this.inbox.claim(message, lease.session());
+          if (claimed === undefined) {
+            continue;
+          }
+          await options.onMessage(unclaimedMessage(claimed));
           lease.requireActive();
-          const marked = await this.inbox.markDelivered(message);
+          const marked = await this.inbox.markDelivered(claimed);
           if (marked === undefined) {
             throw new Error(`Inbox message "${message.id.value}" was not marked delivered.`);
           }
           delivered += 1;
         } catch (error) {
+          await clearClaim(this.inbox, claimed);
           failures.push(Object.freeze({ message, error }));
         }
       }
@@ -118,17 +124,23 @@ export class Delivery {
         throw new InboxMessageError("Inbox message row shard does not match message shard.");
       }
 
+      let claimed: InboxMessage | undefined;
       try {
         lease.requireActive();
-        await options.onMessage(pending);
+        claimed = await this.inbox.claim(pending, lease.session());
+        if (claimed === undefined) {
+          return deliveryRun("DRAINED", 1, 0, 0, []);
+        }
+        await options.onMessage(unclaimedMessage(claimed));
         lease.requireActive();
-        const marked = await this.inbox.markDelivered(pending);
+        const marked = await this.inbox.markDelivered(claimed);
         if (marked === undefined) {
           throw new Error(`Inbox message "${pending.id.value}" was not marked delivered.`);
         }
 
         return deliveryRun("DRAINED", 1, 1, 0, []);
       } catch (error) {
+        await clearClaim(this.inbox, claimed);
         const failures = [Object.freeze({ message: pending, error })];
 
         return deliveryRun("DRAINED", 1, 0, 1, failures);
@@ -198,6 +210,7 @@ export interface DeliveryFailure {
 interface ShardLeaseKeeper {
   readonly close: () => Promise<void>;
   readonly requireActive: () => void;
+  readonly session: () => ShardSession;
 }
 
 function deliveryRun(
@@ -269,7 +282,31 @@ function keepShardLease(
         throw failed;
       }
     },
+    session() {
+      return current;
+    },
   });
+}
+
+function unclaimedMessage(message: InboxMessage): InboxMessage {
+  if (message.claim === undefined) {
+    return message;
+  }
+
+  const { claim: _claim, ...unclaimed } = message;
+  return Object.freeze(unclaimed);
+}
+
+async function clearClaim(inbox: Inbox, message: InboxMessage | undefined): Promise<void> {
+  if (message === undefined) {
+    return;
+  }
+
+  try {
+    await inbox.unclaim(message);
+  } catch {
+    // Preserve the original endpoint or marker failure reported by the drain.
+  }
 }
 
 function requireMessageShard(message: InboxMessage): ShardIndex {

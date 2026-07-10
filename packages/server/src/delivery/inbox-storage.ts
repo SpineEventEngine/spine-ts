@@ -5,6 +5,7 @@ import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
 import {
   InboxMessageError,
   type DeliveryStatus,
+  type InboxClaim,
   type InboxMessage,
   type InboxMessageId,
   type InboxReadOptions,
@@ -111,6 +112,124 @@ export class InboxStorage {
     }
   }
 
+  /** Claim one exact pending inbox message for endpoint invocation. */
+  async claim(message: InboxMessage, claim: InboxClaim): Promise<InboxMessage | undefined> {
+    const snapshot = InboxRecords.read(InboxRecords.write(message));
+    const nextClaim = this.#claimSnapshot(claim);
+    const nextSnapshot = InboxRecords.read(
+      InboxRecords.write({
+        ...snapshot,
+        claim: nextClaim,
+      }),
+    );
+    const inboxStorage = this.#inboxStorage();
+
+    try {
+      return await this.#claimMessage(inboxStorage, snapshot, nextSnapshot);
+    } finally {
+      inboxStorage.close();
+    }
+  }
+
+  /** Clear one exact pending inbox message claim. */
+  async unclaim(message: InboxMessage): Promise<InboxMessage | undefined> {
+    const snapshot = InboxRecords.read(InboxRecords.write(message));
+    const inboxStorage = this.#inboxStorage();
+
+    try {
+      return await this.#unclaimMessage(inboxStorage, snapshot);
+    } finally {
+      inboxStorage.close();
+    }
+  }
+
+  async #claimMessage(
+    inboxStorage: RecordStorage<string, Any>,
+    message: InboxMessage,
+    claimedMessage: InboxMessage,
+  ): Promise<InboxMessage | undefined> {
+    const key = this.#messageKey(message.id);
+
+    for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
+      const currentRecord = await this.#durableRead("Inbox record", () => inboxStorage.read(key));
+      if (currentRecord === undefined) {
+        return undefined;
+      }
+
+      const current = InboxRecords.read(currentRecord, key);
+      if (current.status !== "TO_DELIVER") {
+        return undefined;
+      }
+      if (!this.#sameMessageExceptClaim(current, message)) {
+        return undefined;
+      }
+      if (
+        current.claim !== undefined &&
+        !this.#sameClaim(current.claim, claimedMessage.claim) &&
+        this.#claimIsLive(current.claim)
+      ) {
+        return undefined;
+      }
+
+      const nextClaim = claimedMessage.claim;
+      if (nextClaim === undefined) {
+        return undefined;
+      }
+      const claimed = Object.freeze({
+        ...current,
+        claim: nextClaim,
+      });
+      const nextRecord = InboxRecords.write(claimed);
+      const updated = await this.#durableCompareAndSet(
+        "Inbox record",
+        inboxStorage,
+        key,
+        currentRecord,
+        nextRecord,
+      );
+      if (updated) {
+        return InboxRecords.read(nextRecord, key);
+      }
+    }
+
+    throw casRetriesExhausted("Inbox claim");
+  }
+
+  async #unclaimMessage(
+    inboxStorage: RecordStorage<string, Any>,
+    message: InboxMessage,
+  ): Promise<InboxMessage | undefined> {
+    const key = this.#messageKey(message.id);
+    const expectedRecord = InboxRecords.write(message);
+
+    for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
+      const currentRecord = await this.#durableRead("Inbox record", () => inboxStorage.read(key));
+      if (currentRecord === undefined) {
+        return undefined;
+      }
+
+      const current = InboxRecords.read(currentRecord, key);
+      if (current.status !== "TO_DELIVER" || !this.#sameRecord(currentRecord, expectedRecord)) {
+        return undefined;
+      }
+
+      const unclaimed = this.#withoutClaim(current);
+      const nextRecord = InboxRecords.write(unclaimed);
+      const updated = await this.#durableCompareAndSet(
+        "Inbox record",
+        inboxStorage,
+        key,
+        currentRecord,
+        nextRecord,
+      );
+      if (updated) {
+        return InboxRecords.read(nextRecord, key);
+      }
+    }
+
+    throw casRetriesExhausted("Inbox claim release");
+  }
+
   async #markDeliveredWithDedup(
     inboxStorage: RecordStorage<string, Any>,
     dedupStorage: RecordStorage<string, Any>,
@@ -140,7 +259,7 @@ export class InboxStorage {
       }
 
       const delivered = Object.freeze({
-        ...current,
+        ...this.#withoutClaim(current),
         status: "DELIVERED" as const,
       });
       await this.#syncDeliveredDedupGuard(dedupStorage, current, delivered);
@@ -585,6 +704,51 @@ export class InboxStorage {
       }),
       InboxRecords.write(right),
     );
+  }
+
+  #sameMessageExceptClaim(left: InboxMessage, right: InboxMessage): boolean {
+    return this.#sameRecord(
+      InboxRecords.write(this.#withClaim(left, right.claim)),
+      InboxRecords.write(right),
+    );
+  }
+
+  #withClaim(message: InboxMessage, claim: InboxClaim | undefined): InboxMessage {
+    const unclaimed = this.#withoutClaim(message);
+    return claim === undefined ? unclaimed : Object.freeze({ ...unclaimed, claim });
+  }
+
+  #withoutClaim(message: InboxMessage): InboxMessage {
+    const { claim: _claim, ...unclaimed } = message;
+    return Object.freeze(unclaimed);
+  }
+
+  #sameClaim(left: InboxClaim | undefined, right: InboxClaim | undefined): boolean {
+    return (
+      left?.id === right?.id &&
+      left?.node === right?.node &&
+      left?.expiresAt.getTime() === right?.expiresAt.getTime()
+    );
+  }
+
+  #claimIsLive(claim: InboxClaim): boolean {
+    return claim.expiresAt.getTime() > this.#dedupNow();
+  }
+
+  #claimSnapshot(claim: InboxClaim): InboxClaim {
+    const record = InboxRecords.write({
+      id: { value: "claim-snapshot", shard: ShardIndex.single() },
+      inboxId: { targetId: "claim-snapshot", targetTypeUrl: "type.spine-ts.dev/ClaimSnapshot" },
+      signalId: "claim-snapshot",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard: ShardIndex.single(),
+      whenReceived: new Date(0),
+      version: 0n,
+      claim,
+    });
+
+    return InboxRecords.read(record).claim as InboxClaim;
   }
 
   async #durableRead<T>(label: string, read: () => Promise<T>): Promise<T> {
