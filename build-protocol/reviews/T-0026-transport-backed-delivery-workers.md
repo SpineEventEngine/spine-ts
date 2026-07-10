@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 68 fix verified; re-review pending
+Status: Round 69 findings recorded; fix pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status                             |
-| -------------------------- | -------- | ---------------------------------- |
-| Code style/maintainability | TBD      | Needs fresh current-HEAD re-review |
-| Documentation              | TBD      | Needs fresh current-HEAD re-review |
-| TypeScript/API docs        | TBD      | Needs fresh current-HEAD re-review |
-| Security                   | TBD      | Needs fresh current-HEAD re-review |
-| Performance/reliability    | TBD      | Needs fresh current-HEAD re-review |
+| Lane                       | Reviewer           | Status           |
+| -------------------------- | ------------------ | ---------------- |
+| Code style/maintainability | Pascal the 2nd     | Findings pending |
+| Documentation              | Arendt the 2nd     | Findings pending |
+| TypeScript/API docs        | Dewey the 3rd      | Clean            |
+| Security                   | Heisenberg the 3rd | Clean            |
+| Performance/reliability    | Hilbert the 3rd    | Clean            |
 
 ## Review Criteria
 
@@ -2425,3 +2425,44 @@ red/green delivery regressions before the next review pass.
   the rerun `format:check` passed, `git diff --check` passed, and final
   focused Vitest/typecheck reruns on the formatted code passed.
 - Action: rerun all five reviewer lanes from the verified current HEAD.
+
+### Round 69 Re-review - `2026-07-10T21:12:51Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..6704af8b.diff` from task baseline
+  `ca8fb2b3` to current HEAD `6704af8b`.
+- Code style/maintainability (Pascal the 2nd): [P1]
+  `packages/server/src/delivery/delivery.ts` fails `pnpm lint` because private
+  method `resetResumedCursorToHead()` exceeds the semantic-name limit. Rename
+  the method and its call sites to a shorter head-reset transition name, and
+  update the Round 68 durable records that mention the rejected name.
+- Documentation (Arendt the 2nd): [P2] durable chronology still goes backward
+  around Rounds 54-56. Round 54/55 entries use local-looking times with `Z`,
+  then Round 56 is correctly anchored to `2026-07-10T19:42:56Z`. Normalize the
+  Round 54/55 records against commit-backed UTC or explicitly label local time
+  so the work and review logs stay monotonic.
+- Documentation (Arendt the 2nd): [P3] `docs/api/README.md` and
+  `packages/server/README.md` say the endpoint callback limit and scan budget
+  are finite but do not name the binding formula. Update those public summaries
+  to say the callback limit caps endpoint callbacks actually invoked and the
+  storage read cap plus `limit` bounds scanning.
+- TypeScript/API docs (Dewey the 3rd): clean. `DeliveryEndpointMessage`
+  remains exported with supported callback labels only, raw delivery callbacks
+  stay out of the root barrel, replay target types narrow labels/status, local
+  callback options use `onHandoff`/`onReplay`, public docs distinguish durable
+  labels from callback labels, no generated output appears in the diff,
+  `typecheck:build:generated`, `docs:check`, focused API/context tests, and
+  `git diff --check ca8fb2b3..HEAD` passed.
+- Security (Heisenberg the 3rd): clean. Focused delivery worker and context
+  handoff tests passed; fail-closed validation, tenant/target checks,
+  unsupported-label skipping, legacy-label rejection, snapshot copying,
+  CAS/lease ownership, and public exposure remain acceptable. Event replay
+  tenant fallback is pre-existing baseline behavior, not a T-0026 diff finding.
+- Performance/reliability (Hilbert the 3rd): clean. The keyset/indexed
+  continuation adjudication is acceptable for T-0026's stated contract; drains
+  remain bounded by the logical scan budget, callback-count semantics are
+  preserved, unsupported `CATCH_UP` rows are skipped before accounting, and
+  storage-index design remains future work. Focused delivery/inbox/shard tests
+  passed.
+- Action: record the complete findings batch, dispatch one fix worker, verify,
+  commit, and rerun all five reviewer lanes from the fixed HEAD.

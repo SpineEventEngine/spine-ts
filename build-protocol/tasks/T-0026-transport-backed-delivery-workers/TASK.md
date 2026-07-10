@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 68 fix verified; re-review pending
+Status: Round 69 findings recorded; fix pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1178,3 +1178,16 @@ bound logical delivery scan rows and storage calls. Verification passed:
 focused delivery-loop Vitest, generated build typecheck, formatter check after
 formatter normalization, final focused Vitest/typecheck reruns on the formatted
 code, and `git diff --check`.
+
+Round 69 re-review on `2026-07-10T21:12:51Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..6704af8b.diff` produced clean
+TypeScript/API docs, security, and performance/reliability lanes. Code
+style/maintainability found `resetResumedCursorToHead()` violates the
+semantic-name lint rule and must be shortened with its call sites and durable
+records updated. Documentation found the Round 54/55 durable records still use
+local-looking timestamps with `Z`, causing the log to go backward before the
+Round 56 `19:42:56Z` record; it also found public/API summaries that say the
+callback limit and scan budget are finite without naming the explicit storage
+read cap plus `limit` formula. The next fix will record commit-backed
+chronology, strengthen those public summaries, shorten the private method
+name, verify, and rerun all five lanes.
