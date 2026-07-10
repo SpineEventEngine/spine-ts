@@ -35,7 +35,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
     return await coordinateLocalInboxHandoff({
       handoffs: this.#inFlightHandoffs,
       key: localInboxHandoffKey(input, deliveryTenantId),
-      handoff: () => this.#receiveAndDrain(delivery, input, deliveryTenantId),
+      onHandoff: () => this.#receiveAndDrain(delivery, input, deliveryTenantId),
     });
   }
 
@@ -135,7 +135,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
       delivery,
       received: message,
       node: this.#contextName,
-      replay: (nextMessage) => this.#replay(nextMessage, deliveryTenantId),
+      onReplay: (nextMessage) => this.#replay(nextMessage, deliveryTenantId),
       replayFailureMessage: "Process-manager inbox replay failed.",
       skippedMessage:
         "Process-manager inbox delivery was skipped before the target row was delivered.",

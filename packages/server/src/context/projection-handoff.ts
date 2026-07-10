@@ -45,7 +45,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
     return await coordinateLocalInboxHandoff({
       handoffs: this.#inFlightHandoffs,
       key: localInboxHandoffKey(input, deliveryTenantId),
-      handoff: () => this.#receiveAndDrain(delivery, input, deliveryTenantId),
+      onHandoff: () => this.#receiveAndDrain(delivery, input, deliveryTenantId),
     });
   }
 
@@ -81,7 +81,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
       delivery,
       received: written.message,
       node: this.#contextName,
-      replay: (message) => this.#replay(message, deliveryTenantId),
+      onReplay: (message) => this.#replay(message, deliveryTenantId),
       replayFailureMessage: "Projection inbox replay failed.",
       skippedMessage: "Projection inbox delivery was skipped before the target row was delivered.",
       unfinishedMessage:

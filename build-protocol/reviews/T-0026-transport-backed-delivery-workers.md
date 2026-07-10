@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 65 review findings recorded; fix pending
+Status: Round 66 fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -2352,3 +2352,20 @@ red/green delivery regressions before the next review pass.
   rows.
 - Action: record the complete findings batch, dispatch one fix worker, verify,
   commit, and rerun all five reviewer lanes.
+
+### Round 66 Fix Implementation - `2026-07-10T20:47:04Z`
+
+- Renamed injected `local-inbox-handoff.ts` callbacks to `onHandoff` and
+  `onReplay`; process-manager and projection handoff call sites now use those
+  option names. Public domain `replay()` methods are unchanged.
+- Added a red/green loop regression with a paused post-head cursor, a cleared
+  live head claim, and three supported tail rows. Before the change, the first
+  two deliveries were tail rows; after it, the cleared head row is delivered
+  immediately after the first tail row.
+- `DeliveryScanState` now resets the next cursor to the head when accepted
+  post-cursor work occurs during a resumed scan. Existing finite budgets,
+  skipped-only handling, and limit/failure accounting remain in place.
+- Verification passed: full delivery-loop suite (30 tests), process-manager
+  and projection handoff suites (23 tests), generated typecheck, and formatter
+  check. `docs:check` was not required because the renamed options are private
+  and no exports or API docs changed. `git diff --check` passed.

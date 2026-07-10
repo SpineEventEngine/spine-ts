@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 65 review findings recorded; fix pending
+Status: Round 66 fix verified; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1139,3 +1139,12 @@ later cleared. The next fix will re-anchor the Round 63/64 record timestamps,
 rename the local handoff callbacks, add a supported-tail liveness regression,
 reset the next cursor to the head after resumed accepted work, verify, and
 rerun all five lanes.
+
+Round 66 fix implementation on `2026-07-10T20:47:04Z`: local handoff callback
+options now use `onHandoff` and `onReplay`, while domain `replay()` methods
+remain unchanged. A delivery-loop regression first failed because sustained
+supported tail rows held the resumed offset past a cleared head claim. A
+resumed scan now resets its next cursor to the head after it accepts post-cursor
+work, preserving the existing scan budget and failure accounting. The focused
+regression passed green. Full delivery-loop and handoff suites, generated
+typecheck, format checks, and `git diff --check` passed.

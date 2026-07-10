@@ -6,7 +6,7 @@ const drainLimit = 8;
 export async function coordinateLocalInboxHandoff(options: {
   readonly handoffs: Map<string, Promise<InboxMessage>>;
   readonly key: string;
-  readonly handoff: () => Promise<InboxMessage>;
+  readonly onHandoff: () => Promise<InboxMessage>;
 }): Promise<InboxMessage> {
   const inFlightHandoff = options.handoffs.get(options.key);
 
@@ -14,7 +14,7 @@ export async function coordinateLocalInboxHandoff(options: {
     return await inFlightHandoff;
   }
 
-  const handoff = options.handoff();
+  const handoff = options.onHandoff();
   options.handoffs.set(options.key, handoff);
   try {
     return await handoff;
@@ -34,7 +34,7 @@ async function runLocalInboxDrain(options: LocalInboxDrainOptions): Promise<void
     delivery,
     received,
     node,
-    replay,
+    onReplay,
     replayFailureMessage,
     skippedMessage,
     unfinishedMessage,
@@ -43,7 +43,7 @@ async function runLocalInboxDrain(options: LocalInboxDrainOptions): Promise<void
   for (let attempt = 0; attempt < drainLimit; attempt += 1) {
     const run = await delivery.drainMessage(received, {
       node,
-      onMessage: replay,
+      onMessage: onReplay,
     });
     const target = await delivery.inbox.readMessage(received.id);
 
@@ -73,7 +73,7 @@ export interface LocalInboxDrainOptions {
   readonly delivery: Delivery;
   readonly received: InboxMessage;
   readonly node: string;
-  readonly replay: (message: InboxMessage) => Promise<void> | void;
+  readonly onReplay: (message: InboxMessage) => Promise<void> | void;
   readonly replayFailureMessage: string;
   readonly skippedMessage: string;
   readonly unfinishedMessage: string;

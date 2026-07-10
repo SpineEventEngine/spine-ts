@@ -159,6 +159,7 @@ export class Delivery {
       }
 
       for (const message of messages) {
+        const accepted = progress.accepted;
         if (progress.hasSeen(message)) {
           if (!scan.consumeSeenRescanAllowance()) {
             return finishExhaustedSkippedScan();
@@ -178,6 +179,7 @@ export class Delivery {
         if (remainsPending) {
           scan.advancePastPending(message);
         }
+        scan.resetAfterResumedAcceptance(progress.accepted > accepted);
         if (progress.accepted >= limit) {
           return progress.finish(scan.cursor());
         }
@@ -676,6 +678,12 @@ class DeliveryScanState {
     this.#offset = 0;
     this.#pendingBoundaryId = undefined;
     this.#resumedHeadRescan = false;
+  }
+
+  resetAfterResumedAcceptance(accepted: boolean): void {
+    if (accepted && this.#resumedHeadRescan) {
+      this.resetResumedHead();
+    }
   }
 
   consumeSeenRescanAllowance(): boolean {
