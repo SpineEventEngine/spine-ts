@@ -1,4 +1,4 @@
-import { InMemoryStorageFactory } from "@spine-ts/storage";
+import { InMemoryStorageFactory, type StorageFactory } from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
 import { deliveryAccess, type DeliveryDrainOutcome } from "../../src/delivery/delivery.js";
@@ -641,7 +641,7 @@ describe("DeliveryLoop", () => {
   });
 });
 
-function createDelivery(storageFactory = new InMemoryStorageFactory()): Delivery {
+function createDelivery(storageFactory: StorageFactory = new InMemoryStorageFactory()): Delivery {
   return new Delivery({
     context: { name: "Tasks", multitenant: false },
     storageFactory,

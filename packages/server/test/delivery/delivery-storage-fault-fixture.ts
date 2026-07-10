@@ -68,7 +68,7 @@ export function throwDedupFinalizeOnce(
 
 export function skipInboxClearOnce(): CountedDeliveryFaultProbe {
   return compareAndSetProbe(isInboxClaimClear, async (id, expected, _next, delegate) => {
-    const current = InboxRecords.read(expected.record as Any, id as string);
+    const current = readInboxRecord(expected.record, id as string);
     const changed = Object.freeze({
       ...current,
       claim: Object.freeze({
@@ -145,6 +145,10 @@ export function unpackStoredRecord(record: Any): Record<string, unknown> {
   return JSON.parse(Buffer.from(record.value).toString("utf8")) as Record<string, unknown>;
 }
 
+function readInboxRecord(record: Message, id: string): ReturnType<typeof InboxRecords.read> {
+  return InboxRecords.read(record as unknown as Any, id);
+}
+
 type MaterializedRecord<I, R extends Message> = ReturnType<RecordSpec<I, R>["materialize"]>;
 
 interface Deferred<T> {
@@ -153,7 +157,7 @@ interface Deferred<T> {
   readonly reject: (reason?: unknown) => void;
 }
 
-export interface CountedDeliveryFaultProbe {
+export interface CountedDeliveryFaultProbe extends DeliveryStorageFaultProbe {
   readonly count: number;
 }
 
@@ -395,8 +399,8 @@ function isInboxClaimClear(
     return false;
   }
 
-  const current = InboxRecords.read(expected.record as Any, id);
-  const unclaimed = InboxRecords.read(next.record as Any, id);
+  const current = readInboxRecord(expected.record, id);
+  const unclaimed = readInboxRecord(next.record, id);
 
   return (
     current.status === "TO_DELIVER" &&
@@ -421,8 +425,8 @@ function isInboxClaimCreation(
     return false;
   }
 
-  const current = InboxRecords.read(expected.record as Any, id);
-  const claimed = InboxRecords.read(next.record as Any, id);
+  const current = readInboxRecord(expected.record, id);
+  const claimed = readInboxRecord(next.record, id);
 
   return (
     current.status === "TO_DELIVER" &&
@@ -447,8 +451,8 @@ function isInboxClaimRenewal(
     return false;
   }
 
-  const current = InboxRecords.read(expected.record as Any, id);
-  const renewed = InboxRecords.read(next.record as Any, id);
+  const current = readInboxRecord(expected.record, id);
+  const renewed = readInboxRecord(next.record, id);
 
   return (
     current.status === "TO_DELIVER" &&
@@ -486,8 +490,8 @@ function isInboxRepair<I, R extends Message>(
     return false;
   }
 
-  const current = InboxRecords.read(expected.record as Any, id);
-  const repaired = InboxRecords.read(next.record as Any, id);
+  const current = readInboxRecord(expected.record, id);
+  const repaired = readInboxRecord(next.record, id);
 
   return (
     current.status === "TO_DELIVER" &&

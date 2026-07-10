@@ -562,6 +562,32 @@ commit `a66ab6b5` (`Fix delivery lint gate`), and the Round 32 fix report table
 is Prettier-formatted. Verification passed: `format:check`, `git diff --check`,
 and `lint:generated`. A fresh five-lane re-review is still required.
 
+Round 34 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..8cd57172.diff` produced clean
+TypeScript/API, security, and performance/reliability lanes. Documentation
+found the Round 33 trace still needs commit `8cd57172` (`Record Round 32 fix
+evidence`) and current-status cleanup. Style found `typecheck:tooling` fails on
+delivery test/fixture typing: probe helper return annotations erase internal
+probe capability, generic `Message` to `Any` casts are unsafe, and
+`delivery-loop.test.ts` helper inference is too narrow for a general
+`StorageFactory`. The next fix will address those findings before another
+re-review.
+
+Round 34 fix implementation on `2026-07-10`: tooling typecheck failures were
+fixed without runtime behavior changes. The delivery-loop test helper now
+accepts the `StorageFactory` abstraction passed by the fault fixture, scenario
+probe helpers retain their internal fault-probe capability while preserving
+their public count/block/arm controls, and storage-fixture inbox-record reads
+use one explicit `unknown` bridge at the known `Any` record boundary. Round 33
+durable trace records now name commit `8cd57172` (`Record Round 32 fix
+evidence`), and the current review status/table records Round 34 fixed pending
+re-review rather than pending Round 33 findings. Required verification passed:
+`typecheck:tooling`, `lint:generated`, focused delivery/storage Vitest with 7
+files and 248 tests, `docs:check`, `format:check`, and `git diff --check`.
+Worker and coordinator verification both passed. `docs:check` retained only the
+existing invalid-origin TypeDoc source-link warning. A fresh five-lane
+re-review is still required.
+
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker
 will add red/green regressions before changing delivery code, preserve direct
