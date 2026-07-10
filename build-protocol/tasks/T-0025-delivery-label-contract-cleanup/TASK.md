@@ -1,6 +1,6 @@
 # T-0025: Delivery Label Contract Cleanup
 
-Status: implemented; review pending
+Status: integrated into main; post-merge verification passed
 Started: `2026-07-10T03:08:00Z`
 Baseline commit: `1a9804c0`
 Branch: `task/T-0025-delivery-label-contract-cleanup`
