@@ -321,16 +321,13 @@ function normalizeValue(value: unknown): NormalizedValue {
 
   return Object.keys(value)
     .sort()
-    .reduce<NormalizedObject>(
-      (result, key) => {
-        Object.defineProperty(result, key, {
-          value: normalizeValue(Reflect.get(value, key)),
-          enumerable: true,
-        });
-        return result;
-      },
-      Object.create(null) as NormalizedObject,
-    );
+    .reduce<NormalizedObject>((result, key) => {
+      Object.defineProperty(result, key, {
+        value: normalizeValue(Reflect.get(value, key)),
+        enumerable: true,
+      });
+      return result;
+    }, emptyNormalizedObject());
 }
 
 function encodeNormalizedValue(value: NormalizedValue): string {
@@ -346,11 +343,20 @@ function toEncodedValue(value: NormalizedValue): EncodedValue {
     case "null":
       return ["null"];
     case "boolean":
-      return ["boolean", value as boolean];
+      if (typeof value !== "boolean") {
+        throw new Error("Normalized boolean value has an unexpected type.");
+      }
+      return ["boolean", value];
     case "number":
-      return ["number", String(value as number)];
+      if (typeof value !== "number") {
+        throw new Error("Normalized number value has an unexpected type.");
+      }
+      return ["number", String(value)];
     case "string":
-      return ["string", value as string];
+      if (typeof value !== "string") {
+        throw new Error("Normalized string value has an unexpected type.");
+      }
+      return ["string", value];
     case "bigint":
       return ["bigint", taggedPayload(value as NormalizedBigInt)];
     case "bytes":
@@ -418,13 +424,17 @@ function taggedNormalizedValue<K extends TaggedValueKind, P>(
 }
 
 function normalizedTag(value: object): TaggedValueKind | undefined {
-  const tag = Reflect.get(value, normalizedKind);
+  const tag = (value as Partial<NormalizedTaggedValue<TaggedValueKind, unknown>>)[normalizedKind];
 
   return tag === "bigint" || tag === "bytes" ? tag : undefined;
 }
 
+function emptyNormalizedObject(): NormalizedObject {
+  return Object.create(null) as NormalizedObject;
+}
+
 function taggedPayload<P>(value: NormalizedTaggedValue<TaggedValueKind, P>): P {
-  return Reflect.get(value, normalizedPayload) as P;
+  return value[normalizedPayload];
 }
 
 type NormalizedValue =

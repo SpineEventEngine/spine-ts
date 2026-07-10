@@ -93,7 +93,7 @@ function requireShards(shards: readonly ShardIndex[]): readonly ShardIndex[] {
     throw new Error("DeliveryWorker shards must be a non-empty array.");
   }
 
-  return Object.freeze([...shards]);
+  return Object.freeze(Array.from<ShardIndex>(shards));
 }
 
 function workerRun(loops: readonly DeliveryLoopRun[]): DeliveryWorkerRun {

@@ -819,8 +819,7 @@ export class InboxStorage {
   }
 
   #withoutClaim(message: InboxRecordMessage): InboxMessage {
-    const { claim: _claim, ...unclaimed } = message;
-    return Object.freeze(unclaimed);
+    return publicMessage(message);
   }
 
   async #durableRead<T>(label: string, read: () => Promise<T>): Promise<T> {
@@ -1019,9 +1018,6 @@ function requireClaimed(message: InboxRecordMessage): ClaimedInboxMessage {
 }
 
 function requirePublicMessage(message: InboxMessage): InboxMessage {
-  if (typeof message !== "object" || message === null) {
-    return message;
-  }
   if (Reflect.has(message, "claim")) {
     throw new InboxMessageError("Inbox message claim is internal.");
   }
@@ -1104,8 +1100,21 @@ function publicMessage(message: InboxRecordMessage): InboxMessage {
     return message;
   }
 
-  const { claim: _claim, ...unclaimed } = message;
-  return Object.freeze(unclaimed);
+  return Object.freeze({
+    id: Object.freeze({
+      value: message.id.value,
+      shard: message.id.shard,
+    }),
+    inboxId: Object.freeze({ ...message.inboxId }),
+    label: message.label,
+    status: message.status,
+    signalId: message.signalId,
+    shard: message.shard,
+    whenReceived: message.whenReceived,
+    version: message.version,
+    ...(message.signal === undefined ? {} : { signal: message.signal }),
+    ...(message.keepUntil === undefined ? {} : { keepUntil: message.keepUntil }),
+  });
 }
 
 function dedupStorageContext(context: StorageContext): StorageContext {

@@ -9,7 +9,6 @@ import {
   ShardIndex,
   type InboxId,
   type InboxMessage,
-  type DeliveryRun,
 } from "../../src/index.js";
 import { inboxStorageAccess } from "../../src/delivery/inbox-storage.js";
 import { deliveryStorageFaults } from "./delivery-storage-fault-fixture.js";
@@ -357,7 +356,7 @@ describe("DeliveryLoop", () => {
     expect(seen).toEqual(["signal-now-supported"]);
   });
 
-  it("rejects loop-private drain access for non-owned delivery instances", async () => {
+  it("rejects loop-private drain access for non-owned delivery instances", () => {
     const fake = {
       drain() {
         throw new Error("public drain should not run");

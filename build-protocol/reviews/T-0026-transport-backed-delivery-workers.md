@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 31 fixes verified; re-review pending
+Status: Round 32 fixes verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer   | Status   |
-| -------------------------- | ---------- | -------- |
-| Code style/maintainability | Aquinas    | Clean    |
-| Documentation              | Rawls      | Findings |
-| TypeScript/API docs        | McClintock | Clean    |
-| Security                   | Parfit     | Clean    |
-| Performance/reliability    | Galileo    | Findings |
+| Lane                       | Reviewer  | Status   |
+| -------------------------- | --------- | -------- |
+| Code style/maintainability | Leibniz   | Findings |
+| Documentation              | Franklin  | Findings |
+| TypeScript/API docs        | Dalton    | Clean    |
+| Security                   | Ramanujan | Clean    |
+| Performance/reliability    | Darwin    | Clean    |
 
 ## Review Criteria
 
@@ -327,6 +327,51 @@ head row before going idle after a later success"` failed before production
 - Coordinator verification at `2026-07-10T13:47:56Z` passed the focused Round
   31 pair with 1 file and 2 tests, the required focused delivery/API Vitest
   batch with 6 files and 232 tests, `typecheck:build:generated`, `docs:check`,
+  `format:check`, and `git diff --check`. `docs:check` retained only the
+  existing invalid `origin` source-link warning.
+- Fix commit: `a06e3749` (`Fix delivery resume cursor rescan`).
+
+### Round 32 Follow-up - `2026-07-10T13:54:16Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..a06e3749.diff` from task baseline
+  `ca8fb2b3` to current HEAD `a06e3749`.
+- TypeScript/API docs (Dalton): clean.
+- Security (Ramanujan): clean.
+- Performance/reliability (Darwin): clean.
+- Code style/maintainability (Leibniz): [P1] the branch fails the repository
+  lint gate. `pnpm --config.verify-deps-before-run=false lint:generated`
+  reaches ESLint and reports 35 errors on changed T-0026 files, including
+  unsafe returns/spreads in delivery worker/status code, throwing `unknown`,
+  unused imports in delivery tests/fixtures, and unsafe assignments in memory
+  storage. Fix the lint gate before calling the round clean.
+- Documentation (Franklin): [P2] Round 31 is not tied to fix commit
+  `a06e3749` (`Fix delivery resume cursor rescan`) in the durable task, work,
+  review, and Round 31 report records. Add the same fix-commit breadcrumb used
+  by earlier rounds.
+- Action: reproduce lint output locally, dispatch one fix worker for the
+  complete Round 32 batch, rerun lint plus focused verification, and repeat
+  five-lane re-review.
+
+### Round 32 Fix Implementation - `2026-07-10`
+
+- Reproduced `pnpm --config.verify-deps-before-run=false lint:generated`
+  locally before code edits; it failed with the same 35 ESLint errors reported
+  by the coordinator.
+- Applied lint-safe cleanup only: removed unused imports/type parameters,
+  replaced unnecessary assertions, made claim-stripping helpers build explicit
+  claim-free snapshots, normalized non-`Error` lease renewal failures before
+  throwing, and tightened memory-storage normalized-value typing.
+- Confirmed the Round 31 task, work, review, and Round 31 report records
+  already name fix commit `a06e3749` (`Fix delivery resume cursor rescan`) in
+  the current Round 32 intake diff.
+- Fix-worker verification passed: `lint:generated`; focused delivery/storage
+  Vitest batch with 7 files and 248 tests; `typecheck:build:generated`;
+  `docs:check`; `format:check`; and `git diff --check`. `docs:check` reported
+  only the existing invalid `origin` source-link warning.
+- Coordinator verification at `2026-07-10T14:08:41Z` passed
+  `lint:generated`, the same focused delivery/storage Vitest batch with 7
+  files and 248 tests, `typecheck:build:generated`, `docs:check`,
   `format:check`, and `git diff --check`. `docs:check` retained only the
   existing invalid `origin` source-link warning.
 

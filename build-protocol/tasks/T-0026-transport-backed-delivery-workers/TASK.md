@@ -525,6 +525,30 @@ guard with the focused Round 31 pair, the required focused delivery/API batch,
 typecheck, docs, format, and diff checks. A fresh five-lane re-review is still
 required.
 
+Round 32 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..a06e3749.diff` produced clean
+TypeScript/API, security, and performance/reliability lanes. Style found the
+branch fails `pnpm --config.verify-deps-before-run=false lint:generated` with
+ESLint errors on changed T-0026 files, so the branch cannot pass the repository
+lint/verify gate. Documentation found Round 31 verification records are
+missing the fix-commit breadcrumb for `a06e3749` (`Fix delivery resume cursor
+rescan`). The next fix batch will reproduce and fix lint plus the durable
+commit trace before another re-review.
+
+Round 32 fix implementation on `2026-07-10`: lint-safe cleanup resolved the 35
+reported ESLint errors without intended behavior changes. The cleanup removed
+unused imports and redundant assertions, made claim-free message snapshots
+explicit instead of destructuring away internal claims, normalized non-`Error`
+lease renewal failures before throwing, and tightened normalized storage value
+typing. The Round 31 commit breadcrumb for `a06e3749` was already present in
+the current intake diff across the task, work, review, and Round 31 report
+records. Required verification passed: `lint:generated`; focused
+delivery/storage Vitest with 7 files and 248 tests;
+`typecheck:build:generated`; `docs:check`; `format:check`; and
+`git diff --check` in worker and coordinator verification. `docs:check`
+retained only the existing invalid-origin TypeDoc source-link warning. A fresh
+five-lane re-review is still required.
+
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker
 will add red/green regressions before changing delivery code, preserve direct

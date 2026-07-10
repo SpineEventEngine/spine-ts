@@ -2291,30 +2291,28 @@ function withClaim(message: ReturnType<typeof createMessage>): ReturnType<typeof
       node: "node-a",
       expiresAt: new Date("2026-07-08T09:01:00.000Z"),
     },
-  }) as unknown as ReturnType<typeof createMessage>;
+  });
 }
 
 function inheritedClaimMessage(
   message: ReturnType<typeof createMessage>,
 ): ReturnType<typeof createMessage> {
-  return Object.freeze(
-    Object.assign(
-      Object.create({
-        claim: {
-          id: "inherited-external-claim",
-          node: "node-a",
-          expiresAt: new Date("2026-07-08T09:01:00.000Z"),
-        },
-      }),
-      message,
-    ),
-  ) as ReturnType<typeof createMessage>;
+  const clone: ReturnType<typeof createMessage> = { ...message };
+  Object.setPrototypeOf(clone, {
+    claim: {
+      id: "inherited-external-claim",
+      node: "node-a",
+      expiresAt: new Date("2026-07-08T09:01:00.000Z"),
+    },
+  });
+
+  return Object.freeze(clone);
 }
 
 function claimHidingProxy(
   message: ReturnType<typeof createMessage>,
 ): ReturnType<typeof createMessage> {
-  return new Proxy(message, {
+  const handler: ProxyHandler<ReturnType<typeof createMessage>> = {
     get(target, property, receiver) {
       if (property === "claim") {
         return {
@@ -2324,7 +2322,7 @@ function claimHidingProxy(
         };
       }
 
-      return Reflect.get(target, property, receiver);
+      return Reflect.get(target, property, receiver) as unknown;
     },
     has(target, property) {
       return property === "claim" ? false : Reflect.has(target, property);
@@ -2335,7 +2333,9 @@ function claimHidingProxy(
     getOwnPropertyDescriptor(target, property) {
       return property === "claim" ? undefined : Reflect.getOwnPropertyDescriptor(target, property);
     },
-  }) as ReturnType<typeof createMessage>;
+  };
+
+  return new Proxy(message, handler);
 }
 
 function legacyImportRecord(): Any {

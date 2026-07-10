@@ -1,15 +1,9 @@
-import { create, type Message } from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { InMemoryStorageFactory } from "@spine-ts/storage";
-import { StorageFactory } from "@spine-ts/storage";
 import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
-import {
-  DedupRecords,
-  dedupRecordSpec,
-  InboxRecords,
-  inboxRecordSpec,
-} from "../../src/delivery/inbox-records.js";
+import { DedupRecords, dedupRecordSpec, InboxRecords } from "../../src/delivery/inbox-records.js";
 import { inboxStorageAccess } from "../../src/delivery/inbox-storage.js";
 import {
   Delivery,
@@ -20,7 +14,6 @@ import {
   ShardIndex,
   ShardSession,
   type DeliveryMessageDrainOptions,
-  type InboxId,
   type InboxMessage,
 } from "../../src/index.js";
 import {
@@ -518,7 +511,9 @@ describe("Delivery worker", () => {
     const unavailable: InboxMessage[] = [];
 
     for (let index = 0; index < 1_000; index += 1) {
-      unavailable.push(await seed(delivery, `signal-unavailable-${index}`, BigInt(index + 1)));
+      unavailable.push(
+        await seed(delivery, `signal-unavailable-${String(index)}`, BigInt(index + 1)),
+      );
     }
     await seed(delivery, "signal-available-tail", 1_001n);
 
@@ -1106,7 +1101,9 @@ describe("Delivery worker", () => {
     const unavailable: InboxMessage[] = [];
 
     for (let index = 0; index < 1_000; index += 1) {
-      unavailable.push(await seed(delivery, `signal-bounded-skip-${index}`, BigInt(index + 1)));
+      unavailable.push(
+        await seed(delivery, `signal-bounded-skip-${String(index)}`, BigInt(index + 1)),
+      );
     }
     await seed(delivery, "signal-bounded-tail", 1_001n);
 
@@ -2111,5 +2108,5 @@ function withClaim(message: InboxMessage): InboxMessage {
       node: "node-a",
       expiresAt: new Date("2026-07-08T09:01:00.000Z"),
     },
-  }) as unknown as InboxMessage;
+  });
 }

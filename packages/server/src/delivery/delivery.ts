@@ -236,7 +236,7 @@ export class Delivery {
         return deliveryRun("DRAINED", 0, 0, 0, 0, []);
       }
 
-      return this.#drainExactMessage(scope.inbox, pending, options.onMessage, lease, active);
+      return await this.#drainExactMessage(scope.inbox, pending, options.onMessage, lease, active);
     } finally {
       await lease.close();
       await scope.shards.release(session);
@@ -739,7 +739,7 @@ function keepShardLease(
     },
     requireActive() {
       if (failed !== undefined) {
-        throw failed;
+        throw leaseError(failed);
       }
       if (current.expiresAt.getTime() <= nowMs()) {
         failed = new Error("Shard lease expired.");
@@ -837,7 +837,7 @@ class ActiveClaim {
 }
 
 function endpointMessage(message: ClaimedInboxMessage): DeliveryEndpointMessage {
-  const { claim: _claim, ...unclaimed } = message;
+  const unclaimed = claimFreeMessage(message);
   const label = requireEndpointLabel(unclaimed.label);
   return Object.freeze({
     ...unclaimed,
@@ -851,7 +851,7 @@ function endpointMessage(message: ClaimedInboxMessage): DeliveryEndpointMessage 
     whenReceived: new Date(unclaimed.whenReceived),
     shard: unclaimed.shard,
     ...(unclaimed.keepUntil === undefined ? {} : { keepUntil: new Date(unclaimed.keepUntil) }),
-  }) as DeliveryEndpointMessage;
+  });
 }
 
 function copySignal(signal: Any): Any {
@@ -924,13 +924,37 @@ function requireEndpointMessage(message: InboxMessage): DeliveryEndpointMessage 
   return Object.freeze({
     ...message,
     label,
-  }) as DeliveryEndpointMessage;
+  });
 }
 
 function isEndpointLabel(label: InboxMessage["label"]): label is DeliveryEndpointLabel {
   return (
     label === "HANDLE_COMMAND" || label === "UPDATE_SUBSCRIBER" || label === "REACT_UPON_EVENT"
   );
+}
+
+function leaseError(error: unknown): Error {
+  return error instanceof Error
+    ? error
+    : new Error("Shard lease renewal failed.", { cause: error });
+}
+
+function claimFreeMessage(message: ClaimedInboxMessage): InboxMessage {
+  return Object.freeze({
+    id: Object.freeze({
+      value: message.id.value,
+      shard: message.id.shard,
+    }),
+    inboxId: Object.freeze({ ...message.inboxId }),
+    label: message.label,
+    status: message.status,
+    signalId: message.signalId,
+    shard: message.shard,
+    whenReceived: message.whenReceived,
+    version: message.version,
+    ...(message.signal === undefined ? {} : { signal: copySignal(message.signal) }),
+    ...(message.keepUntil === undefined ? {} : { keepUntil: message.keepUntil }),
+  });
 }
 
 async function clearActiveClaim(

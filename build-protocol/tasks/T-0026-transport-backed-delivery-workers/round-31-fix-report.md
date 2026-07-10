@@ -19,8 +19,8 @@ Evidence gathered before edits:
 
 Selected skills applied for this round:
 
-| Skill                            | Round 31 use                                                                 |
-| -------------------------------- | ---------------------------------------------------------------------------- |
+| Skill                            | Round 31 use                                                                  |
+| -------------------------------- | ----------------------------------------------------------------------------- |
 | `test-driven-development`        | Confirmed the resume-cursor starvation regression failed before runtime code. |
 | `implement`                      | Applied the narrow delivery-loop reliability and durable-log trace fixes.     |
 | `verification-before-completion` | Recorded fresh required verification before reporting status.                 |
@@ -106,3 +106,4 @@ Address every finding in the Round 31 batch:
   - `docs:check`, with only the existing invalid `origin` warning;
   - `format:check`;
   - `git diff --check`.
+- Fix commit: `a06e3749` (`Fix delivery resume cursor rescan`).

@@ -10,7 +10,6 @@ import {
 } from "@spine-ts/storage";
 
 import {
-  DedupRecords,
   dedupRecordSpec,
   InboxRecords,
   inboxRecordSpec,
@@ -100,7 +99,7 @@ export function onInboxReadOnce(onRead: () => void): DeliveryStorageFaultProbe {
   let used = false;
 
   return Object.freeze({
-    read<I>(context: StorageContext, _id: I) {
+    read(context: StorageContext) {
       if (used || !context.name.endsWith(".delivery.inbox")) {
         return;
       }
@@ -189,7 +188,7 @@ interface DeliveryStorageFaultProbe {
     next: MaterializedRecord<I, R> | undefined,
     delegate: RecordStorage<I, R>,
   ): Promise<boolean | undefined>;
-  read?<I>(context: StorageContext, id: I): void;
+  read?(context: StorageContext, id: unknown): void;
 }
 
 type CompareAndSetMatcher = <I, R extends Message>(
@@ -356,7 +355,6 @@ function blockingCompareAndSetProbe(
       id: I,
       expected: MaterializedRecord<I, R> | undefined,
       next: MaterializedRecord<I, R> | undefined,
-      _delegate: RecordStorage<I, R>,
     ): Promise<boolean | undefined> {
       if (!armed || !matches(context, id, expected, next)) {
         return undefined;
@@ -382,11 +380,11 @@ function throwingCompareAndSetProbe(
   return compareAndSetProbe(matches, () => Promise.reject(error), initiallyArmed);
 }
 
-function isInboxClaimClear<I, R extends Message>(
+function isInboxClaimClear(
   context: StorageContext,
-  id: I,
-  expected: MaterializedRecord<I, R> | undefined,
-  next: MaterializedRecord<I, R> | undefined,
+  id: unknown,
+  expected: MaterializedRecord<unknown, Message> | undefined,
+  next: MaterializedRecord<unknown, Message> | undefined,
 ): boolean {
   if (
     !context.name.endsWith(".delivery.inbox") ||
@@ -408,11 +406,11 @@ function isInboxClaimClear<I, R extends Message>(
   );
 }
 
-function isInboxClaimCreation<I, R extends Message>(
+function isInboxClaimCreation(
   context: StorageContext,
-  id: I,
-  expected: MaterializedRecord<I, R> | undefined,
-  next: MaterializedRecord<I, R> | undefined,
+  id: unknown,
+  expected: MaterializedRecord<unknown, Message> | undefined,
+  next: MaterializedRecord<unknown, Message> | undefined,
 ): boolean {
   if (
     !context.name.endsWith(".delivery.inbox") ||
@@ -434,11 +432,11 @@ function isInboxClaimCreation<I, R extends Message>(
   );
 }
 
-function isInboxClaimRenewal<I, R extends Message>(
+function isInboxClaimRenewal(
   context: StorageContext,
-  id: I,
-  expected: MaterializedRecord<I, R> | undefined,
-  next: MaterializedRecord<I, R> | undefined,
+  id: unknown,
+  expected: MaterializedRecord<unknown, Message> | undefined,
+  next: MaterializedRecord<unknown, Message> | undefined,
 ): boolean {
   if (
     !context.name.endsWith(".delivery.inbox") ||
@@ -456,18 +454,17 @@ function isInboxClaimRenewal<I, R extends Message>(
     current.status === "TO_DELIVER" &&
     renewed.status === "TO_DELIVER" &&
     current.claim !== undefined &&
-    renewed.claim !== undefined &&
-    current.claim.id === renewed.claim.id &&
+    current.claim.id === renewed.claim?.id &&
     current.claim.node === renewed.claim.node &&
     current.claim.expiresAt.getTime() !== renewed.claim.expiresAt.getTime()
   );
 }
 
-function isDedupFinalize<I, R extends Message>(
+function isDedupFinalize(
   context: StorageContext,
-  _id: I,
-  expected: MaterializedRecord<I, R> | undefined,
-  next: MaterializedRecord<I, R> | undefined,
+  _id: unknown,
+  expected: MaterializedRecord<unknown, Message> | undefined,
+  next: MaterializedRecord<unknown, Message> | undefined,
 ): boolean {
   return (
     context.name.endsWith(".delivery.inbox-dedup") && expected !== undefined && next !== undefined
