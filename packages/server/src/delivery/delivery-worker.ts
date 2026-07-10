@@ -33,11 +33,9 @@ export class DeliveryWorker {
       throw new Error("DeliveryWorker is already running.");
     }
 
-    const running = Promise.all(this.#loops.map((loop) => loop.run()))
-      .then((loops) => workerRun(loops))
-      .finally(() => {
-        this.#running = undefined;
-      });
+    const running = settleWorkerRun(this.#loops.map((loop) => loop.run())).finally(() => {
+      this.#running = undefined;
+    });
     this.#running = running;
     return running;
   }
@@ -93,6 +91,31 @@ function workerRun(loops: readonly DeliveryLoopRun[]): DeliveryWorkerRun {
     status: workerStatus(loops),
     loops: Object.freeze([...loops]),
   });
+}
+
+async function settleWorkerRun(
+  loopRuns: readonly Promise<DeliveryLoopRun>[],
+): Promise<DeliveryWorkerRun> {
+  const settled = await Promise.allSettled(loopRuns);
+  const loops: DeliveryLoopRun[] = [];
+  const failures: unknown[] = [];
+
+  for (const result of settled) {
+    if (result.status === "fulfilled") {
+      loops.push(result.value);
+    } else {
+      failures.push(result.reason);
+    }
+  }
+
+  if (failures.length === 1) {
+    throw failures[0];
+  }
+  if (failures.length > 1) {
+    throw new AggregateError(failures, "DeliveryWorker loops failed.");
+  }
+
+  return workerRun(loops);
 }
 
 function workerStatus(loops: readonly DeliveryLoopRun[]): DeliveryLoopStatus {

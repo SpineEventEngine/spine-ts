@@ -5,6 +5,7 @@ import {
   Delivery,
   DeliveryWorker,
   ShardIndex,
+  type DeliveryRun,
   type InboxId,
   type InboxMessage,
 } from "../../src/index.js";
@@ -66,6 +67,64 @@ describe("DeliveryWorker", () => {
     });
     expect(closed).toBe(true);
   });
+
+  it("close waits for active shard drains after another shard rejects", async () => {
+    const failure = new Error("storage failed");
+    const activeDrain = deferred<DeliveryRun>();
+    const delivery = {
+      drain(shard: ShardIndex) {
+        if (shard.index === 0) {
+          return Promise.reject(failure);
+        }
+
+        return activeDrain.promise;
+      },
+    } as unknown as Delivery;
+    const worker = new DeliveryWorker({
+      delivery,
+      shards: [new ShardIndex(0, 2), new ShardIndex(1, 2)],
+      node: "worker-a",
+      onMessage: () => undefined,
+    });
+    let closed = false;
+    const running = worker.start();
+    const startFailure = running.catch((error: unknown) => error);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const closing = worker.close().finally(() => {
+      closed = true;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(closed).toBe(false);
+
+    activeDrain.resolve(deliveryRun());
+
+    await expect(closing).rejects.toBe(failure);
+    await expect(startFailure).resolves.toBe(failure);
+    expect(closed).toBe(true);
+  });
+
+  it("reports all shard drain rejections when multiple loops fail", async () => {
+    const first = new Error("first shard failed");
+    const second = new Error("second shard failed");
+    const delivery = {
+      drain(shard: ShardIndex) {
+        return Promise.reject(shard.index === 0 ? first : second);
+      },
+    } as unknown as Delivery;
+    const worker = new DeliveryWorker({
+      delivery,
+      shards: [new ShardIndex(0, 2), new ShardIndex(1, 2)],
+      node: "worker-a",
+      onMessage: () => undefined,
+    });
+
+    const thrown = await worker.start().catch((error: unknown) => error);
+
+    expect(thrown).toBeInstanceOf(AggregateError);
+    expect((thrown as AggregateError).errors).toEqual([first, second]);
+  });
 });
 
 function createDelivery(): Delivery {
@@ -99,11 +158,24 @@ function targetInbox(): InboxId {
 function deferred<T>(): {
   readonly promise: Promise<T>;
   readonly resolve: (value: T | PromiseLike<T>) => void;
+  readonly reject: (reason?: unknown) => void;
 } {
   let resolve: (value: T | PromiseLike<T>) => void = () => undefined;
-  const promise = new Promise<T>((nextResolve) => {
+  let reject: (reason?: unknown) => void = () => undefined;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
     resolve = nextResolve;
+    reject = nextReject;
   });
 
-  return { promise, resolve };
+  return { promise, resolve, reject };
+}
+
+function deliveryRun(): DeliveryRun {
+  return Object.freeze({
+    status: "DRAINED",
+    processed: 0,
+    delivered: 0,
+    failed: 0,
+    failures: Object.freeze([]),
+  });
 }

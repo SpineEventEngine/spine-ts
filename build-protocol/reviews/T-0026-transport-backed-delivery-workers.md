@@ -43,3 +43,18 @@ Pending after implementation commit `94b4c632`.
   history, production delivery policy, and catch-up work. The README still
   states that full production supervision and retry policy remain outside this
   slice.
+
+### Reliability Review Follow-up - `2026-07-10T04:14:12Z`
+
+- Finding: [P1] `DeliveryWorker.start()` used fail-fast `Promise.all()` for
+  shard loops. If one `DeliveryLoop.run()` rejected while another loop was still
+  inside an active drain, the worker cleared `#running` early and later
+  `close()` calls no longer waited for that active loop.
+- Fix: `DeliveryWorker.start()` now stores a run promise backed by
+  `Promise.allSettled()`, so `#running` is cleared only after every shard loop
+  fulfills or rejects. Single loop failures preserve the original rejection;
+  multiple loop failures reject with one `AggregateError` containing every
+  reason.
+- Evidence: focused `delivery-worker-runtime.test.ts` failed before the fix on
+  early close settlement and missing multi-failure aggregation, then passed
+  after the worker settlement change.
