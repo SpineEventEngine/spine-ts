@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 47 coverage fix in progress
+Status: Round 47 coverage fix verification passed
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -68,6 +68,25 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   then failed global branch coverage: 89.56% versus the required 90%.
 - Action: add focused behavioral coverage for uncovered T-0026 branches without
   changing coverage thresholds, then rerun verification and five-lane review.
+
+### Round 47 Coverage Fix - `2026-07-10T19:14:00Z`
+
+- Fix: added focused behavioral coverage for real uncovered T-0026 branches in
+  `delivery-worker-runtime.test.ts` and `sharded-work-registry.test.ts`.
+- Delivery-worker coverage now exercises optional `limit`/`maxFailures`
+  forwarding and defaults, invalid shard-list validation, double-start
+  rejection, and aggregate status priority including `FAILED` and `SKIPPED`.
+- Sharded-registry coverage now exercises default lease/clock construction,
+  renew on missing/mismatched sessions, renew CAS retry/exhaustion, non-Error
+  renew storage failure wrapping, non-object renew/release sessions, and
+  malformed stored shard-session envelopes.
+- Evidence: focused Vitest passed with 2 files and 63 tests. Required generated
+  coverage passed under approved local IPC/loopback access with all 59 test
+  files and 1211 tests, and global branch coverage reached 90.02% (3329/3698).
+  No production source, coverage thresholds, or coverage configuration changed.
+- Coordinator verification reran the focused suite, formatting, diff checks,
+  and approved local IPC/loopback generated coverage successfully.
+- Action: commit the verified fix, then rerun five-lane review.
 
 ### Round 45 Follow-up - `2026-07-10T19:15:00Z`
 

@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 47 coverage fix in progress
+Status: Round 47 coverage fix verification passed
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -884,3 +884,18 @@ expiry during claim reads, scan-cap continuation, and pre-callback loop failure
 budgeting. The durable report records the callback API rename, snapshot and
 label contract, recovery wording, and final verification plan; no commit is
 created by this worker.
+
+Round 47 coverage fix on `2026-07-10`: added focused behavioral coverage for
+previously uncovered T-0026 delivery-worker and sharded-work-registry branches.
+`delivery-worker-runtime.test.ts` now covers optional `limit`/`maxFailures`
+forwarding and defaults, invalid shard-list validation, double-start rejection,
+and aggregate status priority including `FAILED` and `SKIPPED`.
+`sharded-work-registry.test.ts` now covers default registry lease/clock
+construction, renew on missing/mismatched sessions, renew CAS retry and
+exhaustion, non-Error renew storage failure wrapping, non-object renew/release
+sessions, and malformed shard-session storage envelopes. No production source,
+coverage thresholds, or coverage configuration changed. Required generated
+coverage passed with all 59 test files and 1211 tests; global branch coverage
+is now 90.02% (3329/3698). Coordinator verification reran the focused
+delivery-worker/registry suite, formatting, diff checks, and approved
+local-IPC/loopback generated coverage successfully before commit.

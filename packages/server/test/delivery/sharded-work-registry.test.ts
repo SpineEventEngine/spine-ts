@@ -267,6 +267,24 @@ describe("ShardedWorkRegistry", () => {
     ).toThrow(/at most 2147483647/);
   });
 
+  it("uses default registry lease and clock when options are omitted", async () => {
+    const registry = new ShardedWorkRegistry({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const before = Date.now();
+    const session = await registry.pickUp(new ShardIndex(0, 1), "node-a");
+    const after = Date.now();
+
+    expect(session).toMatchObject({
+      node: "node-a",
+      shard: new ShardIndex(0, 1),
+    });
+    expect(session?.pickedUpAt.getTime()).toBeGreaterThanOrEqual(before);
+    expect(session?.pickedUpAt.getTime()).toBeLessThanOrEqual(after);
+    expect((session?.expiresAt.getTime() ?? 0) - (session?.pickedUpAt.getTime() ?? 0)).toBe(30_000);
+  });
+
   it("returns false when releasing a missing or mismatched shard session", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -304,6 +322,62 @@ describe("ShardedWorkRegistry", () => {
     ).resolves.toBe(false);
     await expect(delivery.shards.release(session)).resolves.toBe(true);
     await expect(delivery.shards.release(session)).resolves.toBe(false);
+  });
+
+  it("returns undefined when renewing a missing shard session", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => new Date("2026-07-02T09:21:00.000Z"),
+    });
+
+    await expect(
+      delivery.shards.renew(
+        new ShardSession(
+          "missing-session",
+          new ShardIndex(0, 1),
+          "node-a",
+          new Date("2026-07-02T09:20:00.000Z"),
+          new Date("2026-07-02T09:22:00.000Z"),
+        ),
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it("returns undefined when renewing a mismatched shard session", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => new Date("2026-07-02T09:22:00.000Z"),
+    });
+    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+
+    if (session === undefined) {
+      throw new Error("Expected shard pickup to create a session.");
+    }
+
+    await expect(
+      delivery.shards.renew(
+        new ShardSession(
+          "other-session",
+          session.shard,
+          session.node,
+          session.pickedUpAt,
+          session.expiresAt,
+        ),
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      delivery.shards.renew(
+        new ShardSession(
+          session.id,
+          session.shard,
+          "node-b",
+          session.pickedUpAt,
+          session.expiresAt,
+        ),
+      ),
+    ).resolves.toBeUndefined();
   });
 
   it("rejects corrupted stored shard sessions", async () => {
@@ -507,6 +581,71 @@ describe("ShardedWorkRegistry", () => {
       DeliveryStorageCorruptionError,
     );
     await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/type url/i);
+  });
+
+  it("classifies malformed stored shard-session type URL fields as storage corruption", async () => {
+    const storageFactory = new RawSessionFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:35:00.000Z"),
+    });
+    const shard = new ShardIndex(0, 1);
+
+    await delivery.shards.pickUp(shard, "seed-node");
+    storageFactory.writeRawSession({
+      typeUrl: 123,
+      value: Buffer.from("{}", "utf8"),
+    } as unknown as Any);
+
+    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/type url/i);
+  });
+
+  it("classifies non-byte stored shard-session values as storage corruption", async () => {
+    const storageFactory = new RawSessionFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:35:00.000Z"),
+    });
+    const shard = new ShardIndex(0, 1);
+
+    await delivery.shards.pickUp(shard, "seed-node");
+    storageFactory.writeRawSession({
+      typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
+      value: "not bytes",
+    } as unknown as Any);
+
+    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/value must/i);
+  });
+
+  it("classifies shard-session value accessor failures as storage corruption", async () => {
+    const storageFactory = new RawSessionFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:35:00.000Z"),
+    });
+    const shard = new ShardIndex(0, 1);
+
+    await delivery.shards.pickUp(shard, "seed-node");
+    storageFactory.writeRawSession({
+      typeUrl: "type.spine-ts.dev/internal/ShardSessionRecord",
+      get value() {
+        throw new Error("value getter failed");
+      },
+    } as unknown as Any);
+
+    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toBeInstanceOf(
+      DeliveryStorageCorruptionError,
+    );
+    await expect(delivery.shards.pickUp(shard, "node-a")).rejects.toThrow(/value is invalid/i);
   });
 
   it("classifies shard-session value clone failures during pickup as storage corruption", async () => {
@@ -934,6 +1073,27 @@ describe("ShardedWorkRegistry", () => {
     await expect(delivery.shards.release(session)).resolves.toBe(true);
   });
 
+  it("retries shard renewal when compare-and-set loses one race", async () => {
+    const storageFactory = new RetryingStorageFactory({ failRenewOnce: true });
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:50:00.000Z"),
+    });
+    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+
+    if (session === undefined) {
+      throw new Error("Expected shard pickup to create a session.");
+    }
+
+    await expect(delivery.shards.renew(session)).resolves.toMatchObject({
+      id: session.id,
+      node: "node-a",
+      shard: new ShardIndex(0, 1),
+    });
+    expect(storageFactory.renewAttempts).toBe(1);
+  });
+
   it("fails clearly when shard pickup compare-and-set keeps missing", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -960,6 +1120,23 @@ describe("ShardedWorkRegistry", () => {
 
     await expect(delivery.shards.release(session)).rejects.toThrow(
       /shard release could not be completed due to concurrent changes/i,
+    );
+  });
+
+  it("fails clearly when shard renewal compare-and-set keeps missing", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new RetryingStorageFactory({ failRenewAlways: true }),
+      now: () => new Date("2026-07-02T09:50:00.000Z"),
+    });
+    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+
+    if (session === undefined) {
+      throw new Error("Expected shard pickup to create a session.");
+    }
+
+    await expect(delivery.shards.renew(session)).rejects.toThrow(
+      /shard renewal could not be completed due to concurrent changes/i,
     );
   });
 
@@ -993,6 +1170,25 @@ describe("ShardedWorkRegistry", () => {
       DeliveryStorageCorruptionError,
     );
     expect(storageFactory.createAttempts).toBe(1);
+  });
+
+  it("wraps non-Error shard renewal compare-and-set failures", async () => {
+    const storageFactory = new RetryingStorageFactory({
+      throwRenewError: "Shard renewal storage failed.",
+    });
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-02T09:50:00.000Z"),
+    });
+    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+
+    if (session === undefined) {
+      throw new Error("Expected shard pickup to create a session.");
+    }
+
+    await expect(delivery.shards.renew(session)).rejects.toThrow(/shard renewal storage failed/i);
+    expect(storageFactory.renewAttempts).toBe(1);
   });
 
   it("propagates shard release compare-and-set failures", async () => {
@@ -1113,6 +1309,21 @@ describe("ShardedWorkRegistry", () => {
         },
       } as unknown as ShardSession),
     ).rejects.toThrow("Shard session is invalid.");
+  });
+
+  it("rejects non-object renew and release sessions", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => new Date("2026-07-02T09:54:00.000Z"),
+    });
+
+    await expect(delivery.shards.renew(undefined as unknown as ShardSession)).rejects.toThrow(
+      "Shard session is invalid.",
+    );
+    await expect(delivery.shards.release(undefined as unknown as ShardSession)).rejects.toThrow(
+      "Shard session is invalid.",
+    );
   });
 
   it("passes multitenant shard contexts through to storage validation", async () => {
@@ -1381,20 +1592,27 @@ class RetryingStorageFactory extends StorageFactory {
   readonly #plan: {
     failCreateOnce?: boolean;
     failCreateAlways?: boolean;
+    failRenewOnce?: boolean;
+    failRenewAlways?: boolean;
     failReleaseOnce?: boolean;
     failReleaseAlways?: boolean;
     throwCreateError?: Error;
+    throwRenewError?: unknown;
     throwReleaseError?: Error;
   };
   createAttempts = 0;
+  renewAttempts = 0;
   releaseAttempts = 0;
 
   constructor(plan: {
     failCreateOnce?: boolean;
     failCreateAlways?: boolean;
+    failRenewOnce?: boolean;
+    failRenewAlways?: boolean;
     failReleaseOnce?: boolean;
     failReleaseAlways?: boolean;
     throwCreateError?: Error;
+    throwRenewError?: unknown;
     throwReleaseError?: Error;
   }) {
     super();
@@ -1414,6 +1632,9 @@ class RetryingStorageFactory extends StorageFactory {
       this.#plan,
       () => {
         this.createAttempts += 1;
+      },
+      () => {
+        this.renewAttempts += 1;
       },
       () => {
         this.releaseAttempts += 1;
@@ -1480,12 +1701,16 @@ class RetryingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   readonly #plan: {
     failCreateOnce?: boolean;
     failCreateAlways?: boolean;
+    failRenewOnce?: boolean;
+    failRenewAlways?: boolean;
     failReleaseOnce?: boolean;
     failReleaseAlways?: boolean;
     throwCreateError?: Error;
+    throwRenewError?: unknown;
     throwReleaseError?: Error;
   };
   readonly #countCreateAttempt: () => void;
+  readonly #countRenewAttempt: () => void;
   readonly #countReleaseAttempt: () => void;
 
   constructor(
@@ -1495,18 +1720,23 @@ class RetryingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
     plan: {
       failCreateOnce?: boolean;
       failCreateAlways?: boolean;
+      failRenewOnce?: boolean;
+      failRenewAlways?: boolean;
       failReleaseOnce?: boolean;
       failReleaseAlways?: boolean;
       throwCreateError?: Error;
+      throwRenewError?: unknown;
       throwReleaseError?: Error;
     },
     countCreateAttempt: () => void,
+    countRenewAttempt: () => void,
     countReleaseAttempt: () => void,
   ) {
     super(context, recordSpec);
     this.#delegate = delegate;
     this.#plan = plan;
     this.#countCreateAttempt = countCreateAttempt;
+    this.#countRenewAttempt = countRenewAttempt;
     this.#countReleaseAttempt = countReleaseAttempt;
   }
 
@@ -1539,6 +1769,26 @@ class RetryingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
       ) {
         this.#countCreateAttempt();
         throw this.#plan.throwCreateError;
+      }
+
+      if (expected !== undefined && next !== undefined && this.#plan.failRenewAlways === true) {
+        this.#countRenewAttempt();
+        return Promise.resolve(false);
+      }
+
+      if (expected !== undefined && next !== undefined && this.#plan.failRenewOnce === true) {
+        this.#countRenewAttempt();
+        this.#plan.failRenewOnce = false;
+        return Promise.resolve(false);
+      }
+
+      if (
+        expected !== undefined &&
+        next !== undefined &&
+        this.#plan.throwRenewError !== undefined
+      ) {
+        this.#countRenewAttempt();
+        throw this.#plan.throwRenewError;
       }
 
       if (expected !== undefined && next === undefined && this.#plan.failReleaseAlways === true) {

@@ -40,6 +40,100 @@ describe("DeliveryWorker", () => {
     ).resolves.toEqual([]);
   });
 
+  it("forwards optional limit and maxFailures to each configured shard loop", async () => {
+    const delivery = createDelivery();
+    const calls: Array<{ shard: ShardIndex; limit: number | undefined; maxFailures: number }> = [];
+    const restore = deliveryAccess.replace(delivery, (shard, options, controls) => {
+      calls.push({ shard, limit: options.limit, maxFailures: controls.maxFailures ?? 0 });
+
+      return Promise.resolve(deliveryOutcome());
+    });
+    const shards = [new ShardIndex(0, 2), new ShardIndex(1, 2)];
+    const worker = new DeliveryWorker({
+      delivery,
+      shards,
+      node: "worker-a",
+      limit: 7,
+      maxFailures: 3,
+      onMessage: () => undefined,
+    });
+
+    const run = await worker.start();
+
+    expect(run).toMatchObject({
+      status: "IDLE",
+      loops: [
+        { status: "IDLE", runs: 1 },
+        { status: "IDLE", runs: 1 },
+      ],
+    });
+    expect(calls).toEqual([
+      { shard: shards[0], limit: 7, maxFailures: 3 },
+      { shard: shards[1], limit: 7, maxFailures: 3 },
+    ]);
+    restore();
+  });
+
+  it("uses loop defaults when optional limit and maxFailures are omitted", async () => {
+    const delivery = createDelivery();
+    const calls: Array<{ limit: number | undefined; maxFailures: number | undefined }> = [];
+    const restore = deliveryAccess.replace(delivery, (_shard, options, controls) => {
+      calls.push({ limit: options.limit, maxFailures: controls.maxFailures });
+
+      return Promise.resolve(deliveryOutcome());
+    });
+    const worker = new DeliveryWorker({
+      delivery,
+      shards: [ShardIndex.single()],
+      node: "worker-a",
+      onMessage: () => undefined,
+    });
+
+    await worker.start();
+
+    expect(calls).toEqual([{ limit: 100, maxFailures: 1 }]);
+    restore();
+  });
+
+  it("rejects invalid shard lists before starting loops", () => {
+    const delivery = createDelivery();
+    const options = {
+      delivery,
+      node: "worker-a",
+      onMessage: () => undefined,
+    };
+
+    expect(() => new DeliveryWorker({ ...options, shards: [] })).toThrow(
+      "DeliveryWorker shards must be a non-empty array.",
+    );
+    expect(
+      () =>
+        new DeliveryWorker({
+          ...options,
+          shards: undefined as unknown as readonly ShardIndex[],
+        }),
+    ).toThrow("DeliveryWorker shards must be a non-empty array.");
+  });
+
+  it("rejects a second start while loops are still running", async () => {
+    const delivery = createDelivery();
+    const activeDrain = deferred<DeliveryDrainOutcome>();
+    const restore = deliveryAccess.replace(delivery, () => activeDrain.promise);
+    const worker = new DeliveryWorker({
+      delivery,
+      shards: [ShardIndex.single()],
+      node: "worker-a",
+      onMessage: () => undefined,
+    });
+
+    const running = worker.start();
+
+    expect(() => worker.start()).toThrow("DeliveryWorker is already running.");
+    activeDrain.resolve(deliveryOutcome());
+    await expect(running).resolves.toMatchObject({ status: "IDLE" });
+    restore();
+  });
+
   it("close waits for active loop drains", async () => {
     const delivery = createDelivery();
     const barrier = deferred<undefined>();
@@ -135,6 +229,22 @@ describe("DeliveryWorker", () => {
     ] satisfies readonly DeliveryLoopRun[];
 
     expect(deliveryWorkerAccess.status(loops)).toBe("PAUSED");
+  });
+
+  it("preserves FAILED over lower-priority statuses when aggregating mixed loop outcomes", () => {
+    const loops = [
+      loopRun("SKIPPED"),
+      loopRun("STOPPED"),
+      loopRun("FAILED"),
+    ] satisfies readonly DeliveryLoopRun[];
+
+    expect(deliveryWorkerAccess.status(loops)).toBe("FAILED");
+  });
+
+  it("reports SKIPPED when every configured loop skips or idles", () => {
+    const loops = [loopRun("IDLE"), loopRun("SKIPPED")] satisfies readonly DeliveryLoopRun[];
+
+    expect(deliveryWorkerAccess.status(loops)).toBe("SKIPPED");
   });
 });
 
