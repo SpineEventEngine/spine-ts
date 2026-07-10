@@ -2543,6 +2543,57 @@ Consequences:
 - Normal delivery/runtime gaps remain explicit instead of being hidden by the
   import cleanup.
 
+## D-0077: Keep Transport-Backed Delivery Workers Narrow
+
+Status: Accepted
+
+Date: 2026-07-10
+
+Task: `T-0026`
+
+Context: T-0022a and T-0022b completed durable inbox handoff for live
+projection subscribers and process-manager event paths. T-0024 removed
+aggregate import/importers from the active roadmap, and T-0025 made
+`IMPORT_EVENT` unsupported for new inbox writes. The next implementation gap is
+worker execution for existing durable rows, but the human has repeatedly warned
+against over-engineering and asked that server-module work closely follow
+Spine JVM concepts instead of inventing large TypeScript-only abstractions.
+
+Decision:
+
+- Implement T-0026 as the smallest framework-owned delivery worker boundary
+  over existing `Delivery`, `DeliveryLoop`, `Inbox`, and `ShardedWorkRegistry`
+  behavior.
+- Reuse existing framework-owned replay endpoints for supported labels instead
+  of introducing a generic repository delivery engine or production supervisor.
+- Keep ZeroMQ endpoint topology, broker supervision, retry monitors, retained
+  attempt history, conveyor/station hierarchy, and production retry policy out
+  of this slice.
+- Keep `CATCH_UP` out of worker execution unless the existing code already has
+  a supported endpoint; do not invent projection catch-up semantics here.
+- Keep end-user code free of framework envelopes, manual transactions,
+  `@Apply`, schema-bearing decorators, and materialization helpers.
+
+Alternatives considered:
+
+- Build a full production delivery subsystem now. Rejected because it would
+  combine several documented gaps and risk repeating the earlier
+  over-engineering problem.
+- Add a new public delivery API for application code. Rejected because delivery
+  workers are framework runtime infrastructure, not an end-user handler concern.
+- Implement catch-up semantics together with worker execution. Rejected unless
+  already supported by existing endpoints, because read-side catch-up has its
+  own roadmap semantics and should not be smuggled into this slice.
+
+Consequences:
+
+- T-0026 can make durable rows executable by a background/local worker without
+  claiming full production supervision.
+- Later tasks still own retry monitoring, retained attempt history, worker
+  topology, and production policy.
+- Reviewers must reject shallow abstractions or broad worker concepts that
+  exceed this narrow scope.
+
 ## D-0076: Reject New IMPORT_EVENT Delivery Writes
 
 Status: Accepted
