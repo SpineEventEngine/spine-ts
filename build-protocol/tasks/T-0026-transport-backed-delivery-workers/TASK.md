@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 74 records-only fix verified; re-review pending
+Status: Round 76 coordinator verification passed; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1257,3 +1257,31 @@ one allowed Markdown formatting run normalized the work log. `git diff --check`
 passed. The targeted work-log boundary check shows the Round 48-52 block is
 monotonic from `2026-07-10T18:35:52Z` through `2026-07-10T19:03:44Z`, and no
 local-looking `19:27Z` through `20:24Z` timestamps remain in that block.
+
+Round 75 re-review on `2026-07-10T22:03:43Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..56d2670f.diff` produced clean security and
+performance/reliability lanes. Code style/maintainability found a stale Round
+51 review-log note that still preserves the superseded Round 50 local-looking
+timestamp as the fixed state, plus a stale internal `Delivery scanOffset` error
+message after the resume cursor rename. Documentation found the Round 71
+review-log clean bullet wraps `git diff --check ca8fb2b3..70cf4dcd` awkwardly
+across a flush-left continuation. TypeScript/API docs found
+`DeliveryEndpointMessage` narrows labels but still exposes the broader
+`DeliveryStatus` union instead of the worker-supported pending `TO_DELIVER`
+status. The next fix will handle the full findings batch, verify, commit, and
+rerun all five lanes.
+
+Round 76 fix on `2026-07-10T22:05:46Z`: narrowed
+`DeliveryEndpointMessage["status"]` to readonly `"TO_DELIVER"` with focused
+type coverage, required endpoint snapshot builders to expose only pending
+status, renamed the resume-cursor offset validation error away from retired
+`scanOffset` terminology, updated the stale Round 51 historical note, and
+repaired the Round 71 inline `git diff --check ca8fb2b3..70cf4dcd` command
+wrapping. The task/review dashboard is reset so all five lanes require fresh
+current-HEAD re-review after this fix. Focused worker verification passed at
+`2026-07-10T22:09:22Z` with
+`pnpm --config.verify-deps-before-run=false test packages/server/test/delivery/delivery-worker.test.ts`
+and `git diff --check`. Coordinator verification passed at
+`2026-07-10T22:13:04Z` with focused delivery-worker Vitest, generated build
+typecheck, docs check with only the existing invalid TypeDoc `origin` warning,
+format check, and `git diff --check`.

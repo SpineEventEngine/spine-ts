@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 74 records-only fix verified; re-review pending
+Status: Round 76 coordinator verification passed; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status                  |
-| -------------------------- | -------- | ----------------------- |
-| Code style/maintainability | TBD      | Fresh re-review pending |
-| Documentation              | TBD      | Fresh re-review pending |
-| TypeScript/API docs        | TBD      | Fresh re-review pending |
-| Security                   | TBD      | Fresh re-review pending |
-| Performance/reliability    | TBD      | Fresh re-review pending |
+| Lane                       | Reviewer | Status                               |
+| -------------------------- | -------- | ------------------------------------ |
+| Code style/maintainability | TBD      | Fresh current-HEAD re-review pending |
+| Documentation              | TBD      | Fresh current-HEAD re-review pending |
+| TypeScript/API docs        | TBD      | Fresh current-HEAD re-review pending |
+| Security                   | TBD      | Fresh current-HEAD re-review pending |
+| Performance/reliability    | TBD      | Fresh current-HEAD re-review pending |
 
 ## Review Criteria
 
@@ -1952,9 +1952,11 @@ red/green delivery regressions before the next review pass.
 
 - Fix: updated task, work-log, and review-log status records to describe the
   Round 51 docs/records fix state.
-- Fix: corrected the Round 50 coordinator verification timestamp from
-  `2026-07-10T19:52:00Z` to `2026-07-10T20:12:00Z`, keeping the audit trail
-  monotonic after the `20:03` fix start and `20:10` verification entries.
+- Fix: corrected the Round 50 coordinator verification timestamp record and
+  later Round 74 records re-anchored the active Round 48-51 work-log block to
+  commit-backed UTC around `2026-07-10T18:54:43Z` through
+  `2026-07-10T19:03:44Z`; this historical note no longer treats the
+  superseded local-looking chronology as authoritative.
 - Fix: refreshed the required review-lane table to name the Round 50 reviewers,
   their clean lanes, and the fixed style/documentation findings.
 - Fix: updated `build-protocol/RUNTIME_ARCHITECTURE.md` so process-manager and
@@ -2497,9 +2499,9 @@ red/green delivery regressions before the next review pass.
   `.superpowers/sdd/review-ca8fb2b3..70cf4dcd.diff` from task baseline
   `ca8fb2b3` to current HEAD `70cf4dcd`.
 - Code style/maintainability (Zeno the 3rd): clean. `pnpm lint`,
-  `format:check`, focused delivery-loop tests, and `git diff --check
-ca8fb2b3..70cf4dcd` passed. The rejected `resetResumedCursorToHead()` method
-  is gone from active code; `rewindToHead()` is within the semantic-name limit.
+  `format:check`, focused delivery-loop tests, and `git diff --check ca8fb2b3..70cf4dcd`
+  passed. The rejected `resetResumedCursorToHead()` method is gone from active
+  code; `rewindToHead()` is within the semantic-name limit.
 - Documentation (Beauvoir the 3rd): [P2] the Round 54/55/56 chronology itself
   is now monotonic, and the public scan-budget wording is explicit, but the
   immediately preceding work-log Round 52/53 entries still use local-looking
@@ -2595,3 +2597,63 @@ ca8fb2b3..70cf4dcd` passed. The rejected `resetResumedCursorToHead()` method
   `2026-07-10T19:03:44Z`, and the stale local-looking timestamps no longer
   appear in that block.
 - Action: rerun all five reviewer lanes from the verified Round 74 HEAD.
+
+### Round 75 Re-review - `2026-07-10T22:03:43Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..56d2670f.diff` from task baseline
+  `ca8fb2b3` to current HEAD `56d2670f`.
+- Code style/maintainability (Darwin the 3rd): [P3] the Round 51
+  docs/records-fix note still describes the superseded Round 50 coordinator
+  timestamp as corrected to `2026-07-10T20:12:00Z` after `20:03` and `20:10`
+  entries, even though Round 74 re-anchored the active work-log block to
+  commit-backed UTC around `18:54:43Z` through `19:03:44Z`. [P3] the internal
+  delivery resume-cursor validation error still says `Delivery scanOffset`,
+  preserving retired terminology after the cursor rename.
+- Documentation (Anscombe the 3rd): [P3] the Round 71 code-style clean bullet
+  wraps the inline `git diff --check ca8fb2b3..70cf4dcd` command across a
+  flush-left continuation, leaving the durable review log awkward and
+  malformed-looking. No remaining Round 74 timestamp-ordering issue was found.
+- TypeScript/API docs (Mill the 3rd): [P2] `DeliveryEndpointMessage` narrows
+  `label` but still inherits the broader `DeliveryStatus` union from
+  `InboxMessage`, so `OnDeliveryMessage` and `DeliveryFailure.message` appear
+  to expose statuses other than the worker-supported pending `TO_DELIVER`
+  callback/failure snapshots.
+- Security (Bernoulli the 3rd): clean. Tenant validation, fail-closed label
+  handling, callback exposure, snapshot copying, claim/lease fencing, and root
+  public API exposure remain acceptable. The storage-index/keyset and
+  production supervision gaps remain documented future work outside T-0026.
+- Performance/reliability (Leibniz the 3rd): clean. Bounded scans, live and
+  expired claims, lease renewal, failure budgets, callback accounting,
+  unsupported labels, and snapshot mutation coverage remain acceptable for the
+  T-0026 contract. Production-adapter indexed/keyset behavior remains future
+  storage-index work.
+- Action: record this findings batch, dispatch one fix worker, verify, commit,
+  and rerun all five reviewer lanes from the fixed HEAD.
+
+### Round 76 Fix - `2026-07-10T22:05:46Z`
+
+- TypeScript/API: narrowed `DeliveryEndpointMessage` by omitting both `label`
+  and `status` from the inherited `InboxMessage` surface, then exposing the
+  supported callback labels plus readonly pending `TO_DELIVER` status. Endpoint
+  snapshot builders now require the pending status before exposing the public
+  callback/failure snapshot, and the focused type test asserts
+  `DeliveryEndpointMessage["status"]` is exactly `"TO_DELIVER"`.
+- Code style/maintainability: renamed the resume-cursor offset validation
+  message away from retired `scanOffset` terminology.
+- Docs/style: updated the Round 51 docs/records-fix historical note so it no
+  longer presents the superseded `20:03`/`20:10`/`20:12` chronology as
+  authoritative after Round 74's commit-backed UTC re-anchor, and repaired the
+  Round 71 code-style bullet so `git diff --check ca8fb2b3..70cf4dcd` remains
+  one inline command.
+- Dashboard: reset all five required review lanes to fresh current-HEAD
+  re-review pending after the fix.
+- Verification: focused worker check passed at `2026-07-10T22:09:22Z` with
+  `pnpm --config.verify-deps-before-run=false test packages/server/test/delivery/delivery-worker.test.ts`
+  (proto checksum/generation, `tsc -b`, 1 Vitest file, 51 tests) and
+  `git diff --check`. Coordinator verification passed at
+  `2026-07-10T22:13:04Z` with focused delivery-worker Vitest, generated build
+  typecheck, docs check with only the existing invalid TypeDoc `origin`
+  warning, format check, and `git diff --check`.
+- Action: commit the verified fix, then rerun all five reviewer lanes from the
+  fixed HEAD.

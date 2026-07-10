@@ -547,9 +547,11 @@ export interface DeliveryMessageDrainOptions {
  * `Date` values and `Any.value` payload bytes are copied, so callback mutation
  * cannot alter the claimed internal row.
  */
-export interface DeliveryEndpointMessage extends Omit<InboxMessage, "label"> {
+export interface DeliveryEndpointMessage extends Omit<InboxMessage, "label" | "status"> {
   /** Delivery label supported by the direct worker endpoint callback surface. */
   readonly label: "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT";
+  /** Pending delivery status exposed by the direct worker endpoint callback surface. */
+  readonly status: "TO_DELIVER";
 }
 
 /** One durable inbox row accepted by framework-owned direct worker endpoints. */
@@ -955,9 +957,11 @@ class ActiveClaim {
 function endpointMessage(message: ClaimedInboxMessage): DeliveryEndpointMessage {
   const unclaimed = claimFreeMessage(message);
   const label = requireEndpointLabel(unclaimed.label);
+  const status = requireEndpointStatus(unclaimed.status);
   return Object.freeze({
     ...unclaimed,
     label,
+    status,
     id: Object.freeze({
       value: unclaimed.id.value,
       shard: unclaimed.id.shard,
@@ -1017,7 +1021,7 @@ function requireScanOffset(value: unknown): number {
     return 0;
   }
   if (!Number.isSafeInteger(value) || (value as number) < 0) {
-    throw new Error("Delivery scanOffset must be a non-negative safe integer.");
+    throw new Error("Delivery resume cursor offset must be a non-negative safe integer.");
   }
 
   return value as number;
@@ -1036,11 +1040,21 @@ function drainCursor(offset: number, pendingBoundaryId?: string): DeliveryDrainC
 
 function requireEndpointMessage(message: InboxMessage): DeliveryEndpointMessage {
   const label = requireEndpointLabel(message.label);
+  const status = requireEndpointStatus(message.status);
 
   return Object.freeze({
     ...message,
     label,
+    status,
   });
+}
+
+function requireEndpointStatus(status: InboxMessage["status"]): DeliveryEndpointMessage["status"] {
+  if (status === "TO_DELIVER") {
+    return status;
+  }
+
+  throw new Error(`Delivery worker does not support "${status}" message status.`);
 }
 
 function isEndpointLabel(label: InboxMessage["label"]): label is DeliveryEndpointLabel {

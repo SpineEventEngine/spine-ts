@@ -769,6 +769,7 @@ describe("Delivery worker", () => {
     expectTypeOf<DeliveryEndpointMessage["label"]>().toEqualTypeOf<
       "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT"
     >();
+    expectTypeOf<DeliveryEndpointMessage["status"]>().toEqualTypeOf<"TO_DELIVER">();
   });
 
   it("leaves failed messages pending for retry and records failures", async () => {
