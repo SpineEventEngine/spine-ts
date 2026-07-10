@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 49 clean review; final verification pending
+Status: Round 50 lint fix pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -932,3 +932,12 @@ documentation (Goodall the 2nd), TypeScript/API docs (Schrodinger the 2nd),
 security (Wegener the 2nd), and performance/reliability (Newton the 2nd)
 reported no findings. Newton also reran focused sharded-registry Vitest and
 `git diff --check`; both passed. Final verification is pending before merge.
+
+Final verification after Round 49 on `2026-07-10`: the required focused T-0026
+suite passed with 9 files and 291 tests. Generated build typecheck, docs check
+with only the existing invalid-`origin` TypeDoc warning, format check, and
+`git diff --check` passed. Full `verify` under approved local IPC/loopback
+access failed during lint on Round 47 test code: `Array<T>` is forbidden in two
+delivery-worker-runtime test declarations, and the sharded-work-registry retry
+test helper can throw a non-Error value. The next fix addresses these lint
+findings only, then repeats verification and review.

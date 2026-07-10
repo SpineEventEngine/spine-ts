@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 49 clean review; final verification pending
+Status: Round 50 lint fix pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -138,6 +138,18 @@ Review findings fixed and verified after implementation commit `94b4c632`.
 - Performance/reliability (Newton the 2nd): clean. The reviewer reran focused
   sharded-registry Vitest and `git diff --check`; both passed.
 - Action: all mandatory T-0026 lanes are clean again; rerun final verification.
+
+### Final Verification Lint Gate - `2026-07-10`
+
+- Required focused T-0026 suite passed with 9 files and 291 tests.
+- Generated build typecheck, docs check with only the existing invalid-`origin`
+  TypeDoc warning, format check, and `git diff --check` passed.
+- Full `verify` under approved local IPC/loopback access failed during
+  `lint:generated` on Round 47 test code: two `Array<T>` array-type violations
+  in `delivery-worker-runtime.test.ts`, and one non-Error throw in the
+  `RetryingRecordStorage` test helper in `sharded-work-registry.test.ts`.
+- Action: fix the focused lint findings without production behavior changes,
+  verify, and rerun review.
 
 ### Round 45 Follow-up - `2026-07-10T19:15:00Z`
 
