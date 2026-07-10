@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 82 records-only fix verified; current-HEAD re-review pending
+Status: Round 84 records-only fix verified; current-HEAD re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -319,8 +319,7 @@ rerun the same verification gates.
 Coordinator Round 23 verification on `2026-07-10`: focused delivery Vitest
 passed for `delivery-worker`, `delivery-loop`, and `inbox` tests (161 tests);
 generated build typecheck passed; docs check passed with only the existing
-invalid-origin TypeDoc source-link warning; format check passed; `git diff
---check` passed.
+invalid-origin TypeDoc source-link warning; format check passed; `git diff --check` passed.
 
 Coordinator scan-budget refinement on `2026-07-10`: replace the temporary
 `limit * 2` scan budget with a finite budget based on the existing storage read
@@ -383,8 +382,7 @@ tests, docs, API docs, and durable logs for the full Round 25 findings batch.
 Coordinator verification passed with focused delivery Vitest (4 files, 210
 tests), generated build typecheck, docs check, format check, and
 `git diff --check`; docs check reported only the existing invalid-origin
-TypeDoc source-link warning. The fix commit is `e089963f` (`Fix delivery loop
-reliability and docs`). A fresh five-lane re-review is still required.
+TypeDoc source-link warning. The fix commit is `e089963f` (`Fix delivery loop reliability and docs`). A fresh five-lane re-review is still required.
 
 Round 26 re-review intake on `2026-07-10`: the fresh review package
 `.superpowers/sdd/review-ca8fb2b3..2caee0d7.diff` produced clean documentation
@@ -401,8 +399,7 @@ accepted-work limit while enforcing remaining failure budget separately.
 Coordinator verification passed with focused delivery/API Vitest (5 files, 220
 tests), generated build typecheck, docs check, format check, and
 `git diff --check`; docs check reported only the existing invalid-origin
-TypeDoc source-link warning. The fix commit is `47672dc8` (`Fix delivery drain
-internal controls`). A fresh five-lane re-review is still required.
+TypeDoc source-link warning. The fix commit is `47672dc8` (`Fix delivery drain internal controls`). A fresh five-lane re-review is still required.
 
 Round 27 re-review intake on `2026-07-10`: the fresh review package
 `.superpowers/sdd/review-ca8fb2b3..599d6bcf.diff` produced clean style and
@@ -540,8 +537,7 @@ TypeScript/API, security, and performance/reliability lanes. Style found the
 branch fails `pnpm --config.verify-deps-before-run=false lint:generated` with
 ESLint errors on changed T-0026 files, so the branch cannot pass the repository
 lint/verify gate. Documentation found Round 31 verification records are
-missing the fix-commit breadcrumb for `a06e3749` (`Fix delivery resume cursor
-rescan`). The next fix batch will reproduce and fix lint plus the durable
+missing the fix-commit breadcrumb for `a06e3749` (`Fix delivery resume cursor rescan`). The next fix batch will reproduce and fix lint plus the durable
 commit trace before another re-review.
 
 Round 32 fix implementation on `2026-07-10`: lint-safe cleanup resolved the 35
@@ -574,8 +570,7 @@ and `lint:generated`. A fresh five-lane re-review is still required.
 Round 34 re-review intake on `2026-07-10`: the fresh review package
 `.superpowers/sdd/review-ca8fb2b3..8cd57172.diff` produced clean
 TypeScript/API, security, and performance/reliability lanes. Documentation
-found the Round 33 trace still needs commit `8cd57172` (`Record Round 32 fix
-evidence`) and current-status cleanup. Style found `typecheck:tooling` fails on
+found the Round 33 trace still needs commit `8cd57172` (`Record Round 32 fix evidence`) and current-status cleanup. Style found `typecheck:tooling` fails on
 delivery test/fixture typing: probe helper return annotations erase internal
 probe capability, generic `Message` to `Any` casts are unsafe, and
 `delivery-loop.test.ts` helper inference is too narrow for a general
@@ -588,8 +583,7 @@ accepts the `StorageFactory` abstraction passed by the fault fixture, scenario
 probe helpers retain their internal fault-probe capability while preserving
 their public count/block/arm controls, and storage-fixture inbox-record reads
 use one explicit `unknown` bridge at the known `Any` record boundary. Round 33
-durable trace records now name commit `8cd57172` (`Record Round 32 fix
-evidence`), and the current review status/table records Round 34 fixed pending
+durable trace records now name commit `8cd57172` (`Record Round 32 fix evidence`), and the current review status/table records Round 34 fixed pending
 re-review rather than pending Round 33 findings. Required verification passed:
 `typecheck:tooling`, `lint:generated`, focused delivery/storage Vitest with 7
 files and 248 tests, `docs:check`, `format:check`, and `git diff --check`.
@@ -622,8 +616,7 @@ verification passed: focused delivery Vitest with 5 files and 223 tests,
 `typecheck:build:generated`, `docs:check`, `format:check`, and
 `git diff --check`. `docs:check` retained only the existing invalid-origin
 TypeDoc source-link warning. No commit was created by this fix worker, per
-instruction. Coordinator commit `5c3705e2` (`Fix delivery claim blocking and
-offset rescan`) later recorded this fix. A fresh five-lane re-review is still
+instruction. Coordinator commit `5c3705e2` (`Fix delivery claim blocking and offset rescan`) later recorded this fix. A fresh five-lane re-review is still
 required.
 
 Round 36 re-review intake on `2026-07-10`: the fresh review package
@@ -673,8 +666,7 @@ Round 39 re-review intake on `2026-07-10`: the fresh review package
 TypeScript/API docs, security, and performance/reliability lanes. Style and
 documentation found only durable status cleanup: the review log and work log
 still described the Round 38 fix as pending, and the Round 37 report should
-name coordinator commit `1403505e`. Coordinator commit `faa2d814` (`Record
-delivery round 39 review status`) recorded that records-only fix.
+name coordinator commit `1403505e`. Coordinator commit `faa2d814` (`Record delivery round 39 review status`) recorded that records-only fix.
 
 Round 40 re-review intake on `2026-07-10`: the fresh review package
 `.superpowers/sdd/review-ca8fb2b3..faa2d814.diff` produced clean
@@ -688,8 +680,7 @@ and revalidates the pending boundary after each offset-page read before
 processing its rows. A moved boundary discards the stale page and resets to the
 head once inside the existing scan budget. The requested focused delivery
 tests, generated build typecheck, docs, lint, format, and diff checks passed;
-no worker commit was created. Coordinator commit `9c51b77a` (`Fix delivery
-stale offset page rescan`) recorded the verified fix. A fresh five-lane
+no worker commit was created. Coordinator commit `9c51b77a` (`Fix delivery stale offset page rescan`) recorded the verified fix. A fresh five-lane
 re-review remains pending.
 
 Round 41 re-review intake on `2026-07-10`: the fresh review package
@@ -814,10 +805,8 @@ temporarily introduced the no-reclaim contract before Round 43 / `9477830c`
 restored expired-claim reclaim during claim CAS while live claims block.
 Verification passed with focused context handoff Vitest, generated typecheck,
 docs check, lint, format check, working-tree diff check, and baseline range diff
-check. No worker commit was created. Coordinator commit `9bb68f33` (`Fix
-projection replay status guard`) recorded the fix; five-lane re-review remains
-pending. Records-only coordinator commit `52a4326d` (`Record delivery round 44
-review status`) later recorded the `2026-07-10T17:28:52Z` follow-up status
+check. No worker commit was created. Coordinator commit `9bb68f33` (`Fix projection replay status guard`) recorded the fix; five-lane re-review remains
+pending. Records-only coordinator commit `52a4326d` (`Record delivery round 44 review status`) later recorded the `2026-07-10T17:28:52Z` follow-up status
 package.
 Coordinator verification after the worker returned passed focused context
 handoff Vitest with 2 files and 22 tests, generated build typecheck, docs check
@@ -1336,14 +1325,11 @@ boundary is normalized to commit-backed UTC: `59c44c44` at
 `2026-07-10T16:40:12Z` for Round 43 re-review intake, `9477830c` at
 `2026-07-10T17:06:42Z` for Round 43 fix/verification evidence, and `f7f56f54`
 at `2026-07-10T17:08:13Z` for Round 44 re-review intake. Wrapped durable
-commit-title continuations for `Fix projection replay status guard`, `Close
-server environment delivery type leak`, and `Fix delivery expired claim
-reclaim` are indented inside their list items. The task/review dashboard is
+commit-title continuations for `Fix projection replay status guard`, `Close server environment delivery type leak`, and `Fix delivery expired claim reclaim` are indented inside their list items. The task/review dashboard is
 reset so all five lanes require fresh current-HEAD re-review. The first
 `format:check` found Markdown wrapping in the review and work logs; the repo
 formatter normalized those records. The final
-`pnpm --config.verify-deps-before-run=false format:check` and `git diff
---check` passed at `2026-07-10T22:49:09Z`. Coordinator verification passed at
+`pnpm --config.verify-deps-before-run=false format:check` and `git diff --check` passed at `2026-07-10T22:49:09Z`. Coordinator verification passed at
 `2026-07-10T22:56:00Z`: the targeted flush-left continuation search returned
 no matches, `format:check` passed, and `git diff --check` passed.
 
@@ -1364,3 +1350,22 @@ summary Round 77/78 entries before Round 79/80. The task/review dashboard is
 reset so all five lanes require fresh current-HEAD re-review. Verification
 passed at `2026-07-10T23:04:10Z`: the targeted flush-left continuation search
 returned no matches, `format:check` passed, and `git diff --check` passed.
+
+Round 83 re-review on `2026-07-10T23:09:55Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..a09d078c.diff` produced clean
+documentation, TypeScript/API docs, security, and performance/reliability
+lanes. Code style/maintainability found older durable work-log verification
+command lines still have flush-left continuations, and found the same split
+`git diff --check` pattern in the task tail and Round 24 review-log
+verification. The next records-only fix will repair the remaining split
+durable command lines, verify, commit, and rerun all five lanes.
+
+Round 84 records-only fix on `2026-07-10T23:09:55Z`: rephrased the remaining
+split durable command lines in the Round 28 and Round 31 work-log verification
+entries as concise command summaries, repaired the Round 24 review-log
+`git diff --check` split, and collapsed historical broken inline command
+continuations so path-like fragments no longer start at column zero. The
+task/review dashboard remains reset for fresh current-HEAD re-review.
+Verification passed at
+`2026-07-10T23:17:03Z`: the targeted flush-left continuation search returned
+no matches, `format:check` passed, and `git diff --check` passed.

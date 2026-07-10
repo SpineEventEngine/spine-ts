@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 82 records-only fix verified; current-HEAD re-review pending
+Status: Round 84 records-only fix verified; current-HEAD re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -805,8 +805,8 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   Required delivery Vitest passed with 3 files and 165 tests;
   `typecheck:build:generated` passed; `docs:check` passed after updating the
   expected root export list for `DeliveryEndpointMessage`, still with only the
-  existing invalid-origin TypeDoc warning; `format:check` passed; `git diff
---check` passed.
+  existing invalid-origin TypeDoc warning; `format:check` passed; and
+  `git diff --check` passed.
 
 ### Round 25 Follow-up - `2026-07-10T10:58:57Z`
 
@@ -1057,11 +1057,8 @@ red/green delivery regressions before the next review pass.
 ### Round 29 Fix Implementation - `2026-07-10`
 
 - Added the required red regression first:
-  `pnpm --config.verify-deps-before-run=false exec vitest run
-packages/server/test/delivery/delivery-loop.test.ts -t "retries a failed
-head row before going idle after a later success"` failed before production
-  edits because the loop attempted only `["signal-fails",
-"signal-succeeds"]` and then returned idle.
+  `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/delivery/delivery-loop.test.ts -t "retries a failed head row before going idle after a later success"` failed before production
+  edits because the loop attempted only `["signal-fails", "signal-succeeds"]` and then returned idle.
 - `Delivery` now owns an explicit package-local `DeliveryDrainOutcome`
   contract for loop-only state. Each drain returns
   `{ run, resumeCursor, exhaustedSkippedScan }` and reports skipped-scan
@@ -1280,8 +1277,7 @@ head row before going idle after a later success"` failed before production
 - Security (Kierkegaard): clean.
 - Performance/reliability (Wegener): clean.
 - Documentation (Boyle): [P2] Round 33 trace still appears unresolved and
-  lacks its fix-commit breadcrumb. Add commit `8cd57172` (`Record Round 32 fix
-evidence`) to the Round 33 task/work/review records and update the current
+  lacks its fix-commit breadcrumb. Add commit `8cd57172` (`Record Round 32 fix evidence`) to the Round 33 task/work/review records and update the current
   status/table away from pending findings.
 - Code style/maintainability (Godel): [P1] `typecheck:tooling` fails on the
   changed delivery tests/fixture. Fault helper return annotations erase the
@@ -1304,8 +1300,7 @@ evidence`) to the Round 33 task/work/review records and update the current
   capability required by `deliveryStorageFaults(...probes)`, and fixture
   inbox-record inspection uses one explicit `unknown` bridge at the known
   `Any` record boundary.
-- Round 33 durable trace now names fix commit `8cd57172` (`Record Round 32 fix
-evidence`) in the task, work, review, and Round 33 fix records. The current
+- Round 33 durable trace now names fix commit `8cd57172` (`Record Round 32 fix evidence`) in the task, work, review, and Round 33 fix records. The current
   review status/table now records the Round 34 findings as fixed pending
   re-review rather than pending Round 33 findings.
 - Fix-worker verification passed: `typecheck:tooling`, `lint:generated`, the
@@ -1372,8 +1367,7 @@ evidence`) in the task, work, review, and Round 33 fix records. The current
   `git diff --check` passed. `docs:check` reported only the existing invalid
   `origin` TypeDoc source-link warning.
 - No commit was created by the fix worker, per Round 35 instruction.
-  Coordinator commit `5c3705e2` (`Fix delivery claim blocking and offset
-rescan`) later recorded this fix.
+  Coordinator commit `5c3705e2` (`Fix delivery claim blocking and offset rescan`) later recorded this fix.
 
 ### Round 36 Follow-up - `2026-07-10T16:05:00Z`
 
@@ -1424,8 +1418,7 @@ rescan`) later recorded this fix.
 ### Round 37 Fix Implementation - `2026-07-10`
 
 - Durable breadcrumb cleanup: Round 35 report/task/work/review records now name
-  coordinator commit `5c3705e2` (`Fix delivery claim blocking and offset
-rescan`), and Round 36 report/task/work/review records now name coordinator
+  coordinator commit `5c3705e2` (`Fix delivery claim blocking and offset rescan`), and Round 36 report/task/work/review records now name coordinator
   commit `e4388fb5` (`Fix delivery review gate cleanup`).
 - Historical reclaim cleanup: Round 24/25 task, work, review, and fix-report
   reclaim statements are marked as historical and superseded by Round 35 /
@@ -1518,8 +1511,7 @@ rescan`), and Round 36 report/task/work/review records now name coordinator
 ### Round 40 Fix Implementation - `2026-07-10`
 
 - Updated stale Round 39 status records to state that the records-only cleanup
-  was verified and committed as `faa2d814` (`Record delivery round 39 review
-status`).
+  was verified and committed as `faa2d814` (`Record delivery round 39 review status`).
 - Added a focused full stale-offset-page regression. It removes a complete
   skipped head page after the pre-read boundary validation, leaves a full stale
   offset page of unsupported filler, and proves the shifted supported row is
@@ -2811,3 +2803,42 @@ status`).
 - Verification: the targeted flush-left continuation search returned no
   matches, `format:check` passed, and `git diff --check` passed at
   `2026-07-10T23:04:10Z`.
+
+### Round 83 Re-review - `2026-07-10T23:09:55Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..a09d078c.diff` from task baseline
+  `ca8fb2b3` to current HEAD `a09d078c`.
+- Code style/maintainability (Halley the 3rd): [P3] older durable work-log
+  verification command lines still have flush-left continuations, and the task
+  tail plus Round 24 review-log verification still split `git diff --check`
+  across a flush-left `--check` continuation. The Round 82 targeted fixes were
+  confirmed, and no runtime maintainability findings were found.
+- Documentation (Huygens the 3rd): clean. Round 82 specifically fixed the
+  work-log Round 43 wrap and task-tail ordering, and T-0026 delivery semantics
+  remain consistently represented.
+- TypeScript/API docs (Hooke the 3rd): clean. Root public exports and durable
+  delivery docs align; `node scripts/check-api-docs.mjs` passed with only the
+  existing invalid TypeDoc `origin` warning.
+- Security (McClintock the 3rd): clean. No tenant/isolation, callback exposure,
+  mutable shared state, label/status fail-closed, lease/claim, or public API
+  boundary issue was found.
+- Performance/reliability (Epicurus the 3rd): clean. Remaining production
+  storage-index/keyset continuation and full worker supervision/retry policy
+  remain outside T-0026.
+- Action: record this records-only findings batch, repair the remaining split
+  durable command lines, verify, commit, and rerun all five reviewer lanes from
+  the fixed HEAD.
+
+### Round 84 Records-only Fix - `2026-07-10T23:09:55Z`
+
+- Documentation/style: rephrased the remaining split durable command lines in
+  the Round 28 and Round 31 work-log verification entries, repaired the Round
+  24 review-log `git diff --check` split, and collapsed historical broken
+  inline command continuations so path-like fragments no longer start at column
+  zero.
+- Dashboard: all required review lanes remain pending for fresh current-HEAD
+  re-review after this records-only fix.
+- Verification: the targeted flush-left continuation search returned no
+  matches, `format:check` passed, and `git diff --check` passed at
+  `2026-07-10T23:17:03Z`.
