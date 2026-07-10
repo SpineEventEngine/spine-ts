@@ -1,13 +1,16 @@
 # Round 57 Fix Report: T-0026 Resume Cursor Starvation
 
-Started: `2026-07-10T21:20:00Z`
+Reported: `2026-07-10T21:20:00Z` (the verified fix was committed earlier as
+`7d1b09ad` at `2026-07-10T19:55:11Z`)
 
 ## Scope
 
 Round 57 addresses the complete Round 56 findings:
 
-- `build-protocol/work-logs/T-0026.md` recorded the Round 46 clean re-review at
-  `2026-07-10T17:57:08Z` after Round 45 fix/verification entries at `19:45`.
+- The then-current `build-protocol/work-logs/T-0026.md` rendered Round 45 at
+  `19:45` and Round 46 at `17:57:08Z`; later commit evidence reconciles the
+  actual sequence as Round 45 at `17:45`, Round 46 at `17:57:08Z`, and Round
+  47 work after the final verification coverage gate.
 - `build-protocol/reviews/T-0026-transport-backed-delivery-workers.md` had two
   wrapped `git diff --check ca8fb2b3...HEAD` references with flush-left
   continuation lines inside list items.
@@ -19,17 +22,21 @@ Round 57 addresses the complete Round 56 findings:
 
 - Added the focused regression
   `DeliveryLoop > drops a stale skipped-only resume cursor so a cleared head
-  claim is reconsidered`.
+claim is reconsidered`.
 - Red command:
-  `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/delivery/delivery-loop.test.ts -t "drops a stale skipped-only resume cursor"`
+  ```sh
+  pnpm --config.verify-deps-before-run=false exec vitest run \
+    packages/server/test/delivery/delivery-loop.test.ts \
+    -t "drops a stale skipped-only resume cursor"
+  ```
 - Red result: failed as expected because the resumed loop returned
   `delivered: 0` instead of `delivered: 1`.
 
 ## Changes
 
-- Corrected the work-log Round 46 clean re-review timestamp to
-  `2026-07-10T19:57:08Z`, after the Round 45 `19:45` fix and verification
-  records.
+- The reporting record initially described a Round 46 timestamp correction.
+  Commit evidence later established that the correct durable sequence keeps
+  Round 46 at `2026-07-10T17:57:08Z` after the Round 45 `17:45` records.
 - Rewrapped the two review-log `git diff --check ca8fb2b3...HEAD` references
   so continuation lines remain indented within their bullets.
 - Changed `Delivery.drain()` so a resumed drain that exhausts its skipped-only
@@ -40,7 +47,11 @@ Round 57 addresses the complete Round 56 findings:
 ## Green
 
 - Green command:
-  `pnpm --config.verify-deps-before-run=false exec vitest run packages/server/test/delivery/delivery-loop.test.ts -t "drops a stale skipped-only resume cursor"`
+  ```sh
+  pnpm --config.verify-deps-before-run=false exec vitest run \
+    packages/server/test/delivery/delivery-loop.test.ts \
+    -t "drops a stale skipped-only resume cursor"
+  ```
 - Green result: passed with 1 test run and 27 skipped in
   `delivery-loop.test.ts`.
 

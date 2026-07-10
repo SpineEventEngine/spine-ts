@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 57 fix verified; re-review pending
+Status: Round 58 fix verified; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1033,9 +1033,11 @@ again without reconsidering the head row. The next fix records and addresses
 the documentation/style findings and adds a failing regression before changing
 delivery scan behavior.
 
-Round 57 fix on `2026-07-10`: corrected the work-log Round 46 clean re-review
-timestamp from `2026-07-10T17:57:08Z` to `2026-07-10T19:57:08Z`, keeping it
-after the Round 45 fix/verification entries it reviewed. Rewrapped the two
+Round 57 fix reporting record on `2026-07-10`: the `21:20Z` record summarizes
+the verified fix already committed as `7d1b09ad` at `19:55:11Z`; it is not a
+worker-start timestamp. It incorrectly moved the work-log Round 46 clean
+re-review timestamp from `2026-07-10T17:57:08Z` to `2026-07-10T19:57:08Z`.
+Rewrapped the two
 review-log `git diff --check ca8fb2b3...HEAD` references so continuation lines
 stay readable inside their list items. Added a focused delivery-loop
 regression first; it failed red with `delivered: 0` after a cleared head claim
@@ -1048,3 +1050,29 @@ regression passed green. Verification passed for the full focused
 `docs:check` with only the existing invalid TypeDoc `origin` warning,
 `format:check` after repository formatting normalized the review log, and
 `git diff --check`. Five-lane re-review remains pending.
+
+Round 58 re-review on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..7d1b09ad.diff` produced clean
+TypeScript/API docs, security, and performance/reliability lanes. Code
+style/maintainability found that `Delivery.#drainAvailableMessages()` now
+carries cursor state across several mutable locals and duplicated reset
+transitions; the next fix should extract a small private scan-state helper
+local to the delivery module without adding a broader worker abstraction.
+Documentation found remaining durable-record issues: the Round 46 work-log
+timestamp still disrupts the Round 45-47 chronology, the Round 57 start
+timestamp is later than fix commit `7d1b09ad`, the required-lanes dashboard was
+stale before this Round 58 record, and the Round 57 red/green command lines
+exceed the 120-character ledger limit. The next fix will address the complete
+batch and rerun focused verification before another five-lane re-review.
+
+Round 58 fix implementation on `2026-07-10`: extracted private
+`DeliveryScanState` transitions for the bounded delivery scan, preserving the
+existing behavior and public API while removing the spread of mutable cursor
+locals. Commit evidence reconciles the Round 45-47 work-log sequence as Round
+45 at `17:45`, Round 46 at `17:57:08Z`, final verification at `18:05`, and
+Round 47 work at `18:14`. The later Round 57 `21:20Z` records now describe
+reporting actions for fix commit `7d1b09ad` at `19:55:11Z`, rather than worker
+starts. The Round 57 red/green commands are wrapped within the ledger limit;
+`round-59-fix-report.md` records the batch. The focused regression, both
+required delivery files, generated TypeScript build typecheck, docs check,
+format check, and `git diff --check` passed; five-lane re-review is pending.

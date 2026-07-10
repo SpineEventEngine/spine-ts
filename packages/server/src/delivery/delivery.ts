@@ -124,72 +124,48 @@ export class Delivery {
   ): Promise<DeliveryDrainOutcome> {
     const progress = drainProgress();
     const scanBudget = inboxStorageAccess.maxReadLimit + limit;
-    let offset = cursor.offset;
-    let pendingBoundaryId = cursor.pendingBoundaryId;
-    let resumedHeadRescan = offset > 0;
-    let offsetRescan = false;
-    let rescanSeenAllowance = 0;
+    const scan = new DeliveryScanState(cursor);
     const finishExhaustedSkippedScan = () =>
       progress.finish(
-        resumedHeadRescan && progress.accepted === 0 && progress.failed === 0
-          ? drainCursor(0, undefined)
-          : drainCursor(offset, pendingBoundaryId),
+        scan.finishExhaustedSkippedOnlyScan(progress.accepted, progress.failed),
         true,
       );
 
     while (progress.processed < scanBudget) {
       if (
-        offset > 0 &&
-        pendingBoundaryId !== undefined &&
-        !offsetRescan &&
-        !(await this.#pendingBoundaryMatches(inbox, shard, offset, pendingBoundaryId))
+        scan.requiresBoundaryValidation() &&
+        !(await this.#pendingBoundaryMatches(inbox, shard, scan.offset, scan.pendingBoundaryId))
       ) {
         // Offset pages are relative to the current `TO_DELIVER` set. If
         // skipped rows disappeared, reset once instead of paging past work
         // that moved before the old absolute offset.
-        offset = 0;
-        pendingBoundaryId = undefined;
-        offsetRescan = true;
-        resumedHeadRescan = false;
-        rescanSeenAllowance = inboxStorageAccess.maxReadLimit;
+        scan.resetToHeadAfterBoundaryChange();
         continue;
       }
 
-      const readLimit = Math.min(
-        inboxStorageAccess.maxReadLimit,
-        scanBudget - progress.processed + rescanSeenAllowance,
-      );
-      const messages = await this.#readPendingDeliveryPage(inbox, shard, readLimit, offset);
+      const readLimit = scan.readLimit(scanBudget, progress.processed);
+      const messages = await this.#readPendingDeliveryPage(inbox, shard, readLimit, scan.offset);
 
       if (
-        offset > 0 &&
-        pendingBoundaryId !== undefined &&
-        !offsetRescan &&
-        !(await this.#pendingBoundaryMatches(inbox, shard, offset, pendingBoundaryId))
+        scan.requiresBoundaryValidation() &&
+        !(await this.#pendingBoundaryMatches(inbox, shard, scan.offset, scan.pendingBoundaryId))
       ) {
         // The offset page may have been read from a changed `TO_DELIVER` set.
         // Discard it before processing so work that moved to the head is not skipped.
-        offset = 0;
-        pendingBoundaryId = undefined;
-        offsetRescan = true;
-        resumedHeadRescan = false;
-        rescanSeenAllowance = inboxStorageAccess.maxReadLimit;
+        scan.resetToHeadAfterBoundaryChange();
         continue;
       }
 
-      if (messages.length === 0 && progress.processed === 0 && resumedHeadRescan) {
-        offset = 0;
-        pendingBoundaryId = undefined;
-        resumedHeadRescan = false;
+      if (messages.length === 0 && progress.processed === 0 && scan.hasResumedHeadRescan()) {
+        scan.resetToHeadAfterEmptyResumedPage();
         continue;
       }
 
       for (const message of messages) {
         if (progress.hasSeen(message)) {
-          if (rescanSeenAllowance === 0) {
+          if (!scan.consumeSeenRescanAllowance()) {
             return finishExhaustedSkippedScan();
           }
-          rescanSeenAllowance -= 1;
         } else if (progress.processed >= scanBudget) {
           return finishExhaustedSkippedScan();
         }
@@ -203,26 +179,23 @@ export class Delivery {
           active,
         );
         if (remainsPending) {
-          offset += 1;
-          pendingBoundaryId = message.id.value;
+          scan.advancePastPending(message);
         }
         if (progress.accepted >= limit) {
-          return progress.finish(drainCursor(offset, pendingBoundaryId));
+          return progress.finish(scan.cursor());
         }
         if (maxFailures !== undefined && progress.failed >= maxFailures) {
-          return progress.finish(drainCursor(offset, pendingBoundaryId));
+          return progress.finish(scan.cursor());
         }
       }
 
       if (messages.length < readLimit) {
-        if (resumedHeadRescan && progress.accepted === 0 && progress.failed === 0) {
-          offset = 0;
-          pendingBoundaryId = undefined;
-          resumedHeadRescan = false;
+        if (scan.shouldRescanHeadAfterShortPage(progress.accepted, progress.failed)) {
+          scan.resetToHeadAfterEmptyResumedPage();
           continue;
         }
 
-        return progress.finish(drainCursor(offset, pendingBoundaryId));
+        return progress.finish(scan.cursor());
       }
     }
 
@@ -662,6 +635,90 @@ interface DrainProgress {
   readonly hasSeen: (message: InboxMessage) => boolean;
   readonly observe: (message: InboxMessage) => boolean;
   readonly record: (message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) => void;
+}
+
+/** Mutable cursor state for one bounded pending-message scan. */
+class DeliveryScanState {
+  #offset: number;
+  #pendingBoundaryId: string | undefined;
+  #resumedHeadRescan: boolean;
+  #offsetRescan = false;
+  #rescanSeenAllowance = 0;
+
+  constructor(cursor: DeliveryDrainCursor) {
+    this.#offset = cursor.offset;
+    this.#pendingBoundaryId = cursor.pendingBoundaryId;
+    this.#resumedHeadRescan = cursor.offset > 0;
+  }
+
+  get offset(): number {
+    return this.#offset;
+  }
+
+  get pendingBoundaryId(): string {
+    if (this.#pendingBoundaryId === undefined) {
+      throw new Error("Pending boundary ID is required while validating a delivery scan cursor.");
+    }
+
+    return this.#pendingBoundaryId;
+  }
+
+  requiresBoundaryValidation(): boolean {
+    return this.#offset > 0 && this.#pendingBoundaryId !== undefined && !this.#offsetRescan;
+  }
+
+  hasResumedHeadRescan(): boolean {
+    return this.#resumedHeadRescan;
+  }
+
+  readLimit(scanBudget: number, processed: number): number {
+    return Math.min(
+      inboxStorageAccess.maxReadLimit,
+      scanBudget - processed + this.#rescanSeenAllowance,
+    );
+  }
+
+  resetToHeadAfterBoundaryChange(): void {
+    this.#offset = 0;
+    this.#pendingBoundaryId = undefined;
+    this.#offsetRescan = true;
+    this.#resumedHeadRescan = false;
+    this.#rescanSeenAllowance = inboxStorageAccess.maxReadLimit;
+  }
+
+  resetToHeadAfterEmptyResumedPage(): void {
+    this.#offset = 0;
+    this.#pendingBoundaryId = undefined;
+    this.#resumedHeadRescan = false;
+  }
+
+  consumeSeenRescanAllowance(): boolean {
+    if (this.#rescanSeenAllowance === 0) {
+      return false;
+    }
+
+    this.#rescanSeenAllowance -= 1;
+    return true;
+  }
+
+  advancePastPending(message: InboxMessage): void {
+    this.#offset += 1;
+    this.#pendingBoundaryId = message.id.value;
+  }
+
+  shouldRescanHeadAfterShortPage(accepted: number, failed: number): boolean {
+    return this.#resumedHeadRescan && accepted === 0 && failed === 0;
+  }
+
+  cursor(): DeliveryDrainCursor {
+    return drainCursor(this.#offset, this.#pendingBoundaryId);
+  }
+
+  finishExhaustedSkippedOnlyScan(accepted: number, failed: number): DeliveryDrainCursor {
+    return this.#resumedHeadRescan && accepted === 0 && failed === 0
+      ? drainCursor(0)
+      : this.cursor();
+  }
 }
 
 type DeliveryMessageResult =

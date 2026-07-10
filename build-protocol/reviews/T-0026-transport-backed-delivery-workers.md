@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 57 fix verified; re-review pending
+Status: Round 58 fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer        | Status           |
-| -------------------------- | --------------- | ---------------- |
-| Code style/maintainability | Sagan the 2nd   | Findings pending |
-| Documentation              | Hubble the 2nd  | Findings pending |
-| TypeScript/API docs        | Aquinas the 2nd | Clean            |
-| Security                   | Locke the 2nd   | Clean            |
-| Performance/reliability    | Ptolemy the 2nd | Findings pending |
+| Lane                       | Reviewer         | Status                           |
+| -------------------------- | ---------------- | -------------------------------- |
+| Code style/maintainability | Gibbs the 2nd    | Finding fixed; re-review pending |
+| Documentation              | Popper the 2nd   | Finding fixed; re-review pending |
+| TypeScript/API docs        | Herschel the 2nd | Clean (Round 58)                 |
+| Security                   | Euler the 2nd    | Clean (Round 58)                 |
+| Performance/reliability    | Volta the 2nd    | Clean (Round 58)                 |
 
 ## Review Criteria
 
@@ -2106,11 +2106,15 @@ red/green delivery regressions before the next review pass.
 - Action: fix the durable record formatting/timestamp issues and add a failing
   delivery regression before changing resumed scan behavior.
 
-### Round 57 Fix Implementation - `2026-07-10T21:20:00Z`
+### Round 57 Fix Record - `2026-07-10T21:20:00Z`
 
-- Fix: corrected the work-log Round 46 clean re-review timestamp from
-  `2026-07-10T17:57:08Z` to `2026-07-10T19:57:08Z`, keeping the durable
-  chronology after the Round 45 `19:45` fix and verification records.
+- This later reporting record summarizes the verified fix already committed as
+  `7d1b09ad` at `2026-07-10T19:55:11Z`; it does not describe a worker start.
+
+- Reporting record: it described the Round 46 timestamp as `19:57:08Z`.
+  Subsequent commit evidence reconciles the durable sequence as Round 45 at
+  `17:45`, Round 46 at `17:57:08Z`, final verification at `18:05`, and Round
+  47 work at `18:14`.
 - Fix: rewrapped the two `git diff --check ca8fb2b3...HEAD` review-log
   references so continuation lines stay inside their list items.
 - Red: added a delivery-loop regression for dropping stale skipped-only resume
@@ -2127,3 +2131,58 @@ red/green delivery regressions before the next review pass.
   initial `format:check` flagged this review log, the repo formatter
   normalized it, the rerun passed, and `git diff --check` passed.
 - Action: rerun all five reviewer lanes from the Round 57 HEAD.
+
+### Round 58 Re-review - `2026-07-10T20:00:08Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..7d1b09ad.diff` from task baseline
+  `ca8fb2b3` to current HEAD `7d1b09ad`.
+- Code style/maintainability (Gibbs the 2nd): [P2]
+  `Delivery.#drainAvailableMessages()` has become a mutable cursor state
+  machine spread across `offset`, `pendingBoundaryId`, `resumedHeadRescan`,
+  `offsetRescan`, and the rescan allowance counter. The reset transitions are
+  duplicated, and the Round 57 closure adds another path over the same locals.
+  Extract a small private scan-state helper with named transitions, local to
+  the delivery module, without introducing a broader worker abstraction.
+- Documentation (Popper the 2nd): [P2] the work log still has a non-chronological
+  Round 45-47 sequence: Round 46 is now recorded at `19:57:08Z`, after later
+  final verification and Round 47 entries. Reconcile against associated commits
+  and order or timestamp the entries consistently.
+- Documentation (Popper the 2nd): [P2] Round 57 records say the fix worker
+  started at `21:20Z`, but fix commit `7d1b09ad` was committed at
+  `2026-07-10T20:55:11+01:00` (`19:55:11Z`). Normalize the UTC timestamps or
+  describe the later entries as reporting actions rather than worker start.
+- Documentation (Popper the 2nd): [P2] before this Round 58 record, the
+  required-lanes table still showed Round 56 reviewers and findings despite the
+  document status saying Round 57 was verified and re-review was pending. This
+  Round 58 record updates the dashboard to the current reviewers and outcomes.
+- Documentation (Popper the 2nd): [P3] the Round 57 fix report's red/green
+  command lines exceed the 120-character ledger limit; wrap the commands with
+  shell continuations or otherwise format them over multiple lines.
+- TypeScript/API docs (Herschel the 2nd): clean. No TypeScript soundness,
+  public export, callback/failure typing, or API-doc issues found; raw worker
+  callback surfaces remain absent from root exports and generated TypeDoc.
+- Security (Euler the 2nd): clean. Tenant context snapshotting, replay
+  validation, live-vs-expired claims, fail-closed deprecated/malformed labels,
+  unsupported-label skip behavior, callback snapshot copying, and public API
+  exposure remain acceptable.
+- Performance/reliability (Volta the 2nd): clean. The resumed-cursor fix is
+  bounded, preserves skipped-row callback/accounting behavior, and rechecks the
+  head after stale skipped-only scans; focused reliability tests passed.
+- Action: record the complete Round 58 findings batch, dispatch one fix worker,
+  verify, commit, and rerun all five reviewer lanes.
+
+### Round 58 Fix Implementation - `2026-07-10T20:05:13Z`
+
+- Code style: extracted private `DeliveryScanState` transitions from
+  `Delivery.#drainAvailableMessages()` without changing its public API or
+  introducing a worker abstraction.
+- Documentation: reconciled the Round 45-47 work-log sequence against commit
+  evidence, relabeled the Round 57 `21:20Z` entries as reporting records,
+  wrapped the Round 57 red/green commands, and refreshed this dashboard.
+- Verification: focused regression and generated TypeScript build typecheck
+  passed. Full `delivery-loop.test.ts` (28 tests), `delivery-worker.test.ts`
+  (51 tests), `docs:check` with only the known invalid-`origin` warning, final
+  `format:check`, and `git diff --check` also passed.
+- Action: rerun all five required reviewer lanes from the verified Round 58
+  fix state.
