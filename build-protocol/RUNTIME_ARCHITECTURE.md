@@ -241,12 +241,14 @@ delivery worker boundary:
   payload, use the original event ID as `signalId`, target the process-manager
   state type URL plus routed process-manager ID, drain the local single shard
   immediately, and replay only that inbox row target before process-manager
-  handler execution;
+  handler execution. Before handler code runs, replay validates tenant,
+  payload/schema, target type URL, and routed target ID;
 - live projection subscriber rows store the original `Event` envelope as the
   signal payload, use the original event ID as `signalId`, target the
   projection state type URL plus routed projection ID, drain the local single
   shard immediately, and replay only that inbox row target before running the
-  projection transaction and `Stand` update;
+  projection transaction and `Stand` update. Before handler code runs, replay
+  validates tenant, payload/schema, target type URL, and routed target ID;
 - pending and final dedup guards block duplicate `(signalId, inboxId)` writes
   during the same 30-second local retention window as JVM local delivery while
   allowing crash recovery from a durable inbox row;

@@ -3232,7 +3232,7 @@ describe("repository signal routing", () => {
     });
     InboxCheckingProcessManager.reset(delivery);
     const context = BoundedContext.singleTenant("Tasks")
-      .add(createInboxCheckingRepository())
+      .add(createInboxCheckRepo())
       .withStorageFactory(factory)
       .build();
 
@@ -3287,7 +3287,7 @@ describe("repository signal routing", () => {
   it("deduplicates duplicate live process-manager event delivery locally", async () => {
     BlockingProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    const repository = createBlockingProcessManagerRepository();
+    const repository = createBlockingPmRepo();
     const context = BoundedContext.singleTenant("Tasks")
       .add(repository)
       .withStorageFactory(factory)
@@ -3346,21 +3346,21 @@ describe("repository signal routing", () => {
     });
     const target = requireProcessManagerInboxTarget(repository);
     const event = createProjectionEvent("event-pm-replay", "pm-replay");
-    const wrongId = await storeProcessManagerInboxEvent(
+    const wrongId = await storePmInboxEvent(
       delivery,
       event,
       new Date("2026-07-08T09:05:00.000Z"),
       1n,
       { targetId: "pm-other" },
     );
-    const wrongType = await storeProcessManagerInboxEvent(
+    const wrongType = await storePmInboxEvent(
       delivery,
       event,
       new Date("2026-07-08T09:05:01.000Z"),
       2n,
       { signalId: "event-pm-replay-type", targetTypeUrl: "type.example.dev/OtherPm" },
     );
-    const malformed = await storeProcessManagerInboxEvent(
+    const malformed = await storePmInboxEvent(
       delivery,
       event,
       new Date("2026-07-08T09:05:02.000Z"),
@@ -3377,7 +3377,7 @@ describe("repository signal routing", () => {
         ),
       },
     );
-    const wrongLabel = await storeProcessManagerInboxEvent(
+    const wrongLabel = await storePmInboxEvent(
       delivery,
       event,
       new Date("2026-07-08T09:05:03.000Z"),
@@ -5623,7 +5623,7 @@ function createProcessManagerReactRepository(): Repository<typeof RoutingProcess
   });
 }
 
-function createInboxCheckingRepository(): Repository<typeof InboxCheckingProcessManager> {
+function createInboxCheckRepo(): Repository<typeof InboxCheckingProcessManager> {
   const handlers = defineEntityHandlers(
     InboxCheckingProcessManager,
     ProcessManagerStateSchema,
@@ -5637,7 +5637,7 @@ function createInboxCheckingRepository(): Repository<typeof InboxCheckingProcess
   });
 }
 
-function createBlockingProcessManagerRepository(): Repository<typeof BlockingProcessManager> {
+function createBlockingPmRepo(): Repository<typeof BlockingProcessManager> {
   const handlers = defineEntityHandlers(
     BlockingProcessManager,
     ProcessManagerStateSchema,
@@ -5972,7 +5972,7 @@ async function storeProcessManagerInboxCommand(
   return message.message;
 }
 
-async function storeProcessManagerInboxEvent(
+async function storePmInboxEvent(
   delivery: Delivery,
   event: SpineEvent,
   whenReceived: Date,

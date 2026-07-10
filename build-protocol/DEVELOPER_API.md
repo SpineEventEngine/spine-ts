@@ -337,7 +337,9 @@ signal payload, the original event ID as `signalId`, the target state type URL
 plus routed entity ID as `inboxId`, `TO_DELIVER` status, `ShardIndex.single()`,
 and the local 30-second dedup retention window. The context drains the local
 shard immediately and replays only the exact row target before running the
-process-manager or projection transaction and `Stand` update.
+process-manager or projection transaction and `Stand` update. Before handler
+code runs, replay validates tenant, payload/schema, target type URL, and
+routed target ID.
 `InboxStorage` remains the durable dedup authority.
 
 The current API does not schedule repeated runs, expose a generic repository

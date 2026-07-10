@@ -49,7 +49,9 @@ Current slice exposes:
   envelopes, and immediate exact-row local shard replay. Live projection event
   subscribers use the same handoff shape with `UPDATE_SUBSCRIBER` rows and
   replay only the routed row target before the projection transaction and
-  `Stand` update. Transport-backed/background workers, broker supervision,
+  `Stand` update. Before handler code runs, replay validates the tenant,
+  payload/schema, target type URL, and routed target ID.
+  Transport-backed/background workers, broker supervision,
   retained attempt history, and deployment hardening remain outside this local
   slice;
   and
@@ -975,7 +977,8 @@ projection subscribers now use the framework-owned durable inbox handoff with
 immediate local shard replay/drain. Process-manager event rows use
 `REACT_UPON_EVENT`, keep the original `Event` envelope as the payload, use the
 original event ID as `signalId`, and replay only the stored target row before
-handler execution.
+handler execution. Before handler code runs, replay validates tenant,
+payload/schema, target type URL, and routed target ID.
 Scheduler/retry workers, cross-process recovery, and broader event/aggregate
 handoff remain open production gaps. This seam follows Spine `core-jvm`
 `Repository` identity and registration concepts closely. The direct repository

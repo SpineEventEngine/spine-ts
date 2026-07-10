@@ -102,7 +102,9 @@ tenant-safe replay in multitenant contexts, and resolves only after that
 received row is marked delivered. Process-manager event rows use
 `REACT_UPON_EVENT`, projection subscriber rows use `UPDATE_SUBSCRIBER`, both
 store the original `Event` envelope, and both replay only the routed row target
-before the transaction and `Stand` update. Broader inbox lifecycle management,
+before the transaction and `Stand` update. Before handler code runs, replay
+validates tenant, payload/schema, target type URL, and routed target ID.
+Broader inbox lifecycle management,
 schedulers, retries, and transport topology remain open production gaps.
 Process-manager
 repositories with authentic generated metadata do execute through the local
@@ -181,9 +183,12 @@ runtime drains that inbox immediately, requires tenant-safe replay in
 multitenant contexts, and resolves only after the received inbox row is marked
 delivered. Live projection subscribers use the same local handoff shape with
 `UPDATE_SUBSCRIBER` rows, original event IDs as dedup signal IDs, and exact-row
-target replay during the 30-second local retention window. Process-manager
-event reactors and event-commanding handlers are invoked directly from the
-event bus, state is stored in tenant-scoped `Stand` records with numeric
+target replay during the 30-second local retention window. Live
+process-manager event reactors and event-commanding handlers use the same
+durable inbox handoff with `REACT_UPON_EVENT` rows, original `Event`
+envelopes, and exact-row target replay. Before handler code runs, replay
+validates tenant, payload/schema, target type URL, and routed target ID.
+State is stored in tenant-scoped `Stand` records with numeric
 versions, returned commands are wrapped and posted after state storage, and
 returned event messages are wrapped with process-manager-emitted event schemas
 and appended through the event store before follow-up dispatch. The repository
