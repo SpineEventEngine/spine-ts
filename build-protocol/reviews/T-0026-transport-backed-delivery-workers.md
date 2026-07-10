@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 27 fix verified; re-review pending
+Status: Round 27 fix committed; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -83,6 +83,7 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   files and 222 tests; `typecheck:build:generated`, `docs:check`,
   `format:check`, and `git diff --check` passed. `docs:check` reported only the
   existing invalid-origin TypeDoc source-link warning.
+- Fix commit: `770981ea` (`Fix delivery drain tenant scope and loop bounds`).
 
 ### Round 26 Follow-up - `2026-07-10T11:29:35Z`
 

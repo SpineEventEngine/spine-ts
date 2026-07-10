@@ -421,8 +421,9 @@ union, and the historical Round 24 notes mention the later
 `OnDeliveryMessage` rename. Coordinator verification passed with focused
 delivery/API Vitest (5 files, 222 tests), generated build typecheck, docs
 check, format check, and `git diff --check`; `docs:check` reported only the
-existing invalid-origin TypeDoc source-link warning. No commit was created by
-this fix worker.
+existing invalid-origin TypeDoc source-link warning. The fix commit is
+`770981ea` (`Fix delivery drain tenant scope and loop bounds`). A fresh
+five-lane re-review is still required.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker

@@ -11,23 +11,23 @@ Checklist source: `build-protocol/BUILD_PROTOCOL.md#skills-and-tooling`.
 
 Evidence gathered before code changes:
 
-| Source                                     | Scope                                | Evidence                                                                                                                      |
-| ------------------------------------------ | ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| Session skill inventory                    | Task-relevant subset                 | Workflow, implementation, testing, verification, security, review, and TypeScript skills were present in the session.       |
-| Task-provided skills                       | Explicit Round 27 requirements       | The assignment explicitly required TDD-style red evidence, implementation, and fresh verification before return.            |
-| `build-protocol/skills/EXPECTED_SKILLS.md` | Full file                            | Read; expected workflow, testing, and TypeScript skills are installed locally.                                               |
-| User-installed entrypoints                 | Full directory listing               | The installed skill entrypoints under `/Users/armiol/.agents/skills` remain readable from earlier T-0026 rounds.           |
-| Installed-skill lock                       | Manifest opened                      | `/Users/armiol/.agents/.skill-lock.json` remained readable and sufficient for applicability confirmation.                    |
+| Source                                     | Scope                          | Evidence                                                                                                              |
+| ------------------------------------------ | ------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Session skill inventory                    | Task-relevant subset           | Workflow, implementation, testing, verification, security, review, and TypeScript skills were present in the session. |
+| Task-provided skills                       | Explicit Round 27 requirements | The assignment explicitly required TDD-style red evidence, implementation, and fresh verification before return.      |
+| `build-protocol/skills/EXPECTED_SKILLS.md` | Full file                      | Read; expected workflow, testing, and TypeScript skills are installed locally.                                        |
+| User-installed entrypoints                 | Full directory listing         | The installed skill entrypoints under `/Users/armiol/.agents/skills` remain readable from earlier T-0026 rounds.      |
+| Installed-skill lock                       | Manifest opened                | `/Users/armiol/.agents/.skill-lock.json` remained readable and sufficient for applicability confirmation.             |
 
 Selected skills applied for this round:
 
-| Skill                            | Round 27 use                                                                                                  |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Skill                            | Round 27 use                                                                                                 |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | `test-driven-development`        | Add focused failing regressions for the tenant-context split and the unbounded loop invocation before edits. |
-| `implement`                      | Apply the smallest runtime and doc/API changes needed for the full Round 27 batch without committing.       |
-| `javascript-testing-patterns`    | Keep Vitest coverage behavior-focused with shared in-memory storage seams and targeted fake-delivery tests. |
-| `typescript-advanced-types`      | Keep the public `DeliveryEndpointMessage.label` union explicit and small.                                   |
-| `verification-before-completion` | Rerun the required focused tests and repository checks on the final state before reporting completion.      |
+| `implement`                      | Apply the smallest runtime and doc/API changes needed for the full Round 27 batch without committing.        |
+| `javascript-testing-patterns`    | Keep Vitest coverage behavior-focused with shared in-memory storage seams and targeted fake-delivery tests.  |
+| `typescript-advanced-types`      | Keep the public `DeliveryEndpointMessage.label` union explicit and small.                                    |
+| `verification-before-completion` | Rerun the required focused tests and repository checks on the final state before reporting completion.       |
 
 Relevant-looking but skipped: `nodejs-backend-patterns` (no new Node lifecycle work), `projection-patterns`, `cqrs-implementation`, `event-store-design`, and `saga-orchestration` (no design changes in those seams), plus `security-best-practices` (the security findings are fully covered by the task-specific runtime regressions and fixes here).
 
