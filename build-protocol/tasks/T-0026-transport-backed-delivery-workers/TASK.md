@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 47 coverage fix verification passed
+Status: Round 48 findings recorded; fix pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -899,3 +899,16 @@ coverage passed with all 59 test files and 1211 tests; global branch coverage
 is now 90.02% (3329/3698). Coordinator verification reran the focused
 delivery-worker/registry suite, formatting, diff checks, and approved
 local-IPC/loopback generated coverage successfully before commit.
+
+Round 48 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..a806f78d.diff` produced clean
+style/maintainability, TypeScript/API docs, and security lanes. Documentation
+found the work-log status header still says the Round 47 coverage fix is in
+progress, and `docs/architecture/README.md` omits label plus pending
+`TO_DELIVER` replay validation in its exact-row replay/process-manager wording.
+Performance/reliability found the new default-clock sharded-registry test
+brackets `pickUp()` with live `Date.now()` assertions, with the same older
+pattern in the registry CAS retry test; both should use deterministic time to
+avoid flaking under system-clock adjustments. The next fix updates the records,
+architecture docs, and deterministic tests, then repeats verification and
+five-lane review.
