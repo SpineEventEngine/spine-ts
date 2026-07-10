@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 78 verification passed; re-review pending
+Status: Round 80 records-only fix verified; current-HEAD re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status                               |
-| -------------------------- | -------- | ------------------------------------ |
-| Code style/maintainability | TBD      | Fresh current-HEAD re-review pending |
-| Documentation              | TBD      | Fresh current-HEAD re-review pending |
-| TypeScript/API docs        | TBD      | Fresh current-HEAD re-review pending |
-| Security                   | TBD      | Fresh current-HEAD re-review pending |
-| Performance/reliability    | TBD      | Fresh current-HEAD re-review pending |
+| Lane                       | Reviewer | Status                         |
+| -------------------------- | -------- | ------------------------------ |
+| Code style/maintainability | TBD      | Current-HEAD re-review pending |
+| Documentation              | TBD      | Current-HEAD re-review pending |
+| TypeScript/API docs        | TBD      | Current-HEAD re-review pending |
+| Security                   | TBD      | Current-HEAD re-review pending |
+| Performance/reliability    | TBD      | Current-HEAD re-review pending |
 
 ## Review Criteria
 
@@ -1622,7 +1622,7 @@ status`).
   `be299a5d` (`Close delivery raw callback exports`) recorded the fix;
   five-lane re-review remains pending.
 
-### Round 43 Follow-up - `2026-07-10T17:45:00Z`
+### Round 43 Follow-up - `2026-07-10T16:40:12Z`
 
 - Review package:
   `.superpowers/sdd/review-ca8fb2b3..59c44c44.diff` from task baseline
@@ -1653,7 +1653,7 @@ status`).
   root export-surface test; correct `DEVELOPER_API.md`; verify; and repeat
   five-lane re-review.
 
-### Round 43 Fix Implementation - `2026-07-10`
+### Round 43 Fix Implementation - `2026-07-10T17:06:42Z`
 
 - `InboxStorage` now treats only live per-message claims as unavailable during
   claim compare-and-set. Expired per-message claims may be replaced with the
@@ -1730,8 +1730,8 @@ status`).
   handoff Vitest with 2 files and 22 tests, generated build typecheck, docs
   check with only the existing invalid-`origin` warning, lint, format check,
   working-tree diff check, and baseline range diff check.
-- No worker commit was created. Coordinator commit `9bb68f33` (`Fix projection
-replay status guard`) recorded the fix. Records-only coordinator commit
+- No worker commit was created. Coordinator commit `9bb68f33` recorded the
+  `Fix projection replay status guard` fix. Records-only coordinator commit
   `52a4326d` (`Record delivery round 44 review status`) recorded the follow-up
   status package; five-lane re-review remains pending.
 
@@ -1781,8 +1781,8 @@ replay status guard`) recorded the fix. Records-only coordinator commit
   `typecheck:build:generated`, `docs:check` with only the existing
   invalid-`origin` warning, `lint`, final `format:check`, `git diff --check`,
   and `git diff --check ca8fb2b3..HEAD`.
-- No worker commit was created. Coordinator commit `9546ed2a` (`Close server
-environment delivery type leak`) recorded the fix; five-lane re-review
+- No worker commit was created. Coordinator commit `9546ed2a` recorded the
+  `Close server environment delivery type leak` fix; five-lane re-review
   remains pending.
 
 ### Round 46 Clean Re-review - `2026-07-10T17:52:32Z`
@@ -2718,3 +2718,56 @@ environment delivery type leak`) recorded the fix; five-lane re-review
   delivery-worker Vitest, generated build typecheck, docs check with only the
   existing invalid TypeDoc `origin` warning, format check, and
   `git diff --check`.
+
+### Round 79 Re-review - `2026-07-10T22:42:51Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..24498ddf.diff` from task baseline
+  `ca8fb2b3` to current HEAD `24498ddf`.
+- Code style/maintainability (Chandrasekhar the 3rd): [P3] the Round 44/45
+  durable review records still have flush-left continuation lines in wrapped
+  commit titles, including `Fix projection replay status guard` and
+  `Close server environment delivery type leak`. [P3] the work log has the
+  same issue for the wrapped `Fix delivery expired claim reclaim` title under
+  Round 43. No runtime maintainability findings were found in the Round 78 code
+  touchpoints.
+- Documentation (Planck the 3rd): [P2] Round 78 normalized the Round 44-46
+  window, but the immediately preceding Round 43 durable records still use
+  later `Z` timestamps, so the log goes backward at the Round 43 to Round 44
+  boundary. The commit anchors are `59c44c44` at
+  `2026-07-10T16:40:12Z`, `9477830c` at `2026-07-10T17:06:42Z`, and
+  `f7f56f54` at `2026-07-10T17:08:13Z`.
+- TypeScript/API docs (Confucius the 3rd): clean. `DeliveryEndpointMessage`
+  status/label narrowing, the shared `endpointSnapshot()` path, and callback
+  plus failure-visible mutation isolation coverage align with the API contract.
+- Security (James the 3rd): clean. Residual storage-index/keyset work remains
+  out of scope for T-0026.
+- Performance/reliability (Hegel the 3rd): clean. Bounded scans,
+  retry/failure-budget accounting, live-vs-expired claims, lease fencing,
+  endpoint accounting, unsupported `CATCH_UP`, fail-closed `IMPORT_EVENT`, and
+  shared snapshot copying remain acceptable.
+- Action: record this records-only findings batch, normalize the Round 43/44
+  boundary and wrapped durable-log commit titles, verify, commit, and rerun all
+  five reviewer lanes from the fixed HEAD.
+
+### Round 80 Records-only Fix - `2026-07-10T22:44:58Z`
+
+- Documentation: normalized the Round 43 to Round 44 boundary to the
+  commit-backed UTC anchors: Round 43 re-review package `59c44c44` at
+  `2026-07-10T16:40:12Z`, Round 43 fix/verification commit `9477830c` at
+  `2026-07-10T17:06:42Z`, and Round 44 re-review package `f7f56f54` at
+  `2026-07-10T17:08:13Z`. The misleading local-looking Round 43 worker
+  timestamps are summarized under the `9477830c` commit-backed window.
+- Style: repaired the Round 44 `Fix projection replay status guard`, Round 45
+  `Close server environment delivery type leak`, and work-log Round 43
+  `Fix delivery expired claim reclaim` continuations so wrapped lines remain
+  inside their list items.
+- Dashboard: reset all required review lanes to fresh current-HEAD re-review
+  pending after this records-only fix.
+- Verification: the first `format:check` found Markdown wrapping in the review
+  and work logs; the repo formatter normalized those records. The final
+  `pnpm --config.verify-deps-before-run=false format:check` and
+  `git diff --check` passed at `2026-07-10T22:49:09Z`.
+- Coordinator verification passed at `2026-07-10T22:56:00Z`: the targeted
+  flush-left continuation search returned no matches, `format:check` passed,
+  and `git diff --check` passed.

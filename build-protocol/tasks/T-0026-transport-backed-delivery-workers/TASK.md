@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 78 verification passed; re-review pending
+Status: Round 80 records-only fix verified; current-HEAD re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -756,7 +756,7 @@ diff checks passed. No worker commit was created. Coordinator commit `be299a5d`
 (`Close delivery raw callback exports`) recorded the fix; five-lane re-review
 remains pending.
 
-Round 43 re-review intake on `2026-07-10`: the fresh review package
+Round 43 re-review intake on `2026-07-10T16:40:12Z`: the fresh review package
 `.superpowers/sdd/review-ca8fb2b3..59c44c44.diff` found that the active handoff
 and review contract expects expired per-message claims to be reclaimable during
 claim CAS while live claims block, but current code, tests, and docs still
@@ -770,25 +770,23 @@ keeps live claims blocking, updates opposite tests/docs, moves raw callback
 type checks out of the root public export test, corrects `DEVELOPER_API.md`,
 verifies, and repeats five-lane re-review.
 
-Round 43 fix summary/evidence on `2026-07-10`: expired per-message claims are
-again reclaimable during inbox claim compare-and-set using the storage clock,
-while live per-message claims still block competing delivery. Focused red tests
-first failed for the previous no-reclaim behavior, including a claim expiring
-while the claim-row read was pending; the same focused command passed after the
-storage change. The root public export-surface test no longer imports or
-type-checks package-internal raw callback delivery APIs; the internal callback
-type checks remain in delivery-internal tests. Delivery API docs now describe
-root-public durable inbox/storage primitives and framework-owned validated
-replay, with raw callback delivery remaining package-internal. Focused
-delivery/index Vitest, generated build typecheck, docs check, and lint passed.
-`format:check` initially found durable-log wrapping; the formatter was run and
-final format/diff checks are recorded in the Round 43 report and work log. No
-worker commit was created. Coordinator commit `9477830c` (`Fix delivery expired
-claim reclaim`) recorded the fix; five-lane re-review remains pending.
-Coordinator verification after the worker returned passed focused
-delivery/index Vitest with 4 files and 189 tests, generated build typecheck,
-docs check with only the existing invalid-`origin` warning, lint, format check,
-working-tree diff check, and baseline range diff check.
+Round 43 fix summary/evidence on `2026-07-10T17:06:42Z`: expired per-message
+claims are again reclaimable during inbox claim compare-and-set using the
+storage clock, while live per-message claims still block competing delivery.
+Focused red tests first failed for the previous no-reclaim behavior, including
+a claim expiring while the claim-row read was pending; the same focused command
+passed after the storage change. The root public export-surface test no longer
+imports or type-checks package-internal raw callback delivery APIs; the
+internal callback type checks remain in delivery-internal tests. Delivery API
+docs now describe root-public durable inbox/storage primitives and
+framework-owned validated replay, with raw callback delivery remaining
+package-internal. Focused delivery/index Vitest with 4 files and 189 tests,
+generated build typecheck, docs check with only the existing invalid-`origin`
+warning, lint, format check, working-tree diff check, and baseline range diff
+check passed. No worker commit was created. Coordinator commit `9477830c`
+(`Fix delivery expired claim reclaim`) recorded the fix; the intermediate
+local-looking Round 43 worker timestamps are summarized into this commit-backed
+UTC window, and five-lane re-review remained pending.
 
 Round 44 re-review intake on `2026-07-10T17:08:13Z`: the fresh review package
 `.superpowers/sdd/review-ca8fb2b3..f7f56f54.diff` produced a clean
@@ -1289,6 +1287,33 @@ and `git diff --check`. Coordinator verification passed at
 `2026-07-10T22:13:04Z` with focused delivery-worker Vitest, generated build
 typecheck, docs check with only the existing invalid TypeDoc `origin` warning,
 format check, and `git diff --check`.
+
+Round 79 re-review on `2026-07-10T22:42:51Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..24498ddf.diff` produced clean
+TypeScript/API docs, security, and performance/reliability lanes. Code
+style/maintainability found wrapped commit-title continuations still
+flush-left in Round 43-45 durable records. Documentation found the Round 43
+records still use local-looking `Z` timestamps that make the Round 43 to Round
+44 boundary go backward after Round 78 normalized Round 44-46. The next
+records-only fix will normalize that boundary with
+`59c44c44`/`9477830c`/`f7f56f54` UTC anchors, repair the wrapped commit-title
+continuations, verify, commit, and rerun all five lanes.
+
+Round 80 records-only fix on `2026-07-10T22:44:58Z`: the Round 43 to Round 44
+boundary is normalized to commit-backed UTC: `59c44c44` at
+`2026-07-10T16:40:12Z` for Round 43 re-review intake, `9477830c` at
+`2026-07-10T17:06:42Z` for Round 43 fix/verification evidence, and `f7f56f54`
+at `2026-07-10T17:08:13Z` for Round 44 re-review intake. Wrapped durable
+commit-title continuations for `Fix projection replay status guard`, `Close
+server environment delivery type leak`, and `Fix delivery expired claim
+reclaim` are indented inside their list items. The task/review dashboard is
+reset so all five lanes require fresh current-HEAD re-review. The first
+`format:check` found Markdown wrapping in the review and work logs; the repo
+formatter normalized those records. The final
+`pnpm --config.verify-deps-before-run=false format:check` and `git diff
+--check` passed at `2026-07-10T22:49:09Z`. Coordinator verification passed at
+`2026-07-10T22:56:00Z`: the targeted flush-left continuation search returned
+no matches, `format:check` passed, and `git diff --check` passed.
 
 Round 77 re-review on `2026-07-10T22:19:30Z`: the fresh review package
 `.superpowers/sdd/review-ca8fb2b3..5101cc1e.diff` produced clean
