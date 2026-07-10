@@ -1,6 +1,6 @@
 # T-0022b Implementation Report
 
-Status: implemented in code/docs; round-four fixes verified; re-review pending
+Status: implemented in code/docs; round-five fixes verified; re-review pending
 Date: `2026-07-10`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0022b-process-manager-event-inbox-handoff`
@@ -87,6 +87,16 @@ Round-four findings fixed in this pass:
 2. TypeScript/API docs
    - narrowed process-manager replay messages to the `TO_DELIVER` status used
      by local inbox replay.
+
+Round-five findings fixed in this pass:
+
+1. Code style/maintainability
+   - removed unused Protobuf binary imports;
+   - made the split-route process-manager regression helper synchronous;
+   - replaced the unsafe nested matcher with direct row inspection.
+2. Durable docs
+   - updated the review log through round five;
+   - clarified the stalled-worker handoff wording in the work log.
 
 ## Files Changed
 

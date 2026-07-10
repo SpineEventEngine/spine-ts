@@ -1224,7 +1224,7 @@ class SplitRouteProcessManager extends ProcessManager<
     this.completedIds = [];
   }
 
-  async reactTask(event: ProjectionState): Promise<void> {
+  reactTask(event: ProjectionState): void {
     SplitRouteProcessManager.startedIds.push(this.id);
 
     if (this.id === "pm-fail") {
@@ -3399,19 +3399,14 @@ describe("repository signal routing", () => {
 
     const pending = await delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] });
 
-    expect(pending).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          signalId: "event-pm-split",
-          label: "REACT_UPON_EVENT",
-          status: "TO_DELIVER",
-          inboxId: expect.objectContaining({
-            targetId: "pm-later",
-            targetTypeUrl: deriveTypeUrl(ProcessManagerStateSchema),
-          }),
-        }),
-      ]),
+    const later = pending.find(
+      (message) =>
+        message.signalId === "event-pm-split" &&
+        message.label === "REACT_UPON_EVENT" &&
+        message.status === "TO_DELIVER" &&
+        message.inboxId.targetId === "pm-later",
     );
+    expect(later?.inboxId.targetTypeUrl).toBe(deriveTypeUrl(ProcessManagerStateSchema));
   });
 
   it("rejects invalid stored process-manager event rows before handler code", async () => {

@@ -1,6 +1,6 @@
 # Review Log: T-0022b Process-Manager Event Inbox Handoff
 
-Status: round 3 completed; fixes required
+Status: round 5 completed; fixes required
 
 Scope: live process-manager event reactor durable inbox handoff.
 
@@ -8,11 +8,11 @@ Scope: live process-manager event reactor durable inbox handoff.
 
 | Lane                       | Reviewer | Status  | Notes |
 | -------------------------- | -------- | ------- | ----- |
-| Code style/maintainability | latest: `019f4965-e9d3-7cf3-96ee-f2e67010cc61` | fixes required | Round-three test helper name violates four-component rule. |
-| Documentation completeness | latest: `019f4966-0cd5-7822-aa2e-932b3922de03` | fixes required | Round-three table summary was stale. |
-| TypeScript/API docs        | latest: `019f4966-30c9-7860-8a67-35fbc24b5be6` | fixes required | Round-three minor internal inbox type widening. |
-| Security                   | latest: `019f4966-50a0-7270-9434-a3deadb01608` | clean | Tenant/payload/target validation still found before handler code. |
-| Performance/reliability    | latest: `019f4966-75af-76d2-b11f-d19007f075ca` | clean | Round-two high multi-target durability finding verified fixed. |
+| Code style/maintainability | latest: `019f4976-eb21-71c0-97ff-e0ef1fb34029` | fixes required | Round-five lint/style cleanup required. |
+| Documentation completeness | latest: `019f4977-11e3-7831-839a-0d89709c5826` | fixes required | Round-five review-log status and handoff wording stale. |
+| TypeScript/API docs        | latest: `019f4977-3a04-7db0-afed-2b8dbdf2487e` | clean | PM inbox label/status narrowing verified. |
+| Security                   | latest: `019f4977-596f-7093-a008-a4b6fa61f3fa` | clean | Fail-closed replay still verified. |
+| Performance/reliability    | latest: `019f4977-7c38-7433-91e2-64351e4a0a74` | clean | Multi-target durability remains verified. |
 
 ## Planned Review Focus
 
@@ -154,3 +154,64 @@ Scope: live process-manager event reactor durable inbox handoff.
 - Clean. The reviewer verified that the multi-target path writes all routed rows
   before replay, keeps exact-row drain behavior, and that the new regression
   proves the fixed behavior.
+
+## Round 4 Findings
+
+### Code Style/Maintainability
+
+- Clean. The reviewer found the helper rename and task-scope names compliant,
+  and found the process-manager inbox type narrowing small and internal.
+
+### Documentation
+
+- Medium: work-log chronology was timestamp-sorted but still narratively
+  inconsistent because the stalled-worker handoff said a replacement worker
+  "will continue" after entries already recorded that worker's work.
+- Minor: the implementation report still used stale round-two status wording.
+
+### TypeScript/API Docs
+
+- Minor: `ProcessManagerInboxMessage` narrowed labels but still inherited the
+  broad inbox status union. Narrow replay messages to `TO_DELIVER`.
+
+### Security
+
+- Clean. The reviewer found latest fixes did not weaken pre-handler validation
+  or introduce execution/transport/IPC surface.
+
+### Performance/Reliability
+
+- Clean. The reviewer found multi-target durability, exact-row replay, duplicate
+  delivery, failure propagation, and retryability still sound.
+
+## Round 5 Findings
+
+### Code Style/Maintainability
+
+- Medium: remove unused `fromBinary` and `toBinary` imports from
+  `packages/server/src/repository/repository.ts`.
+- Medium: remove unnecessary `async` from `SplitRouteProcessManager.reactTask()`.
+- Medium: avoid the nested `expect.objectContaining(...)` matcher shape that
+  triggers `@typescript-eslint/no-unsafe-assignment`.
+
+### Documentation
+
+- Medium: review-log status/table were stale and still showed round-three
+  information.
+- Medium: the work-log stalled-worker handoff wording still said a replacement
+  worker "will continue" after the replacement worker entries.
+
+### TypeScript/API Docs
+
+- Clean. The reviewer found the internal PM inbox contract now narrows labels
+  and status, with no public API creep or generated reference edits.
+
+### Security
+
+- Clean. The reviewer found latest fixes did not weaken fail-closed replay and
+  did not introduce new execution/transport/IPC surface.
+
+### Performance/Reliability
+
+- Clean. The reviewer found multi-target PM event durability, exact-row replay,
+  duplicate delivery, failure propagation, and retryability remain sound.

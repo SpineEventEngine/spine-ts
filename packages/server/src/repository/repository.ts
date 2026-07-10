@@ -1,4 +1,4 @@
-import { clone, create, fromBinary, toBinary } from "@bufbuild/protobuf";
+import { clone, create } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import {
   ValidationException,
