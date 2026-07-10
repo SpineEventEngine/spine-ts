@@ -1220,14 +1220,21 @@ unavailable to the active worker and pass independent
 ownership is reclaimable by a later claim attempt while live ownership still
 blocks. Proactive sweeping and broader production recovery policy remain future
 work.
+In `Delivery.drain()`, `limit` caps endpoint callbacks that actually run for
+that drain, while the storage read cap plus `limit` bounds total scanning.
+Valid worker-unsupported labels such as `CATCH_UP` remain pending and are
+skipped before callback invocation, row acceptance, failure recording, or
+failure-budget consumption. Pre-callback claim, replay-validation, lease,
+cleanup, and delivery-status failures stay visible in `DeliveryRun.failures`
+without consuming accepted work or loop failure budget.
 `DeliveryLoop` repeats that direct drain for one shard until the shard is idle,
-skipped, stopped, or reaches a configured failure bound. Failed rows stay
-pending as `TO_DELIVER` for later loop/drain retry when the endpoint callback
-fails and framework-owned cleanup succeeds; no retained attempt history is
-written. Valid worker-unsupported labels such as `CATCH_UP` remain pending and
-are skipped before callback invocation, row acceptance, failure recording, or
-failure-budget consumption. Cleanup/replay validation, lease/fencing, and
-delivery-status update failures are reported in `DeliveryRun.failures` /
+skipped, stopped, paused after a bounded skipped-only scan streak, or reaches a
+configured failure bound. A later `run()` resumes from the saved scan offset
+after that paused result. Failed rows stay pending as `TO_DELIVER` for later
+loop/drain retry when the endpoint callback fails and framework-owned cleanup
+succeeds; no retained attempt history is written. Cleanup/replay validation,
+lease/fencing, and delivery-status update failures are reported in
+`DeliveryRun.failures` /
 `DeliveryFailure` without promising immediate retry, and future recovery policy
 may be needed for abandoned or unavailable rows. Malformed or deprecated legacy
 label data such as stored `IMPORT_EVENT` still fails closed as storage

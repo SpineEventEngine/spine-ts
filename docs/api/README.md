@@ -346,7 +346,9 @@ deprecated legacy label data such as stored `IMPORT_EVENT` remains a
 fail-closed storage-corruption path. Cleanup, lease/fencing, and
 delivery-status update failures are reported in the returned
 `DeliveryRun.failures` / `DeliveryFailure` values without promising immediate
-retry. A later claim attempt can reclaim expired per-message ownership, while
+retry. Pre-callback claim, validation, lease, cleanup, and delivery-status
+failures stay visible there without consuming accepted work or loop failure
+budget. A later claim attempt can reclaim expired per-message ownership, while
 live ownership still blocks; proactive sweeping and broader production recovery
 policy remain future work.
 Drains release the shard in `finally` and return
@@ -356,9 +358,10 @@ and per-message failures retained only in that result.
 picks up the message shard only when `message.id.shard` matches
 `message.shard`, then replays that exact pending row without accepting a page
 limit. `DeliveryLoop` repeats the shard-level `Delivery.drain()` boundary for
-one shard until a drain is idle, skipped, stopped, or reaches `maxFailures`;
-endpoint callback retry is simply a later loop/drain seeing rows that remained
-`TO_DELIVER`.
+one shard until a drain is idle, skipped, stopped, paused after a bounded
+skipped-only scan streak, or reaches `maxFailures`; a later `run()` resumes
+from the saved scan offset after that paused result. Endpoint callback retry is
+simply a later loop/drain seeing rows that remained `TO_DELIVER`.
 `DeliveryLoopRun` aggregates `DeliveryRun` counts across loop drains: `status`
 is the loop stop reason, `runs` is the number of started drains, and
 `processed`, `accepted`, `delivered`, `failed`, and `failures` are accumulated

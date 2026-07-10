@@ -395,6 +395,35 @@ tests), generated build typecheck, docs check, format check, and
 TypeDoc source-link warning. The fix commit is `47672dc8` (`Fix delivery drain
 internal controls`). A fresh five-lane re-review is still required.
 
+Round 27 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..599d6bcf.diff` produced clean style and
+performance/reliability lanes. Blocking findings remain: broader guides must
+state the direct-drain accounting and finite scan contract; delivery drains
+must snapshot/validate tenant context so awaited callbacks cannot redirect
+renew/mark/release operations to a different tenant; and loop invocations need
+an aggregate scan/run bound so continuous unsupported writes cannot keep one
+run alive indefinitely. Minor cleanup remains for the TypeDoc visibility of
+`DeliveryEndpointMessage.label`'s supported-label union and historical Round 24
+references to `DeliveryEndpoint` after the Round 25 `OnDeliveryMessage` rename.
+One fix worker will address the complete batch before another re-review.
+
+Round 27 fix verification on `2026-07-10`: direct drains now snapshot and
+validate one immutable multitenant storage context per drain, so awaited
+callbacks cannot redirect shard renew/mark/cleanup/release or inbox/dedup work
+to another tenant. `DeliveryLoop.run()` now returns a resumable `PAUSED`
+status after a bounded skipped-only scan streak instead of letting one
+invocation continue scanning unsupported rows indefinitely. Broader guides now
+state that `limit` caps endpoint callbacks actually invoked, scanning is
+bounded by `maxReadLimit + limit`, and skipped/unsupported rows plus
+pre-callback failures do not consume accepted work or loop failure budget. The
+public `DeliveryEndpointMessage.label` property now inlines its supported-label
+union, and the historical Round 24 notes mention the later
+`OnDeliveryMessage` rename. Coordinator verification passed with focused
+delivery/API Vitest (5 files, 222 tests), generated build typecheck, docs
+check, format check, and `git diff --check`; `docs:check` reported only the
+existing invalid-origin TypeDoc source-link warning. No commit was created by
+this fix worker.
+
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker
 will add red/green regressions before changing delivery code, preserve direct

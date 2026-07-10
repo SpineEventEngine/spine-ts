@@ -11,8 +11,10 @@ import { ShardedWorkRegistry, type ShardSession } from "./sharded-work-registry.
 
 /** Delivery owner for inbox storage and shard registry. */
 export class Delivery {
+  readonly #context: StorageContext;
   readonly #leaseMs: number;
   readonly #now: () => Date;
+  readonly #storageFactory: StorageFactory;
 
   /** Durable inbox facade. */
   readonly inbox: Inbox;
@@ -21,8 +23,10 @@ export class Delivery {
 
   /** Open delivery from one storage context and factory. */
   constructor(options: DeliveryOptions) {
+    this.#context = options.context;
     this.#leaseMs = requireDeliveryLeaseMs("Delivery", options.leaseMs ?? defaultShardLeaseMs);
     this.#now = options.now ?? (() => new Date());
+    this.#storageFactory = options.storageFactory;
     this.inbox = new Inbox(
       new InboxStorage({
         context: options.context,
@@ -69,20 +73,28 @@ export class Delivery {
     options: DeliveryDrainOptions,
     controls: DeliveryDrainControls,
   ): Promise<DeliveryRun> {
+    const scope = this.#drainScope();
     const limit = inboxStorageAccess.readLimit(options.limit);
     const scanOffset = requireScanOffset(controls.scanOffset);
     const maxFailures = requireFailureLimit(controls.maxFailures);
-    const session = await this.shards.pickUp(shard, options.node);
+    const session = await scope.shards.pickUp(shard, options.node);
     if (session === undefined) {
       return deliveryRun("SKIPPED", 0, 0, 0, 0, []);
     }
     const active = new ActiveClaim();
-    const lease = keepShardLease(this.shards, session, this.#leaseMs, () => this.#now().getTime(), {
-      onRenewClaim: (next) => active.renew(this.inbox.storage, next),
-    });
+    const lease = keepShardLease(
+      scope.shards,
+      session,
+      this.#leaseMs,
+      () => this.#now().getTime(),
+      {
+        onRenewClaim: (next) => active.renew(scope.inbox.storage, next),
+      },
+    );
 
     try {
       return await this.#drainAvailableMessages(
+        scope.inbox,
         session.shard,
         limit,
         options.onMessage,
@@ -93,11 +105,12 @@ export class Delivery {
       );
     } finally {
       await lease.close();
-      await this.shards.release(session);
+      await scope.shards.release(session);
     }
   }
 
   async #drainAvailableMessages(
+    inbox: Inbox,
     shard: ShardIndex,
     limit: number,
     onMessage: OnDeliveryMessage,
@@ -111,10 +124,11 @@ export class Delivery {
 
     while (progress.processed < scanBudget) {
       const readLimit = Math.min(inboxStorageAccess.maxReadLimit, scanBudget - progress.processed);
-      const messages = await this.#readPendingDeliveryPage(shard, readLimit, offset);
+      const messages = await this.#readPendingDeliveryPage(inbox, shard, readLimit, offset);
 
       for (const message of messages) {
         const remainsPending = await this.#tryDrainMessage(
+          inbox,
           progress,
           message,
           onMessage,
@@ -141,11 +155,12 @@ export class Delivery {
   }
 
   async #readPendingDeliveryPage(
+    inbox: Inbox,
     shard: ShardIndex,
     limit: number,
     offset: number,
   ): Promise<readonly InboxMessage[]> {
-    return this.inbox.read(shard, {
+    return inbox.read(shard, {
       statuses: ["TO_DELIVER"],
       limit,
       offset,
@@ -169,42 +184,50 @@ export class Delivery {
     message: InboxMessage,
     options: DeliveryMessageDrainOptions,
   ): Promise<DeliveryRun> {
+    const scope = this.#drainScope();
     const shard = requireMessageShard(message);
     const id = Object.freeze({
       value: message.id.value,
       shard,
     });
-    const session = await this.shards.pickUp(shard, options.node);
+    const session = await scope.shards.pickUp(shard, options.node);
     if (session === undefined) {
       return deliveryRun("SKIPPED", 0, 0, 0, 0, []);
     }
     const active = new ActiveClaim();
-    const lease = keepShardLease(this.shards, session, this.#leaseMs, () => this.#now().getTime(), {
-      onRenewClaim: (next) => active.renew(this.inbox.storage, next),
-    });
+    const lease = keepShardLease(
+      scope.shards,
+      session,
+      this.#leaseMs,
+      () => this.#now().getTime(),
+      {
+        onRenewClaim: (next) => active.renew(scope.inbox.storage, next),
+      },
+    );
 
     try {
       if (!sameShard(session.shard, shard)) {
         throw new InboxMessageError("Inbox message lease shard does not match message shard.");
       }
 
-      const pending = await this.#readPendingMessage(id, shard);
+      const pending = await this.#readPendingMessage(scope.inbox, id, shard);
       if (pending === undefined) {
         return deliveryRun("DRAINED", 0, 0, 0, 0, []);
       }
 
-      return this.#drainExactMessage(pending, options.onMessage, lease, active);
+      return this.#drainExactMessage(scope.inbox, pending, options.onMessage, lease, active);
     } finally {
       await lease.close();
-      await this.shards.release(session);
+      await scope.shards.release(session);
     }
   }
 
   async #readPendingMessage(
+    inbox: Inbox,
     id: InboxMessage["id"],
     shard: ShardIndex,
   ): Promise<InboxMessage | undefined> {
-    const pending = await this.inbox.readMessage(id);
+    const pending = await inbox.readMessage(id);
     if (pending?.status !== "TO_DELIVER") {
       return undefined;
     }
@@ -217,6 +240,7 @@ export class Delivery {
   }
 
   async #drainExactMessage(
+    inbox: Inbox,
     message: InboxMessage,
     onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
@@ -227,7 +251,7 @@ export class Delivery {
     }
 
     const endpoint = requireEndpointMessage(message);
-    const attempt = await this.#deliverMessage(endpoint, onMessage, lease, active);
+    const attempt = await this.#deliverMessage(inbox, endpoint, onMessage, lease, active);
     if (attempt.kind === "SKIPPED") {
       return deliveryRun("DRAINED", 1, 0, 0, 0, []);
     }
@@ -241,27 +265,28 @@ export class Delivery {
   }
 
   async #deliverMessage(
+    inbox: Inbox,
     message: DeliveryEndpointMessage,
     onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
     active: ActiveClaim,
   ): Promise<DeliveryMessageResult> {
     try {
-      const claimed = await this.#claimMessageForDelivery(message, lease);
+      const claimed = await this.#claimMessageForDelivery(inbox, message, lease);
       if (claimed === undefined) {
         return { kind: "SKIPPED" };
       }
 
       active.set(claimed);
       await this.#invokeEndpoint(claimed, onMessage, lease, active);
-      await this.#markActiveDelivered(message, lease, active);
+      await this.#markActiveDelivered(inbox, message, lease, active);
 
       return { kind: "DELIVERED" };
     } catch (error) {
       return Object.freeze({
         kind: "FAILED" as const,
         accepted: active.callbackAccepted(),
-        error: await this.#clearFailedClaim(error, active),
+        error: await this.#clearFailedClaim(inbox, error, active),
       });
     } finally {
       active.clear();
@@ -269,12 +294,13 @@ export class Delivery {
   }
 
   async #claimMessageForDelivery(
+    inbox: Inbox,
     message: InboxMessage,
     lease: ShardLeaseKeeper,
   ): Promise<ClaimedInboxMessage | undefined> {
     lease.requireActive();
 
-    return inboxStorageAccess.claim(this.inbox.storage, message, lease.session());
+    return inboxStorageAccess.claim(inbox.storage, message, lease.session());
   }
 
   async #invokeEndpoint(
@@ -292,6 +318,7 @@ export class Delivery {
   }
 
   async #markActiveDelivered(
+    inbox: Inbox,
     message: InboxMessage,
     lease: ShardLeaseKeeper,
     active: ActiveClaim,
@@ -300,20 +327,20 @@ export class Delivery {
     lease.requireActive();
 
     const marked = await active.finalize((current) =>
-      inboxStorageAccess.markDelivered(this.inbox.storage, current),
+      inboxStorageAccess.markDelivered(inbox.storage, current),
     );
     if (marked === undefined) {
       throw new Error(`Inbox message "${message.id.value}" was not marked delivered.`);
     }
   }
 
-  async #clearFailedClaim(error: unknown, active: ActiveClaim): Promise<unknown> {
+  async #clearFailedClaim(inbox: Inbox, error: unknown, active: ActiveClaim): Promise<unknown> {
     if (active.callbackSucceeded()) {
       return error;
     }
 
     try {
-      await active.clearStored(this.inbox.storage);
+      await active.clearStored(inbox.storage);
 
       return error;
     } catch (clearError) {
@@ -322,6 +349,7 @@ export class Delivery {
   }
 
   async #tryDrainMessage(
+    inbox: Inbox,
     progress: DrainProgress,
     message: InboxMessage,
     onMessage: OnDeliveryMessage,
@@ -337,10 +365,29 @@ export class Delivery {
     }
 
     const endpoint = requireEndpointMessage(message);
-    const attempt = await this.#deliverMessage(endpoint, onMessage, lease, active);
+    const attempt = await this.#deliverMessage(inbox, endpoint, onMessage, lease, active);
     progress.record(endpoint, attempt);
 
     return attempt.kind !== "DELIVERED";
+  }
+
+  #drainScope(): DeliveryScope {
+    const context = snapshotStorageContext(this.#context);
+    const inbox = new Inbox(
+      new InboxStorage({
+        context,
+        storageFactory: this.#storageFactory,
+        now: this.#now,
+      }),
+    );
+    const shards = new ShardedWorkRegistry({
+      context,
+      storageFactory: this.#storageFactory,
+      leaseMs: this.#leaseMs,
+      now: this.#now,
+    });
+
+    return Object.freeze({ inbox, shards });
   }
 }
 
@@ -417,9 +464,6 @@ export interface DeliveryMessageDrainOptions {
   readonly onMessage: OnDeliveryMessage;
 }
 
-/** One durable inbox row accepted by framework-owned direct worker endpoints. */
-type DeliveryEndpointLabel = "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT";
-
 /**
  * Independent callback/failure snapshot for one supported durable inbox row.
  *
@@ -428,8 +472,11 @@ type DeliveryEndpointLabel = "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPO
  */
 export interface DeliveryEndpointMessage extends Omit<InboxMessage, "label"> {
   /** Delivery label supported by the direct worker endpoint callback surface. */
-  readonly label: DeliveryEndpointLabel;
+  readonly label: "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT";
 }
+
+/** One durable inbox row accepted by framework-owned direct worker endpoints. */
+type DeliveryEndpointLabel = DeliveryEndpointMessage["label"];
 
 /** Framework callback for one supported durable inbox row. */
 export type OnDeliveryMessage = (message: DeliveryEndpointMessage) => Promise<void> | void;
@@ -470,6 +517,11 @@ interface ShardLeaseKeeper {
 
 interface ShardLeaseRenewalOptions {
   readonly onRenewClaim: (session: ShardSession) => Promise<void>;
+}
+
+interface DeliveryScope {
+  readonly inbox: Inbox;
+  readonly shards: ShardedWorkRegistry;
 }
 
 interface DrainProgress {
@@ -794,6 +846,26 @@ function requireMessageShard(message: InboxMessage): ShardIndex {
   }
 
   return idShard;
+}
+
+function snapshotStorageContext(context: StorageContext): StorageContext {
+  if (!context.multitenant) {
+    return Object.freeze({
+      name: context.name,
+      multitenant: false,
+    });
+  }
+
+  const { tenantId } = context;
+  if (tenantId === undefined || tenantId.trim().length === 0) {
+    throw new Error(`Multitenant storage "${context.name}" requires context.tenantId.`);
+  }
+
+  return Object.freeze({
+    name: context.name,
+    multitenant: true,
+    tenantId,
+  });
 }
 
 function readShard(value: unknown, label: string): ShardIndex {

@@ -188,6 +188,78 @@ describe("Delivery worker", () => {
     }
   });
 
+  it("keeps one drain on its original tenant when the caller-owned context mutates mid-callback", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-08T09:00:00.000Z"));
+      let tenantId = "tenant-a";
+      const storageFactory = new InMemoryStorageFactory();
+      const delivery = new Delivery({
+        context: {
+          name: "Tasks",
+          multitenant: true,
+          get tenantId() {
+            return tenantId;
+          },
+        },
+        storageFactory,
+        leaseMs: 1_000,
+        now: () => new Date(Date.now()),
+      });
+      const tenantA = new Delivery({
+        context: { name: "Tasks", multitenant: true, tenantId: "tenant-a" },
+        storageFactory,
+        leaseMs: 1_000,
+        now: () => new Date(Date.now()),
+      });
+      const tenantB = new Delivery({
+        context: { name: "Tasks", multitenant: true, tenantId: "tenant-b" },
+        storageFactory,
+        leaseMs: 1_000,
+        now: () => new Date(Date.now()),
+      });
+      const shard = ShardIndex.single();
+      const started = deferred<undefined>();
+      const barrier = deferred<undefined>();
+      const seen: string[] = [];
+
+      await seed(delivery, "signal-tenant-snapshot", 1n);
+      const runPromise = delivery.drain(shard, {
+        node: "node-a",
+        onMessage(message) {
+          seen.push(message.signalId);
+          tenantId = "tenant-b";
+          started.resolve(undefined);
+
+          return barrier.promise;
+        },
+      });
+
+      await started.promise;
+      await vi.advanceTimersByTimeAsync(500);
+      barrier.resolve(undefined);
+      const run = await runPromise;
+
+      expect(seen).toEqual(["signal-tenant-snapshot"]);
+      expect(run).toMatchObject({
+        status: "DRAINED",
+        processed: 1,
+        accepted: 1,
+        delivered: 1,
+        failed: 0,
+      });
+      await expect(tenantA.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
+      await expect(tenantA.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
+        { signalId: "signal-tenant-snapshot", status: "DELIVERED" },
+      ]);
+      await expect(
+        tenantB.inbox.read(shard, { statuses: ["TO_DELIVER", "DELIVERED"] }),
+      ).resolves.toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("marks delivered with the renewed row claim when renewal races final marking", async () => {
     vi.useFakeTimers();
     try {

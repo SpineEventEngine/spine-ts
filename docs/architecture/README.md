@@ -594,7 +594,9 @@ with durable shard leases, and exposes `Delivery.drain()` plus `DeliveryLoop`
 for local framework-owned shard draining. A drain picks up, renews, and
 releases its shard session with compare-and-set fencing. Rows unavailable to the
 active worker are skipped before endpoint invocation, and bounded drains can
-scan past unavailable head rows to reach later available rows. Endpoint
+scan past unavailable head rows to reach later available rows. In
+`Delivery.drain()`, `limit` caps endpoint callbacks that actually run, and the
+storage read cap plus `limit` bounds total scanning for that drain. Endpoint
 callbacks receive independent `DeliveryEndpointMessage` snapshots only for
 `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; their `Date`
 values and `Any.value` bytes are copied. `CATCH_UP` stays pending and never
@@ -602,12 +604,16 @@ reaches callbacks or returned failures. Successful callbacks mark rows
 `DELIVERED`; endpoint failures remain pending for later runs only when
 framework-owned cleanup succeeds. Cleanup, validation, lease/fencing, and
 delivery-status failures are reported without an immediate retry or recovery
-guarantee in this slice. A later claim attempt can reclaim expired per-message
+guarantee in this slice. Worker-unsupported rows plus pre-callback failures do
+not consume accepted work or loop failure budget. A later claim attempt can
+reclaim expired per-message
 ownership, while live ownership still blocks; proactive sweeping and broader
 production recovery policy remain future work. `DeliveryLoop` repeats one-shard drains until idle,
-skipped, stopped, or a configured failure bound. `stop()` prevents future drain
-starts and does not interrupt an in-flight `Delivery.drain()`; `close()` calls
-`stop()` and waits for the current drain, if any, to finish. `DeliveryWorker`
+skipped, stopped, paused after a bounded skipped-only scan streak, or a
+configured failure bound. A later `run()` resumes from the saved scan offset
+after that paused result. `stop()` prevents future drain starts and does not
+interrupt an in-flight `Delivery.drain()`; `close()` calls `stop()` and waits
+for the current drain, if any, to finish. `DeliveryWorker`
 owns configured shard loops for one node and closes through the same
 stop-and-wait behavior. Local posting handoffs now cover command rows,
 projection subscriber rows, and process-manager event rows. Command

@@ -195,6 +195,47 @@ describe("DeliveryLoop", () => {
     expect(run).toMatchObject({ status: "IDLE", runs: 2, accepted: 1, delivered: 1, failed: 0 });
   });
 
+  it("returns a resumable status instead of scanning skipped-only drains forever", async () => {
+    const limit = 3;
+    const scanBudget = inboxStorageAccess.maxReadLimit + limit;
+    let drains = 0;
+    const delivery = {
+      async drain(_shard: ShardIndex, options: { readonly limit?: number }) {
+        drains += 1;
+        expect(options.limit).toBe(limit);
+        if (drains > 2) {
+          throw new Error("DeliveryLoop kept starting skipped-only drains without stopping.");
+        }
+
+        return {
+          status: "DRAINED" as const,
+          processed: scanBudget,
+          accepted: 0,
+          delivered: 0,
+          failed: 0,
+          failures: [],
+        };
+      },
+    } as unknown as Delivery;
+
+    const run = await new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      node: "node-a",
+      limit,
+      onMessage: () => undefined,
+    }).run();
+
+    expect(run).toMatchObject({
+      status: "PAUSED",
+      runs: 2,
+      processed: scanBudget * 2,
+      accepted: 0,
+      delivered: 0,
+      failed: 0,
+    });
+  });
+
   it("stop prevents starting a new drain", async () => {
     const delivery = createDelivery();
     const shard = ShardIndex.single();

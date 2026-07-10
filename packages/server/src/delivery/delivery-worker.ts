@@ -133,6 +133,9 @@ function workerStatus(loops: readonly DeliveryLoopRun[]): DeliveryLoopStatus {
   if (loops.some(({ status }) => status === "SKIPPED")) {
     return "SKIPPED";
   }
+  if (loops.some(({ status }) => status === "PAUSED")) {
+    return "PAUSED";
+  }
 
   return "IDLE";
 }

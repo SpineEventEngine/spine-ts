@@ -120,10 +120,13 @@ Current slice exposes:
   exact-message `Delivery.drainMessage()` runs that reject mismatched
   `message.id.shard`/`message.shard` snapshots and accept only `node` plus
   `onMessage`, a small `DeliveryLoop` that repeats those drains until idle,
-  stopped, skipped, or a configured failure bound, and a closeable
+  stopped, skipped, paused after a bounded skipped-only scan streak, or a
+  configured failure bound, and a closeable
   `DeliveryWorker` that owns configured shard loops for one worker node.
-  Delivery skips rows unavailable to the active worker, passes independent
-  `DeliveryEndpointMessage` snapshots only for `HANDLE_COMMAND`,
+  In `Delivery.drain()`, `limit` caps endpoint callbacks that actually run for
+  one drain; scanning stays finite at the storage read cap plus `limit` while
+  the drain skips rows unavailable to the active worker first. Delivery passes
+  independent `DeliveryEndpointMessage` snapshots only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`, and marks successful rows
   delivered. Those snapshots copy `Date` values and `Any.value` bytes.
   Endpoint callback failures leave rows pending for a later run through the
@@ -133,12 +136,14 @@ Current slice exposes:
   `DeliveryFailure` without an immediate retry or recovery guarantee in this
   slice. Endpoint callbacks run only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; worker-unsupported labels remain
-  pending and are skipped before callback invocation, failure recording, or
-  failure-budget consumption. Expired per-message ownership is reclaimable by a
-  later claim attempt while live ownership still blocks; proactive sweeping and
-  broader production recovery policy remain future work. Supported public delivery
-  labels are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and
-  `CATCH_UP`;
+  pending and are skipped before callback invocation, row acceptance, failure
+  recording, or failure-budget consumption. Pre-callback claim, lease, cleanup,
+  and validation failures stay visible in `DeliveryRun.failures` without
+  consuming accepted endpoint work or loop failure budget. Expired per-message
+  ownership is reclaimable by a later claim attempt while live ownership still
+  blocks; proactive sweeping and broader production recovery policy remain
+  future work. Supported public delivery labels are `HANDLE_COMMAND`,
+  `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`;
   `IMPORT_EVENT` is rejected for new inbox writes before durable storage opens.
   Stored/wire legacy `IMPORT_EVENT` rows remain recognizable only as deprecated
   compatibility data and fail closed on read or drain rather than being

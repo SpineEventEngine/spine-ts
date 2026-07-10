@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 26 fix committed; re-review pending
+Status: Round 27 fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer  | Status                   |
-| -------------------------- | --------- | ------------------------ |
-| Code style/maintainability | Aristotle | Minor only               |
-| Documentation              | Hilbert   | Clean                    |
-| TypeScript/API docs        | Zeno      | Fixed; re-review pending |
-| Security                   | Linnaeus  | Clean                    |
-| Performance/reliability    | Euler     | Fixed; re-review pending |
+| Lane                       | Reviewer   | Status     |
+| -------------------------- | ---------- | ---------- |
+| Code style/maintainability | Einstein   | Clean      |
+| Documentation              | Euclid     | Findings   |
+| TypeScript/API docs        | Hubble     | Minor only |
+| Security                   | Cicero     | Findings   |
+| Performance/reliability    | Heisenberg | Clean      |
 
 ## Review Criteria
 
@@ -31,6 +31,58 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 ## Rounds
 
 Review findings fixed and verified after implementation commit `94b4c632`.
+
+### Round 27 Follow-up - `2026-07-10T11:55:46Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..599d6bcf.diff` from task baseline
+  `ca8fb2b3` to current HEAD `599d6bcf`.
+- Code style/maintainability (Einstein): clean; retained the existing
+  non-blocking note that `FaultyDeliveryRecordStorage.compareAndSetRecord()` is
+  a broad but contained test-only fault-injection helper.
+- Performance/reliability (Heisenberg): clean.
+- TypeScript/API docs (Hubble): [Minor] `DeliveryEndpointMessage.label`
+  references non-exported `DeliveryEndpointLabel`, making the supported
+  endpoint-label union less navigable in TypeDoc. Inline the union or export
+  and document the label type with API coverage.
+- Documentation (Euclid): [Important] broader guides under-specify direct-drain
+  accounting: `limit` caps endpoint callbacks, scanning is bounded by
+  `maxReadLimit + limit`, and skipped/unsupported rows plus pre-callback
+  failures do not consume accepted work or failure budget. [Minor] historical
+  Round 24 notes name `DeliveryEndpoint` without saying it was later renamed to
+  `OnDeliveryMessage`.
+- Security (Cicero): [Important] `Delivery` retains a caller-owned
+  `StorageContext` and rereads tenant state across awaited endpoint callbacks,
+  so tenant mutation during a drain can split claim/renew/mark/release across
+  tenants. [Important] `DeliveryLoop.run()` has finite per-drain scanning but no
+  aggregate run/scan bound, so continuous unsupported writes can keep one
+  invocation scanning indefinitely.
+- Action: dispatch one fix worker for the complete Round 27 batch with TDD red
+  evidence for the behavior bugs, docs/API-log cleanup for the documentation
+  findings, focused verification, and another five-lane re-review.
+
+### Round 27 Fix Implementation - `2026-07-10`
+
+- Added focused red regressions before production code:
+  `delivery-worker.test.ts` failed because a multitenant context flip during an
+  awaited callback changed drain follow-up storage to another tenant, and
+  `delivery-loop.test.ts` failed because skipped-only drains kept repeating
+  until the test seam threw.
+- Delivery drains now snapshot and validate one immutable storage context at
+  drain start, then use that snapshot for shard pickup/renew/release plus inbox
+  reads, claims, dedup updates, cleanup, and delivery marking throughout the
+  drain.
+- `DeliveryLoop.run()` now returns `PAUSED` after two saturated skipped-only
+  drains, preserving the scan offset for a later `run()` instead of letting one
+  invocation keep scanning unsupported rows indefinitely.
+- Public docs now state the direct-drain accounting contract in the broader
+  package, architecture, user, and API guides. `DeliveryEndpointMessage.label`
+  now inlines its supported-label union for clearer TypeDoc output. Historical
+  Round 24 notes now mention the later `OnDeliveryMessage` rename.
+- Fix-worker verification passed: focused delivery/API Vitest passed with 5
+  files and 222 tests; `typecheck:build:generated`, `docs:check`,
+  `format:check`, and `git diff --check` passed. `docs:check` reported only the
+  existing invalid-origin TypeDoc source-link warning.
 
 ### Round 26 Follow-up - `2026-07-10T11:29:35Z`
 

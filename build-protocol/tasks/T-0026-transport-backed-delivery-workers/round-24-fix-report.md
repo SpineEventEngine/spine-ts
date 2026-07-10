@@ -20,7 +20,8 @@ Fixed the Round 24 review batch for T-0026:
 
 ## Changes
 
-- Added exported `DeliveryEndpointMessage` and narrowed `DeliveryEndpoint` plus
+- Added exported `DeliveryEndpointMessage` and narrowed `DeliveryEndpoint`
+  (later renamed to `OnDeliveryMessage` in Round 25) plus
   `DeliveryFailure.message` to the supported worker-label subset.
 - Updated delivery TypeDoc so exact-row drains invoke `onMessage` for the exact
   pending supported row when available, at most once, and so accepted counts

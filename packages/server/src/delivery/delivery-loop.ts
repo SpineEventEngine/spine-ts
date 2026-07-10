@@ -36,7 +36,10 @@ export class DeliveryLoop {
     Object.freeze(this);
   }
 
-  /** Run drains until idle, skipped, stopped, or the failure bound is reached. */
+  /**
+   * Run drains until idle, skipped, stopped, paused after a bounded skipped-only scan streak,
+   * or the failure bound is reached.
+   */
   run(): Promise<DeliveryLoopRun> {
     if (this.#running !== undefined) {
       throw new Error("DeliveryLoop is already running.");
@@ -66,6 +69,7 @@ export class DeliveryLoop {
   async #runLoop(): Promise<DeliveryLoopRun> {
     this.#requireStorageBoundedLimit();
     const summary = new DeliveryLoopSummary();
+    let resumableScanRuns = 0;
     for (;;) {
       if (this.#state.stopped) {
         return summary.result("STOPPED");
@@ -82,12 +86,18 @@ export class DeliveryLoop {
       }
       if (run.accepted === 0 && run.delivered === 0 && run.failed === 0) {
         if (run.processed === this.#scanBudget(limit)) {
+          resumableScanRuns += 1;
           this.#scanOffset += run.processed;
+          if (resumableScanRuns >= maxResumableScanRuns) {
+            return summary.result("PAUSED");
+          }
           continue;
         }
+        resumableScanRuns = 0;
         this.#scanOffset = 0;
         return summary.result("IDLE");
       }
+      resumableScanRuns = 0;
       this.#scanOffset = run.delivered > 0 ? this.#scanOffset + run.processed - run.delivered : 0;
     }
   }
@@ -127,6 +137,7 @@ export class DeliveryLoop {
 
 const maxDeliveryLoopLimit = 1_000;
 const maxDeliveryLoopFailures = 1_000;
+const maxResumableScanRuns = 2;
 
 /** Delivery loop construction options. */
 export interface DeliveryLoopOptions {
@@ -145,7 +156,7 @@ export interface DeliveryLoopOptions {
 }
 
 /** Delivery loop stop reason. */
-export type DeliveryLoopStatus = "IDLE" | "SKIPPED" | "STOPPED" | "FAILED";
+export type DeliveryLoopStatus = "IDLE" | "SKIPPED" | "STOPPED" | "FAILED" | "PAUSED";
 
 /** Aggregate statistics for one delivery loop run. */
 export interface DeliveryLoopRun {
