@@ -2609,14 +2609,15 @@ callers into believing event import remains supported runtime work.
 Decision:
 
 - Run T-0025 as the delivery-label contract cleanup slice.
-- Define the public supported delivery labels as `HANDLE_COMMAND`,
-  `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`.
+- Define the public valid delivery labels for durable rows as
+  `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`.
 - Reject new `IMPORT_EVENT` writes through public inbox write paths before
   durable rows are stored.
 - Keep a narrow legacy stored-row recognition path for deprecated
   `IMPORT_EVENT` compatibility data, but fail closed instead of delivering it.
 - Leave `CATCH_UP` and `TO_CATCH_UP` unchanged; projection/read-side catch-up
-  is separate from ADR 0001 event import removal.
+  is separate from ADR 0001 event import removal and from replay callback
+  support.
 
 Alternatives considered:
 

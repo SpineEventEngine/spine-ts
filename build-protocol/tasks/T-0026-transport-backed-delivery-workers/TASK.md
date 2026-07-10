@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 54 review findings recorded; fix pending
+Status: Round 55 fix verified; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1003,3 +1003,19 @@ supported delivery label even though it is only a recognized/valid label for
 stored rows and remains worker-unsupported for replay callbacks. The next fix
 updates review-log ordering and stale label wording, then repeats verification
 and five-lane review.
+
+Round 55 fix on `2026-07-10`: public/API docs and the nearby decision-log
+wording now distinguish recognized valid `DeliveryLabel` values for durable
+rows from the replay callback labels that workers actually execute. `CATCH_UP`
+remains a valid/recognized row label that stays pending and skipped, while
+replay callbacks support only `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
+`REACT_UPON_EVENT`; new `IMPORT_EVENT` writes remain invalid and legacy rows
+fail closed. The review log now places the Round 45-and-earlier historical
+block before the Round 46+ block and records this Round 55 fix near the current
+tail. Required verification passed: stale-wording searches found no remaining
+public/API docs that say supported labels include `CATCH_UP`,
+`pnpm --config.verify-deps-before-run=false docs:check` passed with only the
+existing invalid TypeDoc `origin` warning,
+`pnpm --config.verify-deps-before-run=false format:check` passed after the
+repo formatter normalized review-log Markdown, and `git diff --check` passed.
+Five-lane re-review remains pending.

@@ -317,10 +317,11 @@ inbox messages and shard lease records through `StorageFactory` /
 through small internal guard records, and keeps shard ordering metadata on each
 message with receive time (`whenReceived`), `version`, and inbox-message UUID
 ordering. Direct inbox writes require `InboxMessage.id.shard` to match
-`InboxMessage.shard`. Supported public `DeliveryLabel` values are
-`HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`;
-`IMPORT_EVENT` is recognized only as deprecated legacy stored/wire data and
-fails closed on read or framework replay.
+`InboxMessage.shard`. Recognized valid `DeliveryLabel` values for durable rows
+are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`;
+framework replay callbacks support only `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`,
+and `REACT_UPON_EVENT`. `IMPORT_EVENT` is recognized only as deprecated legacy
+stored/wire data and fails closed on read or framework replay.
 
 Built contexts use storage-backed shard pickup, renewal, and release internally
 through atomic `RecordStorage.compareAndSet()` fencing. Framework-owned replay

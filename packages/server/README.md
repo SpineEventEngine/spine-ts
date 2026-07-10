@@ -133,12 +133,14 @@ Current slice exposes:
   bound. Live per-message ownership blocks competing delivery; expired
   per-message ownership may be replaced during claim compare-and-set using the
   storage clock. Broader production recovery policy remains future work.
-  Supported public delivery labels are `HANDLE_COMMAND`,
-  `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`;
-  `IMPORT_EVENT` is rejected for new inbox writes before durable storage opens.
-  Stored/wire legacy `IMPORT_EVENT` rows remain recognizable only as deprecated
-  compatibility data and fail closed on read or replay with
-  `DeliveryStorageCorruptionError` rather than being delivered. A paused
+  Recognized valid `DeliveryLabel` values for durable rows are
+  `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`.
+  Framework replay callbacks support only `HANDLE_COMMAND`,
+  `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; valid `CATCH_UP` rows remain
+  pending and skipped. `IMPORT_EVENT` is rejected for new inbox writes before
+  durable storage opens. Stored/wire legacy `IMPORT_EVENT` rows remain
+  recognizable only as deprecated compatibility data and fail closed on read or
+  replay with `DeliveryStorageCorruptionError` rather than being delivered. A paused
   framework run resumes from a saved internal cursor and safely resets that
   cursor if earlier pending rows disappeared. Lease renewal uses same-event-loop
   timers around in-process callbacks, so CPU-bound synchronous callbacks can

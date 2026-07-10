@@ -315,11 +315,14 @@ out of contract. `ShardedWorkRegistry.pickUp()` caller validation for blank or
 oversized `node` values, or invalid clock values supplied through `now`,
 currently throws plain `Error` before any storage read/write begins.
 `ShardedWorkRegistryOptions.leaseMs` must be a safe integer from `1000` through
-`2147483647` milliseconds. Supported delivery labels are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`,
-`REACT_UPON_EVENT`, and `CATCH_UP`. New `IMPORT_EVENT` inbox writes are invalid
-and rejected before durable storage opens; legacy stored/wire `IMPORT_EVENT`
-rows remain recognizable only as deprecated compatibility data and fail closed
-as storage corruption if read or drained.
+`2147483647` milliseconds. Recognized valid `DeliveryLabel` values for durable
+rows are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and
+`CATCH_UP`. Framework replay callbacks support only `HANDLE_COMMAND`,
+`UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; valid `CATCH_UP` rows remain
+pending and skipped. New `IMPORT_EVENT` inbox writes are invalid and rejected
+before durable storage opens; legacy stored/wire `IMPORT_EVENT` rows remain
+recognizable only as deprecated compatibility data and fail closed as storage
+corruption if read or drained.
 
 Current storage usage is deliberately narrow:
 
