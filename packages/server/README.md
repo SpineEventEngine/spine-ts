@@ -994,12 +994,15 @@ immediate local shard replay/drain. Process-manager event rows use
 original event ID as `signalId`, and replay only the stored target row before
 handler execution. Before handler code runs, replay validates tenant,
 payload/schema, target type URL, and routed target ID.
-Supported delivery workers, scheduler/retry workers, cross-process recovery,
-retry monitors, retained attempt history, production delivery policy, and
-supported catch-up work remain open production gaps. This seam follows Spine
-`core-jvm` `Repository` identity and registration concepts closely. The direct
-repository API does not create, find, or store entities; invoke handlers; write
-inboxes; manage caches; emit lifecycle events; or touch transport.
+Process-supervised delivery workers, transport-topology workers,
+scheduler/retry workers, retained attempt history, production delivery policy,
+and supported catch-up work remain open production gaps. `DeliveryWorker`
+is the supported local closeable wrapper over shard delivery loops, but full
+production supervision and retry policy remain outside this slice. This seam
+follows Spine `core-jvm` `Repository` identity and registration concepts
+closely. The direct repository API does not create, find, or store entities;
+invoke handlers; write inboxes; manage caches; emit lifecycle events; or touch
+transport.
 
 ## Entity State Transition Validation
 

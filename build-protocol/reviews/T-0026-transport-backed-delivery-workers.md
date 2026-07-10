@@ -31,3 +31,15 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 ## Rounds
 
 Pending after implementation commit `94b4c632`.
+
+### Documentation Review Follow-up - `2026-07-10T05:09:03Z`
+
+- Finding: [P2] `packages/server/README.md` still said "Supported delivery
+  workers" remain an open production gap, which was stale after T-0026 exported
+  and documented `DeliveryWorker` as the supported local closeable wrapper over
+  shard delivery loops.
+- Fix: narrowed the open-gap wording to process-supervised delivery workers,
+  transport-topology workers, scheduler/retry workers, retained attempt
+  history, production delivery policy, and catch-up work. The README still
+  states that full production supervision and retry policy remain outside this
+  slice.
