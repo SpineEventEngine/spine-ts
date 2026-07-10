@@ -32,6 +32,39 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 Review findings fixed and verified after implementation commit `94b4c632`.
 
+### Round 15 Follow-up - `2026-07-10T07:40:04Z`
+
+- Finding: [Docs MEDIUM] `docs/USER_GUIDE.md` and `docs/api/README.md`
+  overpromised retry behavior by saying failed rows stay pending for later
+  drains without distinguishing endpoint callback failures from delivery
+  marking, fencing, fail-closed validation, or lease failures.
+- Finding: [API P3] `DeliveryRun.failed`, `DeliveryFailure.error`, and
+  `DeliveryLoopRun.failed` TypeDoc comments only named endpoint or
+  delivery-marking failures even though direct delivery can also report
+  fail-closed validation and lease/fencing failures.
+- Finding: [Security MEDIUM] `inbox-records.ts` read internal `claim` metadata
+  through `Reflect.get`, so public write/mark input with an inherited or
+  proxy-provided optional field could serialize framework-owned claim metadata
+  after public claim checks.
+- Fix: narrowed the delivery retry docs to endpoint callback failures and
+  documented non-callback delivery failures as returned
+  `DeliveryRun.failures` / `DeliveryFailure` values without promising immediate
+  retry or recovery policy.
+- Fix: broadened `DeliveryRun.failed`, `DeliveryFailure.error`, and
+  `DeliveryLoopRun.failed` TypeDoc to include endpoint callback,
+  fail-closed validation, lease/fencing, and delivery-status update failures
+  without exposing internal claim details.
+- Fix: `InboxRecords` now reads optional internal `claim` metadata only from an
+  own property. The focused regression covers proxy-provided and inherited
+  claim metadata staying out of public record snapshots.
+- Evidence: the focused inbox regression failed before the fix with the hidden
+  claim present on the serialized snapshot, then passed after the own-property
+  check.
+- Verification: Round 15 requested focused Vitest passed with 2 files and 137
+  tests; `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
+
 ### Round 14 Follow-up - `2026-07-10T07:30:12Z`
 
 - Finding: [Docs MEDIUM] `build-protocol/DEVELOPER_API.md` used

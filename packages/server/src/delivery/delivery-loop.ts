@@ -111,7 +111,7 @@ export interface DeliveryLoopRun {
   readonly accepted: number;
   /** Number of rows delivered across all drains. */
   readonly delivered: number;
-  /** Number of endpoint or delivery-marking failures across all drains. */
+  /** Number of endpoint callback, validation, lease/fencing, or status update failures. */
   readonly failed: number;
   /** Per-message failures retained only in the returned run result. */
   readonly failures: readonly DeliveryFailure[];

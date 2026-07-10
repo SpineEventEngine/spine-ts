@@ -245,7 +245,7 @@ export interface DeliveryRun {
   readonly accepted: number;
   /** Number of rows whose endpoint callback succeeded and were marked delivered. */
   readonly delivered: number;
-  /** Number of endpoint or delivery-marking failures. */
+  /** Number of endpoint callback, validation, lease/fencing, or status update failures. */
   readonly failed: number;
   /** Per-message failures kept only in the returned run result. */
   readonly failures: readonly DeliveryFailure[];
@@ -255,7 +255,10 @@ export interface DeliveryRun {
 export interface DeliveryFailure {
   /** Message that failed during this run. */
   readonly message: InboxMessage;
-  /** Error thrown by the endpoint callback or delivery status update. */
+  /**
+   * Error observed during endpoint callback, fail-closed validation,
+   * lease/fencing, or delivery-status update work.
+   */
   readonly error: unknown;
 }
 

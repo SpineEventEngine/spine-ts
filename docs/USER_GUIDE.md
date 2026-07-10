@@ -1212,12 +1212,15 @@ unavailable to the active worker and pass public `InboxMessage` snapshots to
 endpoint code. Abandoned-row recovery remains future production policy.
 `DeliveryLoop` repeats that direct drain for one shard until the shard is idle,
 skipped, stopped, or reaches a configured failure bound. Failed rows stay
-pending as `TO_DELIVER` and are retried by a later loop/drain run; no retained
-attempt history is written. `stop()` prevents future drain starts and does not
-interrupt an in-flight `Delivery.drain()`; `close()` calls `stop()` and waits
-for the current drain, if any, to finish. `DeliveryWorker` owns configured
-shard loops for one node and closes through the same stop-and-wait
-behavior.
+pending as `TO_DELIVER` for later loop/drain retry when the endpoint callback
+fails; no retained attempt history is written. Fail-closed label validation,
+lease/fencing, and delivery-status update failures are reported in
+`DeliveryRun.failures` / `DeliveryFailure` without promising immediate retry,
+and future recovery policy may be needed for abandoned or unavailable rows.
+`stop()` prevents future drain starts and does not interrupt an in-flight
+`Delivery.drain()`; `close()` calls `stop()` and waits for the current drain, if
+any, to finish. `DeliveryWorker` owns configured shard loops for one node and
+closes through the same stop-and-wait behavior.
 Projection catch-up remains the existing `BoundedContext.catchUpReadSide()`
 coordination path and does not gain fake durable catch-up storage here; retry
 workers and generic repository

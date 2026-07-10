@@ -387,7 +387,8 @@ function snapshotInboxMessage(message: InboxRecordMessage): InboxMessageSnapshot
   const version = requireInputVersion(readInputProperty(messageInput, "version", "Inbox version"));
   const signal = readInputProperty(messageInput, "signal", "Inbox signal") as Any | undefined;
   const keepUntil = readInputProperty(messageInput, "keepUntil", "Inbox keep-until time");
-  const claim = readInputProperty(messageInput, "claim", "Inbox claim") as InboxClaim | undefined;
+  const claim = readOwnInputProperty(messageInput, "claim", "Inbox claim") as
+    InboxClaim | undefined;
 
   return Object.freeze({
     id,
@@ -415,6 +416,20 @@ function readInputProperty(
 ): unknown {
   try {
     return Reflect.get(value, property);
+  } catch (error) {
+    throw new InboxMessageError(`${label} is invalid.`, { cause: error });
+  }
+}
+
+function readOwnInputProperty(
+  value: Record<string, unknown>,
+  property: string,
+  label: string,
+): unknown {
+  try {
+    return Object.prototype.hasOwnProperty.call(value, property)
+      ? Reflect.get(value, property)
+      : undefined;
   } catch (error) {
     throw new InboxMessageError(`${label} is invalid.`, { cause: error });
   }

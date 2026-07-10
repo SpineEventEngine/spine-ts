@@ -285,6 +285,32 @@ describe("Inbox", () => {
     });
   });
 
+  it("does not serialize proxy-provided claim metadata through public record snapshots", () => {
+    const proxySnapshot = InboxRecords.read(
+      InboxRecords.write(
+        claimHidingProxy(createMessage("message-record-proxy", "signal-proxy", 1n)),
+      ),
+    );
+    const inheritedSnapshot = InboxRecords.read(
+      InboxRecords.write(
+        inheritedClaimMessage(createMessage("message-record-inherited", "signal-inherited", 1n)),
+      ),
+    );
+
+    expect(proxySnapshot).toMatchObject({
+      id: { value: "message-record-proxy" },
+      signalId: "signal-proxy",
+      status: "TO_DELIVER",
+    });
+    expect(Reflect.has(proxySnapshot, "claim")).toBe(false);
+    expect(inheritedSnapshot).toMatchObject({
+      id: { value: "message-record-inherited" },
+      signalId: "signal-inherited",
+      status: "TO_DELIVER",
+    });
+    expect(Reflect.has(inheritedSnapshot, "claim")).toBe(false);
+  });
+
   it("orders equal receive time and version ties by inbox message UUID and supports paging limits", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -2266,6 +2292,23 @@ function withClaim(message: ReturnType<typeof createMessage>): ReturnType<typeof
       expiresAt: new Date("2026-07-08T09:01:00.000Z"),
     },
   }) as unknown as ReturnType<typeof createMessage>;
+}
+
+function inheritedClaimMessage(
+  message: ReturnType<typeof createMessage>,
+): ReturnType<typeof createMessage> {
+  return Object.freeze(
+    Object.assign(
+      Object.create({
+        claim: {
+          id: "inherited-external-claim",
+          node: "node-a",
+          expiresAt: new Date("2026-07-08T09:01:00.000Z"),
+        },
+      }),
+      message,
+    ),
+  ) as ReturnType<typeof createMessage>;
 }
 
 function claimHidingProxy(

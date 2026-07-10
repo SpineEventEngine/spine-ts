@@ -333,16 +333,20 @@ invoking the `DeliveryEndpoint`, and passes a public `InboxMessage` snapshot to
 the endpoint. Endpoint callbacks run only for `HANDLE_COMMAND`,
 `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; unsupported labels fail closed
 before the callback. Successful delivery marks the row `DELIVERED`; failures
-leave the row pending for a later run, release the shard in `finally`, and
-return a `DeliveryRun` with `status`, `processed`, `accepted`, `delivered`,
-`failed`, and per-message `DeliveryFailure` values retained only in that
-result.
+from endpoint callbacks leave the row pending for a later run. Fail-closed
+label validation, lease/fencing, and delivery-status update failures are
+reported in the returned `DeliveryRun.failures` / `DeliveryFailure` values
+without promising immediate retry; future recovery policy may be needed for
+abandoned or unavailable rows. Drains release the shard in `finally` and return
+a `DeliveryRun` with `status`, `processed`, `accepted`, `delivered`, `failed`,
+and per-message failures retained only in that result.
 `Delivery.drainMessage(message, { node, onMessage })`
 picks up the message shard only when `message.id.shard` matches
 `message.shard`, then replays that exact pending row without accepting a page
 limit. `DeliveryLoop` repeats the shard-level `Delivery.drain()` boundary for
 one shard until a drain is idle, skipped, stopped, or reaches `maxFailures`;
-retry is simply a later loop/drain seeing rows that remained `TO_DELIVER`.
+endpoint callback retry is simply a later loop/drain seeing rows that remained
+`TO_DELIVER`.
 `DeliveryLoopRun` aggregates `DeliveryRun` counts across loop drains: `status`
 is the loop stop reason, `runs` is the number of started drains, and
 `processed`, `accepted`, `delivered`, `failed`, and `failures` are accumulated
