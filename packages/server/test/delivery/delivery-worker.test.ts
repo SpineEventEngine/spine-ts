@@ -675,6 +675,64 @@ describe("Delivery worker", () => {
     expect(Array.from(delivered[0]?.signal?.value ?? [])).toEqual([1, 2, 3]);
   });
 
+  it("keeps the internal pending row private from failure message mutations", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const shard = ShardIndex.single();
+    const keepUntil = new Date("2026-07-08T10:00:00.000Z");
+
+    await delivery.inbox.receive({
+      inboxId: targetInbox(),
+      signalId: "signal-mutable-failure-copy",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      version: 1n,
+      signal: create(AnySchema, {
+        typeUrl: "type.example.dev/tasks.Signal",
+        value: new Uint8Array([1, 2, 3]),
+      }),
+      keepUntil,
+    });
+
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage() {
+        throw new Error("endpoint failed");
+      },
+    });
+
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 1,
+      delivered: 0,
+      failed: 1,
+    });
+    const failure = run.failures[0];
+    expect(failure).toBeDefined();
+    if (failure === undefined) {
+      throw new Error("Expected one delivery failure.");
+    }
+
+    failure.message.whenReceived.setTime(Date.parse("2026-07-08T09:30:00.000Z"));
+    failure.message.keepUntil?.setTime(Date.parse("2026-07-08T10:30:00.000Z"));
+    failure.message.signal?.value.fill(9);
+
+    const pending = await delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] });
+    expect(pending).toMatchObject([
+      {
+        signalId: "signal-mutable-failure-copy",
+        whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+        keepUntil,
+      },
+    ]);
+    expect(Array.from(pending[0]?.signal?.value ?? [])).toEqual([1, 2, 3]);
+  });
+
   it("honors a run limit and leaves later pending rows for another drain", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },

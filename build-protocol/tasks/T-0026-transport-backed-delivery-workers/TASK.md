@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 76 coordinator verification passed; re-review pending
+Status: Round 78 verification passed; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -790,7 +790,7 @@ delivery/index Vitest with 4 files and 189 tests, generated build typecheck,
 docs check with only the existing invalid-`origin` warning, lint, format check,
 working-tree diff check, and baseline range diff check.
 
-Round 44 re-review intake on `2026-07-10`: the fresh review package
+Round 44 re-review intake on `2026-07-10T17:08:13Z`: the fresh review package
 `.superpowers/sdd/review-ca8fb2b3..f7f56f54.diff` produced a clean
 performance/reliability lane. Documentation and TypeScript/API docs found
 `build-protocol/DEVELOPER_API.md` still names internal `DeliveryOptions.leaseMs`
@@ -805,7 +805,7 @@ public API doc sentence, adds a projection replay status guard with focused
 coverage, updates stale durable records, verifies, and repeats five-lane
 re-review.
 
-Round 44 fix implementation on `2026-07-10`: projection replay now validates
+Round 44 fix implementation on `2026-07-10T17:27:31Z`: projection replay now validates
 `message.status === "TO_DELIVER"` before target lookup and repository/user
 projection invocation. Focused red/green coverage proves `DELIVERED`,
 `SCHEDULED`, and `TO_CATCH_UP` projection replay snapshots fail closed without
@@ -819,13 +819,14 @@ docs check, lint, format check, working-tree diff check, and baseline range diff
 check. No worker commit was created. Coordinator commit `9bb68f33` (`Fix
 projection replay status guard`) recorded the fix; five-lane re-review remains
 pending. Records-only coordinator commit `52a4326d` (`Record delivery round 44
-review status`) later recorded the follow-up status package.
+review status`) later recorded the `2026-07-10T17:28:52Z` follow-up status
+package.
 Coordinator verification after the worker returned passed focused context
 handoff Vitest with 2 files and 22 tests, generated build typecheck, docs check
 with only the existing invalid-`origin` warning, lint, format check,
 working-tree diff check, and baseline range diff check.
 
-Round 45 re-review intake on `2026-07-10`: the fresh review package
+Round 45 re-review intake on `2026-07-10T17:28:52Z`: the fresh review package
 `.superpowers/sdd/review-ca8fb2b3..52a4326d.diff` produced clean security and
 performance/reliability lanes. Style found Round 44 records name fix commit
 `9bb68f33` but omit records-only commit `52a4326d`, and one review-log bullet
@@ -839,7 +840,7 @@ status guard. The next fix closes the server-environment public type leak,
 narrows projection replay target typing, updates docs and durable records,
 verifies the batch, and leaves coordinator commit/re-review pending.
 
-Round 45 fix implementation on `2026-07-10`: `ServerEnvironment` public
+Round 45 fix implementation on `2026-07-10T17:51:06Z`: `ServerEnvironment` public
 delivery option/property types now use the small `ServerEnvironmentCloseable`
 owner type instead of internal raw `Delivery`; projection inbox target replay
 now accepts only pending `UPDATE_SUBSCRIBER` messages while
@@ -856,7 +857,7 @@ approval with 5 files and 179 tests. Required verification passed:
 commit `9546ed2a` (`Close server environment delivery type leak`) recorded the
 fix; five-lane re-review remains pending.
 
-Round 46 clean re-review on `2026-07-10`: the fresh review package
+Round 46 clean re-review on `2026-07-10T17:52:32Z`: the fresh review package
 `.superpowers/sdd/review-ca8fb2b3..4aa591ed.diff` produced clean results in all
 five mandatory lanes. Code style/maintainability (Avicenna the 2nd),
 documentation (Raman the 2nd), TypeScript/API docs (Parfit the 2nd), security
@@ -1037,8 +1038,9 @@ delivery scan behavior.
 
 Round 57 fix on `2026-07-10`: commit `7d1b09ad` at `19:55:11Z` addressed the
 Round 56 findings. A later reporting draft incorrectly moved the work-log
-Round 46 clean re-review timestamp from `2026-07-10T17:57:08Z` to
-`2026-07-10T19:57:08Z`. Rewrapped the two
+Round 46 clean re-review timestamp to a later local-looking
+`2026-07-10T19:57:08Z`. Round 78 later reconciled the active Round 44-46 band
+to commit-backed UTC. Rewrapped the two
 review-log `git diff --check ca8fb2b3...HEAD` references so continuation lines
 stay readable inside their list items. Added a focused delivery-loop
 regression first; it failed red with `delivered: 0` after a cleared head claim
@@ -1059,21 +1061,23 @@ style/maintainability found that `Delivery.#drainAvailableMessages()` now
 carries cursor state across several mutable locals and duplicated reset
 transitions; the next fix should extract a small private scan-state helper
 local to the delivery module without adding a broader worker abstraction.
-Documentation found remaining durable-record issues: the Round 46 work-log
-timestamp still disrupts the Round 45-47 chronology, the Round 57 start
-timestamp is later than fix commit `7d1b09ad`, the required-lanes dashboard was
-stale before this Round 58 record, and the Round 57 red/green command lines
-exceed the 120-character ledger limit. The next fix will address the complete
-batch and rerun focused verification before another five-lane re-review.
+Documentation found remaining durable-record issues: the Round 45-47 work-log
+chronology was still not consistently anchored to commit-backed UTC, the Round
+57 start timestamp is later than fix commit `7d1b09ad`, the required-lanes
+dashboard was stale before this Round 58 record, and the Round 57 red/green
+command lines exceed the 120-character ledger limit. The next fix will address
+the complete batch and rerun focused verification before another five-lane
+re-review.
 
 Round 58 fix implementation on `2026-07-10`: extracted private
 `DeliveryScanState` transitions for the bounded delivery scan, preserving the
 existing behavior and public API while removing the spread of mutable cursor
-locals. Commit evidence reconciles the Round 45-47 work-log sequence as Round
-45 at `17:45`, Round 46 at `17:57:08Z`, final verification at `18:05`, and
-Round 47 work at `18:14`. The later Round 57 `21:20Z` records now describe
-reporting actions for fix commit `7d1b09ad` at `19:55:11Z`, rather than worker
-starts. The Round 57 red/green commands are wrapped within the ledger limit;
+locals. Later Round 78 records reconciled the active Round 44-46 sequence to
+commit-backed UTC: Round 44 status at `17:28:52Z`, Round 45 fix at
+`17:51:06Z`, and Round 46 clean re-review at `17:52:32Z`. The later Round 57
+`21:20Z` records now describe reporting actions for fix commit `7d1b09ad` at
+`19:55:11Z`, rather than worker starts. The Round 57 red/green commands are
+wrapped within the ledger limit;
 `round-59-fix-report.md` records the batch. The focused regression, both
 required delivery files, generated TypeScript build typecheck, docs check,
 format check, and `git diff --check` passed; five-lane re-review is pending.
@@ -1283,5 +1287,37 @@ current-HEAD re-review after this fix. Focused worker verification passed at
 `pnpm --config.verify-deps-before-run=false test packages/server/test/delivery/delivery-worker.test.ts`
 and `git diff --check`. Coordinator verification passed at
 `2026-07-10T22:13:04Z` with focused delivery-worker Vitest, generated build
+typecheck, docs check with only the existing invalid TypeDoc `origin` warning,
+format check, and `git diff --check`.
+
+Round 77 re-review on `2026-07-10T22:19:30Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..5101cc1e.diff` produced clean
+TypeScript/API docs, security, and performance/reliability lanes. Code
+style/maintainability found `requireScanOffset()` still uses retired
+scan-offset terminology and `requireEndpointMessage()` still builds
+failure-visible endpoint snapshots through a shallow path rather than the
+callback snapshot copy path. Documentation found the Round 45 work-log
+chronology still goes backward from the re-review entry to its fix and Round 46
+clean re-review, and found the review log still starts with Round 45 before
+older rounds then resumes Round 46 later. The next fix will handle the full
+batch, verify, commit, and rerun all five lanes.
+
+Round 78 fix on `2026-07-10T22:28:32Z`: renamed the private resume-cursor
+offset helper to `requireResumeCursorOffset()`, routed callback and
+failure-visible endpoint snapshots through one local validating/copying builder,
+and added focused failure-message mutation isolation coverage. Round 44-46
+durable records now use the supplied commit-backed UTC anchors, and the review
+log sections are mechanically ordered by round so Round 45 sits after Round 44
+and before Round 46 instead of at the file top. The task/review dashboard is
+reset so all five lanes require fresh current-HEAD re-review.
+Focused verification passed at `2026-07-10T22:29:32Z`: the delivery-worker
+test command completed proto generation/checks, generated build typecheck, and
+52 passing Vitest tests in 1 file. The first post-record format check found
+work-log wrapping only; the repo formatter normalized it, the final format
+check passed, and `git diff --check` passed. `git status --short` showed no
+generated Protobuf output in the tracked diff; the pre-existing untracked
+`.codex-review-packages/` directory remains untracked. Five-lane current-HEAD
+re-review remains pending. Coordinator verification passed at
+`2026-07-10T22:37:21Z` with focused delivery-worker Vitest, generated build
 typecheck, docs check with only the existing invalid TypeDoc `origin` warning,
 format check, and `git diff --check`.

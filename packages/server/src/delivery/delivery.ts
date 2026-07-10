@@ -955,22 +955,27 @@ class ActiveClaim {
 }
 
 function endpointMessage(message: ClaimedInboxMessage): DeliveryEndpointMessage {
-  const unclaimed = claimFreeMessage(message);
-  const label = requireEndpointLabel(unclaimed.label);
-  const status = requireEndpointStatus(unclaimed.status);
+  return endpointSnapshot(message);
+}
+
+function endpointSnapshot(message: InboxMessage): DeliveryEndpointMessage {
+  const label = requireEndpointLabel(message.label);
+  const status = requireEndpointStatus(message.status);
+
   return Object.freeze({
-    ...unclaimed,
+    id: Object.freeze({
+      value: message.id.value,
+      shard: message.id.shard,
+    }),
+    inboxId: Object.freeze({ ...message.inboxId }),
     label,
     status,
-    id: Object.freeze({
-      value: unclaimed.id.value,
-      shard: unclaimed.id.shard,
-    }),
-    inboxId: Object.freeze({ ...unclaimed.inboxId }),
-    ...(unclaimed.signal === undefined ? {} : { signal: copySignal(unclaimed.signal) }),
-    whenReceived: new Date(unclaimed.whenReceived),
-    shard: unclaimed.shard,
-    ...(unclaimed.keepUntil === undefined ? {} : { keepUntil: new Date(unclaimed.keepUntil) }),
+    signalId: message.signalId,
+    shard: message.shard,
+    whenReceived: new Date(message.whenReceived),
+    version: message.version,
+    ...(message.signal === undefined ? {} : { signal: copySignal(message.signal) }),
+    ...(message.keepUntil === undefined ? {} : { keepUntil: new Date(message.keepUntil) }),
   });
 }
 
@@ -1005,7 +1010,7 @@ function requireDrainCursor(value: unknown): DeliveryDrainCursor {
     readonly offset?: unknown;
     readonly pendingBoundaryId?: unknown;
   };
-  const safeOffset = requireScanOffset(offset);
+  const safeOffset = requireResumeCursorOffset(offset);
   if (safeOffset === 0) {
     return drainCursor(0);
   }
@@ -1016,7 +1021,7 @@ function requireDrainCursor(value: unknown): DeliveryDrainCursor {
   return drainCursor(safeOffset, pendingBoundaryId);
 }
 
-function requireScanOffset(value: unknown): number {
+function requireResumeCursorOffset(value: unknown): number {
   if (value === undefined) {
     return 0;
   }
@@ -1039,14 +1044,7 @@ function drainCursor(offset: number, pendingBoundaryId?: string): DeliveryDrainC
 }
 
 function requireEndpointMessage(message: InboxMessage): DeliveryEndpointMessage {
-  const label = requireEndpointLabel(message.label);
-  const status = requireEndpointStatus(message.status);
-
-  return Object.freeze({
-    ...message,
-    label,
-    status,
-  });
+  return endpointSnapshot(message);
 }
 
 function requireEndpointStatus(status: InboxMessage["status"]): DeliveryEndpointMessage["status"] {
@@ -1067,24 +1065,6 @@ function leaseError(error: unknown): Error {
   return error instanceof Error
     ? error
     : new Error("Shard lease renewal failed.", { cause: error });
-}
-
-function claimFreeMessage(message: ClaimedInboxMessage): InboxMessage {
-  return Object.freeze({
-    id: Object.freeze({
-      value: message.id.value,
-      shard: message.id.shard,
-    }),
-    inboxId: Object.freeze({ ...message.inboxId }),
-    label: message.label,
-    status: message.status,
-    signalId: message.signalId,
-    shard: message.shard,
-    whenReceived: message.whenReceived,
-    version: message.version,
-    ...(message.signal === undefined ? {} : { signal: copySignal(message.signal) }),
-    ...(message.keepUntil === undefined ? {} : { keepUntil: message.keepUntil }),
-  });
 }
 
 async function clearActiveClaim(

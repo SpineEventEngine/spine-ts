@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 76 coordinator verification passed; re-review pending
+Status: Round 78 verification passed; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -32,472 +32,872 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 Review findings fixed and verified after implementation commit `94b4c632`.
 
-### Round 45 Follow-up - `2026-07-10T19:15:00Z`
+### Reliability Review Follow-up - `2026-07-10T04:14:12Z`
 
-- Review package:
-  `.superpowers/sdd/review-ca8fb2b3..52a4326d.diff` from task baseline
-  `ca8fb2b3` to current HEAD `52a4326d`.
-- Code style/maintainability (Maxwell the 2nd): [P2] Round 44 records name fix
-  commit `9bb68f33` but do not mention records-only commit `52a4326d`;
-  [P3] one Round 44 review-log bullet has a flush-left continuation line.
-- Documentation (Mencius the 2nd): [P2] current replay-validation docs omit the
-  new `TO_DELIVER` status validation before handler/projection execution; [P2]
-  a few Round 35 expired-claim records still omit the Round 43 / `9477830c`
-  supersession.
-- TypeScript/API docs (Einstein the 2nd): [P1] root-public
-  `ServerEnvironment` still exposes internal raw `Delivery` through public
-  option/property types; [P2] projection replay guard is runtime-correct but
-  its assertion does not narrow because `ProjectionInboxTarget.replay()` still
-  accepts plain `InboxMessage` instead of an `UPDATE_SUBSCRIBER`/`TO_DELIVER`
-  message type.
-- Security (Godel the 2nd): clean.
-- Performance/reliability (Darwin the 2nd): clean.
-- Action: close the `ServerEnvironment` raw-delivery public type leak, mirror
-  the process-manager narrow target-message type for projection replay, document
-  replay status validation, update remaining historical Round 35 no-reclaim
-  notes and Round 44 records-commit breadcrumbs, verify, and repeat five-lane
-  re-review.
+- Finding: [P1] `DeliveryWorker.start()` used fail-fast `Promise.all()` for
+  shard loops. If one `DeliveryLoop.run()` rejected while another loop was still
+  inside an active drain, the worker cleared `#running` early and later
+  `close()` calls no longer waited for that active loop.
+- Fix: `DeliveryWorker.start()` now stores a run promise backed by
+  `Promise.allSettled()`, so `#running` is cleared only after every shard loop
+  fulfills or rejects. Single loop failures preserve the original rejection;
+  multiple loop failures reject with one `AggregateError` containing every
+  reason.
+- Evidence: focused `delivery-worker-runtime.test.ts` failed before the fix on
+  early close settlement and missing multi-failure aggregation, then passed
+  after the worker settlement change.
 
-### Round 45 Fix Implementation - `2026-07-10`
+### Lease Reliability Follow-up - `2026-07-10T04:27:00Z`
 
-- Public `ServerEnvironment` delivery option/property types now use
-  `ServerEnvironmentCloseable` rather than internal raw `Delivery`, closing the
-  root-public type leak without exposing direct callback delivery APIs.
-- `ProjectionInboxTarget.replay()` now accepts only a pending
-  `UPDATE_SUBSCRIBER` inbox message, while `ProjectionInbox.replay()` remains
-  the broader internal entrypoint and validates before target invocation.
-- Replay-validation docs now mention pending `TO_DELIVER` status before
-  process-manager/projection handler execution.
-- Remaining historical Round 35 no-reclaim notes now name Round 43 /
-  `9477830c` as the later expired-claim reclaim supersession.
-- Round 44 records now distinguish fix commit `9bb68f33` from records-only
-  status commit `52a4326d`, and the wrapped review-log commit-title line is
-  fixed.
-- Verification passed: focused `typecheck:tooling` red/green, focused
-  runtime/API Vitest under local-listener approval (5 files, 179 tests),
-  `typecheck:build:generated`, `docs:check` with only the existing
-  invalid-`origin` warning, `lint`, final `format:check`, `git diff --check`,
-  and `git diff --check ca8fb2b3..HEAD`.
-- No worker commit was created. Coordinator commit `9546ed2a` (`Close server
-environment delivery type leak`) recorded the fix; five-lane re-review
-  remains pending.
+- Finding: [P1] `Delivery.drain()` and `drainMessage()` could keep awaiting an
+  endpoint callback after their shard lease expired. Another worker could then
+  pick up the same shard and invoke the same `TO_DELIVER` row concurrently.
+- Fix: `ShardedWorkRegistry.renew()` now extends only the current storage-backed
+  session ID/node with compare-and-set fencing. Active delivery drains start a
+  small lease keeper, check that ownership has not been lost before endpoint
+  invocation and before marking delivered, and still release the session in
+  `finally`.
+- Evidence: focused `delivery-worker.test.ts` regression failed before the fix
+  with worker B returning `DRAINED`/`delivered: 1` instead of `SKIPPED`, then
+  passed after adding session renewal and drain-local keepalive.
 
-### Round 44 Follow-up - `2026-07-10T18:45:00Z`
+### Review Log Follow-up - `2026-07-10T04:27:00Z`
 
-- Review package:
-  `.superpowers/sdd/review-ca8fb2b3..f7f56f54.diff` from task baseline
-  `ca8fb2b3` to current HEAD `f7f56f54`.
-- Code style/maintainability (Curie the 2nd): [P2] older durable records still
-  contain authoritative-looking "current contract" wording from Round 35 that
-  says expired and live row claims both block competing delivery until future
-  explicit recovery policy exists. Update those historical notes to name Round
-  43 / `9477830c` as the later supersession.
-- Documentation (Hypatia the 2nd): [P2] `build-protocol/DEVELOPER_API.md` still
-  names internal `DeliveryOptions.leaseMs` in the public delivery error
-  contract even though raw callback delivery options are not root-public.
-- TypeScript/API docs (Russell the 2nd): [P2] same internal
-  `DeliveryOptions.leaseMs` public-doc leak.
-- Security (Aristotle the 2nd): [P2] projection inbox replay validates the
-  label but not `message.status` before invoking projection handlers. Unlike
-  process-manager replay, `ProjectionInbox.replay()` can forward non-pending
-  `DELIVERED`, `SCHEDULED`, or `TO_CATCH_UP` snapshots to repository/user
-  projection code if an internal caller misuses the replay endpoint.
-- Performance/reliability (Galileo the 2nd): clean.
-- Action: correct the public API doc sentence to mention only public lease
-  options, make projection replay fail closed for non-`TO_DELIVER` rows with
-  focused regression coverage, update stale durable records, verify, and repeat
-  five-lane re-review.
+- Finding: [P3] The required review lanes table still listed every lane as
+  `Pending` after findings and fixes had been recorded.
+- Fix: updated the table to show completed lanes and fixed P1/P2/P3 follow-up
+  status.
 
-### Round 44 Fix Implementation - `2026-07-10`
+### Round 3 Follow-up - `2026-07-10T04:42:03Z`
 
-- `LocalProjectionInbox.replay()` now asserts `UPDATE_SUBSCRIBER` and
-  `TO_DELIVER` before target lookup and repository/user projection invocation,
-  matching the process-manager replay fail-closed status boundary.
-- Focused regression coverage proves `DELIVERED`, `SCHEDULED`, and
-  `TO_CATCH_UP` projection replay snapshots reject before projection handlers
-  run.
-- `build-protocol/DEVELOPER_API.md` no longer names internal
-  `DeliveryOptions.leaseMs` in the public delivery error contract; the public
-  sentence now names only `ShardedWorkRegistryOptions.leaseMs`.
-- Round 24, Round 25, Round 37, task, work, and review records were updated so
-  Round 35 / `5c3705e2` is historical no-reclaim context and Round 43 /
-  `9477830c` is the later expired-claim reclaim restoration.
-- Verification passed: projection replay red/green, focused context handoff
-  Vitest (2 files, 22 tests), generated build typecheck, docs check with only
-  the existing invalid-`origin` warning, lint, format check, `git diff --check`,
-  and `git diff --check ca8fb2b3..HEAD`.
-- Coordinator verification after the worker returned passed focused context
-  handoff Vitest with 2 files and 22 tests, generated build typecheck, docs
-  check with only the existing invalid-`origin` warning, lint, format check,
-  working-tree diff check, and baseline range diff check.
-- No worker commit was created. Coordinator commit `9bb68f33` (`Fix projection
-replay status guard`) recorded the fix. Records-only coordinator commit
-  `52a4326d` (`Record delivery round 44 review status`) recorded the follow-up
-  status package; five-lane re-review remains pending.
+- Finding: [P1] lease activity in `Delivery.drain()` and `drainMessage()` was
+  still timer-state-only. If the event loop paused or renewal was delayed past
+  `expiresAt`, `requireActive()` could pass before the renewal timer observed
+  the loss, allowing an expired owner to mark a row delivered after another
+  worker became eligible to pick up the shard.
+- Fix: delivery now keeps the configured delivery clock and passes it to the
+  lease keeper. `requireActive()` fails once the current session expiry is at
+  or before that clock, even if the renewal timer has not run yet. Renewal
+  remains framework-owned lease fencing; no production retry or supervisor
+  policy was added.
+- Evidence: focused red regression in `delivery-worker.test.ts` failed before
+  the fix with the expired foreground drain returning `delivered: 1` and
+  `failed: 0`, then passed after the time-aware guard.
+- Finding: [P3] `ShardedWorkRegistry.renew()` used release-specific helper
+  names (`ReleaseSession`, `snapshotReleaseSession`) for a snapshot shared by
+  renew and release.
+- Fix: renamed the internal snapshot to `SessionClaim` and
+  `snapshotSessionClaim`.
+- Finding: [P2] curated API docs still described the exported registry seam as
+  pickup/release only.
+- Fix: updated `docs/api/README.md`, `build-protocol/DEVELOPER_API.md`, and
+  `packages/server/README.md` to describe pickup/renew/release and renewal as
+  framework-owned lease fencing for active drains.
+- Verification: focused delivery Vitest, `typecheck:build:generated`,
+  `docs:check`, `format:check`, and `git diff --check` all passed on
+  `2026-07-10T04:44:33Z`. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
+- Post-fix local review: compared `HEAD~1...HEAD` after commit because no
+  separate Agent tool was exposed in this session. Standards/spec review found
+  no additional issues on `2026-07-10T04:46:21Z`.
 
-### Round 43 Follow-up - `2026-07-10T17:45:00Z`
+### Round 4 Follow-up - `2026-07-10T04:53:23Z`
 
-- Review package:
-  `.superpowers/sdd/review-ca8fb2b3..59c44c44.diff` from task baseline
-  `ca8fb2b3` to current HEAD `59c44c44`.
-- Code style/maintainability (Anscombe the 2nd): [P1] the expired-claim
-  contract is inconsistent with the active handoff/review assignment because
-  current code and comments treat every existing row claim as unavailable, even
-  when expired; [P2] `build-protocol/DEVELOPER_API.md` still presents raw
-  callback delivery APIs as current public surface.
-- Documentation (Dewey the 2nd): [P1] docs currently say expired and live row
-  claims both block competing delivery, which conflicts with the active review
-  contract that expired per-message claims are reclaimable during claim CAS;
-  [P1] `build-protocol/DEVELOPER_API.md` still describes raw callback delivery
-  APIs as stable public surface after Round 42 removed them from the root
-  barrel.
-- TypeScript/API docs (Socrates the 2nd): [P1] implementation, tests, and docs
-  still reverse the requested expired-claim semantics; [P2]
-  `build-protocol/DEVELOPER_API.md` still documents raw callback delivery as
-  stable public API; [P3] the root export test still type-checks internal raw
-  callback delivery types inside the package export-surface test.
-- Security (Halley the 2nd): [P1] expired row claims are never reclaimable,
-  allowing an abandoned pending row to remain unavailable indefinitely.
-- Performance/reliability (James the 2nd): [P1] same expired row-claim
-  reclaim gap and opposite tests/docs.
-- Action: restore expired per-message claim reclaim during claim CAS while live
-  claims still block; update tests and docs that encode the superseded
-  no-reclaim behavior; remove internal raw callback type assertions from the
-  root export-surface test; correct `DEVELOPER_API.md`; verify; and repeat
-  five-lane re-review.
+- Finding: [P1] `ShardedWorkRegistry.renew()` could renew an already-expired
+  session when the stored session ID and node still matched the caller's
+  session. That let a delayed renewal extend ownership after another worker had
+  become eligible to pick up the shard.
+- Fix: `renew()` now reads the current storage-backed session, confirms
+  session ID/node ownership, and returns `undefined` when the current stored
+  `expiresAt` is at or before the renewal clock before constructing the next
+  session.
+- Evidence: focused red regression in `sharded-work-registry.test.ts` failed
+  before the fix because delayed renewal returned a renewed `node-a` session,
+  then passed after the expiry guard.
+- Finding: [P2] `build-protocol/RUNTIME_ARCHITECTURE.md` described shard
+  claim/release but did not mention renewal in the delivery-worker section.
+- Fix: updated the runtime architecture delivery-worker section to describe
+  storage-backed pickup, renewal, and release. It now states renewal is
+  framework-owned lease fencing for active drains, not production retry or
+  supervision.
+- Verification: required focused delivery Vitest, `typecheck:build:generated`,
+  `docs:check`, `format:check`, and `git diff --check` all passed on
+  `2026-07-10T04:56:04Z`. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
 
-### Round 43 Fix Implementation - `2026-07-10`
+### Documentation Review Follow-up - `2026-07-10T05:09:03Z`
 
-- `InboxStorage` now treats only live per-message claims as unavailable during
-  claim compare-and-set. Expired per-message claims may be replaced with the
-  active worker claim using the storage clock; live claims still block.
-- Focused regressions were updated test-first. The red run showed endpoint
-  callbacks were not invoked for an expired claim and for a claim expiring
-  while the claim-row read was pending. The green run passed after the storage
-  change.
-- `packages/server/test/index.test.ts` no longer imports or type-checks
-  internal raw callback delivery types. The direct-drain option/callback type
-  assertions now live in `packages/server/test/delivery/delivery-worker.test.ts`.
-- Delivery docs now state that root-public delivery API is durable
-  inbox/storage primitives and framework-owned replay remains
-  package-internal behind validated endpoints. Expired/live ownership wording
-  was corrected in package, API, user-guide, architecture, and build-protocol
-  docs.
-- Verification passed: focused reclaim red/green, focused delivery/index Vitest
-  with 4 files and 189 tests, `typecheck:build:generated`, `docs:check`,
-  `lint`, formatter repair for durable logs, and final format/diff checks
-  recorded in the Round 43 report/work log. No worker commit was created.
-  Coordinator commit `9477830c` (`Fix delivery expired claim reclaim`) recorded
-  the fix.
-- Coordinator verification after the worker returned passed focused
-  delivery/index Vitest with 4 files and 189 tests, generated build typecheck,
-  docs check with only the existing invalid-`origin` warning, lint, format
-  check, working-tree diff check, and baseline range diff check. Coordinator
-  commit `9477830c` recorded the fix; five-lane re-review remains pending.
+- Finding: [P2] `packages/server/README.md` still said "Supported delivery
+  workers" remain an open production gap, which was stale after T-0026 exported
+  and documented `DeliveryWorker` as the supported local closeable wrapper over
+  shard delivery loops.
+- Fix: narrowed the open-gap wording to process-supervised delivery workers,
+  transport-topology workers, scheduler/retry workers, retained attempt
+  history, production delivery policy, and catch-up work. The README still
+  states that full production supervision and retry policy remain outside this
+  slice.
 
-### Round 42 Follow-up - `2026-07-10T17:25:00Z`
+### Round 5 Follow-up - `2026-07-10T06:10:10Z`
 
-- Review package:
-  `.superpowers/sdd/review-ca8fb2b3..d7c9b35e.diff` from task baseline
-  `ca8fb2b3` to current HEAD `d7c9b35e`.
-- Performance/reliability (Epicurus the 2nd): clean.
-- Documentation (Faraday the 2nd): [P1] Round 41 records still say
-  `git diff --check ca8fb2b3..HEAD` remains red, but the command now passes
-  after coordinator commit `2a673e42`.
-- Code style/maintainability (Bernoulli the 2nd): [P3] the Round 41 work-log
-  coordinator-commit line has a flush-left continuation.
-- TypeScript/API docs (Hume the 2nd): [P2] public docs say no raw worker
-  callback API exists, but root-exported `Delivery.drain()` and `DeliveryLoop`
-  still accept public `onMessage` callbacks.
-- Security (Averroes the 2nd): [P1] removing only `DeliveryWorker` left
-  root-exported `Delivery`, `DeliveryLoop`, and `OnDeliveryMessage`, so public
-  callers can still invoke raw inbox callbacks and bypass validated framework
-  replay.
-- Action: remove or otherwise close the remaining root raw-callback delivery
-  surface, correct docs and API export checks, update Round 41 range-check
-  records, fix work-log formatting, verify, and repeat five-lane re-review.
+- Finding: [P1] `Delivery.drain()` invoked `onMessage` after only a shard
+  lease pre-check. A worker that lost or outlived shard ownership could race
+  with another drain and duplicate endpoint invocation before stale
+  `markDelivered()` fencing took effect.
+- Fix: inbox rows now carry a small durable optional claim with shard-session
+  id, node, and expiry. `Delivery.drain()` and `drainMessage()` acquire the
+  claim through `Inbox`/`InboxStorage` with compare-and-set before invoking the
+  endpoint. Competing drains skip rows with a live different claim; successful
+  delivery marks with the claimed snapshot; failed attempts best-effort clear
+  the unchanged claim. Endpoint callbacks still receive unclaimed message
+  snapshots, so the fence remains framework-owned and does not expose framework
+  `Event` envelopes or add production retry/supervision/topology.
+- Evidence: focused red regression in `delivery-worker.test.ts` failed before
+  the fix because `delivery.inbox.claim` was missing, then passed after the
+  durable claim CAS. The requested focused delivery/context Vitest batch passed
+  after the fix with 182 tests.
+- Finding: [P2] `ShardedWorkRegistry.release()` could CAS-delete an
+  already-expired matching session, unlike `renew()`.
+- Fix: `release()` now reads the registry clock, returns `false` when the
+  current stored session expires at or before that time, and refreshes the
+  clock across CAS retries.
+- Evidence: focused red regression in `sharded-work-registry.test.ts` failed
+  before the fix because release resolved `true` after expiry, then passed
+  after the expiry guard.
+- Finding: [P2] internal `ProcessManagerInbox` and `ProjectionInbox` contracts
+  did not include their concrete `replay(...)` endpoint even though local
+  handoff classes and tests depend on that framework capability.
+- Fix: added `replay(...)` to both internal inbox contracts, keeping the names
+  short and avoiding concrete-class typing.
+- Finding: [P2] API comments and the delivery gap wording could be read as
+  contradicting storage-backed pickup/renew/release and caller-started
+  `DeliveryLoop`/`DeliveryWorker` loops.
+- Fix: updated `ShardedWorkRegistry` and `DeliveryWorker` class docs and
+  reworded `build-protocol/DEVELOPER_API.md` to describe no process-wide or
+  production scheduler/supervisor beyond caller-started delivery loops.
 
-### Round 42 Fix Implementation - `2026-07-10`
+### Round 6 Follow-up - `2026-07-10T05:32:00Z`
 
-- Removed `Delivery`, `DeliveryLoop`, and every associated direct
-  option/result/callback type from the root barrel; framework code and behavior
-  tests retain package-internal source imports.
-- Updated the root export test and API manifest first; its red run observed the
-  two remaining raw delivery exports, then its green run passed after the barrel
-  change.
-- Rewrote public delivery documentation to expose only the inbox/storage API and
-  to describe validated replay as framework-owned.
-- Corrected Round 41 task, work, review, and report wording: the baseline range
-  diff now passes after `2a673e42` and `d7c9b35e`; the work-log continuation is
-  formatted.
-- Verification passed: prescribed five-file delivery Vitest command with 194
-  tests; generated typecheck; docs/API check; lint; format; baseline range diff;
-  and working-tree diff. `docs:check` retained only the existing invalid-origin
-  TypeDoc source-link warning. No worker commit was created. Coordinator commit
-  `be299a5d` (`Close delivery raw callback exports`) recorded the fix;
-  five-lane re-review remains pending.
+- Finding: [P1] the Round 5 per-message claim used the current shard-session
+  expiry only when the row was first claimed. Shard keepalive renewed the shard
+  session while an endpoint callback was in flight, but did not renew the row
+  claim, so another worker could claim the row after the original claim expiry.
+- Fix: active delivery now tracks the claimed row snapshot and renews it with a
+  compare-and-set to each renewed `ShardSession` expiry. If claim renewal
+  returns `undefined` or throws, the lease keeper records lease loss and the
+  foreground delivery path fails closed before marking delivered.
+- Finding: [HIGH] `Inbox.claim()`, `Inbox.unclaim()`, `InboxMessage.claim`,
+  and exported `InboxClaim` exposed framework-owned internals through the
+  application-facing API.
+- Fix: public `InboxMessage` and `DeliveryEndpoint` are claim-free, and `Inbox`
+  no longer exposes claim/unclaim methods. Internal `InboxClaim`,
+  `InboxRecordMessage`, and `ClaimedInboxMessage` live in a non-barrel module,
+  while package-internal helper functions in `inbox-storage.ts` are not exported
+  from `packages/server/src/index.ts`.
+- Finding: [P3] `delivery.ts` duplicated claim/invoke/mark/clear logic between
+  shard drain and exact-message drain.
+- Fix: extracted one private `#deliverMessage()` helper and kept the public
+  drain methods focused on shard/page/exact-row flow.
+- Finding: [P3] `InboxStorage.#claimSnapshot()` validated claims by building a
+  fake full inbox message.
+- Fix: replaced that path with the direct internal `InboxClaimRecords`
+  snapshot codec.
+- Finding: [P2] docs did not describe durable row-claim fencing and claim-free
+  endpoint snapshots.
+- Fix: updated runtime architecture, developer API, API README source, package
+  README, and delivery source comments to document row claim renewal, skipped
+  live competing claims, marking from the claimed snapshot, clearing only the
+  unchanged claim after failed attempts, and unclaimed `InboxMessage` snapshots
+  passed to endpoints.
+- Evidence: the new focused regression failed before the fix because a
+  competing claim could take the row after the original claim expiry, then
+  passed after CAS claim renewal. Required verification passed:
+  requested delivery/context/index Vitest batch (7 files, 193 tests),
+  `typecheck:build:generated`, `docs:check` with only the existing invalid
+  origin TypeDoc warning, `format:check`, and `git diff --check`.
 
-### Round 41 Follow-up - `2026-07-10T17:05:00Z`
+### Round 7 Follow-up - `2026-07-10T05:48:00Z`
 
-- Review package:
-  `.superpowers/sdd/review-ca8fb2b3..9e831767.diff` from task baseline
-  `ca8fb2b3` to current HEAD `9e831767`.
-- Code style/maintainability (Raman): [P1] `round-40-fix-report.md` lines 5-6
-  have Markdown hard-break trailing spaces, so
-  `git diff --check ca8fb2b3..HEAD` fails while the report says the diff check
-  passed.
-- Documentation (Socrates): [P1] same false verification breadcrumb.
-- TypeScript/API docs (James): [P1] same false verification breadcrumb;
-  TypeScript/API surface otherwise looks sound.
-- Security (Averroes): [P1] the root-exported `DeliveryWorker` accepts an
-  arbitrary `onMessage` callback, exposing a raw inbox dispatcher path that can
-  bypass the framework replay validation boundary.
-- Performance/reliability (Beauvoir): [P1] same range whitespace failure; [P2]
-  partial stale-head rescans can degrade to one inbox query per already-seen
-  skipped row because seen-row observation does not advance the scan budget.
-- Action: fix the range whitespace, repair the public worker callback boundary,
-  preserve bounded page behavior during partial stale-head rescans, add focused
-  regression coverage, verify, and repeat five-lane re-review.
-
-### Round 41 Fix Implementation - `2026-07-10`
-
-- Removed the `DeliveryWorker`, `DeliveryWorkerOptions`, and `DeliveryWorkerRun`
-  root exports. The raw callback boundary is now package-internal; public
-  context handoffs continue to replay through validated framework endpoints.
-- Removed all public docs/API export-check references to that worker surface.
-- Removed the two Markdown hard-break spaces from the Round 40 fix report.
-- Added a `limit: 1` partial stale-head regression. Before the production fix,
-  one skipped head row disappearing caused 1004 inbox queries. `Delivery` now
-  grants its single offset rescan one bounded page allowance for already-seen
-  rows while still refusing new rows past the finite scan budget; the regression
-  passes with five queries and the moved supported row delivered.
-- Verification passed: focused red/green regression; prescribed five-file
-  delivery Vitest command with 194 tests; generated typecheck; docs/API check;
-  lint; format; and working-tree `git diff --check`. `docs:check` retained only
-  the existing invalid-origin TypeDoc source-link warning.
-- `git diff --check ca8fb2b3..HEAD` was rerun after coordinator commits
-  `2a673e42` and `d7c9b35e` and now passes. The Round 41 range-check follow-up
-  is resolved. This worker made no commit; coordinator commit `2a673e42`
-  (`Fix delivery worker API and rescan paging`) recorded the fix.
-
-### Round 40 Follow-up - `2026-07-10T16:48:00Z`
-
-- Review package:
-  `.superpowers/sdd/review-ca8fb2b3..faa2d814.diff` from task baseline
-  `ca8fb2b3` to current HEAD `faa2d814`.
-- TypeScript/API docs (Hooke): clean.
-- Security (Halley): clean.
-- Code style/maintainability (Anscombe): [P2] review/work logs still describe
-  the Round 39 records-only fix as future/pending after commit `faa2d814`.
-- Documentation (Carver): [P2] same stale Round 39 status.
-- Performance/reliability (Bernoulli): [P1] offset pagination can still skip
-  deliverable rows when only part of the skipped head set disappears after
-  boundary validation and the stale offset page remains full/non-empty.
-- Action: update Round 39 status records and fix the partial-disappearance
-  offset race with focused regression coverage before another five-lane
-  re-review.
-
-### Round 40 Fix Implementation - `2026-07-10`
-
-- Updated stale Round 39 status records to state that the records-only cleanup
-  was verified and committed as `faa2d814` (`Record delivery round 39 review
-status`).
-- Added a focused full stale-offset-page regression. It removes a complete
-  skipped head page after the pre-read boundary validation, leaves a full stale
-  offset page of unsupported filler, and proves the shifted supported row is
-  delivered in the same `DeliveryLoop.run()`.
-- `Delivery.#drainAvailableMessages()` now revalidates an offset boundary after
-  reading the page and, on movement, discards the page and performs its one
-  bounded head rescan before any page rows are processed.
-- Updated the intentional inbox-query count in the bounded-paging test from
-  three to four for the post-read boundary validation.
-- Verification passed: focused regression red then green; focused delivery
-  worker/loop/inbox Vitest with 3 files and 178 tests;
-  `typecheck:build:generated`, `docs:check`, `lint`, and `format:check`.
-  `docs:check` retained only the existing invalid-origin TypeDoc source-link
-  warning.
-- No commit was created by this worker. Coordinator commit: `9c51b77a`
-  (`Fix delivery stale offset page rescan`).
-
-### Round 39 Follow-up - `2026-07-10T16:40:00Z`
-
-- Review package:
-  `.superpowers/sdd/review-ca8fb2b3..7927c4d3.diff` from task baseline
-  `ca8fb2b3` to current HEAD `7927c4d3`.
-- TypeScript/API docs (Peirce): clean.
-- Security (Gauss): clean.
-- Performance/reliability (Tesla): clean.
-- Code style/maintainability (Laplace): [P2] review-log status/table still
-  showed Round 38 findings pending after commit `7927c4d3`; work-log summary
-  still said the Round 38 fix was pending.
-- Documentation (Sartre): [P2] same stale Round 38 status; [P3] Round 37
-  report's coordinator breadcrumb should name `1403505e`.
-- Action: update status/breadcrumb records and rerun format/diff checks before
-  another five-lane re-review.
-
-### Round 39 Fix Implementation - `2026-07-10`
-
-- Updated the review-log status/table and work-log summary so Round 38's
-  records-only cleanup is no longer marked pending.
-- Updated the Round 37 report's coordinator breadcrumb to name `1403505e`
-  (`Fix delivery offset boundary race`).
-- Verification passed: `format:check` and `git diff --check`.
-- Coordinator commit: `faa2d814` (`Record delivery round 39 review status`).
-
-### Round 38 Follow-up - `2026-07-10T16:31:00Z`
-
-- Review package:
-  `.superpowers/sdd/review-ca8fb2b3..1403505e.diff` from task baseline
-  `ca8fb2b3` to current HEAD `1403505e`.
-- TypeScript/API docs (Copernicus): clean.
-- Security (Popper): clean.
-- Performance/reliability (Jason): clean.
-- Code style/maintainability (Planck): [P2] Round 37 report says no commit was
-  created even though coordinator commit `1403505e` records the fix.
-- Documentation (Ohm): [P2] same Round 37 commit-note issue; [P3] Round 29 and
-  Round 30 reports still say coordinator commits are pending even though their
-  durable breadcrumbs are known.
-- Action: update the commit notes and rerun format/diff checks before another
-  five-lane re-review.
-
-### Round 38 Fix Implementation - `2026-07-10`
-
-- Updated Round 37 report/task/work/review records so they say the fix worker
-  created no commit and coordinator commit `1403505e`
-  (`Fix delivery offset boundary race`) recorded the verified fix.
-- Updated Round 29 and Round 30 reports with their resolved coordinator commit
-  breadcrumbs: `fd563047` and `8a65e2b6`.
-- Verification passed: `format:check` and `git diff --check`.
-
-### Round 37 Follow-up - `2026-07-10T16:15:00Z`
-
-- Review package:
-  `.superpowers/sdd/review-ca8fb2b3..e4388fb5.diff` from task baseline
-  `ca8fb2b3` to current HEAD `e4388fb5`.
-- TypeScript/API docs (Locke): clean.
-- Security (Nietzsche): clean.
-- Code style/maintainability (Russell): [P2] Round 35 and Round 36 fix reports
-  still say coordinator commits are pending even though commits `5c3705e2` and
-  `e4388fb5` exist.
-- Documentation (Hume): [P2] same stale Round 35/Round 36 commit breadcrumbs;
-  [P2] older Round 24/25 durable reclaim wording should be marked as
-  superseded by Round 35's no-reclaim contract.
-- Performance/reliability (Kant): [P2] moving `TO_DELIVER` pagination can
-  still falsely idle if skipped head rows disappear after boundary validation
-  but before the offset page read.
-- Action: apply one fix for breadcrumbs, historical reclaim wording, and the
-  boundary/read race; rerun focused verification; repeat five-lane re-review.
-
-### Round 37 Fix Implementation - `2026-07-10`
-
-- Durable breadcrumb cleanup: Round 35 report/task/work/review records now name
-  coordinator commit `5c3705e2` (`Fix delivery claim blocking and offset
-rescan`), and Round 36 report/task/work/review records now name coordinator
-  commit `e4388fb5` (`Fix delivery review gate cleanup`).
-- Historical reclaim cleanup: Round 24/25 task, work, review, and fix-report
-  reclaim statements are marked as historical and superseded by Round 35 /
-  `5c3705e2`. Round 43 later superseded that no-reclaim contract: live row
-  claims block competing delivery, while expired row claims may be replaced
-  during claim CAS using the storage clock.
-- Reliability fix: added a regression for a skipped head page disappearing
-  after pending-boundary validation but before offset-page read. The red run
-  returned `IDLE` with `delivered: 0`; after the fix,
-  `Delivery.#drainAvailableMessages()` revalidates the boundary after a short
-  zero-work offset page and performs one bounded head rescan when it moved.
-- Verification passed: focused delivery worker/loop/runtime/inbox/shard-registry
-  Vitest passed with 5 files and 224 tests; `typecheck:build:generated`,
-  `docs:check`, `lint`, `format:check`, and `git diff --check` passed.
-  `docs:check` retained only the existing invalid-origin TypeDoc source-link
-  warning. No commit was created, per Round 37 instruction.
-- Coordinator verification at `2026-07-10T16:22:00Z` passed the focused
-  boundary/read race regression, the focused delivery batch with 5 files and
-  224 tests, `typecheck:build:generated`, `docs:check`, `lint`,
-  `format:check`, and `git diff --check`.
-- Fix commit: `1403505e` (`Fix delivery offset boundary race`).
-
-### Round 36 Follow-up - `2026-07-10T16:05:00Z`
-
-- Review package:
-  `.superpowers/sdd/review-ca8fb2b3..5c3705e2.diff` from task baseline
-  `ca8fb2b3` to current HEAD `5c3705e2`.
-- Documentation (Bohr): clean.
-- TypeScript/API docs (Fermat): clean.
-- Security (Banach): clean.
-- Performance/reliability (Dirac): clean.
-- Code style/maintainability (Descartes): [P1] `format:check` fails on
-  `round-35-fix-report.md`; [P1] `lint` fails on unused `_claim`
-  destructuring in `delivery-loop.test.ts` and `delivery-worker.test.ts`, plus
-  a `let delivery` local in `delivery-worker.test.ts` that can be `const`.
-- Action: apply one style/lint fix, rerun lint/format and focused checks, then
-  repeat five-lane re-review.
-
-### Round 36 Fix Implementation - `2026-07-10`
-
-- Formatted `round-35-fix-report.md` and the touched T-0026 logs.
-- Replaced ignored `claim` destructuring in delivery test helpers with explicit
-  claim-free `InboxMessage` snapshots.
-- Changed the moving pending-set regression's delivery local from `let` to
-  `const`.
-- Verification passed: `lint`, `format:check`, focused delivery Vitest with 5
-  files and 223 tests, and `git diff --check`.
-- Fix commit: `e4388fb5` (`Fix delivery review gate cleanup`).
-
-### Round 35 Follow-up - `2026-07-10T14:47:00Z`
-
-- Review package:
-  `.superpowers/sdd/review-ca8fb2b3..7a5378eb.diff` from task baseline
-  `ca8fb2b3` to current HEAD `7a5378eb`.
-- TypeScript/API docs (Pascal): clean.
-- Documentation (Faraday): [P2] Round 34 verification records should name fix
-  commit `7a5378eb` (`Fix delivery tooling typecheck`), and the Round 34 fix
-  report still says no commit was created.
-- Code style/maintainability (Lovelace): [P1] `format:check` currently fails
-  on `round-34-fix-report.md`; apply Prettier formatting before accepting the
-  verification record.
-- Security (Gibbs): [P1] expired row-claim reclaim can double-invoke endpoint
-  callbacks. Treat any existing row claim as unavailable until a future
-  abandoned-claim recovery policy can prove recovery is safe.
-- Performance/reliability (Dewey): [P2] absolute offset paging can falsely idle
-  when skipped head rows disappear during one drain page sequence. Avoid
-  reading later pages by an offset that is relative to a moving `TO_DELIVER`
-  set.
-- Action: dispatch one fix worker for the complete Round 35 batch, with
-  focused red/green regressions for the claim and pagination behavior, report
-  formatting, durable Round 34 commit trace, verification, and another
-  five-lane re-review.
-
-### Round 35 Fix Implementation - `2026-07-10`
-
-- Added focused red regressions before production edits. The expired-claim
-  regression failed because `signal-expired-claim` was invoked, and the moving
-  pending-set regression failed because `signal-reachable-tail` was skipped
-  when the unavailable head rows disappeared between page reads.
-- `InboxStorage` now treats any existing row claim as unavailable, including
-  expired claims. Abandoned-claim recovery remains a future explicit policy
-  because the earlier owner may still be inside `onMessage`.
-- `Delivery` now validates the pending boundary before reading an offset page.
-  If skipped rows disappeared and the boundary no longer matches, the drain
-  resets to the head once and continues inside the same scan budget rather than
-  paging or idling past reachable supported work.
-- Updated expired-claim and paused-loop tests to use explicit claim recovery
-  where recovery is intended, and added a query hook to the delivery storage
-  fault fixture for moving pending-set regressions.
-- Coordinator refinement moved the pending-boundary check before all offset
-  page reads and refreshed public docs plus the `InboxClaim` comment to state
-  that expired and live ownership both blocked competing delivery in that
-  slice. Round 43 later restored expired-claim reclaim during claim CAS while
-  live claims still block.
-- Round 34 durable trace now names fix commit `7a5378eb`
-  (`Fix delivery tooling typecheck`), and `round-34-fix-report.md` is
-  Prettier-formatted.
-- Fix-worker verification passed: focused delivery worker/loop/runtime/inbox/
-  shard-registry Vitest passed with 5 files and 223 tests;
+- Finding: [HIGH] Expired row claims were treated as reclaimable, so a late or
+  missed renewal could let a second local/direct worker invoke the same endpoint
+  while the original callback was still in flight.
+- Fix: `InboxStorage.claim` now skips rows with any durable row claim, expired
+  or live. Successful owners still mark delivered from the claimed snapshot;
+  failed attempts clear only the unchanged claim. Abandoned/stale claim recovery
+  remains future production retry/supervision policy.
+- Evidence: added regression in `delivery-worker.test.ts` proving an
+  expired-claimed row is read but not claimed or dispatched by a competing
+  drain.
+- Finding: [MEDIUM] `DeliveryLoop` used `processed` rows as proof of progress,
+  so a page containing only already-claimed rows could be redrained tightly.
+- Fix: added `claimed` counts to `DeliveryRun` and `DeliveryLoopRun`, and made
+  the loop stop `IDLE` when a drain has no claimed, delivered, or failed rows.
+- Evidence: added regression in `delivery-loop.test.ts` proving already-claimed
+  pending rows stop after one idle drain with no endpoint invocation.
+- Finding: [MEDIUM] Public inbox/drain/loop limits were not bounded at the
+  storage query boundary.
+- Fix: `InboxStorage.read` validates limits as positive safe integers at or
+  below a fixed `1000` bound before opening/querying inbox storage; public
+  drain and loop limits flow through that same storage boundary.
+- Evidence: added regressions for zero, negative, fractional, non-finite, and
+  above-bound limits, plus public drain/loop above-bound cases.
+- Finding: [MEDIUM] Stored `CATCH_UP` labels were valid rows but direct delivery
+  could still invoke callbacks for them.
+- Fix: direct delivery now fail-closes after acquiring its row claim but before
+  endpoint invocation unless the label is `HANDLE_COMMAND`,
+  `UPDATE_SUBSCRIBER`, or `REACT_UPON_EVENT`.
+- Evidence: added regression proving a `CATCH_UP` row records a failed run,
+  leaves the row pending, clears only its own claim, and never invokes the
+  callback.
+- Docs: updated architecture and user-guide delivery summaries plus the
+  `DeliveryLoop` class comment to describe shard pickup/renew/release CAS,
+  durable row-claim fencing, skipped competing/abandoned claims, claim-free
+  endpoint snapshots, and future abandoned-claim recovery policy.
+- Verification: requested focused Vitest passed with 8 files and 219 tests;
   `typecheck:build:generated`, `docs:check`, `format:check`, and
-  `git diff --check` passed. `docs:check` reported only the existing invalid
-  `origin` TypeDoc source-link warning.
-- No commit was created by the fix worker, per Round 35 instruction.
-  Coordinator commit `5c3705e2` (`Fix delivery claim blocking and offset
-rescan`) later recorded this fix.
+  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
+
+### Round 8 Follow-up - `2026-07-10T06:05:12Z`
+
+- Finding: [HIGH] active row-claim renewal could race final delivery marking.
+  A renewal could update the active internal snapshot and durable row between
+  callback completion and the final marker CAS, causing delivery to report
+  failure after the endpoint already ran and making the row immediately
+  retryable.
+- Fix: active row-claim renewal, failure clearing, and final marking now share a
+  local serialization point. After a callback returns, delivery waits for any
+  in-flight shard renewal, marks delivered from the latest active internal
+  snapshot, and preserves the durable claim if final marking still fails after
+  a successful callback.
+- Evidence: added a regression in `delivery-worker.test.ts` that blocks renewal
+  until the endpoint returns. It failed before the fix with `delivered: 0` and
+  `failed: 1`, then passed after renewal/mark serialization.
+- Finding: [P1/P2] public TypeDoc-facing comments and curated API docs exposed
+  row-claim mechanics.
+- Fix: rewrote public `Delivery.drain()` / `drainMessage()` JSDoc,
+  `docs/api/README.md`, and `build-protocol/DEVELOPER_API.md` to describe
+  lease-fenced shard draining, supported worker labels, skipped unavailable
+  rows, and `DeliveryRun` stats without row-claim internals.
+- Finding: [MEDIUM] `BoundedContext` stored local inbox fields by concrete
+  classes.
+- Fix: added narrow internal `PmInbox` and `PrjInbox` interfaces that combine
+  the public inbox contracts with `register(...)`; concrete local inbox classes
+  remain construction details.
+- Docs: `InboxClaim.expiresAt` now says local/direct workers do not
+  auto-reclaim expired claims. Internal architecture docs state any existing
+  durable claim is skipped, including expired or abandoned claims, and stale
+  recovery remains future production policy. Historical correction: Round 43 /
+  `9477830c` later restored expired-claim reclaim during claim CAS while live
+  row claims block. The package README keeps the public-facing delivery summary
+  at the lease-fenced worker-contract level.
+- Verification: requested Vitest batch passed with 8 files and 220 tests;
+  `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
+
+### Round 9 Follow-up - `2026-07-10T06:21:29Z`
+
+- Finding: [MEDIUM] `inbox-storage.ts` exposed the row-claim worker internals as
+  several exported standalone helpers.
+- Fix: replaced those helpers with one grouped `@internal`
+  `inboxStorageAccess` object/interface containing `claim`, `renew`,
+  `markDelivered`, and `clear`. Delivery internals and storage-focused tests now
+  import that grouped object directly from `inbox-storage.ts`; the package
+  barrel still exports only public `InboxStorage` and `InboxStorageOptions`.
+- Finding: [MEDIUM] public `InboxStorage.write()` and public marker paths could
+  serialize a caller-supplied object that included optional internal `claim`
+  metadata.
+- Fix: public write and mark paths now reject snapshots containing a `claim`
+  property before serialization. Internal claim-bearing serialization remains
+  available only through `inboxStorageAccess` for worker CAS flows.
+- Evidence: added regressions proving low-level public write and public
+  `markDelivered()` reject injected claim metadata and leave the row state
+  unchanged. Focused preflight Vitest passed with 3 files and 148 tests.
+- Docs: public user-guide delivery sections now describe lease-fenced local
+  drains, skipped unavailable rows, public `InboxMessage` snapshots, and
+  future abandoned-row recovery without claim mechanics. `DeliveryLoopRun`
+  TypeDoc avoids "rows claimed"; package README deferred wording is narrowed to
+  transport topology, broker/process supervision, retained attempt history, and
+  production retry policy; Developer API now documents
+  `Delivery.drainMessage(message, { node, onMessage })` exact-row/no-limit
+  semantics.
+- Verification: requested Vitest passed with 8 files and 222 tests;
+  `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
+
+### Round 10 Follow-up - `2026-07-10T06:41:50Z`
+
+- Finding: [Security MEDIUM] public `InboxStorage.write()` and public
+  `markDelivered()` rejected visible top-level `claim` fields but still passed
+  the caller object into serialization. A Proxy could hide `claim` from
+  `Reflect.has()` while returning internal claim metadata from `get`.
+- Fix: public inbox write/mark paths now build a new claim-free `InboxMessage`
+  snapshot from the explicit public fields before serialization. Visible
+  top-level `claim` remains rejected; hidden Proxy claim metadata is ignored and
+  never reaches durable inbox or dedup records.
+- Evidence: added Proxy regressions for public `InboxStorage.write()` and
+  public `markDelivered()`. They failed before the fix because hidden claim
+  metadata prevented public delivery marking, then passed after snapshotting.
+- Finding: [API P1] public `DeliveryRun.claimed` and
+  `DeliveryLoopRun.claimed` exposed claim mechanics in user-facing stats.
+- Fix: renamed the public stat to `accepted` across delivery runs, loop
+  aggregation, local handoff checks, tests, and public API docs. Internal
+  claim-bearing worker code keeps claim terminology only for implementation
+  fencing.
+- Finding: [API P2] `ShardSession.shard` TypeDoc said "Shard claimed by this
+  session."
+- Fix: reworded it to "Shard held by this session."
+- Finding: [Reliability HIGH/MEDIUM] `ShardedWorkRegistry.renew()` and
+  `release()` captured `now` before awaited storage reads, allowing delayed
+  reads or event-loop pauses to renew or release sessions that had expired by
+  the time ownership was checked and CASed.
+- Fix: both paths refresh the clock after reading and decoding the current
+  stored session, before expiry checks and CAS decisions.
+- Evidence: added delayed-read/clock-advance regressions for renew and release.
+  They failed before the fix by renewing/releasing expired sessions, then
+  passed after refreshing the clock. The existing row-renewal race test was
+  adjusted to advance fake time to the renewal interval while staying inside
+  the shard lease, preserving its intended inbox-renewal coverage.
+- Verification: requested Vitest passed with 8 files and 226 tests;
+  `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
+
+### Round 11 Follow-up - `2026-07-10T06:55:21Z`
+
+- Finding: [Security MEDIUM] `Delivery.drain()` picked up and released shard
+  storage before validating an invalid or oversized `options.limit`, so a bad
+  direct-drain request could mutate shard storage before failing at the inbox read
+  boundary.
+- Fix: `Delivery.drain()` now validates `options.limit` at method entry with the
+  same bounded inbox page-size helper used by inbox reads. The helper keeps the
+  positive safe integer and `1000` upper-bound contract in one place.
+- Evidence: added a focused regression proving an invalid direct-drain limit
+  rejects before any storage open or compare-and-set through the shard registry.
+  It failed before the fix with two storage opens, then passed after early
+  validation.
+- Finding: [API docs MEDIUM] public docs listed `DeliveryLoopRun` but did not
+  document its `status`, `runs`, `processed`, `accepted`, `delivered`, `failed`,
+  and `failures` fields.
+- Fix: updated `docs/api/README.md` and `build-protocol/DEVELOPER_API.md` with
+  claim-free prose stating that `DeliveryLoopRun` aggregates `DeliveryRun` counts
+  across loop drains and naming each public field.
+- Verification: requested Vitest passed with 4 files and 192 tests;
+  `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
+
+### Round 12 Follow-up - `2026-07-10T07:09:12Z`
+
+- Finding: [Reliability HIGH] after an inbox row was accepted, `Delivery.drain()`
+  and `drainMessage()` could invoke the endpoint without first observing an
+  in-flight shard renewal or re-checking the shard lease. A slow row acceptance
+  could therefore cross lease expiry before endpoint side effects.
+- Fix: `Delivery.#deliverMessage()` now awaits any in-flight shard renewal and
+  calls `lease.requireActive()` after row acceptance and before endpoint label
+  validation or callback invocation. When the re-check fails before the callback,
+  the existing cleanup clears the row acceptance and leaves the row pending.
+- Evidence: added a focused delayed-acceptance regression that pauses inbox row
+  acceptance, advances the delivery clock past shard expiry, and verifies the
+  endpoint callback is not invoked and the row remains `TO_DELIVER`.
+- Finding: [Docs MEDIUM] the developer API example manually picked up the single
+  shard and then called `Delivery.drain()` for the same shard while the manual
+  session was still live.
+- Fix: updated the example so the low-level pickup/read section releases the
+  manual session before the higher-level `Delivery.drain()` and `DeliveryWorker`
+  examples.
+- Finding: [Docs LOW] public TypeDoc callback comments said `onMessage` was
+  invoked once per pending inbox row.
+- Fix: reworded callback comments in `delivery.ts`, `delivery-loop.ts`, and
+  `delivery-worker.ts` to say the callback is invoked for each available
+  supported worker row.
+- Verification: requested delivery Vitest passed with 3 files and 152 tests;
+  `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
+
+### Round 13 Follow-up - `2026-07-10T07:21:10Z`
+
+- Finding: [Reliability HIGH] `ShardedWorkRegistry.pickUp()` captured `now`
+  before the awaited shard read and reused that stale value when deciding
+  whether a stored session was still live and when timestamping the replacement
+  session. A delayed storage read could therefore miss a lease expiry that
+  happened during the read and incorrectly reject the next eligible worker.
+- Fix: `pickUp()` still validates the caller clock before opening shard storage,
+  then refreshes `now` immediately after `readShardRecord()`/`readSession()` on
+  each attempt. The fresh post-read clock now drives both the live-session check
+  and `new ShardSession(...)`, matching the existing `renew()` and `release()`
+  pattern.
+- Evidence: added a delayed-read/clock-advance regression that seeds a live
+  stored session, advances the pickup clock across that lease expiry during the
+  awaited shard read, and verifies the next worker receives a replacement
+  session stamped with the post-read clock. The focused regression failed before
+  the fix with `undefined`, then passed after refreshing the pickup clock.
+- Verification: requested sharded-registry and delivery-worker Vitest passed
+  with 2 files and 78 tests; `typecheck:build:generated`, `docs:check`,
+  `format:check`, and `git diff --check` passed. `docs:check` reported only
+  the existing TypeDoc invalid-origin warning.
+
+### Round 14 Follow-up - `2026-07-10T07:30:12Z`
+
+- Finding: [Docs MEDIUM] `build-protocol/DEVELOPER_API.md` used
+  `inspectPendingRows(pending)` in a usage example without defining or
+  importing that helper.
+- Fix: replaced the helper call with a local `for...of` loop that consumes the
+  pending rows inline and logs public message fields, keeping the example
+  self-contained.
+- Verification: `docs:check`, `format:check`, and `git diff --check` passed.
+  `docs:check` reported only the existing TypeDoc invalid-origin warning.
+
+### Round 15 Follow-up - `2026-07-10T07:40:04Z`
+
+- Finding: [Docs MEDIUM] `docs/USER_GUIDE.md` and `docs/api/README.md`
+  overpromised retry behavior by saying failed rows stay pending for later
+  drains without distinguishing endpoint callback failures from delivery
+  marking, fencing, fail-closed validation, or lease failures.
+- Finding: [API P3] `DeliveryRun.failed`, `DeliveryFailure.error`, and
+  `DeliveryLoopRun.failed` TypeDoc comments only named endpoint or
+  delivery-marking failures even though direct delivery can also report
+  fail-closed validation and lease/fencing failures.
+- Finding: [Security MEDIUM] `inbox-records.ts` read internal `claim` metadata
+  through `Reflect.get`, so public write/mark input with an inherited or
+  proxy-provided optional field could serialize framework-owned claim metadata
+  after public claim checks.
+- Fix: narrowed the delivery retry docs to endpoint callback failures and
+  documented non-callback delivery failures as returned
+  `DeliveryRun.failures` / `DeliveryFailure` values without promising immediate
+  retry or recovery policy.
+- Fix: broadened `DeliveryRun.failed`, `DeliveryFailure.error`, and
+  `DeliveryLoopRun.failed` TypeDoc to include endpoint callback,
+  fail-closed validation, lease/fencing, and delivery-status update failures
+  without exposing internal claim details.
+- Fix: `InboxRecords` now reads optional internal `claim` metadata only from an
+  own property. The focused regression covers proxy-provided and inherited
+  claim metadata staying out of public record snapshots.
+- Evidence: the focused inbox regression failed before the fix with the hidden
+  claim present on the serialized snapshot, then passed after the own-property
+  check.
+- Verification: Round 15 requested focused Vitest passed with 2 files and 137
+  tests; `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
+
+### Round 16 Follow-up - `2026-07-10T07:52:54Z`
+
+- Finding: [Docs/API MEDIUM] `packages/server/README.md` and
+  `build-protocol/DEVELOPER_API.md` still said failed rows remain
+  `TO_DELIVER` for later retry without narrowing that guarantee to endpoint
+  callback failures.
+- Finding: [Docs LOW] the T-0026 task brief status still said
+  `implemented; review pending` after review-fix rounds had verified the
+  implementation.
+- Finding: [Reliability HIGH] `clearActiveClaim()` suppressed
+  `inboxStorageAccess.clear()` failures after endpoint or validation failure.
+  A row could therefore stay `TO_DELIVER` but durably claimed, making it
+  unavailable to later drains while the result implied a retryable endpoint
+  failure.
+- Action: dispatch one fix worker with the complete docs/status/reliability
+  findings, require a focused regression, then rerun all required review lanes.
+- Fix: `Delivery.drain()` and `Delivery.drainMessage()` now report active
+  claim-clear failures after endpoint or validation failure through the
+  returned `DeliveryRun.failures` / `DeliveryFailure.error` path. The reported
+  error is an `AggregateError` containing both the original delivery failure and
+  the claim-clear failure, so the result no longer implies the row is simply
+  ready for immediate retry when cleanup failed.
+- Fix: narrowed `packages/server/README.md` and
+  `build-protocol/DEVELOPER_API.md` so later-run retry wording applies only to
+  endpoint callback failures after row-claim cleanup succeeds. The docs now
+  state fail-closed validation, lease/fencing, status-update, and claim-clear
+  failures are reported without an immediate retry or recovery guarantee in
+  this slice. Updated the T-0026 task status to the current review-fix state.
+- Evidence: the focused claim-clear regression failed before the fix because
+  the run reported only `Error: endpoint failed`, then passed after the
+  delivery catch path surfaced the claim-clear failure.
+- Verification: focused delivery Vitest passed with 1 file and 37 tests;
+  `typecheck:build:generated`, `docs:check`, rerun `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning. `format:check` caught review/work-log Markdown
+  wrapping before the final clean rerun.
+
+### Round 17 Follow-up - `2026-07-10T08:06:46Z`
+
+- Finding: [Style/API/Docs MEDIUM] public package and Developer API docs used
+  `active row claim` / `claim-clear failures`, and other public API docs did
+  not consistently qualify endpoint callback retry with successful
+  framework-owned cleanup.
+- Finding: [API P2] the public `DeliveryFailure.error` `AggregateError`
+  message exposed the internal phrase `inbox claim clear failed`.
+- Finding: [API P3] `DeliveryRun.failed` and `DeliveryLoopRun.failed` TypeDoc
+  omitted framework-cleanup failures.
+- Finding: [Reliability MEDIUM] cleanup returning `undefined` after endpoint
+  failure was ignored, so a row could remain unavailable while the run reported
+  only the endpoint failure.
+- Finding: [Reliability LOW] `DeliveryLoop.maxFailures` accepted any positive
+  safe integer, allowing deterministic failures to repeat for an effectively
+  unbounded number of drain runs.
+- Action: dispatch one fix worker for claim-free public wording,
+  cleanup-result reporting, `maxFailures` bounding, tests, and durable logs.
+- Fix: changed the public aggregate cleanup error to
+  `Delivery failed and framework cleanup failed.`, updated public docs and
+  TypeDoc to include framework cleanup failures without claim terminology, and
+  made cleanup returning `undefined` aggregate with the original delivery
+  failure.
+- Fix: capped `DeliveryLoop.maxFailures` at 1000 during construction and
+  documented the bound in the option TypeDoc.
+- Evidence: focused regressions failed before the fix on the old public error
+  message, ignored cleanup `undefined` result, and missing max-failure bound,
+  then the focused delivery Vitest batch passed after the fix with 2 files and
+  55 tests.
+- Verification: focused delivery Vitest rerun, `typecheck:build:generated`,
+  `docs:check`, rerun `format:check`, and `git diff --check` passed.
+  `docs:check` reported only the existing invalid-origin TypeDoc warning.
+  `format:check` caught `delivery-loop.ts` formatting before the final clean
+  rerun.
+
+### Round 18 Follow-up - `2026-07-10T08:21:18Z`
+
+- Finding: [Docs/API/Style MEDIUM] `docs/architecture/README.md` still exposed
+  row-claim internals and described retry without qualifying successful
+  framework cleanup. The task brief scope had the same retry overpromise.
+- Finding: [Style LOW] `delivery-loop.ts` placed a supporting constant before
+  the primary `DeliveryLoop` declaration, and `requirePositiveSafeIntegerAtMost`
+  exceeded the naming component rule.
+- Finding: [Style LOW] `inbox-storage.ts` exported standalone
+  `requireInboxReadLimit`, violating the grouped-helper preference.
+- Finding: [Security MEDIUM] `leaseMs` was only a positive integer, but it is
+  used as a Node timer delay. Oversized values can overflow or clamp to `1ms`
+  and cause excessive renewal/storage traffic.
+- Finding: [Reliability P1] all-unavailable read pages were treated as idle.
+  Because `Delivery.drain()` reads a bounded first page, unavailable rows at
+  the head of a shard could permanently starve later available rows.
+- Action: dispatch one fix worker for claim-free docs, style cleanup, bounded
+  lease timing, and bounded scan-through of unavailable pages before the next
+  review round.
+- Fix: `Delivery.drain()` now uses a bounded growing read window and tracks
+  unique rows already observed in the run, so unavailable rows at the head are
+  skipped before endpoint invocation while later available rows can still be
+  reached without accepting more endpoint work than the configured limit.
+- Fix: `leaseMs` is validated as a positive safe integer at most `2147483647`
+  before it reaches shard expiry math or delivery renewal timer scheduling.
+  `delivery-loop.ts` now keeps supporting constants below the primary class and
+  uses the shorter `requireBoundedInteger` helper name. Inbox read-limit
+  validation is grouped under the internal `inboxStorageAccess` API instead of
+  exporting a standalone helper.
+- Fix: architecture and task-brief wording now avoids public row-claim
+  mechanics, states unavailable rows are skipped before endpoint invocation,
+  names public `InboxMessage` callbacks, qualifies endpoint retry on successful
+  framework-owned cleanup, and does not promise immediate recovery for cleanup,
+  validation, lease/fencing, or delivery-status failures.
+- Evidence: focused regressions failed before the fix because
+  `signal-available-tail` was never dispatched behind a claimed head row and
+  `leaseMs: 2147483648` was accepted. After the fix, the targeted red tests
+  passed, and the focused delivery Vitest batch passed with 4 files and
+  199 tests.
+- Verification: `typecheck:build:generated` passed (`tsc -b`). `docs:check`
+  passed and reported only the existing invalid-origin TypeDoc warning.
+  `format:check` initially flagged `delivery-loop.ts`; after formatting that
+  file, the final `format:check` passed. `git diff --check` passed.
+- Cleanup: removed the exported standalone `requireShardLeaseMs` helper from
+  `sharded-work-registry.ts`. Lease validation now stays class-owned inside
+  `ShardedWorkRegistry` and `Delivery`, preserving the timer-safe maximum
+  without exposing a helper only used by delivery construction.
+- Cleanup: split `Delivery.#drainAvailableMessages` by moving per-message
+  delivery/accounting into `#tryDrainMessage` and `drainProgress()`, keeping
+  the page-scanning method under the 35 LOC style target without changing
+  counters or skip behavior.
+- Cleanup verification: `typecheck:build:generated`, `format:check`,
+  `git diff --check`, and focused delivery Vitest passed on
+  `2026-07-10T08:35:29Z`.
+
+### Round 19 Follow-up - `2026-07-10T08:57:33Z`
+
+- Finding: [Reliability HIGH] `Delivery.drain()` still could not scan past a
+  full `maxReadLimit` page of unavailable `TO_DELIVER` rows because record
+  storage had no paging cursor/offset and the drain treated the saturated read
+  window as exhaustion.
+- Fix: added minimal `RecordQuery.offset` support, applied it in in-memory
+  storage after deterministic sorting and before `limit`, exposed inbox read
+  offset for ordered pages, and changed delivery scanning to advance past rows
+  that remain pending/unavailable while stopping only on a short page or the
+  accepted-work cap.
+- Evidence: the new regression with 1000 claimed unavailable head rows and one
+  deliverable tail row failed before the final drain stop-condition fix with no
+  endpoint dispatch, then passed after the scan continued beyond a full
+  `maxReadLimit` page.
+- Finding: [Docs MEDIUM] delivery/loop/worker `limit` comments and curated API
+  docs still described delivery `limit` as a page-size knob.
+- Fix: delivery `limit` docs now describe the maximum accepted endpoint work per
+  drain plus the initial scan window. `InboxReadOptions.limit` remains
+  documented as the page-size control for one ordered inbox read.
+- Finding: [Style LOW] `drainMessage()`, `#deliverMessage()`, and the
+  stateful active-claim factory were still broad and closure-heavy.
+- Fix: split exact-message read/result handling and delivery claim/invoke/mark
+  helpers, and replaced the active-claim factory closure with a private
+  `ActiveClaim` class.
+- Verification: focused Vitest for storage offset plus delivery worker/loop
+  passed with 3 files and 72 tests.
+  `pnpm --config.verify-deps-before-run=false typecheck:build:generated`
+  passed (`tsc -b`), refreshing ignored package `dist` output.
+  `pnpm --config.verify-deps-before-run=false docs:check` passed with the
+  existing invalid-origin TypeDoc warning only.
+  `pnpm --config.verify-deps-before-run=false format:check` passed.
+  `git diff --check` passed.
+
+### Round 20 Follow-up - `2026-07-10T09:09:57Z`
+
+- Finding: [Security MEDIUM] in-memory storage canonicalized user objects into
+  plain `{}` records and recognized internal `bigint`/`bytes` tags with
+  property-name checks, letting user keys collide with normalized internal
+  representation and affecting ID/filter/CAS matching.
+- Finding: [Style LOW] `Delivery.#drainAvailableMessages` remained over the
+  local method-length target, and the exported claim-bearing storage access
+  object still needs review as an internal-boundary concern.
+- Finding: [Docs LOW] delivery `limit` wording should say accepted delivery
+  attempts, including endpoint work and fail-closed validation, and the task
+  integration result still referenced Round 18.
+- Action: dispatch one fix worker for collision-free storage canonicalization
+  regressions, small delivery method/doc cleanup, and durable log updates.
+- Fix: in-memory storage normalized user objects into null-prototype records
+  with `Object.defineProperty`, moved internal bigint/bytes tags to private
+  symbols, and keyed normalized values through a custom kind-aware canonical
+  encoder so user keys cannot collide with internal representation.
+- Fix: extracted `Delivery.#readPendingDeliveryPage()` from the direct drain
+  loop, updated curated delivery `limit` docs to include fail-closed
+  validation in accepted delivery attempts, and refreshed the task integration
+  result to the Round 19 final state with Round 20 verification pending.
+- Evidence: the new storage regression for `__proto__`, `constructor`,
+  `prototype`, `bigint`, and `bytes` keys failed before the fix with
+  `SyntaxError: Cannot convert bigint:a to a BigInt`, then passed after the
+  canonicalizer change.
+- Verification: required focused storage/delivery Vitest passed with 2 files
+  and 56 tests; generated build typecheck passed; docs check passed with only
+  the existing invalid-origin TypeDoc warning; format check passed after
+  formatting `tenant-records.ts`; `git diff --check` passed.
+
+### Round 21 Follow-up - `2026-07-10T09:24:24Z`
+
+- Finding: [Reliability MEDIUM] `DeliveryLoop.maxFailures` was checked only
+  after an entire `Delivery.drain()`, so the default `maxFailures: 1` could
+  still run multiple failing endpoint attempts in one drain.
+- Finding: [Docs LOW] user and architecture storage summaries omitted
+  `RecordQuery.offset`, and the task brief still had one retry sentence without
+  the framework-cleanup success qualifier.
+- Finding: [Style MEDIUM/LOW] several `InboxStorage` private methods remain
+  over the local method-length target, and the internal claim-bearing storage
+  access object remains an exported module-level bridge.
+- Action: dispatch one fix worker for failure-budget enforcement, docs, and
+  scoped inbox-storage method cleanup without broad internal-access churn.
+- Fix: `DeliveryLoop` now validates the configured read limit before running
+  and passes each `Delivery.drain()` the smaller of the configured
+  accepted-work limit and the remaining failure budget, so the loop cannot
+  accept more failing attempts than the budget before returning `FAILED`.
+- Fix: user and architecture docs now describe non-negative
+  `RecordQuery.offset` support and state that offsets are applied after sorting
+  and before limits. The task brief retry sentence now includes the
+  framework-owned cleanup success qualifier.
+- Fix: split `InboxStorage.#handleStoredGuardMessage()` into private
+  guard-finalization and row-repair helpers. `inboxStorageAccess` remains
+  unchanged because reducing that exported bridge would require broader
+  delivery worker/test call-site churn rather than a scoped method-length
+  cleanup.
+- Evidence: the new two-row failure-budget regression failed before the fix
+  with attempts `["signal-fails-1", "signal-fails-2"]`, then passed after the
+  loop capped the drain to the remaining failure budget.
+- Verification: required delivery-loop/inbox Vitest passed with 2 files and
+  119 tests; generated build typecheck passed; docs check passed with only the
+  existing invalid-origin TypeDoc warning; format check passed; diff whitespace
+  check passed.
+
+### Round 22 Follow-up - `2026-07-10T09:39:00Z`
+
+- Finding: [Security MEDIUM] unsupported worker labels such as `CATCH_UP`
+  stayed public-writeable and were fail-closed as delivery failures, so a
+  single `CATCH_UP` row could consume the default loop failure budget and block
+  supported rows in the same shard.
+- Finding: [Style MEDIUM/LOW] `build-protocol/RUNTIME_ARCHITECTURE.md` still
+  exposed row-claim internals; several `InboxStorage` private methods remain
+  over the method-length target.
+- Finding: [API P3] `packages/server/README.md` omitted
+  `RecordQuery.offset` from `queryVersioned()` docs.
+- Action: dispatch one fix worker for non-starving unsupported-label handling,
+  public architecture wording, server README offset docs, and scoped
+  inbox-storage cleanup.
+- Fix: `Delivery.drain()` and `drainMessage()` now skip worker-unsupported
+  public labels before row acceptance, storage-claiming, or callback
+  invocation. Unsupported rows remain pending for future catch-up handling and
+  are paged past like unavailable rows, so they do not consume failure budget
+  or block supported rows behind them.
+- Fix: rewrote the runtime architecture delivery summary with public concepts:
+  shard lease fencing, rows unavailable to the active worker, public
+  `InboxMessage` snapshots, endpoint callback cleanup failures, and deferred
+  stale-row recovery. The server README now documents non-negative
+  `RecordQuery.offset` for `queryVersioned()`, applied after sorting and
+  before limits.
+- Fix: split `InboxStorage.#claimAndWrite()` rollback handling into
+  `#rollbackPendingGuard()`. Broader internal-access redesign remains out of
+  scope for this scoped method-length cleanup.
+- Evidence: the focused `CATCH_UP` regression failed before the fix with
+  `accepted: 2` and `failed: 1`, then passed after unsupported labels were
+  skipped before acceptance.
+- Verification: required delivery Vitest passed with 3 files and 159 tests;
+  generated build typecheck passed; docs check passed with only the existing
+  invalid-origin TypeDoc warning; format check passed; diff whitespace check
+  passed.
+
+### Round 23 Follow-up - `2026-07-10T10:08:00Z`
+
+- Finding: [API/Docs MEDIUM] endpoint callbacks still received a snapshot that
+  shared mutable nested state with the internal claimed CAS row, and stale docs
+  still described unsupported labels as failure-budget consumers.
+- Finding: [Performance MEDIUM] the temporary skipped-row scan budget needed to
+  stay finite while still allowing one full storage page of skipped rows before
+  accepted endpoint work.
+- Fix: `Delivery.drain()` now exposes a cloned public callback snapshot,
+  bounds skipped-row scanning to storage read cap plus accepted-work limit, and
+  keeps valid worker-unsupported labels pending and skipped rather than failed.
+- Evidence: focused delivery regressions covered callback mutation privacy,
+  skipped-row scan progression, and finite scan budget; they failed before the
+  final adjustments and passed after the fixes.
+- Verification: see
+  `build-protocol/tasks/T-0026-transport-backed-delivery-workers/round-23-fix-report.md`.
+  Required delivery Vitest, generated build typecheck, docs check, format
+  check, and `git diff --check` all passed. `docs:check` reported only the
+  existing invalid-origin TypeDoc warning.
+
+### Round 24 Follow-up - `2026-07-10T11:22:00Z`
+
+- Finding: [Durability MEDIUM] the external work log and review ledger stopped
+  at Round 22, so the durable trail no longer matched the verified Round 23
+  state.
+- Finding: [API MEDIUM] `DeliveryEndpoint` still admitted full `InboxMessage`,
+  so public callback/failure typing still allowed `CATCH_UP` even though the
+  worker never invokes endpoints for that label.
+- Finding: [Reliability MEDIUM] `InboxStorage` claim CAS rejected any existing
+  claim, so expired per-message claims stayed pending forever until some other
+  cleanup path ran. Historical correction: this finding's reclaim expectation
+  was superseded by Round 35 commit `5c3705e2`; Round 43 later restored
+  expired-claim reclaim during claim CAS while live row claims still block.
+- Finding: [Reliability MEDIUM] pre-callback claim/lease failures were still
+  counted as accepted endpoint work, letting them consume the accepted-work
+  limit before any callback ran.
+- Finding: [Performance MEDIUM] direct drains still chose page size from the
+  accepted-work limit, so limit `1` plus many skipped rows degenerated toward
+  one inbox query per skipped row.
+- Fix: appended missing Round 23 and Round 24 durable trail entries, exported
+  `DeliveryEndpointMessage`, narrowed `DeliveryEndpoint` and
+  `DeliveryFailure.message`, then reclaimed expired claims during claim CAS
+  using the storage clock. Historical correction: Round 35 / `5c3705e2`
+  superseded that reclaim behavior with no competing delivery for any existing
+  row claim. Round 24 also kept pre-callback failures visible without
+  incrementing accepted work, and widened page reads to
+  `min(inboxStorageAccess.maxReadLimit, remaining scan budget)` while stopping
+  on accepted endpoint work.
+- Evidence: new regressions covered expired-claim reclaim on a later drain,
+  limit-1 pre-callback failure followed by a second-row delivery in the same
+  drain, and bounded query count for one full skipped page plus one accepted
+  row. Existing delivery-loop coverage was updated so live claims still leave a
+  loop idle while expired claims are reclaimable. Historical correction: the
+  expired-claim reclaim evidence is retained as Round 24 history only and no
+  longer describes current behavior after Round 35 / `5c3705e2`.
+- Verification: see
+  `build-protocol/tasks/T-0026-transport-backed-delivery-workers/round-24-fix-report.md`.
+  Required delivery Vitest passed with 3 files and 165 tests;
+  `typecheck:build:generated` passed; `docs:check` passed after updating the
+  expected root export list for `DeliveryEndpointMessage`, still with only the
+  existing invalid-origin TypeDoc warning; `format:check` passed; `git diff
+--check` passed.
+
+### Round 25 Follow-up - `2026-07-10T10:58:57Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..71ba68e0.diff` from task baseline
+  `ca8fb2b3` to handoff HEAD `71ba68e0`.
+- Code style/maintainability (Hypatia): [Important] callback names violate the
+  binding `on`/`On` convention. Rename exported `DeliveryEndpoint` and internal
+  `renewClaim` / `action` callback names. [Minor] the storage fault-injection
+  test override is too large and should be split when touching that area.
+- Documentation (Kuhn): [Important] public docs still say endpoint callbacks
+  receive `InboxMessage` snapshots rather than narrowed
+  `DeliveryEndpointMessage` snapshots, and stale recovery wording implies
+  expired per-message ownership is wholly future work instead of the
+  then-current reclaim-by-later-claim-attempt behavior. Historical correction:
+  Round 35 commit `5c3705e2` superseded expired-claim reclaim; Round 43 later
+  restored expired-claim reclaim during claim CAS while live row claims still
+  block.
+- TypeScript/API docs (Arendt): [Important] public documentation does not match
+  the narrowed callback/failure API and should consistently name
+  `DeliveryEndpointMessage` plus its three-label supported endpoint union.
+- Security (Pauli): [Important] `leaseMs: 1` creates an unsafe renewal cadence.
+  Add a shared lower lease-duration bound across delivery and sharded registry
+  validation and cover rejected lower values.
+- Performance/reliability (Erdos): [Important] scan-budget exhaustion is
+  reported as idle and can starve a supported tail row across loop drains;
+  claim expiry can be missed when it occurs during the storage read; and
+  pre-callback failures can exceed the loop failure budget because they do not
+  consume accepted callback budget.
+- Action: dispatch one fix worker with the complete findings list. Required
+  verification includes focused delivery worker/loop/inbox/sharded-registry
+  tests, typecheck, docs check, format check, and `git diff --check`, followed
+  by a fresh five-lane re-review.
+
+### Round 25 Fix Worker Start - `2026-07-10`
+
+The fix worker opened `round-25-fix-report.md` with the canonical skill
+applicability check and will address every Round 25 finding through focused
+red/green delivery regressions before the next review pass.
+
+### Round 25 Fix Implementation - `2026-07-10`
+
+- Added focused red/green coverage for the shared lease floor, delayed claim
+  expiry, finite scan continuation, and pre-callback loop failure budget.
+- Implemented the `OnDeliveryMessage` rename, independent public snapshot docs,
+  shared `1000ms` lease validation, post-read expiry check, and loop-only
+  continuation/failure controls.
+- Coordinator verification passed after the fix worker returned: focused
+  delivery Vitest passed with 4 files and 210 tests; generated build typecheck,
+  docs check, format check, and `git diff --check` passed. `docs:check`
+  reported only the existing invalid-origin TypeDoc source-link warning.
+- Fix commit: `e089963f` (`Fix delivery loop reliability and docs`).
+
+### Round 26 Follow-up - `2026-07-10T11:29:35Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..2caee0d7.diff` from task baseline
+  `ca8fb2b3` to current HEAD `2caee0d7`.
+- Documentation (Hilbert): clean.
+- Security (Linnaeus): clean.
+- Code style/maintainability (Aristotle): no blocking findings; retained one
+  minor note that `FaultyDeliveryRecordStorage.compareAndSetRecord()` remains a
+  broad test-only fault-injection helper.
+- TypeScript/API docs (Zeno): [Important] `scanOffset` and `maxFailures` are
+  loop-only controls but are exported on public `DeliveryDrainOptions` and
+  rendered by TypeDoc. Split public drain options from loop-private controls
+  and add API/type coverage that public `Delivery.drain()` options exclude
+  both fields.
+- Performance/reliability (Euler): [Important] `DeliveryLoop.#drainLimit()`
+  reduces the accepted-work cap to the remaining failure budget, so healthy
+  backlogs run one shard pickup/read/release per delivered row with default
+  `maxFailures: 1`. Preserve the configured accepted-work limit and pass the
+  remaining failure budget separately.
+- Action: dispatch one fix worker for the API leak and batching regression,
+  with focused delivery-loop/API export verification before another five-lane
+  re-review.
+
+### Round 26 Fix Implementation - `2026-07-10`
+
+- Split public `DeliveryDrainOptions` from loop-private drain controls behind
+  the non-barrel `deliveryAccess` capability.
+- Preserved the configured/default accepted-work limit for loop drains while
+  passing the remaining failure budget as a separate internal control.
+- Added API type coverage proving public drain options exclude `scanOffset` and
+  `maxFailures`, and delivery-loop coverage proving multiple successful
+  callbacks can complete in one drain before the first failure stops the loop.
+- Coordinator verification passed: focused delivery/API Vitest passed with 5
+  files and 220 tests; generated build typecheck, docs check, format check,
+  and `git diff --check` passed. `docs:check` reported only the existing
+  invalid-origin TypeDoc source-link warning.
+- Fix commit: `47672dc8` (`Fix delivery drain internal controls`).
 
 ### Round 27 Follow-up - `2026-07-10T11:55:46Z`
 
@@ -918,874 +1318,474 @@ evidence`) in the task, work, review, and Round 33 fix records. The current
   `git diff --check`. `docs:check` retained only the existing invalid `origin`
   source-link warning.
 
-### Round 26 Follow-up - `2026-07-10T11:29:35Z`
+### Round 35 Follow-up - `2026-07-10T14:47:00Z`
 
 - Review package:
-  `.superpowers/sdd/review-ca8fb2b3..2caee0d7.diff` from task baseline
-  `ca8fb2b3` to current HEAD `2caee0d7`.
-- Documentation (Hilbert): clean.
-- Security (Linnaeus): clean.
-- Code style/maintainability (Aristotle): no blocking findings; retained one
-  minor note that `FaultyDeliveryRecordStorage.compareAndSetRecord()` remains a
-  broad test-only fault-injection helper.
-- TypeScript/API docs (Zeno): [Important] `scanOffset` and `maxFailures` are
-  loop-only controls but are exported on public `DeliveryDrainOptions` and
-  rendered by TypeDoc. Split public drain options from loop-private controls
-  and add API/type coverage that public `Delivery.drain()` options exclude
-  both fields.
-- Performance/reliability (Euler): [Important] `DeliveryLoop.#drainLimit()`
-  reduces the accepted-work cap to the remaining failure budget, so healthy
-  backlogs run one shard pickup/read/release per delivered row with default
-  `maxFailures: 1`. Preserve the configured accepted-work limit and pass the
-  remaining failure budget separately.
-- Action: dispatch one fix worker for the API leak and batching regression,
-  with focused delivery-loop/API export verification before another five-lane
+  `.superpowers/sdd/review-ca8fb2b3..7a5378eb.diff` from task baseline
+  `ca8fb2b3` to current HEAD `7a5378eb`.
+- TypeScript/API docs (Pascal): clean.
+- Documentation (Faraday): [P2] Round 34 verification records should name fix
+  commit `7a5378eb` (`Fix delivery tooling typecheck`), and the Round 34 fix
+  report still says no commit was created.
+- Code style/maintainability (Lovelace): [P1] `format:check` currently fails
+  on `round-34-fix-report.md`; apply Prettier formatting before accepting the
+  verification record.
+- Security (Gibbs): [P1] expired row-claim reclaim can double-invoke endpoint
+  callbacks. Treat any existing row claim as unavailable until a future
+  abandoned-claim recovery policy can prove recovery is safe.
+- Performance/reliability (Dewey): [P2] absolute offset paging can falsely idle
+  when skipped head rows disappear during one drain page sequence. Avoid
+  reading later pages by an offset that is relative to a moving `TO_DELIVER`
+  set.
+- Action: dispatch one fix worker for the complete Round 35 batch, with
+  focused red/green regressions for the claim and pagination behavior, report
+  formatting, durable Round 34 commit trace, verification, and another
+  five-lane re-review.
+
+### Round 35 Fix Implementation - `2026-07-10`
+
+- Added focused red regressions before production edits. The expired-claim
+  regression failed because `signal-expired-claim` was invoked, and the moving
+  pending-set regression failed because `signal-reachable-tail` was skipped
+  when the unavailable head rows disappeared between page reads.
+- `InboxStorage` now treats any existing row claim as unavailable, including
+  expired claims. Abandoned-claim recovery remains a future explicit policy
+  because the earlier owner may still be inside `onMessage`.
+- `Delivery` now validates the pending boundary before reading an offset page.
+  If skipped rows disappeared and the boundary no longer matches, the drain
+  resets to the head once and continues inside the same scan budget rather than
+  paging or idling past reachable supported work.
+- Updated expired-claim and paused-loop tests to use explicit claim recovery
+  where recovery is intended, and added a query hook to the delivery storage
+  fault fixture for moving pending-set regressions.
+- Coordinator refinement moved the pending-boundary check before all offset
+  page reads and refreshed public docs plus the `InboxClaim` comment to state
+  that expired and live ownership both blocked competing delivery in that
+  slice. Round 43 later restored expired-claim reclaim during claim CAS while
+  live claims still block.
+- Round 34 durable trace now names fix commit `7a5378eb`
+  (`Fix delivery tooling typecheck`), and `round-34-fix-report.md` is
+  Prettier-formatted.
+- Fix-worker verification passed: focused delivery worker/loop/runtime/inbox/
+  shard-registry Vitest passed with 5 files and 223 tests;
+  `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing invalid
+  `origin` TypeDoc source-link warning.
+- No commit was created by the fix worker, per Round 35 instruction.
+  Coordinator commit `5c3705e2` (`Fix delivery claim blocking and offset
+rescan`) later recorded this fix.
+
+### Round 36 Follow-up - `2026-07-10T16:05:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..5c3705e2.diff` from task baseline
+  `ca8fb2b3` to current HEAD `5c3705e2`.
+- Documentation (Bohr): clean.
+- TypeScript/API docs (Fermat): clean.
+- Security (Banach): clean.
+- Performance/reliability (Dirac): clean.
+- Code style/maintainability (Descartes): [P1] `format:check` fails on
+  `round-35-fix-report.md`; [P1] `lint` fails on unused `_claim`
+  destructuring in `delivery-loop.test.ts` and `delivery-worker.test.ts`, plus
+  a `let delivery` local in `delivery-worker.test.ts` that can be `const`.
+- Action: apply one style/lint fix, rerun lint/format and focused checks, then
+  repeat five-lane re-review.
+
+### Round 36 Fix Implementation - `2026-07-10`
+
+- Formatted `round-35-fix-report.md` and the touched T-0026 logs.
+- Replaced ignored `claim` destructuring in delivery test helpers with explicit
+  claim-free `InboxMessage` snapshots.
+- Changed the moving pending-set regression's delivery local from `let` to
+  `const`.
+- Verification passed: `lint`, `format:check`, focused delivery Vitest with 5
+  files and 223 tests, and `git diff --check`.
+- Fix commit: `e4388fb5` (`Fix delivery review gate cleanup`).
+
+### Round 37 Follow-up - `2026-07-10T16:15:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..e4388fb5.diff` from task baseline
+  `ca8fb2b3` to current HEAD `e4388fb5`.
+- TypeScript/API docs (Locke): clean.
+- Security (Nietzsche): clean.
+- Code style/maintainability (Russell): [P2] Round 35 and Round 36 fix reports
+  still say coordinator commits are pending even though commits `5c3705e2` and
+  `e4388fb5` exist.
+- Documentation (Hume): [P2] same stale Round 35/Round 36 commit breadcrumbs;
+  [P2] older Round 24/25 durable reclaim wording should be marked as
+  superseded by Round 35's no-reclaim contract.
+- Performance/reliability (Kant): [P2] moving `TO_DELIVER` pagination can
+  still falsely idle if skipped head rows disappear after boundary validation
+  but before the offset page read.
+- Action: apply one fix for breadcrumbs, historical reclaim wording, and the
+  boundary/read race; rerun focused verification; repeat five-lane re-review.
+
+### Round 37 Fix Implementation - `2026-07-10`
+
+- Durable breadcrumb cleanup: Round 35 report/task/work/review records now name
+  coordinator commit `5c3705e2` (`Fix delivery claim blocking and offset
+rescan`), and Round 36 report/task/work/review records now name coordinator
+  commit `e4388fb5` (`Fix delivery review gate cleanup`).
+- Historical reclaim cleanup: Round 24/25 task, work, review, and fix-report
+  reclaim statements are marked as historical and superseded by Round 35 /
+  `5c3705e2`. Round 43 later superseded that no-reclaim contract: live row
+  claims block competing delivery, while expired row claims may be replaced
+  during claim CAS using the storage clock.
+- Reliability fix: added a regression for a skipped head page disappearing
+  after pending-boundary validation but before offset-page read. The red run
+  returned `IDLE` with `delivered: 0`; after the fix,
+  `Delivery.#drainAvailableMessages()` revalidates the boundary after a short
+  zero-work offset page and performs one bounded head rescan when it moved.
+- Verification passed: focused delivery worker/loop/runtime/inbox/shard-registry
+  Vitest passed with 5 files and 224 tests; `typecheck:build:generated`,
+  `docs:check`, `lint`, `format:check`, and `git diff --check` passed.
+  `docs:check` retained only the existing invalid-origin TypeDoc source-link
+  warning. No commit was created, per Round 37 instruction.
+- Coordinator verification at `2026-07-10T16:22:00Z` passed the focused
+  boundary/read race regression, the focused delivery batch with 5 files and
+  224 tests, `typecheck:build:generated`, `docs:check`, `lint`,
+  `format:check`, and `git diff --check`.
+- Fix commit: `1403505e` (`Fix delivery offset boundary race`).
+
+### Round 38 Follow-up - `2026-07-10T16:31:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..1403505e.diff` from task baseline
+  `ca8fb2b3` to current HEAD `1403505e`.
+- TypeScript/API docs (Copernicus): clean.
+- Security (Popper): clean.
+- Performance/reliability (Jason): clean.
+- Code style/maintainability (Planck): [P2] Round 37 report says no commit was
+  created even though coordinator commit `1403505e` records the fix.
+- Documentation (Ohm): [P2] same Round 37 commit-note issue; [P3] Round 29 and
+  Round 30 reports still say coordinator commits are pending even though their
+  durable breadcrumbs are known.
+- Action: update the commit notes and rerun format/diff checks before another
+  five-lane re-review.
+
+### Round 38 Fix Implementation - `2026-07-10`
+
+- Updated Round 37 report/task/work/review records so they say the fix worker
+  created no commit and coordinator commit `1403505e`
+  (`Fix delivery offset boundary race`) recorded the verified fix.
+- Updated Round 29 and Round 30 reports with their resolved coordinator commit
+  breadcrumbs: `fd563047` and `8a65e2b6`.
+- Verification passed: `format:check` and `git diff --check`.
+
+### Round 39 Follow-up - `2026-07-10T16:40:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..7927c4d3.diff` from task baseline
+  `ca8fb2b3` to current HEAD `7927c4d3`.
+- TypeScript/API docs (Peirce): clean.
+- Security (Gauss): clean.
+- Performance/reliability (Tesla): clean.
+- Code style/maintainability (Laplace): [P2] review-log status/table still
+  showed Round 38 findings pending after commit `7927c4d3`; work-log summary
+  still said the Round 38 fix was pending.
+- Documentation (Sartre): [P2] same stale Round 38 status; [P3] Round 37
+  report's coordinator breadcrumb should name `1403505e`.
+- Action: update status/breadcrumb records and rerun format/diff checks before
+  another five-lane re-review.
+
+### Round 39 Fix Implementation - `2026-07-10`
+
+- Updated the review-log status/table and work-log summary so Round 38's
+  records-only cleanup is no longer marked pending.
+- Updated the Round 37 report's coordinator breadcrumb to name `1403505e`
+  (`Fix delivery offset boundary race`).
+- Verification passed: `format:check` and `git diff --check`.
+- Coordinator commit: `faa2d814` (`Record delivery round 39 review status`).
+
+### Round 40 Follow-up - `2026-07-10T16:48:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..faa2d814.diff` from task baseline
+  `ca8fb2b3` to current HEAD `faa2d814`.
+- TypeScript/API docs (Hooke): clean.
+- Security (Halley): clean.
+- Code style/maintainability (Anscombe): [P2] review/work logs still describe
+  the Round 39 records-only fix as future/pending after commit `faa2d814`.
+- Documentation (Carver): [P2] same stale Round 39 status.
+- Performance/reliability (Bernoulli): [P1] offset pagination can still skip
+  deliverable rows when only part of the skipped head set disappears after
+  boundary validation and the stale offset page remains full/non-empty.
+- Action: update Round 39 status records and fix the partial-disappearance
+  offset race with focused regression coverage before another five-lane
   re-review.
 
-### Round 26 Fix Implementation - `2026-07-10`
+### Round 40 Fix Implementation - `2026-07-10`
 
-- Split public `DeliveryDrainOptions` from loop-private drain controls behind
-  the non-barrel `deliveryAccess` capability.
-- Preserved the configured/default accepted-work limit for loop drains while
-  passing the remaining failure budget as a separate internal control.
-- Added API type coverage proving public drain options exclude `scanOffset` and
-  `maxFailures`, and delivery-loop coverage proving multiple successful
-  callbacks can complete in one drain before the first failure stops the loop.
-- Coordinator verification passed: focused delivery/API Vitest passed with 5
-  files and 220 tests; generated build typecheck, docs check, format check,
-  and `git diff --check` passed. `docs:check` reported only the existing
-  invalid-origin TypeDoc source-link warning.
-- Fix commit: `47672dc8` (`Fix delivery drain internal controls`).
+- Updated stale Round 39 status records to state that the records-only cleanup
+  was verified and committed as `faa2d814` (`Record delivery round 39 review
+status`).
+- Added a focused full stale-offset-page regression. It removes a complete
+  skipped head page after the pre-read boundary validation, leaves a full stale
+  offset page of unsupported filler, and proves the shifted supported row is
+  delivered in the same `DeliveryLoop.run()`.
+- `Delivery.#drainAvailableMessages()` now revalidates an offset boundary after
+  reading the page and, on movement, discards the page and performs its one
+  bounded head rescan before any page rows are processed.
+- Updated the intentional inbox-query count in the bounded-paging test from
+  three to four for the post-read boundary validation.
+- Verification passed: focused regression red then green; focused delivery
+  worker/loop/inbox Vitest with 3 files and 178 tests;
+  `typecheck:build:generated`, `docs:check`, `lint`, and `format:check`.
+  `docs:check` retained only the existing invalid-origin TypeDoc source-link
+  warning.
+- No commit was created by this worker. Coordinator commit: `9c51b77a`
+  (`Fix delivery stale offset page rescan`).
 
-### Round 25 Follow-up - `2026-07-10T10:58:57Z`
+### Round 41 Follow-up - `2026-07-10T17:05:00Z`
 
 - Review package:
-  `.superpowers/sdd/review-ca8fb2b3..71ba68e0.diff` from task baseline
-  `ca8fb2b3` to handoff HEAD `71ba68e0`.
-- Code style/maintainability (Hypatia): [Important] callback names violate the
-  binding `on`/`On` convention. Rename exported `DeliveryEndpoint` and internal
-  `renewClaim` / `action` callback names. [Minor] the storage fault-injection
-  test override is too large and should be split when touching that area.
-- Documentation (Kuhn): [Important] public docs still say endpoint callbacks
-  receive `InboxMessage` snapshots rather than narrowed
-  `DeliveryEndpointMessage` snapshots, and stale recovery wording implies
-  expired per-message ownership is wholly future work instead of the
-  then-current reclaim-by-later-claim-attempt behavior. Historical correction:
-  Round 35 commit `5c3705e2` superseded expired-claim reclaim; Round 43 later
-  restored expired-claim reclaim during claim CAS while live row claims still
-  block.
-- TypeScript/API docs (Arendt): [Important] public documentation does not match
-  the narrowed callback/failure API and should consistently name
-  `DeliveryEndpointMessage` plus its three-label supported endpoint union.
-- Security (Pauli): [Important] `leaseMs: 1` creates an unsafe renewal cadence.
-  Add a shared lower lease-duration bound across delivery and sharded registry
-  validation and cover rejected lower values.
-- Performance/reliability (Erdos): [Important] scan-budget exhaustion is
-  reported as idle and can starve a supported tail row across loop drains;
-  claim expiry can be missed when it occurs during the storage read; and
-  pre-callback failures can exceed the loop failure budget because they do not
-  consume accepted callback budget.
-- Action: dispatch one fix worker with the complete findings list. Required
-  verification includes focused delivery worker/loop/inbox/sharded-registry
-  tests, typecheck, docs check, format check, and `git diff --check`, followed
-  by a fresh five-lane re-review.
-
-### Round 25 Fix Worker Start - `2026-07-10`
-
-The fix worker opened `round-25-fix-report.md` with the canonical skill
-applicability check and will address every Round 25 finding through focused
-red/green delivery regressions before the next review pass.
-
-### Round 25 Fix Implementation - `2026-07-10`
-
-- Added focused red/green coverage for the shared lease floor, delayed claim
-  expiry, finite scan continuation, and pre-callback loop failure budget.
-- Implemented the `OnDeliveryMessage` rename, independent public snapshot docs,
-  shared `1000ms` lease validation, post-read expiry check, and loop-only
-  continuation/failure controls.
-- Coordinator verification passed after the fix worker returned: focused
-  delivery Vitest passed with 4 files and 210 tests; generated build typecheck,
-  docs check, format check, and `git diff --check` passed. `docs:check`
-  reported only the existing invalid-origin TypeDoc source-link warning.
-- Fix commit: `e089963f` (`Fix delivery loop reliability and docs`).
-
-### Round 19 Follow-up - `2026-07-10T08:57:33Z`
-
-- Finding: [Reliability HIGH] `Delivery.drain()` still could not scan past a
-  full `maxReadLimit` page of unavailable `TO_DELIVER` rows because record
-  storage had no paging cursor/offset and the drain treated the saturated read
-  window as exhaustion.
-- Fix: added minimal `RecordQuery.offset` support, applied it in in-memory
-  storage after deterministic sorting and before `limit`, exposed inbox read
-  offset for ordered pages, and changed delivery scanning to advance past rows
-  that remain pending/unavailable while stopping only on a short page or the
-  accepted-work cap.
-- Evidence: the new regression with 1000 claimed unavailable head rows and one
-  deliverable tail row failed before the final drain stop-condition fix with no
-  endpoint dispatch, then passed after the scan continued beyond a full
-  `maxReadLimit` page.
-- Finding: [Docs MEDIUM] delivery/loop/worker `limit` comments and curated API
-  docs still described delivery `limit` as a page-size knob.
-- Fix: delivery `limit` docs now describe the maximum accepted endpoint work per
-  drain plus the initial scan window. `InboxReadOptions.limit` remains
-  documented as the page-size control for one ordered inbox read.
-- Finding: [Style LOW] `drainMessage()`, `#deliverMessage()`, and the
-  stateful active-claim factory were still broad and closure-heavy.
-- Fix: split exact-message read/result handling and delivery claim/invoke/mark
-  helpers, and replaced the active-claim factory closure with a private
-  `ActiveClaim` class.
-- Verification: focused Vitest for storage offset plus delivery worker/loop
-  passed with 3 files and 72 tests.
-  `pnpm --config.verify-deps-before-run=false typecheck:build:generated`
-  passed (`tsc -b`), refreshing ignored package `dist` output.
-  `pnpm --config.verify-deps-before-run=false docs:check` passed with the
-  existing invalid-origin TypeDoc warning only.
-  `pnpm --config.verify-deps-before-run=false format:check` passed.
-  `git diff --check` passed.
-
-### Round 20 Follow-up - `2026-07-10T09:09:57Z`
-
-- Finding: [Security MEDIUM] in-memory storage canonicalized user objects into
-  plain `{}` records and recognized internal `bigint`/`bytes` tags with
-  property-name checks, letting user keys collide with normalized internal
-  representation and affecting ID/filter/CAS matching.
-- Finding: [Style LOW] `Delivery.#drainAvailableMessages` remained over the
-  local method-length target, and the exported claim-bearing storage access
-  object still needs review as an internal-boundary concern.
-- Finding: [Docs LOW] delivery `limit` wording should say accepted delivery
-  attempts, including endpoint work and fail-closed validation, and the task
-  integration result still referenced Round 18.
-- Action: dispatch one fix worker for collision-free storage canonicalization
-  regressions, small delivery method/doc cleanup, and durable log updates.
-- Fix: in-memory storage normalized user objects into null-prototype records
-  with `Object.defineProperty`, moved internal bigint/bytes tags to private
-  symbols, and keyed normalized values through a custom kind-aware canonical
-  encoder so user keys cannot collide with internal representation.
-- Fix: extracted `Delivery.#readPendingDeliveryPage()` from the direct drain
-  loop, updated curated delivery `limit` docs to include fail-closed
-  validation in accepted delivery attempts, and refreshed the task integration
-  result to the Round 19 final state with Round 20 verification pending.
-- Evidence: the new storage regression for `__proto__`, `constructor`,
-  `prototype`, `bigint`, and `bytes` keys failed before the fix with
-  `SyntaxError: Cannot convert bigint:a to a BigInt`, then passed after the
-  canonicalizer change.
-- Verification: required focused storage/delivery Vitest passed with 2 files
-  and 56 tests; generated build typecheck passed; docs check passed with only
-  the existing invalid-origin TypeDoc warning; format check passed after
-  formatting `tenant-records.ts`; `git diff --check` passed.
-
-### Round 21 Follow-up - `2026-07-10T09:24:24Z`
-
-- Finding: [Reliability MEDIUM] `DeliveryLoop.maxFailures` was checked only
-  after an entire `Delivery.drain()`, so the default `maxFailures: 1` could
-  still run multiple failing endpoint attempts in one drain.
-- Finding: [Docs LOW] user and architecture storage summaries omitted
-  `RecordQuery.offset`, and the task brief still had one retry sentence without
-  the framework-cleanup success qualifier.
-- Finding: [Style MEDIUM/LOW] several `InboxStorage` private methods remain
-  over the local method-length target, and the internal claim-bearing storage
-  access object remains an exported module-level bridge.
-- Action: dispatch one fix worker for failure-budget enforcement, docs, and
-  scoped inbox-storage method cleanup without broad internal-access churn.
-- Fix: `DeliveryLoop` now validates the configured read limit before running
-  and passes each `Delivery.drain()` the smaller of the configured
-  accepted-work limit and the remaining failure budget, so the loop cannot
-  accept more failing attempts than the budget before returning `FAILED`.
-- Fix: user and architecture docs now describe non-negative
-  `RecordQuery.offset` support and state that offsets are applied after sorting
-  and before limits. The task brief retry sentence now includes the
-  framework-owned cleanup success qualifier.
-- Fix: split `InboxStorage.#handleStoredGuardMessage()` into private
-  guard-finalization and row-repair helpers. `inboxStorageAccess` remains
-  unchanged because reducing that exported bridge would require broader
-  delivery worker/test call-site churn rather than a scoped method-length
-  cleanup.
-- Evidence: the new two-row failure-budget regression failed before the fix
-  with attempts `["signal-fails-1", "signal-fails-2"]`, then passed after the
-  loop capped the drain to the remaining failure budget.
-- Verification: required delivery-loop/inbox Vitest passed with 2 files and
-  119 tests; generated build typecheck passed; docs check passed with only the
-  existing invalid-origin TypeDoc warning; format check passed; diff whitespace
-  check passed.
-
-### Round 22 Follow-up - `2026-07-10T09:39:00Z`
-
-- Finding: [Security MEDIUM] unsupported worker labels such as `CATCH_UP`
-  stayed public-writeable and were fail-closed as delivery failures, so a
-  single `CATCH_UP` row could consume the default loop failure budget and block
-  supported rows in the same shard.
-- Finding: [Style MEDIUM/LOW] `build-protocol/RUNTIME_ARCHITECTURE.md` still
-  exposed row-claim internals; several `InboxStorage` private methods remain
-  over the method-length target.
-- Finding: [API P3] `packages/server/README.md` omitted
-  `RecordQuery.offset` from `queryVersioned()` docs.
-- Action: dispatch one fix worker for non-starving unsupported-label handling,
-  public architecture wording, server README offset docs, and scoped
-  inbox-storage cleanup.
-- Fix: `Delivery.drain()` and `drainMessage()` now skip worker-unsupported
-  public labels before row acceptance, storage-claiming, or callback
-  invocation. Unsupported rows remain pending for future catch-up handling and
-  are paged past like unavailable rows, so they do not consume failure budget
-  or block supported rows behind them.
-- Fix: rewrote the runtime architecture delivery summary with public concepts:
-  shard lease fencing, rows unavailable to the active worker, public
-  `InboxMessage` snapshots, endpoint callback cleanup failures, and deferred
-  stale-row recovery. The server README now documents non-negative
-  `RecordQuery.offset` for `queryVersioned()`, applied after sorting and
-  before limits.
-- Fix: split `InboxStorage.#claimAndWrite()` rollback handling into
-  `#rollbackPendingGuard()`. Broader internal-access redesign remains out of
-  scope for this scoped method-length cleanup.
-- Evidence: the focused `CATCH_UP` regression failed before the fix with
-  `accepted: 2` and `failed: 1`, then passed after unsupported labels were
-  skipped before acceptance.
-- Verification: required delivery Vitest passed with 3 files and 159 tests;
-  generated build typecheck passed; docs check passed with only the existing
-  invalid-origin TypeDoc warning; format check passed; diff whitespace check
+  `.superpowers/sdd/review-ca8fb2b3..9e831767.diff` from task baseline
+  `ca8fb2b3` to current HEAD `9e831767`.
+- Code style/maintainability (Raman): [P1] `round-40-fix-report.md` lines 5-6
+  have Markdown hard-break trailing spaces, so
+  `git diff --check ca8fb2b3..HEAD` fails while the report says the diff check
   passed.
+- Documentation (Socrates): [P1] same false verification breadcrumb.
+- TypeScript/API docs (James): [P1] same false verification breadcrumb;
+  TypeScript/API surface otherwise looks sound.
+- Security (Averroes): [P1] the root-exported `DeliveryWorker` accepts an
+  arbitrary `onMessage` callback, exposing a raw inbox dispatcher path that can
+  bypass the framework replay validation boundary.
+- Performance/reliability (Beauvoir): [P1] same range whitespace failure; [P2]
+  partial stale-head rescans can degrade to one inbox query per already-seen
+  skipped row because seen-row observation does not advance the scan budget.
+- Action: fix the range whitespace, repair the public worker callback boundary,
+  preserve bounded page behavior during partial stale-head rescans, add focused
+  regression coverage, verify, and repeat five-lane re-review.
 
-### Round 23 Follow-up - `2026-07-10T10:08:00Z`
+### Round 41 Fix Implementation - `2026-07-10`
 
-- Finding: [API/Docs MEDIUM] endpoint callbacks still received a snapshot that
-  shared mutable nested state with the internal claimed CAS row, and stale docs
-  still described unsupported labels as failure-budget consumers.
-- Finding: [Performance MEDIUM] the temporary skipped-row scan budget needed to
-  stay finite while still allowing one full storage page of skipped rows before
-  accepted endpoint work.
-- Fix: `Delivery.drain()` now exposes a cloned public callback snapshot,
-  bounds skipped-row scanning to storage read cap plus accepted-work limit, and
-  keeps valid worker-unsupported labels pending and skipped rather than failed.
-- Evidence: focused delivery regressions covered callback mutation privacy,
-  skipped-row scan progression, and finite scan budget; they failed before the
-  final adjustments and passed after the fixes.
-- Verification: see
-  `build-protocol/tasks/T-0026-transport-backed-delivery-workers/round-23-fix-report.md`.
-  Required delivery Vitest, generated build typecheck, docs check, format
-  check, and `git diff --check` all passed. `docs:check` reported only the
-  existing invalid-origin TypeDoc warning.
+- Removed the `DeliveryWorker`, `DeliveryWorkerOptions`, and `DeliveryWorkerRun`
+  root exports. The raw callback boundary is now package-internal; public
+  context handoffs continue to replay through validated framework endpoints.
+- Removed all public docs/API export-check references to that worker surface.
+- Removed the two Markdown hard-break spaces from the Round 40 fix report.
+- Added a `limit: 1` partial stale-head regression. Before the production fix,
+  one skipped head row disappearing caused 1004 inbox queries. `Delivery` now
+  grants its single offset rescan one bounded page allowance for already-seen
+  rows while still refusing new rows past the finite scan budget; the regression
+  passes with five queries and the moved supported row delivered.
+- Verification passed: focused red/green regression; prescribed five-file
+  delivery Vitest command with 194 tests; generated typecheck; docs/API check;
+  lint; format; and working-tree `git diff --check`. `docs:check` retained only
+  the existing invalid-origin TypeDoc source-link warning.
+- `git diff --check ca8fb2b3..HEAD` was rerun after coordinator commits
+  `2a673e42` and `d7c9b35e` and now passes. The Round 41 range-check follow-up
+  is resolved. This worker made no commit; coordinator commit `2a673e42`
+  (`Fix delivery worker API and rescan paging`) recorded the fix.
 
-### Round 24 Follow-up - `2026-07-10T11:22:00Z`
+### Round 42 Follow-up - `2026-07-10T17:25:00Z`
 
-- Finding: [Durability MEDIUM] the external work log and review ledger stopped
-  at Round 22, so the durable trail no longer matched the verified Round 23
-  state.
-- Finding: [API MEDIUM] `DeliveryEndpoint` still admitted full `InboxMessage`,
-  so public callback/failure typing still allowed `CATCH_UP` even though the
-  worker never invokes endpoints for that label.
-- Finding: [Reliability MEDIUM] `InboxStorage` claim CAS rejected any existing
-  claim, so expired per-message claims stayed pending forever until some other
-  cleanup path ran. Historical correction: this finding's reclaim expectation
-  was superseded by Round 35 commit `5c3705e2`; Round 43 later restored
-  expired-claim reclaim during claim CAS while live row claims still block.
-- Finding: [Reliability MEDIUM] pre-callback claim/lease failures were still
-  counted as accepted endpoint work, letting them consume the accepted-work
-  limit before any callback ran.
-- Finding: [Performance MEDIUM] direct drains still chose page size from the
-  accepted-work limit, so limit `1` plus many skipped rows degenerated toward
-  one inbox query per skipped row.
-- Fix: appended missing Round 23 and Round 24 durable trail entries, exported
-  `DeliveryEndpointMessage`, narrowed `DeliveryEndpoint` and
-  `DeliveryFailure.message`, then reclaimed expired claims during claim CAS
-  using the storage clock. Historical correction: Round 35 / `5c3705e2`
-  superseded that reclaim behavior with no competing delivery for any existing
-  row claim. Round 24 also kept pre-callback failures visible without
-  incrementing accepted work, and widened page reads to
-  `min(inboxStorageAccess.maxReadLimit, remaining scan budget)` while stopping
-  on accepted endpoint work.
-- Evidence: new regressions covered expired-claim reclaim on a later drain,
-  limit-1 pre-callback failure followed by a second-row delivery in the same
-  drain, and bounded query count for one full skipped page plus one accepted
-  row. Existing delivery-loop coverage was updated so live claims still leave a
-  loop idle while expired claims are reclaimable. Historical correction: the
-  expired-claim reclaim evidence is retained as Round 24 history only and no
-  longer describes current behavior after Round 35 / `5c3705e2`.
-- Verification: see
-  `build-protocol/tasks/T-0026-transport-backed-delivery-workers/round-24-fix-report.md`.
-  Required delivery Vitest passed with 3 files and 165 tests;
-  `typecheck:build:generated` passed; `docs:check` passed after updating the
-  expected root export list for `DeliveryEndpointMessage`, still with only the
-  existing invalid-origin TypeDoc warning; `format:check` passed; `git diff
---check` passed.
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..d7c9b35e.diff` from task baseline
+  `ca8fb2b3` to current HEAD `d7c9b35e`.
+- Performance/reliability (Epicurus the 2nd): clean.
+- Documentation (Faraday the 2nd): [P1] Round 41 records still say
+  `git diff --check ca8fb2b3..HEAD` remains red, but the command now passes
+  after coordinator commit `2a673e42`.
+- Code style/maintainability (Bernoulli the 2nd): [P3] the Round 41 work-log
+  coordinator-commit line has a flush-left continuation.
+- TypeScript/API docs (Hume the 2nd): [P2] public docs say no raw worker
+  callback API exists, but root-exported `Delivery.drain()` and `DeliveryLoop`
+  still accept public `onMessage` callbacks.
+- Security (Averroes the 2nd): [P1] removing only `DeliveryWorker` left
+  root-exported `Delivery`, `DeliveryLoop`, and `OnDeliveryMessage`, so public
+  callers can still invoke raw inbox callbacks and bypass validated framework
+  replay.
+- Action: remove or otherwise close the remaining root raw-callback delivery
+  surface, correct docs and API export checks, update Round 41 range-check
+  records, fix work-log formatting, verify, and repeat five-lane re-review.
 
-### Round 15 Follow-up - `2026-07-10T07:40:04Z`
+### Round 42 Fix Implementation - `2026-07-10`
 
-- Finding: [Docs MEDIUM] `docs/USER_GUIDE.md` and `docs/api/README.md`
-  overpromised retry behavior by saying failed rows stay pending for later
-  drains without distinguishing endpoint callback failures from delivery
-  marking, fencing, fail-closed validation, or lease failures.
-- Finding: [API P3] `DeliveryRun.failed`, `DeliveryFailure.error`, and
-  `DeliveryLoopRun.failed` TypeDoc comments only named endpoint or
-  delivery-marking failures even though direct delivery can also report
-  fail-closed validation and lease/fencing failures.
-- Finding: [Security MEDIUM] `inbox-records.ts` read internal `claim` metadata
-  through `Reflect.get`, so public write/mark input with an inherited or
-  proxy-provided optional field could serialize framework-owned claim metadata
-  after public claim checks.
-- Fix: narrowed the delivery retry docs to endpoint callback failures and
-  documented non-callback delivery failures as returned
-  `DeliveryRun.failures` / `DeliveryFailure` values without promising immediate
-  retry or recovery policy.
-- Fix: broadened `DeliveryRun.failed`, `DeliveryFailure.error`, and
-  `DeliveryLoopRun.failed` TypeDoc to include endpoint callback,
-  fail-closed validation, lease/fencing, and delivery-status update failures
-  without exposing internal claim details.
-- Fix: `InboxRecords` now reads optional internal `claim` metadata only from an
-  own property. The focused regression covers proxy-provided and inherited
-  claim metadata staying out of public record snapshots.
-- Evidence: the focused inbox regression failed before the fix with the hidden
-  claim present on the serialized snapshot, then passed after the own-property
-  check.
-- Verification: Round 15 requested focused Vitest passed with 2 files and 137
-  tests; `typecheck:build:generated`, `docs:check`, `format:check`, and
-  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
-  invalid-origin warning.
+- Removed `Delivery`, `DeliveryLoop`, and every associated direct
+  option/result/callback type from the root barrel; framework code and behavior
+  tests retain package-internal source imports.
+- Updated the root export test and API manifest first; its red run observed the
+  two remaining raw delivery exports, then its green run passed after the barrel
+  change.
+- Rewrote public delivery documentation to expose only the inbox/storage API and
+  to describe validated replay as framework-owned.
+- Corrected Round 41 task, work, review, and report wording: the baseline range
+  diff now passes after `2a673e42` and `d7c9b35e`; the work-log continuation is
+  formatted.
+- Verification passed: prescribed five-file delivery Vitest command with 194
+  tests; generated typecheck; docs/API check; lint; format; baseline range diff;
+  and working-tree diff. `docs:check` retained only the existing invalid-origin
+  TypeDoc source-link warning. No worker commit was created. Coordinator commit
+  `be299a5d` (`Close delivery raw callback exports`) recorded the fix;
+  five-lane re-review remains pending.
 
-### Round 16 Follow-up - `2026-07-10T07:52:54Z`
+### Round 43 Follow-up - `2026-07-10T17:45:00Z`
 
-- Finding: [Docs/API MEDIUM] `packages/server/README.md` and
-  `build-protocol/DEVELOPER_API.md` still said failed rows remain
-  `TO_DELIVER` for later retry without narrowing that guarantee to endpoint
-  callback failures.
-- Finding: [Docs LOW] the T-0026 task brief status still said
-  `implemented; review pending` after review-fix rounds had verified the
-  implementation.
-- Finding: [Reliability HIGH] `clearActiveClaim()` suppressed
-  `inboxStorageAccess.clear()` failures after endpoint or validation failure.
-  A row could therefore stay `TO_DELIVER` but durably claimed, making it
-  unavailable to later drains while the result implied a retryable endpoint
-  failure.
-- Action: dispatch one fix worker with the complete docs/status/reliability
-  findings, require a focused regression, then rerun all required review lanes.
-- Fix: `Delivery.drain()` and `Delivery.drainMessage()` now report active
-  claim-clear failures after endpoint or validation failure through the
-  returned `DeliveryRun.failures` / `DeliveryFailure.error` path. The reported
-  error is an `AggregateError` containing both the original delivery failure and
-  the claim-clear failure, so the result no longer implies the row is simply
-  ready for immediate retry when cleanup failed.
-- Fix: narrowed `packages/server/README.md` and
-  `build-protocol/DEVELOPER_API.md` so later-run retry wording applies only to
-  endpoint callback failures after row-claim cleanup succeeds. The docs now
-  state fail-closed validation, lease/fencing, status-update, and claim-clear
-  failures are reported without an immediate retry or recovery guarantee in
-  this slice. Updated the T-0026 task status to the current review-fix state.
-- Evidence: the focused claim-clear regression failed before the fix because
-  the run reported only `Error: endpoint failed`, then passed after the
-  delivery catch path surfaced the claim-clear failure.
-- Verification: focused delivery Vitest passed with 1 file and 37 tests;
-  `typecheck:build:generated`, `docs:check`, rerun `format:check`, and
-  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
-  invalid-origin warning. `format:check` caught review/work-log Markdown
-  wrapping before the final clean rerun.
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..59c44c44.diff` from task baseline
+  `ca8fb2b3` to current HEAD `59c44c44`.
+- Code style/maintainability (Anscombe the 2nd): [P1] the expired-claim
+  contract is inconsistent with the active handoff/review assignment because
+  current code and comments treat every existing row claim as unavailable, even
+  when expired; [P2] `build-protocol/DEVELOPER_API.md` still presents raw
+  callback delivery APIs as current public surface.
+- Documentation (Dewey the 2nd): [P1] docs currently say expired and live row
+  claims both block competing delivery, which conflicts with the active review
+  contract that expired per-message claims are reclaimable during claim CAS;
+  [P1] `build-protocol/DEVELOPER_API.md` still describes raw callback delivery
+  APIs as stable public surface after Round 42 removed them from the root
+  barrel.
+- TypeScript/API docs (Socrates the 2nd): [P1] implementation, tests, and docs
+  still reverse the requested expired-claim semantics; [P2]
+  `build-protocol/DEVELOPER_API.md` still documents raw callback delivery as
+  stable public API; [P3] the root export test still type-checks internal raw
+  callback delivery types inside the package export-surface test.
+- Security (Halley the 2nd): [P1] expired row claims are never reclaimable,
+  allowing an abandoned pending row to remain unavailable indefinitely.
+- Performance/reliability (James the 2nd): [P1] same expired row-claim
+  reclaim gap and opposite tests/docs.
+- Action: restore expired per-message claim reclaim during claim CAS while live
+  claims still block; update tests and docs that encode the superseded
+  no-reclaim behavior; remove internal raw callback type assertions from the
+  root export-surface test; correct `DEVELOPER_API.md`; verify; and repeat
+  five-lane re-review.
 
-### Round 17 Follow-up - `2026-07-10T08:06:46Z`
+### Round 43 Fix Implementation - `2026-07-10`
 
-- Finding: [Style/API/Docs MEDIUM] public package and Developer API docs used
-  `active row claim` / `claim-clear failures`, and other public API docs did
-  not consistently qualify endpoint callback retry with successful
-  framework-owned cleanup.
-- Finding: [API P2] the public `DeliveryFailure.error` `AggregateError`
-  message exposed the internal phrase `inbox claim clear failed`.
-- Finding: [API P3] `DeliveryRun.failed` and `DeliveryLoopRun.failed` TypeDoc
-  omitted framework-cleanup failures.
-- Finding: [Reliability MEDIUM] cleanup returning `undefined` after endpoint
-  failure was ignored, so a row could remain unavailable while the run reported
-  only the endpoint failure.
-- Finding: [Reliability LOW] `DeliveryLoop.maxFailures` accepted any positive
-  safe integer, allowing deterministic failures to repeat for an effectively
-  unbounded number of drain runs.
-- Action: dispatch one fix worker for claim-free public wording,
-  cleanup-result reporting, `maxFailures` bounding, tests, and durable logs.
-- Fix: changed the public aggregate cleanup error to
-  `Delivery failed and framework cleanup failed.`, updated public docs and
-  TypeDoc to include framework cleanup failures without claim terminology, and
-  made cleanup returning `undefined` aggregate with the original delivery
-  failure.
-- Fix: capped `DeliveryLoop.maxFailures` at 1000 during construction and
-  documented the bound in the option TypeDoc.
-- Evidence: focused regressions failed before the fix on the old public error
-  message, ignored cleanup `undefined` result, and missing max-failure bound,
-  then the focused delivery Vitest batch passed after the fix with 2 files and
-  55 tests.
-- Verification: focused delivery Vitest rerun, `typecheck:build:generated`,
-  `docs:check`, rerun `format:check`, and `git diff --check` passed.
-  `docs:check` reported only the existing invalid-origin TypeDoc warning.
-  `format:check` caught `delivery-loop.ts` formatting before the final clean
-  rerun.
+- `InboxStorage` now treats only live per-message claims as unavailable during
+  claim compare-and-set. Expired per-message claims may be replaced with the
+  active worker claim using the storage clock; live claims still block.
+- Focused regressions were updated test-first. The red run showed endpoint
+  callbacks were not invoked for an expired claim and for a claim expiring
+  while the claim-row read was pending. The green run passed after the storage
+  change.
+- `packages/server/test/index.test.ts` no longer imports or type-checks
+  internal raw callback delivery types. The direct-drain option/callback type
+  assertions now live in `packages/server/test/delivery/delivery-worker.test.ts`.
+- Delivery docs now state that root-public delivery API is durable
+  inbox/storage primitives and framework-owned replay remains
+  package-internal behind validated endpoints. Expired/live ownership wording
+  was corrected in package, API, user-guide, architecture, and build-protocol
+  docs.
+- Verification passed: focused reclaim red/green, focused delivery/index Vitest
+  with 4 files and 189 tests, `typecheck:build:generated`, `docs:check`,
+  `lint`, formatter repair for durable logs, and final format/diff checks
+  recorded in the Round 43 report/work log. No worker commit was created.
+  Coordinator commit `9477830c` (`Fix delivery expired claim reclaim`) recorded
+  the fix.
+- Coordinator verification after the worker returned passed focused
+  delivery/index Vitest with 4 files and 189 tests, generated build typecheck,
+  docs check with only the existing invalid-`origin` warning, lint, format
+  check, working-tree diff check, and baseline range diff check. Coordinator
+  commit `9477830c` recorded the fix; five-lane re-review remains pending.
 
-### Round 18 Follow-up - `2026-07-10T08:21:18Z`
+### Round 44 Follow-up - `2026-07-10T17:08:13Z`
 
-- Finding: [Docs/API/Style MEDIUM] `docs/architecture/README.md` still exposed
-  row-claim internals and described retry without qualifying successful
-  framework cleanup. The task brief scope had the same retry overpromise.
-- Finding: [Style LOW] `delivery-loop.ts` placed a supporting constant before
-  the primary `DeliveryLoop` declaration, and `requirePositiveSafeIntegerAtMost`
-  exceeded the naming component rule.
-- Finding: [Style LOW] `inbox-storage.ts` exported standalone
-  `requireInboxReadLimit`, violating the grouped-helper preference.
-- Finding: [Security MEDIUM] `leaseMs` was only a positive integer, but it is
-  used as a Node timer delay. Oversized values can overflow or clamp to `1ms`
-  and cause excessive renewal/storage traffic.
-- Finding: [Reliability P1] all-unavailable read pages were treated as idle.
-  Because `Delivery.drain()` reads a bounded first page, unavailable rows at
-  the head of a shard could permanently starve later available rows.
-- Action: dispatch one fix worker for claim-free docs, style cleanup, bounded
-  lease timing, and bounded scan-through of unavailable pages before the next
-  review round.
-- Fix: `Delivery.drain()` now uses a bounded growing read window and tracks
-  unique rows already observed in the run, so unavailable rows at the head are
-  skipped before endpoint invocation while later available rows can still be
-  reached without accepting more endpoint work than the configured limit.
-- Fix: `leaseMs` is validated as a positive safe integer at most `2147483647`
-  before it reaches shard expiry math or delivery renewal timer scheduling.
-  `delivery-loop.ts` now keeps supporting constants below the primary class and
-  uses the shorter `requireBoundedInteger` helper name. Inbox read-limit
-  validation is grouped under the internal `inboxStorageAccess` API instead of
-  exporting a standalone helper.
-- Fix: architecture and task-brief wording now avoids public row-claim
-  mechanics, states unavailable rows are skipped before endpoint invocation,
-  names public `InboxMessage` callbacks, qualifies endpoint retry on successful
-  framework-owned cleanup, and does not promise immediate recovery for cleanup,
-  validation, lease/fencing, or delivery-status failures.
-- Evidence: focused regressions failed before the fix because
-  `signal-available-tail` was never dispatched behind a claimed head row and
-  `leaseMs: 2147483648` was accepted. After the fix, the targeted red tests
-  passed, and the focused delivery Vitest batch passed with 4 files and
-  199 tests.
-- Verification: `typecheck:build:generated` passed (`tsc -b`). `docs:check`
-  passed and reported only the existing invalid-origin TypeDoc warning.
-  `format:check` initially flagged `delivery-loop.ts`; after formatting that
-  file, the final `format:check` passed. `git diff --check` passed.
-- Cleanup: removed the exported standalone `requireShardLeaseMs` helper from
-  `sharded-work-registry.ts`. Lease validation now stays class-owned inside
-  `ShardedWorkRegistry` and `Delivery`, preserving the timer-safe maximum
-  without exposing a helper only used by delivery construction.
-- Cleanup: split `Delivery.#drainAvailableMessages` by moving per-message
-  delivery/accounting into `#tryDrainMessage` and `drainProgress()`, keeping
-  the page-scanning method under the 35 LOC style target without changing
-  counters or skip behavior.
-- Cleanup verification: `typecheck:build:generated`, `format:check`,
-  `git diff --check`, and focused delivery Vitest passed on
-  `2026-07-10T08:35:29Z`.
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..f7f56f54.diff` from task baseline
+  `ca8fb2b3` to current HEAD `f7f56f54`.
+- Code style/maintainability (Curie the 2nd): [P2] older durable records still
+  contain authoritative-looking "current contract" wording from Round 35 that
+  says expired and live row claims both block competing delivery until future
+  explicit recovery policy exists. Update those historical notes to name Round
+  43 / `9477830c` as the later supersession.
+- Documentation (Hypatia the 2nd): [P2] `build-protocol/DEVELOPER_API.md` still
+  names internal `DeliveryOptions.leaseMs` in the public delivery error
+  contract even though raw callback delivery options are not root-public.
+- TypeScript/API docs (Russell the 2nd): [P2] same internal
+  `DeliveryOptions.leaseMs` public-doc leak.
+- Security (Aristotle the 2nd): [P2] projection inbox replay validates the
+  label but not `message.status` before invoking projection handlers. Unlike
+  process-manager replay, `ProjectionInbox.replay()` can forward non-pending
+  `DELIVERED`, `SCHEDULED`, or `TO_CATCH_UP` snapshots to repository/user
+  projection code if an internal caller misuses the replay endpoint.
+- Performance/reliability (Galileo the 2nd): clean.
+- Action: correct the public API doc sentence to mention only public lease
+  options, make projection replay fail closed for non-`TO_DELIVER` rows with
+  focused regression coverage, update stale durable records, verify, and repeat
+  five-lane re-review.
 
-### Round 14 Follow-up - `2026-07-10T07:30:12Z`
+### Round 44 Fix Implementation - `2026-07-10T17:27:31Z`
 
-- Finding: [Docs MEDIUM] `build-protocol/DEVELOPER_API.md` used
-  `inspectPendingRows(pending)` in a usage example without defining or
-  importing that helper.
-- Fix: replaced the helper call with a local `for...of` loop that consumes the
-  pending rows inline and logs public message fields, keeping the example
-  self-contained.
-- Verification: `docs:check`, `format:check`, and `git diff --check` passed.
-  `docs:check` reported only the existing TypeDoc invalid-origin warning.
+- `LocalProjectionInbox.replay()` now asserts `UPDATE_SUBSCRIBER` and
+  `TO_DELIVER` before target lookup and repository/user projection invocation,
+  matching the process-manager replay fail-closed status boundary.
+- Focused regression coverage proves `DELIVERED`, `SCHEDULED`, and
+  `TO_CATCH_UP` projection replay snapshots reject before projection handlers
+  run.
+- `build-protocol/DEVELOPER_API.md` no longer names internal
+  `DeliveryOptions.leaseMs` in the public delivery error contract; the public
+  sentence now names only `ShardedWorkRegistryOptions.leaseMs`.
+- Round 24, Round 25, Round 37, task, work, and review records were updated so
+  Round 35 / `5c3705e2` is historical no-reclaim context and Round 43 /
+  `9477830c` is the later expired-claim reclaim restoration.
+- Verification passed: projection replay red/green, focused context handoff
+  Vitest (2 files, 22 tests), generated build typecheck, docs check with only
+  the existing invalid-`origin` warning, lint, format check, `git diff --check`,
+  and `git diff --check ca8fb2b3..HEAD`.
+- Coordinator verification after the worker returned passed focused context
+  handoff Vitest with 2 files and 22 tests, generated build typecheck, docs
+  check with only the existing invalid-`origin` warning, lint, format check,
+  working-tree diff check, and baseline range diff check.
+- No worker commit was created. Coordinator commit `9bb68f33` (`Fix projection
+replay status guard`) recorded the fix. Records-only coordinator commit
+  `52a4326d` (`Record delivery round 44 review status`) recorded the follow-up
+  status package; five-lane re-review remains pending.
 
-### Round 13 Follow-up - `2026-07-10T07:21:10Z`
+### Round 45 Follow-up - `2026-07-10T17:28:52Z`
 
-- Finding: [Reliability HIGH] `ShardedWorkRegistry.pickUp()` captured `now`
-  before the awaited shard read and reused that stale value when deciding
-  whether a stored session was still live and when timestamping the replacement
-  session. A delayed storage read could therefore miss a lease expiry that
-  happened during the read and incorrectly reject the next eligible worker.
-- Fix: `pickUp()` still validates the caller clock before opening shard storage,
-  then refreshes `now` immediately after `readShardRecord()`/`readSession()` on
-  each attempt. The fresh post-read clock now drives both the live-session check
-  and `new ShardSession(...)`, matching the existing `renew()` and `release()`
-  pattern.
-- Evidence: added a delayed-read/clock-advance regression that seeds a live
-  stored session, advances the pickup clock across that lease expiry during the
-  awaited shard read, and verifies the next worker receives a replacement
-  session stamped with the post-read clock. The focused regression failed before
-  the fix with `undefined`, then passed after refreshing the pickup clock.
-- Verification: requested sharded-registry and delivery-worker Vitest passed
-  with 2 files and 78 tests; `typecheck:build:generated`, `docs:check`,
-  `format:check`, and `git diff --check` passed. `docs:check` reported only
-  the existing TypeDoc invalid-origin warning.
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..52a4326d.diff` from task baseline
+  `ca8fb2b3` to current HEAD `52a4326d`.
+- Code style/maintainability (Maxwell the 2nd): [P2] Round 44 records name fix
+  commit `9bb68f33` but do not mention records-only commit `52a4326d`;
+  [P3] one Round 44 review-log bullet has a flush-left continuation line.
+- Documentation (Mencius the 2nd): [P2] current replay-validation docs omit the
+  new `TO_DELIVER` status validation before handler/projection execution; [P2]
+  a few Round 35 expired-claim records still omit the Round 43 / `9477830c`
+  supersession.
+- TypeScript/API docs (Einstein the 2nd): [P1] root-public
+  `ServerEnvironment` still exposes internal raw `Delivery` through public
+  option/property types; [P2] projection replay guard is runtime-correct but
+  its assertion does not narrow because `ProjectionInboxTarget.replay()` still
+  accepts plain `InboxMessage` instead of an `UPDATE_SUBSCRIBER`/`TO_DELIVER`
+  message type.
+- Security (Godel the 2nd): clean.
+- Performance/reliability (Darwin the 2nd): clean.
+- Action: close the `ServerEnvironment` raw-delivery public type leak, mirror
+  the process-manager narrow target-message type for projection replay, document
+  replay status validation, update remaining historical Round 35 no-reclaim
+  notes and Round 44 records-commit breadcrumbs, verify, and repeat five-lane
+  re-review.
 
-### Round 12 Follow-up - `2026-07-10T07:09:12Z`
+### Round 45 Fix Implementation - `2026-07-10T17:51:06Z`
 
-- Finding: [Reliability HIGH] after an inbox row was accepted, `Delivery.drain()`
-  and `drainMessage()` could invoke the endpoint without first observing an
-  in-flight shard renewal or re-checking the shard lease. A slow row acceptance
-  could therefore cross lease expiry before endpoint side effects.
-- Fix: `Delivery.#deliverMessage()` now awaits any in-flight shard renewal and
-  calls `lease.requireActive()` after row acceptance and before endpoint label
-  validation or callback invocation. When the re-check fails before the callback,
-  the existing cleanup clears the row acceptance and leaves the row pending.
-- Evidence: added a focused delayed-acceptance regression that pauses inbox row
-  acceptance, advances the delivery clock past shard expiry, and verifies the
-  endpoint callback is not invoked and the row remains `TO_DELIVER`.
-- Finding: [Docs MEDIUM] the developer API example manually picked up the single
-  shard and then called `Delivery.drain()` for the same shard while the manual
-  session was still live.
-- Fix: updated the example so the low-level pickup/read section releases the
-  manual session before the higher-level `Delivery.drain()` and `DeliveryWorker`
-  examples.
-- Finding: [Docs LOW] public TypeDoc callback comments said `onMessage` was
-  invoked once per pending inbox row.
-- Fix: reworded callback comments in `delivery.ts`, `delivery-loop.ts`, and
-  `delivery-worker.ts` to say the callback is invoked for each available
-  supported worker row.
-- Verification: requested delivery Vitest passed with 3 files and 152 tests;
-  `typecheck:build:generated`, `docs:check`, `format:check`, and
-  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
-  invalid-origin warning.
+- Public `ServerEnvironment` delivery option/property types now use
+  `ServerEnvironmentCloseable` rather than internal raw `Delivery`, closing the
+  root-public type leak without exposing direct callback delivery APIs.
+- `ProjectionInboxTarget.replay()` now accepts only a pending
+  `UPDATE_SUBSCRIBER` inbox message, while `ProjectionInbox.replay()` remains
+  the broader internal entrypoint and validates before target invocation.
+- Replay-validation docs now mention pending `TO_DELIVER` status before
+  process-manager/projection handler execution.
+- Remaining historical Round 35 no-reclaim notes now name Round 43 /
+  `9477830c` as the later expired-claim reclaim supersession.
+- Round 44 records now distinguish fix commit `9bb68f33` from records-only
+  status commit `52a4326d`, and the wrapped review-log commit-title line is
+  fixed.
+- Verification passed: focused `typecheck:tooling` red/green, focused
+  runtime/API Vitest under local-listener approval (5 files, 179 tests),
+  `typecheck:build:generated`, `docs:check` with only the existing
+  invalid-`origin` warning, `lint`, final `format:check`, `git diff --check`,
+  and `git diff --check ca8fb2b3..HEAD`.
+- No worker commit was created. Coordinator commit `9546ed2a` (`Close server
+environment delivery type leak`) recorded the fix; five-lane re-review
+  remains pending.
 
-### Round 11 Follow-up - `2026-07-10T06:55:21Z`
-
-- Finding: [Security MEDIUM] `Delivery.drain()` picked up and released shard
-  storage before validating an invalid or oversized `options.limit`, so a bad
-  direct-drain request could mutate shard storage before failing at the inbox read
-  boundary.
-- Fix: `Delivery.drain()` now validates `options.limit` at method entry with the
-  same bounded inbox page-size helper used by inbox reads. The helper keeps the
-  positive safe integer and `1000` upper-bound contract in one place.
-- Evidence: added a focused regression proving an invalid direct-drain limit
-  rejects before any storage open or compare-and-set through the shard registry.
-  It failed before the fix with two storage opens, then passed after early
-  validation.
-- Finding: [API docs MEDIUM] public docs listed `DeliveryLoopRun` but did not
-  document its `status`, `runs`, `processed`, `accepted`, `delivered`, `failed`,
-  and `failures` fields.
-- Fix: updated `docs/api/README.md` and `build-protocol/DEVELOPER_API.md` with
-  claim-free prose stating that `DeliveryLoopRun` aggregates `DeliveryRun` counts
-  across loop drains and naming each public field.
-- Verification: requested Vitest passed with 4 files and 192 tests;
-  `typecheck:build:generated`, `docs:check`, `format:check`, and
-  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
-  invalid-origin warning.
-
-### Round 10 Follow-up - `2026-07-10T06:41:50Z`
-
-- Finding: [Security MEDIUM] public `InboxStorage.write()` and public
-  `markDelivered()` rejected visible top-level `claim` fields but still passed
-  the caller object into serialization. A Proxy could hide `claim` from
-  `Reflect.has()` while returning internal claim metadata from `get`.
-- Fix: public inbox write/mark paths now build a new claim-free `InboxMessage`
-  snapshot from the explicit public fields before serialization. Visible
-  top-level `claim` remains rejected; hidden Proxy claim metadata is ignored and
-  never reaches durable inbox or dedup records.
-- Evidence: added Proxy regressions for public `InboxStorage.write()` and
-  public `markDelivered()`. They failed before the fix because hidden claim
-  metadata prevented public delivery marking, then passed after snapshotting.
-- Finding: [API P1] public `DeliveryRun.claimed` and
-  `DeliveryLoopRun.claimed` exposed claim mechanics in user-facing stats.
-- Fix: renamed the public stat to `accepted` across delivery runs, loop
-  aggregation, local handoff checks, tests, and public API docs. Internal
-  claim-bearing worker code keeps claim terminology only for implementation
-  fencing.
-- Finding: [API P2] `ShardSession.shard` TypeDoc said "Shard claimed by this
-  session."
-- Fix: reworded it to "Shard held by this session."
-- Finding: [Reliability HIGH/MEDIUM] `ShardedWorkRegistry.renew()` and
-  `release()` captured `now` before awaited storage reads, allowing delayed
-  reads or event-loop pauses to renew or release sessions that had expired by
-  the time ownership was checked and CASed.
-- Fix: both paths refresh the clock after reading and decoding the current
-  stored session, before expiry checks and CAS decisions.
-- Evidence: added delayed-read/clock-advance regressions for renew and release.
-  They failed before the fix by renewing/releasing expired sessions, then
-  passed after refreshing the clock. The existing row-renewal race test was
-  adjusted to advance fake time to the renewal interval while staying inside
-  the shard lease, preserving its intended inbox-renewal coverage.
-- Verification: requested Vitest passed with 8 files and 226 tests;
-  `typecheck:build:generated`, `docs:check`, `format:check`, and
-  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
-  invalid-origin warning.
-
-### Round 9 Follow-up - `2026-07-10T06:21:29Z`
-
-- Finding: [MEDIUM] `inbox-storage.ts` exposed the row-claim worker internals as
-  several exported standalone helpers.
-- Fix: replaced those helpers with one grouped `@internal`
-  `inboxStorageAccess` object/interface containing `claim`, `renew`,
-  `markDelivered`, and `clear`. Delivery internals and storage-focused tests now
-  import that grouped object directly from `inbox-storage.ts`; the package
-  barrel still exports only public `InboxStorage` and `InboxStorageOptions`.
-- Finding: [MEDIUM] public `InboxStorage.write()` and public marker paths could
-  serialize a caller-supplied object that included optional internal `claim`
-  metadata.
-- Fix: public write and mark paths now reject snapshots containing a `claim`
-  property before serialization. Internal claim-bearing serialization remains
-  available only through `inboxStorageAccess` for worker CAS flows.
-- Evidence: added regressions proving low-level public write and public
-  `markDelivered()` reject injected claim metadata and leave the row state
-  unchanged. Focused preflight Vitest passed with 3 files and 148 tests.
-- Docs: public user-guide delivery sections now describe lease-fenced local
-  drains, skipped unavailable rows, public `InboxMessage` snapshots, and
-  future abandoned-row recovery without claim mechanics. `DeliveryLoopRun`
-  TypeDoc avoids "rows claimed"; package README deferred wording is narrowed to
-  transport topology, broker/process supervision, retained attempt history, and
-  production retry policy; Developer API now documents
-  `Delivery.drainMessage(message, { node, onMessage })` exact-row/no-limit
-  semantics.
-- Verification: requested Vitest passed with 8 files and 222 tests;
-  `typecheck:build:generated`, `docs:check`, `format:check`, and
-  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
-  invalid-origin warning.
-
-### Round 8 Follow-up - `2026-07-10T06:05:12Z`
-
-- Finding: [HIGH] active row-claim renewal could race final delivery marking.
-  A renewal could update the active internal snapshot and durable row between
-  callback completion and the final marker CAS, causing delivery to report
-  failure after the endpoint already ran and making the row immediately
-  retryable.
-- Fix: active row-claim renewal, failure clearing, and final marking now share a
-  local serialization point. After a callback returns, delivery waits for any
-  in-flight shard renewal, marks delivered from the latest active internal
-  snapshot, and preserves the durable claim if final marking still fails after
-  a successful callback.
-- Evidence: added a regression in `delivery-worker.test.ts` that blocks renewal
-  until the endpoint returns. It failed before the fix with `delivered: 0` and
-  `failed: 1`, then passed after renewal/mark serialization.
-- Finding: [P1/P2] public TypeDoc-facing comments and curated API docs exposed
-  row-claim mechanics.
-- Fix: rewrote public `Delivery.drain()` / `drainMessage()` JSDoc,
-  `docs/api/README.md`, and `build-protocol/DEVELOPER_API.md` to describe
-  lease-fenced shard draining, supported worker labels, skipped unavailable
-  rows, and `DeliveryRun` stats without row-claim internals.
-- Finding: [MEDIUM] `BoundedContext` stored local inbox fields by concrete
-  classes.
-- Fix: added narrow internal `PmInbox` and `PrjInbox` interfaces that combine
-  the public inbox contracts with `register(...)`; concrete local inbox classes
-  remain construction details.
-- Docs: `InboxClaim.expiresAt` now says local/direct workers do not
-  auto-reclaim expired claims. Internal architecture docs state any existing
-  durable claim is skipped, including expired or abandoned claims, and stale
-  recovery remains future production policy. Historical correction: Round 43 /
-  `9477830c` later restored expired-claim reclaim during claim CAS while live
-  row claims block. The package README keeps the public-facing delivery summary
-  at the lease-fenced worker-contract level.
-- Verification: requested Vitest batch passed with 8 files and 220 tests;
-  `typecheck:build:generated`, `docs:check`, `format:check`, and
-  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
-  invalid-origin warning.
-
-### Round 7 Follow-up - `2026-07-10T05:48:00Z`
-
-- Finding: [HIGH] Expired row claims were treated as reclaimable, so a late or
-  missed renewal could let a second local/direct worker invoke the same endpoint
-  while the original callback was still in flight.
-- Fix: `InboxStorage.claim` now skips rows with any durable row claim, expired
-  or live. Successful owners still mark delivered from the claimed snapshot;
-  failed attempts clear only the unchanged claim. Abandoned/stale claim recovery
-  remains future production retry/supervision policy.
-- Evidence: added regression in `delivery-worker.test.ts` proving an
-  expired-claimed row is read but not claimed or dispatched by a competing
-  drain.
-- Finding: [MEDIUM] `DeliveryLoop` used `processed` rows as proof of progress,
-  so a page containing only already-claimed rows could be redrained tightly.
-- Fix: added `claimed` counts to `DeliveryRun` and `DeliveryLoopRun`, and made
-  the loop stop `IDLE` when a drain has no claimed, delivered, or failed rows.
-- Evidence: added regression in `delivery-loop.test.ts` proving already-claimed
-  pending rows stop after one idle drain with no endpoint invocation.
-- Finding: [MEDIUM] Public inbox/drain/loop limits were not bounded at the
-  storage query boundary.
-- Fix: `InboxStorage.read` validates limits as positive safe integers at or
-  below a fixed `1000` bound before opening/querying inbox storage; public
-  drain and loop limits flow through that same storage boundary.
-- Evidence: added regressions for zero, negative, fractional, non-finite, and
-  above-bound limits, plus public drain/loop above-bound cases.
-- Finding: [MEDIUM] Stored `CATCH_UP` labels were valid rows but direct delivery
-  could still invoke callbacks for them.
-- Fix: direct delivery now fail-closes after acquiring its row claim but before
-  endpoint invocation unless the label is `HANDLE_COMMAND`,
-  `UPDATE_SUBSCRIBER`, or `REACT_UPON_EVENT`.
-- Evidence: added regression proving a `CATCH_UP` row records a failed run,
-  leaves the row pending, clears only its own claim, and never invokes the
-  callback.
-- Docs: updated architecture and user-guide delivery summaries plus the
-  `DeliveryLoop` class comment to describe shard pickup/renew/release CAS,
-  durable row-claim fencing, skipped competing/abandoned claims, claim-free
-  endpoint snapshots, and future abandoned-claim recovery policy.
-- Verification: requested focused Vitest passed with 8 files and 219 tests;
-  `typecheck:build:generated`, `docs:check`, `format:check`, and
-  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
-  invalid-origin warning.
-
-### Round 6 Follow-up - `2026-07-10T05:32:00Z`
-
-- Finding: [P1] the Round 5 per-message claim used the current shard-session
-  expiry only when the row was first claimed. Shard keepalive renewed the shard
-  session while an endpoint callback was in flight, but did not renew the row
-  claim, so another worker could claim the row after the original claim expiry.
-- Fix: active delivery now tracks the claimed row snapshot and renews it with a
-  compare-and-set to each renewed `ShardSession` expiry. If claim renewal
-  returns `undefined` or throws, the lease keeper records lease loss and the
-  foreground delivery path fails closed before marking delivered.
-- Finding: [HIGH] `Inbox.claim()`, `Inbox.unclaim()`, `InboxMessage.claim`,
-  and exported `InboxClaim` exposed framework-owned internals through the
-  application-facing API.
-- Fix: public `InboxMessage` and `DeliveryEndpoint` are claim-free, and `Inbox`
-  no longer exposes claim/unclaim methods. Internal `InboxClaim`,
-  `InboxRecordMessage`, and `ClaimedInboxMessage` live in a non-barrel module,
-  while package-internal helper functions in `inbox-storage.ts` are not exported
-  from `packages/server/src/index.ts`.
-- Finding: [P3] `delivery.ts` duplicated claim/invoke/mark/clear logic between
-  shard drain and exact-message drain.
-- Fix: extracted one private `#deliverMessage()` helper and kept the public
-  drain methods focused on shard/page/exact-row flow.
-- Finding: [P3] `InboxStorage.#claimSnapshot()` validated claims by building a
-  fake full inbox message.
-- Fix: replaced that path with the direct internal `InboxClaimRecords`
-  snapshot codec.
-- Finding: [P2] docs did not describe durable row-claim fencing and claim-free
-  endpoint snapshots.
-- Fix: updated runtime architecture, developer API, API README source, package
-  README, and delivery source comments to document row claim renewal, skipped
-  live competing claims, marking from the claimed snapshot, clearing only the
-  unchanged claim after failed attempts, and unclaimed `InboxMessage` snapshots
-  passed to endpoints.
-- Evidence: the new focused regression failed before the fix because a
-  competing claim could take the row after the original claim expiry, then
-  passed after CAS claim renewal. Required verification passed:
-  requested delivery/context/index Vitest batch (7 files, 193 tests),
-  `typecheck:build:generated`, `docs:check` with only the existing invalid
-  origin TypeDoc warning, `format:check`, and `git diff --check`.
-
-### Round 5 Follow-up - `2026-07-10T06:10:10Z`
-
-- Finding: [P1] `Delivery.drain()` invoked `onMessage` after only a shard
-  lease pre-check. A worker that lost or outlived shard ownership could race
-  with another drain and duplicate endpoint invocation before stale
-  `markDelivered()` fencing took effect.
-- Fix: inbox rows now carry a small durable optional claim with shard-session
-  id, node, and expiry. `Delivery.drain()` and `drainMessage()` acquire the
-  claim through `Inbox`/`InboxStorage` with compare-and-set before invoking the
-  endpoint. Competing drains skip rows with a live different claim; successful
-  delivery marks with the claimed snapshot; failed attempts best-effort clear
-  the unchanged claim. Endpoint callbacks still receive unclaimed message
-  snapshots, so the fence remains framework-owned and does not expose framework
-  `Event` envelopes or add production retry/supervision/topology.
-- Evidence: focused red regression in `delivery-worker.test.ts` failed before
-  the fix because `delivery.inbox.claim` was missing, then passed after the
-  durable claim CAS. The requested focused delivery/context Vitest batch passed
-  after the fix with 182 tests.
-- Finding: [P2] `ShardedWorkRegistry.release()` could CAS-delete an
-  already-expired matching session, unlike `renew()`.
-- Fix: `release()` now reads the registry clock, returns `false` when the
-  current stored session expires at or before that time, and refreshes the
-  clock across CAS retries.
-- Evidence: focused red regression in `sharded-work-registry.test.ts` failed
-  before the fix because release resolved `true` after expiry, then passed
-  after the expiry guard.
-- Finding: [P2] internal `ProcessManagerInbox` and `ProjectionInbox` contracts
-  did not include their concrete `replay(...)` endpoint even though local
-  handoff classes and tests depend on that framework capability.
-- Fix: added `replay(...)` to both internal inbox contracts, keeping the names
-  short and avoiding concrete-class typing.
-- Finding: [P2] API comments and the delivery gap wording could be read as
-  contradicting storage-backed pickup/renew/release and caller-started
-  `DeliveryLoop`/`DeliveryWorker` loops.
-- Fix: updated `ShardedWorkRegistry` and `DeliveryWorker` class docs and
-  reworded `build-protocol/DEVELOPER_API.md` to describe no process-wide or
-  production scheduler/supervisor beyond caller-started delivery loops.
-
-### Round 4 Follow-up - `2026-07-10T04:53:23Z`
-
-- Finding: [P1] `ShardedWorkRegistry.renew()` could renew an already-expired
-  session when the stored session ID and node still matched the caller's
-  session. That let a delayed renewal extend ownership after another worker had
-  become eligible to pick up the shard.
-- Fix: `renew()` now reads the current storage-backed session, confirms
-  session ID/node ownership, and returns `undefined` when the current stored
-  `expiresAt` is at or before the renewal clock before constructing the next
-  session.
-- Evidence: focused red regression in `sharded-work-registry.test.ts` failed
-  before the fix because delayed renewal returned a renewed `node-a` session,
-  then passed after the expiry guard.
-- Finding: [P2] `build-protocol/RUNTIME_ARCHITECTURE.md` described shard
-  claim/release but did not mention renewal in the delivery-worker section.
-- Fix: updated the runtime architecture delivery-worker section to describe
-  storage-backed pickup, renewal, and release. It now states renewal is
-  framework-owned lease fencing for active drains, not production retry or
-  supervision.
-- Verification: required focused delivery Vitest, `typecheck:build:generated`,
-  `docs:check`, `format:check`, and `git diff --check` all passed on
-  `2026-07-10T04:56:04Z`. `docs:check` reported only the existing TypeDoc
-  invalid-origin warning.
-
-### Round 3 Follow-up - `2026-07-10T04:42:03Z`
-
-- Finding: [P1] lease activity in `Delivery.drain()` and `drainMessage()` was
-  still timer-state-only. If the event loop paused or renewal was delayed past
-  `expiresAt`, `requireActive()` could pass before the renewal timer observed
-  the loss, allowing an expired owner to mark a row delivered after another
-  worker became eligible to pick up the shard.
-- Fix: delivery now keeps the configured delivery clock and passes it to the
-  lease keeper. `requireActive()` fails once the current session expiry is at
-  or before that clock, even if the renewal timer has not run yet. Renewal
-  remains framework-owned lease fencing; no production retry or supervisor
-  policy was added.
-- Evidence: focused red regression in `delivery-worker.test.ts` failed before
-  the fix with the expired foreground drain returning `delivered: 1` and
-  `failed: 0`, then passed after the time-aware guard.
-- Finding: [P3] `ShardedWorkRegistry.renew()` used release-specific helper
-  names (`ReleaseSession`, `snapshotReleaseSession`) for a snapshot shared by
-  renew and release.
-- Fix: renamed the internal snapshot to `SessionClaim` and
-  `snapshotSessionClaim`.
-- Finding: [P2] curated API docs still described the exported registry seam as
-  pickup/release only.
-- Fix: updated `docs/api/README.md`, `build-protocol/DEVELOPER_API.md`, and
-  `packages/server/README.md` to describe pickup/renew/release and renewal as
-  framework-owned lease fencing for active drains.
-- Verification: focused delivery Vitest, `typecheck:build:generated`,
-  `docs:check`, `format:check`, and `git diff --check` all passed on
-  `2026-07-10T04:44:33Z`. `docs:check` reported only the existing TypeDoc
-  invalid-origin warning.
-- Post-fix local review: compared `HEAD~1...HEAD` after commit because no
-  separate Agent tool was exposed in this session. Standards/spec review found
-  no additional issues on `2026-07-10T04:46:21Z`.
-
-### Lease Reliability Follow-up - `2026-07-10T04:27:00Z`
-
-- Finding: [P1] `Delivery.drain()` and `drainMessage()` could keep awaiting an
-  endpoint callback after their shard lease expired. Another worker could then
-  pick up the same shard and invoke the same `TO_DELIVER` row concurrently.
-- Fix: `ShardedWorkRegistry.renew()` now extends only the current storage-backed
-  session ID/node with compare-and-set fencing. Active delivery drains start a
-  small lease keeper, check that ownership has not been lost before endpoint
-  invocation and before marking delivered, and still release the session in
-  `finally`.
-- Evidence: focused `delivery-worker.test.ts` regression failed before the fix
-  with worker B returning `DRAINED`/`delivered: 1` instead of `SKIPPED`, then
-  passed after adding session renewal and drain-local keepalive.
-
-### Review Log Follow-up - `2026-07-10T04:27:00Z`
-
-- Finding: [P3] The required review lanes table still listed every lane as
-  `Pending` after findings and fixes had been recorded.
-- Fix: updated the table to show completed lanes and fixed P1/P2/P3 follow-up
-  status.
-
-### Documentation Review Follow-up - `2026-07-10T05:09:03Z`
-
-- Finding: [P2] `packages/server/README.md` still said "Supported delivery
-  workers" remain an open production gap, which was stale after T-0026 exported
-  and documented `DeliveryWorker` as the supported local closeable wrapper over
-  shard delivery loops.
-- Fix: narrowed the open-gap wording to process-supervised delivery workers,
-  transport-topology workers, scheduler/retry workers, retained attempt
-  history, production delivery policy, and catch-up work. The README still
-  states that full production supervision and retry policy remain outside this
-  slice.
-
-### Reliability Review Follow-up - `2026-07-10T04:14:12Z`
-
-- Finding: [P1] `DeliveryWorker.start()` used fail-fast `Promise.all()` for
-  shard loops. If one `DeliveryLoop.run()` rejected while another loop was still
-  inside an active drain, the worker cleared `#running` early and later
-  `close()` calls no longer waited for that active loop.
-- Fix: `DeliveryWorker.start()` now stores a run promise backed by
-  `Promise.allSettled()`, so `#running` is cleared only after every shard loop
-  fulfills or rejects. Single loop failures preserve the original rejection;
-  multiple loop failures reject with one `AggregateError` containing every
-  reason.
-- Evidence: focused `delivery-worker-runtime.test.ts` failed before the fix on
-  early close settlement and missing multi-failure aggregation, then passed
-  after the worker settlement change.
-
-### Round 46 Clean Re-review - `2026-07-10`
+### Round 46 Clean Re-review - `2026-07-10T17:52:32Z`
 
 - Review package:
   `.superpowers/sdd/review-ca8fb2b3..4aa591ed.diff` from task baseline
@@ -2086,10 +2086,10 @@ red/green delivery regressions before the next review pass.
   `git diff --check ca8fb2b3...HEAD` references have flush-left continuation
   lines inside list items after the review-log reorder. The reviewer found no
   production TypeScript style regression.
-- Documentation (Hubble the 2nd): [P2] the work log still records Round 46
-  clean re-review at `2026-07-10T17:57:08Z` after Round 45 fix/verification
-  entries at `19:45`, making the durable work-log chronology go backward.
-  Hubble found no remaining label-semantics documentation drift.
+- Documentation (Hubble the 2nd): [P2] the work log still carries a
+  non-commit-backed Round 45/46 chronology, making the durable work-log
+  chronology go backward. Hubble found no remaining label-semantics
+  documentation drift.
 - TypeScript/API docs (Aquinas the 2nd): clean. Root server exports exclude
   raw delivery APIs, `ServerEnvironment` exposes only
   `ServerEnvironmentCloseable`, callback/failure message types remain narrowed
@@ -2111,11 +2111,11 @@ red/green delivery regressions before the next review pass.
 
 ### Round 57 Fix Implementation - `2026-07-10T19:55:11Z`
 
-- Commit evidence reconciles the durable sequence as Round 45 at `17:45`,
-  Round 46 at `17:57:08Z`, final verification at `18:05`, and Round 47 work at
-  `18:14`. The earlier Round 57 reporting draft described the Round 46
-  timestamp as `19:57:08Z`; this record is anchored to fix commit `7d1b09ad`
-  at `2026-07-10T19:55:11Z`.
+- Later Round 78 records reconciled the active Round 44-46 sequence to
+  commit-backed UTC: Round 44 status at `17:28:52Z`, Round 45 fix at
+  `17:51:06Z`, and Round 46 clean re-review at `17:52:32Z`. The earlier Round
+  57 reporting draft described the Round 46 timestamp as `19:57:08Z`; this
+  record is anchored to fix commit `7d1b09ad` at `2026-07-10T19:55:11Z`.
 - Fix: rewrapped the two `git diff --check ca8fb2b3...HEAD` review-log
   references so continuation lines stay inside their list items.
 - Red: added a delivery-loop regression for dropping stale skipped-only resume
@@ -2145,10 +2145,11 @@ red/green delivery regressions before the next review pass.
   duplicated, and the Round 57 closure adds another path over the same locals.
   Extract a small private scan-state helper with named transitions, local to
   the delivery module, without introducing a broader worker abstraction.
-- Documentation (Popper the 2nd): [P2] the work log still has a non-chronological
-  Round 45-47 sequence: Round 46 is now recorded at `19:57:08Z`, after later
-  final verification and Round 47 entries. Reconcile against associated commits
-  and order or timestamp the entries consistently.
+- Documentation (Popper the 2nd): [P2] the work log still has a
+  non-chronological Round 45-47 sequence because Round 46 was recorded with a
+  later local-looking timestamp after final verification and Round 47 entries.
+  Reconcile against associated commits and order or timestamp the entries
+  consistently.
 - Documentation (Popper the 2nd): [P2] Round 57 records say the fix worker
   started at `21:20Z`, but fix commit `7d1b09ad` was committed at
   `2026-07-10T20:55:11+01:00` (`19:55:11Z`). Normalize the UTC timestamps or
@@ -2178,9 +2179,10 @@ red/green delivery regressions before the next review pass.
 - Code style: extracted private `DeliveryScanState` transitions from
   `Delivery.#drainAvailableMessages()` without changing its public API or
   introducing a worker abstraction.
-- Documentation: reconciled the Round 45-47 work-log sequence against commit
-  evidence, relabeled the Round 57 `21:20Z` entries as reporting records,
-  wrapped the Round 57 red/green commands, and refreshed this dashboard.
+- Documentation: attempted to reconcile the Round 45-47 work-log sequence
+  against commit evidence, relabeled the Round 57 `21:20Z` entries as
+  reporting records, wrapped the Round 57 red/green commands, and refreshed
+  this dashboard.
 - Verification: focused regression and generated TypeScript build typecheck
   passed. Full `delivery-loop.test.ts` (28 tests), `delivery-worker.test.ts`
   (51 tests), `docs:check` with only the known invalid-`origin` warning, final
@@ -2657,3 +2659,62 @@ red/green delivery regressions before the next review pass.
   warning, format check, and `git diff --check`.
 - Action: commit the verified fix, then rerun all five reviewer lanes from the
   fixed HEAD.
+
+### Round 77 Re-review - `2026-07-10T22:19:30Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..5101cc1e.diff` from task baseline
+  `ca8fb2b3` to current HEAD `5101cc1e`.
+- Code style/maintainability (Lagrange the 3rd): [P3] the helper
+  `requireScanOffset()` still carries retired scan-offset terminology even
+  though the user-visible error now says resume cursor offset. [P3]
+  `requireEndpointMessage()` builds failure-visible endpoint snapshots by
+  shallow-freezing the input row, while callback snapshots use explicit
+  `Date`/`Any.value` copying; using one local snapshot builder would avoid
+  coupling failure snapshot isolation to storage decode behavior.
+- Documentation (Euclid the 3rd): [P2] the work-log Round 45 chronology still
+  goes backward: Round 45 re-review is recorded at
+  `2026-07-10T19:15:00Z`, then its fix and Round 46 clean re-review are
+  recorded at `17:45:00Z` and `17:57:08Z`. [P3] the review log still begins
+  with Round 45, walks backward through older rounds, then resumes Round 46
+  later, making the review loop hard to audit.
+- TypeScript/API docs (Parfit the 3rd): clean. The Round 76
+  `DeliveryEndpointMessage["status"]` narrowing to `"TO_DELIVER"` is
+  acceptable. Residual note: failure-message mutation coverage could be
+  stronger but was not a contract violation.
+- Security (Lorentz the 3rd): clean. Supported labels, pending status
+  narrowing, callback snapshot copying, fail-closed replay status checks, and
+  root export boundaries remain acceptable.
+- Performance/reliability (Cicero the 3rd): clean. Bounded scans,
+  live-vs-expired claims, failure budgets, unsupported `CATCH_UP`, and
+  `TO_DELIVER` status narrowing remain acceptable. Residual note:
+  failure-message mutation coverage could be stronger but was not a defect.
+- Action: record this findings batch, dispatch one fix worker, verify, commit,
+  and rerun all five reviewer lanes from the fixed HEAD.
+
+### Round 78 Fix - `2026-07-10T22:28:32Z`
+
+- Code style/maintainability: renamed `requireScanOffset()` to
+  `requireResumeCursorOffset()` and routed callback plus failure-visible
+  endpoint snapshots through one local `endpointSnapshot()` builder.
+- Reliability: the shared snapshot builder validates supported delivery labels
+  plus `TO_DELIVER` status and copies mutable `Date` and `Any.value` fields;
+  focused coverage mutates `DeliveryRun.failures[*].message` and verifies the
+  pending inbox row stays unchanged.
+- Documentation: re-anchored the Round 44-46 durable chronology to
+  `f7f56f54`/`9bb68f33`/`52a4326d`/`9546ed2a`/`4aa591ed` UTC evidence and
+  mechanically ordered the review-log sections by round so the Round 45
+  entries sit after Round 44 and before Round 46 instead of at the file top.
+- Dashboard: reset all five required review lanes to fresh current-HEAD
+  re-review pending after this fix.
+- Verification: focused delivery-worker test passed at
+  `2026-07-10T22:29:32Z` with proto generation/checks, generated build
+  typecheck, 1 Vitest file, and 52 tests. The first post-record format check
+  found work-log wrapping only; the repo formatter normalized it, the final
+  format check passed, and `git diff --check` passed. `git status --short`
+  showed no generated Protobuf output in the tracked diff; the pre-existing
+  untracked `.codex-review-packages/` directory remains untracked.
+- Coordinator verification passed at `2026-07-10T22:37:21Z` with focused
+  delivery-worker Vitest, generated build typecheck, docs check with only the
+  existing invalid TypeDoc `origin` warning, format check, and
+  `git diff --check`.
