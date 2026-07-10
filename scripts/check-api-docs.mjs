@@ -215,6 +215,7 @@ const expectedServerExports = [
   "Delivery",
   "DeliveryDrainOptions",
   "DeliveryEndpoint",
+  "DeliveryEndpointMessage",
   "DeliveryFailure",
   "DeliveryLabel",
   "DeliveryLoop",

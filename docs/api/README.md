@@ -307,11 +307,12 @@ handler invocation, delivery, catch-up, read-side indexing, subscriptions,
 system events, or aggregate repository caching.
 Delivery exports include `Delivery`, `DeliveryOptions`,
 `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`, `DeliveryEndpoint`,
-`DeliveryFailure`, `DeliveryRun`, `DeliveryLoop`, `DeliveryLoopOptions`,
-`DeliveryLoopRun`, `DeliveryLoopStatus`, `DeliveryWorker`,
-`DeliveryWorkerOptions`, `DeliveryWorkerRun`, `DeliveryStorageCorruptionError`,
-`Inbox`, `InboxId`, `InboxMessage`, `InboxMessageError`, `InboxMessageId`,
-`InboxMessageInput`, `InboxReadOptions`, `InboxWriteResult`, `InboxStorage`,
+`DeliveryEndpointMessage`, `DeliveryFailure`, `DeliveryRun`, `DeliveryLoop`,
+`DeliveryLoopOptions`, `DeliveryLoopRun`, `DeliveryLoopStatus`,
+`DeliveryWorker`, `DeliveryWorkerOptions`, `DeliveryWorkerRun`,
+`DeliveryStorageCorruptionError`, `Inbox`, `InboxId`, `InboxMessage`,
+`InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
+`InboxReadOptions`, `InboxWriteResult`, `InboxStorage`,
 `InboxStorageOptions`, `DeliveryLabel`, `DeliveryStatus`, `ShardIndex`,
 `ShardSession`, `ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`. This slice persists
 inbox messages and shard lease records through `StorageFactory` /
@@ -329,13 +330,15 @@ worker boundary. `ShardedWorkRegistry.renew(session)` is framework-owned lease
 fencing for active drains, not an application retry or supervision policy.
 `Delivery.drain(shard, { node, onMessage, limit })` picks up one shard, scans
 `TO_DELIVER` rows in inbox order, skips rows unavailable to this worker before
-invoking the `DeliveryEndpoint`, and passes a public `InboxMessage` snapshot to
-the endpoint. `limit` caps rows accepted for endpoint work for one drain; the
-storage read cap plus `limit` bounds scanning while the drain advances past
-unavailable or worker-unsupported rows first. Endpoint callbacks run only for `HANDLE_COMMAND`,
-`UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; valid worker-unsupported labels
-such as `CATCH_UP` remain pending and are skipped before callback invocation,
-row acceptance, failure recording, or failure-budget consumption. Successful
+invoking the `DeliveryEndpoint`, and passes a public
+`DeliveryEndpointMessage` snapshot to the endpoint. `limit` caps rows whose
+endpoint callback actually runs for one drain; the storage read cap plus
+`limit` bounds scanning while the drain advances past unavailable or
+worker-unsupported rows first. Endpoint callbacks run only for
+`HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; valid
+worker-unsupported labels such as `CATCH_UP` remain pending and are skipped
+before callback invocation, row acceptance, failure recording, or
+failure-budget consumption. Successful
 delivery marks the row `DELIVERED`; endpoint callback failures leave the row
 pending for a later run only when framework-owned cleanup succeeds. Malformed or
 deprecated legacy label data such as stored `IMPORT_EVENT` remains a

@@ -122,7 +122,11 @@ describe("DeliveryLoop", () => {
 
   it("stops idle when pending rows are already claimed", async () => {
     const storageFactory = new InMemoryStorageFactory();
-    const delivery = createDelivery(storageFactory);
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => new Date("2026-07-08T09:00:30.000Z"),
+    });
     const shard = ShardIndex.single();
     const stored = await seed(delivery, "signal-row-claimed", 1n);
     const claimed = await inboxStorageAccess.claim(

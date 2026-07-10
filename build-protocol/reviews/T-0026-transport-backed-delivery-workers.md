@@ -167,6 +167,63 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   invalid-origin TypeDoc warning; format check passed; diff whitespace check
   passed.
 
+### Round 23 Follow-up - `2026-07-10T10:08:00Z`
+
+- Finding: [API/Docs MEDIUM] endpoint callbacks still received a snapshot that
+  shared mutable nested state with the internal claimed CAS row, and stale docs
+  still described unsupported labels as failure-budget consumers.
+- Finding: [Performance MEDIUM] the temporary skipped-row scan budget needed to
+  stay finite while still allowing one full storage page of skipped rows before
+  accepted endpoint work.
+- Fix: `Delivery.drain()` now exposes a cloned public callback snapshot,
+  bounds skipped-row scanning to storage read cap plus accepted-work limit, and
+  keeps valid worker-unsupported labels pending and skipped rather than failed.
+- Evidence: focused delivery regressions covered callback mutation privacy,
+  skipped-row scan progression, and finite scan budget; they failed before the
+  final adjustments and passed after the fixes.
+- Verification: see
+  `build-protocol/tasks/T-0026-transport-backed-delivery-workers/round-23-fix-report.md`.
+  Required delivery Vitest, generated build typecheck, docs check, format
+  check, and `git diff --check` all passed. `docs:check` reported only the
+  existing invalid-origin TypeDoc warning.
+
+### Round 24 Follow-up - `2026-07-10T11:22:00Z`
+
+- Finding: [Durability MEDIUM] the external work log and review ledger stopped
+  at Round 22, so the durable trail no longer matched the verified Round 23
+  state.
+- Finding: [API MEDIUM] `DeliveryEndpoint` still admitted full `InboxMessage`,
+  so public callback/failure typing still allowed `CATCH_UP` even though the
+  worker never invokes endpoints for that label.
+- Finding: [Reliability MEDIUM] `InboxStorage` claim CAS rejected any existing
+  claim, so expired per-message claims stayed pending forever until some other
+  cleanup path ran.
+- Finding: [Reliability MEDIUM] pre-callback claim/lease failures were still
+  counted as accepted endpoint work, letting them consume the accepted-work
+  limit before any callback ran.
+- Finding: [Performance MEDIUM] direct drains still chose page size from the
+  accepted-work limit, so limit `1` plus many skipped rows degenerated toward
+  one inbox query per skipped row.
+- Fix: appended missing Round 23 and Round 24 durable trail entries, exported
+  `DeliveryEndpointMessage`, narrowed `DeliveryEndpoint` and
+  `DeliveryFailure.message`, reclaimed expired claims during claim CAS using
+  the storage clock, kept pre-callback failures visible without incrementing
+  accepted work, and widened page reads to
+  `min(inboxStorageAccess.maxReadLimit, remaining scan budget)` while stopping
+  on accepted endpoint work.
+- Evidence: new regressions covered expired-claim reclaim on a later drain,
+  limit-1 pre-callback failure followed by a second-row delivery in the same
+  drain, and bounded query count for one full skipped page plus one accepted
+  row. Existing delivery-loop coverage was updated so live claims still leave a
+  loop idle while expired claims are reclaimable.
+- Verification: see
+  `build-protocol/tasks/T-0026-transport-backed-delivery-workers/round-24-fix-report.md`.
+  Required delivery Vitest passed with 3 files and 165 tests;
+  `typecheck:build:generated` passed; `docs:check` passed after updating the
+  expected root export list for `DeliveryEndpointMessage`, still with only the
+  existing invalid-origin TypeDoc warning; `format:check` passed; `git diff
+--check` passed.
+
 ### Round 15 Follow-up - `2026-07-10T07:40:04Z`
 
 - Finding: [Docs MEDIUM] `docs/USER_GUIDE.md` and `docs/api/README.md`

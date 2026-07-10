@@ -55,8 +55,9 @@ export class Delivery {
    * `TO_DELIVER` rows in inbox order. `limit` bounds accepted endpoint work;
    * the storage read cap plus `limit` bounds scanning while the drain advances
    * past unavailable rows before endpoint invocation. The `onMessage` endpoint
-   * receives a public `InboxMessage` snapshot only for supported worker labels:
-   * `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`.
+   * receives a public `DeliveryEndpointMessage` snapshot only for supported
+   * worker labels: `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
+   * `REACT_UPON_EVENT`.
    * Worker-unsupported labels remain pending and are skipped before callback
    * invocation, row acceptance, failure recording, or failure-budget
    * consumption. Malformed or deprecated legacy label data remains a true
@@ -104,7 +105,7 @@ export class Delivery {
     const scanBudget = inboxStorageAccess.maxReadLimit + limit;
 
     while (progress.processed < scanBudget) {
-      const readLimit = Math.min(limit, scanBudget - progress.processed);
+      const readLimit = Math.min(inboxStorageAccess.maxReadLimit, scanBudget - progress.processed);
       const messages = await this.#readPendingDeliveryPage(shard, readLimit, offset);
 
       for (const message of messages) {
@@ -217,7 +218,8 @@ export class Delivery {
       return deliveryRun("DRAINED", 1, 0, 0, 0, []);
     }
 
-    const attempt = await this.#deliverMessage(message, onMessage, lease, active);
+    const endpoint = requireEndpointMessage(message);
+    const attempt = await this.#deliverMessage(endpoint, onMessage, lease, active);
     if (attempt.kind === "SKIPPED") {
       return deliveryRun("DRAINED", 1, 0, 0, 0, []);
     }
@@ -225,13 +227,13 @@ export class Delivery {
       return deliveryRun("DRAINED", 1, 1, 1, 0, []);
     }
 
-    const failures = [Object.freeze({ message, error: attempt.error })];
+    const failures = [Object.freeze({ message: endpoint, error: attempt.error })];
 
-    return deliveryRun("DRAINED", 1, 1, 0, 1, failures);
+    return deliveryRun("DRAINED", 1, attempt.accepted ? 1 : 0, 0, 1, failures);
   }
 
   async #deliverMessage(
-    message: InboxMessage,
+    message: DeliveryEndpointMessage,
     onMessage: DeliveryEndpoint,
     lease: ShardLeaseKeeper,
     active: ActiveClaim,
@@ -250,6 +252,7 @@ export class Delivery {
     } catch (error) {
       return Object.freeze({
         kind: "FAILED" as const,
+        accepted: active.callbackAccepted(),
         error: await this.#clearFailedClaim(error, active),
       });
     } finally {
@@ -275,6 +278,7 @@ export class Delivery {
     await lease.awaitRenewal();
     lease.requireActive();
     requireEndpointLabel(message.label);
+    active.markCallbackAccepted();
     await onMessage(endpointMessage(message));
     active.markCallbackSucceeded();
   }
@@ -324,8 +328,9 @@ export class Delivery {
       return true;
     }
 
-    const attempt = await this.#deliverMessage(message, onMessage, lease, active);
-    progress.record(message, attempt);
+    const endpoint = requireEndpointMessage(message);
+    const attempt = await this.#deliverMessage(endpoint, onMessage, lease, active);
+    progress.record(endpoint, attempt);
 
     return attempt.kind !== "DELIVERED";
   }
@@ -357,12 +362,24 @@ export interface DeliveryDrainOptions {
 export interface DeliveryMessageDrainOptions {
   /** Worker node name used for shard pickup. */
   readonly node: string;
-  /** Framework endpoint callback invoked for each available supported worker row. */
+  /**
+   * Framework endpoint callback invoked for the exact pending row when it is
+   * still available and supported by this worker, at most once.
+   */
   readonly onMessage: DeliveryEndpoint;
 }
 
-/** Framework endpoint callback for one durable inbox row. */
-export type DeliveryEndpoint = (message: InboxMessage) => Promise<void> | void;
+/** One durable inbox row accepted by framework-owned direct worker endpoints. */
+type DeliveryEndpointLabel = "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT";
+
+/** One durable inbox row accepted by framework-owned direct worker endpoints. */
+export interface DeliveryEndpointMessage extends Omit<InboxMessage, "label"> {
+  /** Delivery label supported by the direct worker endpoint callback surface. */
+  readonly label: DeliveryEndpointLabel;
+}
+
+/** Framework endpoint callback for one supported durable inbox row. */
+export type DeliveryEndpoint = (message: DeliveryEndpointMessage) => Promise<void> | void;
 
 /** Simple delivery worker run statistics. */
 export interface DeliveryRun {
@@ -370,7 +387,7 @@ export interface DeliveryRun {
   readonly status: "DRAINED" | "SKIPPED";
   /** Number of pending rows read for this run. */
   readonly processed: number;
-  /** Number of rows accepted for endpoint work. */
+  /** Number of rows whose endpoint callback was invoked during this run. */
   readonly accepted: number;
   /** Number of rows whose endpoint callback succeeded and were marked delivered. */
   readonly delivered: number;
@@ -382,8 +399,8 @@ export interface DeliveryRun {
 
 /** Failure from one message in a direct delivery run. */
 export interface DeliveryFailure {
-  /** Message that failed during this run. */
-  readonly message: InboxMessage;
+  /** Supported worker row that failed during this run. */
+  readonly message: DeliveryEndpointMessage;
   /**
    * Error observed during endpoint callback, lease/fencing,
    * delivery-status update, or framework cleanup work.
@@ -407,13 +424,13 @@ interface DrainProgress {
   readonly processed: number;
   readonly finish: () => DeliveryRun;
   readonly observe: (message: InboxMessage) => boolean;
-  readonly record: (message: InboxMessage, attempt: DeliveryMessageResult) => void;
+  readonly record: (message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) => void;
 }
 
 type DeliveryMessageResult =
   | { readonly kind: "SKIPPED" }
   | { readonly kind: "DELIVERED" }
-  | { readonly kind: "FAILED"; readonly error: unknown };
+  | { readonly kind: "FAILED"; readonly accepted: boolean; readonly error: unknown };
 
 const defaultShardLeaseMs = 30_000;
 const maxLeaseMs = 2_147_483_647;
@@ -462,8 +479,12 @@ function drainProgress(): DrainProgress {
 
       return true;
     },
-    record(message: InboxMessage, attempt: DeliveryMessageResult) {
+    record(message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) {
       if (attempt.kind === "SKIPPED") {
+        return;
+      }
+      if (attempt.kind === "FAILED" && !attempt.accepted) {
+        failures.push(Object.freeze({ message, error: attempt.error }));
         return;
       }
       accepted += 1;
@@ -542,8 +563,13 @@ function keepShardLease(
 
 class ActiveClaim {
   #claimed: ClaimedInboxMessage | undefined;
+  #callbackAccepted = false;
   #deliveredCallback = false;
   #lock: Promise<void> = Promise.resolve();
+
+  callbackAccepted(): boolean {
+    return this.#callbackAccepted;
+  }
 
   callbackSucceeded(): boolean {
     return this.#deliveredCallback;
@@ -551,6 +577,7 @@ class ActiveClaim {
 
   clear(): void {
     this.#claimed = undefined;
+    this.#callbackAccepted = false;
     this.#deliveredCallback = false;
   }
 
@@ -574,6 +601,10 @@ class ActiveClaim {
     });
   }
 
+  markCallbackAccepted(): void {
+    this.#callbackAccepted = true;
+  }
+
   markCallbackSucceeded(): void {
     this.#deliveredCallback = true;
   }
@@ -594,6 +625,7 @@ class ActiveClaim {
 
   set(message: ClaimedInboxMessage): void {
     this.#claimed = message;
+    this.#callbackAccepted = false;
     this.#deliveredCallback = false;
   }
 
@@ -613,10 +645,12 @@ class ActiveClaim {
   }
 }
 
-function endpointMessage(message: ClaimedInboxMessage): InboxMessage {
+function endpointMessage(message: ClaimedInboxMessage): DeliveryEndpointMessage {
   const { claim: _claim, ...unclaimed } = message;
+  const label = requireEndpointLabel(unclaimed.label);
   return Object.freeze({
     ...unclaimed,
+    label,
     id: Object.freeze({
       value: unclaimed.id.value,
       shard: unclaimed.id.shard,
@@ -626,7 +660,7 @@ function endpointMessage(message: ClaimedInboxMessage): InboxMessage {
     whenReceived: new Date(unclaimed.whenReceived),
     shard: unclaimed.shard,
     ...(unclaimed.keepUntil === undefined ? {} : { keepUntil: new Date(unclaimed.keepUntil) }),
-  });
+  }) as DeliveryEndpointMessage;
 }
 
 function copySignal(signal: Any): Any {
@@ -636,15 +670,24 @@ function copySignal(signal: Any): Any {
   return copied;
 }
 
-function requireEndpointLabel(label: InboxMessage["label"]): void {
+function requireEndpointLabel(label: InboxMessage["label"]): DeliveryEndpointLabel {
   if (isEndpointLabel(label)) {
-    return;
+    return label;
   }
 
   throw new Error(`Delivery worker does not support "${label}" messages.`);
 }
 
-function isEndpointLabel(label: InboxMessage["label"]): boolean {
+function requireEndpointMessage(message: InboxMessage): DeliveryEndpointMessage {
+  const label = requireEndpointLabel(message.label);
+
+  return Object.freeze({
+    ...message,
+    label,
+  }) as DeliveryEndpointMessage;
+}
+
+function isEndpointLabel(label: InboxMessage["label"]): label is DeliveryEndpointLabel {
   return (
     label === "HANDLE_COMMAND" || label === "UPDATE_SUBSCRIBER" || label === "REACT_UPON_EVENT"
   );

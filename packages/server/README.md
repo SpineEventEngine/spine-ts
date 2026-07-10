@@ -105,8 +105,9 @@ Current slice exposes:
   `PrimitiveId` and `MessageId` expose the accepted public ID shapes;
   and
 - `Delivery`, `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`,
-  `DeliveryEndpoint`, `DeliveryFailure`, `DeliveryLoop`, `DeliveryLoopOptions`,
-  `DeliveryLoopRun`, `DeliveryLoopStatus`, `DeliveryRun`, `DeliveryWorker`,
+  `DeliveryEndpoint`, `DeliveryEndpointMessage`, `DeliveryFailure`,
+  `DeliveryLoop`, `DeliveryLoopOptions`, `DeliveryLoopRun`,
+  `DeliveryLoopStatus`, `DeliveryRun`, `DeliveryWorker`,
   `DeliveryWorkerOptions`, `DeliveryWorkerRun`, `Inbox`, `InboxStorage`,
   `ShardIndex`, `ShardSession`, and `ShardedWorkRegistry` for the current durable delivery
   slice: inbox writes with durable `(signalId, inboxId)` live deduplication

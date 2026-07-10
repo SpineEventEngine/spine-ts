@@ -306,9 +306,10 @@ smaller than the later scheduler/retry stack:
   lease fencing for active drains, not an application retry or supervision
   policy; and
 - `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`, `DeliveryEndpoint`,
-  `DeliveryFailure`, `DeliveryLabel`, `DeliveryLoopOptions`,
-  `DeliveryLoopRun`, `DeliveryLoopStatus`, `DeliveryRun`, `DeliveryStatus`,
-  `DeliveryWorkerOptions`, `DeliveryWorkerRun`, `InboxId`, `InboxMessage`,
+  `DeliveryEndpointMessage`, `DeliveryFailure`, `DeliveryLabel`,
+  `DeliveryLoopOptions`, `DeliveryLoopRun`, `DeliveryLoopStatus`,
+  `DeliveryRun`, `DeliveryStatus`, `DeliveryWorkerOptions`,
+  `DeliveryWorkerRun`, `InboxId`, `InboxMessage`,
   `DeliveryStorageCorruptionError`, `InboxMessageError`, `InboxMessageId`,
   `InboxMessageInput`, `InboxReadOptions`, `InboxWriteResult`,
   `InboxStorageOptions`, `DeliveryOptions`, and `ShardedWorkRegistryOptions`

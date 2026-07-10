@@ -178,6 +178,7 @@ export class InboxStorage {
   ): Promise<ClaimedInboxMessage | undefined> {
     const key = this.#messageKey(message.id);
     const nextClaim = InboxClaimRecords.snapshot(claim);
+    const now = this.#dedupNow();
 
     for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
       const currentRecord = await this.#durableRead("Inbox record", () => inboxStorage.read(key));
@@ -192,7 +193,7 @@ export class InboxStorage {
       if (!this.#sameMessageExceptClaim(current, message)) {
         return undefined;
       }
-      if (current.claim !== undefined) {
+      if (current.claim !== undefined && current.claim.expiresAt.getTime() > now) {
         return undefined;
       }
 

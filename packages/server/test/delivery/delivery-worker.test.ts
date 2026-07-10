@@ -19,6 +19,8 @@ import {
 import { inboxStorageAccess } from "../../src/delivery/inbox-storage.js";
 import {
   Delivery,
+  type DeliveryEndpoint,
+  type DeliveryEndpointMessage,
   InboxMessageError,
   ShardIndex,
   ShardSession,
@@ -284,7 +286,7 @@ describe("Delivery worker", () => {
       expect(run).toMatchObject({
         status: "DRAINED",
         processed: 1,
-        accepted: 1,
+        accepted: 0,
         delivered: 0,
         failed: 1,
       });
@@ -339,7 +341,7 @@ describe("Delivery worker", () => {
     });
   });
 
-  it("skips a claimed row after the claim expiry instead of duplicate dispatching", async () => {
+  it("reclaims an expired row claim and delivers the row in a later drain", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -370,17 +372,15 @@ describe("Delivery worker", () => {
     });
 
     expect(claimed?.signalId).toBe("signal-expired-claim");
-    expect(seen).toEqual([]);
+    expect(seen).toEqual(["signal-expired-claim"]);
     expect(run).toMatchObject({
       status: "DRAINED",
       processed: 1,
-      accepted: 0,
-      delivered: 0,
+      accepted: 1,
+      delivered: 1,
       failed: 0,
     });
-    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
-      { signalId: "signal-expired-claim", status: "TO_DELIVER" },
-    ]);
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
   });
 
   it("scans past unavailable head rows to deliver a later row in the same drain", async () => {
@@ -673,6 +673,13 @@ describe("Delivery worker", () => {
     expectTypeOf<DrainMessageOptions>().not.toHaveProperty("limit");
   });
 
+  it("narrows endpoint callbacks and delivery failures to supported worker labels", () => {
+    expectTypeOf<Parameters<DeliveryEndpoint>[0]>().toEqualTypeOf<DeliveryEndpointMessage>();
+    expectTypeOf<DeliveryEndpointMessage["label"]>().toEqualTypeOf<
+      "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT"
+    >();
+  });
+
   it("leaves failed messages pending for retry and records failures", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -890,6 +897,100 @@ describe("Delivery worker", () => {
       { signalId: "signal-catch-up-2", status: "TO_DELIVER" },
       { signalId: "signal-catch-up-3", status: "TO_DELIVER" },
     ]);
+  });
+
+  it("does not consume the accepted-work limit when a pre-callback failure leaves the row pending", async () => {
+    const faultPlan: DeliveryFaultPlan = {
+      throwInboxClaimOnce: true,
+    };
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FaultyDeliveryStorageFactory(faultPlan),
+      leaseMs: 60_000,
+      now: () => new Date("2026-07-08T09:00:00.000Z"),
+    });
+    const shard = ShardIndex.single();
+
+    await seed(delivery, "signal-pre-callback-fails", 1n);
+    await seed(delivery, "signal-pre-callback-tail", 2n);
+
+    const seen: string[] = [];
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      limit: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(seen).toEqual(["signal-pre-callback-tail"]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 2,
+      accepted: 1,
+      delivered: 1,
+      failed: 1,
+    });
+    expect(faultPlan.thrownInboxClaims).toBe(1);
+    expect(run.failures).toHaveLength(1);
+    expect(run.failures[0]?.message.signalId).toBe("signal-pre-callback-fails");
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-pre-callback-fails", status: "TO_DELIVER" },
+    ]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
+      { signalId: "signal-pre-callback-tail", status: "DELIVERED" },
+    ]);
+  });
+
+  it("reads skipped head rows in bounded pages instead of one query per row when limit is 1", async () => {
+    const faultPlan: DeliveryFaultPlan = {};
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FaultyDeliveryStorageFactory(faultPlan),
+      leaseMs: 60_000,
+      now: () => new Date("2026-07-08T09:00:00.000Z"),
+    });
+    const shard = ShardIndex.single();
+    const unavailable: InboxMessage[] = [];
+
+    for (let index = 0; index < 1_000; index += 1) {
+      unavailable.push(await seed(delivery, `signal-bounded-skip-${index}`, BigInt(index + 1)));
+    }
+    await seed(delivery, "signal-bounded-tail", 1_001n);
+
+    for (const message of unavailable) {
+      const claimed = await inboxStorageAccess.claim(
+        delivery.inbox.storage,
+        message,
+        new ShardSession(
+          `message-owner-${message.signalId}`,
+          shard,
+          "node-a",
+          new Date("2026-07-08T09:00:00.000Z"),
+          new Date("2026-07-08T09:01:00.000Z"),
+        ),
+      );
+      expect(claimed?.signalId).toBe(message.signalId);
+    }
+
+    const seen: string[] = [];
+    const run = await delivery.drain(shard, {
+      node: "node-b",
+      limit: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(seen).toEqual(["signal-bounded-tail"]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1_001,
+      accepted: 1,
+      delivered: 1,
+      failed: 0,
+    });
+    expect(faultPlan.inboxQueries).toBe(2);
   });
 
   it("stops unsupported-row scanning at the storage read cap", async () => {
@@ -1949,6 +2050,7 @@ function isInboxClaimClear<I, R extends Message>(id: I, expected: R, next: R): b
 interface DeliveryFaultPlan {
   blockInboxClaimOnce?: boolean;
   blockInboxRenewalOnce?: boolean;
+  throwInboxClaimOnce?: boolean;
   throwInboxClearOnce?: boolean;
   skipInboxClearOnce?: boolean;
   skipDedupFinalizeOnce?: boolean;
@@ -1960,12 +2062,14 @@ interface DeliveryFaultPlan {
   resumeInboxRenewal?: ReturnType<typeof deferred<undefined>>;
   blockedInboxClaims?: number;
   blockedInboxRenewals?: number;
+  thrownInboxClaims?: number;
   thrownInboxClears?: number;
   skippedInboxClears?: number;
   skippedDedupFinalizations?: number;
   skippedInboxRepairs?: number;
   opens?: number;
   compareAndSets?: number;
+  inboxQueries?: number;
 }
 
 class FaultyDeliveryStorageFactory extends StorageFactory {
@@ -2014,6 +2118,18 @@ class FaultyDeliveryRecordStorage<I, R extends Message> extends RecordStorage<I,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
     this.#plan.compareAndSets = (this.#plan.compareAndSets ?? 0) + 1;
+    if (
+      this.context.name.endsWith(".delivery.inbox") &&
+      expected !== undefined &&
+      next !== undefined &&
+      this.#plan.throwInboxClaimOnce === true &&
+      isInboxClaimCreation(id, expected.record, next.record)
+    ) {
+      this.#plan.throwInboxClaimOnce = false;
+      this.#plan.thrownInboxClaims = (this.#plan.thrownInboxClaims ?? 0) + 1;
+      return Promise.reject(new Error("Inbox claim failed."));
+    }
+
     if (
       this.context.name.endsWith(".delivery.inbox") &&
       expected !== undefined &&
@@ -2116,6 +2232,9 @@ class FaultyDeliveryRecordStorage<I, R extends Message> extends RecordStorage<I,
   protected override queryRecordEntries(
     query: RecordQuery<I>,
   ): Promise<readonly { id: I; record: R }[]> {
+    if (this.context.name.endsWith(".delivery.inbox")) {
+      this.#plan.inboxQueries = (this.#plan.inboxQueries ?? 0) + 1;
+    }
     return this.#delegate.queryEntries(query);
   }
 

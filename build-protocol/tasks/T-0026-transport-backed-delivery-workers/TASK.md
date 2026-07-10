@@ -345,3 +345,15 @@ delivery Vitest passed for `delivery-worker`, `delivery-loop`, and `inbox`
 tests (162 tests); generated build typecheck passed; docs check passed with
 only the existing invalid-origin TypeDoc source-link warning; format check
 passed; `git diff --check` passed.
+
+Round 24 review intake on `2026-07-10`: fix the remaining durable-log drift by
+adding Round 23 and Round 24 entries to the external work log, append Round 23
+and Round 24 follow-up evidence to the review ledger, and write a full
+`round-24-fix-report.md`. In code, tighten the public endpoint callback type so
+only `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT` rows are
+admitted, allow durable row-claim CAS to reclaim expired claims using the
+storage clock, ensure pre-callback claim/lease failures are reported without
+consuming the accepted endpoint-work limit, and decouple direct-drain page size
+from the accepted-work cap so skipped rows do not force one query per row. The
+required verification for this round remains focused delivery Vitest,
+generated-build typecheck, docs check, format check, and `git diff --check`.

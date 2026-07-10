@@ -48,6 +48,7 @@ export {
   Delivery,
   type DeliveryDrainOptions,
   type DeliveryEndpoint,
+  type DeliveryEndpointMessage,
   type DeliveryFailure,
   type DeliveryMessageDrainOptions,
   type DeliveryOptions,
