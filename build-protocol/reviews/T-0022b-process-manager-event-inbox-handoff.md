@@ -1,6 +1,6 @@
 # Review Log: T-0022b Process-Manager Event Inbox Handoff
 
-Status: round 7 fixes verified; re-review pending
+Status: round 8 documentation fix applied; re-review pending
 
 Scope: live process-manager event reactor durable inbox handoff.
 
@@ -8,11 +8,11 @@ Scope: live process-manager event reactor durable inbox handoff.
 
 | Lane                       | Reviewer | Status  | Notes |
 | -------------------------- | -------- | ------- | ----- |
-| Code style/maintainability | latest: round 7 | clean | No new style findings reported. |
-| Documentation completeness | latest: round 7 | clean | Review log now records round-seven findings and fix status. |
-| TypeScript/API docs        | latest: round 7 | clean | No public API or generated-doc findings reported. |
-| Security                   | latest: round 7 | clean | No new security findings reported. |
-| Performance/reliability    | latest: round 7 | clean | `receiveAll()` now coordinates duplicate multi-target handoffs on a batch key. |
+| Code style/maintainability | latest: round 8 | clean | No new style findings reported. |
+| Documentation completeness | latest: round 8 | fix applied; re-review pending | Work-log chronology normalized after round-six completion. |
+| TypeScript/API docs        | latest: round 8 | clean | No public API or generated-doc findings reported. |
+| Security                   | latest: round 8 | clean | No new security findings reported. |
+| Performance/reliability    | latest: round 8 | clean | Duplicate multi-target handoff coordination verified. |
 
 ## Planned Review Focus
 
@@ -276,3 +276,37 @@ Scope: live process-manager event reactor durable inbox handoff.
   the shard lease, causing a spurious skipped-delivery failure. Coordinate
   duplicate multi-target handoffs on a tenant-aware batch key while preserving
   write-all-before-drain behavior and the monotonic version allocator.
+
+## Round 8 Findings
+
+### Code Style/Maintainability
+
+- Clean. The reviewer did not report new naming, layout, generated-output, or
+  style findings.
+
+### Documentation
+
+- Medium: `build-protocol/work-logs/T-0022b.md` recorded round-seven review and
+  fix entries before the round-six verification entry, making the durable
+  chronology contradictory. Normalize the work-log timeline.
+
+### TypeScript/API Docs
+
+- Clean. The reviewer did not report new internal contract or public API doc
+  findings.
+
+### Security
+
+- Clean. The reviewer did not report new security findings.
+
+### Performance/Reliability
+
+- Clean. The reviewer verified that duplicate `receiveAll()` calls are
+  coordinated on a tenant-aware batch key, write-all-before-drain remains in
+  place, version allocation still uses `#takeVersion()`, and the new concurrent
+  duplicate multi-target regression is deterministic enough for this slice.
+
+## Round-Eight Fix Follow-Up
+
+- Author follow-up moved the round-seven work-log review/fix entries after the
+  round-six verification entry and recorded the round-eight lane results here.

@@ -1,6 +1,6 @@
 # T-0022b Implementation Report
 
-Status: implemented in code/docs; round-seven fixes verified; re-review pending
+Status: implemented in code/docs; round-eight documentation fix applied; re-review pending
 Date: `2026-07-10`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0022b-process-manager-event-inbox-handoff`
@@ -120,6 +120,13 @@ Round-seven findings fixed in this pass:
    - update the review log, work log, and implementation report so round-seven
      status is current.
 
+Round-eight findings fixed in this pass:
+
+1. Durable docs
+   - normalized the work-log chronology so round-seven review/fix entries follow
+     the recorded round-six verification entry;
+   - updated the review log and this report to record round-eight lane status.
+
 ## Files Changed
 
 - `packages/server/src/context/process-manager-handoff.ts`
@@ -180,6 +187,12 @@ Passed:
 - `pnpm --config.verify-deps-before-run=false lint:generated`
   - exit `0`
   - result: `tsc -b`, ESLint, and cleanup enforcement passed
+- round-eight documentation fix verification
+  - command: `pnpm --config.verify-deps-before-run=false docs:check`
+  - exit `0`
+  - note: TypeDoc reported the existing invalid-`origin` source-link warning
+  - command: `git diff --check`
+  - exit `0`
 - `git diff --check`
   - exit `0`
 
