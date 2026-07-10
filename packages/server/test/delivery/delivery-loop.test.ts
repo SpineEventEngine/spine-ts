@@ -687,12 +687,26 @@ async function clearClaimByRecord(
       throw new Error(`Missing inbox row "${key}".`);
     }
 
-    const claimed = InboxRecords.read(current, key);
-    const { claim: _claim, ...unclaimed } = claimed;
+    const unclaimed = withoutClaim(InboxRecords.read(current, key));
     await storage.compareAndSet(key, current, InboxRecords.write(unclaimed));
   } finally {
     storage.close();
   }
+}
+
+function withoutClaim(message: InboxMessage): InboxMessage {
+  return Object.freeze({
+    id: message.id,
+    inboxId: message.inboxId,
+    signalId: message.signalId,
+    ...(message.signal === undefined ? {} : { signal: message.signal }),
+    label: message.label,
+    status: message.status,
+    shard: message.shard,
+    whenReceived: message.whenReceived,
+    version: message.version,
+    ...(message.keepUntil === undefined ? {} : { keepUntil: message.keepUntil }),
+  });
 }
 
 function targetInbox(): InboxId {

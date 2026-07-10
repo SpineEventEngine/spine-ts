@@ -615,6 +615,22 @@ verification passed: focused delivery Vitest with 5 files and 223 tests,
 TypeDoc source-link warning. No commit was created by this fix worker, per
 instruction. A fresh five-lane re-review is still required.
 
+Round 36 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..5c3705e2.diff` produced clean
+documentation, TypeScript/API docs, security, and performance/reliability
+lanes. Style found the branch fails `format:check` on the Round 35 report and
+fails `lint` on unused `_claim` destructuring in delivery test helpers plus a
+`let` that can be `const`. The next fix will format the report, remove the
+unused bindings, tighten the test local, verify lint/format, and repeat
+five-lane re-review.
+
+Round 36 fix implementation on `2026-07-10`: formatted the Round 35 report and
+T-0026 logs, replaced ignored `claim` destructuring with explicit claim-free
+test snapshots, and changed the moving-page regression's delivery local to
+`const`. Verification passed: `lint`, `format:check`, focused delivery Vitest
+with 5 files and 223 tests, and `git diff --check`. A fresh five-lane
+re-review is still required.
+
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker
 will add red/green regressions before changing delivery code, preserve direct

@@ -29,11 +29,11 @@ Selected skills applied for this round:
 
 Skipped or overridden relevant-looking skills:
 
-| Skill                         | Reason Skipped or Overridden                                                                                                    |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Skill                         | Reason Skipped or Overridden                                                                                                     |
+| ----------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `requesting-code-review`      | The user requested a fix worker only; the orchestrator will run the next five-lane re-review after this report and verification. |
-| `javascript-testing-patterns` | Existing Vitest delivery-worker and loop regressions cover this focused behavior change.                                        |
-| `implement` commit guidance   | Overridden by the explicit Round 35 instruction: do not commit.                                                                 |
+| `javascript-testing-patterns` | Existing Vitest delivery-worker and loop regressions cover this focused behavior change.                                         |
+| `implement` commit guidance   | Overridden by the explicit Round 35 instruction: do not commit.                                                                  |
 
 Project protocol, task scope, sandbox rules, and explicit human requirements
 take precedence over advisory skill guidance.

@@ -1149,7 +1149,6 @@ describe("Delivery worker", () => {
   });
 
   it("does not skip a supported row when skipped head rows disappear between page reads", async () => {
-    let delivery: Delivery;
     let queries = 0;
     let unavailable: readonly InboxMessage[] = [];
     const faults = deliveryStorageFaults(
@@ -1164,7 +1163,7 @@ describe("Delivery worker", () => {
         );
       }),
     );
-    delivery = new Delivery({
+    const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: faults.storageFactory,
       leaseMs: 60_000,
@@ -2169,16 +2168,30 @@ async function markDeliveredByRecord(
       throw new Error(`Missing inbox row "${key}".`);
     }
 
-    const pending = InboxRecords.read(current, key);
-    const { claim: _claim, ...unclaimed } = pending;
+    const pending = withoutClaim(InboxRecords.read(current, key));
     const delivered = Object.freeze({
-      ...unclaimed,
+      ...pending,
       status: "DELIVERED" as const,
     });
     await storage.compareAndSet(key, current, InboxRecords.write(delivered));
   } finally {
     storage.close();
   }
+}
+
+function withoutClaim(message: InboxMessage): InboxMessage {
+  return Object.freeze({
+    id: message.id,
+    inboxId: message.inboxId,
+    signalId: message.signalId,
+    ...(message.signal === undefined ? {} : { signal: message.signal }),
+    label: message.label,
+    status: message.status,
+    shard: message.shard,
+    whenReceived: message.whenReceived,
+    version: message.version,
+    ...(message.keepUntil === undefined ? {} : { keepUntil: message.keepUntil }),
+  });
 }
 
 function missingMessage(): InboxMessage {

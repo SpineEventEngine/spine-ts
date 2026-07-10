@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 35 fix verified; re-review pending
+Status: Round 36 fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status |
-| -------------------------- | -------- | ------ |
-| Code style/maintainability | Lovelace | Fixed  |
-| Documentation              | Faraday  | Fixed  |
-| TypeScript/API docs        | Pascal   | Clean  |
-| Security                   | Gibbs    | Fixed  |
-| Performance/reliability    | Dewey    | Fixed  |
+| Lane                       | Reviewer  | Status |
+| -------------------------- | --------- | ------ |
+| Code style/maintainability | Descartes | Fixed  |
+| Documentation              | Bohr      | Clean  |
+| TypeScript/API docs        | Fermat    | Clean  |
+| Security                   | Banach    | Clean  |
+| Performance/reliability    | Dirac     | Clean  |
 
 ## Review Criteria
 
@@ -31,6 +31,32 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 ## Rounds
 
 Review findings fixed and verified after implementation commit `94b4c632`.
+
+### Round 36 Follow-up - `2026-07-10T16:05:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..5c3705e2.diff` from task baseline
+  `ca8fb2b3` to current HEAD `5c3705e2`.
+- Documentation (Bohr): clean.
+- TypeScript/API docs (Fermat): clean.
+- Security (Banach): clean.
+- Performance/reliability (Dirac): clean.
+- Code style/maintainability (Descartes): [P1] `format:check` fails on
+  `round-35-fix-report.md`; [P1] `lint` fails on unused `_claim`
+  destructuring in `delivery-loop.test.ts` and `delivery-worker.test.ts`, plus
+  a `let delivery` local in `delivery-worker.test.ts` that can be `const`.
+- Action: apply one style/lint fix, rerun lint/format and focused checks, then
+  repeat five-lane re-review.
+
+### Round 36 Fix Implementation - `2026-07-10`
+
+- Formatted `round-35-fix-report.md` and the touched T-0026 logs.
+- Replaced ignored `claim` destructuring in delivery test helpers with explicit
+  claim-free `InboxMessage` snapshots.
+- Changed the moving pending-set regression's delivery local from `let` to
+  `const`.
+- Verification passed: `lint`, `format:check`, focused delivery Vitest with 5
+  files and 223 tests, and `git diff --check`.
 
 ### Round 35 Follow-up - `2026-07-10T14:47:00Z`
 
