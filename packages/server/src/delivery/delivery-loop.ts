@@ -65,7 +65,7 @@ export class DeliveryLoop {
       if (summary.failed >= this.#maxFailures && run.failed > 0) {
         return summary.result("FAILED");
       }
-      if (run.claimed === 0 && run.delivered === 0 && run.failed === 0) {
+      if (run.accepted === 0 && run.delivered === 0 && run.failed === 0) {
         return summary.result("IDLE");
       }
     }
@@ -108,7 +108,7 @@ export interface DeliveryLoopRun {
   /** Number of pending rows read across all drains. */
   readonly processed: number;
   /** Number of rows accepted for endpoint work or fail-closed validation across all drains. */
-  readonly claimed: number;
+  readonly accepted: number;
   /** Number of rows delivered across all drains. */
   readonly delivered: number;
   /** Number of endpoint or delivery-marking failures across all drains. */
@@ -120,7 +120,7 @@ export interface DeliveryLoopRun {
 class DeliveryLoopSummary {
   #runs = 0;
   #processed = 0;
-  #claimed = 0;
+  #accepted = 0;
   #delivered = 0;
   #failed = 0;
   readonly #failures: DeliveryFailure[] = [];
@@ -132,7 +132,7 @@ class DeliveryLoopSummary {
   add(run: DeliveryRun): void {
     this.#runs += 1;
     this.#processed += run.processed;
-    this.#claimed += run.claimed;
+    this.#accepted += run.accepted;
     this.#delivered += run.delivered;
     this.#failed += run.failed;
     this.#failures.push(...run.failures);
@@ -143,7 +143,7 @@ class DeliveryLoopSummary {
       status,
       this.#runs,
       this.#processed,
-      this.#claimed,
+      this.#accepted,
       this.#delivered,
       this.#failed,
       this.#failures,
@@ -155,7 +155,7 @@ function loopRun(
   status: DeliveryLoopStatus,
   runs = 0,
   processed = 0,
-  claimed = 0,
+  accepted = 0,
   delivered = 0,
   failed = 0,
   failures: readonly DeliveryFailure[] = [],
@@ -164,7 +164,7 @@ function loopRun(
     status,
     runs,
     processed,
-    claimed,
+    accepted,
     delivered,
     failed,
     failures: Object.freeze([...failures]),

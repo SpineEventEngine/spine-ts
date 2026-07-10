@@ -334,7 +334,7 @@ the endpoint. Endpoint callbacks run only for `HANDLE_COMMAND`,
 `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; unsupported labels fail closed
 before the callback. Successful delivery marks the row `DELIVERED`; failures
 leave the row pending for a later run, release the shard in `finally`, and
-return a `DeliveryRun` with `status`, `processed`, `claimed`, `delivered`,
+return a `DeliveryRun` with `status`, `processed`, `accepted`, `delivered`,
 `failed`, and per-message `DeliveryFailure` values retained only in that
 result.
 `Delivery.drainMessage(message, { node, onMessage })`

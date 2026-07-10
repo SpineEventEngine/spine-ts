@@ -96,6 +96,7 @@ export class ShardedWorkRegistry {
         }
 
         const current = readSession(currentRecord, expected.key);
+        now = requireInputTime(this.#now(), "Shard renewal time");
         if (current.id !== expected.id || current.node !== expected.node) {
           return undefined;
         }
@@ -113,7 +114,6 @@ export class ShardedWorkRegistry {
         if (await casShardRecord(storage, expected.key, currentRecord, writeSession(next))) {
           return next;
         }
-        now = requireInputTime(this.#now(), "Shard renewal time");
       }
 
       throw casRetriesExhausted("Shard renewal");
@@ -136,6 +136,7 @@ export class ShardedWorkRegistry {
         }
 
         const current = readSession(currentRecord, expected.key);
+        now = requireInputTime(this.#now(), "Shard release time");
         if (current.id !== expected.id || current.node !== expected.node) {
           return false;
         }
@@ -146,7 +147,6 @@ export class ShardedWorkRegistry {
         if (await casShardRecord(storage, expected.key, currentRecord, undefined)) {
           return true;
         }
-        now = requireInputTime(this.#now(), "Shard release time");
       }
 
       throw casRetriesExhausted("Shard release");
@@ -169,7 +169,7 @@ export class ShardSession {
   constructor(
     /** Unique pickup session identifier. */
     readonly id: string,
-    /** Shard claimed by this session. */
+    /** Shard held by this session. */
     readonly shard: ShardIndex,
     /** Worker node that owns this session. */
     readonly node: string,

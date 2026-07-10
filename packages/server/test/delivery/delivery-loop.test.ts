@@ -153,7 +153,7 @@ describe("DeliveryLoop", () => {
       status: "IDLE",
       runs: 1,
       processed: 1,
-      claimed: 0,
+      accepted: 0,
       delivered: 0,
       failed: 0,
     });

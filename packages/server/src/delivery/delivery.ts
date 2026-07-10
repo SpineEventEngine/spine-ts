@@ -66,7 +66,7 @@ export class Delivery {
         statuses: ["TO_DELIVER"],
         ...(options.limit === undefined ? {} : { limit: options.limit }),
       });
-      let claimed = 0;
+      let accepted = 0;
       let delivered = 0;
       const failures: DeliveryFailure[] = [];
 
@@ -75,7 +75,7 @@ export class Delivery {
         if (attempt.kind === "SKIPPED") {
           continue;
         }
-        claimed += 1;
+        accepted += 1;
         if (attempt.kind === "DELIVERED") {
           delivered += 1;
         } else {
@@ -83,7 +83,14 @@ export class Delivery {
         }
       }
 
-      return deliveryRun("DRAINED", messages.length, claimed, delivered, failures.length, failures);
+      return deliveryRun(
+        "DRAINED",
+        messages.length,
+        accepted,
+        delivered,
+        failures.length,
+        failures,
+      );
     } finally {
       await lease.close();
       await this.shards.release(session);
@@ -232,7 +239,7 @@ export interface DeliveryRun {
   /** Number of pending rows read for this run. */
   readonly processed: number;
   /** Number of rows accepted for endpoint work or fail-closed validation. */
-  readonly claimed: number;
+  readonly accepted: number;
   /** Number of rows whose endpoint callback succeeded and were marked delivered. */
   readonly delivered: number;
   /** Number of endpoint or delivery-marking failures. */
@@ -278,7 +285,7 @@ type DeliveryMessageResult =
 function deliveryRun(
   status: DeliveryRun["status"],
   processed: number,
-  claimed: number,
+  accepted: number,
   delivered: number,
   failed: number,
   failures: readonly DeliveryFailure[],
@@ -286,7 +293,7 @@ function deliveryRun(
   return Object.freeze({
     status,
     processed,
-    claimed,
+    accepted,
     delivered,
     failed,
     failures: Object.freeze([...failures]),

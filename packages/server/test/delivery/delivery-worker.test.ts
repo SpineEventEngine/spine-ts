@@ -219,7 +219,7 @@ describe("Delivery worker", () => {
       });
 
       await started.promise;
-      vi.advanceTimersByTime(25);
+      vi.advanceTimersByTime(15);
       await faultPlan.inboxRenewalBlocked.promise;
 
       barrier.resolve(undefined);
@@ -233,7 +233,7 @@ describe("Delivery worker", () => {
       expect(run).toMatchObject({
         status: "DRAINED",
         processed: 1,
-        claimed: 1,
+        accepted: 1,
         delivered: 1,
         failed: 0,
       });
@@ -281,7 +281,7 @@ describe("Delivery worker", () => {
     expect(secondRun).toMatchObject({
       status: "DRAINED",
       processed: 1,
-      claimed: 0,
+      accepted: 0,
       delivered: 0,
       failed: 0,
     });
@@ -322,7 +322,7 @@ describe("Delivery worker", () => {
     expect(run).toMatchObject({
       status: "DRAINED",
       processed: 1,
-      claimed: 0,
+      accepted: 0,
       delivered: 0,
       failed: 0,
     });
@@ -525,7 +525,7 @@ describe("Delivery worker", () => {
     expect(run).toMatchObject({
       status: "DRAINED",
       processed: 1,
-      claimed: 1,
+      accepted: 1,
       delivered: 0,
       failed: 1,
     });

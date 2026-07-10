@@ -262,7 +262,7 @@ smaller than the later scheduler/retry stack:
   `REACT_UPON_EVENT`; unsupported labels fail closed before callback
   invocation. Successful rows are marked `DELIVERED`; failures leave the row
   `TO_DELIVER` for a later run. The run returns simple `DeliveryRun` statistics
-  (`status`, `processed`, `claimed`, `delivered`, `failed`, and `failures`) and
+  (`status`, `processed`, `accepted`, `delivered`, `failed`, and `failures`) and
   releases the shard in a `finally` path. If the shard is already owned by
   another live worker lease, the run returns `SKIPPED` with zero counts and does
   not invoke the callback;

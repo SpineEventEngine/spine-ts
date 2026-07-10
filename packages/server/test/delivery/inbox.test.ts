@@ -253,6 +253,38 @@ describe("Inbox", () => {
     );
   });
 
+  it("keeps proxy-hidden claim metadata out of public inbox writes", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const message = claimHidingProxy(createMessage("message-proxy-claim", "signal-proxy", 1n));
+
+    await expect(storage.write(message)).resolves.toMatchObject({
+      outcome: "WRITTEN",
+      message: {
+        id: { value: "message-proxy-claim" },
+        signalId: "signal-proxy",
+        status: "TO_DELIVER",
+      },
+    });
+
+    const stored = await storage.read(ShardIndex.single(), { statuses: liveStatuses });
+
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({
+      id: { value: "message-proxy-claim" },
+      signalId: "signal-proxy",
+      status: "TO_DELIVER",
+    });
+    expect(Reflect.has(stored[0] ?? {}, "claim")).toBe(false);
+    await expect(storage.markDelivered(stored[0] ?? message)).resolves.toMatchObject({
+      id: { value: "message-proxy-claim" },
+      signalId: "signal-proxy",
+      status: "DELIVERED",
+    });
+  });
+
   it("orders equal receive time and version ties by inbox message UUID and supports paging limits", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
@@ -2192,6 +2224,31 @@ describe("Inbox", () => {
       /storage key/i,
     );
   });
+
+  it("keeps proxy-hidden claim metadata out of public markDelivered", async () => {
+    const storage = new InboxStorage({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const write = await storage.write(createMessage("message-mark-proxy", "signal-mark-proxy", 1n));
+    const hiddenClaim = claimHidingProxy(write.message);
+
+    await expect(storage.markDelivered(hiddenClaim)).resolves.toMatchObject({
+      id: { value: "message-mark-proxy" },
+      signalId: "signal-mark-proxy",
+      status: "DELIVERED",
+    });
+
+    const delivered = await storage.read(ShardIndex.single(), { statuses: ["DELIVERED"] });
+
+    expect(delivered).toHaveLength(1);
+    expect(delivered[0]).toMatchObject({
+      id: { value: "message-mark-proxy" },
+      signalId: "signal-mark-proxy",
+      status: "DELIVERED",
+    });
+    expect(Reflect.has(delivered[0] ?? {}, "claim")).toBe(false);
+  });
 });
 
 const liveStatuses: readonly DeliveryStatus[] = Object.freeze([
@@ -2209,6 +2266,33 @@ function withClaim(message: ReturnType<typeof createMessage>): ReturnType<typeof
       expiresAt: new Date("2026-07-08T09:01:00.000Z"),
     },
   }) as unknown as ReturnType<typeof createMessage>;
+}
+
+function claimHidingProxy(
+  message: ReturnType<typeof createMessage>,
+): ReturnType<typeof createMessage> {
+  return new Proxy(message, {
+    get(target, property, receiver) {
+      if (property === "claim") {
+        return {
+          id: "hidden-external-claim",
+          node: "node-a",
+          expiresAt: new Date("2026-07-08T09:01:00.000Z"),
+        };
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+    has(target, property) {
+      return property === "claim" ? false : Reflect.has(target, property);
+    },
+    ownKeys(target) {
+      return Reflect.ownKeys(target).filter((property) => property !== "claim");
+    },
+    getOwnPropertyDescriptor(target, property) {
+      return property === "claim" ? undefined : Reflect.getOwnPropertyDescriptor(target, property);
+    },
+  }) as ReturnType<typeof createMessage>;
 }
 
 function legacyImportRecord(): Any {

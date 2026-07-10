@@ -106,6 +106,28 @@ describe("ShardedWorkRegistry", () => {
     });
   });
 
+  it("does not renew when storage read delay crosses expiry", async () => {
+    const storageFactory = new DelayedReadStorageFactory();
+    const now = { value: new Date("2026-07-02T09:13:00.000Z") };
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      leaseMs: 500,
+      now: () => now.value,
+    });
+    const shard = new ShardIndex(0, 2);
+
+    const session = await delivery.shards.pickUp(shard, "node-a");
+    if (session === undefined) {
+      throw new Error("Expected shard pickup to create a session.");
+    }
+    storageFactory.onShardRead = () => {
+      now.value = new Date("2026-07-02T09:13:00.501Z");
+    };
+
+    await expect(delivery.shards.renew(session)).resolves.toBeUndefined();
+  });
+
   it("does not release a delayed shard session after expiry", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const now = { value: new Date("2026-07-02T09:14:00.000Z") };
@@ -122,6 +144,32 @@ describe("ShardedWorkRegistry", () => {
       throw new Error("Expected shard pickup to create a session.");
     }
     now.value = new Date("2026-07-02T09:14:00.501Z");
+
+    await expect(delivery.shards.release(session)).resolves.toBe(false);
+    await expect(delivery.shards.pickUp(shard, "node-b")).resolves.toMatchObject({
+      node: "node-b",
+      shard,
+    });
+  });
+
+  it("does not release when storage read delay crosses expiry", async () => {
+    const storageFactory = new DelayedReadStorageFactory();
+    const now = { value: new Date("2026-07-02T09:15:00.000Z") };
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      leaseMs: 500,
+      now: () => now.value,
+    });
+    const shard = new ShardIndex(0, 2);
+
+    const session = await delivery.shards.pickUp(shard, "node-a");
+    if (session === undefined) {
+      throw new Error("Expected shard pickup to create a session.");
+    }
+    storageFactory.onShardRead = () => {
+      now.value = new Date("2026-07-02T09:15:00.501Z");
+    };
 
     await expect(delivery.shards.release(session)).resolves.toBe(false);
     await expect(delivery.shards.pickUp(shard, "node-b")).resolves.toMatchObject({
@@ -1123,6 +1171,79 @@ class RawSessionStorage<I, R extends Message> extends RecordStorage<I, R> {
 
   protected readRecord(id: I): Promise<R | undefined> {
     return this.#delegate.read(id);
+  }
+
+  protected writeAllRecords(
+    records: readonly ReturnType<RecordSpec<I, R>["materialize"]>[],
+  ): Promise<void> {
+    return this.#delegate.writeAll(records.map((record) => record.record));
+  }
+
+  protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
+    return this.#delegate.write(record.record);
+  }
+}
+
+class DelayedReadStorageFactory extends StorageFactory {
+  readonly #delegate = new InMemoryStorageFactory();
+  onShardRead: (() => void) | undefined;
+
+  protected onCreateRecordStorage<I, R extends Message>(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+  ): RecordStorage<I, R> {
+    return new DelayedReadRecordStorage(
+      context,
+      recordSpec,
+      this.#delegate.createRecordStorage(context, recordSpec),
+      () => this.onShardRead,
+    );
+  }
+}
+
+class DelayedReadRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
+  readonly #delegate: RecordStorage<I, R>;
+  readonly #onShardRead: () => (() => void) | undefined;
+
+  constructor(
+    context: StorageContext,
+    recordSpec: RecordSpec<I, R>,
+    delegate: RecordStorage<I, R>,
+    onShardRead: () => (() => void) | undefined,
+  ) {
+    super(context, recordSpec);
+    this.#delegate = delegate;
+    this.#onShardRead = onShardRead;
+  }
+
+  override close(): void {
+    this.#delegate.close();
+    super.close();
+  }
+
+  protected compareAndSetRecord(
+    id: I,
+    expected: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+    next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
+  ): Promise<boolean> {
+    return this.#delegate.compareAndSet(id, expected?.record, next?.record);
+  }
+
+  protected deleteRecord(id: I): Promise<boolean> {
+    return this.#delegate.delete(id);
+  }
+
+  protected queryRecordEntries(query: RecordQuery<I>): Promise<readonly { id: I; record: R }[]> {
+    return this.#delegate.queryEntries(query);
+  }
+
+  protected async readRecord(id: I): Promise<R | undefined> {
+    const record = await this.#delegate.read(id);
+    if (this.context.name.endsWith(".delivery.shards")) {
+      this.#onShardRead()?.();
+    }
+
+    return record;
   }
 
   protected writeAllRecords(

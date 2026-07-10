@@ -61,7 +61,7 @@ async function runLocalInboxDrain(options: LocalInboxDrainOptions): Promise<void
     if (run.status === "SKIPPED") {
       throw new Error(skippedMessage);
     }
-    if (run.claimed === 0 && run.delivered === 0 && run.failed === 0) {
+    if (run.accepted === 0 && run.delivered === 0 && run.failed === 0) {
       break;
     }
   }

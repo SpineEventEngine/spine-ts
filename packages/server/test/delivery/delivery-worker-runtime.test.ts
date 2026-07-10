@@ -174,7 +174,7 @@ function deliveryRun(): DeliveryRun {
   return Object.freeze({
     status: "DRAINED",
     processed: 0,
-    claimed: 0,
+    accepted: 0,
     delivered: 0,
     failed: 0,
     failures: Object.freeze([]),

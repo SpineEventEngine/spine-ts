@@ -972,11 +972,84 @@ function requireClaimed(message: InboxRecordMessage): ClaimedInboxMessage {
 }
 
 function requirePublicMessage(message: InboxMessage): InboxMessage {
-  if (typeof message === "object" && message !== null && Reflect.has(message, "claim")) {
+  if (typeof message !== "object" || message === null) {
+    return message;
+  }
+  if (Reflect.has(message, "claim")) {
     throw new InboxMessageError("Inbox message claim is internal.");
   }
 
-  return message;
+  const id = readPublicMessageProperty(message, "id", "Inbox message ID") as InboxMessage["id"];
+  const inboxId = readPublicMessageProperty(
+    message,
+    "inboxId",
+    "Inbox target identity",
+  ) as InboxMessage["inboxId"];
+  const signalId = readPublicMessageProperty(
+    message,
+    "signalId",
+    "Inbox signal ID",
+  ) as InboxMessage["signalId"];
+  const label = readPublicMessageProperty(
+    message,
+    "label",
+    "Inbox delivery label",
+  ) as InboxMessage["label"];
+  const status = readPublicMessageProperty(
+    message,
+    "status",
+    "Inbox delivery status",
+  ) as InboxMessage["status"];
+  const shard = readPublicMessageProperty(
+    message,
+    "shard",
+    "Inbox message shard",
+  ) as InboxMessage["shard"];
+  const whenReceived = readPublicMessageProperty(
+    message,
+    "whenReceived",
+    "Inbox receive time",
+  ) as InboxMessage["whenReceived"];
+  const version = readPublicMessageProperty(
+    message,
+    "version",
+    "Inbox version",
+  ) as InboxMessage["version"];
+  const signal = readPublicMessageProperty(
+    message,
+    "signal",
+    "Inbox signal",
+  ) as InboxMessage["signal"];
+  const keepUntil = readPublicMessageProperty(
+    message,
+    "keepUntil",
+    "Inbox keep-until time",
+  ) as InboxMessage["keepUntil"];
+
+  return Object.freeze({
+    id,
+    inboxId,
+    signalId,
+    ...(signal === undefined ? {} : { signal }),
+    label,
+    status,
+    shard,
+    whenReceived,
+    version,
+    ...(keepUntil === undefined ? {} : { keepUntil }),
+  });
+}
+
+function readPublicMessageProperty(
+  message: InboxMessage,
+  property: keyof InboxMessage,
+  label: string,
+): unknown {
+  try {
+    return Reflect.get(message, property);
+  } catch (error) {
+    throw new InboxMessageError(`${label} is invalid.`, { cause: error });
+  }
 }
 
 function publicMessage(message: InboxRecordMessage): InboxMessage {

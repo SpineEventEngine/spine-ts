@@ -32,6 +32,44 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 Review findings fixed and verified after implementation commit `94b4c632`.
 
+### Round 10 Follow-up - `2026-07-10T06:41:50Z`
+
+- Finding: [Security MEDIUM] public `InboxStorage.write()` and public
+  `markDelivered()` rejected visible top-level `claim` fields but still passed
+  the caller object into serialization. A Proxy could hide `claim` from
+  `Reflect.has()` while returning internal claim metadata from `get`.
+- Fix: public inbox write/mark paths now build a new claim-free `InboxMessage`
+  snapshot from the explicit public fields before serialization. Visible
+  top-level `claim` remains rejected; hidden Proxy claim metadata is ignored and
+  never reaches durable inbox or dedup records.
+- Evidence: added Proxy regressions for public `InboxStorage.write()` and
+  public `markDelivered()`. They failed before the fix because hidden claim
+  metadata prevented public delivery marking, then passed after snapshotting.
+- Finding: [API P1] public `DeliveryRun.claimed` and
+  `DeliveryLoopRun.claimed` exposed claim mechanics in user-facing stats.
+- Fix: renamed the public stat to `accepted` across delivery runs, loop
+  aggregation, local handoff checks, tests, and public API docs. Internal
+  claim-bearing worker code keeps claim terminology only for implementation
+  fencing.
+- Finding: [API P2] `ShardSession.shard` TypeDoc said "Shard claimed by this
+  session."
+- Fix: reworded it to "Shard held by this session."
+- Finding: [Reliability HIGH/MEDIUM] `ShardedWorkRegistry.renew()` and
+  `release()` captured `now` before awaited storage reads, allowing delayed
+  reads or event-loop pauses to renew or release sessions that had expired by
+  the time ownership was checked and CASed.
+- Fix: both paths refresh the clock after reading and decoding the current
+  stored session, before expiry checks and CAS decisions.
+- Evidence: added delayed-read/clock-advance regressions for renew and release.
+  They failed before the fix by renewing/releasing expired sessions, then
+  passed after refreshing the clock. The existing row-renewal race test was
+  adjusted to advance fake time to the renewal interval while staying inside
+  the shard lease, preserving its intended inbox-renewal coverage.
+- Verification: requested Vitest passed with 8 files and 226 tests;
+  `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
+
 ### Round 9 Follow-up - `2026-07-10T06:21:29Z`
 
 - Finding: [MEDIUM] `inbox-storage.ts` exposed the row-claim worker internals as
