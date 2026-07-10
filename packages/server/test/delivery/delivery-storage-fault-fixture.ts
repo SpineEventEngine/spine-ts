@@ -121,6 +121,28 @@ export function onInboxQuery(onQuery: () => Promise<void> | void): DeliveryStora
   });
 }
 
+export function onInboxQueryNumber(
+  targetQuery: number,
+  onQuery: () => Promise<void> | void,
+): DeliveryStorageFaultProbe {
+  let queries = 0;
+
+  return Object.freeze({
+    query(context: StorageContext) {
+      if (!context.name.endsWith(".delivery.inbox")) {
+        return undefined;
+      }
+
+      queries += 1;
+      if (queries === targetQuery) {
+        return onQuery();
+      }
+
+      return undefined;
+    },
+  });
+}
+
 export function deliveryDedupRecords(storageFactory: StorageFactory) {
   return storageFactory.createRecordStorage(
     { name: "Tasks.delivery.inbox-dedup", multitenant: false },

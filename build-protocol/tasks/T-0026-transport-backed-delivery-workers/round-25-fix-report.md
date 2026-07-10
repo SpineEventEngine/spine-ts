@@ -29,15 +29,17 @@ Project protocol, task ledger, and the user prompt take precedence over skill ad
 
 ## Scope
 
-Round 25 addresses the mandatory review findings: public callback contract documentation, expired ownership wording, callback naming, minimum lease validation, finite-scan loop progress, post-read claim-expiry decisions, and loop-only pre-callback failure budgeting. Unsupported valid labels remain pending and do not reach callbacks, failures, acceptance, or failure budgets.
+Round 25 addressed the mandatory review findings: public callback contract documentation, then-current expired ownership wording, callback naming, minimum lease validation, finite-scan loop progress, post-read claim-expiry decisions, and loop-only pre-callback failure budgeting. Historical correction: Round 35 commit `5c3705e2` (`Fix delivery claim blocking and offset rescan`) superseded expired-claim reclaim; the current contract blocks competing delivery for both expired and live row claims until a future explicit recovery policy exists. Unsupported valid labels remain pending and do not reach callbacks, failures, acceptance, or failure budgets.
 
 ## TDD Evidence
 
 Focused red regressions were added before production changes. The pre-fix run
 failed four intended cases: `leaseMs: 1` was accepted; a supported tail row
 past the loop scan cap was not invoked; a claim expiring during its storage read
-was not reclaimed; and a pre-callback failure still permitted the next callback
-with `maxFailures: 1`.
+was not reclaimed under the then-current Round 25 contract; and a pre-callback
+failure still permitted the next callback with `maxFailures: 1`. The
+expired-claim reclaim expectation is historical only after Round 35 /
+`5c3705e2`.
 
 ## Implementation
 
@@ -50,12 +52,18 @@ with `maxFailures: 1`.
 - Added one shared `1000ms` lower lease bound for `Delivery` and
   `ShardedWorkRegistry` while retaining the existing upper limit.
 - Refreshed the storage clock after every claim-row read before evaluating claim
-  expiry, so expired ownership is reclaimable by the later claim attempt.
+  expiry, so expired ownership was reclaimable by the later claim attempt under
+  the then-current Round 25 contract. Historical correction: Round 35 /
+  `5c3705e2` superseded this with no competing delivery for any existing row
+  claim.
 - Added loop-only drain controls for the remaining failure budget and a
   continuation offset after a saturated all-skipped scan. Direct `drain()` calls
   retain their original accounting when those controls are omitted.
 - Updated the public delivery, API, architecture, package, and user docs to
-  distinguish expired-claim reclaim from still-future proactive recovery policy.
+  distinguish then-current expired-claim reclaim from still-future proactive
+  recovery policy. Historical correction: Round 35 / `5c3705e2` now makes all
+  expired and live row claims block competing delivery until explicit recovery
+  policy exists.
 
 ## Final Verification
 

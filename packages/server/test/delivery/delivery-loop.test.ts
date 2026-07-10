@@ -16,6 +16,7 @@ import {
   deliveryInboxRecords,
   deliveryStorageFaults,
   messageKey,
+  onInboxQueryNumber,
 } from "./delivery-storage-fault-fixture.js";
 
 describe("DeliveryLoop", () => {
@@ -361,6 +362,53 @@ describe("DeliveryLoop", () => {
       failed: 0,
     });
     expect(seen).toEqual(["signal-now-supported"]);
+  });
+
+  it("rescans when skipped rows disappear after boundary validation", async () => {
+    const race = {
+      clearSkippedRows: () => undefined as Promise<void> | void,
+    };
+    const faults = deliveryStorageFaults(
+      onInboxQueryNumber(4, async () => {
+        await race.clearSkippedRows();
+      }),
+    );
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: faults.storageFactory,
+    });
+    const shard = ShardIndex.single();
+    const seen: string[] = [];
+    const loop = new DeliveryLoop({
+      delivery,
+      shard,
+      node: "node-a",
+      limit: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    for (let index = 1; index <= 1_001; index += 1) {
+      await seed(delivery, `signal-paused-${String(index)}`, BigInt(index), "CATCH_UP");
+    }
+    await seed(delivery, "signal-supported-tail", 1_002n);
+    const pending = await delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] });
+
+    race.clearSkippedRows = async () => {
+      for (const message of pending.slice(0, 1_001)) {
+        await delivery.inbox.markDelivered(message);
+      }
+    };
+
+    const run = await loop.run();
+
+    expect(run).toMatchObject({
+      status: "IDLE",
+      delivered: 1,
+      failed: 0,
+    });
+    expect(seen).toEqual(["signal-supported-tail"]);
   });
 
   it("rejects loop-private drain access for non-owned delivery instances", () => {

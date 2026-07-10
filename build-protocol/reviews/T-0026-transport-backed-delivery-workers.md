@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 36 fix verified; re-review pending
+Status: Round 37 fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -10,11 +10,11 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 | Lane                       | Reviewer  | Status |
 | -------------------------- | --------- | ------ |
-| Code style/maintainability | Descartes | Fixed  |
-| Documentation              | Bohr      | Clean  |
-| TypeScript/API docs        | Fermat    | Clean  |
-| Security                   | Banach    | Clean  |
-| Performance/reliability    | Dirac     | Clean  |
+| Code style/maintainability | Russell   | Fixed  |
+| Documentation              | Hume      | Fixed  |
+| TypeScript/API docs        | Locke     | Clean  |
+| Security                   | Nietzsche | Clean  |
+| Performance/reliability    | Kant      | Fixed  |
 
 ## Review Criteria
 
@@ -31,6 +31,50 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 ## Rounds
 
 Review findings fixed and verified after implementation commit `94b4c632`.
+
+### Round 37 Follow-up - `2026-07-10T16:15:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..e4388fb5.diff` from task baseline
+  `ca8fb2b3` to current HEAD `e4388fb5`.
+- TypeScript/API docs (Locke): clean.
+- Security (Nietzsche): clean.
+- Code style/maintainability (Russell): [P2] Round 35 and Round 36 fix reports
+  still say coordinator commits are pending even though commits `5c3705e2` and
+  `e4388fb5` exist.
+- Documentation (Hume): [P2] same stale Round 35/Round 36 commit breadcrumbs;
+  [P2] older Round 24/25 durable reclaim wording should be marked as
+  superseded by Round 35's no-reclaim contract.
+- Performance/reliability (Kant): [P2] moving `TO_DELIVER` pagination can
+  still falsely idle if skipped head rows disappear after boundary validation
+  but before the offset page read.
+- Action: apply one fix for breadcrumbs, historical reclaim wording, and the
+  boundary/read race; rerun focused verification; repeat five-lane re-review.
+
+### Round 37 Fix Implementation - `2026-07-10`
+
+- Durable breadcrumb cleanup: Round 35 report/task/work/review records now name
+  coordinator commit `5c3705e2` (`Fix delivery claim blocking and offset
+rescan`), and Round 36 report/task/work/review records now name coordinator
+  commit `e4388fb5` (`Fix delivery review gate cleanup`).
+- Historical reclaim cleanup: Round 24/25 task, work, review, and fix-report
+  reclaim statements are marked as historical and superseded by Round 35 /
+  `5c3705e2`. Current contract: expired and live row claims both block
+  competing delivery until future explicit recovery policy exists.
+- Reliability fix: added a regression for a skipped head page disappearing
+  after pending-boundary validation but before offset-page read. The red run
+  returned `IDLE` with `delivered: 0`; after the fix,
+  `Delivery.#drainAvailableMessages()` revalidates the boundary after a short
+  zero-work offset page and performs one bounded head rescan when it moved.
+- Verification passed: focused delivery worker/loop/runtime/inbox/shard-registry
+  Vitest passed with 5 files and 224 tests; `typecheck:build:generated`,
+  `docs:check`, `lint`, `format:check`, and `git diff --check` passed.
+  `docs:check` retained only the existing invalid-origin TypeDoc source-link
+  warning. No commit was created, per Round 37 instruction.
+- Coordinator verification at `2026-07-10T16:22:00Z` passed the focused
+  boundary/read race regression, the focused delivery batch with 5 files and
+  224 tests, `typecheck:build:generated`, `docs:check`, `lint`,
+  `format:check`, and `git diff --check`.
 
 ### Round 36 Follow-up - `2026-07-10T16:05:00Z`
 
@@ -57,6 +101,7 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   `const`.
 - Verification passed: `lint`, `format:check`, focused delivery Vitest with 5
   files and 223 tests, and `git diff --check`.
+- Fix commit: `e4388fb5` (`Fix delivery review gate cleanup`).
 
 ### Round 35 Follow-up - `2026-07-10T14:47:00Z`
 
@@ -109,7 +154,9 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   `typecheck:build:generated`, `docs:check`, `format:check`, and
   `git diff --check` passed. `docs:check` reported only the existing invalid
   `origin` TypeDoc source-link warning.
-- No commit was created, per Round 35 instruction.
+- No commit was created by the fix worker, per Round 35 instruction.
+  Coordinator commit `5c3705e2` (`Fix delivery claim blocking and offset
+rescan`) later recorded this fix.
 
 ### Round 27 Follow-up - `2026-07-10T11:55:46Z`
 
@@ -581,8 +628,11 @@ evidence`) in the task, work, review, and Round 33 fix records. The current
 - Documentation (Kuhn): [Important] public docs still say endpoint callbacks
   receive `InboxMessage` snapshots rather than narrowed
   `DeliveryEndpointMessage` snapshots, and stale recovery wording implies
-  expired per-message ownership is wholly future work instead of reclaimable by
-  later claim attempts.
+  expired per-message ownership is wholly future work instead of the
+  then-current reclaim-by-later-claim-attempt behavior. Historical correction:
+  Round 35 commit `5c3705e2` superseded expired-claim reclaim; expired and live
+  row claims both now block competing delivery until future explicit recovery
+  policy exists.
 - TypeScript/API docs (Arendt): [Important] public documentation does not match
   the narrowed callback/failure API and should consistently name
   `DeliveryEndpointMessage` plus its three-label supported endpoint union.
@@ -783,7 +833,10 @@ red/green delivery regressions before the next review pass.
   worker never invokes endpoints for that label.
 - Finding: [Reliability MEDIUM] `InboxStorage` claim CAS rejected any existing
   claim, so expired per-message claims stayed pending forever until some other
-  cleanup path ran.
+  cleanup path ran. Historical correction: this finding's reclaim expectation
+  was superseded by Round 35 commit `5c3705e2`; the current contract keeps
+  expired and live row claims unavailable to competing workers until a future
+  explicit recovery policy exists.
 - Finding: [Reliability MEDIUM] pre-callback claim/lease failures were still
   counted as accepted endpoint work, letting them consume the accepted-work
   limit before any callback ran.
@@ -792,16 +845,20 @@ red/green delivery regressions before the next review pass.
   one inbox query per skipped row.
 - Fix: appended missing Round 23 and Round 24 durable trail entries, exported
   `DeliveryEndpointMessage`, narrowed `DeliveryEndpoint` and
-  `DeliveryFailure.message`, reclaimed expired claims during claim CAS using
-  the storage clock, kept pre-callback failures visible without incrementing
-  accepted work, and widened page reads to
+  `DeliveryFailure.message`, then reclaimed expired claims during claim CAS
+  using the storage clock. Historical correction: Round 35 / `5c3705e2`
+  superseded that reclaim behavior with no competing delivery for any existing
+  row claim. Round 24 also kept pre-callback failures visible without
+  incrementing accepted work, and widened page reads to
   `min(inboxStorageAccess.maxReadLimit, remaining scan budget)` while stopping
   on accepted endpoint work.
 - Evidence: new regressions covered expired-claim reclaim on a later drain,
   limit-1 pre-callback failure followed by a second-row delivery in the same
   drain, and bounded query count for one full skipped page plus one accepted
   row. Existing delivery-loop coverage was updated so live claims still leave a
-  loop idle while expired claims are reclaimable.
+  loop idle while expired claims are reclaimable. Historical correction: the
+  expired-claim reclaim evidence is retained as Round 24 history only and no
+  longer describes current behavior after Round 35 / `5c3705e2`.
 - Verification: see
   `build-protocol/tasks/T-0026-transport-backed-delivery-workers/round-24-fix-report.md`.
   Required delivery Vitest passed with 3 files and 165 tests;

@@ -128,4 +128,5 @@ Address every finding in the Round 35 batch:
 ## No-Commit Note
 
 - The fix worker created no commit, per Round 35 instruction. Coordinator
-  commit is pending after verification.
+  commit `5c3705e2` (`Fix delivery claim blocking and offset rescan`) later
+  recorded the verified fix.

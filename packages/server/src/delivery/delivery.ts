@@ -178,6 +178,21 @@ export class Delivery {
       }
 
       if (messages.length < readLimit) {
+        if (
+          offset > 0 &&
+          pendingBoundaryId !== undefined &&
+          !offsetRescan &&
+          progress.accepted === 0 &&
+          progress.failed === 0 &&
+          !(await this.#pendingBoundaryMatches(inbox, shard, offset, pendingBoundaryId))
+        ) {
+          offset = 0;
+          pendingBoundaryId = undefined;
+          offsetRescan = true;
+          resumedHeadRescan = false;
+          continue;
+        }
+
         if (resumedHeadRescan && progress.accepted === 0 && progress.failed === 0) {
           offset = 0;
           pendingBoundaryId = undefined;

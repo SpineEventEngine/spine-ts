@@ -11,8 +11,11 @@ Fixed the Round 24 review batch for T-0026:
 - Tighten the public direct-worker callback type so endpoint callbacks and
   per-message delivery failures only admit `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`.
-- Allow claim compare-and-set to reclaim expired per-message claims using the
-  storage clock.
+- Historical Round 24 behavior allowed claim compare-and-set to reclaim
+  expired per-message claims using the storage clock. This was superseded by
+  Round 35 commit `5c3705e2` (`Fix delivery claim blocking and offset rescan`);
+  the current contract blocks competing delivery for both expired and live row
+  claims until a future explicit recovery policy exists.
 - Keep pre-callback claim/lease failures visible without letting them consume
   the accepted endpoint-work limit.
 - Decouple direct-drain page size from accepted-work limit so limit `1` can
@@ -26,20 +29,26 @@ Fixed the Round 24 review batch for T-0026:
 - Updated delivery TypeDoc so exact-row drains invoke `onMessage` for the exact
   pending supported row when available, at most once, and so accepted counts
   mean the endpoint callback actually ran.
-- Changed `InboxStorage.#claimMessage()` so a live claim still blocks claim CAS,
-  while an expired claim can be atomically replaced by the new shard-session
-  claim.
-- Updated the `InboxClaim` comment to clarify that local/direct workers do not
-  proactively sweep expired claims, but claim CAS may reclaim an expired row.
+- Changed `InboxStorage.#claimMessage()` in this round so a live claim still
+  blocked claim CAS while an expired claim could be atomically replaced by the
+  new shard-session claim. Historical correction: Round 35 / `5c3705e2`
+  removed that reclaim path, so any existing row claim now blocks competing
+  delivery.
+- Updated the `InboxClaim` comment in this round to clarify that local/direct
+  workers did not proactively sweep expired claims. Historical correction:
+  Round 35 / `5c3705e2` later changed the current comment/contract to no
+  expired-claim reclaim without explicit recovery policy.
 - Changed direct-drain accounting so pre-callback failures stay in
   `DeliveryRun.failures` without incrementing `accepted`, while callback
   invocation and later failures still count as accepted endpoint work.
 - Changed direct-drain reads to page by
   `min(inboxStorageAccess.maxReadLimit, remaining scan budget)` while still
   stopping when accepted endpoint work reaches `limit`.
-- Added and updated regressions for expired-claim reclaim, pre-callback
-  accepted-limit accounting, bounded query count under skipped rows, supported
-  endpoint typing, and live-claim loop idling.
+- Added and updated regressions for then-current expired-claim reclaim,
+  pre-callback accepted-limit accounting, bounded query count under skipped
+  rows, supported endpoint typing, and live-claim loop idling. Historical
+  correction: the expired-claim reclaim regressions are retained as Round 24
+  history only; current behavior is the Round 35 no-reclaim contract.
 
 ## Verification
 

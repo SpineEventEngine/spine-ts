@@ -38,4 +38,5 @@ reviewers reported clean in Round 36.
 
 ## Commit Note
 
-- Coordinator commit is pending after verification.
+- Coordinator commit `e4388fb5` (`Fix delivery review gate cleanup`) later
+  recorded the verified fix.

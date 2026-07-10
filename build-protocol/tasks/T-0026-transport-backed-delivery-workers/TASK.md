@@ -351,23 +351,30 @@ adding Round 23 and Round 24 entries to the external work log, append Round 23
 and Round 24 follow-up evidence to the review ledger, and write a full
 `round-24-fix-report.md`. In code, tighten the public endpoint callback type so
 only `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT` rows are
-admitted, allow durable row-claim CAS to reclaim expired claims using the
-storage clock, ensure pre-callback claim/lease failures are reported without
-consuming the accepted endpoint-work limit, and decouple direct-drain page size
-from the accepted-work cap so skipped rows do not force one query per row. The
-required verification for this round remains focused delivery Vitest,
-generated-build typecheck, docs check, format check, and `git diff --check`.
+admitted. Historical note: Round 24 attempted to allow durable row-claim CAS to
+reclaim expired claims using the storage clock; that behavior was superseded by
+Round 35 commit `5c3705e2` (`Fix delivery claim blocking and offset rescan`).
+The current contract is that expired and live row claims both block competing
+delivery until a future explicit recovery policy exists. Round 24 also ensured
+pre-callback claim/lease failures are reported without consuming the accepted
+endpoint-work limit, and decoupled direct-drain page size from the accepted-work
+cap so skipped rows do not force one query per row. The required verification
+for this round remains focused delivery Vitest, generated-build typecheck, docs
+check, format check, and `git diff --check`.
 
 Round 25 review intake on `2026-07-10`: after the handoff-only commit, the
 mandatory five-lane review against
 `.superpowers/sdd/review-ca8fb2b3..71ba68e0.diff` found blocking issues.
 Required fixes: align public docs with the narrowed `DeliveryEndpointMessage`
-callback/failure API and expired-ownership reclaim behavior; rename callback
-types/parameters to satisfy the `on`/`On` convention; add a safe lower bound
-for shard lease duration; prevent loop starvation when a scan budget is
+callback/failure API and then-current expired-ownership wording; rename
+callback types/parameters to satisfy the `on`/`On` convention; add a safe lower
+bound for shard lease duration; prevent loop starvation when a scan budget is
 exhausted ahead of a supported row; refresh claim-expiry checks after claim-row
-reads; and enforce loop failure budget for pre-callback failures. One fix
-worker will address this complete batch before re-review.
+reads; and enforce loop failure budget for pre-callback failures. Historical
+note: the Round 25 expired-ownership reclaim behavior was superseded by Round
+35 commit `5c3705e2`; the current contract is no competing delivery for expired
+or live row claims without a future explicit recovery policy. One fix worker
+will address this complete batch before re-review.
 
 Round 25 fix verification on `2026-07-10`: the fix worker updated runtime code,
 tests, docs, API docs, and durable logs for the full Round 25 findings batch.
@@ -613,7 +620,9 @@ verification passed: focused delivery Vitest with 5 files and 223 tests,
 `typecheck:build:generated`, `docs:check`, `format:check`, and
 `git diff --check`. `docs:check` retained only the existing invalid-origin
 TypeDoc source-link warning. No commit was created by this fix worker, per
-instruction. A fresh five-lane re-review is still required.
+instruction. Coordinator commit `5c3705e2` (`Fix delivery claim blocking and
+offset rescan`) later recorded this fix. A fresh five-lane re-review is still
+required.
 
 Round 36 re-review intake on `2026-07-10`: the fresh review package
 `.superpowers/sdd/review-ca8fb2b3..5c3705e2.diff` produced clean
@@ -628,8 +637,20 @@ Round 36 fix implementation on `2026-07-10`: formatted the Round 35 report and
 T-0026 logs, replaced ignored `claim` destructuring with explicit claim-free
 test snapshots, and changed the moving-page regression's delivery local to
 `const`. Verification passed: `lint`, `format:check`, focused delivery Vitest
-with 5 files and 223 tests, and `git diff --check`. A fresh five-lane
-re-review is still required.
+with 5 files and 223 tests, and `git diff --check`. Coordinator commit
+`e4388fb5` (`Fix delivery review gate cleanup`) later recorded this fix. A
+fresh five-lane re-review is still required.
+
+Round 37 fix implementation on `2026-07-10`: the fix worker updated durable
+breadcrumbs for Round 35 commit `5c3705e2` and Round 36 commit `e4388fb5`, and
+marked Round 24/25 expired-claim reclaim records as historical because Round
+35 superseded them with no competing delivery for expired or live row claims
+until future explicit recovery policy exists. Runtime reliability fix: direct
+drains now revalidate the pending boundary when an offset-page read returns
+short with no accepted or failed work, then perform one bounded head rescan if
+the boundary moved after the earlier validation. The focused regression removes
+a full skipped head page after boundary validation and before the offset-page
+query, proving the supported tail is delivered in the same loop run.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker
