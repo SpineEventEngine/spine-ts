@@ -1,6 +1,6 @@
 # T-0022b Implementation Report
 
-Status: implemented in code/docs; final review clean; integration pending
+Status: implemented in code/docs; integrated into main; post-merge verification passed
 Date: `2026-07-10`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0022b-process-manager-event-inbox-handoff`
@@ -318,6 +318,13 @@ Passed:
 - final review
   - result: clean across code style/maintainability, documentation,
     TypeScript/API docs, security, and performance/reliability
+- post-merge verification on `main`
+  - merge commit: `2fd6aace`
+  - command: `pnpm --config.verify-deps-before-run=false verify`
+  - exit `0`
+  - tests: `58` regular test files passed, `1125` regular tests passed
+  - coverage: `1125` coverage tests passed, branch coverage `90.02%`
+  - note: TypeDoc reported the existing invalid-`origin` source-link warning
 
 ## Remaining Deferrals
 
