@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: pending implementation
+Status: implementation complete; review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -30,4 +30,4 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Rounds
 
-Pending.
+Pending after implementation commit `94b4c632`.
