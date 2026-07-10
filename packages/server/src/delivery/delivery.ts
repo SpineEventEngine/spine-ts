@@ -129,6 +129,13 @@ export class Delivery {
     let resumedHeadRescan = offset > 0;
     let offsetRescan = false;
     let rescanSeenAllowance = 0;
+    const finishExhaustedSkippedScan = () =>
+      progress.finish(
+        resumedHeadRescan && progress.accepted === 0 && progress.failed === 0
+          ? drainCursor(0, undefined)
+          : drainCursor(offset, pendingBoundaryId),
+        true,
+      );
 
     while (progress.processed < scanBudget) {
       if (
@@ -180,11 +187,11 @@ export class Delivery {
       for (const message of messages) {
         if (progress.hasSeen(message)) {
           if (rescanSeenAllowance === 0) {
-            return progress.finish(drainCursor(offset, pendingBoundaryId), true);
+            return finishExhaustedSkippedScan();
           }
           rescanSeenAllowance -= 1;
         } else if (progress.processed >= scanBudget) {
-          return progress.finish(drainCursor(offset, pendingBoundaryId), true);
+          return finishExhaustedSkippedScan();
         }
 
         const remainsPending = await this.#tryDrainMessage(
@@ -219,7 +226,7 @@ export class Delivery {
       }
     }
 
-    return progress.finish(drainCursor(offset, pendingBoundaryId), true);
+    return finishExhaustedSkippedScan();
   }
 
   async #readPendingDeliveryPage(

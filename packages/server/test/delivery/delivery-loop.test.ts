@@ -362,6 +362,69 @@ describe("DeliveryLoop", () => {
     expect(seen).toEqual(["signal-now-supported"]);
   });
 
+  it("drops a stale skipped-only resume cursor so a cleared head claim is reconsidered", async () => {
+    let now = new Date("2026-07-08T09:00:00.000Z");
+    const storageFactory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      now: () => now,
+    });
+    const shard = ShardIndex.single();
+    const seen: string[] = [];
+    const loop = new DeliveryLoop({
+      delivery,
+      shard,
+      node: "node-a",
+      limit: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    const claimedHead = await seed(delivery, "signal-cleared-head", 1n);
+    const claim = await inboxStorageAccess.claim(
+      delivery.inbox.storage,
+      claimedHead,
+      new ShardSession(
+        "message-owner",
+        shard,
+        "node-b",
+        new Date("2026-07-08T09:00:00.000Z"),
+        new Date("2026-07-08T09:01:00.000Z"),
+      ),
+    );
+
+    for (let index = 2; index <= 2_002; index += 1) {
+      await seed(delivery, `signal-paused-${String(index)}`, BigInt(index), "CATCH_UP");
+    }
+
+    const paused = await loop.run();
+
+    expect(claim?.signalId).toBe("signal-cleared-head");
+    expect(paused).toMatchObject({
+      status: "PAUSED",
+      delivered: 0,
+      failed: 0,
+    });
+    expect(seen).toEqual([]);
+
+    now = new Date("2026-07-08T09:02:00.000Z");
+    await clearClaimByRecord(storageFactory, claimedHead);
+    for (let index = 2_003; index <= 4_005; index += 1) {
+      await seed(delivery, `signal-skipped-tail-${String(index)}`, BigInt(index), "CATCH_UP");
+    }
+
+    const resumed = await loop.run();
+
+    expect(resumed).toMatchObject({
+      status: "PAUSED",
+      delivered: 1,
+      failed: 0,
+    });
+    expect(seen).toEqual(["signal-cleared-head"]);
+  });
+
   it("rescans when skipped rows disappear after boundary validation", async () => {
     const race = {
       clearSkippedRows: () => undefined as Promise<void> | void,

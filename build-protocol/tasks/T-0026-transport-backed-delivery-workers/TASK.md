@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 56 review findings recorded; fix pending
+Status: Round 57 fix verified; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1032,3 +1032,19 @@ continue from a saved cursor through full skipped/unsupported pages and pause
 again without reconsidering the head row. The next fix records and addresses
 the documentation/style findings and adds a failing regression before changing
 delivery scan behavior.
+
+Round 57 fix on `2026-07-10`: corrected the work-log Round 46 clean re-review
+timestamp from `2026-07-10T17:57:08Z` to `2026-07-10T19:57:08Z`, keeping it
+after the Round 45 fix/verification entries it reviewed. Rewrapped the two
+review-log `git diff --check ca8fb2b3...HEAD` references so continuation lines
+stay readable inside their list items. Added a focused delivery-loop
+regression first; it failed red with `delivered: 0` after a cleared head claim
+remained before a stale cursor while full skipped pages remained after the
+cursor. `Delivery.drain()` now drops a resumed skipped-only exhausted cursor
+when no accepted work or failures occurred, so the next bounded loop drain
+starts at the head and can reconsider newly available rows. The focused
+regression passed green. Verification passed for the full focused
+`delivery-loop.test.ts` file, adjacent `delivery-worker.test.ts` file,
+`docs:check` with only the existing invalid TypeDoc `origin` warning,
+`format:check` after repository formatting normalized the review log, and
+`git diff --check`. Five-lane re-review remains pending.

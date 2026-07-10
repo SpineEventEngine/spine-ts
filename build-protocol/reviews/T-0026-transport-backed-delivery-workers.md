@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 56 review findings recorded; fix pending
+Status: Round 57 fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -1993,8 +1993,8 @@ red/green delivery regressions before the next review pass.
 - Performance/reliability (Linnaeus the 2nd): clean. Finite scan budget,
   limit/failure accounting, live-vs-expired claims, shard lease safety, fake
   timer containment, and coverage/lint records remain acceptable. The reviewer
-  ran read-only baseline-to-HEAD inspection and `git diff --check
-ca8fb2b3...HEAD`, which passed.
+  ran read-only baseline-to-HEAD inspection and
+  `git diff --check ca8fb2b3...HEAD`, which passed.
 - Action: update the stale docs and current review-lane table, verify, and
   rerun all five reviewer lanes.
 
@@ -2024,8 +2024,8 @@ ca8fb2b3...HEAD`, which passed.
 - Code style/maintainability (Ramanujan the 2nd): [P2] the review log records
   Round 53 at `2026-07-10T20:42:00Z`, then immediately drops back to Round 45
   and earlier entries. The reviewer found no production TypeScript
-  style/maintainability regression and ran `git diff --check
-ca8fb2b3...HEAD`, which passed.
+  style/maintainability regression and ran
+  `git diff --check ca8fb2b3...HEAD`, which passed.
 - Documentation (Noether the 2nd): [P2] public/API docs still describe
   `CATCH_UP` as a supported delivery label in `build-protocol/DEVELOPER_API.md`,
   `docs/api/README.md`, and `packages/server/README.md`, contradicting the
@@ -2105,3 +2105,25 @@ ca8fb2b3...HEAD`, which passed.
   without reconsidering the head row.
 - Action: fix the durable record formatting/timestamp issues and add a failing
   delivery regression before changing resumed scan behavior.
+
+### Round 57 Fix Implementation - `2026-07-10T21:20:00Z`
+
+- Fix: corrected the work-log Round 46 clean re-review timestamp from
+  `2026-07-10T17:57:08Z` to `2026-07-10T19:57:08Z`, keeping the durable
+  chronology after the Round 45 `19:45` fix and verification records.
+- Fix: rewrapped the two `git diff --check ca8fb2b3...HEAD` review-log
+  references so continuation lines stay inside their list items.
+- Red: added a delivery-loop regression for dropping stale skipped-only resume
+  cursors; it failed before the production change with `delivered: 0` instead
+  of `delivered: 1`.
+- Fix: when a resumed drain exhausts its skipped-only scan budget without
+  accepted work or failures, `Delivery.drain()` no longer returns the stale
+  resume cursor. The next bounded loop drain starts at the head and can
+  reconsider rows that became available before the old cursor.
+- Green: the focused regression test passed after the production change.
+- Verification: the full focused `delivery-loop.test.ts` file passed with 28
+  tests; the adjacent `delivery-worker.test.ts` file passed with 51 tests;
+  `docs:check` passed with only the existing invalid TypeDoc `origin` warning;
+  initial `format:check` flagged this review log, the repo formatter
+  normalized it, the rerun passed, and `git diff --check` passed.
+- Action: rerun all five reviewer lanes from the Round 57 HEAD.
