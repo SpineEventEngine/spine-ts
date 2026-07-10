@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 45 fixes implemented and verified; coordinator commit pending
+Status: Round 45 fixes committed; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -78,8 +78,9 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   `typecheck:build:generated`, `docs:check` with only the existing
   invalid-`origin` warning, `lint`, final `format:check`, `git diff --check`,
   and `git diff --check ca8fb2b3..HEAD`.
-- No worker commit was created. Coordinator commit remains pending, followed
-  by the next five-lane re-review.
+- No worker commit was created. Coordinator commit `9546ed2a` (`Close server
+environment delivery type leak`) recorded the fix; five-lane re-review
+  remains pending.
 
 ### Round 44 Follow-up - `2026-07-10T18:45:00Z`
 

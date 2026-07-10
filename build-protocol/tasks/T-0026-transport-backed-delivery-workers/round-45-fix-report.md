@@ -1,11 +1,12 @@
 # T-0026 Round 45 Fix Report
 
-Status: implemented and verified; coordinator commit pending
+Status: committed; re-review pending
 Date: `2026-07-10`
 
 Branch: `task/T-0026-transport-backed-delivery-workers`
 Worktree: `.worktrees/T-0026-transport-backed-delivery-workers`
-Worker commit: none; coordinator commit pending.
+Worker commit: none.
+Coordinator commit: `9546ed2a` (`Close server environment delivery type leak`).
 
 ## Skill Applicability
 
@@ -114,4 +115,5 @@ packages/server/test/repository/repository-routing.test.ts`; 5 files,
 
 ## Commit
 
-No worker commit was created. Coordinator commit is pending.
+No worker commit was created. Coordinator commit `9546ed2a` (`Close server
+environment delivery type leak`) recorded this round.
