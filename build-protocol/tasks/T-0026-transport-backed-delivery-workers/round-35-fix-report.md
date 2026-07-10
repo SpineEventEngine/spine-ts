@@ -84,7 +84,9 @@ Address every finding in the Round 35 batch:
 - Coordinator refinement moved boundary validation before all offset-page reads,
   covering both empty and non-empty shifted pages, and updated public docs so
   expired and live per-message ownership both block competing delivery until a
-  future explicit recovery policy exists.
+  future explicit recovery policy exists. Historical correction: Round 43 /
+  `9477830c` later superseded this no-reclaim rule by restoring expired-claim
+  reclaim during claim CAS while live row claims block.
 
 ## Verification Commands and Results
 

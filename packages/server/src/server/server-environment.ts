@@ -10,7 +10,6 @@ import type {
   TransportSubscriptionHandle,
 } from "@spine-ts/transport";
 
-import type { Delivery } from "../delivery/delivery.js";
 import { RetryableCloseGroup } from "./retryable-close.js";
 
 /** Deployment profile used by a small explicit server runtime environment. */
@@ -40,8 +39,8 @@ export interface ServerEnvironmentLocalOptions extends ServerEnvironmentOwnershi
   readonly storageFactory?: StorageFactory;
   /** Local signal transport facility. */
   readonly transport?: SignalTransport;
-  /** Optional delivery owner for durable delivery seams. */
-  readonly delivery?: Delivery;
+  /** Optional closeable delivery owner for durable delivery seams. */
+  readonly delivery?: ServerEnvironmentCloseable;
   /** Optional tracing factory placeholder for later tracing adapters. */
   readonly tracerFactory?: ServerEnvironmentCloseable;
 }
@@ -52,8 +51,8 @@ export interface ServerEnvironmentProductionOptions extends ServerEnvironmentOwn
   readonly storageFactory: StorageFactory;
   /** Signal transport facility supplied by the deployment. */
   readonly transport: SignalTransport;
-  /** Optional delivery owner for durable delivery seams. */
-  readonly delivery?: Delivery;
+  /** Optional closeable delivery owner for durable delivery seams. */
+  readonly delivery?: ServerEnvironmentCloseable;
   /** Optional tracing factory placeholder for later tracing adapters. */
   readonly tracerFactory?: ServerEnvironmentCloseable;
 }
@@ -62,7 +61,7 @@ interface ServerEnvironmentConstructorOptions extends ServerEnvironmentOwnership
   readonly mode: ServerEnvironmentMode;
   readonly storageFactory: StorageFactory;
   readonly transport: SignalTransport;
-  readonly delivery?: Delivery;
+  readonly delivery?: ServerEnvironmentCloseable;
   readonly tracerFactory?: ServerEnvironmentCloseable;
 }
 
@@ -82,8 +81,8 @@ export class ServerEnvironment implements ServerEnvironmentCloseable {
   readonly storageFactory: StorageFactory;
   /** Transport facility selected for this environment. */
   readonly transport: SignalTransport;
-  /** Optional delivery owner selected for this environment. */
-  readonly delivery: Delivery | undefined;
+  /** Optional closeable delivery owner selected for this environment. */
+  readonly delivery: ServerEnvironmentCloseable | undefined;
   /** Optional tracing factory selected for this environment. */
   readonly tracerFactory: ServerEnvironmentCloseable | undefined;
 

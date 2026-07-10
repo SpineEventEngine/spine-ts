@@ -49,8 +49,9 @@ Current slice exposes:
   envelopes, and immediate exact-row local shard replay. Live projection event
   subscribers use the same handoff shape with `UPDATE_SUBSCRIBER` rows and
   replay only the routed row target before the projection transaction and
-  `Stand` update. Before handler code runs, replay validates the tenant,
-  payload/schema, target type URL, and routed target ID.
+  `Stand` update. Before handler code runs, replay validates pending
+  `TO_DELIVER` status, the tenant, payload/schema, target type URL, and routed
+  target ID.
   Transport topology, broker/process supervision, retained attempt history,
   production retry policy, and deployment hardening remain outside this local
   slice;
@@ -1006,8 +1007,9 @@ projection subscribers now use the framework-owned durable inbox handoff with
 immediate local shard replay/drain. Process-manager event rows use
 `REACT_UPON_EVENT`, keep the original `Event` envelope as the payload, use the
 original event ID as `signalId`, and replay only the stored target row before
-handler execution. Before handler code runs, replay validates tenant,
-payload/schema, target type URL, and routed target ID.
+handler execution. Before handler code runs, replay validates pending
+`TO_DELIVER` status, tenant, payload/schema, target type URL, and routed target
+ID.
 Transport topology, broker/process supervision, retained attempt history,
 production retry policy, and supported catch-up work remain open production
 gaps. Full production supervision and retry policy remain outside this slice.

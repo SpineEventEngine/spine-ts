@@ -480,11 +480,21 @@ export interface ProcessManagerInbox {
 }
 
 /** @internal Narrow framework-only replay target for projection subscriber inbox handoff. */
+type ProjectionInboxMessage = InboxMessage & {
+  readonly label: "UPDATE_SUBSCRIBER";
+  readonly status: "TO_DELIVER";
+};
+
+type ProjectionInboxInput = Omit<InboxMessageInput, "whenReceived" | "version"> & {
+  readonly label: "UPDATE_SUBSCRIBER";
+  readonly status: "TO_DELIVER";
+};
+
 export interface ProjectionInboxTarget {
   /** Target projection state type URL routed by this replay target. */
   readonly targetTypeUrl: string;
   /** Replays one durable inbox event under the active delivery tenant. */
-  replay(message: InboxMessage, deliveryTenantId?: string): Promise<void>;
+  replay(message: ProjectionInboxMessage, deliveryTenantId?: string): Promise<void>;
 }
 
 /** @internal Context-owned projection subscriber inbox handoff capability. */
@@ -494,7 +504,7 @@ export interface ProjectionInbox {
   /** Writes a durable inbox row and waits for that exact row to be delivered locally. */
   receive(
     delivery: Delivery,
-    input: Omit<InboxMessageInput, "whenReceived" | "version">,
+    input: ProjectionInboxInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage>;
 }
@@ -668,7 +678,7 @@ function createProjectionInboxTarget(
 
   return Object.freeze({
     targetTypeUrl: deriveTypeUrl(repository.stateSchema),
-    replay: (message: InboxMessage, deliveryTenantId?: string): Promise<void> =>
+    replay: (message: ProjectionInboxMessage, deliveryTenantId?: string): Promise<void> =>
       replayProjectionEvent(repository, routing, message, deliveryTenantId),
   });
 }

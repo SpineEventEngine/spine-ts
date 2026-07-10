@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 44 fixes committed; re-review pending
+Status: Round 45 fixes implemented and verified; coordinator commit pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -818,11 +818,42 @@ Verification passed with focused context handoff Vitest, generated typecheck,
 docs check, lint, format check, working-tree diff check, and baseline range diff
 check. No worker commit was created. Coordinator commit `9bb68f33` (`Fix
 projection replay status guard`) recorded the fix; five-lane re-review remains
-pending.
+pending. Records-only coordinator commit `52a4326d` (`Record delivery round 44
+review status`) later recorded the follow-up status package.
 Coordinator verification after the worker returned passed focused context
 handoff Vitest with 2 files and 22 tests, generated build typecheck, docs check
 with only the existing invalid-`origin` warning, lint, format check,
 working-tree diff check, and baseline range diff check.
+
+Round 45 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..52a4326d.diff` produced clean security and
+performance/reliability lanes. Style found Round 44 records name fix commit
+`9bb68f33` but omit records-only commit `52a4326d`, and one review-log bullet
+has a flush-left continuation. Documentation found current replay-validation
+docs omit the new `TO_DELIVER` status validation, and a few Round 35 historical
+expired-claim records still omit the Round 43 / `9477830c` supersession.
+TypeScript/API docs found root-public `ServerEnvironment` still exposes
+internal raw `Delivery` through public option/property types, and projection
+target replay types still accept plain `InboxMessage` despite the runtime
+status guard. The next fix closes the server-environment public type leak,
+narrows projection replay target typing, updates docs and durable records,
+verifies the batch, and leaves coordinator commit/re-review pending.
+
+Round 45 fix implementation on `2026-07-10`: `ServerEnvironment` public
+delivery option/property types now use the small `ServerEnvironmentCloseable`
+owner type instead of internal raw `Delivery`; projection inbox target replay
+now accepts only pending `UPDATE_SUBSCRIBER` messages while
+`ProjectionInbox.replay()` remains the broader validated entrypoint. Replay
+validation docs now mention pending `TO_DELIVER` status; remaining Round 35
+historical no-reclaim records name Round 43 / `9477830c`; and Round 44 records
+distinguish fix commit `9bb68f33` from records-only status commit `52a4326d`.
+Focused type assertions first failed under `typecheck:tooling`, then passed
+after the code changes. Focused runtime/API Vitest passed under local-listener
+approval with 5 files and 179 tests. Required verification passed:
+`typecheck:build:generated`, `docs:check` with only the existing invalid
+`origin` warning, `lint`, final `format:check`, `git diff --check`, and
+`git diff --check ca8fb2b3..HEAD`. No worker commit was created; coordinator
+commit is pending, and five-lane re-review remains pending.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker

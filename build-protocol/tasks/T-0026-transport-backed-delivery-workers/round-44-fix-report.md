@@ -1,11 +1,12 @@
 # T-0026 Round 44 Fix Report
 
-Status: committed; re-review pending
+Status: committed; records-only status committed; re-review pending
 Date: `2026-07-10`
 
 Branch: `task/T-0026-transport-backed-delivery-workers`
 Worktree: `.worktrees/T-0026-transport-backed-delivery-workers`
-Worker commit: none; coordinator commit `9bb68f33`.
+Worker commit: none; fix coordinator commit `9bb68f33`; records-only status
+coordinator commit `52a4326d`.
 
 ## Skill Applicability
 
@@ -97,4 +98,6 @@ advice.
 ## Commit
 
 No worker commit was created. Coordinator commit `9bb68f33` (`Fix projection
-replay status guard`) recorded this fix.
+replay status guard`) recorded this fix. Records-only coordinator commit
+`52a4326d` (`Record delivery round 44 review status`) recorded the follow-up
+status package.

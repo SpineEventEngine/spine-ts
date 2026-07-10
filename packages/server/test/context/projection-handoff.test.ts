@@ -1,14 +1,22 @@
 import { create } from "@bufbuild/protobuf";
 import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { InMemoryStorageFactory } from "@spine-ts/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import { Delivery } from "../../src/delivery/delivery.js";
 import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
+import type { ProjectionInboxTarget } from "../../src/repository/repository.js";
 import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { LocalProjectionInbox } from "../../src/context/projection-handoff.js";
 
 describe("LocalProjectionInbox", () => {
+  it("narrows replay targets to pending subscriber updates", () => {
+    type ReplayMessage = Parameters<ProjectionInboxTarget["replay"]>[0];
+
+    expectTypeOf<ReplayMessage["label"]>().toEqualTypeOf<"UPDATE_SUBSCRIBER">();
+    expectTypeOf<ReplayMessage["status"]>().toEqualTypeOf<"TO_DELIVER">();
+  });
+
   it("replays existing durable subscriber rows through a delivery loop endpoint", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },

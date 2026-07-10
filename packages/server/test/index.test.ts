@@ -28,6 +28,9 @@ import {
   type EventRegistrationReactorMetadata,
   type EventRegistrationSubscriberMetadata,
   FixedClock,
+  type ServerEnvironmentCloseable,
+  type ServerEnvironmentLocalOptions,
+  type ServerEnvironmentProductionOptions,
   describeEntityMetadata,
   DescriptorMetadataError,
   isEntitySchema,
@@ -304,6 +307,12 @@ describe("@spine-ts/server", () => {
     expectTypeOf<InboxMessage>().not.toHaveProperty("claim");
     expectTypeOf<Inbox>().not.toHaveProperty("claim");
     expectTypeOf<Inbox>().not.toHaveProperty("unclaim");
+    expectTypeOf<ServerEnvironmentLocalOptions["delivery"]>().toEqualTypeOf<
+      ServerEnvironmentCloseable | undefined
+    >();
+    expectTypeOf<ServerEnvironmentProductionOptions["delivery"]>().toEqualTypeOf<
+      ServerEnvironmentCloseable | undefined
+    >();
     expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
     expect(new StandStateTypeError("Unknown", "read")).toBeInstanceOf(StandStateTypeError);
     expect(new SingleProcessServerRuntime()).toBeInstanceOf(SingleProcessServerRuntime);

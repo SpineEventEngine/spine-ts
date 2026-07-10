@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 44 fixes committed; re-review pending
+Status: Round 45 fixes implemented and verified; coordinator commit pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer          | Status                       |
-| -------------------------- | ----------------- | ---------------------------- |
-| Code style/maintainability | Curie the 2nd     | Addressed; re-review pending |
-| Documentation              | Hypatia the 2nd   | Addressed; re-review pending |
-| TypeScript/API docs        | Russell the 2nd   | Addressed; re-review pending |
-| Security                   | Aristotle the 2nd | Addressed; re-review pending |
-| Performance/reliability    | Galileo the 2nd   | Clean                        |
+| Lane                       | Reviewer         | Status                   |
+| -------------------------- | ---------------- | ------------------------ |
+| Code style/maintainability | Maxwell the 2nd  | Fixed; re-review pending |
+| Documentation              | Mencius the 2nd  | Fixed; re-review pending |
+| TypeScript/API docs        | Einstein the 2nd | Fixed; re-review pending |
+| Security                   | Godel the 2nd    | Clean; re-review pending |
+| Performance/reliability    | Darwin the 2nd   | Clean; re-review pending |
 
 ## Review Criteria
 
@@ -31,6 +31,55 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 ## Rounds
 
 Review findings fixed and verified after implementation commit `94b4c632`.
+
+### Round 45 Follow-up - `2026-07-10T19:15:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..52a4326d.diff` from task baseline
+  `ca8fb2b3` to current HEAD `52a4326d`.
+- Code style/maintainability (Maxwell the 2nd): [P2] Round 44 records name fix
+  commit `9bb68f33` but do not mention records-only commit `52a4326d`;
+  [P3] one Round 44 review-log bullet has a flush-left continuation line.
+- Documentation (Mencius the 2nd): [P2] current replay-validation docs omit the
+  new `TO_DELIVER` status validation before handler/projection execution; [P2]
+  a few Round 35 expired-claim records still omit the Round 43 / `9477830c`
+  supersession.
+- TypeScript/API docs (Einstein the 2nd): [P1] root-public
+  `ServerEnvironment` still exposes internal raw `Delivery` through public
+  option/property types; [P2] projection replay guard is runtime-correct but
+  its assertion does not narrow because `ProjectionInboxTarget.replay()` still
+  accepts plain `InboxMessage` instead of an `UPDATE_SUBSCRIBER`/`TO_DELIVER`
+  message type.
+- Security (Godel the 2nd): clean.
+- Performance/reliability (Darwin the 2nd): clean.
+- Action: close the `ServerEnvironment` raw-delivery public type leak, mirror
+  the process-manager narrow target-message type for projection replay, document
+  replay status validation, update remaining historical Round 35 no-reclaim
+  notes and Round 44 records-commit breadcrumbs, verify, and repeat five-lane
+  re-review.
+
+### Round 45 Fix Implementation - `2026-07-10`
+
+- Public `ServerEnvironment` delivery option/property types now use
+  `ServerEnvironmentCloseable` rather than internal raw `Delivery`, closing the
+  root-public type leak without exposing direct callback delivery APIs.
+- `ProjectionInboxTarget.replay()` now accepts only a pending
+  `UPDATE_SUBSCRIBER` inbox message, while `ProjectionInbox.replay()` remains
+  the broader internal entrypoint and validates before target invocation.
+- Replay-validation docs now mention pending `TO_DELIVER` status before
+  process-manager/projection handler execution.
+- Remaining historical Round 35 no-reclaim notes now name Round 43 /
+  `9477830c` as the later expired-claim reclaim supersession.
+- Round 44 records now distinguish fix commit `9bb68f33` from records-only
+  status commit `52a4326d`, and the wrapped review-log commit-title line is
+  fixed.
+- Verification passed: focused `typecheck:tooling` red/green, focused
+  runtime/API Vitest under local-listener approval (5 files, 179 tests),
+  `typecheck:build:generated`, `docs:check` with only the existing
+  invalid-`origin` warning, `lint`, final `format:check`, `git diff --check`,
+  and `git diff --check ca8fb2b3..HEAD`.
+- No worker commit was created. Coordinator commit remains pending, followed
+  by the next five-lane re-review.
 
 ### Round 44 Follow-up - `2026-07-10T18:45:00Z`
 
@@ -81,7 +130,9 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   check with only the existing invalid-`origin` warning, lint, format check,
   working-tree diff check, and baseline range diff check.
 - No worker commit was created. Coordinator commit `9bb68f33` (`Fix projection
-replay status guard`) recorded the fix; five-lane re-review remains pending.
+replay status guard`) recorded the fix. Records-only coordinator commit
+  `52a4326d` (`Record delivery round 44 review status`) recorded the follow-up
+  status package; five-lane re-review remains pending.
 
 ### Round 43 Follow-up - `2026-07-10T17:45:00Z`
 
@@ -1499,8 +1550,10 @@ red/green delivery regressions before the next review pass.
 - Docs: `InboxClaim.expiresAt` now says local/direct workers do not
   auto-reclaim expired claims. Internal architecture docs state any existing
   durable claim is skipped, including expired or abandoned claims, and stale
-  recovery remains future production policy. The package README keeps the
-  public-facing delivery summary at the lease-fenced worker-contract level.
+  recovery remains future production policy. Historical correction: Round 43 /
+  `9477830c` later restored expired-claim reclaim during claim CAS while live
+  row claims block. The package README keeps the public-facing delivery summary
+  at the lease-fenced worker-contract level.
 - Verification: requested Vitest batch passed with 8 files and 220 tests;
   `typecheck:build:generated`, `docs:check`, `format:check`, and
   `git diff --check` passed. `docs:check` reported only the existing TypeDoc

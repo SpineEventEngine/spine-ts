@@ -21,8 +21,12 @@ import type {
 import { createTransportSubscription, createTransportTopic } from "@spine-ts/transport";
 import { describe, expect, it } from "vitest";
 
-import type { Delivery } from "../../src/delivery/delivery.js";
-import { BoundedContext, Server, ServerEnvironment } from "../../src/index.js";
+import {
+  BoundedContext,
+  Server,
+  ServerEnvironment,
+  type ServerEnvironmentCloseable,
+} from "../../src/index.js";
 
 describe("Server", () => {
   it("starts on 127.0.0.1 by default and exposes its local base URL", async () => {
@@ -426,7 +430,7 @@ describe("Server", () => {
     const callerTracer = new CloseTrackingCloseable(closed, "caller-tracer");
 
     await ServerEnvironment.local({
-      delivery: ownedDelivery as unknown as Delivery,
+      delivery: ownedDelivery satisfies ServerEnvironmentCloseable,
       tracerFactory: ownedTracer,
       ownsDelivery: true,
       ownsTracerFactory: true,
@@ -434,7 +438,7 @@ describe("Server", () => {
     await ServerEnvironment.production({
       storageFactory: new InMemoryStorageFactory(),
       transport: new CloseTrackingTransport(closed),
-      delivery: callerDelivery as unknown as Delivery,
+      delivery: callerDelivery satisfies ServerEnvironmentCloseable,
       tracerFactory: callerTracer,
     }).close();
     const production = ServerEnvironment.production({
