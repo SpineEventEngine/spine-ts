@@ -65,21 +65,23 @@ export class Delivery {
    * schedule later runs, open transports, or retain endpoint attempt history.
    */
   async drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
-    return this.#drain(shard, options, {});
+    const outcome = await this.#drain(shard, options, {});
+
+    return outcome.run;
   }
 
   async #drain(
     shard: ShardIndex,
     options: DeliveryDrainOptions,
     controls: DeliveryDrainControls,
-  ): Promise<DeliveryRun> {
+  ): Promise<DeliveryDrainOutcome> {
     const scope = this.#drainScope();
     const limit = inboxStorageAccess.readLimit(options.limit);
     const cursor = await this.#resolveDrainCursor(scope.inbox, shard, controls.resume);
     const maxFailures = requireFailureLimit(controls.maxFailures);
     const session = await scope.shards.pickUp(shard, options.node);
     if (session === undefined) {
-      return deliveryRun("SKIPPED", 0, 0, 0, 0, []);
+      return deliveryDrainOutcome(deliveryRun("SKIPPED", 0, 0, 0, 0, []));
     }
     const active = new ActiveClaim();
     const lease = keepShardLease(
@@ -118,7 +120,7 @@ export class Delivery {
     active: ActiveClaim,
     cursor: DeliveryDrainCursor,
     maxFailures: number | undefined,
-  ): Promise<DeliveryRun> {
+  ): Promise<DeliveryDrainOutcome> {
     const progress = drainProgress();
     const scanBudget = inboxStorageAccess.maxReadLimit + limit;
     let offset = cursor.offset;
@@ -154,7 +156,7 @@ export class Delivery {
       }
     }
 
-    return progress.finish(drainCursor(offset, pendingBoundaryId));
+    return progress.finish(drainCursor(offset, pendingBoundaryId), true);
   }
 
   async #readPendingDeliveryPage(
@@ -450,8 +452,7 @@ export interface DeliveryAccess {
     shard: ShardIndex,
     options: DeliveryDrainOptions,
     controls: DeliveryDrainControls,
-  ): Promise<DeliveryRun>;
-  resume(run: DeliveryRun): DeliveryDrainCursor | undefined;
+  ): Promise<DeliveryDrainOutcome>;
   replace(delivery: Delivery, drainer: DeliveryDrainer): () => void;
 }
 
@@ -459,7 +460,7 @@ type DeliveryDrainer = (
   shard: ShardIndex,
   options: DeliveryDrainOptions,
   controls: DeliveryDrainControls,
-) => Promise<DeliveryRun>;
+) => Promise<DeliveryDrainOutcome>;
 
 const deliveryDrainers = new WeakMap<Delivery, DeliveryDrainer>();
 
@@ -472,9 +473,6 @@ export const deliveryAccess: DeliveryAccess = Object.freeze({
     controls: DeliveryDrainControls,
   ) {
     return requireDeliveryDrainer(delivery)(shard, options, controls);
-  },
-  resume(run: DeliveryRun) {
-    return deliveryRunMetadata.get(run)?.cursor;
   },
   replace(delivery: Delivery, drainer: DeliveryDrainer) {
     const previous = requireDeliveryDrainer(delivery);
@@ -557,16 +555,27 @@ interface DeliveryScope {
   readonly shards: ShardedWorkRegistry;
 }
 
-interface DeliveryDrainCursor {
+/** @internal Cursor used only by the package-local delivery loop access path. */
+export interface DeliveryDrainCursor {
   readonly offset: number;
   readonly pendingBoundaryId?: string;
+}
+
+/** @internal Result metadata used by `DeliveryLoop` without widening public `DeliveryRun`. */
+export interface DeliveryDrainOutcome {
+  readonly run: DeliveryRun;
+  readonly resumeCursor?: DeliveryDrainCursor;
+  readonly exhaustedSkippedScan: boolean;
 }
 
 interface DrainProgress {
   readonly accepted: number;
   readonly failed: number;
   readonly processed: number;
-  readonly finish: (cursor: DeliveryDrainCursor) => DeliveryRun;
+  readonly finish: (
+    cursor: DeliveryDrainCursor,
+    exhaustedSkippedScan?: boolean,
+  ) => DeliveryDrainOutcome;
   readonly observe: (message: InboxMessage) => boolean;
   readonly record: (message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) => void;
 }
@@ -576,12 +585,7 @@ type DeliveryMessageResult =
   | { readonly kind: "DELIVERED" }
   | { readonly kind: "FAILED"; readonly accepted: boolean; readonly error: unknown };
 
-interface DeliveryRunMetadata {
-  readonly cursor: DeliveryDrainCursor;
-}
-
 const defaultShardLeaseMs = 30_000;
-const deliveryRunMetadata = new WeakMap<DeliveryRun, DeliveryRunMetadata>();
 
 function deliveryRun(
   status: DeliveryRun["status"],
@@ -590,9 +594,8 @@ function deliveryRun(
   delivered: number,
   failed: number,
   failures: readonly DeliveryFailure[],
-  cursor = drainCursor(0),
 ): DeliveryRun {
-  const run = Object.freeze({
+  return Object.freeze({
     status,
     processed,
     accepted,
@@ -600,9 +603,18 @@ function deliveryRun(
     failed,
     failures: Object.freeze([...failures]),
   });
-  deliveryRunMetadata.set(run, Object.freeze({ cursor }));
+}
 
-  return run;
+function deliveryDrainOutcome(
+  run: DeliveryRun,
+  resumeCursor?: DeliveryDrainCursor,
+  exhaustedSkippedScan = false,
+): DeliveryDrainOutcome {
+  return Object.freeze({
+    run,
+    ...(resumeCursor === undefined ? {} : { resumeCursor }),
+    exhaustedSkippedScan,
+  });
 }
 
 function drainProgress(): DrainProgress {
@@ -622,15 +634,15 @@ function drainProgress(): DrainProgress {
     get failed() {
       return failures.length;
     },
-    finish(cursor: DeliveryDrainCursor) {
-      return deliveryRun(
-        "DRAINED",
-        processed,
-        accepted,
-        delivered,
-        failures.length,
-        failures,
-        cursor,
+    finish(cursor: DeliveryDrainCursor, exhaustedSkippedScan = false) {
+      const run = deliveryRun("DRAINED", processed, accepted, delivered, failures.length, failures);
+      const resumableSkippedScan =
+        exhaustedSkippedScan && run.accepted === 0 && run.delivered === 0 && run.failed === 0;
+
+      return deliveryDrainOutcome(
+        run,
+        run.failed > 0 || cursor.offset === 0 ? undefined : cursor,
+        resumableSkippedScan,
       );
     },
     observe(message: InboxMessage) {

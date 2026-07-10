@@ -1,7 +1,7 @@
 import { InMemoryStorageFactory } from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
-import { deliveryAccess } from "../../src/delivery/delivery.js";
+import { deliveryAccess, type DeliveryDrainOutcome } from "../../src/delivery/delivery.js";
 import { deliveryWorkerAccess } from "../../src/delivery/delivery-worker.js";
 import {
   Delivery,
@@ -73,7 +73,7 @@ describe("DeliveryWorker", () => {
 
   it("close waits for active shard drains after another shard rejects", async () => {
     const failure = new Error("storage failed");
-    const activeDrain = deferred<DeliveryRun>();
+    const activeDrain = deferred<DeliveryDrainOutcome>();
     const delivery = createDelivery();
     const restore = deliveryAccess.replace(delivery, (shard: ShardIndex) => {
       if (shard.index === 0) {
@@ -100,7 +100,7 @@ describe("DeliveryWorker", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(closed).toBe(false);
 
-    activeDrain.resolve(deliveryRun());
+    activeDrain.resolve(deliveryOutcome());
 
     await expect(closing).rejects.toBe(failure);
     await expect(startFailure).resolves.toBe(failure);
@@ -197,6 +197,14 @@ function deliveryRun(): DeliveryRun {
     delivered: 0,
     failed: 0,
     failures: Object.freeze([]),
+  });
+}
+
+function deliveryOutcome(run = deliveryRun()): DeliveryDrainOutcome {
+  return Object.freeze({
+    run,
+    resumeCursor: Object.freeze({ offset: 0 }),
+    exhaustedSkippedScan: false,
   });
 }
 

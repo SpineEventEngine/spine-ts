@@ -1,7 +1,7 @@
 import { InMemoryStorageFactory } from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
-import { deliveryAccess } from "../../src/delivery/delivery.js";
+import { deliveryAccess, type DeliveryDrainOutcome } from "../../src/delivery/delivery.js";
 import {
   Delivery,
   DeliveryLoop,
@@ -379,7 +379,7 @@ describe("DeliveryLoop", () => {
 
   it("propagates current drain rejection through close without starting another drain", async () => {
     const failure = new Error("storage failed");
-    const barrier = deferred<DeliveryRun>();
+    const barrier = deferred<DeliveryDrainOutcome>();
     const delivery = createDelivery();
     const restore = deliveryAccess.replace(delivery, () => {
       drains += 1;
@@ -476,6 +476,40 @@ describe("DeliveryLoop", () => {
       { signalId: "signal-fails-1", status: "TO_DELIVER" },
       { signalId: "signal-fails-2", status: "TO_DELIVER" },
     ]);
+  });
+
+  it("retries a failed head row before going idle after a later success", async () => {
+    const delivery = createDelivery();
+    const attempts: string[] = [];
+
+    await seed(delivery, "signal-fails", 1n);
+    await seed(delivery, "signal-succeeds", 2n);
+
+    const run = await new DeliveryLoop({
+      delivery,
+      shard: ShardIndex.single(),
+      node: "node-a",
+      maxFailures: 2,
+      onMessage(message) {
+        attempts.push(message.signalId);
+        if (message.signalId === "signal-fails") {
+          throw new Error("endpoint failed");
+        }
+      },
+    }).run();
+
+    expect(attempts).toEqual(["signal-fails", "signal-succeeds", "signal-fails"]);
+    expect(run).toMatchObject({
+      status: "FAILED",
+      runs: 2,
+      processed: 3,
+      accepted: 3,
+      delivered: 1,
+      failed: 2,
+    });
+    await expect(
+      delivery.inbox.read(ShardIndex.single(), { statuses: ["TO_DELIVER"] }),
+    ).resolves.toMatchObject([{ signalId: "signal-fails", status: "TO_DELIVER" }]);
   });
 
   it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, Number.MAX_SAFE_INTEGER + 1])(

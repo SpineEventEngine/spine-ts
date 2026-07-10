@@ -1,8 +1,8 @@
 import { inboxStorageAccess } from "./inbox-storage.js";
 import {
   deliveryAccess,
-  type DeliveryAccess,
   type Delivery,
+  type DeliveryDrainOutcome,
   type DeliveryFailure,
   type DeliveryRun,
   type OnDeliveryMessage,
@@ -78,8 +78,9 @@ export class DeliveryLoop {
       }
       const remainingFailures = this.#maxFailures - summary.failed;
       const limit = this.#drainLimit();
-      const run = await this.#drain(limit, remainingFailures);
-      this.#resume = deliveryAccess.resume(run);
+      const outcome = await this.#drain(limit, remainingFailures);
+      const { run } = outcome;
+      this.#resume = outcome.resumeCursor;
       summary.add(run);
       if (run.status === "SKIPPED") {
         this.#resume = undefined;
@@ -90,7 +91,7 @@ export class DeliveryLoop {
         return summary.result("FAILED");
       }
       if (run.accepted === 0 && run.delivered === 0 && run.failed === 0) {
-        if (run.processed === this.#scanBudget(limit)) {
+        if (outcome.exhaustedSkippedScan) {
           resumableScanRuns += 1;
           if (resumableScanRuns >= maxResumableScanRuns) {
             return summary.result("PAUSED");
@@ -102,13 +103,10 @@ export class DeliveryLoop {
         return summary.result("IDLE");
       }
       resumableScanRuns = 0;
-      if (run.failed > 0 && run.delivered === 0) {
-        this.#resume = undefined;
-      }
     }
   }
 
-  #drain(limit: number, remainingFailures: number): Promise<DeliveryRun> {
+  #drain(limit: number, remainingFailures: number): Promise<DeliveryDrainOutcome> {
     return deliveryAccess.drain(
       this.#delivery,
       this.#shard,
@@ -135,15 +133,11 @@ export class DeliveryLoop {
       );
     }
   }
-
-  #scanBudget(limit: number): number {
-    return inboxStorageAccess.maxReadLimit + limit;
-  }
 }
 
 const maxDeliveryLoopFailures = 1_000;
 const maxResumableScanRuns = 2;
-type DeliveryResumeCursor = ReturnType<DeliveryAccess["resume"]>;
+type DeliveryResumeCursor = DeliveryDrainOutcome["resumeCursor"];
 
 /** Delivery loop construction options. */
 export interface DeliveryLoopOptions {

@@ -24,13 +24,21 @@ import {
   type InboxMessage,
 } from "../../src/index.js";
 import {
-  type DeliveryFaultPlan,
-  FaultyDeliveryStorageFactory,
+  blockInboxClaimOnce,
+  blockInboxRenewalOnce,
   deliveryDedupRecords,
   deliveryInboxRecords,
+  deliveryStorageFaults,
   messageKey,
+  onInboxReadOnce,
   packStoredRecord,
+  skipDedupFinalizeOnce,
+  skipInboxClearOnce,
+  skipInboxRepairOnce,
   targetInbox,
+  throwDedupFinalizeOnce,
+  throwInboxClaimOnce,
+  throwInboxClearOnce,
   unpackStoredRecord,
 } from "./delivery-storage-fault-fixture.js";
 
@@ -268,15 +276,11 @@ describe("Delivery worker", () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date("2026-07-08T09:00:00.000Z"));
-      const faultPlan: DeliveryFaultPlan = {
-        blockInboxRenewalOnce: true,
-        inboxRenewalBlocked: deferred<undefined>(),
-        resumeInboxRenewal: deferred<undefined>(),
-      };
-      const storageFactory = new FaultyDeliveryStorageFactory(faultPlan);
+      const blockedRenewal = blockInboxRenewalOnce();
+      const faults = deliveryStorageFaults(blockedRenewal);
       const delivery = new Delivery({
         context: { name: "Tasks", multitenant: false },
-        storageFactory,
+        storageFactory: faults.storageFactory,
         leaseMs: 1_000,
         now: () => new Date(Date.now()),
       });
@@ -299,15 +303,15 @@ describe("Delivery worker", () => {
 
       await started.promise;
       vi.advanceTimersByTime(500);
-      await faultPlan.inboxRenewalBlocked.promise;
+      await blockedRenewal.blocked;
 
       barrier.resolve(undefined);
       await Promise.resolve();
-      faultPlan.resumeInboxRenewal.resolve(undefined);
+      blockedRenewal.resume();
 
       const run = await runPromise;
 
-      expect(faultPlan.blockedInboxRenewals).toBe(1);
+      expect(blockedRenewal.count).toBe(1);
       expect(seen).toEqual(["signal-renew-mark-race"]);
       expect(run).toMatchObject({
         status: "DRAINED",
@@ -329,15 +333,11 @@ describe("Delivery worker", () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date("2026-07-08T09:00:00.000Z"));
-      const faultPlan: DeliveryFaultPlan = {
-        blockInboxClaimOnce: true,
-        inboxClaimBlocked: deferred<undefined>(),
-        resumeInboxClaim: deferred<undefined>(),
-      };
-      const storageFactory = new FaultyDeliveryStorageFactory(faultPlan);
+      const blockedClaim = blockInboxClaimOnce();
+      const faults = deliveryStorageFaults(blockedClaim);
       const delivery = new Delivery({
         context: { name: "Tasks", multitenant: false },
-        storageFactory,
+        storageFactory: faults.storageFactory,
         leaseMs: 1_000,
         now: () => new Date(Date.now()),
       });
@@ -352,13 +352,13 @@ describe("Delivery worker", () => {
         },
       });
 
-      await faultPlan.inboxClaimBlocked.promise;
+      await blockedClaim.blocked;
       vi.setSystemTime(new Date("2026-07-08T09:00:01.001Z"));
-      faultPlan.resumeInboxClaim.resolve(undefined);
+      blockedClaim.resume();
 
       const run = await runPromise;
 
-      expect(faultPlan.blockedInboxClaims).toBe(1);
+      expect(blockedClaim.count).toBe(1);
       expect(seen).toEqual([]);
       expect(run).toMatchObject({
         status: "DRAINED",
@@ -725,10 +725,10 @@ describe("Delivery worker", () => {
   });
 
   it("rejects invalid drain limits before shard storage access", async () => {
-    const faultPlan: DeliveryFaultPlan = {};
+    const faults = deliveryStorageFaults();
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new FaultyDeliveryStorageFactory(faultPlan),
+      storageFactory: faults.storageFactory,
     });
 
     await expect(
@@ -739,8 +739,8 @@ describe("Delivery worker", () => {
       }),
     ).rejects.toThrow("Inbox read limit must be a positive safe integer at most 1000.");
 
-    expect(faultPlan.opens).toBeUndefined();
-    expect(faultPlan.compareAndSets).toBeUndefined();
+    expect(faults.opens).toBe(0);
+    expect(faults.compareAndSets).toBe(0);
   });
 
   it("uses exact-message options without a drain limit for drainMessage", () => {
@@ -808,12 +808,11 @@ describe("Delivery worker", () => {
   });
 
   it("reports framework cleanup failures after endpoint failure instead of implying retryability", async () => {
-    const faultPlan: DeliveryFaultPlan = {
-      throwInboxClearOnce: true,
-    };
+    const failedClear = throwInboxClearOnce();
+    const faults = deliveryStorageFaults(failedClear);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new FaultyDeliveryStorageFactory(faultPlan),
+      storageFactory: faults.storageFactory,
     });
     const shard = ShardIndex.single();
 
@@ -843,7 +842,7 @@ describe("Delivery worker", () => {
       { message: "endpoint failed" },
       { message: "Inbox claim clear failed." },
     ]);
-    expect(faultPlan.thrownInboxClears).toBe(1);
+    expect(failedClear.count).toBe(1);
 
     const retried: string[] = [];
     const retryRun = await delivery.drain(shard, {
@@ -867,12 +866,11 @@ describe("Delivery worker", () => {
   });
 
   it("reports framework cleanup failures when cleanup does not clear the row", async () => {
-    const faultPlan: DeliveryFaultPlan = {
-      skipInboxClearOnce: true,
-    };
+    const skippedClear = skipInboxClearOnce();
+    const faults = deliveryStorageFaults(skippedClear);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new FaultyDeliveryStorageFactory(faultPlan),
+      storageFactory: faults.storageFactory,
     });
     const shard = ShardIndex.single();
 
@@ -902,7 +900,7 @@ describe("Delivery worker", () => {
       { message: "endpoint failed" },
       { message: "Framework cleanup did not clear the pending row." },
     ]);
-    expect(faultPlan.skippedInboxClears).toBe(1);
+    expect(skippedClear.count).toBe(1);
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
       { signalId: "signal-clear-skipped", status: "TO_DELIVER" },
     ]);
@@ -977,12 +975,11 @@ describe("Delivery worker", () => {
   });
 
   it("does not consume the accepted-work limit when a pre-callback failure leaves the row pending", async () => {
-    const faultPlan: DeliveryFaultPlan = {
-      throwInboxClaimOnce: true,
-    };
+    const failedClaim = throwInboxClaimOnce();
+    const faults = deliveryStorageFaults(failedClaim);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new FaultyDeliveryStorageFactory(faultPlan),
+      storageFactory: faults.storageFactory,
       leaseMs: 60_000,
       now: () => new Date("2026-07-08T09:00:00.000Z"),
     });
@@ -1008,7 +1005,7 @@ describe("Delivery worker", () => {
       delivered: 1,
       failed: 1,
     });
-    expect(faultPlan.thrownInboxClaims).toBe(1);
+    expect(failedClaim.count).toBe(1);
     expect(run.failures).toHaveLength(1);
     expect(run.failures[0]?.message.signalId).toBe("signal-pre-callback-fails");
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
@@ -1021,10 +1018,13 @@ describe("Delivery worker", () => {
 
   it("reclaims a claim that expires while the claim-row read is pending", async () => {
     const now = { value: new Date("2026-07-08T09:00:00.999Z") };
-    const faultPlan: DeliveryFaultPlan = {};
+    const readProbe = onInboxReadOnce(() => {
+      now.value = new Date("2026-07-08T09:00:01.001Z");
+    });
+    const faults = deliveryStorageFaults(readProbe);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new FaultyDeliveryStorageFactory(faultPlan),
+      storageFactory: faults.storageFactory,
       leaseMs: 60_000,
       now: () => now.value,
     });
@@ -1041,9 +1041,6 @@ describe("Delivery worker", () => {
         new Date("2026-07-08T09:00:01.000Z"),
       ),
     );
-    faultPlan.onInboxReadOnce = () => {
-      now.value = new Date("2026-07-08T09:00:01.001Z");
-    };
 
     const seen: string[] = [];
     const run = await delivery.drain(shard, {
@@ -1059,10 +1056,11 @@ describe("Delivery worker", () => {
   });
 
   it("does not exceed the loop failure budget before a callback is accepted", async () => {
-    const faultPlan: DeliveryFaultPlan = { throwInboxClaimOnce: true };
+    const failedClaim = throwInboxClaimOnce();
+    const faults = deliveryStorageFaults(failedClaim);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new FaultyDeliveryStorageFactory(faultPlan),
+      storageFactory: faults.storageFactory,
       leaseMs: 60_000,
       now: () => new Date("2026-07-08T09:00:00.000Z"),
     });
@@ -1093,13 +1091,14 @@ describe("Delivery worker", () => {
       { signalId: "signal-pre-callback-failure" },
       { signalId: "signal-after-failure" },
     ]);
+    expect(failedClaim.count).toBe(1);
   });
 
   it("reads skipped head rows in bounded pages instead of one query per row when limit is 1", async () => {
-    const faultPlan: DeliveryFaultPlan = {};
+    const faults = deliveryStorageFaults();
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new FaultyDeliveryStorageFactory(faultPlan),
+      storageFactory: faults.storageFactory,
       leaseMs: 60_000,
       now: () => new Date("2026-07-08T09:00:00.000Z"),
     });
@@ -1143,7 +1142,7 @@ describe("Delivery worker", () => {
       delivered: 1,
       failed: 0,
     });
-    expect(faultPlan.inboxQueries).toBe(2);
+    expect(faults.inboxQueries).toBe(2);
   });
 
   it("stops unsupported-row scanning at the storage read cap", async () => {
@@ -1535,15 +1534,16 @@ describe("Delivery worker", () => {
   });
 
   it("leaves a row pending when the dedup guard cannot be marked delivered", async () => {
-    const faultPlan: DeliveryFaultPlan = {};
+    const failedDedupFinalize = throwDedupFinalizeOnce({ armed: false });
+    const faults = deliveryStorageFaults(failedDedupFinalize);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new FaultyDeliveryStorageFactory(faultPlan),
+      storageFactory: faults.storageFactory,
     });
     const shard = ShardIndex.single();
 
     await seed(delivery, "signal-guard-fails", 1n);
-    faultPlan.throwDedupFinalizeOnce = true;
+    failedDedupFinalize.arm();
 
     const seen: string[] = [];
     const run = await delivery.drain(shard, {
@@ -1564,6 +1564,7 @@ describe("Delivery worker", () => {
       { signalId: "signal-guard-fails", status: "TO_DELIVER" },
     ]);
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+    expect(failedDedupFinalize.count).toBe(1);
   });
 
   it("rejects forged delivered markers that only reuse an inbox message id", async () => {
@@ -1840,8 +1841,8 @@ describe("Delivery worker", () => {
   });
 
   it("retries when stale delivered-row guard repair loses a race", async () => {
-    const faultPlan: DeliveryFaultPlan = {};
-    const storageFactory = new FaultyDeliveryStorageFactory(faultPlan);
+    const skippedDedupFinalize = skipDedupFinalizeOnce({ armed: false });
+    const storageFactory = deliveryStorageFaults(skippedDedupFinalize).storageFactory;
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory,
@@ -1874,7 +1875,7 @@ describe("Delivery worker", () => {
       inboxRecords.compareAndSet(inboxKey, pendingInbox, InboxRecords.write(delivered)),
     ).resolves.toBe(true);
 
-    faultPlan.skipDedupFinalizeOnce = true;
+    skippedDedupFinalize.arm();
     const duplicate = await delivery.inbox.receive({
       inboxId,
       signalId: "signal-stale-guard-retry",
@@ -1886,7 +1887,7 @@ describe("Delivery worker", () => {
       keepUntil,
     });
 
-    expect(faultPlan.skippedDedupFinalizations).toBe(1);
+    expect(skippedDedupFinalize.count).toBe(1);
     expect(duplicate.outcome).toBe("DUPLICATE");
     expect(duplicate.message.status).toBe("DELIVERED");
     await expect(dedupRecords.read(DedupRecords.guardKey(stored.message))).resolves.toEqual(
@@ -1954,8 +1955,8 @@ describe("Delivery worker", () => {
   });
 
   it("retries when guard-delivered row repair loses a race", async () => {
-    const faultPlan: DeliveryFaultPlan = {};
-    const storageFactory = new FaultyDeliveryStorageFactory(faultPlan);
+    const skippedRepair = skipInboxRepairOnce({ armed: false });
+    const storageFactory = deliveryStorageFaults(skippedRepair).storageFactory;
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory,
@@ -1988,7 +1989,7 @@ describe("Delivery worker", () => {
       dedupRecords.compareAndSet(dedupKey, pendingGuard, DedupRecords.writeFinal(delivered)),
     ).resolves.toBe(true);
 
-    faultPlan.skipInboxRepairOnce = true;
+    skippedRepair.arm();
     const duplicate = await delivery.inbox.receive({
       inboxId,
       signalId: "signal-row-repair-retry",
@@ -2000,7 +2001,7 @@ describe("Delivery worker", () => {
       keepUntil,
     });
 
-    expect(faultPlan.skippedInboxRepairs).toBe(1);
+    expect(skippedRepair.count).toBe(1);
     expect(duplicate.outcome).toBe("DUPLICATE");
     expect(duplicate.message.status).toBe("DELIVERED");
     await expect(inboxRecords.read(messageKey(stored.message))).resolves.toEqual(
@@ -2009,8 +2010,8 @@ describe("Delivery worker", () => {
   });
 
   it("retries when pending claim recovery finalization loses a race", async () => {
-    const faultPlan: DeliveryFaultPlan = {};
-    const storageFactory = new FaultyDeliveryStorageFactory(faultPlan);
+    const skippedDedupFinalize = skipDedupFinalizeOnce({ armed: false });
+    const storageFactory = deliveryStorageFaults(skippedDedupFinalize).storageFactory;
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory,
@@ -2026,7 +2027,7 @@ describe("Delivery worker", () => {
       ),
     ).resolves.toBe(true);
 
-    faultPlan.skipDedupFinalizeOnce = true;
+    skippedDedupFinalize.arm();
     const result = await delivery.inbox.receive({
       inboxId: pending.inboxId,
       signalId: pending.signalId,
@@ -2037,7 +2038,7 @@ describe("Delivery worker", () => {
       version: 100n,
     });
 
-    expect(faultPlan.skippedDedupFinalizations).toBe(1);
+    expect(skippedDedupFinalize.count).toBe(1);
     expect(result).toMatchObject({
       outcome: "DUPLICATE",
       message: {

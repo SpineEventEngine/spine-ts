@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 28 fix committed; re-review pending
+Status: Round 29 fixes coordinator-verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer      | Status   |
-| -------------------------- | ------------- | -------- |
-| Code style/maintainability | Helmholtz     | Findings |
-| Documentation              | Chandrasekhar | Findings |
-| TypeScript/API docs        | Meitner       | Findings |
-| Security                   | Noether       | Findings |
-| Performance/reliability    | Archimedes    | Findings |
+| Lane                       | Reviewer    | Status   |
+| -------------------------- | ----------- | -------- |
+| Code style/maintainability | Confucius   | Findings |
+| Documentation              | Pasteur     | Findings |
+| TypeScript/API docs        | Mendel      | Clean    |
+| Security                   | Carson      | Clean    |
+| Performance/reliability    | Schrodinger | Findings |
 
 ## Review Criteria
 
@@ -153,6 +153,73 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   cannot preempt it. The docs now say this plainly instead of implying timer
   renewal protects blocked in-process callbacks.
 - Fix commit: `0c622787` (`Fix delivery loop resume and worker status`).
+
+### Round 29 Follow-up - `2026-07-10T12:53:31Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..5e17283b.diff` from task baseline
+  `ca8fb2b3` to current HEAD `5e17283b`.
+- TypeScript/API docs (Mendel): clean.
+- Security (Carson): clean.
+- Documentation (Pasteur): [Medium] historical Round 27 summaries in
+  `round-27-fix-report.md` and `work-logs/T-0026.md` still say pre-callback
+  failures do not consume loop failure budget. Add an explicit correction that
+  only skipped unsupported rows avoid failure-budget consumption; pre-callback
+  failures increment `failed`/`DeliveryLoop.maxFailures` while leaving
+  `accepted` unchanged.
+- Code style/maintainability (Confucius): [Important] the `PAUSED`/resume path
+  is still implicit because `DeliveryLoop` infers skipped-scan exhaustion from
+  public counters and fetches the resume cursor through `DeliveryRun` WeakMap
+  metadata. Return an explicit package-local internal drain result instead.
+  [Important] the new delivery-storage fault fixture is still one broad mutable
+  protocol; expose scenario-focused helpers or narrower plans so tests do not
+  couple to ambient fixture state.
+- Performance/reliability (Schrodinger): [High] mixed success/failure drains
+  can preserve a cursor past a failed pending row and later return `IDLE` while
+  that row remains retryable. Clear resume state after any failed run or prevent
+  cursors from advancing past failed rows, and add a regression for
+  `maxFailures: 2` with a failed row followed by a successful row.
+- Action: dispatch one fix worker for the complete Round 29 batch with focused
+  red evidence for the mixed fail/success starvation case, explicit internal
+  drain result refactoring, fixture helper cleanup, docs corrections, and
+  focused verification before another five-lane re-review.
+
+### Round 29 Fix Implementation - `2026-07-10`
+
+- Added the required red regression first:
+  `pnpm --config.verify-deps-before-run=false exec vitest run
+packages/server/test/delivery/delivery-loop.test.ts -t "retries a failed
+head row before going idle after a later success"` failed before production
+  edits because the loop attempted only `["signal-fails",
+"signal-succeeds"]` and then returned idle.
+- `Delivery` now owns an explicit package-local `DeliveryDrainOutcome`
+  contract for loop-only state. Each drain returns
+  `{ run, resumeCursor, exhaustedSkippedScan }` and reports skipped-scan
+  exhaustion directly instead of hiding resume state in public counters or
+  metadata. Failed drain outcomes omit the resume cursor, so `DeliveryLoop`
+  cannot persist cursor state past retryable failed rows.
+- The delivery storage fault fixture is now a coherent probe-based helper
+  module. Delivery worker tests arm scenario-focused helpers such as
+  `blockInboxClaimOnce()`, `throwInboxClearOnce()`, and
+  `skipDedupFinalizeOnce({ armed: false })` instead of mutating one ambient
+  plan object.
+- Historical docs were corrected: `round-27-fix-report.md` and the work log now
+  say only skipped unsupported rows avoid failure-budget consumption; pre-
+  callback claim/validation/lease/cleanup/status-update failures still
+  increment `failed` / `DeliveryLoop.maxFailures` while leaving `accepted`
+  unchanged.
+- Fix-worker verification passed:
+  `delivery-worker.test.ts`, `delivery-loop.test.ts`,
+  `delivery-worker-runtime.test.ts`, `inbox.test.ts`,
+  `sharded-work-registry.test.ts`, and `index.test.ts` passed with 230 tests;
+  `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing invalid
+  `origin` source-link warning.
+- Coordinator verification at `2026-07-10T13:14:12Z` passed the same focused
+  delivery/API Vitest batch with 6 files and 230 tests, plus
+  `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check`. `docs:check` retained only the existing invalid `origin`
+  source-link warning.
 
 ### Round 26 Follow-up - `2026-07-10T11:29:35Z`
 

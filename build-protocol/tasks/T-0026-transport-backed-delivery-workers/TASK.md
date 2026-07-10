@@ -457,6 +457,29 @@ still starve renewal because JavaScript cannot preempt them. The fix commit is
 `0c622787` (`Fix delivery loop resume and worker status`). A fresh five-lane
 re-review is still required.
 
+Round 29 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..5e17283b.diff` produced clean TypeScript/API
+and security lanes. Blocking findings remain: the internal paused/resume seam
+must return an explicit package-local drain result instead of combining
+counter inference with `DeliveryRun` WeakMap metadata; the delivery-storage
+fault fixture needs scenario-focused helpers or narrower plans; historical
+Round 27 summaries must correct the stale failure-budget wording; and
+mixed success/failure drains must not preserve a cursor past a failed pending
+row and later report idle while that row remains retryable. One fix worker will
+address the complete batch before another re-review.
+
+Round 29 fix implementation on `2026-07-10`: `Delivery` now returns an explicit
+package-local `DeliveryDrainOutcome` for loop-private access while public
+`Delivery.drain()` still returns `DeliveryRun`. Failed drain outcomes omit the
+resume cursor, preventing mixed failure/success drains from advancing past a
+retryable failed row, and `DeliveryLoop` now uses explicit
+`exhaustedSkippedScan` metadata instead of counter inference. The delivery
+storage fault fixture now exposes scenario-focused probes, and historical
+Round 27 failure-budget wording was corrected. Coordinator verification passed
+the focused delivery/API Vitest batch with 6 files and 230 tests, plus
+`typecheck:build:generated`, `docs:check`, `format:check`, and
+`git diff --check`. A fresh five-lane re-review is still required.
+
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker
 will add red/green regressions before changing delivery code, preserve direct

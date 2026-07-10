@@ -58,7 +58,7 @@ The existing non-blocking note about `FaultyDeliveryRecordStorage.compareAndSetR
 - `DeliveryEndpointMessage.label` now inlines its three supported public labels, leaving TypeDoc with a navigable public union instead of a private alias reference.
 - `DeliveryLoop` now returns `PAUSED` after two saturated skipped-only drains in one invocation and preserves `scanOffset` for the next `run()`, bounding one invocation while keeping resumable forward progress.
 - `DeliveryWorker` now propagates `PAUSED` as a worker-level stop reason when any owned loop pauses.
-- `packages/server/README.md`, `docs/architecture/README.md`, `docs/USER_GUIDE.md`, and `docs/api/README.md` now explicitly state that direct-drain `limit` caps endpoint callbacks actually invoked, scanning is bounded by `maxReadLimit + limit`, and skipped/unsupported rows plus pre-callback failures do not consume accepted work or loop failure budget.
+- `packages/server/README.md`, `docs/architecture/README.md`, `docs/USER_GUIDE.md`, and `docs/api/README.md` now explicitly state that direct-drain `limit` caps endpoint callbacks actually invoked and scanning is bounded by `maxReadLimit + limit`. Historical correction recorded in Round 29: skipped/unsupported rows do not consume accepted work or failure budget, but pre-callback claim/validation/lease/cleanup/status-update failures still increment `failed` / `DeliveryLoop.maxFailures` while leaving `accepted` unchanged.
 - Historical Round 24 durable notes now mention that `DeliveryEndpoint` was renamed to `OnDeliveryMessage` in Round 25.
 
 ## Verification Commands and Results
