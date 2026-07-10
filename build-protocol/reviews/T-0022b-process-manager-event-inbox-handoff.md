@@ -1,18 +1,18 @@
 # Review Log: T-0022b Process-Manager Event Inbox Handoff
 
-Status: round 11 style fix applied; re-review pending
+Status: final verification passed; final re-review pending
 
 Scope: live process-manager event reactor durable inbox handoff.
 
 ## Required Lanes
 
-| Lane                       | Reviewer | Status  | Notes |
-| -------------------------- | -------- | ------- | ----- |
-| Code style/maintainability | latest: round 11 | fix applied; re-review pending | Markdown lines reflowed. |
-| Documentation completeness | latest: round 11 | clean | Durable logs verified current. |
-| TypeScript/API docs        | latest: round 11 | clean | No public API findings reported. |
-| Security                   | latest: round 11 | clean | No new security findings reported. |
-| Performance/reliability    | latest: round 11 | clean | Mixed duplicate coordination verified. |
+| Lane                       | Reviewer         | Status | Notes                                  |
+| -------------------------- | ---------------- | ------ | -------------------------------------- |
+| Code style/maintainability | latest: round 12 | clean  | Markdown and source style verified.    |
+| Documentation completeness | latest: round 12 | clean  | Durable logs verified current.         |
+| TypeScript/API docs        | latest: round 12 | clean  | No public API findings reported.       |
+| Security                   | latest: round 12 | clean  | No new security findings reported.     |
+| Performance/reliability    | latest: round 12 | clean  | Mixed duplicate coordination verified. |
 
 ## Planned Review Focus
 
@@ -429,3 +429,18 @@ Scope: live process-manager event reactor durable inbox handoff.
 
 - Author follow-up shortened the required-lanes note and wrapped long work-log
   command evidence lines.
+
+## Round 12 Findings
+
+- Clean across all required lanes: code style/maintainability, documentation,
+  TypeScript/API docs, security, and performance/reliability.
+
+## Final Verification Follow-Up
+
+- Final full verification first exposed stale test typing in PM inbox negative
+  tests and a branch coverage shortfall. Author follow-up kept the narrowed
+  production PM inbox input type, made corrupted test inputs explicit, simplified
+  an unreachable PM inbox branch, and added focused coverage for durable
+  subscription record validation plus signal metadata optional/error paths.
+- Escalated final `pnpm --config.verify-deps-before-run=false verify` passed
+  with 1125 tests and 90.02% branch coverage.

@@ -6,6 +6,8 @@ import { describe, expect, it } from "vitest";
 import { Delivery, ShardIndex, type InboxMessage } from "../../src/index.js";
 import { LocalProcessManagerInbox } from "../../src/context/process-manager-handoff.js";
 
+type ReceiveInput = Parameters<LocalProcessManagerInbox["receive"]>[1];
+
 describe("LocalProcessManagerInbox", () => {
   it("delivers a handled command without optional signal and keepUntil fields", async () => {
     const delivery = new Delivery({
@@ -445,15 +447,18 @@ describe("LocalProcessManagerInbox", () => {
     });
 
     await expect(
-      inbox.receive(delivery, {
-        inboxId: { targetId: "pm-1", targetTypeUrl },
-        signalId: "signal-1",
-        signal: laterSignal,
-        label: "HANDLE_COMMAND",
-        status: "SCHEDULED",
-        shard,
-        keepUntil,
-      }),
+      inbox.receive(
+        delivery,
+        corruptedInput({
+          inboxId: { targetId: "pm-1", targetTypeUrl },
+          signalId: "signal-1",
+          signal: laterSignal,
+          label: "HANDLE_COMMAND",
+          status: "SCHEDULED",
+          shard,
+          keepUntil,
+        }),
+      ),
     ).rejects.toThrow(
       "Process-manager inbox delivery did not reach the target row before the local drain finished.",
     );
@@ -690,13 +695,16 @@ describe("LocalProcessManagerInbox", () => {
     });
 
     await expect(
-      inbox.receive(delivery, {
-        inboxId: { targetId: "pm-5", targetTypeUrl },
-        signalId: "signal-5",
-        label: "HANDLE_COMMAND",
-        status: "SCHEDULED",
-        shard: ShardIndex.single(),
-      }),
+      inbox.receive(
+        delivery,
+        corruptedInput({
+          inboxId: { targetId: "pm-5", targetTypeUrl },
+          signalId: "signal-5",
+          label: "HANDLE_COMMAND",
+          status: "SCHEDULED",
+          shard: ShardIndex.single(),
+        }),
+      ),
     ).rejects.toThrow(
       "Process-manager inbox delivery did not reach the target row before the local drain finished.",
     );
@@ -727,13 +735,16 @@ describe("LocalProcessManagerInbox", () => {
     });
 
     await expect(
-      inbox.receive(delivery, {
-        inboxId: { targetId: "pm-6", targetTypeUrl },
-        signalId: "signal-6",
-        label: "UPDATE_SUBSCRIBER",
-        status: "TO_DELIVER",
-        shard: ShardIndex.single(),
-      }),
+      inbox.receive(
+        delivery,
+        corruptedInput({
+          inboxId: { targetId: "pm-6", targetTypeUrl },
+          signalId: "signal-6",
+          label: "UPDATE_SUBSCRIBER",
+          status: "TO_DELIVER",
+          shard: ShardIndex.single(),
+        }),
+      ),
     ).rejects.toThrow(
       'BoundedContext delivery has no handler for inbox label "UPDATE_SUBSCRIBER".',
     );
@@ -785,4 +796,8 @@ function pause(milliseconds: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, milliseconds);
   });
+}
+
+function corruptedInput(input: unknown): ReceiveInput {
+  return input as ReceiveInput;
 }

@@ -1,6 +1,6 @@
 # T-0022b Implementation Report
 
-Status: implemented in code/docs; round-eleven style fix applied; re-review pending
+Status: implemented in code/docs; final verification passed; final re-review pending
 Date: `2026-07-10`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0022b-process-manager-event-inbox-handoff`
@@ -37,7 +37,7 @@ Round-one findings fixed in this pass:
      `packages/server/src/repository/repository.ts`;
    - replaced the `fromBinary(AnySchema, toBinary(AnySchema, ...))` copy path
      with generated `Any` rebuilding via `create(AnySchema, { ... value: new
-     Uint8Array(...) })` before unpacking;
+Uint8Array(...) })` before unpacking;
    - shortened new helper names such as `handoffPmEvent`, `replayPmInbox`,
      `readPmInboxEvent`, `requirePmEventTenant`, `createInboxCheckRepo`,
      `createBlockingPmRepo`, and `storePmInboxEvent`.
@@ -160,6 +160,19 @@ Round-eleven findings fixed in this pass:
 1. Code style/maintainability
    - shortened the review-log lane note and wrapped long work-log command
      evidence lines to stay within the line-length rule.
+
+Round-twelve review result:
+
+- clean across all required review lanes.
+
+Final verification fixes:
+
+1. TypeScript/coverage
+   - kept PM inbox production inputs narrowed and made corrupted negative-test
+     inputs explicit in tests;
+   - simplified an unreachable PM inbox owner-presence branch;
+   - added focused branch coverage for durable subscription records and signal
+     metadata optional/error paths.
 
 ## Files Changed
 
@@ -293,6 +306,15 @@ Passed:
   - note: TypeDoc reported the existing invalid-`origin` source-link warning
   - command: `git diff --check`
   - exit `0`
+- final escalated verification
+  - command: `pnpm --config.verify-deps-before-run=false verify`
+  - exit `0`
+  - result: typecheck, ESLint, format, cleanup enforcement, regular tests,
+    coverage tests, docs check, proto lint, and generated-clean checks passed
+  - tests: `58` files passed, `1125` tests passed
+  - coverage: statements `95.03%`, branches `90.02%`, functions `98.27%`,
+    lines `95.03%`
+  - note: TypeDoc reported the existing invalid-`origin` source-link warning
 
 ## Remaining Deferrals
 

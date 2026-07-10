@@ -2414,10 +2414,7 @@ function requireProjectionTenant(context: StorageContext, event: Event): string 
   return tenantId;
 }
 
-function requirePmEventTenant(
-  context: StorageContext,
-  event: Event,
-): string | undefined {
+function requirePmEventTenant(context: StorageContext, event: Event): string | undefined {
   if (!context.multitenant) {
     return undefined;
   }

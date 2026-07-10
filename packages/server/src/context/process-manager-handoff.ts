@@ -1,9 +1,6 @@
 import { Delivery } from "../delivery/delivery.js";
 import type { InboxMessage } from "../delivery/inbox.js";
-import type {
-  ProcessManagerInbox,
-  ProcessManagerInboxTarget,
-} from "../repository/repository.js";
+import type { ProcessManagerInbox, ProcessManagerInboxTarget } from "../repository/repository.js";
 import {
   coordinateLocalInboxHandoff,
   drainLocalInboxMessage,
@@ -90,10 +87,10 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
           await row.promise;
           continue;
         }
-        const message = requireOwnedMessage(row);
+        const message = writtenMessage(row.owner);
 
         await this.#drainInboxRow(delivery, message, deliveryTenantId);
-        resolveRow(row, message);
+        resolveRow(row.owner, message);
       }
       return Object.freeze(await Promise.all(rows.map(({ promise }) => promise)));
     } catch (error) {
@@ -220,21 +217,17 @@ function createInboxDeferred(): InboxDeferred {
   return { promise, resolve, reject, settled: false };
 }
 
-function requireOwnedMessage(row: BatchRow): InboxMessage {
-  if (row.owner?.message === undefined) {
+function writtenMessage(owner: InboxDeferred): InboxMessage {
+  if (owner.message === undefined) {
     throw new Error("Process-manager inbox batch row was not written before drain.");
   }
 
-  return row.owner.message;
+  return owner.message;
 }
 
-function resolveRow(row: BatchRow, message: InboxMessage): void {
-  if (row.owner === undefined || row.owner.settled) {
-    return;
-  }
-
-  row.owner.settled = true;
-  row.owner.resolve(message);
+function resolveRow(owner: InboxDeferred, message: InboxMessage): void {
+  owner.settled = true;
+  owner.resolve(message);
 }
 
 function rejectRows(rows: readonly BatchRow[], reason: unknown): void {
@@ -246,7 +239,9 @@ function rejectRows(rows: readonly BatchRow[], reason: unknown): void {
   }
 }
 
-function assertProcessManagerMessage(message: InboxMessage): asserts message is ProcessManagerMessage {
+function assertProcessManagerMessage(
+  message: InboxMessage,
+): asserts message is ProcessManagerMessage {
   if (message.label !== "HANDLE_COMMAND" && message.label !== "REACT_UPON_EVENT") {
     throw new Error(`BoundedContext delivery has no handler for inbox label "${message.label}".`);
   }
