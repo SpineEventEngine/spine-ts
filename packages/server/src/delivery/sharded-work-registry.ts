@@ -92,6 +92,9 @@ export class ShardedWorkRegistry {
         if (current.id !== expected.id || current.node !== expected.node) {
           return undefined;
         }
+        if (current.expiresAt.getTime() <= now) {
+          return undefined;
+        }
 
         const next = new ShardSession(
           current.id,

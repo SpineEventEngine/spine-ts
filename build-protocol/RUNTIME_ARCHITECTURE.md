@@ -252,17 +252,20 @@ delivery worker boundary:
 - pending and final dedup guards block duplicate `(signalId, inboxId)` writes
   during the same 30-second local retention window as JVM local delivery while
   allowing crash recovery from a durable inbox row;
-- shard pickup persists lease-backed shard sessions through storage
-  compare-and-set rather than process-local locks; and
+- shard pickup, renewal, and release persist lease-backed shard sessions through
+  storage compare-and-set rather than process-local locks. Renewal extends only
+  an unexpired current session for the same session ID and node;
 - one direct drain run claims a shard through `ShardedWorkRegistry`, reads
-  `TO_DELIVER` rows in inbox order, invokes one supplied framework endpoint
-  callback per row, marks successful rows `DELIVERED`, leaves failed endpoint
-  calls `TO_DELIVER` for a later run, returns simple counts plus per-message
-  failures, and releases the shard in a `finally` path;
+  `TO_DELIVER` rows in inbox order, keeps the storage lease renewed while the
+  drain is active, invokes one supplied framework endpoint callback per row,
+  marks successful rows `DELIVERED`, leaves failed endpoint calls `TO_DELIVER`
+  for a later run, returns simple counts plus per-message failures, and releases
+  the shard in a `finally` path;
 - `DeliveryLoop` repeats those direct drains for one shard, and `DeliveryWorker`
-  is the closeable owner for one node's configured shard loops. These are
-  lifecycle wrappers over the direct primitive, not production supervision or
-  transport topology; and
+  is the closeable owner for one node's configured shard loops. Renewal is
+  framework-owned lease fencing for active drains. These are lifecycle wrappers
+  over the direct primitive, not production retry policy, production
+  supervision, or transport topology; and
 - malformed, oversized, or key-mismatched inbox, dedup, and shard-session
   records fail closed as storage corruption.
 

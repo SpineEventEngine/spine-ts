@@ -32,6 +32,30 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 Review findings fixed and verified after implementation commit `94b4c632`.
 
+### Round 4 Follow-up - `2026-07-10T04:53:23Z`
+
+- Finding: [P1] `ShardedWorkRegistry.renew()` could renew an already-expired
+  session when the stored session ID and node still matched the caller's
+  session. That let a delayed renewal extend ownership after another worker had
+  become eligible to pick up the shard.
+- Fix: `renew()` now reads the current storage-backed session, confirms
+  session ID/node ownership, and returns `undefined` when the current stored
+  `expiresAt` is at or before the renewal clock before constructing the next
+  session.
+- Evidence: focused red regression in `sharded-work-registry.test.ts` failed
+  before the fix because delayed renewal returned a renewed `node-a` session,
+  then passed after the expiry guard.
+- Finding: [P2] `build-protocol/RUNTIME_ARCHITECTURE.md` described shard
+  claim/release but did not mention renewal in the delivery-worker section.
+- Fix: updated the runtime architecture delivery-worker section to describe
+  storage-backed pickup, renewal, and release. It now states renewal is
+  framework-owned lease fencing for active drains, not production retry or
+  supervision.
+- Verification: required focused delivery Vitest, `typecheck:build:generated`,
+  `docs:check`, `format:check`, and `git diff --check` all passed on
+  `2026-07-10T04:56:04Z`. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
+
 ### Round 3 Follow-up - `2026-07-10T04:42:03Z`
 
 - Finding: [P1] lease activity in `Delivery.drain()` and `drainMessage()` was
