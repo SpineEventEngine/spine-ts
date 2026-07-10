@@ -3368,7 +3368,7 @@ describe("repository signal routing", () => {
   it("writes later process-manager event inbox rows when an earlier routed target fails", async () => {
     SplitRouteProcessManager.reset();
     const factory = new InMemoryStorageFactory();
-    const repository = createSplitRoutePmRepo();
+    const repository = createSplitPmRepo();
     const routeEvent = repository.routeEvent.bind(repository);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -5730,7 +5730,7 @@ function createBlockingPmRepo(): Repository<typeof BlockingProcessManager> {
   });
 }
 
-function createSplitRoutePmRepo(): Repository<typeof SplitRouteProcessManager> {
+function createSplitPmRepo(): Repository<typeof SplitRouteProcessManager> {
   const handlers = defineEntityHandlers(
     SplitRouteProcessManager,
     ProcessManagerStateSchema,

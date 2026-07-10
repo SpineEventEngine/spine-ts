@@ -1,6 +1,6 @@
 # Review Log: T-0022b Process-Manager Event Inbox Handoff
 
-Status: round-two fixes applied; verification complete; re-review pending
+Status: round 3 completed; fixes required
 
 Scope: live process-manager event reactor durable inbox handoff.
 
@@ -8,11 +8,11 @@ Scope: live process-manager event reactor durable inbox handoff.
 
 | Lane                       | Reviewer | Status  | Notes |
 | -------------------------- | -------- | ------- | ----- |
-| Code style/maintainability | `019f4947-110f-7773-b40b-56a90982b0ad` | fixes required | Duplicate event inbox reader and overlong names. |
-| Documentation completeness | `019f4947-439d-7931-a16d-301eccbf0ed3` | fixes required | Stale direct-EventBus prose and missing safety contract/status docs. |
-| TypeScript/API docs        | `019f4947-5f0f-7252-9b3f-34dafd99a7db` | fixes required | Stale API README prose and internal JSDoc. |
-| Security                   | `019f4947-7a60-7110-8578-01e9c530019e` | clean | Tenant/payload/target validation found before handler code. |
-| Performance/reliability    | `019f4947-9c96-7540-8d5b-7e91edb49c19` | clean | Exact-row replay and duplicate handoff behavior found sound. |
+| Code style/maintainability | latest: `019f4965-e9d3-7cf3-96ee-f2e67010cc61` | fixes required | Round-three test helper name violates four-component rule. |
+| Documentation completeness | latest: `019f4966-0cd5-7822-aa2e-932b3922de03` | fixes required | Round-three table summary was stale. |
+| TypeScript/API docs        | latest: `019f4966-30c9-7860-8a67-35fbc24b5be6` | fixes required | Round-three minor internal inbox type widening. |
+| Security                   | latest: `019f4966-50a0-7270-9434-a3deadb01608` | clean | Tenant/payload/target validation still found before handler code. |
+| Performance/reliability    | latest: `019f4966-75af-76d2-b11f-d19007f075ca` | clean | Round-two high multi-target durability finding verified fixed. |
 
 ## Planned Review Focus
 
@@ -124,3 +124,33 @@ Scope: live process-manager event reactor durable inbox handoff.
 - Author follow-up corrected the durable chronology in
   `build-protocol/work-logs/T-0022b.md` and expanded
   `IMPLEMENTATION_REPORT.md` to include the missing changed files.
+
+## Round 3 Findings
+
+### Code Style/Maintainability
+
+- Important: the new test helper `createSplitRoutePmRepo` violates the
+  four-component naming rule. Rename it before style can pass.
+
+### Documentation
+
+- Medium: the required-lanes summary table was stale and contradicted later
+  round-two entries. Keep the table aligned with the latest lane status.
+
+### TypeScript/API Docs
+
+- Minor: internal process-manager inbox types are still widened to generic
+  inbox input/message shapes. Narrow the internal compile-time contract for
+  process-manager inbox rows so impossible labels/statuses are not accepted by
+  TypeScript where the framework constructs these rows.
+
+### Security
+
+- Clean. The reviewer found the multi-target fix did not weaken fail-closed
+  replay and did not introduce a public execution or transport surface.
+
+### Performance/Reliability
+
+- Clean. The reviewer verified that the multi-target path writes all routed rows
+  before replay, keeps exact-row drain behavior, and that the new regression
+  proves the fixed behavior.

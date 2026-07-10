@@ -443,12 +443,21 @@ const repositoryProjectionDirect = new WeakMap<RepositoryView, (event: Event) =>
 const repositoryRuntimes = new WeakMap<RepositoryView, RepositoryRuntime>();
 Object.freeze(Repository);
 
+type ProcessManagerInboxLabel = "HANDLE_COMMAND" | "REACT_UPON_EVENT";
+type ProcessManagerInboxMessage = InboxMessage & {
+  readonly label: ProcessManagerInboxLabel;
+};
+type ProcessManagerInboxInput = Omit<InboxMessageInput, "whenReceived" | "version"> & {
+  readonly label: ProcessManagerInboxLabel;
+  readonly status: "TO_DELIVER";
+};
+
 /** @internal Narrow framework-only replay target for process-manager inbox handoff. */
 export interface ProcessManagerInboxTarget {
   /** Target process-manager state type URL routed by this replay target. */
   readonly targetTypeUrl: string;
   /** Replays one durable inbox message under the active delivery tenant. */
-  replay(message: InboxMessage, deliveryTenantId?: string): Promise<void>;
+  replay(message: ProcessManagerInboxMessage, deliveryTenantId?: string): Promise<void>;
 }
 
 /** @internal Context-owned process-manager inbox handoff capability. */
@@ -456,7 +465,7 @@ export interface ProcessManagerInbox {
   /** Writes a durable inbox row and waits for that exact row to be delivered locally. */
   receive(
     delivery: Delivery,
-    input: Omit<InboxMessageInput, "whenReceived" | "version">,
+    input: ProcessManagerInboxInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage>;
 }
@@ -866,7 +875,7 @@ function pmEventInboxInput(
   event: Event,
   entityId: unknown,
   keepUntil: Date,
-): Omit<InboxMessageInput, "whenReceived" | "version"> {
+): ProcessManagerInboxInput {
   return {
     inboxId: {
       targetId: inboxTargetId(entityId),

@@ -1,11 +1,17 @@
 import { Delivery } from "../delivery/delivery.js";
 import type { InboxMessage } from "../delivery/inbox.js";
-import type { ProcessManagerInbox, ProcessManagerInboxTarget } from "../repository/repository.js";
+import type {
+  ProcessManagerInbox,
+  ProcessManagerInboxTarget,
+} from "../repository/repository.js";
 import {
   coordinateLocalInboxHandoff,
   drainLocalInboxMessage,
   localInboxHandoffKey,
 } from "./local-inbox-handoff.js";
+
+type ProcessManagerInput = Parameters<ProcessManagerInbox["receive"]>[1];
+type ProcessManagerMessage = Parameters<ProcessManagerInboxTarget["replay"]>[0];
 
 export class LocalProcessManagerInbox implements ProcessManagerInbox {
   readonly #contextName: string;
@@ -23,18 +29,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
 
   async receive(
     delivery: Delivery,
-    input: {
-      readonly inboxId: {
-        readonly targetId: string;
-        readonly targetTypeUrl: string;
-      };
-      readonly signalId: string;
-      readonly signal?: InboxMessage["signal"];
-      readonly label: InboxMessage["label"];
-      readonly status: InboxMessage["status"];
-      readonly shard: InboxMessage["shard"];
-      readonly keepUntil?: Date;
-    },
+    input: ProcessManagerInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
     return await coordinateLocalInboxHandoff({
@@ -46,18 +41,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
 
   async #receiveAndDrain(
     delivery: Delivery,
-    input: {
-      readonly inboxId: {
-        readonly targetId: string;
-        readonly targetTypeUrl: string;
-      };
-      readonly signalId: string;
-      readonly signal?: InboxMessage["signal"];
-      readonly label: InboxMessage["label"];
-      readonly status: InboxMessage["status"];
-      readonly shard: InboxMessage["shard"];
-      readonly keepUntil?: Date;
-    },
+    input: ProcessManagerInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
     const written = await delivery.inbox.receive({
@@ -104,6 +88,6 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
       );
     }
 
-    await target.replay(message, deliveryTenantId);
+    await target.replay(message as ProcessManagerMessage, deliveryTenantId);
   }
 }
