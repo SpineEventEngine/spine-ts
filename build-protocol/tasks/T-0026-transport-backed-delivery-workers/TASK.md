@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 44 fixes implemented; coordinator commit pending
+Status: Round 44 fixes committed; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -816,7 +816,9 @@ temporarily introduced the no-reclaim contract before Round 43 / `9477830c`
 restored expired-claim reclaim during claim CAS while live claims block.
 Verification passed with focused context handoff Vitest, generated typecheck,
 docs check, lint, format check, working-tree diff check, and baseline range diff
-check. No worker commit was created; coordinator commit remains pending.
+check. No worker commit was created. Coordinator commit `9bb68f33` (`Fix
+projection replay status guard`) recorded the fix; five-lane re-review remains
+pending.
 Coordinator verification after the worker returned passed focused context
 handoff Vitest with 2 files and 22 tests, generated build typecheck, docs check
 with only the existing invalid-`origin` warning, lint, format check,

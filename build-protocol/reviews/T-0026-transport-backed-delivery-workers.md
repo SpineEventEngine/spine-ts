@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 44 fixes implemented; coordinator commit pending
+Status: Round 44 fixes committed; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -80,8 +80,8 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   handoff Vitest with 2 files and 22 tests, generated build typecheck, docs
   check with only the existing invalid-`origin` warning, lint, format check,
   working-tree diff check, and baseline range diff check.
-- No worker commit was created. Coordinator commit remains pending before the
-  next five-lane re-review.
+- No worker commit was created. Coordinator commit `9bb68f33` (`Fix projection
+replay status guard`) recorded the fix; five-lane re-review remains pending.
 
 ### Round 43 Follow-up - `2026-07-10T17:45:00Z`
 

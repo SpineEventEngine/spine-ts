@@ -1,11 +1,11 @@
 # T-0026 Round 44 Fix Report
 
-Status: verified; coordinator commit pending
+Status: committed; re-review pending
 Date: `2026-07-10`
 
 Branch: `task/T-0026-transport-backed-delivery-workers`
 Worktree: `.worktrees/T-0026-transport-backed-delivery-workers`
-Worker commit: none.
+Worker commit: none; coordinator commit `9bb68f33`.
 
 ## Skill Applicability
 
@@ -21,8 +21,8 @@ Canonical checklist source: `build-protocol/BUILD_PROTOCOL.md#skills-and-tooling
 
 Selected skill:
 
-| Skill                     | Source             | Why selected                                  | Applied instruction                                                              |
-| ------------------------- | ------------------ | --------------------------------------------- | -------------------------------------------------------------------------------- |
+| Skill                     | Source             | Why selected                                 | Applied instruction                                                              |
+| ------------------------- | ------------------ | -------------------------------------------- | -------------------------------------------------------------------------------- |
 | `test-driven-development` | User-provided path | Required for projection replay behavior fix. | Added focused failing regression before changing projection replay status guard. |
 
 Skipped relevant-looking skills: `javascript-testing-patterns` because the
@@ -96,4 +96,5 @@ advice.
 
 ## Commit
 
-No worker commit was created. Coordinator commit remains pending.
+No worker commit was created. Coordinator commit `9bb68f33` (`Fix projection
+replay status guard`) recorded this fix.
