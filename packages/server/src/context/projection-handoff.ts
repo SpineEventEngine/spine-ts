@@ -28,18 +28,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
 
   async receive(
     delivery: Delivery,
-    input: {
-      readonly inboxId: {
-        readonly targetId: string;
-        readonly targetTypeUrl: string;
-      };
-      readonly signalId: string;
-      readonly signal?: InboxMessage["signal"];
-      readonly label: InboxMessage["label"];
-      readonly status: InboxMessage["status"];
-      readonly shard: InboxMessage["shard"];
-      readonly keepUntil?: Date;
-    },
+    input: ProjectionInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
     return await coordinateLocalInboxHandoff({
@@ -51,18 +40,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
 
   async #receiveAndDrain(
     delivery: Delivery,
-    input: {
-      readonly inboxId: {
-        readonly targetId: string;
-        readonly targetTypeUrl: string;
-      };
-      readonly signalId: string;
-      readonly signal?: InboxMessage["signal"];
-      readonly label: InboxMessage["label"];
-      readonly status: InboxMessage["status"];
-      readonly shard: InboxMessage["shard"];
-      readonly keepUntil?: Date;
-    },
+    input: ProjectionInput,
     deliveryTenantId?: string,
   ): Promise<InboxMessage> {
     const written = await delivery.inbox.receive({
@@ -110,6 +88,7 @@ export class LocalProjectionInbox implements ProjectionInbox {
   }
 }
 
+type ProjectionInput = Parameters<ProjectionInbox["receive"]>[1];
 type ProjectionMessage = Parameters<ProjectionInboxTarget["replay"]>[0];
 
 function assertProjectionMessage(message: InboxMessage): asserts message is ProjectionMessage {

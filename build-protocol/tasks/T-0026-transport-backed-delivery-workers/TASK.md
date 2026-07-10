@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 88 fix verified; current-HEAD re-review pending
+Status: Round 90 fix verified; current-HEAD re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1413,5 +1413,26 @@ Round 86 fix timestamp to the actual verification time. Verification passed:
 `docs:check` passed with only the existing invalid TypeDoc `origin` warning,
 the targeted command-continuation search returned no matches, `format:check`
 passed, `git diff --check` passed, and generated/API reference diff checks
+returned no changed files. A fresh five-lane current-HEAD re-review is
+required.
+
+Round 89 re-review on `2026-07-10T23:51:43Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..90c43a4a.diff` produced clean
+TypeScript/API docs, security, and performance/reliability lanes.
+Documentation found only the remaining Round 88 planning-vs-verification
+timestamp mismatch. Style found two P3 runtime maintainability issues:
+projection handoff repeats its receive input shape instead of deriving it from
+`ProjectionInbox.receive()`, and `ActiveClaim.#deliveredCallback` should be
+named for callback success rather than delivery. The next fix batch will
+address these findings, verify, commit, and rerun all five lanes.
+
+Round 90 fix on `2026-07-10T23:55:22Z`: projection handoff now derives its
+input alias from `ProjectionInbox.receive()`, `ActiveClaim` now uses a
+`#callbackSucceeded` flag name, and Round 88 timestamps are aligned to the
+verification time. Verification passed: focused projection/delivery Vitest
+passed with 3 files and 90 tests; `typecheck:build:generated` passed;
+`docs:check` passed with only the existing invalid TypeDoc `origin` warning;
+`format:check` passed; the targeted command-continuation search returned no
+matches; `git diff --check` passed; and generated/API reference diff checks
 returned no changed files. A fresh five-lane current-HEAD re-review is
 required.

@@ -873,7 +873,7 @@ function keepShardLease(
 class ActiveClaim {
   #claimed: ClaimedInboxMessage | undefined;
   #callbackAccepted = false;
-  #deliveredCallback = false;
+  #callbackSucceeded = false;
   #lock: Promise<void> = Promise.resolve();
 
   callbackAccepted(): boolean {
@@ -881,13 +881,13 @@ class ActiveClaim {
   }
 
   callbackSucceeded(): boolean {
-    return this.#deliveredCallback;
+    return this.#callbackSucceeded;
   }
 
   clear(): void {
     this.#claimed = undefined;
     this.#callbackAccepted = false;
-    this.#deliveredCallback = false;
+    this.#callbackSucceeded = false;
   }
 
   async clearStored(storage: InboxStorage): Promise<void> {
@@ -915,7 +915,7 @@ class ActiveClaim {
   }
 
   markCallbackSucceeded(): void {
-    this.#deliveredCallback = true;
+    this.#callbackSucceeded = true;
   }
 
   async renew(storage: InboxStorage, session: ShardSession): Promise<void> {
@@ -935,7 +935,7 @@ class ActiveClaim {
   set(message: ClaimedInboxMessage): void {
     this.#claimed = message;
     this.#callbackAccepted = false;
-    this.#deliveredCallback = false;
+    this.#callbackSucceeded = false;
   }
 
   async #locked<T>(callback: () => Promise<T>): Promise<T> {

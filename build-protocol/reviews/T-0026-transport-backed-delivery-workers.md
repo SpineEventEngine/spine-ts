@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 88 fix verified; current-HEAD re-review pending
+Status: Round 90 fix verified; current-HEAD re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -2911,7 +2911,7 @@ red/green delivery regressions before the next review pass.
 - Action: record this findings batch, fix the remaining docs and Round 40/Round
   86 records issues, verify, commit, and rerun all five reviewer lanes.
 
-### Round 88 Fix - `2026-07-10T23:33:21Z`
+### Round 88 Fix - `2026-07-10T23:45:33Z`
 
 - Documentation/API docs: aligned `docs/architecture/README.md`,
   `build-protocol/DEVELOPER_API.md`, and
@@ -2924,3 +2924,46 @@ red/green delivery regressions before the next review pass.
   `origin` warning, the targeted command-continuation search returned no
   matches, `format:check` passed, `git diff --check` passed, and generated/API
   reference diff checks returned no changed files at `2026-07-10T23:45:33Z`.
+
+### Round 89 Re-review - `2026-07-10T23:51:43Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..90c43a4a.diff` from task baseline
+  `ca8fb2b3` to current HEAD `90c43a4a`.
+- Code style/maintainability (Franklin the 3rd): [P3]
+  `packages/server/src/context/projection-handoff.ts` repeats the full
+  projection inbox input shape in `ProjectionInbox.receive()` and again in
+  `#receiveAndDrain()`; mirror the process-manager handoff's derived input
+  alias so the method and helper cannot drift. [P3]
+  `packages/server/src/delivery/delivery.ts` names the
+  `ActiveClaim.#deliveredCallback` flag as if the row was delivered, but it is
+  set when the endpoint callback succeeds before delivery-status update.
+- Documentation (Kuhn the 3rd): [P3] Round 88 timestamp cleanup is still
+  internally inconsistent because the Round 88 report and review-log header use
+  the planning timestamp while verification evidence uses `2026-07-10T23:45:33Z`.
+- TypeScript/API docs (Fermat the 3rd): clean. Exports, generated-output
+  hygiene, `DeliveryEndpointMessage`, and accepted-work docs align.
+- Security (Sartre the 3rd): clean. Tenant isolation, callback exposure,
+  mutable snapshot safety, label handling, claim/lease fencing, and public API
+  boundaries remain sound.
+- Performance/reliability (Nash the 3rd): clean. Delivery loop, inbox storage,
+  shard registry, handoff path, and focused regression coverage match the
+  intended semantics.
+- Action: record this findings batch, fix the two code maintainability issues
+  and the Round 88 timestamp consistency, verify, commit, and rerun all five
+  reviewer lanes.
+
+### Round 90 Fix - `2026-07-10T23:51:43Z`
+
+- Runtime style: derived `ProjectionInput` from `ProjectionInbox.receive()`
+  input parameters and reused it for both projection handoff receive paths.
+- Runtime style: renamed `ActiveClaim.#deliveredCallback` to
+  `#callbackSucceeded`.
+- Records: aligned the Round 88 fix report and review-log header with the
+  actual verification timestamp.
+- Verification: focused projection/delivery Vitest passed with 3 files and 90
+  tests, `typecheck:build:generated` passed, `docs:check` passed with only the
+  existing invalid TypeDoc `origin` warning, `format:check` passed, the
+  targeted command-continuation search returned no matches, `git diff --check`
+  passed, and generated/API reference diff checks returned no changed files at
+  `2026-07-10T23:55:22Z`.
