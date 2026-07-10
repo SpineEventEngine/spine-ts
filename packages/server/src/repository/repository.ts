@@ -446,6 +446,7 @@ Object.freeze(Repository);
 type ProcessManagerInboxLabel = "HANDLE_COMMAND" | "REACT_UPON_EVENT";
 type ProcessManagerInboxMessage = InboxMessage & {
   readonly label: ProcessManagerInboxLabel;
+  readonly status: "TO_DELIVER";
 };
 type ProcessManagerInboxInput = Omit<InboxMessageInput, "whenReceived" | "version"> & {
   readonly label: ProcessManagerInboxLabel;

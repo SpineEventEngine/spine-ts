@@ -76,9 +76,7 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
   }
 
   async #replay(message: InboxMessage, deliveryTenantId?: string): Promise<void> {
-    if (message.label !== "HANDLE_COMMAND" && message.label !== "REACT_UPON_EVENT") {
-      throw new Error(`BoundedContext delivery has no handler for inbox label "${message.label}".`);
-    }
+    assertProcessManagerMessage(message);
 
     const target = this.#targets.get(message.inboxId.targetTypeUrl);
 
@@ -88,6 +86,17 @@ export class LocalProcessManagerInbox implements ProcessManagerInbox {
       );
     }
 
-    await target.replay(message as ProcessManagerMessage, deliveryTenantId);
+    await target.replay(message, deliveryTenantId);
+  }
+}
+
+function assertProcessManagerMessage(message: InboxMessage): asserts message is ProcessManagerMessage {
+  if (message.label !== "HANDLE_COMMAND" && message.label !== "REACT_UPON_EVENT") {
+    throw new Error(`BoundedContext delivery has no handler for inbox label "${message.label}".`);
+  }
+  if (message.status !== "TO_DELIVER") {
+    throw new Error(
+      `BoundedContext delivery cannot replay process-manager inbox message with status "${message.status}".`,
+    );
   }
 }

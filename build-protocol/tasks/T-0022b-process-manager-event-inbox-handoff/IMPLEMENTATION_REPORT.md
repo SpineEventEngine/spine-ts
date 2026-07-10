@@ -1,6 +1,6 @@
 # T-0022b Implementation Report
 
-Status: implemented in code/docs; round-two fixes verified
+Status: implemented in code/docs; round-four fixes verified; re-review pending
 Date: `2026-07-10`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0022b-process-manager-event-inbox-handoff`
@@ -79,6 +79,14 @@ Round-three findings fixed in this pass:
      process-manager labels and `TO_DELIVER` status used by this handoff.
 3. Durable docs
    - updated the review summary table to reflect the latest lane state.
+
+Round-four findings fixed in this pass:
+
+1. Documentation
+   - corrected stale round-two status wording in the work log and this report.
+2. TypeScript/API docs
+   - narrowed process-manager replay messages to the `TO_DELIVER` status used
+     by local inbox replay.
 
 ## Files Changed
 
