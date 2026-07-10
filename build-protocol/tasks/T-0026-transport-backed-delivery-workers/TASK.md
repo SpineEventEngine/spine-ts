@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 61 review findings recorded; fix pending
+Status: Round 62 fix verified; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1096,11 +1096,23 @@ re-review after this docs commit. `round-60-fix-report.md` records the fix;
 Round 61 re-review on `2026-07-10`: the fresh review package
 `.superpowers/sdd/review-ca8fb2b3..6d3c352b.diff` produced clean
 documentation, TypeScript/API docs, and security lanes. Code
-style/maintainability found the work log still recorded Round 56 at
-`21:10:00Z`, after the Round 57 `19:55:11Z` fix, and found four private
+style/maintainability found the stale historical work-log claim that placed
+Round 56 at `21:10:00Z`, after the Round 57 `19:55:11Z` fix, and found four private
 `DeliveryScanState` transition names longer than the four-semantic-component
 limit. Performance/reliability found resumed cursor handling validates the same
 boundary during cursor resolution and again before the first page read. The
 next fix will reconcile Round 56 to commit evidence, shorten the helper method
 names, make cursor resolution structural-only, add a resumed-scan query-count
 regression, verify, and rerun all five lanes.
+
+Round 62 fix on `2026-07-10`: durable records identify the Round 61 chronology
+finding as a stale historical claim, while the actual Round 56 review remains
+anchored at `2026-07-10T19:42:56Z`, before the Round 57 fix at `19:55:11Z`.
+The focused resumed-scan inbox-query regression failed red with four queries,
+then passed after `#resolveDrainCursor()` became structural-only. The delivery
+scan keeps its pre-read and post-read boundary validation, while the private
+transition names are now `resetAfterBoundaryChange`, `resetResumedHead`,
+`shouldRescanShortPage`, and `finishSkippedScan`. `round-62-fix-report.md`
+records concise evidence. The focused regression, full `delivery-loop.test.ts`,
+`delivery-worker.test.ts`, generated TypeScript build typecheck, `format:check`,
+and `git diff --check` passed; five-lane re-review is pending.

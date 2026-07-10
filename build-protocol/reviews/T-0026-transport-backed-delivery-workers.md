@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 61 review findings recorded; fix pending
+Status: Round 62 fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -2235,10 +2235,10 @@ red/green delivery regressions before the next review pass.
 - Review package:
   `.superpowers/sdd/review-ca8fb2b3..6d3c352b.diff` from task baseline
   `ca8fb2b3` to current HEAD `6d3c352b`.
-- Code style/maintainability (Heisenberg the 2nd): [P2] the work log still
-  recorded Round 56 at `21:10:00Z`, after the Round 57 fix at `19:55:11Z`,
-  making the durable log imply a fix preceded the review that produced its
-  findings. Reconcile Round 56 to commit evidence for `1e00b44a` at
+- Code style/maintainability (Heisenberg the 2nd): [P2] the stale work-log
+  claim placed Round 56 at `21:10:00Z`, after the Round 57 fix at `19:55:11Z`,
+  making the durable history imply a fix preceded the review that produced its
+  findings. Round 56 is reconciled to commit evidence for `1e00b44a` at
   `2026-07-10T19:42:56Z`.
 - Code style/maintainability (Heisenberg the 2nd): [P3] private
   `DeliveryScanState` transition names exceed the task's four-semantic-component
@@ -2263,3 +2263,22 @@ red/green delivery regressions before the next review pass.
   regression using the delivery storage fault fixture.
 - Action: record the complete findings batch, dispatch one fix worker, verify,
   commit, and rerun all five reviewer lanes.
+
+### Round 62 Fix Implementation - `2026-07-10T20:20:01Z`
+
+- Documentation: Round 56 remains recorded at `2026-07-10T19:42:56Z`, before the
+  Round 57 fix at `19:55:11Z`. Round 61's `21:10:00Z` wording is retained only
+  as the stale historical condition it reported, so the active chronology does
+  not imply that Round 57 fixed findings before Round 56 produced them.
+- Red test: added a resumed-boundary query-count regression using
+  `deliveryStorageFaults()`. It preserves the delivery outcome assertion while
+  expecting three inbox queries: pre-read validation, page read, and post-read
+  validation. It failed red with four queries before the production change.
+- Fix: made `#resolveDrainCursor()` structural-only and kept the existing
+  pre-read and post-read boundary validation in `#drainAvailableMessages()`.
+  Shortened the four private scan-state transition names to the task limit.
+- Verification: the focused regression passed green (1 passed, 28 skipped).
+  Full `delivery-loop.test.ts` passed 29 tests and `delivery-worker.test.ts`
+  passed 51 tests. Generated TypeScript build typecheck, `format:check`, and
+  `git diff --check` passed.
+- Action: rerun all five reviewer lanes from the verified Round 62 state.

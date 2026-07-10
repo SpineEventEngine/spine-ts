@@ -149,6 +149,37 @@ describe("DeliveryLoop", () => {
     expect(faults.inboxQueries).toBe(0);
   });
 
+  it("validates a resumed boundary only around the first page read", async () => {
+    const faults = deliveryStorageFaults();
+    const delivery = createDelivery(faults.storageFactory);
+    const shard = ShardIndex.single();
+    const seen: string[] = [];
+    const boundary = await seed(delivery, "signal-resume-boundary", 1n, "CATCH_UP");
+
+    await seed(delivery, "signal-resume-delivered", 2n);
+
+    const outcome = await deliveryAccess.drain(
+      delivery,
+      shard,
+      {
+        node: "node-a",
+        onMessage(message) {
+          seen.push(message.signalId);
+        },
+      },
+      { resume: { offset: 1, pendingBoundaryId: boundary.id.value } },
+    );
+
+    expect(outcome.run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      delivered: 1,
+      failed: 0,
+    });
+    expect(seen).toEqual(["signal-resume-delivered"]);
+    expect(faults.inboxQueries).toBe(3);
+  });
+
   it("stops idle when pending rows are already claimed", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({

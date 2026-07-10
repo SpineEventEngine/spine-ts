@@ -94,7 +94,7 @@ export class Delivery {
     );
 
     try {
-      const cursor = await this.#resolveDrainCursor(scope.inbox, shard, controls.resume);
+      const cursor = this.#resolveDrainCursor(controls.resume);
 
       return await this.#drainAvailableMessages(
         scope.inbox,
@@ -126,10 +126,7 @@ export class Delivery {
     const scanBudget = inboxStorageAccess.maxReadLimit + limit;
     const scan = new DeliveryScanState(cursor);
     const finishExhaustedSkippedScan = () =>
-      progress.finish(
-        scan.finishExhaustedSkippedOnlyScan(progress.accepted, progress.failed),
-        true,
-      );
+      progress.finish(scan.finishSkippedScan(progress.accepted, progress.failed), true);
 
     while (progress.processed < scanBudget) {
       if (
@@ -139,7 +136,7 @@ export class Delivery {
         // Offset pages are relative to the current `TO_DELIVER` set. If
         // skipped rows disappeared, reset once instead of paging past work
         // that moved before the old absolute offset.
-        scan.resetToHeadAfterBoundaryChange();
+        scan.resetAfterBoundaryChange();
         continue;
       }
 
@@ -152,12 +149,12 @@ export class Delivery {
       ) {
         // The offset page may have been read from a changed `TO_DELIVER` set.
         // Discard it before processing so work that moved to the head is not skipped.
-        scan.resetToHeadAfterBoundaryChange();
+        scan.resetAfterBoundaryChange();
         continue;
       }
 
       if (messages.length === 0 && progress.processed === 0 && scan.hasResumedHeadRescan()) {
-        scan.resetToHeadAfterEmptyResumedPage();
+        scan.resetResumedHead();
         continue;
       }
 
@@ -190,8 +187,8 @@ export class Delivery {
       }
 
       if (messages.length < readLimit) {
-        if (scan.shouldRescanHeadAfterShortPage(progress.accepted, progress.failed)) {
-          scan.resetToHeadAfterEmptyResumedPage();
+        if (scan.shouldRescanShortPage(progress.accepted, progress.failed)) {
+          scan.resetResumedHead();
           continue;
         }
 
@@ -453,20 +450,9 @@ export class Delivery {
     return Object.freeze({ inbox, shards });
   }
 
-  async #resolveDrainCursor(
-    inbox: Inbox,
-    shard: ShardIndex,
-    value: DeliveryDrainCursor | undefined,
-  ): Promise<DeliveryDrainCursor> {
+  #resolveDrainCursor(value: DeliveryDrainCursor | undefined): DeliveryDrainCursor {
     const cursor = requireDrainCursor(value);
-    if (cursor.offset === 0) {
-      return cursor;
-    }
-
-    if (
-      cursor.pendingBoundaryId === undefined ||
-      !(await this.#pendingBoundaryMatches(inbox, shard, cursor.offset, cursor.pendingBoundaryId))
-    ) {
+    if (cursor.offset === 0 || cursor.pendingBoundaryId === undefined) {
       return drainCursor(0);
     }
 
@@ -678,7 +664,7 @@ class DeliveryScanState {
     );
   }
 
-  resetToHeadAfterBoundaryChange(): void {
+  resetAfterBoundaryChange(): void {
     this.#offset = 0;
     this.#pendingBoundaryId = undefined;
     this.#offsetRescan = true;
@@ -686,7 +672,7 @@ class DeliveryScanState {
     this.#rescanSeenAllowance = inboxStorageAccess.maxReadLimit;
   }
 
-  resetToHeadAfterEmptyResumedPage(): void {
+  resetResumedHead(): void {
     this.#offset = 0;
     this.#pendingBoundaryId = undefined;
     this.#resumedHeadRescan = false;
@@ -706,7 +692,7 @@ class DeliveryScanState {
     this.#pendingBoundaryId = message.id.value;
   }
 
-  shouldRescanHeadAfterShortPage(accepted: number, failed: number): boolean {
+  shouldRescanShortPage(accepted: number, failed: number): boolean {
     return this.#resumedHeadRescan && accepted === 0 && failed === 0;
   }
 
@@ -714,7 +700,7 @@ class DeliveryScanState {
     return drainCursor(this.#offset, this.#pendingBoundaryId);
   }
 
-  finishExhaustedSkippedOnlyScan(accepted: number, failed: number): DeliveryDrainCursor {
+  finishSkippedScan(accepted: number, failed: number): DeliveryDrainCursor {
     return this.#resumedHeadRescan && accepted === 0 && failed === 0
       ? drainCursor(0)
       : this.cursor();
