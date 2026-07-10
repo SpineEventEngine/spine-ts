@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: implementation complete; review pending
+Status: implementation complete; review fixes verified
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status  |
-| -------------------------- | -------- | ------- |
-| Code style/maintainability | Pending  | Pending |
-| Documentation              | Pending  | Pending |
-| TypeScript/API docs        | Pending  | Pending |
-| Security                   | Pending  | Pending |
-| Performance/reliability    | Pending  | Pending |
+| Lane                       | Reviewer                    | Status      |
+| -------------------------- | --------------------------- | ----------- |
+| Code style/maintainability | Review round                | Complete    |
+| Documentation              | Documentation fix sub-agent | Fixed P2/P3 |
+| TypeScript/API docs        | Review round                | Complete    |
+| Security                   | Review round                | Complete    |
+| Performance/reliability    | Reliability fix sub-agent   | Fixed P1    |
 
 ## Review Criteria
 
@@ -30,7 +30,28 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Rounds
 
-Pending after implementation commit `94b4c632`.
+Review findings fixed and verified after implementation commit `94b4c632`.
+
+### Lease Reliability Follow-up - `2026-07-10T04:27:00Z`
+
+- Finding: [P1] `Delivery.drain()` and `drainMessage()` could keep awaiting an
+  endpoint callback after their shard lease expired. Another worker could then
+  pick up the same shard and invoke the same `TO_DELIVER` row concurrently.
+- Fix: `ShardedWorkRegistry.renew()` now extends only the current storage-backed
+  session ID/node with compare-and-set fencing. Active delivery drains start a
+  small lease keeper, check that ownership has not been lost before endpoint
+  invocation and before marking delivered, and still release the session in
+  `finally`.
+- Evidence: focused `delivery-worker.test.ts` regression failed before the fix
+  with worker B returning `DRAINED`/`delivered: 1` instead of `SKIPPED`, then
+  passed after adding session renewal and drain-local keepalive.
+
+### Review Log Follow-up - `2026-07-10T04:27:00Z`
+
+- Finding: [P3] The required review lanes table still listed every lane as
+  `Pending` after findings and fixes had been recorded.
+- Fix: updated the table to show completed lanes and fixed P1/P2/P3 follow-up
+  status.
 
 ### Documentation Review Follow-up - `2026-07-10T05:09:03Z`
 

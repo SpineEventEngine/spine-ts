@@ -75,6 +75,43 @@ export class ShardedWorkRegistry {
     }
   }
 
+  /** Renew one shard session if it is still current. */
+  async renew(session: ShardSession): Promise<ShardSession | undefined> {
+    const expected = snapshotReleaseSession(session);
+    let now = requireInputTime(this.#now(), "Shard renewal time");
+    const storage = this.#storage();
+
+    try {
+      for (let attempt = 0; attempt < casRetryLimit; attempt += 1) {
+        const currentRecord = await readShardRecord(storage, expected.key);
+        if (currentRecord === undefined) {
+          return undefined;
+        }
+
+        const current = readSession(currentRecord, expected.key);
+        if (current.id !== expected.id || current.node !== expected.node) {
+          return undefined;
+        }
+
+        const next = new ShardSession(
+          current.id,
+          current.shard,
+          current.node,
+          current.pickedUpAt,
+          new Date(now + this.#leaseMs),
+        );
+        if (await casShardRecord(storage, expected.key, currentRecord, writeSession(next))) {
+          return next;
+        }
+        now = requireInputTime(this.#now(), "Shard renewal time");
+      }
+
+      throw casRetriesExhausted("Shard renewal");
+    } finally {
+      storage.close();
+    }
+  }
+
   /** Release one shard session if it is still current. */
   async release(session: ShardSession): Promise<boolean> {
     const expected = snapshotReleaseSession(session);

@@ -8,7 +8,7 @@ import {
   StorageFactory,
   type StorageContext,
 } from "@spine-ts/storage";
-import { describe, expect, expectTypeOf, it } from "vitest";
+import { describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import {
   DedupRecords,
@@ -59,6 +59,63 @@ describe("Delivery worker", () => {
     });
     expect(run.failures).toEqual([]);
     expect(seen).toEqual([]);
+  });
+
+  it("keeps active shard ownership while endpoint callbacks await past the original lease", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-08T09:00:00.000Z"));
+      const storageFactory = new InMemoryStorageFactory();
+      const first = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+        leaseMs: 20,
+        now: () => new Date(Date.now()),
+      });
+      const second = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+        leaseMs: 20,
+        now: () => new Date(Date.now()),
+      });
+      const shard = ShardIndex.single();
+      const started = deferred<undefined>();
+      const barrier = deferred<undefined>();
+      const seen: string[] = [];
+
+      await seed(first, "signal-lease", 1n);
+      const firstRun = first.drain(shard, {
+        node: "node-a",
+        onMessage(message) {
+          seen.push(`node-a:${message.signalId}`);
+          started.resolve(undefined);
+
+          return barrier.promise;
+        },
+      });
+
+      await started.promise;
+      await vi.advanceTimersByTimeAsync(20);
+      const secondRun = await second.drain(shard, {
+        node: "node-b",
+        onMessage(message) {
+          seen.push(`node-b:${message.signalId}`);
+        },
+      });
+
+      barrier.resolve(undefined);
+      await firstRun;
+
+      expect(secondRun).toMatchObject({
+        status: "SKIPPED",
+        processed: 0,
+        delivered: 0,
+        failed: 0,
+      });
+      expect(seen).toEqual(["node-a:signal-lease"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("marks successful messages delivered and reports run statistics", async () => {
@@ -1055,6 +1112,21 @@ function targetInbox(): InboxId {
     targetId: "projection-1",
     targetTypeUrl: "type.example.dev/tasks.Projection",
   };
+}
+
+function deferred<T>(): {
+  readonly promise: Promise<T>;
+  readonly resolve: (value: T | PromiseLike<T>) => void;
+  readonly reject: (reason?: unknown) => void;
+} {
+  let resolve: (value: T | PromiseLike<T>) => void = () => undefined;
+  let reject: (reason?: unknown) => void = () => undefined;
+  const promise = new Promise<T>((nextResolve, nextReject) => {
+    resolve = nextResolve;
+    reject = nextReject;
+  });
+
+  return { promise, resolve, reject };
 }
 
 function missingMessage(): InboxMessage {

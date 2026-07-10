@@ -3,10 +3,12 @@ import type { StorageContext, StorageFactory } from "@spine-ts/storage";
 import { Inbox, InboxMessageError, type InboxMessage } from "./inbox.js";
 import { InboxStorage } from "./inbox-storage.js";
 import { ShardIndex } from "./shard-index.js";
-import { ShardedWorkRegistry } from "./sharded-work-registry.js";
+import { ShardedWorkRegistry, type ShardSession } from "./sharded-work-registry.js";
 
 /** Delivery owner for inbox storage and shard registry. */
 export class Delivery {
+  readonly #leaseMs: number;
+
   /** Durable inbox facade. */
   readonly inbox: Inbox;
   /** Storage-backed shard registry. */
@@ -14,6 +16,7 @@ export class Delivery {
 
   /** Open delivery from one storage context and factory. */
   constructor(options: DeliveryOptions) {
+    this.#leaseMs = options.leaseMs ?? 30_000;
     this.inbox = new Inbox(
       new InboxStorage({
         context: options.context,
@@ -46,6 +49,7 @@ export class Delivery {
     if (session === undefined) {
       return deliveryRun("SKIPPED", 0, 0, 0, []);
     }
+    const lease = keepShardLease(this.shards, session, this.#leaseMs);
 
     try {
       const messages = await this.inbox.read(session.shard, {
@@ -57,7 +61,9 @@ export class Delivery {
 
       for (const message of messages) {
         try {
+          lease.requireActive();
           await options.onMessage(message);
+          lease.requireActive();
           const marked = await this.inbox.markDelivered(message);
           if (marked === undefined) {
             throw new Error(`Inbox message "${message.id.value}" was not marked delivered.`);
@@ -70,6 +76,7 @@ export class Delivery {
 
       return deliveryRun("DRAINED", messages.length, delivered, failures.length, failures);
     } finally {
+      await lease.close();
       await this.shards.release(session);
     }
   }
@@ -93,6 +100,7 @@ export class Delivery {
     if (session === undefined) {
       return deliveryRun("SKIPPED", 0, 0, 0, []);
     }
+    const lease = keepShardLease(this.shards, session, this.#leaseMs);
 
     try {
       if (!sameShard(session.shard, shard)) {
@@ -109,7 +117,9 @@ export class Delivery {
       }
 
       try {
+        lease.requireActive();
         await options.onMessage(pending);
+        lease.requireActive();
         const marked = await this.inbox.markDelivered(pending);
         if (marked === undefined) {
           throw new Error(`Inbox message "${pending.id.value}" was not marked delivered.`);
@@ -122,6 +132,7 @@ export class Delivery {
         return deliveryRun("DRAINED", 1, 0, 1, failures);
       }
     } finally {
+      await lease.close();
       await this.shards.release(session);
     }
   }
@@ -182,6 +193,11 @@ export interface DeliveryFailure {
   readonly error: unknown;
 }
 
+interface ShardLeaseKeeper {
+  readonly close: () => Promise<void>;
+  readonly requireActive: () => void;
+}
+
 function deliveryRun(
   status: DeliveryRun["status"],
   processed: number,
@@ -195,6 +211,57 @@ function deliveryRun(
     delivered,
     failed,
     failures: Object.freeze([...failures]),
+  });
+}
+
+function keepShardLease(
+  shards: ShardedWorkRegistry,
+  session: ShardSession,
+  leaseMs: number,
+): ShardLeaseKeeper {
+  let current = session;
+  let failed: unknown;
+  let renewing: Promise<void> | undefined;
+  const interval = setInterval(
+    () => {
+      if (renewing !== undefined) {
+        return;
+      }
+
+      renewing = shards
+        .renew(current)
+        .then((next) => {
+          if (next === undefined) {
+            failed = new Error("Shard lease was lost.");
+
+            return;
+          }
+          current = next;
+        })
+        .catch((error: unknown) => {
+          failed = error;
+        })
+        .finally(() => {
+          renewing = undefined;
+        });
+    },
+    Math.max(1, Math.floor(leaseMs / 2)),
+  );
+
+  if (typeof interval.unref === "function") {
+    interval.unref();
+  }
+
+  return Object.freeze({
+    async close() {
+      clearInterval(interval);
+      await renewing;
+    },
+    requireActive() {
+      if (failed !== undefined) {
+        throw failed;
+      }
+    },
   });
 }
 
