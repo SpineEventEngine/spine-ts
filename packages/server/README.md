@@ -675,11 +675,13 @@ tenant IDs through the configured storage factory. This slice still does not
 invoke query handlers, construct the full system-context runtime, provide
 command-log repositories, emit the full system event taxonomy, provide
 tracing/monitors/debug UI, start query/subscription buses, expose a broad
-production lifecycle, or integrate transports. Process-manager command assignees
-and live projection subscribers now write durable inbox rows before the current
+production lifecycle, or integrate transports. Process-manager command
+assignees, process-manager event reactors and event-commanding handlers, and
+live projection subscribers now write durable inbox rows before the current
 local shard drain replays them, and the post does not resolve until that
 received row is marked delivered. Scheduler/retry workers, cross-process
-recovery, and broader event/aggregate handoff remain open production gaps.
+recovery, production delivery policy, retained attempt history, and supported
+catch-up work remain open production gaps.
 
 ## Direct Stand
 
@@ -982,11 +984,12 @@ immediate local shard replay/drain. Process-manager event rows use
 original event ID as `signalId`, and replay only the stored target row before
 handler execution. Before handler code runs, replay validates tenant,
 payload/schema, target type URL, and routed target ID.
-Scheduler/retry workers, cross-process recovery, and broader event/aggregate
-handoff remain open production gaps. This seam follows Spine `core-jvm`
-`Repository` identity and registration concepts closely. The direct repository
-API does not create, find, or store entities; invoke handlers; write inboxes;
-manage caches; emit lifecycle events; or touch transport.
+Supported delivery workers, scheduler/retry workers, cross-process recovery,
+retry monitors, retained attempt history, production delivery policy, and
+supported catch-up work remain open production gaps. This seam follows Spine
+`core-jvm` `Repository` identity and registration concepts closely. The direct
+repository API does not create, find, or store entities; invoke handlers; write
+inboxes; manage caches; emit lifecycle events; or touch transport.
 
 ## Entity State Transition Validation
 
