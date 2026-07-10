@@ -124,9 +124,9 @@ Current slice exposes:
   Delivery skips rows unavailable to the active worker, passes public
   `InboxMessage` snapshots to endpoints, and marks successful rows delivered.
   Endpoint callback failures leave rows pending for a later run through the
-  same durable `TO_DELIVER` state only after framework-owned cleanup clears the
-  active row claim. Fail-closed validation, lease/fencing, status-update, and
-  claim-clear failures are reported through `DeliveryRun.failures` /
+  same durable `TO_DELIVER` state only after framework-owned cleanup succeeds.
+  Cleanup, fail-closed validation, lease/fencing, and status-update failures
+  are reported through `DeliveryRun.failures` /
   `DeliveryFailure` without an immediate retry or recovery guarantee in this
   slice. Endpoint callbacks run only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; unsupported labels fail closed

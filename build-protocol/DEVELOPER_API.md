@@ -262,8 +262,8 @@ smaller than the later scheduler/retry stack:
   `REACT_UPON_EVENT`; unsupported labels fail closed before callback
   invocation. Successful rows are marked `DELIVERED`; endpoint callback
   failures leave the row `TO_DELIVER` for a later run only when
-  framework-owned cleanup clears the active row claim. Fail-closed validation,
-  lease/fencing, status-update, and claim-clear failures are returned through
+  framework-owned cleanup succeeds. Cleanup, fail-closed validation,
+  lease/fencing, and status-update failures are returned through
   `DeliveryRun.failures` / `DeliveryFailure` without an immediate retry or
   recovery guarantee in this slice. The run returns simple `DeliveryRun`
   statistics (`status`, `processed`, `accepted`, `delivered`, `failed`, and

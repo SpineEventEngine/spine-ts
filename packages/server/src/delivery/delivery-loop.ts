@@ -1,6 +1,8 @@
 import type { Delivery, DeliveryEndpoint, DeliveryFailure, DeliveryRun } from "./delivery.js";
 import type { ShardIndex } from "./shard-index.js";
 
+const maxDeliveryLoopFailures = 1_000;
+
 /** Small local repeat loop around the direct `Delivery.drain()` worker boundary. */
 export class DeliveryLoop {
   readonly #delivery: Delivery;
@@ -19,7 +21,11 @@ export class DeliveryLoop {
     this.#node = options.node;
     this.#limit =
       options.limit === undefined ? undefined : requirePositiveSafeInteger("limit", options.limit);
-    this.#maxFailures = requirePositiveSafeInteger("maxFailures", options.maxFailures ?? 1);
+    this.#maxFailures = requirePositiveSafeIntegerAtMost(
+      "maxFailures",
+      options.maxFailures ?? 1,
+      maxDeliveryLoopFailures,
+    );
     this.#onMessage = options.onMessage;
     Object.freeze(this);
   }
@@ -90,7 +96,7 @@ export interface DeliveryLoopOptions {
   readonly node: string;
   /** Optional positive safe integer page size for each underlying drain. */
   readonly limit?: number;
-  /** Maximum failed message attempts before the loop stops. Defaults to one. */
+  /** Maximum failed message attempts before the loop stops. Defaults to one; capped at 1000. */
   readonly maxFailures?: number;
   /** Framework endpoint callback invoked for each available supported worker row. */
   readonly onMessage: DeliveryEndpoint;
@@ -111,7 +117,7 @@ export interface DeliveryLoopRun {
   readonly accepted: number;
   /** Number of rows delivered across all drains. */
   readonly delivered: number;
-  /** Number of endpoint callback, validation, lease/fencing, or status update failures. */
+  /** Number of endpoint callback, validation, lease/fencing, status update, or cleanup failures. */
   readonly failed: number;
   /** Per-message failures retained only in the returned run result. */
   readonly failures: readonly DeliveryFailure[];
@@ -174,6 +180,18 @@ function loopRun(
 function requirePositiveSafeInteger(name: "limit" | "maxFailures", value: number): number {
   if (!Number.isSafeInteger(value) || value <= 0) {
     throw new Error(`DeliveryLoop ${name} must be a positive safe integer.`);
+  }
+  return value;
+}
+
+function requirePositiveSafeIntegerAtMost(
+  name: "limit" | "maxFailures",
+  value: number,
+  max: number,
+): number {
+  requirePositiveSafeInteger(name, value);
+  if (value > max) {
+    throw new Error(`DeliveryLoop ${name} must be a positive safe integer at most ${String(max)}.`);
   }
   return value;
 }

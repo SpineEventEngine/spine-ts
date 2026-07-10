@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: review fixes in progress
+Status: review fixes verified
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -252,4 +252,9 @@ Ledger and the required JVM inspection evidence.
 
 ## Integration Result
 
-Pending.
+Round 17 review fixes are verified: claim-free cleanup wording,
+framework-cleanup failure reporting for unsuccessful cleanup, and a 1000
+`DeliveryLoop.maxFailures` construction bound are implemented. Focused delivery
+Vitest, generated build typecheck, docs check, format check, and
+`git diff --check` passed on `2026-07-10T08:13:51Z`; `docs:check` reported only
+the existing invalid-origin TypeDoc warning.

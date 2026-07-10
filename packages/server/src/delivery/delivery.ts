@@ -250,7 +250,7 @@ export interface DeliveryRun {
   readonly accepted: number;
   /** Number of rows whose endpoint callback succeeded and were marked delivered. */
   readonly delivered: number;
-  /** Number of endpoint callback, validation, lease/fencing, or status update failures. */
+  /** Number of endpoint callback, validation, lease/fencing, status update, or cleanup failures. */
   readonly failed: number;
   /** Per-message failures kept only in the returned run result. */
   readonly failures: readonly DeliveryFailure[];
@@ -262,7 +262,7 @@ export interface DeliveryFailure {
   readonly message: InboxMessage;
   /**
    * Error observed during endpoint callback, fail-closed validation,
-   * lease/fencing, or delivery-status update work.
+   * lease/fencing, delivery-status update, or framework cleanup work.
    */
   readonly error: unknown;
 }
@@ -465,13 +465,16 @@ async function clearActiveClaim(
     return;
   }
 
-  await inboxStorageAccess.clear(storage, message);
+  const cleared = await inboxStorageAccess.clear(storage, message);
+  if (cleared === undefined) {
+    throw new Error("Framework cleanup did not clear the pending row.");
+  }
 }
 
 function claimClearFailure(deliveryError: unknown, clearError: unknown): AggregateError {
   return new AggregateError(
     [deliveryError, clearError],
-    "Delivery failed and inbox claim clear failed.",
+    "Delivery failed and framework cleanup failed.",
   );
 }
 

@@ -324,6 +324,19 @@ describe("DeliveryLoop", () => {
     },
   );
 
+  it("rejects maxFailures above the practical loop bound before a run starts", () => {
+    expect(
+      () =>
+        new DeliveryLoop({
+          delivery: createDelivery(),
+          shard: ShardIndex.single(),
+          node: "node-a",
+          maxFailures: 1_001,
+          onMessage: () => undefined,
+        }),
+    ).toThrow("DeliveryLoop maxFailures must be a positive safe integer at most 1000.");
+  });
+
   it("rejects loop read limits above the storage bound", async () => {
     const loop = new DeliveryLoop({
       delivery: createDelivery(),

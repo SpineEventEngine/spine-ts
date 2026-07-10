@@ -332,12 +332,13 @@ fencing for active drains, not an application retry or supervision policy.
 invoking the `DeliveryEndpoint`, and passes a public `InboxMessage` snapshot to
 the endpoint. Endpoint callbacks run only for `HANDLE_COMMAND`,
 `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; unsupported labels fail closed
-before the callback. Successful delivery marks the row `DELIVERED`; failures
-from endpoint callbacks leave the row pending for a later run. Fail-closed
-label validation, lease/fencing, and delivery-status update failures are
-reported in the returned `DeliveryRun.failures` / `DeliveryFailure` values
-without promising immediate retry; future recovery policy may be needed for
-abandoned or unavailable rows. Drains release the shard in `finally` and return
+before the callback. Successful delivery marks the row `DELIVERED`; endpoint
+callback failures leave the row pending for a later run only when
+framework-owned cleanup succeeds. Cleanup, fail-closed label validation,
+lease/fencing, and delivery-status update failures are reported in the returned
+`DeliveryRun.failures` / `DeliveryFailure` values without promising immediate
+retry; future recovery policy may be needed for abandoned or unavailable rows.
+Drains release the shard in `finally` and return
 a `DeliveryRun` with `status`, `processed`, `accepted`, `delivered`, `failed`,
 and per-message failures retained only in that result.
 `Delivery.drainMessage(message, { node, onMessage })`

@@ -102,6 +102,41 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   invalid-origin warning. `format:check` caught review/work-log Markdown
   wrapping before the final clean rerun.
 
+### Round 17 Follow-up - `2026-07-10T08:06:46Z`
+
+- Finding: [Style/API/Docs MEDIUM] public package and Developer API docs used
+  `active row claim` / `claim-clear failures`, and other public API docs did
+  not consistently qualify endpoint callback retry with successful
+  framework-owned cleanup.
+- Finding: [API P2] the public `DeliveryFailure.error` `AggregateError`
+  message exposed the internal phrase `inbox claim clear failed`.
+- Finding: [API P3] `DeliveryRun.failed` and `DeliveryLoopRun.failed` TypeDoc
+  omitted framework-cleanup failures.
+- Finding: [Reliability MEDIUM] cleanup returning `undefined` after endpoint
+  failure was ignored, so a row could remain unavailable while the run reported
+  only the endpoint failure.
+- Finding: [Reliability LOW] `DeliveryLoop.maxFailures` accepted any positive
+  safe integer, allowing deterministic failures to repeat for an effectively
+  unbounded number of drain runs.
+- Action: dispatch one fix worker for claim-free public wording,
+  cleanup-result reporting, `maxFailures` bounding, tests, and durable logs.
+- Fix: changed the public aggregate cleanup error to
+  `Delivery failed and framework cleanup failed.`, updated public docs and
+  TypeDoc to include framework cleanup failures without claim terminology, and
+  made cleanup returning `undefined` aggregate with the original delivery
+  failure.
+- Fix: capped `DeliveryLoop.maxFailures` at 1000 during construction and
+  documented the bound in the option TypeDoc.
+- Evidence: focused regressions failed before the fix on the old public error
+  message, ignored cleanup `undefined` result, and missing max-failure bound,
+  then the focused delivery Vitest batch passed after the fix with 2 files and
+  55 tests.
+- Verification: focused delivery Vitest rerun, `typecheck:build:generated`,
+  `docs:check`, rerun `format:check`, and `git diff --check` passed.
+  `docs:check` reported only the existing invalid-origin TypeDoc warning.
+  `format:check` caught `delivery-loop.ts` formatting before the final clean
+  rerun.
+
 ### Round 14 Follow-up - `2026-07-10T07:30:12Z`
 
 - Finding: [Docs MEDIUM] `build-protocol/DEVELOPER_API.md` used

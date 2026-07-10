@@ -575,7 +575,7 @@ describe("Delivery worker", () => {
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
   });
 
-  it("reports claim-clear failures after endpoint failure instead of implying retryability", async () => {
+  it("reports framework cleanup failures after endpoint failure instead of implying retryability", async () => {
     const faultPlan: DeliveryFaultPlan = {
       throwInboxClearOnce: true,
     };
@@ -604,6 +604,9 @@ describe("Delivery worker", () => {
     expect(firstRun.failures).toHaveLength(1);
     expect(firstRun.failures[0]?.message.signalId).toBe("signal-clear-fail");
     expect(firstRun.failures[0]?.error).toBeInstanceOf(AggregateError);
+    expect((firstRun.failures[0]?.error as AggregateError).message).toBe(
+      "Delivery failed and framework cleanup failed.",
+    );
     expect((firstRun.failures[0]?.error as AggregateError).errors).toMatchObject([
       { message: "endpoint failed" },
       { message: "Inbox claim clear failed." },
@@ -628,6 +631,48 @@ describe("Delivery worker", () => {
     });
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
       { signalId: "signal-clear-fail", status: "TO_DELIVER" },
+    ]);
+  });
+
+  it("reports framework cleanup failures when cleanup does not clear the row", async () => {
+    const faultPlan: DeliveryFaultPlan = {
+      skipInboxClearOnce: true,
+    };
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FaultyDeliveryStorageFactory(faultPlan),
+    });
+    const shard = ShardIndex.single();
+
+    await seed(delivery, "signal-clear-skipped", 1n);
+
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage() {
+        throw new Error("endpoint failed");
+      },
+    });
+
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 1,
+      delivered: 0,
+      failed: 1,
+    });
+    expect(run.failures).toHaveLength(1);
+    expect(run.failures[0]?.message.signalId).toBe("signal-clear-skipped");
+    expect(run.failures[0]?.error).toBeInstanceOf(AggregateError);
+    expect((run.failures[0]?.error as AggregateError).message).toBe(
+      "Delivery failed and framework cleanup failed.",
+    );
+    expect((run.failures[0]?.error as AggregateError).errors).toMatchObject([
+      { message: "endpoint failed" },
+      { message: "Framework cleanup did not clear the pending row." },
+    ]);
+    expect(faultPlan.skippedInboxClears).toBe(1);
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-clear-skipped", status: "TO_DELIVER" },
     ]);
   });
 
@@ -1689,6 +1734,7 @@ interface DeliveryFaultPlan {
   blockInboxClaimOnce?: boolean;
   blockInboxRenewalOnce?: boolean;
   throwInboxClearOnce?: boolean;
+  skipInboxClearOnce?: boolean;
   skipDedupFinalizeOnce?: boolean;
   skipInboxRepairOnce?: boolean;
   throwDedupFinalizeOnce?: boolean;
@@ -1699,6 +1745,7 @@ interface DeliveryFaultPlan {
   blockedInboxClaims?: number;
   blockedInboxRenewals?: number;
   thrownInboxClears?: number;
+  skippedInboxClears?: number;
   skippedDedupFinalizations?: number;
   skippedInboxRepairs?: number;
   opens?: number;
@@ -1787,6 +1834,28 @@ class FaultyDeliveryRecordStorage<I, R extends Message> extends RecordStorage<I,
       this.#plan.throwInboxClearOnce = false;
       this.#plan.thrownInboxClears = (this.#plan.thrownInboxClears ?? 0) + 1;
       return Promise.reject(new Error("Inbox claim clear failed."));
+    }
+
+    if (
+      this.context.name.endsWith(".delivery.inbox") &&
+      expected !== undefined &&
+      next !== undefined &&
+      this.#plan.skipInboxClearOnce === true &&
+      isInboxClaimClear(id, expected.record, next.record)
+    ) {
+      this.#plan.skipInboxClearOnce = false;
+      this.#plan.skippedInboxClears = (this.#plan.skippedInboxClears ?? 0) + 1;
+      const current = InboxRecords.read(expected.record as Any, id as string);
+      const changed = Object.freeze({
+        ...current,
+        claim: Object.freeze({
+          id: "competing-cleanup-owner",
+          node: "node-b",
+          expiresAt: new Date("2026-07-08T09:01:00.000Z"),
+        }),
+      });
+      await this.#delegate.compareAndSet(id, expected.record, InboxRecords.write(changed) as R);
+      return Promise.resolve(false);
     }
 
     if (
