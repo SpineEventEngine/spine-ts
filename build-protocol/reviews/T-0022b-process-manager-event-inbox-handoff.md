@@ -1,6 +1,6 @@
 # Review Log: T-0022b Process-Manager Event Inbox Handoff
 
-Status: final review clean; integration pending
+Status: final review clean; integrated to main with post-merge verification passed
 
 Scope: live process-manager event reactor durable inbox handoff.
 

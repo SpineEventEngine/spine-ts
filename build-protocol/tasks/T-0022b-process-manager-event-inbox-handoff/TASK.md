@@ -1,11 +1,13 @@
 # T-0022b: Process-Manager Event Inbox Handoff
 
-Status: in review/fixes
+Status: complete; integrated to main with post-merge verification passed
 Start: `2026-07-10T00:21:00Z`
 Baseline commit: `eccbbb1`
 Branch: `task/T-0022b-process-manager-event-inbox-handoff`
 Worktree:
 `.worktrees/T-0022b-process-manager-event-inbox-handoff`
+Integrated: merge commit `2fd6aace` on `main`; post-merge
+`pnpm --config.verify-deps-before-run=false verify` passed.
 
 ## Objective
 

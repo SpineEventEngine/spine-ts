@@ -2448,3 +2448,35 @@ Consequences:
   process-manager commands and live projection subscribers.
 - Remaining event endpoint kinds stay explicit later tasks instead of being
   hidden behind a generalized delivery abstraction.
+
+## D-0074: Reconcile T-0022b Durable Status Before Next Slice
+
+Status: Accepted
+
+Date: 2026-07-10
+
+Context: T-0022b was merged to `main` at `2fd6aace`, and post-merge
+`pnpm --config.verify-deps-before-run=false verify` passed. Its work log already
+recorded the integration, but the task brief and review log still said review
+or integration was pending.
+
+Decision:
+
+- Run T-0023 as a docs/status-only reconciliation before the next implementation
+  slice.
+- Update only durable build-protocol records whose existing T-0022b evidence
+  already proves integration and post-merge verification.
+- Keep runtime, source, test code, and `human-review-1-jul.md` untouched.
+
+Alternatives considered:
+
+- Proceed directly to the next implementation slice. Rejected because stale
+  durable status can mislead autonomous resumption.
+- Broaden this into a historical log cleanup. Rejected because the immediate
+  inconsistency is limited to the T-0022b task and review status.
+
+Consequences:
+
+- Future sessions can resume from truthful T-0022b durable status.
+- The next implementation slice can start without re-reviewing already merged
+  process-manager event inbox handoff work.
