@@ -8,6 +8,7 @@ import { ShardedWorkRegistry, type ShardSession } from "./sharded-work-registry.
 /** Delivery owner for inbox storage and shard registry. */
 export class Delivery {
   readonly #leaseMs: number;
+  readonly #now: () => Date;
 
   /** Durable inbox facade. */
   readonly inbox: Inbox;
@@ -17,18 +18,19 @@ export class Delivery {
   /** Open delivery from one storage context and factory. */
   constructor(options: DeliveryOptions) {
     this.#leaseMs = options.leaseMs ?? 30_000;
+    this.#now = options.now ?? (() => new Date());
     this.inbox = new Inbox(
       new InboxStorage({
         context: options.context,
         storageFactory: options.storageFactory,
-        ...(options.now === undefined ? {} : { now: options.now }),
+        now: this.#now,
       }),
     );
     this.shards = new ShardedWorkRegistry({
       context: options.context,
       storageFactory: options.storageFactory,
       ...(options.leaseMs === undefined ? {} : { leaseMs: options.leaseMs }),
-      ...(options.now === undefined ? {} : { now: options.now }),
+      now: this.#now,
     });
     Object.freeze(this);
   }
@@ -49,7 +51,7 @@ export class Delivery {
     if (session === undefined) {
       return deliveryRun("SKIPPED", 0, 0, 0, []);
     }
-    const lease = keepShardLease(this.shards, session, this.#leaseMs);
+    const lease = keepShardLease(this.shards, session, this.#leaseMs, () => this.#now().getTime());
 
     try {
       const messages = await this.inbox.read(session.shard, {
@@ -100,7 +102,7 @@ export class Delivery {
     if (session === undefined) {
       return deliveryRun("SKIPPED", 0, 0, 0, []);
     }
-    const lease = keepShardLease(this.shards, session, this.#leaseMs);
+    const lease = keepShardLease(this.shards, session, this.#leaseMs, () => this.#now().getTime());
 
     try {
       if (!sameShard(session.shard, shard)) {
@@ -218,6 +220,7 @@ function keepShardLease(
   shards: ShardedWorkRegistry,
   session: ShardSession,
   leaseMs: number,
+  nowMs: () => number,
 ): ShardLeaseKeeper {
   let current = session;
   let failed: unknown;
@@ -259,6 +262,10 @@ function keepShardLease(
     },
     requireActive() {
       if (failed !== undefined) {
+        throw failed;
+      }
+      if (current.expiresAt.getTime() <= nowMs()) {
+        failed = new Error("Shard lease expired.");
         throw failed;
       }
     },

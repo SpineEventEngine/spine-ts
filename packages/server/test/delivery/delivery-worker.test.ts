@@ -118,6 +118,42 @@ describe("Delivery worker", () => {
     }
   });
 
+  it("leaves a row pending when the foreground lease check observes expiry", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-08T09:00:00.000Z"));
+      const delivery = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory: new InMemoryStorageFactory(),
+        leaseMs: 20,
+        now: () => new Date(Date.now()),
+      });
+      const shard = ShardIndex.single();
+
+      await seed(delivery, "signal-expired", 1n);
+      const run = await delivery.drain(shard, {
+        node: "node-a",
+        onMessage() {
+          vi.setSystemTime(new Date("2026-07-08T09:00:00.021Z"));
+        },
+      });
+
+      expect(run).toMatchObject({
+        status: "DRAINED",
+        processed: 1,
+        delivered: 0,
+        failed: 1,
+      });
+      expect(run.failures).toHaveLength(1);
+      await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject(
+        [{ signalId: "signal-expired", status: "TO_DELIVER" }],
+      );
+      await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("marks successful messages delivered and reports run statistics", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -315,6 +351,7 @@ describe("Delivery worker", () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
+      leaseMs: 900_000,
       now: () => now.value as Date,
     });
     const inboxId = targetInbox();

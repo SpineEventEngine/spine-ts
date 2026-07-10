@@ -112,8 +112,9 @@ Current slice exposes:
   slice: inbox writes with durable `(signalId, inboxId)` live deduplication
   through internal guard records, shard ordering metadata with an explicit
   inbox-message UUID tie-breaker, bounded read paging via
-  `InboxReadOptions.limit`, storage-backed shard pickup/release over atomic
-  `RecordStorage.compareAndSet()` handles for one backing store,
+  `InboxReadOptions.limit`, storage-backed shard pickup/renew/release over
+  atomic `RecordStorage.compareAndSet()` handles for one backing store,
+  framework-owned renewal as lease fencing for active drains,
   framework-owned `Delivery.drain()` runs that claim one shard,
   exact-message `Delivery.drainMessage()` runs that reject mismatched
   `message.id.shard`/`message.shard` snapshots and accept only `node` plus

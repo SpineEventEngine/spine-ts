@@ -281,7 +281,9 @@ smaller than the later scheduler/retry stack:
   application-facing read-side/query facade;
 - `ShardIndex` identifies one delivery shard, `ShardSession` is the durable
   lease snapshot for that shard, and `ShardedWorkRegistry` persists shard
-  pickup/release across processes; and
+  pickup/renew/release across processes. `renew(session)` is framework-owned
+  lease fencing for active drains, not an application retry or supervision
+  policy; and
 - `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`, `DeliveryEndpoint`,
   `DeliveryFailure`, `DeliveryLabel`, `DeliveryLoopOptions`,
   `DeliveryLoopRun`, `DeliveryLoopStatus`, `DeliveryRun`, `DeliveryStatus`,

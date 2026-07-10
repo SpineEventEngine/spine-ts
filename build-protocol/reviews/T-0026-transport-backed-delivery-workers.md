@@ -32,6 +32,39 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 Review findings fixed and verified after implementation commit `94b4c632`.
 
+### Round 3 Follow-up - `2026-07-10T04:42:03Z`
+
+- Finding: [P1] lease activity in `Delivery.drain()` and `drainMessage()` was
+  still timer-state-only. If the event loop paused or renewal was delayed past
+  `expiresAt`, `requireActive()` could pass before the renewal timer observed
+  the loss, allowing an expired owner to mark a row delivered after another
+  worker became eligible to pick up the shard.
+- Fix: delivery now keeps the configured delivery clock and passes it to the
+  lease keeper. `requireActive()` fails once the current session expiry is at
+  or before that clock, even if the renewal timer has not run yet. Renewal
+  remains framework-owned lease fencing; no production retry or supervisor
+  policy was added.
+- Evidence: focused red regression in `delivery-worker.test.ts` failed before
+  the fix with the expired foreground drain returning `delivered: 1` and
+  `failed: 0`, then passed after the time-aware guard.
+- Finding: [P3] `ShardedWorkRegistry.renew()` used release-specific helper
+  names (`ReleaseSession`, `snapshotReleaseSession`) for a snapshot shared by
+  renew and release.
+- Fix: renamed the internal snapshot to `SessionClaim` and
+  `snapshotSessionClaim`.
+- Finding: [P2] curated API docs still described the exported registry seam as
+  pickup/release only.
+- Fix: updated `docs/api/README.md`, `build-protocol/DEVELOPER_API.md`, and
+  `packages/server/README.md` to describe pickup/renew/release and renewal as
+  framework-owned lease fencing for active drains.
+- Verification: focused delivery Vitest, `typecheck:build:generated`,
+  `docs:check`, `format:check`, and `git diff --check` all passed on
+  `2026-07-10T04:44:33Z`. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
+- Post-fix local review: compared `HEAD~1...HEAD` after commit because no
+  separate Agent tool was exposed in this session. Standards/spec review found
+  no additional issues on `2026-07-10T04:46:21Z`.
+
 ### Lease Reliability Follow-up - `2026-07-10T04:27:00Z`
 
 - Finding: [P1] `Delivery.drain()` and `drainMessage()` could keep awaiting an

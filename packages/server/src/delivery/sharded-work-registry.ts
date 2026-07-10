@@ -77,7 +77,7 @@ export class ShardedWorkRegistry {
 
   /** Renew one shard session if it is still current. */
   async renew(session: ShardSession): Promise<ShardSession | undefined> {
-    const expected = snapshotReleaseSession(session);
+    const expected = snapshotSessionClaim(session);
     let now = requireInputTime(this.#now(), "Shard renewal time");
     const storage = this.#storage();
 
@@ -114,7 +114,7 @@ export class ShardedWorkRegistry {
 
   /** Release one shard session if it is still current. */
   async release(session: ShardSession): Promise<boolean> {
-    const expected = snapshotReleaseSession(session);
+    const expected = snapshotSessionClaim(session);
     const storage = this.#storage();
 
     try {
@@ -189,7 +189,7 @@ interface StoredShardSession {
   readonly expiresAtMs: number;
 }
 
-interface ReleaseSession {
+interface SessionClaim {
   readonly key: string;
   readonly id: string;
   readonly node: string;
@@ -435,7 +435,7 @@ function writeSession(session: ShardSession): Any {
   });
 }
 
-function snapshotReleaseSession(session: unknown): ReleaseSession {
+function snapshotSessionClaim(session: unknown): SessionClaim {
   if (typeof session !== "object" || session === null) {
     throw new Error("Shard session is invalid.");
   }

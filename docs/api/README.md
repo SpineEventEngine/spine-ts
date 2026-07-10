@@ -323,14 +323,16 @@ ordering metadata on each message with receive time (`whenReceived`),
 `DeliveryLabel` values are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`,
 `REACT_UPON_EVENT`, and `CATCH_UP`; `IMPORT_EVENT` is recognized only as
 deprecated legacy stored/wire data and fails closed on read/drain. Delivery also
-exposes a storage-backed shard pickup/release seam backed by atomic
+exposes a storage-backed shard pickup/renew/release seam backed by atomic
 `RecordStorage.compareAndSet()`, plus `Delivery.drain()` as the direct local
-worker boundary. `Delivery.drain(shard, { node, onMessage, limit })` claims one
-shard, reads `TO_DELIVER` rows in inbox order, invokes the `DeliveryEndpoint`
-once per row, marks exact-message successes `DELIVERED`, leaves endpoint or
-marker failures pending for retry, releases the shard in `finally`, and returns
-a `DeliveryRun` with counts and per-message `DeliveryFailure` values retained
-only in that result. `Delivery.drainMessage(message, { node, onMessage })`
+worker boundary. `ShardedWorkRegistry.renew(session)` is framework-owned lease
+fencing for active drains, not an application retry or supervision policy.
+`Delivery.drain(shard, { node, onMessage, limit })` claims one shard, reads
+`TO_DELIVER` rows in inbox order, invokes the `DeliveryEndpoint` once per row,
+marks exact-message successes `DELIVERED`, leaves endpoint or marker failures
+pending for retry, releases the shard in `finally`, and returns a `DeliveryRun`
+with counts and per-message `DeliveryFailure` values retained only in that
+result. `Delivery.drainMessage(message, { node, onMessage })`
 claims the message shard only when `message.id.shard` matches `message.shard`,
 then replays that exact pending row without accepting a page limit. `DeliveryLoop`
 repeats the shard-level `Delivery.drain()` boundary for one shard until a
