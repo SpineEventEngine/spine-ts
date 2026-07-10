@@ -125,9 +125,12 @@ Current slice exposes:
   for process-manager command rows, process-manager event reaction rows, and
   live projection subscriber rows, but this slice explicitly excludes
   transport-backed worker supervision, retry monitors, conveyor/stations,
-  generic repository invocation, aggregate event reactors/importers,
-  projection catch-up through inbox storage, broad production lifecycle,
-  retained attempt history, durable catch-up storage, and example app work;
+  generic repository invocation, projection catch-up through inbox storage,
+  broad production lifecycle, retained attempt history, durable catch-up
+  storage, and example app work. Event import and aggregate importers are
+  removed from the active plan by upstream ADR 0001 D1; aggregate `@React`
+  handlers are ordinary generated reactor handlers with current transaction
+  semantics, not event-sourcing import/applier work;
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
 - `isEntitySchema(schema)` for pure descriptor checks;
 - first-field routing hints from descriptor order;
@@ -672,11 +675,13 @@ tenant IDs through the configured storage factory. This slice still does not
 invoke query handlers, construct the full system-context runtime, provide
 command-log repositories, emit the full system event taxonomy, provide
 tracing/monitors/debug UI, start query/subscription buses, expose a broad
-production lifecycle, or integrate transports. Process-manager command assignees
-and live projection subscribers now write durable inbox rows before the current
+production lifecycle, or integrate transports. Process-manager command
+assignees, process-manager event reactors and event-commanding handlers, and
+live projection subscribers now write durable inbox rows before the current
 local shard drain replays them, and the post does not resolve until that
 received row is marked delivered. Scheduler/retry workers, cross-process
-recovery, and broader event/aggregate handoff remain open production gaps.
+recovery, production delivery policy, retained attempt history, and supported
+catch-up work remain open production gaps.
 
 ## Direct Stand
 
@@ -979,11 +984,12 @@ immediate local shard replay/drain. Process-manager event rows use
 original event ID as `signalId`, and replay only the stored target row before
 handler execution. Before handler code runs, replay validates tenant,
 payload/schema, target type URL, and routed target ID.
-Scheduler/retry workers, cross-process recovery, and broader event/aggregate
-handoff remain open production gaps. This seam follows Spine `core-jvm`
-`Repository` identity and registration concepts closely. The direct repository
-API does not create, find, or store entities; invoke handlers; write inboxes;
-manage caches; emit lifecycle events; or touch transport.
+Supported delivery workers, scheduler/retry workers, cross-process recovery,
+retry monitors, retained attempt history, production delivery policy, and
+supported catch-up work remain open production gaps. This seam follows Spine
+`core-jvm` `Repository` identity and registration concepts closely. The direct
+repository API does not create, find, or store entities; invoke handlers; write
+inboxes; manage caches; emit lifecycle events; or touch transport.
 
 ## Entity State Transition Validation
 

@@ -268,6 +268,9 @@ Consequences:
   hard requirement, not taste feedback.
 - Generated Protobuf-ES output belongs under `packages/<package>/generated/`,
   is removed and regenerated during builds, and is entirely ignored by Git.
+- T-0024 later clarified that item 4's aggregate storage shape is superseded by
+  ADR 0001/T-0024: aggregates load the latest persisted state, and aggregate
+  events are retained as a traceability journal only.
 - Production source files must be grouped by package-specific semantics under
   `src/`; package-root `src` folders should contain only a few top-level entry
   files. Tests must live under `packages/<package>/test/` and mirror the
@@ -2402,6 +2405,11 @@ Consequences:
   storage. Superseded by D-0073/T-0022b on 2026-07-10.
 - Remaining event endpoint kinds stay explicit future tasks instead of hidden
   in a large abstraction.
+- T-0024 later clarified that the aggregate import/importer portion of the
+  aggregate event reactors/importers deferral is superseded by D-0075/T-0024
+  after upstream ADR 0001 D1 dropped event import. Supported reactor delivery,
+  projection catch-up, schedulers, retries, transport workers, and retained
+  attempt history remain real deferred work.
 
 ## D-0073: Continue Event Inbox Handoff With Process-Manager Reactors
 
@@ -2428,17 +2436,20 @@ Decision:
 - Drain locally and replay only the exact inbox row target.
 - Preserve current process-manager state mutation/storage, produced event,
   produced command, tenant, and failure behavior.
-- Keep aggregate event reactors/importers, projection catch-up, schedulers,
-  retries, transport workers, and retained attempt history deferred.
+- Keep projection catch-up, schedulers, retries, transport workers, and
+  retained attempt history deferred. The then-open aggregate import/importer
+  wording is superseded by D-0075/T-0024 after upstream ADR 0001 D1 dropped
+  event import.
 
 Alternatives considered:
 
 - Build one generic repository event delivery engine. Rejected again as broader
   than the next JVM endpoint shape and contrary to the human reset against
   overengineering.
-- Jump to aggregate event reactors/importers. Rejected because process-manager
-  event reactors reuse the existing process-manager handoff and execution
-  machinery and are the next smallest endpoint after projection subscribers.
+- Jump to aggregate import/importer work. Rejected at the time because
+  process-manager event reactors reused the existing process-manager handoff
+  and execution machinery. D-0075/T-0024 later removed aggregate import/importer
+  work from the active roadmap.
 - Leave process-manager event reactors as direct `EventBus` execution. Rejected
   because D-0072 explicitly left their durable inbox routing as a future task.
 
@@ -2447,7 +2458,9 @@ Consequences:
 - Process-manager event reactions gain the same durable local handoff shape as
   process-manager commands and live projection subscribers.
 - Remaining event endpoint kinds stay explicit later tasks instead of being
-  hidden behind a generalized delivery abstraction.
+  hidden behind a generalized delivery abstraction. The aggregate
+  import/importer part of this deferral is superseded by D-0075/T-0024 after
+  upstream ADR 0001 D1 dropped event import.
 
 ## D-0074: Reconcile T-0022b Durable Status Before Next Slice
 
@@ -2480,3 +2493,52 @@ Consequences:
 - Future sessions can resume from truthful T-0022b durable status.
 - The next implementation slice can start without re-reviewing already merged
   process-manager event inbox handoff work.
+
+## D-0075: Remove Aggregate Import Work From Active Roadmap
+
+Status: Accepted
+
+Date: 2026-07-10
+
+Context: Upstream Spine JVM ADR 0001 is accepted and D1 was revised on
+2026-07-05 to drop event import. It removes `@Import`, `ImportBus`, import
+endpoints/routing, and related test API, while retaining
+`InboxLabel.IMPORT_EVENT` only as deprecated wire compatibility surface. D2
+makes aggregate and aggregate-part `@Apply` a model-building error retained
+only for detection. Local JVM notes still document the old path as
+`ImportBus` routing to aggregate `@Apply(allowImport = true)` appliers and an
+aggregate `IMPORT_EVENT` inbox endpoint, confirming the import path is tied to
+the event-sourced aggregate applier model.
+
+Decision:
+
+- Run T-0024 as a docs/spec/log reconciliation before any new delivery slice.
+- Remove aggregate event import/importer work from the active TS roadmap.
+- Treat aggregate `@React` handlers as ordinary generated reactor handlers
+  using current transaction semantics, not event-sourcing import/applier work.
+- Keep `IMPORT_EVENT` label compatibility cleanup as a later delivery-label
+  contract task. Do not remove `IMPORT_EVENT` or `CATCH_UP` runtime/proto
+  surfaces in T-0024.
+- Keep projection catch-up, transport-backed/background workers, retry
+  monitors, retained attempt history, and production policy as real remaining
+  gaps where already documented.
+
+Alternatives considered:
+
+- Treat aggregate importers as future runtime work. Rejected because upstream
+  ADR 0001 D1 removes event import and the old JVM import path depends on
+  aggregate `@Apply` appliers.
+- Remove `IMPORT_EVENT` compatibility surfaces now. Rejected because the
+  upstream ADR retains the label for wire compatibility, and TS compatibility
+  behavior needs its own delivery-label contract task.
+- Rewrite historical logs broadly. Rejected because old wording may remain
+  when clearly historical; active roadmap/spec guidance is the risk.
+
+Consequences:
+
+- Active TS docs must not steer implementers toward `ImportBus`, aggregate
+  importers, or event-sourced aggregate applier delivery.
+- Later delivery-label work must decide the exact TS compatibility behavior for
+  `IMPORT_EVENT` without reopening aggregate import/importer implementation.
+- Normal delivery/runtime gaps remain explicit instead of being hidden by the
+  import cleanup.

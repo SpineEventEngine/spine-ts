@@ -265,8 +265,10 @@ delivery worker boundary:
 This slice stops at durable storage, ordered readback, narrow built-context
 process-manager command, process-manager event, and live projection subscriber
 handoffs, and one direct drain call. It does not yet implement a generic
-repository delivery engine, aggregate event reactors/importers, projection
-catch-up through inbox storage, worker loops,
-retry monitors, attempt counters, retained delivery error details, or
-transport-backed delivery. Those concerns are deferred to later delivery and
-runtime tasks.
+repository delivery engine, projection catch-up through inbox storage, worker
+loops, retry monitors, attempt counters, retained delivery error details, or
+transport-backed delivery. Event import and aggregate importers are removed
+from the active plan by upstream ADR 0001 D1. Aggregate `@React` handlers, when
+present, use ordinary generated-reactor transaction semantics rather than
+event-sourcing applier/import delivery. `IMPORT_EVENT` label compatibility is
+a later delivery-label contract cleanup, not this runtime slice.
