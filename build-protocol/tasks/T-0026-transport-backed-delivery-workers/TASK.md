@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 66 fix verified; re-review pending
+Status: Round 67 findings recorded; fix/adjudication pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1148,3 +1148,20 @@ resumed scan now resets its next cursor to the head after it accepts post-cursor
 work, preserving the existing scan budget and failure accounting. The focused
 regression passed green. Full delivery-loop and handoff suites, generated
 typecheck, format checks, and `git diff --check` passed.
+
+Round 67 re-review on `2026-07-10T20:58:51Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..1c88faba.diff` produced clean
+TypeScript/API docs and security lanes. Code style/maintainability found the
+private delivery scan flag and transition names imply a head rescan before any
+head rescan occurs; the next fix will rename the resumed-cursor state and make
+the accepted-work reset call site explicit. Documentation found the required
+review-lane dashboard still showed Round 65 outcomes after Round 66 changed
+code and tests; the dashboard is reset to fresh current-HEAD re-review pending
+as part of this findings record. Performance/reliability requested replacing
+the persisted absolute inbox offset with keyset/indexed storage continuation.
+That request is adjudicated out of the T-0026 fix batch because T-0026's
+accepted contract and prior rounds intentionally use `RecordQuery.offset` to
+bound logical scan rows and storage calls; physical in-memory candidate
+filter/sort work is a broader storage-index design task, not a local delivery
+worker fix. The next fix will address the naming/dashboard findings, record
+this adjudication in the review log, verify, and rerun all five lanes.

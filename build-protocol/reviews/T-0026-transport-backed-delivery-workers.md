@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 66 fix verified; re-review pending
+Status: Round 67 findings recorded; fix/adjudication pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer        | Status           |
-| -------------------------- | --------------- | ---------------- |
-| Code style/maintainability | Hooke the 2nd   | Clean            |
-| Documentation              | Turing the 2nd  | Findings pending |
-| TypeScript/API docs        | Mill the 2nd    | Findings pending |
-| Security                   | Lorentz the 2nd | Clean            |
-| Performance/reliability    | Meitner the 2nd | Findings pending |
+| Lane                       | Reviewer       | Status           |
+| -------------------------- | -------------- | ---------------- |
+| Code style/maintainability | Bacon the 2nd  | Findings pending |
+| Documentation              | Cicero the 2nd | Findings pending |
+| TypeScript/API docs        | Kant the 2nd   | Clean            |
+| Security                   | Harvey the 2nd | Clean            |
+| Performance/reliability    | Jason the 2nd  | Adjudicated      |
 
 ## Review Criteria
 
@@ -2369,3 +2369,38 @@ red/green delivery regressions before the next review pass.
   and projection handoff suites (23 tests), generated typecheck, and formatter
   check. `docs:check` was not required because the renamed options are private
   and no exports or API docs changed. `git diff --check` passed.
+
+### Round 67 Re-review - `2026-07-10T20:58:51Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..1c88faba.diff` from task baseline
+  `ca8fb2b3` to current HEAD `1c88faba`.
+- Code style/maintainability (Bacon the 2nd): [P3]
+  `DeliveryScanState.#resumedHeadRescan` is set as soon as a scan starts from a
+  resumed cursor, before any head rescan actually occurs. Rename the flag to
+  describe resumed-cursor state and replace `resetAfterResumedAcceptance()` with
+  an explicit accepted-work reset transition at the call site.
+- Documentation (Cicero the 2nd): [P2] the required-lanes dashboard still
+  showed Round 65 outcomes after Round 66 changed code and tests. Reset every
+  lane to a fresh current-HEAD re-review-pending state after the next fix, while
+  keeping Round 65/67 outcomes in the historical records.
+- TypeScript/API docs (Kant the 2nd): clean. The branch keeps
+  `DeliveryEndpointMessage` exported and typed, callback/failure message labels
+  narrowed, local callback option renames package-internal, and generated/API
+  docs consistent with the current public surface.
+- Security (Harvey the 2nd): clean. No tenant-isolation, validation,
+  fail-closed legacy-label, claim/lease fencing, callback snapshot, or public
+  exposure regression found.
+- Performance/reliability (Jason the 2nd): [P2, adjudicated out of T-0026]
+  requested replacing persisted absolute inbox offsets with keyset/indexed
+  storage continuation because `InMemoryRecordStorage` filters and sorts
+  matching records before applying offset. T-0026's accepted contract and
+  earlier review/fix rounds intentionally use `RecordQuery.offset` to bound
+  logical delivery scan rows and storage calls. Replacing that with keyset
+  continuation requires storage-query/index design beyond the local
+  transport-backed worker boundary, and would change the storage abstraction
+  established earlier in this task. Keep this as a future storage-index task
+  rather than a T-0026 implementation fix.
+- Action: record the complete findings/adjudication batch, dispatch one fix
+  worker for the naming/dashboard/docs record items, verify, commit, and rerun
+  all five reviewer lanes from the fixed HEAD.
