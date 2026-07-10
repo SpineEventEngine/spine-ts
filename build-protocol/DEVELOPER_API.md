@@ -341,7 +341,9 @@ if (session !== undefined) {
     statuses: ["TO_DELIVER"],
     limit: 100,
   });
-  await inspectPendingRows(pending);
+  for (const message of pending) {
+    console.log(message.inboxId, message.label, message.status);
+  }
   await delivery.shards.release(session);
 }
 

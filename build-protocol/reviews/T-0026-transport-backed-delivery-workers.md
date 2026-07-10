@@ -32,6 +32,17 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 Review findings fixed and verified after implementation commit `94b4c632`.
 
+### Round 14 Follow-up - `2026-07-10T07:30:12Z`
+
+- Finding: [Docs MEDIUM] `build-protocol/DEVELOPER_API.md` used
+  `inspectPendingRows(pending)` in a usage example without defining or
+  importing that helper.
+- Fix: replaced the helper call with a local `for...of` loop that consumes the
+  pending rows inline and logs public message fields, keeping the example
+  self-contained.
+- Verification: `docs:check`, `format:check`, and `git diff --check` passed.
+  `docs:check` reported only the existing TypeDoc invalid-origin warning.
+
 ### Round 13 Follow-up - `2026-07-10T07:21:10Z`
 
 - Finding: [Reliability HIGH] `ShardedWorkRegistry.pickUp()` captured `now`
