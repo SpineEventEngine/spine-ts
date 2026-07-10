@@ -12,6 +12,7 @@ import {
   type DeliveryRun,
 } from "../../src/index.js";
 import { inboxStorageAccess } from "../../src/delivery/inbox-storage.js";
+import { deliveryStorageFaults } from "./delivery-storage-fault-fixture.js";
 
 describe("DeliveryLoop", () => {
   it("drains multiple pages and rows appended during delivery", async () => {
@@ -119,6 +120,30 @@ describe("DeliveryLoop", () => {
       delivered: 0,
       failed: 0,
     });
+  });
+
+  it("skips a live-owned shard before validating a resume cursor", async () => {
+    const faults = deliveryStorageFaults();
+    const first = createDelivery(faults.storageFactory);
+    const second = createDelivery(faults.storageFactory);
+    const shard = ShardIndex.single();
+    const session = await first.shards.pickUp(shard, "node-a");
+
+    const outcome = await deliveryAccess.drain(
+      second,
+      shard,
+      { node: "node-b", onMessage: () => undefined },
+      { resume: { offset: 1, pendingBoundaryId: "stale-boundary" } },
+    );
+
+    expect(session).toBeDefined();
+    expect(outcome.run).toMatchObject({
+      status: "SKIPPED",
+      processed: 0,
+      delivered: 0,
+      failed: 0,
+    });
+    expect(faults.inboxQueries).toBe(0);
   });
 
   it("stops idle when pending rows are already claimed", async () => {
@@ -264,11 +289,72 @@ describe("DeliveryLoop", () => {
     const resumed = await loop.run();
 
     expect(resumed).toMatchObject({
-      status: "IDLE",
+      status: "PAUSED",
       delivered: 1,
       failed: 0,
     });
     expect(seen).toEqual(["signal-supported-tail"]);
+  });
+
+  it("rescans before stopping after a resumed skipped-only drain", async () => {
+    let now = new Date("2026-07-08T09:00:00.000Z");
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+      now: () => now,
+    });
+    const shard = ShardIndex.single();
+    const seen: string[] = [];
+    const loop = new DeliveryLoop({
+      delivery,
+      shard,
+      node: "node-a",
+      limit: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    const claimedHead = await seed(delivery, "signal-now-supported", 1n);
+    const claim = await inboxStorageAccess.claim(
+      delivery.inbox.storage,
+      claimedHead,
+      new ShardSession(
+        "message-owner",
+        shard,
+        "node-b",
+        new Date("2026-07-08T09:00:00.000Z"),
+        new Date("2026-07-08T09:01:00.000Z"),
+      ),
+    );
+
+    for (let index = 2; index <= 2_002; index += 1) {
+      await seed(delivery, `signal-paused-${String(index)}`, BigInt(index), "CATCH_UP");
+    }
+
+    const paused = await loop.run();
+
+    expect(claim?.signalId).toBe("signal-now-supported");
+    expect(paused).toMatchObject({
+      status: "PAUSED",
+      runs: 2,
+      processed: 2_002,
+      delivered: 0,
+      failed: 0,
+    });
+    expect(seen).toEqual([]);
+
+    now = new Date("2026-07-08T09:02:00.000Z");
+    await seed(delivery, "signal-skipped-tail", 2_003n, "CATCH_UP");
+
+    const resumed = await loop.run();
+
+    expect(resumed).toMatchObject({
+      status: "PAUSED",
+      delivered: 1,
+      failed: 0,
+    });
+    expect(seen).toEqual(["signal-now-supported"]);
   });
 
   it("rejects loop-private drain access for non-owned delivery instances", async () => {

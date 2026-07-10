@@ -77,7 +77,6 @@ export class Delivery {
   ): Promise<DeliveryDrainOutcome> {
     const scope = this.#drainScope();
     const limit = inboxStorageAccess.readLimit(options.limit);
-    const cursor = await this.#resolveDrainCursor(scope.inbox, shard, controls.resume);
     const maxFailures = requireFailureLimit(controls.maxFailures);
     const session = await scope.shards.pickUp(shard, options.node);
     if (session === undefined) {
@@ -95,6 +94,8 @@ export class Delivery {
     );
 
     try {
+      const cursor = await this.#resolveDrainCursor(scope.inbox, shard, controls.resume);
+
       return await this.#drainAvailableMessages(
         scope.inbox,
         session.shard,
@@ -125,10 +126,18 @@ export class Delivery {
     const scanBudget = inboxStorageAccess.maxReadLimit + limit;
     let offset = cursor.offset;
     let pendingBoundaryId = cursor.pendingBoundaryId;
+    let resumedHeadRescan = offset > 0;
 
     while (progress.processed < scanBudget) {
       const readLimit = Math.min(inboxStorageAccess.maxReadLimit, scanBudget - progress.processed);
       const messages = await this.#readPendingDeliveryPage(inbox, shard, readLimit, offset);
+
+      if (messages.length === 0 && progress.processed === 0 && resumedHeadRescan) {
+        offset = 0;
+        pendingBoundaryId = undefined;
+        resumedHeadRescan = false;
+        continue;
+      }
 
       for (const message of messages) {
         const remainsPending = await this.#tryDrainMessage(
@@ -152,6 +161,13 @@ export class Delivery {
       }
 
       if (messages.length < readLimit) {
+        if (resumedHeadRescan && progress.accepted === 0 && progress.failed === 0) {
+          offset = 0;
+          pendingBoundaryId = undefined;
+          resumedHeadRescan = false;
+          continue;
+        }
+
         return progress.finish(drainCursor(offset, pendingBoundaryId));
       }
     }

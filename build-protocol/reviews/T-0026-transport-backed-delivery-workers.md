@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 30 fixes verified; re-review pending
+Status: Round 31 fixes verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status   |
-| -------------------------- | -------- | -------- |
-| Code style/maintainability | Ampere   | Findings |
-| Documentation              | Avicenna | Clean    |
-| TypeScript/API docs        | Harvey   | Findings |
-| Security                   | Lagrange | Clean    |
-| Performance/reliability    | Newton   | Clean    |
+| Lane                       | Reviewer   | Status   |
+| -------------------------- | ---------- | -------- |
+| Code style/maintainability | Aquinas    | Clean    |
+| Documentation              | Rawls      | Findings |
+| TypeScript/API docs        | McClintock | Clean    |
+| Security                   | Parfit     | Clean    |
+| Performance/reliability    | Galileo    | Findings |
 
 ## Review Criteria
 
@@ -48,8 +48,11 @@ Review findings fixed and verified after implementation commit `94b4c632`.
 - Documentation (Euclid): [Important] broader guides under-specify direct-drain
   accounting: `limit` caps endpoint callbacks, scanning is bounded by
   `maxReadLimit + limit`, and skipped/unsupported rows plus pre-callback
-  failures do not consume accepted work or failure budget. [Minor] historical
-  Round 24 notes name `DeliveryEndpoint` without saying it was later renamed to
+  failures do not consume accepted work or failure budget. Final contract
+  correction: skipped/unsupported rows avoid failure-budget consumption;
+  pre-callback failures leave `accepted` unchanged but increment `failed` and
+  count toward `DeliveryLoop.maxFailures`. [Minor] historical Round 24 notes
+  name `DeliveryEndpoint` without saying it was later renamed to
   `OnDeliveryMessage`.
 - Security (Cicero): [Important] `Delivery` retains a caller-owned
   `StorageContext` and rereads tenant state across awaited endpoint callbacks,
@@ -262,6 +265,70 @@ head row before going idle after a later success"` failed before production
   `typecheck:build:generated`, `docs:check`, `format:check`, and
   `git diff --check`. `docs:check` retained only the existing invalid `origin`
   source-link warning.
+- Fix commit: `8a65e2b6` (`Polish delivery worker docs and fault fixture`).
+
+### Round 31 Follow-up - `2026-07-10T13:35:21Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..8a65e2b6.diff` from task baseline
+  `ca8fb2b3` to current HEAD `8a65e2b6`.
+- Code style/maintainability (Aquinas): clean.
+- TypeScript/API docs (McClintock): clean.
+- Security (Parfit): clean.
+- Documentation (Rawls): [Medium] the Round 27 documentation finding in this
+  review log still records the stale phrase that skipped/unsupported rows plus
+  pre-callback failures do not consume accepted work or failure budget without
+  an inline correction. Qualify that historical finding with the final
+  contract: skipped/unsupported rows avoid failure-budget consumption, while
+  pre-callback failures leave `accepted` unchanged but increment `failed` and
+  count toward `DeliveryLoop.maxFailures`. [Low] Round 30 verification records
+  should also tie the fix to commit `8a65e2b6` for the durable trace.
+- Performance/reliability (Galileo): [P2] resume cursor validation can still
+  report `IDLE` while a reachable supported row remains before the cursor. If
+  prefix churn preserves the boundary row at `offset - 1`, the resumed drain
+  starts after the cursor and can idle after missing newly reachable work before
+  it. Add a regression and either rescan from head before returning `IDLE` after
+  a resumed zero-work drain or strengthen validation. [P3] `#resolveDrainCursor`
+  reads inbox state before shard pickup, so a live-owned shard can do
+  unnecessary storage work or throw boundary corruption before returning the
+  expected `SKIPPED`; pick up the shard before resume-cursor validation.
+- Action: dispatch one fix worker for the complete Round 31 batch, with red
+  reliability evidence, log-only documentation corrections, focused
+  verification, and a fresh five-lane re-review.
+
+### Round 31 Fix Implementation - `2026-07-10`
+
+- Added the required red regression first:
+  `delivery-loop.test.ts -t "rescans before going idle after a resumed zero-work drain"`
+  failed because a resumed run returned `IDLE` with `delivered: 0` after a
+  live-claimed supported head row became reachable while the saved boundary row
+  remained valid.
+- `Delivery.#drain()` now picks up the shard before internal resume-cursor
+  validation, so live-owned shards return `SKIPPED` before inbox boundary reads.
+- `Delivery.#drainAvailableMessages()` now performs one bounded head rescan
+  when a resumed cursor reads zero pending rows after the cursor, preserving
+  finite scan behavior while preventing the loop from idling past reachable
+  supported work before the cursor.
+- The older Round 27 documentation finding in this review log now records the
+  final accounting contract: skipped/unsupported rows avoid failure-budget
+  consumption; pre-callback failures leave `accepted` unchanged but increment
+  `failed` and count toward `DeliveryLoop.maxFailures`.
+- Round 30 verification traces in the task, work, and review logs name commit
+  `8a65e2b6` (`Polish delivery worker docs and fault fixture`).
+- Fix-worker verification passed: focused delivery/API Vitest passed with 6
+  files and 232 tests; `typecheck:build:generated`, `docs:check`,
+  `format:check`, and `git diff --check` passed. `docs:check` reported only
+  the existing invalid `origin` source-link warning.
+- Coordinator inspection found the initial rescan fix only covered zero rows
+  after the saved cursor. The coordinator extended the regression with a
+  skipped tail row after the cursor and tightened resumed-drain finalization to
+  rescan the head before any non-exhausted zero-accepted/zero-failed resumed
+  finish.
+- Coordinator verification at `2026-07-10T13:47:56Z` passed the focused Round
+  31 pair with 1 file and 2 tests, the required focused delivery/API Vitest
+  batch with 6 files and 232 tests, `typecheck:build:generated`, `docs:check`,
+  `format:check`, and `git diff --check`. `docs:check` retained only the
+  existing invalid `origin` source-link warning.
 
 ### Round 26 Follow-up - `2026-07-10T11:29:35Z`
 

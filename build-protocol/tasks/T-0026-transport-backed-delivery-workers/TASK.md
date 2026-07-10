@@ -495,8 +495,35 @@ and named scenario probe helpers before internal support/protocol types and
 classes. The fixture-local `Deferred<T>` helper type is private. Required
 focused delivery worker/loop/runtime Vitest passed with 3 files and 77 tests,
 and `typecheck:build:generated`, `docs:check`, final `format:check`, and
-`git diff --check` passed in worker and coordinator verification. A fresh
-five-lane re-review is still required.
+`git diff --check` passed in worker and coordinator verification. Fix commit:
+`8a65e2b6` (`Polish delivery worker docs and fault fixture`). A fresh five-lane
+re-review is still required.
+
+Round 31 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..8a65e2b6.diff` produced clean style,
+TypeScript/API, and security lanes. Documentation found one remaining stale
+Round 27 review-log phrase around pre-callback failure-budget accounting and a
+missing Round 30 fix-commit reference. Reliability found that resume cursor
+validation can still miss reachable supported work before the cursor when
+prefix churn preserves the boundary row at `offset - 1`, and that resume cursor
+validation should happen after shard pickup so a live-owned shard returns
+`SKIPPED` before boundary reads. One fix worker will address the complete batch
+before another re-review.
+
+Round 31 fix implementation on `2026-07-10`: delivery drains now pick up the
+shard before internal resume-cursor validation, and a resumed cursor that reads
+zero rows after the cursor performs one bounded head rescan before idling. Red
+evidence captured the missed reachable supported row before the cursor; focused
+Round 31 coverage now also verifies live-owned shards return `SKIPPED` without
+inbox boundary queries. The review log qualifies the older Round 27 accounting
+finding with the final contract, and Round 30 verification traces name commit
+`8a65e2b6`. Required focused delivery/API Vitest passed with 6 files and 232
+tests; `typecheck:build:generated`, `docs:check`, `format:check`, and
+`git diff --check` passed. Coordinator follow-up extended the regression to
+cover skipped rows after the saved cursor and verified the tightened rescan
+guard with the focused Round 31 pair, the required focused delivery/API batch,
+typecheck, docs, format, and diff checks. A fresh five-lane re-review is still
+required.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker
