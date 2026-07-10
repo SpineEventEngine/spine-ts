@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 43 fixes verified; coordinator commit pending
+Status: Round 43 fixes committed; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -782,7 +782,8 @@ replay, with raw callback delivery remaining package-internal. Focused
 delivery/index Vitest, generated build typecheck, docs check, and lint passed.
 `format:check` initially found durable-log wrapping; the formatter was run and
 final format/diff checks are recorded in the Round 43 report and work log. No
-worker commit was created; coordinator commit remains pending.
+worker commit was created. Coordinator commit `9477830c` (`Fix delivery expired
+claim reclaim`) recorded the fix; five-lane re-review remains pending.
 Coordinator verification after the worker returned passed focused
 delivery/index Vitest with 4 files and 189 tests, generated build typecheck,
 docs check with only the existing invalid-`origin` warning, lint, format check,

@@ -1,10 +1,10 @@
 # T-0026 Round 43 Fix Report
 
-Status: fixes verified; coordinator commit pending
+Status: fixes committed; re-review pending
 
 Branch: `task/T-0026-transport-backed-delivery-workers`
 Worktree: `.worktrees/T-0026-transport-backed-delivery-workers`
-Worker commit: none; coordinator commit pending.
+Worker commit: none; coordinator commit `9477830c`.
 
 ## Skill Applicability
 
@@ -20,9 +20,9 @@ Canonical checklist source: `build-protocol/BUILD_PROTOCOL.md#skills-and-tooling
 
 Selected skill:
 
-| Skill                     | Source             | Why selected                              | Applied instruction                                                                 |
-| ------------------------- | ------------------ | ----------------------------------------- | ----------------------------------------------------------------------------------- |
-| `test-driven-development` | User-provided path | Required for claim behavior bug fixes.    | Added focused failing regressions before changing production claim CAS behavior.     |
+| Skill                     | Source             | Why selected                           | Applied instruction                                                              |
+| ------------------------- | ------------------ | -------------------------------------- | -------------------------------------------------------------------------------- |
+| `test-driven-development` | User-provided path | Required for claim behavior bug fixes. | Added focused failing regressions before changing production claim CAS behavior. |
 
 Skipped relevant-looking skills: `javascript-testing-patterns` (the user-provided
 TDD workflow governed the test-first change), `typescript-advanced-types` (no
@@ -46,7 +46,7 @@ lifecycle boundary changed).
 ## Red/Green Evidence
 
 - RED: `pnpm --config.verify-deps-before-run=false exec vitest run
-  packages/server/test/delivery/delivery-worker.test.ts -t "reclaims"` failed
+packages/server/test/delivery/delivery-worker.test.ts -t "reclaims"` failed
   with the expected callback-not-invoked assertions for `signal-expired-claim`
   and `signal-expiry-during-read`.
 - GREEN: the same focused command passed after `InboxStorage` treated only live
@@ -54,9 +54,9 @@ lifecycle boundary changed).
   clock.
 - Focused delivery/index regression batch passed after the export-surface test
   cleanup: `pnpm --config.verify-deps-before-run=false exec vitest run
-  packages/server/test/delivery/delivery-worker.test.ts
-  packages/server/test/delivery/delivery-loop.test.ts
-  packages/server/test/delivery/inbox.test.ts packages/server/test/index.test.ts`;
+packages/server/test/delivery/delivery-worker.test.ts
+packages/server/test/delivery/delivery-loop.test.ts
+packages/server/test/delivery/inbox.test.ts packages/server/test/index.test.ts`;
   4 files, 189 tests.
 
 ## Files Changed
@@ -97,4 +97,5 @@ lifecycle boundary changed).
 
 ## Commit
 
-No worker commit was created. Coordinator commit is pending.
+No worker commit was created. Coordinator commit `9477830c` (`Fix delivery
+expired claim reclaim`) recorded this fix.

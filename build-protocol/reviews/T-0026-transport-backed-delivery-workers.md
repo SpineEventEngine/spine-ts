@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 43 fixes verified; coordinator commit pending
+Status: Round 43 fixes committed; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -83,13 +83,14 @@ Review findings fixed and verified after implementation commit `94b4c632`.
 - Verification passed: focused reclaim red/green, focused delivery/index Vitest
   with 4 files and 189 tests, `typecheck:build:generated`, `docs:check`,
   `lint`, formatter repair for durable logs, and final format/diff checks
-  recorded in the Round 43 report/work log. No worker commit was created;
-  coordinator commit remains pending.
+  recorded in the Round 43 report/work log. No worker commit was created.
+  Coordinator commit `9477830c` (`Fix delivery expired claim reclaim`) recorded
+  the fix.
 - Coordinator verification after the worker returned passed focused
   delivery/index Vitest with 4 files and 189 tests, generated build typecheck,
   docs check with only the existing invalid-`origin` warning, lint, format
   check, working-tree diff check, and baseline range diff check. Coordinator
-  commit remains pending.
+  commit `9477830c` recorded the fix; five-lane re-review remains pending.
 
 ### Round 42 Follow-up - `2026-07-10T17:25:00Z`
 
