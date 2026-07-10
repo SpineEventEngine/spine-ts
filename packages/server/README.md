@@ -115,10 +115,11 @@ Current slice exposes:
   framework-owned shard renewal as lease fencing for active drains,
   framework-owned bounded runs that pick up one shard and replay only through
   validated endpoints. The package does not expose a raw worker callback API.
-  A run skips rows unavailable to its worker first, and its endpoint callback
-  limit and scan budget are finite. It passes independent message snapshots
-  only for `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`, then
-  marks successful rows delivered. Those snapshots copy `Date` values and
+  A run skips rows unavailable to its worker first. Its callback limit caps
+  endpoint callbacks actually invoked, and the storage read cap plus `limit`
+  bounds scanning. It passes independent message snapshots only for
+  `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`, then marks
+  successful rows delivered. Those snapshots copy `Date` values and
   `Any.value` bytes.
   Endpoint callback failures leave rows pending for a later run through the
   same durable `TO_DELIVER` state only after framework-owned cleanup succeeds.

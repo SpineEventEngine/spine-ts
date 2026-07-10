@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 69 findings recorded; fix pending
+Status: Round 70 fix verified; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -993,7 +993,8 @@ only the existing invalid TypeDoc `origin` warning, format check passed after
 normalizing the review log, and `git diff --check` passed. Five-lane re-review
 remains pending.
 
-Round 54 re-review on `2026-07-10`: the fresh review package
+Round 54 re-review after `05962a3c` at `2026-07-10T19:18:10Z` and before
+`c08e7008` at `2026-07-10T19:35:11Z`: the fresh review package
 `.superpowers/sdd/review-ca8fb2b3..05962a3c.diff` produced clean
 TypeScript/API docs, security, and performance/reliability lanes. Code
 style/maintainability found the review log still puts the newer Round 53 block
@@ -1004,8 +1005,9 @@ stored rows and remains worker-unsupported for replay callbacks. The next fix
 updates review-log ordering and stale label wording, then repeats verification
 and five-lane review.
 
-Round 55 fix on `2026-07-10`: public/API docs and the nearby decision-log
-wording now distinguish recognized valid `DeliveryLabel` values for durable
+Round 55 fix on `2026-07-10T19:35:11Z` (`c08e7008`): public/API docs and the
+nearby decision-log wording now distinguish recognized valid `DeliveryLabel`
+values for durable
 rows from the replay callback labels that workers actually execute. `CATCH_UP`
 remains a valid/recognized row label that stays pending and skipped, while
 replay callbacks support only `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
@@ -1191,3 +1193,19 @@ callback limit and scan budget are finite without naming the explicit storage
 read cap plus `limit` formula. The next fix will record commit-backed
 chronology, strengthen those public summaries, shorten the private method
 name, verify, and rerun all five lanes.
+
+Round 70 fix on `2026-07-10T21:17:25Z`: started the complete Round 69 findings
+batch. The private resumed-cursor head-reset transition is being shortened to
+`rewindToHead()`, Round 54/55 records are being anchored to commit-backed UTC,
+public/API summaries are being updated with the callback-limit and storage read
+cap plus `limit` scan formula, and the review dashboard is being reset so all
+five lanes require fresh current-HEAD re-review.
+
+Round 70 verification on `2026-07-10T21:22:13Z`: required verification passed.
+Lint passed, including proto generation, generated build typecheck, ESLint, and
+cleanup checks, without unexpected tracked generated/build state. Focused
+delivery-loop Vitest passed with 30 tests. Docs check passed with only the
+existing invalid TypeDoc `origin` warning. The post-record format check
+initially found review-log Markdown wrapping only; the repo formatter normalized
+it, and the rerun passed. `git diff --check` passed before and after
+formatting.

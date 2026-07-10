@@ -154,7 +154,7 @@ export class Delivery {
       }
 
       if (messages.length === 0 && progress.processed === 0 && scan.hasResumedCursor()) {
-        scan.resetResumedCursorToHead();
+        scan.rewindToHead();
         continue;
       }
 
@@ -180,7 +180,7 @@ export class Delivery {
           scan.advancePastPending(message);
         }
         if (progress.accepted > accepted && scan.hasResumedCursor()) {
-          scan.resetResumedCursorToHead();
+          scan.rewindToHead();
         }
         if (progress.accepted >= limit) {
           return progress.finish(scan.cursor());
@@ -192,7 +192,7 @@ export class Delivery {
 
       if (messages.length < readLimit) {
         if (scan.shouldRescanShortPage(progress.accepted, progress.failed)) {
-          scan.resetResumedCursorToHead();
+          scan.rewindToHead();
           continue;
         }
 
@@ -676,7 +676,7 @@ class DeliveryScanState {
     this.#rescanSeenAllowance = inboxStorageAccess.maxReadLimit;
   }
 
-  resetResumedCursorToHead(): void {
+  rewindToHead(): void {
     this.#offset = 0;
     this.#pendingBoundaryId = undefined;
     this.#resumedCursor = false;

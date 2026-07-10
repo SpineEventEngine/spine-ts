@@ -328,7 +328,8 @@ through atomic `RecordStorage.compareAndSet()` fencing. Framework-owned replay
 scans pending rows in inbox order, skips unavailable rows before endpoint
 invocation, and supplies independent message snapshots only for
 `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`. `Date` values
-and `Any.value` bytes are copied. Its callback limit and scan budget are finite.
+and `Any.value` bytes are copied. Its callback limit caps endpoint callbacks
+actually invoked, and the storage read cap plus `limit` bounds scanning.
 Valid worker-unsupported labels such as `CATCH_UP` remain pending and are
 skipped before callback invocation, acceptance, failure recording, or
 failure-budget consumption. Malformed or deprecated stored `IMPORT_EVENT` data

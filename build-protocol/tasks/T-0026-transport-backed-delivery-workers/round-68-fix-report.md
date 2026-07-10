@@ -6,7 +6,7 @@ Timestamp: `2026-07-10T21:01:36Z`
 
 - Renamed private delivery scan state from `#resumedHeadRescan` to
   `#resumedCursor`, with `hasResumedCursor()` and
-  `resetResumedCursorToHead()` describing resumed-cursor behavior directly.
+  `rewindToHead()` describing resumed-cursor behavior directly.
 - Replaced `resetAfterResumedAcceptance(accepted)` with an explicit drain-loop
   check: accepted work must occur and the scan must actually be resumed before
   the next cursor resets to the head.

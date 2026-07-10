@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 69 findings recorded; fix pending
+Status: Round 70 fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer           | Status           |
-| -------------------------- | ------------------ | ---------------- |
-| Code style/maintainability | Pascal the 2nd     | Findings pending |
-| Documentation              | Arendt the 2nd     | Findings pending |
-| TypeScript/API docs        | Dewey the 3rd      | Clean            |
-| Security                   | Heisenberg the 3rd | Clean            |
-| Performance/reliability    | Hilbert the 3rd    | Clean            |
+| Lane                       | Reviewer | Status                       |
+| -------------------------- | -------- | ---------------------------- |
+| Code style/maintainability | TBD      | Needs current-HEAD re-review |
+| Documentation              | TBD      | Needs current-HEAD re-review |
+| TypeScript/API docs        | TBD      | Needs current-HEAD re-review |
+| Security                   | TBD      | Needs current-HEAD re-review |
+| Performance/reliability    | TBD      | Needs current-HEAD re-review |
 
 ## Review Criteria
 
@@ -1998,7 +1998,7 @@ red/green delivery regressions before the next review pass.
 - Action: update the stale docs and current review-lane table, verify, and
   rerun all five reviewer lanes.
 
-### Round 53 Documentation Fix Implementation - `2026-07-10T20:42:00Z`
+### Round 53 Documentation Fix Implementation - `2026-07-10T19:18:10Z`
 
 - Fix: updated stale API/user-facing replay-validation wording in
   `docs/api/README.md`, `build-protocol/DEVELOPER_API.md`,
@@ -2016,14 +2016,14 @@ red/green delivery regressions before the next review pass.
   repository formatting normalized this review log; `git diff --check` passed.
 - Action: rerun all five reviewer lanes from the Round 53 HEAD.
 
-### Round 54 Follow-up - `2026-07-10`
+### Round 54 Follow-up - after `2026-07-10T19:18:10Z`, before `2026-07-10T19:35:11Z`
 
 - Review package:
   `.superpowers/sdd/review-ca8fb2b3..05962a3c.diff` from task baseline
   `ca8fb2b3` to current HEAD `05962a3c`.
 - Code style/maintainability (Ramanujan the 2nd): [P2] the review log records
-  Round 53 at `2026-07-10T20:42:00Z`, then immediately drops back to Round 45
-  and earlier entries. The reviewer found no production TypeScript
+  the Round 53 block, then immediately drops back to Round 45 and earlier
+  entries. The reviewer found no production TypeScript
   style/maintainability regression and ran
   `git diff --check ca8fb2b3...HEAD`, which passed.
 - Documentation (Noether the 2nd): [P2] public/API docs still describe
@@ -2049,7 +2049,7 @@ red/green delivery regressions before the next review pass.
 - Action: fix the review-log ordering and stale `CATCH_UP` supported-label
   wording, verify, and rerun all five reviewer lanes.
 
-### Round 55 Fix Implementation - `2026-07-10T20:55:00Z`
+### Round 55 Fix Implementation - `2026-07-10T19:35:11Z`
 
 - Fix: updated `build-protocol/DEVELOPER_API.md`,
   `build-protocol/DECISION_LOG.md`, `docs/api/README.md`, and
@@ -2069,7 +2069,8 @@ red/green delivery regressions before the next review pass.
   say supported labels include `CATCH_UP`; positive searches found the
   replacement recognized valid `DeliveryLabel` / replay callback wording; the
   review-log heading search confirmed Round 45 appears before Round 46 and
-  Round 55 stays near the current tail; `docs:check` passed with only the
+  Round 55 stays near the current tail; the fix is anchored to commit
+  `c08e7008` at `2026-07-10T19:35:11Z`; `docs:check` passed with only the
   existing invalid TypeDoc `origin` warning; `format:check` passed after the
   repo formatter normalized review-log Markdown; `git diff --check` passed.
 - Action: rerun all five reviewer lanes from the Round 55 HEAD.
@@ -2409,7 +2410,7 @@ red/green delivery regressions before the next review pass.
 
 - Code style: renamed `DeliveryScanState` resumed-state internals from
   head-rescan wording to resumed-cursor wording. The drain loop now checks
-  accepted counts at the call site and calls `resetResumedCursorToHead()` only
+  accepted counts at the call site and calls `rewindToHead()` only
   when accepted work occurred during a scan that began from a resumed cursor.
 - Documentation: reset the required review-lane dashboard so every lane
   explicitly needs fresh current-HEAD re-review after this code/records fix.
@@ -2466,3 +2467,26 @@ red/green delivery regressions before the next review pass.
   passed.
 - Action: record the complete findings batch, dispatch one fix worker, verify,
   commit, and rerun all five reviewer lanes from the fixed HEAD.
+
+### Round 70 Fix Implementation - `2026-07-10T21:17:25Z`
+
+- Code style: renamed the private resumed-cursor head-reset transition to
+  `rewindToHead()` and updated all call sites.
+- Documentation: anchored Round 54/55 durable records to commit-backed UTC:
+  Round 54 is bounded after `05962a3c` at `2026-07-10T19:18:10Z` and before
+  Round 55 fix commit `c08e7008` at `2026-07-10T19:35:11Z`; Round 56 remains
+  `2026-07-10T19:42:56Z` and Round 57 remains `2026-07-10T19:55:11Z`.
+- Documentation: public API/package summaries now state that the callback
+  limit caps endpoint callbacks actually invoked, and the storage read cap plus
+  `limit` bounds scanning.
+- Dashboard: reset the required review-lane table so all five lanes explicitly
+  need fresh current-HEAD re-review. Round 69 outcomes remain preserved in the
+  Round 69 section above.
+- Verification: required commands passed. Lint passed, including proto
+  generation, generated build typecheck, ESLint, and cleanup checks, without
+  unexpected tracked generated/build state. Focused `delivery-loop.test.ts`
+  passed with 30 tests. Docs check passed with only the existing invalid
+  TypeDoc `origin` warning. The post-record format check initially found
+  review-log Markdown wrapping only; the repo formatter normalized it, and the
+  rerun passed. `git diff --check` passed before and after formatting.
+- Action: rerun all five reviewer lanes from the fixed HEAD.
