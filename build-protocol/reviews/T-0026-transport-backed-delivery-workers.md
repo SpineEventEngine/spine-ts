@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 60 documentation fix verified; re-review pending
+Status: Round 61 review findings recorded; fix pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer           | Status                              |
-| -------------------------- | ------------------ | ----------------------------------- |
-| Code style/maintainability | Dalton the 2nd     | Clean (Round 59); re-review pending |
-| Documentation              | Copernicus the 2nd | Finding fixed; re-review pending    |
-| TypeScript/API docs        | Sartre the 2nd     | Clean (Round 59); re-review pending |
-| Security                   | Boole the 2nd      | Clean (Round 59); re-review pending |
-| Performance/reliability    | Hegel the 2nd      | Clean (Round 59); re-review pending |
+| Lane                       | Reviewer           | Status           |
+| -------------------------- | ------------------ | ---------------- |
+| Code style/maintainability | Heisenberg the 2nd | Findings pending |
+| Documentation              | Boyle the 2nd      | Clean            |
+| TypeScript/API docs        | Planck the 2nd     | Clean            |
+| Security                   | McClintock the 2nd | Clean            |
+| Performance/reliability    | Poincare the 2nd   | Findings pending |
 
 ## Review Criteria
 
@@ -2074,7 +2074,7 @@ red/green delivery regressions before the next review pass.
   repo formatter normalized review-log Markdown; `git diff --check` passed.
 - Action: rerun all five reviewer lanes from the Round 55 HEAD.
 
-### Round 56 Follow-up - `2026-07-10`
+### Round 56 Follow-up - `2026-07-10T19:42:56Z`
 
 - Review package:
   `.superpowers/sdd/review-ca8fb2b3..c08e7008.diff` from task baseline
@@ -2229,3 +2229,37 @@ red/green delivery regressions before the next review pass.
 - Verification: `format:check` and `git diff --check` passed.
 - Action: generate a fresh review package and rerun all five required reviewer
   lanes.
+
+### Round 61 Re-review - `2026-07-10T20:20:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..6d3c352b.diff` from task baseline
+  `ca8fb2b3` to current HEAD `6d3c352b`.
+- Code style/maintainability (Heisenberg the 2nd): [P2] the work log still
+  recorded Round 56 at `21:10:00Z`, after the Round 57 fix at `19:55:11Z`,
+  making the durable log imply a fix preceded the review that produced its
+  findings. Reconcile Round 56 to commit evidence for `1e00b44a` at
+  `2026-07-10T19:42:56Z`.
+- Code style/maintainability (Heisenberg the 2nd): [P3] private
+  `DeliveryScanState` transition names exceed the task's four-semantic-component
+  limit. Shorten `resetToHeadAfterBoundaryChange`,
+  `resetToHeadAfterEmptyResumedPage`, `shouldRescanHeadAfterShortPage`, and
+  `finishExhaustedSkippedOnlyScan` while preserving the helper's private,
+  cohesive scope.
+- Documentation (Boyle the 2nd): clean. Round 57-60 records are coherent with
+  commit timestamps, and the dashboard correctly requires fresh re-review for
+  every lane before these Round 61 findings.
+- TypeScript/API docs (Planck the 2nd): clean. No TypeScript type-soundness,
+  public export/API-doc, helper typing, or replay callback/failure typing
+  issues found.
+- Security (McClintock the 2nd): clean. Tenant-scoped delivery contexts,
+  replay-time envelope/target validation, claim CAS, lease fencing,
+  deprecated-label rejection, callback snapshots, and root export restrictions
+  remain intact.
+- Performance/reliability (Poincare the 2nd): [P3] resumed cursor handling
+  validates the boundary during cursor resolution and again before the first
+  page read. Make cursor resolution structural-only while preserving pre-read
+  and post-read state-machine validation, and add a resumed-scan query-count
+  regression using the delivery storage fault fixture.
+- Action: record the complete findings batch, dispatch one fix worker, verify,
+  commit, and rerun all five reviewer lanes.

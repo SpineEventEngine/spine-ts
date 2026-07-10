@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 60 documentation fix verified; re-review pending
+Status: Round 61 review findings recorded; fix pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1020,7 +1020,7 @@ existing invalid TypeDoc `origin` warning,
 repo formatter normalized review-log Markdown, and `git diff --check` passed.
 Five-lane re-review remains pending.
 
-Round 56 re-review on `2026-07-10`: the fresh review package
+Round 56 re-review on `2026-07-10T19:42:56Z`: the fresh review package
 `.superpowers/sdd/review-ca8fb2b3..c08e7008.diff` produced clean TypeScript/API
 docs and security lanes. Documentation confirmed the label/replay docs are now
 consistent but found the work-log Round 46 clean re-review timestamp still
@@ -1092,3 +1092,15 @@ retaining the out-of-order `21:20Z` reporting timestamp. Updated the
 required-lanes dashboard so all lanes explicitly require fresh current-HEAD
 re-review after this docs commit. `round-60-fix-report.md` records the fix;
 `format:check` and `git diff --check` passed.
+
+Round 61 re-review on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..6d3c352b.diff` produced clean
+documentation, TypeScript/API docs, and security lanes. Code
+style/maintainability found the work log still recorded Round 56 at
+`21:10:00Z`, after the Round 57 `19:55:11Z` fix, and found four private
+`DeliveryScanState` transition names longer than the four-semantic-component
+limit. Performance/reliability found resumed cursor handling validates the same
+boundary during cursor resolution and again before the first page read. The
+next fix will reconcile Round 56 to commit evidence, shorten the helper method
+names, make cursor resolution structural-only, add a resumed-scan query-count
+regression, verify, and rerun all five lanes.
