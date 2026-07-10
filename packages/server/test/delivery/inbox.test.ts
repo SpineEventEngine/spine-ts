@@ -922,7 +922,7 @@ describe("Inbox", () => {
   it("fails closed when reading legacy stored IMPORT_EVENT inbox rows", async () => {
     const storage = new InboxStorage({
       context: { name: "Tasks", multitenant: false },
-      storageFactory: new FakeStorageFactory([legacyImportEventInboxRecord()]),
+      storageFactory: new FakeStorageFactory([legacyImportRecord()]),
     });
 
     await expect(storage.read(ShardIndex.single())).rejects.toBeInstanceOf(
@@ -937,7 +937,7 @@ describe("Inbox", () => {
       { name: "Tasks.delivery.inbox", multitenant: false },
       inboxRecordSpec,
     );
-    await records.compareAndSet("0/1:message-1", undefined, legacyImportEventInboxRecord());
+    await records.compareAndSet("0/1:message-1", undefined, legacyImportRecord());
     records.close();
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -2166,7 +2166,7 @@ const liveStatuses: readonly DeliveryStatus[] = Object.freeze([
   "TO_CATCH_UP",
 ]);
 
-function legacyImportEventInboxRecord(): Any {
+function legacyImportRecord(): Any {
   return create(AnySchema, {
     typeUrl: "type.spine-ts.dev/internal/InboxMessageRecord",
     value: Buffer.from(

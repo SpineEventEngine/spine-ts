@@ -392,7 +392,7 @@ function readInputProperty(
 
 function inboxMessageFromStored(stored: StoredInboxMessage): InboxMessage {
   const shard = new ShardIndex(stored.shardIndex, stored.shardTotal);
-  const label = requireSupportedStoredDeliveryLabel(stored.label);
+  const label = requireSupportedLabel(stored.label);
 
   return Object.freeze({
     id: Object.freeze({
@@ -562,7 +562,7 @@ function requireDeliveryLabel(value: unknown): StoredDeliveryLabel {
   throw new DeliveryStorageCorruptionError(`Inbox delivery label "${String(value)}" is invalid.`);
 }
 
-function requireSupportedStoredDeliveryLabel(value: StoredDeliveryLabel): DeliveryLabel {
+function requireSupportedLabel(value: StoredDeliveryLabel): DeliveryLabel {
   if (value === "IMPORT_EVENT") {
     throw new DeliveryStorageCorruptionError(
       'Inbox delivery label "IMPORT_EVENT" is deprecated and unsupported.',
