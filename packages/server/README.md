@@ -44,11 +44,14 @@ Current slice exposes:
   contexts use the same metadata to execute aggregate command handlers,
   projection event subscribers, and process-manager command assignees, event
   reactors, and event-commanding handlers. Process-manager command assignees
-  and live projection event subscribers use framework-owned durable inbox rows
-  plus immediate local shard replay; projection subscriber rows use
-  `UPDATE_SUBSCRIBER`, keep the original `Event` envelope as the payload, and
+  and live process-manager event reactions use framework-owned durable inbox
+  rows with `HANDLE_COMMAND` or `REACT_UPON_EVENT`, original command/event
+  envelopes, and immediate exact-row local shard replay. Live projection event
+  subscribers use the same handoff shape with `UPDATE_SUBSCRIBER` rows and
   replay only the routed row target before the projection transaction and
-  `Stand` update. Transport-backed/background workers, broker supervision,
+  `Stand` update. Before handler code runs, replay validates the tenant,
+  payload/schema, target type URL, and routed target ID.
+  Transport-backed/background workers, broker supervision,
   retained attempt history, and deployment hardening remain outside this local
   slice;
   and
@@ -119,10 +122,10 @@ Current slice exposes:
   `stop()` prevents future drain starts and does not interrupt an in-flight
   `Delivery.drain()`; `close()` calls `stop()` and waits for the current drain,
   if any, to finish. Built bounded contexts use the storage layer internally
-  for process-manager command rows and live projection subscriber rows, but
-  this slice explicitly excludes transport-backed worker supervision, retry
-  monitors, conveyor/stations, generic repository invocation, process-manager
-  event reactors through inbox storage, aggregate event reactors/importers,
+  for process-manager command rows, process-manager event reaction rows, and
+  live projection subscriber rows, but this slice explicitly excludes
+  transport-backed worker supervision, retry monitors, conveyor/stations,
+  generic repository invocation, aggregate event reactors/importers,
   projection catch-up through inbox storage, broad production lifecycle,
   retained attempt history, durable catch-up storage, and example app work;
 - `describeEntityMetadata(schema)` for deterministic entity kind/visibility metadata;
@@ -968,10 +971,14 @@ execution wraps them in framework `Command`/`Event` envelopes only after
 transaction commit and state storage. Process-manager produced events are
 posted through the event bus so they are appended to the `EventStore` before
 fan-out; post-commit dispatch failures are recorded in
-`storedEventDispatchFailures()`. Process-manager command assignees and live
+`storedEventDispatchFailures()`. Process-manager command assignees,
+process-manager event reactors and event-commanding handlers, and live
 projection subscribers now use the framework-owned durable inbox handoff with
-immediate local shard replay/drain, while process-manager event reactors remain
-direct local `EventBus` execution rather than durable inbox rows.
+immediate local shard replay/drain. Process-manager event rows use
+`REACT_UPON_EVENT`, keep the original `Event` envelope as the payload, use the
+original event ID as `signalId`, and replay only the stored target row before
+handler execution. Before handler code runs, replay validates tenant,
+payload/schema, target type URL, and routed target ID.
 Scheduler/retry workers, cross-process recovery, and broader event/aggregate
 handoff remain open production gaps. This seam follows Spine `core-jvm`
 `Repository` identity and registration concepts closely. The direct repository

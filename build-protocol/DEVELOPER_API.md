@@ -329,21 +329,23 @@ const run = await delivery.drain(ShardIndex.single(), {
 Keep the write/read split intact at the application/service/domain level. These
 storage primitives and the direct shard drain are framework internals; they are
 not user-facing read-side facades. Built bounded contexts use this boundary for
-two narrow local handoffs: process-manager command assignees with
-`HANDLE_COMMAND`, and live projection event subscribers with
-`UPDATE_SUBSCRIBER`. Projection subscriber rows store the original `Event`
-envelope as the signal payload, the original event ID as `signalId`, the
-projection state type URL plus routed projection ID as `inboxId`, `TO_DELIVER`
-status, `ShardIndex.single()`, and the local 30-second dedup retention window.
-The context drains the local shard immediately and replays only the exact row
-target before running the projection transaction and `Stand` update.
+three narrow local handoffs: process-manager command assignees with
+`HANDLE_COMMAND`, process-manager event reactions with `REACT_UPON_EVENT`, and
+live projection event subscribers with `UPDATE_SUBSCRIBER`. Process-manager
+event and projection subscriber rows store the original `Event` envelope as the
+signal payload, the original event ID as `signalId`, the target state type URL
+plus routed entity ID as `inboxId`, `TO_DELIVER` status, `ShardIndex.single()`,
+and the local 30-second dedup retention window. The context drains the local
+shard immediately and replays only the exact row target before running the
+process-manager or projection transaction and `Stand` update. Before handler
+code runs, replay validates tenant, payload/schema, target type URL, and
+routed target ID.
 `InboxStorage` remains the durable dedup authority.
 
 The current API does not schedule repeated runs, expose a generic repository
-delivery engine, route process-manager event reactors through inbox storage,
-run aggregate event reactors/importers, run projection catch-up through inbox
-storage, run retry monitors, open transport workers, or retain attempt/error history beyond the
-returned `DeliveryRun`.
+delivery engine, run aggregate event reactors/importers, run projection catch-up
+through inbox storage, run retry monitors, open transport workers, or retain
+attempt/error history beyond the returned `DeliveryRun`.
 
 ## Runtime Transport Binding
 

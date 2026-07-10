@@ -1,10 +1,16 @@
 import { create } from "@bufbuild/protobuf";
-import { StringValueSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import {
+  BoolValueSchema,
+  DoubleValueSchema,
+  StringValueSchema,
+  TimestampSchema,
+} from "@bufbuild/protobuf/wkt";
 import { deriveTypeUrl, packAny, packCommand, packEvent, unpackAny } from "@spine-ts/core";
 import {
   ActorContextSchema,
   CommandContextSchema,
   CommandIdSchema,
+  CommandSchema,
   EventContextSchema,
   EventIdSchema,
   EventSchema,
@@ -144,6 +150,49 @@ describe("SignalMetadata", () => {
     expect(() => metadata.version(2_147_483_648)).toThrow(/int32/i);
   });
 
+  it("creates only requested optional context and producer metadata", () => {
+    const metadata = new SignalMetadata({
+      clock: new FixedClock(new Date("2026-07-09T12:00:00.000Z")),
+    });
+    const actorContext = create(ActorContextSchema, {
+      actor: create(UserIdSchema, { value: "user-explicit" }),
+    });
+    const origin = create(OriginSchema, {
+      message: create(MessageIdSchema, {
+        id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "command-origin" })),
+        typeUrl: deriveTypeUrl(UserIdSchema),
+      }),
+    });
+
+    expect(metadata.actorContext()).toEqual(create(ActorContextSchema));
+    expect(metadata.commandContext({ actorContext, origin })).toEqual(
+      create(CommandContextSchema, {
+        actorContext,
+        origin,
+      }),
+    );
+    expect(metadata.eventContext()).toEqual(
+      create(EventContextSchema, {
+        timestamp: timestampFor(new Date("2026-07-09T12:00:00.000Z")),
+      }),
+    );
+
+    const booleanProducer = metadata.eventContext({ producerId: true });
+    const numericProducer = metadata.eventContext({ producerId: 42 });
+
+    expect(
+      booleanProducer.producerId === undefined
+        ? undefined
+        : unpackAny(booleanProducer.producerId, BoolValueSchema)?.value,
+    ).toBe(true);
+    expect(
+      numericProducer.producerId === undefined
+        ? undefined
+        : unpackAny(numericProducer.producerId, DoubleValueSchema)?.value,
+    ).toBe(42);
+    expect(metadata.producerId(undefined)).toBeUndefined();
+  });
+
   it("rejects direct or generated empty signal ids immediately", () => {
     const metadata = new SignalMetadata();
     const generatedEmpty = new SignalMetadata({
@@ -182,6 +231,31 @@ describe("SignalMetadata", () => {
     ).toThrow(/event ID/i);
   });
 
+  it("rejects missing or empty command ids before deriving event metadata", () => {
+    const metadata = new SignalMetadata();
+    const commandMessage = packAny(UserIdSchema, create(UserIdSchema, { value: "payload-user" }));
+
+    expect(() =>
+      metadata.eventFromCommand(
+        create(CommandSchema, {
+          message: commandMessage,
+        }),
+        1,
+        {},
+      ),
+    ).toThrow(/command ID/i);
+    expect(() =>
+      metadata.eventFromCommand(
+        create(CommandSchema, {
+          id: create(CommandIdSchema, { uuid: " " }),
+          message: commandMessage,
+        }),
+        1,
+        {},
+      ),
+    ).toThrow(/command ID/i);
+  });
+
   it("rejects whitespace-only event ids before deriving causality", () => {
     const metadata = new SignalMetadata();
     const event = create(EventSchema, {
@@ -200,6 +274,41 @@ describe("SignalMetadata", () => {
     expect(
       metadata.eventContext({ producerId: Number.POSITIVE_INFINITY }).producerId,
     ).toBeUndefined();
+  });
+
+  it("preserves past event origins without actor context", () => {
+    const metadata = new SignalMetadata();
+    const grandOrigin = create(OriginSchema, {
+      message: create(MessageIdSchema, {
+        id: packAny(CommandIdSchema, create(CommandIdSchema, { uuid: "grand-command" })),
+        typeUrl: deriveTypeUrl(UserIdSchema),
+      }),
+    });
+    const event = packEvent({
+      id: create(EventIdSchema, { value: "past-event" }),
+      context: create(EventContextSchema, {
+        origin: {
+          case: "pastMessage",
+          value: grandOrigin,
+        },
+      }),
+      schema: UserIdSchema,
+      message: create(UserIdSchema, { value: "payload-user" }),
+    });
+
+    expect(metadata.originFromEvent(event)).toEqual(
+      create(OriginSchema, {
+        message: create(MessageIdSchema, {
+          id: packAny(EventIdSchema, create(EventIdSchema, { value: "past-event" })),
+          typeUrl: deriveTypeUrl(UserIdSchema),
+        }),
+        grandOrigin,
+      }),
+    );
+  });
+
+  it("rejects invalid fixed clock dates", () => {
+    expect(() => new FixedClock(new Date(Number.NaN))).toThrow(/finite Date/i);
   });
 
   it("clones nested actor-context inputs before returning them", () => {

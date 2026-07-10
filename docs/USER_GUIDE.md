@@ -238,14 +238,15 @@ or multi-host transport example.
   projection subscribers on the same EventBus runtime queue, without
   re-appending those events. Built contexts also execute local process-manager
   command assignees, event reactors, and event-commanding handlers through
-  Stand-backed state. Process-manager command assignees and live projection
-  event subscribers now hand off through durable inbox storage plus an immediate
-  local shard drain before execution. Projection subscriber rows use
-  `UPDATE_SUBSCRIBER`, store the original `Event` envelope, and replay only the
-  routed row target before the projection transaction and `Stand` update.
-  Process-manager event reactors remain direct local `EventBus` execution and
-  are not yet routed through durable inbox storage. The remaining repository
-  event paths still use the direct local runtime in this
+  Stand-backed state. Process-manager command assignees, live process-manager
+  event reactions, and live projection event subscribers now hand off through
+  durable inbox storage plus an immediate local shard drain before execution.
+  Process-manager event rows use `REACT_UPON_EVENT`, projection subscriber rows
+  use `UPDATE_SUBSCRIBER`, both store the original `Event` envelope, and both
+  replay only the routed row target before the transaction and `Stand` update.
+  Before handler code runs, replay validates tenant, payload/schema, target
+  type URL, and routed target ID.
+  The remaining repository event paths still use the direct local runtime in this
   slice. Broader cross-process subscriber/reactor delivery semantics,
   transport-backed/background delivery worker orchestration, retained update
   replay, and cross-process read-side recovery remain open production gaps.
@@ -1202,8 +1203,8 @@ legacy/internal compatibility support; ordinary generated-registry aggregate
 loading uses the latest persisted state rather than snapshot-plus-replay
 loading. Durable inbox records, dedup guards, shard leases, and the direct
 local shard drain are available through the delivery APIs. Built contexts use
-them internally for process-manager command rows and live projection subscriber
-rows. `DeliveryLoop`
+them internally for process-manager command rows, process-manager event reaction
+rows, and live projection subscriber rows. `DeliveryLoop`
 repeats that direct drain for one shard until the shard is idle, skipped,
 stopped, or reaches a configured failure bound. Failed rows stay pending as
 `TO_DELIVER` and are retried by a later loop/drain run; no retained attempt
@@ -1211,10 +1212,9 @@ history is written. `stop()` prevents future drain starts and does not
 interrupt an in-flight `Delivery.drain()`; `close()` calls `stop()` and waits
 for the current drain, if any, to finish. Projection catch-up remains the
 existing `BoundedContext.catchUpReadSide()` coordination path and does not gain
-fake durable catch-up storage here; process-manager event reactors are still
-direct local `EventBus` execution rather than durable inbox rows, and aggregate
-event reactors/importers, retry workers, and generic repository delivery remain
-deferred. Built contexts create a framework-owned tenant index now; production
+fake durable catch-up storage here; aggregate event reactors/importers, retry
+workers, and generic repository delivery remain deferred. Built contexts create
+a framework-owned tenant index now; production
 tenant-index policy, diagnostics, repository storage policy, transport-backed
 worker supervision, retained attempt history, and read-side projection stores
 remain open production gaps.

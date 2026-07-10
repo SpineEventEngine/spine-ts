@@ -3006,6 +3006,84 @@ describe("SpineServices", () => {
     );
   });
 
+  it("rejects malformed durable subscription record payloads", () => {
+    const subscription = create(SubscriptionSchema, {
+      id: create(SubscriptionIdSchema, { value: "s-valid" }),
+      topic: createTopic(),
+    });
+    const valid = DurableSubscriptionRecords.write({
+      id: "s-valid",
+      kind: "state",
+      targetType: deriveTypeUrl(ProjectionStateSchema),
+      subscription,
+      expiresAtMs: Date.now() + 60_000,
+    });
+
+    expect(() => DurableSubscriptionRecords.read(valid, "s-other")).toThrow(
+      "Durable subscription record ID does not match storage key.",
+    );
+
+    const binary = Buffer.from(toBinary(SubscriptionSchema, subscription)).toString("base64");
+    const cases = [
+      {
+        record: create(AnySchema, {
+          typeUrl: "type.spine-ts.dev/internal/WrongRecord",
+          value: durableRecord({}),
+        }),
+        message: "Durable subscription record type URL is invalid.",
+      },
+      {
+        record: durableAny([]),
+        message: "Durable subscription record is not a JSON object.",
+      },
+      {
+        record: durableAny({
+          id: "s-invalid",
+          kind: "command",
+          targetType: deriveTypeUrl(ProjectionStateSchema),
+          subscriptionBinaryBase64: binary,
+          expiresAtMs: 1,
+        }),
+        message: "Durable subscription record kind is invalid.",
+      },
+      {
+        record: durableAny({
+          id: "",
+          kind: "state",
+          targetType: deriveTypeUrl(ProjectionStateSchema),
+          subscriptionBinaryBase64: binary,
+          expiresAtMs: 1,
+        }),
+        message: "Durable subscription ID is required.",
+      },
+      {
+        record: durableAny({
+          id: "s-tenant",
+          kind: "state",
+          targetType: deriveTypeUrl(ProjectionStateSchema),
+          tenantId: " ",
+          subscriptionBinaryBase64: binary,
+          expiresAtMs: 1,
+        }),
+        message: "Durable subscription tenant is required.",
+      },
+      {
+        record: durableAny({
+          id: "s-expired",
+          kind: "event",
+          targetType: deriveTypeUrl(ProjectionStateSchema),
+          subscriptionBinaryBase64: binary,
+          expiresAtMs: -1,
+        }),
+        message: "Durable subscription expiry must be a non-negative finite number.",
+      },
+    ];
+
+    for (const { record, message } of cases) {
+      expect(() => DurableSubscriptionRecords.read(record)).toThrow(message);
+    }
+  });
+
   it("deletes recovered durable subscriptions whose stored target type disagrees with the topic", async () => {
     const contextName = "InconsistentRecoveredSubscriptions";
     const storageFactory = new InMemoryStorageFactory();
@@ -4633,6 +4711,17 @@ function durableSubscriptionStorage(
     },
     durableSubscriptionRecordSpec,
   );
+}
+
+function durableAny(value: unknown): Any {
+  return create(AnySchema, {
+    typeUrl: "type.spine-ts.dev/internal/DurableSubscriptionRecord",
+    value: durableRecord(value),
+  });
+}
+
+function durableRecord(value: unknown): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify(value));
 }
 
 async function withTimeout<T>(promise: Promise<T>, label: string): Promise<T> {

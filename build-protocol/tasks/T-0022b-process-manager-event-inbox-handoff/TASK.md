@@ -1,6 +1,6 @@
 # T-0022b: Process-Manager Event Inbox Handoff
 
-Status: planned
+Status: in review/fixes
 Start: `2026-07-10T00:21:00Z`
 Baseline commit: `eccbbb1`
 Branch: `task/T-0022b-process-manager-event-inbox-handoff`

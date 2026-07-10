@@ -95,14 +95,17 @@ event redispatch failures are observable through the copy-safe
 through `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This
 slice does not invoke query handlers, run durable Delivery catch-up, expose a
 broad server lifecycle, or integrate transports. The supported durable inbox
-handoffs are framework-owned process-manager command replay and live projection
-subscriber replay. The current local runtime writes the inbox row, drains the
-local shard immediately, requires tenant-safe replay in multitenant contexts,
-and resolves only after that received row is marked delivered. Projection
-subscriber rows use `UPDATE_SUBSCRIBER`, store the original `Event` envelope,
-and replay only the routed row target before the projection transaction and
-`Stand` update. Broader inbox lifecycle management, schedulers, retries, and
-transport topology remain open production gaps.
+handoffs are framework-owned process-manager command replay, live
+process-manager event replay, and live projection subscriber replay. The current
+local runtime writes the inbox row, drains the local shard immediately, requires
+tenant-safe replay in multitenant contexts, and resolves only after that
+received row is marked delivered. Process-manager event rows use
+`REACT_UPON_EVENT`, projection subscriber rows use `UPDATE_SUBSCRIBER`, both
+store the original `Event` envelope, and both replay only the routed row target
+before the transaction and `Stand` update. Before handler code runs, replay
+validates tenant, payload/schema, target type URL, and routed target ID.
+Broader inbox lifecycle management,
+schedulers, retries, and transport topology remain open production gaps.
 Process-manager
 repositories with authentic generated metadata do execute through the local
 command/event buses: default command routing reads the first command field,
@@ -180,9 +183,12 @@ runtime drains that inbox immediately, requires tenant-safe replay in
 multitenant contexts, and resolves only after the received inbox row is marked
 delivered. Live projection subscribers use the same local handoff shape with
 `UPDATE_SUBSCRIBER` rows, original event IDs as dedup signal IDs, and exact-row
-target replay during the 30-second local retention window. Process-manager
-event reactors and event-commanding handlers are invoked directly from the
-event bus, state is stored in tenant-scoped `Stand` records with numeric
+target replay during the 30-second local retention window. Live
+process-manager event reactors and event-commanding handlers use the same
+durable inbox handoff with `REACT_UPON_EVENT` rows, original `Event`
+envelopes, and exact-row target replay. Before handler code runs, replay
+validates tenant, payload/schema, target type URL, and routed target ID.
+State is stored in tenant-scoped `Stand` records with numeric
 versions, returned commands are wrapped and posted after state storage, and
 returned event messages are wrapped with process-manager-emitted event schemas
 and appended through the event store before follow-up dispatch. The repository
@@ -335,10 +341,10 @@ controls with a bounded default when omitted. `Inbox.markDelivered()` and
 `undefined` for missing rows, non-pending rows, or caller snapshots that do not
 match the stored message; already-delivered matching rows are returned
 idempotently. Built contexts use this storage boundary internally for
-process-manager command rows and live projection subscriber rows. This slice
-does not run process-wide transport-backed scheduler workers, retry monitors,
-conveyor/stations, generic repository delivery, process-manager event reactors
-through inbox storage, aggregate event reactors/importers, projection catch-up
+process-manager command rows, process-manager event reaction rows, and live
+projection subscriber rows. This slice does not run process-wide
+transport-backed scheduler workers, retry monitors, conveyor/stations, generic
+repository delivery, aggregate event reactors/importers, projection catch-up
 through inbox storage, broad production lifecycle, transport retries, retained
 attempt history, example app work, or production read-side catch-up workers.
 Server metadata exports

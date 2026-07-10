@@ -592,10 +592,16 @@ drains until idle, skipped, stopped, or a configured failure bound; failed rows
 remain `TO_DELIVER` for later retry rather than being copied into a separate
 attempt log. `stop()` prevents future drain starts and does not interrupt an
 in-flight `Delivery.drain()`; `close()` calls `stop()` and waits for the
-current drain, if any, to finish. The current handoff validates replayed command
-payloads, tenant context, and routed target metadata before handler code and
-waits for the received row to reach `DELIVERED` before the posting path
-resolves. Bounded contexts now create internal system-pairing metadata and a
+current drain, if any, to finish. Local posting handoffs now cover command
+rows, projection subscriber rows, and process-manager event rows. Command
+handlers and projection subscribers wait for the exact received row to replay
+and reach `DELIVERED` before their posting path resolves. Live
+process-manager event routing writes `REACT_UPON_EVENT` rows carrying the
+original `Event` payload, original event ID as `signalId`, the
+process-manager state type URL, and the routed process-manager ID target, then
+replays that exact row. Process-manager replay validates tenant context,
+payload/schema, target type URL, and routed target ID before handler code.
+Bounded contexts now create internal system-pairing metadata and a
 tenant index. Single-tenant indexes are constant and reject tenant recording;
 multitenant indexes persist tenant IDs through the configured storage factory.
 Raw system contexts and tenant indexes remain internal framework details.
