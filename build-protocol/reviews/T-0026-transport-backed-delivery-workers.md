@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 50 lint fix pending
+Status: Round 50 lint fix verified
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -150,6 +150,21 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   `RetryingRecordStorage` test helper in `sharded-work-registry.test.ts`.
 - Action: fix the focused lint findings without production behavior changes,
   verify, and rerun review.
+
+### Round 50 Lint Fix Implementation - `2026-07-10`
+
+- Fix: changed the two local delivery-worker call-capture declarations from
+  `Array<T>` to `T[]`.
+- Fix: changed the retrying sharded-registry test helper to route the
+  configured non-Error renewal failure through a named helper. The non-Error
+  renewal test still exercises production wrapping of a non-Error failure.
+- Scope: test-only lint fix; no production source, docs surface, coverage
+  thresholds, or coverage configuration changed.
+- Verification: `pnpm --config.verify-deps-before-run=false lint` passed;
+  focused Vitest for the two edited delivery test files passed with 63 tests;
+  `format:check` passed; `git diff --check` passed.
+- Coordinator verification reran the same lint, focused Vitest, format, and
+  diff checks successfully.
 
 ### Round 45 Follow-up - `2026-07-10T19:15:00Z`
 

@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 50 lint fix pending
+Status: Round 50 lint fix verified
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -941,3 +941,14 @@ access failed during lint on Round 47 test code: `Array<T>` is forbidden in two
 delivery-worker-runtime test declarations, and the sharded-work-registry retry
 test helper can throw a non-Error value. The next fix addresses these lint
 findings only, then repeats verification and review.
+
+Round 50 lint fix on `2026-07-10`: the lint-only follow-up is scoped to the
+Round 47 test code. `delivery-worker-runtime.test.ts` now uses shorthand array
+types for local call-capture arrays. The sharded-registry retry helper now
+routes the deliberate non-Error renewal failure through a named test helper,
+preserving the production wrapping test path while keeping the direct non-Error
+throw isolated and documented. The Round 50 fix report records implementation
+and verification evidence. Required Round 50 verification passed: lint,
+focused Vitest for both edited test files with 63 tests, format check, and
+`git diff --check`. Coordinator verification reran the same checks
+successfully.

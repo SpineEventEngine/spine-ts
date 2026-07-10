@@ -42,7 +42,7 @@ describe("DeliveryWorker", () => {
 
   it("forwards optional limit and maxFailures to each configured shard loop", async () => {
     const delivery = createDelivery();
-    const calls: Array<{ shard: ShardIndex; limit: number | undefined; maxFailures: number }> = [];
+    const calls: { shard: ShardIndex; limit: number | undefined; maxFailures: number }[] = [];
     const restore = deliveryAccess.replace(delivery, (shard, options, controls) => {
       calls.push({ shard, limit: options.limit, maxFailures: controls.maxFailures ?? 0 });
 
@@ -76,7 +76,7 @@ describe("DeliveryWorker", () => {
 
   it("uses loop defaults when optional limit and maxFailures are omitted", async () => {
     const delivery = createDelivery();
-    const calls: Array<{ limit: number | undefined; maxFailures: number | undefined }> = [];
+    const calls: { limit: number | undefined; maxFailures: number | undefined }[] = [];
     const restore = deliveryAccess.replace(delivery, (_shard, options, controls) => {
       calls.push({ limit: options.limit, maxFailures: controls.maxFailures });
 

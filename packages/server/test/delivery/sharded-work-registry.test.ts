@@ -1802,7 +1802,7 @@ class RetryingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
         this.#plan.throwRenewError !== undefined
       ) {
         this.#countRenewAttempt();
-        throw this.#plan.throwRenewError;
+        throwNonErrorRenewFailure(this.#plan.throwRenewError);
       }
 
       if (expected !== undefined && next === undefined && this.#plan.failReleaseAlways === true) {
@@ -1850,6 +1850,11 @@ class RetryingRecordStorage<I, R extends Message> extends RecordStorage<I, R> {
   protected writeRecord(record: ReturnType<RecordSpec<I, R>["materialize"]>): Promise<void> {
     return this.#delegate.write(record.record);
   }
+}
+
+function throwNonErrorRenewFailure(error: unknown): never {
+  // Deliberately covers defensive wrapping of third-party non-Error storage failures.
+  throw error;
 }
 
 class CountingStorageFactory extends StorageFactory {
