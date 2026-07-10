@@ -1,6 +1,6 @@
 # Review Log: T-0022b Process-Manager Event Inbox Handoff
 
-Status: round 10 style fix applied; re-review pending
+Status: round 11 style fix applied; re-review pending
 
 Scope: live process-manager event reactor durable inbox handoff.
 
@@ -8,11 +8,11 @@ Scope: live process-manager event reactor durable inbox handoff.
 
 | Lane                       | Reviewer | Status  | Notes |
 | -------------------------- | -------- | ------- | ----- |
-| Code style/maintainability | latest: round 10 | fix applied; re-review pending | Supporting types moved below the primary class. |
-| Documentation completeness | latest: round 10 | clean | Durable logs and architecture docs verified current. |
-| TypeScript/API docs        | latest: round 10 | clean | No public API or generated-doc findings reported. |
-| Security                   | latest: round 10 | clean | No new security findings reported. |
-| Performance/reliability    | latest: round 10 | clean | Mixed single-vs-batch duplicate coordination verified. |
+| Code style/maintainability | latest: round 11 | fix applied; re-review pending | Markdown lines reflowed. |
+| Documentation completeness | latest: round 11 | clean | Durable logs verified current. |
+| TypeScript/API docs        | latest: round 11 | clean | No public API findings reported. |
+| Security                   | latest: round 11 | clean | No new security findings reported. |
+| Performance/reliability    | latest: round 11 | clean | Mixed duplicate coordination verified. |
 
 ## Planned Review Focus
 
@@ -400,3 +400,32 @@ Scope: live process-manager event reactor durable inbox handoff.
 - Author follow-up moved `ProcessManagerInput`, `ProcessManagerInputs`,
   `ProcessManagerMessage`, `InboxDeferred`, and `BatchRow` below
   `LocalProcessManagerInbox` and before the helper functions.
+
+## Round 11 Findings
+
+### Code Style/Maintainability
+
+- Medium: the review log required-lanes table and work-log verification entries
+  contained lines longer than 120 characters. Reflow the notes and command
+  evidence lines.
+
+### Documentation
+
+- Clean. The reviewer did not report documentation findings.
+
+### TypeScript/API Docs
+
+- Clean. The reviewer did not report TypeScript/API findings.
+
+### Security
+
+- Clean. The reviewer did not report security findings.
+
+### Performance/Reliability
+
+- Clean. The reviewer did not report performance/reliability findings.
+
+## Round-Eleven Fix Follow-Up
+
+- Author follow-up shortened the required-lanes note and wrapped long work-log
+  command evidence lines.

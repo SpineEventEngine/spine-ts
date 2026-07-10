@@ -1,6 +1,6 @@
 # T-0022b Implementation Report
 
-Status: implemented in code/docs; round-ten style fix applied; re-review pending
+Status: implemented in code/docs; round-eleven style fix applied; re-review pending
 Date: `2026-07-10`
 Worktree:
 `/Users/armiol/development/experiments/spine-ts/.worktrees/T-0022b-process-manager-event-inbox-handoff`
@@ -155,6 +155,12 @@ Round-ten findings fixed in this pass:
    - moved supporting process-manager inbox aliases and interfaces below the
      primary `LocalProcessManagerInbox` class and before helper functions.
 
+Round-eleven findings fixed in this pass:
+
+1. Code style/maintainability
+   - shortened the review-log lane note and wrapped long work-log command
+     evidence lines to stay within the line-length rule.
+
 ## Files Changed
 
 - `packages/server/src/context/process-manager-handoff.ts`
@@ -259,6 +265,23 @@ Passed:
   - command: `pnpm --config.verify-deps-before-run=false lint:generated`
   - exit `0`
   - result: TypeScript build, ESLint, and cleanup enforcement passed
+  - command:
+    `pnpm --config.verify-deps-before-run=false exec vitest run`
+    `packages/server/test/context/process-manager-handoff.test.ts`
+    `packages/server/test/repository/repository-routing.test.ts`
+  - exit `0`
+  - result: `2` files passed, `139` tests passed
+  - command: `pnpm --config.verify-deps-before-run=false docs:check`
+  - exit `0`
+  - note: TypeDoc reported the existing invalid-`origin` source-link warning
+  - command: `git diff --check`
+  - exit `0`
+- round-eleven style fix verification
+  - first parallel `lint:generated` attempt exited `1` because it raced with
+    concurrent `docs:check` proto generation and ESLint saw a transient
+    ignored `.generated-*` directory
+  - rerun command: `pnpm --config.verify-deps-before-run=false lint:generated`
+  - exit `0`
   - command:
     `pnpm --config.verify-deps-before-run=false exec vitest run`
     `packages/server/test/context/process-manager-handoff.test.ts`
