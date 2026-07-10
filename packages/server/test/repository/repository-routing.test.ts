@@ -47,7 +47,6 @@ import {
   Aggregate,
   AggregateStorage,
   BoundedContext,
-  Delivery,
   ProcessManager,
   Projection,
   Repository,
@@ -59,6 +58,7 @@ import {
   type EventDispatcher,
   type InboxMessage,
 } from "../../src/index.js";
+import { Delivery } from "../../src/delivery/delivery.js";
 import { handlerMetadataAccess } from "../../src/handler/handler-metadata.js";
 import { repositoryAccess, type RepositoryView } from "../../src/repository/repository.js";
 import { serverEntityMetadataTestFixtures } from "../../test-fixtures/entity-metadata-fixtures.js";

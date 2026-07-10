@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 41 fixes verified; re-review pending
+Status: Round 42 fixes verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status |
-| -------------------------- | -------- | ------ |
-| Code style/maintainability | Raman    | Fixed  |
-| Documentation              | Socrates | Fixed  |
-| TypeScript/API docs        | James    | Fixed  |
-| Security                   | Averroes | Fixed  |
-| Performance/reliability    | Beauvoir | Fixed  |
+| Lane                       | Reviewer          | Status   |
+| -------------------------- | ----------------- | -------- |
+| Code style/maintainability | Bernoulli the 2nd | Findings |
+| Documentation              | Faraday the 2nd   | Findings |
+| TypeScript/API docs        | Hume the 2nd      | Findings |
+| Security                   | Averroes the 2nd  | Findings |
+| Performance/reliability    | Epicurus the 2nd  | Clean    |
 
 ## Review Criteria
 
@@ -31,6 +31,47 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 ## Rounds
 
 Review findings fixed and verified after implementation commit `94b4c632`.
+
+### Round 42 Follow-up - `2026-07-10T17:25:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..d7c9b35e.diff` from task baseline
+  `ca8fb2b3` to current HEAD `d7c9b35e`.
+- Performance/reliability (Epicurus the 2nd): clean.
+- Documentation (Faraday the 2nd): [P1] Round 41 records still say
+  `git diff --check ca8fb2b3..HEAD` remains red, but the command now passes
+  after coordinator commit `2a673e42`.
+- Code style/maintainability (Bernoulli the 2nd): [P3] the Round 41 work-log
+  coordinator-commit line has a flush-left continuation.
+- TypeScript/API docs (Hume the 2nd): [P2] public docs say no raw worker
+  callback API exists, but root-exported `Delivery.drain()` and `DeliveryLoop`
+  still accept public `onMessage` callbacks.
+- Security (Averroes the 2nd): [P1] removing only `DeliveryWorker` left
+  root-exported `Delivery`, `DeliveryLoop`, and `OnDeliveryMessage`, so public
+  callers can still invoke raw inbox callbacks and bypass validated framework
+  replay.
+- Action: remove or otherwise close the remaining root raw-callback delivery
+  surface, correct docs and API export checks, update Round 41 range-check
+  records, fix work-log formatting, verify, and repeat five-lane re-review.
+
+### Round 42 Fix Implementation - `2026-07-10`
+
+- Removed `Delivery`, `DeliveryLoop`, and every associated direct
+  option/result/callback type from the root barrel; framework code and behavior
+  tests retain package-internal source imports.
+- Updated the root export test and API manifest first; its red run observed the
+  two remaining raw delivery exports, then its green run passed after the barrel
+  change.
+- Rewrote public delivery documentation to expose only the inbox/storage API and
+  to describe validated replay as framework-owned.
+- Corrected Round 41 task, work, review, and report wording: the baseline range
+  diff now passes after `2a673e42` and `d7c9b35e`; the work-log continuation is
+  formatted.
+- Verification passed: prescribed five-file delivery Vitest command with 194
+  tests; generated typecheck; docs/API check; lint; format; baseline range diff;
+  and working-tree diff. `docs:check` retained only the existing invalid-origin
+  TypeDoc source-link warning. No worker commit was created; five-lane re-review
+  remains pending.
 
 ### Round 41 Follow-up - `2026-07-10T17:05:00Z`
 
@@ -70,10 +111,10 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   delivery Vitest command with 194 tests; generated typecheck; docs/API check;
   lint; format; and working-tree `git diff --check`. `docs:check` retained only
   the existing invalid-origin TypeDoc source-link warning.
-- `git diff --check ca8fb2b3..HEAD` remains red because the repaired whitespace
-  is in current committed HEAD. This worker made no commit. Coordinator commit
-  `2a673e42` (`Fix delivery worker API and rescan paging`) recorded the fix;
-  a fresh range check is required before re-review.
+- `git diff --check ca8fb2b3..HEAD` was rerun after coordinator commits
+  `2a673e42` and `d7c9b35e` and now passes. The Round 41 range-check follow-up
+  is resolved. This worker made no commit; coordinator commit `2a673e42`
+  (`Fix delivery worker API and rescan paging`) recorded the fix.
 
 ### Round 40 Follow-up - `2026-07-10T16:48:00Z`
 

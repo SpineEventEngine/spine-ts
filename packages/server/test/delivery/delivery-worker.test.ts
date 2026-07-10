@@ -7,15 +7,12 @@ import { DedupRecords, dedupRecordSpec, InboxRecords } from "../../src/delivery/
 import { inboxStorageAccess } from "../../src/delivery/inbox-storage.js";
 import {
   Delivery,
-  DeliveryLoop,
-  type OnDeliveryMessage,
   type DeliveryEndpointMessage,
-  InboxMessageError,
-  ShardIndex,
-  ShardSession,
   type DeliveryMessageDrainOptions,
-  type InboxMessage,
-} from "../../src/index.js";
+  type OnDeliveryMessage,
+} from "../../src/delivery/delivery.js";
+import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
+import { InboxMessageError, ShardIndex, ShardSession, type InboxMessage } from "../../src/index.js";
 import {
   blockInboxClaimOnce,
   blockInboxRenewalOnce,

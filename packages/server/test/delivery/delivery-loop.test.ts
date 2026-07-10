@@ -1,16 +1,14 @@
 import { InMemoryStorageFactory, type StorageFactory } from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
-import { deliveryAccess, type DeliveryDrainOutcome } from "../../src/delivery/delivery.js";
-import { InboxRecords } from "../../src/delivery/inbox-records.js";
 import {
   Delivery,
-  DeliveryLoop,
-  ShardSession,
-  ShardIndex,
-  type InboxId,
-  type InboxMessage,
-} from "../../src/index.js";
+  deliveryAccess,
+  type DeliveryDrainOutcome,
+} from "../../src/delivery/delivery.js";
+import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
+import { InboxRecords } from "../../src/delivery/inbox-records.js";
+import { ShardSession, ShardIndex, type InboxId, type InboxMessage } from "../../src/index.js";
 import { inboxStorageAccess } from "../../src/delivery/inbox-storage.js";
 import {
   deliveryInboxRecords,

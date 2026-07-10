@@ -720,10 +720,35 @@ prescribed five-file delivery Vitest command with 194 tests, generated
 typechecking, API/docs checks, lint, formatting, and working-tree
 `git diff --check`. `docs:check` retained only the existing invalid-origin
 TypeDoc source-link warning. The direct range command
-`git diff --check ca8fb2b3..HEAD` still reports the two spaces in committed
-Round 40 history: this no-commit worker cannot change `HEAD`. Coordinator
-commit `2a673e42` (`Fix delivery worker API and rescan paging`) recorded the
-repair; the range check must be rerun before accepting Round 41.
+`git diff --check ca8fb2b3..HEAD` was rerun after coordinator commits
+`2a673e42` and `d7c9b35e` and now passes. The two-space repair is included in
+the checked range; the Round 41 range-check follow-up is resolved.
+
+Round 42 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..d7c9b35e.diff` produced a clean
+performance/reliability lane. Documentation found Round 41 records still say
+`git diff --check ca8fb2b3..HEAD` remains red, but the command now passes after
+coordinator commit `2a673e42`. Style found the Round 41 work-log
+coordinator-commit line has a flush-left continuation. TypeScript/API docs and
+security found that removing only `DeliveryWorker` did not close the raw
+callback boundary because root-exported `Delivery`, `DeliveryLoop`, and
+`OnDeliveryMessage` still expose public `onMessage` callbacks. The next fix
+removes or closes the remaining root raw-callback delivery surface, updates
+docs/API export checks, corrects Round 41 range-check records, verifies, and
+repeats five-lane re-review.
+
+Round 42 fix implementation completed on `2026-07-10`. The report
+`round-42-fix-report.md` records the canonical skill check, JVM delivery-model
+inspection, and red/green export-boundary evidence. The root barrel no longer
+exports raw callback delivery classes or their related types; internal delivery,
+context, repository, and server tests import those source modules directly.
+Public documentation and the API manifest now list only the remaining durable
+inbox/storage surface and describe replay as framework-owned. The Round 41
+range-check records now state that `git diff --check ca8fb2b3..HEAD` passes, and
+the work-log continuation is formatted. The focused delivery suite, generated
+typecheck, docs/API check, lint, format, baseline range diff, and working-tree
+diff checks passed. No worker commit was created; five-lane re-review remains
+pending.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker

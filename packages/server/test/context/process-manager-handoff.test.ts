@@ -3,7 +3,9 @@ import { AnySchema } from "@bufbuild/protobuf/wkt";
 import { InMemoryStorageFactory } from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
-import { Delivery, DeliveryLoop, ShardIndex, type InboxMessage } from "../../src/index.js";
+import { Delivery } from "../../src/delivery/delivery.js";
+import { DeliveryLoop } from "../../src/delivery/delivery-loop.js";
+import { ShardIndex, type InboxMessage } from "../../src/index.js";
 import { LocalProcessManagerInbox } from "../../src/context/process-manager-handoff.js";
 
 type ReceiveInput = Parameters<LocalProcessManagerInbox["receive"]>[1];

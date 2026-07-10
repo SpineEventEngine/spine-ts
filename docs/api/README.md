@@ -93,7 +93,7 @@ event redispatch failures are observable through the copy-safe
 `storedEventDispatchFailures()` diagnostic snapshot on the owning
 `BoundedContext`. Generated entity-class assembly creates default repositories
 through `add(EntityClass).withGeneratedRegistryRoot(root).buildAsync()`. This
-slice does not invoke query handlers, run durable Delivery catch-up, expose a
+slice does not invoke query handlers, run durable delivery catch-up, expose a
 broad server lifecycle, or integrate transports. The supported durable inbox
 handoffs are framework-owned process-manager command replay, live
 process-manager event replay, and live projection subscriber replay. The current
@@ -119,7 +119,7 @@ to registered projection subscribers whose dispatcher declares that event
 message schema/type URL. It never re-appends events. Single-tenant contexts
 reject `tenantId`; multitenant contexts require the exact non-blank `tenantId`.
 The helper runs sequentially inside one local process and does not implement
-Delivery jobs, schedulers, inbox lifecycle, retries, or transport topology.
+delivery jobs, schedulers, inbox lifecycle, retries, or transport topology.
 Server exports also include the abstract `Entity` shell, `TransactionalEntity`,
 `Aggregate`, `Projection`, `ProcessManager`, `EntityFamily`,
 `TransactionalEntityScopeError`, `EntityScopeReason`,
@@ -305,79 +305,43 @@ finite primitive or single-field Protobuf message aggregate IDs, route
 consistency, and aggregate version order before storage. It does not implement
 handler invocation, delivery, catch-up, read-side indexing, subscriptions,
 system events, or aggregate repository caching.
-Delivery exports include `Delivery`, `DeliveryOptions`,
-`DeliveryDrainOptions`, `DeliveryMessageDrainOptions`, `OnDeliveryMessage`,
-`DeliveryEndpointMessage`, `DeliveryFailure`, `DeliveryRun`, `DeliveryLoop`,
-`DeliveryLoopOptions`, `DeliveryLoopRun`, `DeliveryLoopStatus`,
-`DeliveryStorageCorruptionError`, `Inbox`, `InboxId`, `InboxMessage`,
-`InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
-`InboxReadOptions`, `InboxWriteResult`, `InboxStorage`,
-`InboxStorageOptions`, `DeliveryLabel`, `DeliveryStatus`, `ShardIndex`,
-`ShardSession`, `ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`. This slice persists
+Durable-delivery exports include `DeliveryStorageCorruptionError`, `Inbox`, `InboxId`,
+`InboxMessage`, `InboxMessageError`, `InboxMessageId`, `InboxMessageInput`,
+`InboxReadOptions`, `InboxWriteResult`, `InboxStorage`, `InboxStorageOptions`,
+`DeliveryLabel`, `DeliveryStatus`, `ShardIndex`, `ShardSession`,
+`ShardedWorkRegistry`, and `ShardedWorkRegistryOptions`. This slice persists
 inbox messages and shard lease records through `StorageFactory` /
-`RecordStorage`, deduplicates live inbox writes durably by
-`(signalId, inboxId)` through small internal guard records, keeps shard
-ordering metadata on each message with receive time (`whenReceived`),
-`version`, and inbox message UUID ordering. Direct inbox writes require
-`InboxMessage.id.shard` to match `InboxMessage.shard`. Supported public
-`DeliveryLabel` values are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`,
-`REACT_UPON_EVENT`, and `CATCH_UP`; `IMPORT_EVENT` is recognized only as
-deprecated legacy stored/wire data and fails closed on read/drain. Delivery also
-exposes a storage-backed shard pickup/renew/release seam backed by atomic
-`RecordStorage.compareAndSet()`, plus `Delivery.drain()` as the direct local
-worker boundary. `ShardedWorkRegistry.renew(session)` is framework-owned lease
-fencing for active drains, not an application retry or supervision policy.
-`Delivery.drain(shard, { node, onMessage, limit })` picks up one shard, scans
-`TO_DELIVER` rows in inbox order, skips rows unavailable to this worker before
-invoking the `OnDeliveryMessage` callback, and passes an independent
-`DeliveryEndpointMessage` snapshot to it. `Date` values and `Any.value` bytes
-are copied. `limit` caps rows whose
-endpoint callback actually runs for one drain; the storage read cap plus
-`limit` bounds scanning while the drain advances past unavailable or
-worker-unsupported rows first. Endpoint callbacks run only for
-`HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; valid
-worker-unsupported labels such as `CATCH_UP` remain pending and are skipped
-before callback invocation, row acceptance, failure recording, or
-failure-budget consumption. Successful
-delivery marks the row `DELIVERED`; endpoint callback failures leave the row
-pending for a later run only when framework-owned cleanup succeeds. Malformed or
-deprecated legacy label data such as stored `IMPORT_EVENT` remains a
-fail-closed `DeliveryStorageCorruptionError` path that aborts read/drain before
-any `DeliveryRun` is returned. Cleanup, lease/fencing, and
-delivery-status update failures are reported in the returned
-`DeliveryRun.failures` / `DeliveryFailure` values without promising immediate
-retry. Pre-callback claim, validation, lease, cleanup, and delivery-status
-failures stay visible there, do not increment accepted work, but do increment
-failed work and count toward `DeliveryLoop.maxFailures`. Any existing
-per-message ownership, expired or live, blocks competing delivery in this
-slice; proactive sweeping and broader production recovery policy remain future
-work.
-Drains release the shard in `finally` and return
-a `DeliveryRun` with `status`, `processed`, `accepted`, `delivered`, `failed`,
-and per-message failures retained only in that result.
-`Delivery.drainMessage(message, { node, onMessage })`
-picks up the message shard only when `message.id.shard` matches
-`message.shard`, then replays that exact pending row without accepting a page
-limit. `DeliveryLoop` repeats the shard-level `Delivery.drain()` boundary for
-one shard until a drain is idle, skipped, stopped, paused after a bounded
-skipped-only scan streak, or reaches `maxFailures`; a later `run()` resumes
-from a saved internal cursor and safely resets that cursor if earlier pending
-rows disappeared before the next run. Endpoint callback retry is simply a later
-loop/drain seeing rows that remained `TO_DELIVER`. Lease renewal uses
-same-event-loop timers around in-process callbacks, so CPU-bound synchronous
-callbacks can still starve renewal; this slice treats that as an in-process
-trust-boundary limitation rather than timer-protected preemption.
-`DeliveryLoopRun` aggregates `DeliveryRun` counts across loop drains: `status`
-is the loop stop reason, `runs` is the number of started drains, and
-`processed`, `accepted`, `delivered`, `failed`, and `failures` are accumulated
-from the underlying drain results. `stop()` prevents future drain starts and
-does not interrupt an in-flight `Delivery.drain()`; a run that observes the stop
-returns `STOPPED`. `close()` calls `stop()` and waits for the current drain, if
-any, to finish. The package does not expose a raw worker callback API;
-framework-owned replay stays behind validated endpoints.
-`DeliveryDrainOptions.limit` and `DeliveryLoopOptions.limit`
-are positive accepted-work caps with a bounded default when omitted; the storage
-read cap plus the accepted-work cap bounds skipped-row scanning.
+`RecordStorage`, deduplicates live inbox writes durably by `(signalId, inboxId)`
+through small internal guard records, and keeps shard ordering metadata on each
+message with receive time (`whenReceived`), `version`, and inbox-message UUID
+ordering. Direct inbox writes require `InboxMessage.id.shard` to match
+`InboxMessage.shard`. Supported public `DeliveryLabel` values are
+`HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`;
+`IMPORT_EVENT` is recognized only as deprecated legacy stored/wire data and
+fails closed on read or framework replay.
+
+Built contexts use storage-backed shard pickup, renewal, and release internally
+through atomic `RecordStorage.compareAndSet()` fencing. Framework-owned replay
+scans pending rows in inbox order, skips unavailable rows before endpoint
+invocation, and supplies independent message snapshots only for
+`HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`. `Date` values
+and `Any.value` bytes are copied. Its callback limit and scan budget are finite.
+Valid worker-unsupported labels such as `CATCH_UP` remain pending and are
+skipped before callback invocation, acceptance, failure recording, or
+failure-budget consumption. Malformed or deprecated stored `IMPORT_EVENT` data
+fails closed as `DeliveryStorageCorruptionError` before replay begins.
+
+Endpoint failures leave rows pending for a later framework run only when
+cleanup succeeds. Pre-callback claim, validation, lease, cleanup, and
+delivery-status failures do not increment accepted work, but they increment
+failed work and count toward the framework failure bound. Any existing
+per-message ownership, expired or live, blocks competing delivery in this slice;
+proactive sweeping and broader production recovery policy remain future work.
+The package does not expose a raw worker callback API; framework-owned replay
+stays behind validated endpoints. Lease renewal uses same-event-loop timers
+around in-process callbacks, so CPU-bound synchronous callbacks can still starve
+renewal; this slice treats that as an in-process trust-boundary limitation rather
+than timer-protected preemption.
 `InboxReadOptions.limit` remains the positive page-size control for a single
 ordered inbox read. `Inbox.markDelivered()` and `InboxStorage.markDelivered()` return
 `undefined` for missing rows, non-pending rows, or caller snapshots that do not

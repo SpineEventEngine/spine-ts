@@ -221,11 +221,11 @@ or multi-host transport example.
   production runtime verification.
   Built bounded contexts now create internal system-pairing metadata and a
   framework-owned tenant index; those internals are not exposed to end-user
-  application code. Durable inbox/shard delivery storage, the direct local shard
-  drain, and the local one-shard `DeliveryLoop` already exist for
-  framework-owned delivery work. Lease-fenced local drains skip rows
+  application code. Durable inbox/shard delivery storage and bounded internal
+  shard replay already exist for framework-owned delivery work. Lease-fenced
+  replay skips rows
   unavailable to the active worker and pass independent
-  `DeliveryEndpointMessage` snapshots only for `HANDLE_COMMAND`,
+  message snapshots only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; copied `Date` values and
   `Any.value` bytes are safe to mutate in endpoint code. Any existing
   per-message ownership, expired or live, blocks competing delivery in this
@@ -1209,44 +1209,40 @@ through `AggregateStorage`, using finite primitive or single-field Protobuf
 message `AggregateId` values for this slice. Its history-read API remains
 legacy/internal compatibility support; ordinary generated-registry aggregate
 loading uses the latest persisted state rather than snapshot-plus-replay
-loading. Durable inbox records, dedup guards, shard leases, and the direct
-local shard drain are available through the delivery APIs. Built contexts use
-them internally for process-manager command rows, process-manager event reaction
-rows, and live projection subscriber rows. Lease-fenced local drains skip rows
-unavailable to the active worker and pass independent
-`DeliveryEndpointMessage` snapshots only for `HANDLE_COMMAND`,
+loading. Durable inbox records, dedup guards, and shard leases are available
+through the delivery APIs. Built contexts use them internally for
+process-manager command rows, process-manager event reaction rows, and live
+projection subscriber rows. Lease-fenced framework replay skips rows unavailable
+to the active worker and passes independent message snapshots only for `HANDLE_COMMAND`,
 `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; copied `Date` values and
 `Any.value` bytes are safe to mutate in endpoint code. Any existing
 per-message ownership, expired or live, blocks competing delivery in this
 slice. Proactive sweeping and broader production recovery policy remain future
 work.
-In `Delivery.drain()`, `limit` caps endpoint callbacks that actually run for
-that drain, while the storage read cap plus `limit` bounds total scanning.
+For framework-owned replay, the callback limit caps endpoint callbacks that
+actually run, while the storage read cap plus that limit bounds total scanning.
 Valid worker-unsupported labels such as `CATCH_UP` remain pending and are
 skipped before callback invocation, row acceptance, failure recording, or
 failure-budget consumption. Pre-callback claim, replay-validation, lease,
-cleanup, and delivery-status failures stay visible in `DeliveryRun.failures`,
-do not increment accepted work, but they do increment failed work and count
-toward `DeliveryLoop.maxFailures`.
-`DeliveryLoop` repeats that direct drain for one shard until the shard is idle,
+cleanup, and delivery-status failures remain internal, do not increment
+accepted work, but they increment failed work and count toward the framework
+failure bound. The framework repeats one-shard replay until the shard is idle,
 skipped, stopped, paused after a bounded skipped-only scan streak, or reaches a
-configured failure bound. A later `run()` resumes from a saved internal cursor
-and resets that cursor safely if earlier pending rows disappeared before the
-next run. Failed rows stay pending as `TO_DELIVER` for later loop/drain retry
+configured failure bound. A later internal run resumes from a saved cursor and
+resets it safely if earlier pending rows disappeared. Failed rows stay pending
+as `TO_DELIVER` for later replay retry
 when the endpoint callback fails and framework-owned cleanup succeeds; no
 retained attempt history is written. Cleanup/replay validation, lease/fencing,
-and delivery-status update failures are reported in `DeliveryRun.failures` /
-`DeliveryFailure` without promising immediate retry, and future recovery policy
-may be needed for abandoned or unavailable rows. Malformed or deprecated legacy
-label data such as stored `IMPORT_EVENT` still fails closed as
-`DeliveryStorageCorruptionError` before a `DeliveryRun` is returned. Lease
+and delivery-status update failures are reported internally without promising
+immediate retry, and future recovery policy may be needed for abandoned or
+unavailable rows. Malformed or deprecated legacy label data such as stored
+`IMPORT_EVENT` still fails closed as `DeliveryStorageCorruptionError` before
+replay begins. Lease
 renewal uses same-event-loop timers around in-process callbacks, so CPU-bound
 synchronous callbacks can still starve renewal; this slice treats that as an
 in-process trust-boundary limitation rather than timer-protected preemption.
-`stop()` prevents future drain starts and does not interrupt an in-flight
-`Delivery.drain()`; `close()` calls `stop()` and waits for the current drain, if
-any, to finish. The package does not expose a raw worker callback API;
-framework-owned replay stays behind validated endpoints.
+The package does not expose a raw worker callback API; framework-owned replay
+stays behind validated endpoints.
 Projection catch-up remains the existing `BoundedContext.catchUpReadSide()`
 coordination path and does not gain fake durable catch-up storage here; retry
 workers and generic repository

@@ -104,59 +104,46 @@ Current slice exposes:
   seam, backed by `StorageFactory`, `RecordStorage`, and `EventStore`;
   `PrimitiveId` and `MessageId` expose the accepted public ID shapes;
   and
-- `Delivery`, `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`,
-  `OnDeliveryMessage`, `DeliveryEndpointMessage`, `DeliveryFailure`,
-  `DeliveryLoop`, `DeliveryLoopOptions`, `DeliveryLoopRun`,
-  `DeliveryLoopStatus`, `DeliveryRun`, `Inbox`, `InboxStorage`,
-  `ShardIndex`, `ShardSession`, and `ShardedWorkRegistry` for the current durable delivery
+- `Inbox`, `InboxStorage`, `ShardIndex`, `ShardSession`, and
+  `ShardedWorkRegistry` for the current durable delivery
   slice: inbox writes with durable `(signalId, inboxId)` live deduplication
   through internal guard records, shard ordering metadata with an explicit
   inbox-message UUID tie-breaker, bounded read paging via
   `InboxReadOptions.limit`, storage-backed shard pickup/renew/release over
   atomic `RecordStorage.compareAndSet()` handles for one backing store,
   framework-owned shard renewal as lease fencing for active drains,
-  framework-owned `Delivery.drain()` runs that pick up one shard,
-  exact-message `Delivery.drainMessage()` runs that reject mismatched
-  `message.id.shard`/`message.shard` snapshots and accept only `node` plus
-  `onMessage`, a small `DeliveryLoop` that repeats those drains until idle,
-  stopped, skipped, paused after a bounded skipped-only scan streak, or a
-  configured failure bound. The package does not expose a raw worker callback
-  API; framework-owned replay stays behind validated endpoints.
-  In `Delivery.drain()`, `limit` caps endpoint callbacks that actually run for
-  one drain; scanning stays finite at the storage read cap plus `limit` while
-  the drain skips rows unavailable to the active worker first. Delivery passes
-  independent `DeliveryEndpointMessage` snapshots only for `HANDLE_COMMAND`,
-  `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`, and marks successful rows
-  delivered. Those snapshots copy `Date` values and `Any.value` bytes.
+  framework-owned bounded runs that pick up one shard and replay only through
+  validated endpoints. The package does not expose a raw worker callback API.
+  A run skips rows unavailable to its worker first, and its endpoint callback
+  limit and scan budget are finite. It passes independent message snapshots
+  only for `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`, then
+  marks successful rows delivered. Those snapshots copy `Date` values and
+  `Any.value` bytes.
   Endpoint callback failures leave rows pending for a later run through the
   same durable `TO_DELIVER` state only after framework-owned cleanup succeeds.
   Cleanup, fail-closed validation, lease/fencing, and status-update failures
-  are reported through `DeliveryRun.failures` /
-  `DeliveryFailure` without an immediate retry or recovery guarantee in this
-  slice. Endpoint callbacks run only for `HANDLE_COMMAND`,
+  are reported internally without an immediate retry or recovery guarantee in
+  this slice. Endpoint callbacks run only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; worker-unsupported labels remain
   pending and are skipped before callback invocation, row acceptance, failure
   recording, or failure-budget consumption. Pre-callback claim, lease, cleanup,
-  validation, and status-update failures stay visible in
-  `DeliveryRun.failures`, do not increment accepted endpoint work, but they do
-  increment failed work and count toward `DeliveryLoop.maxFailures`. Any
+  validation, and status-update failures do not increment accepted endpoint
+  work, but they increment failed work and count toward the framework failure
+  bound. Any
   existing per-message ownership, expired or live, blocks competing delivery
   in this slice; proactive sweeping and broader production recovery policy
   remain future work. Supported public delivery labels are `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`;
   `IMPORT_EVENT` is rejected for new inbox writes before durable storage opens.
   Stored/wire legacy `IMPORT_EVENT` rows remain recognizable only as deprecated
-  compatibility data and fail closed on read or drain with
-  `DeliveryStorageCorruptionError` rather than being returned through
-  `DeliveryRun.failures` or delivered.
-  A paused loop resumes from a saved internal cursor and safely resets that
-  cursor if earlier pending rows disappeared before the next run. Lease renewal
-  uses same-event-loop timers around in-process callbacks, so CPU-bound
-  synchronous callbacks can still starve renewal; this slice treats that as an
-  in-process trust-boundary limitation rather than timer-protected preemption.
-  `stop()` prevents future drain starts and does not interrupt an in-flight
-  `Delivery.drain()`; `close()` calls `stop()` and waits for the current drain,
-  if any, to finish. Built bounded contexts use the storage layer internally
+  compatibility data and fail closed on read or replay with
+  `DeliveryStorageCorruptionError` rather than being delivered. A paused
+  framework run resumes from a saved internal cursor and safely resets that
+  cursor if earlier pending rows disappeared. Lease renewal uses same-event-loop
+  timers around in-process callbacks, so CPU-bound synchronous callbacks can
+  still starve renewal; this slice treats that as an in-process trust-boundary
+  limitation rather than timer-protected preemption. Built bounded contexts use
+  the storage layer internally
   for process-manager command rows, process-manager event reaction rows, and
   live projection subscriber rows; their package-internal replay endpoints can
   also serve rows drained later by a delivery loop. This slice explicitly
@@ -761,7 +748,7 @@ framework-owned reset step used by `catchUpReadSide()`.
 `catchUpReadSide(options?)` is intentionally narrow: it replays only
 already-stored events into registered projection subscribers, clears then
 rebuilds projection rows in `Stand`, never re-appends events, and remains a
-process-local sequential helper rather than a durable live-traffic Delivery
+process-local sequential helper rather than a durable live-traffic delivery
 replacement. Custom event dispatchers, delivery jobs, schedulers, inbox
 lifecycle, retries, and transport topology remain out of scope for this slice.
 `SpineServices` adapts built-context command
@@ -817,7 +804,7 @@ direct Stand subscriptions, Stand version metadata, and the in-memory storage
 adapter's backing data remain process-local development/test state, not durable
 delivery or catch-up storage. Cross-context fallback, client query DSLs,
 comparison subscription operators, retained update replay, active-stream
-persistence, and durable cross-process Delivery/subscription recovery catch-up
+persistence, and durable cross-process delivery/subscription recovery catch-up
 remain outside this slice.
 
 ## Local Server Lifecycle

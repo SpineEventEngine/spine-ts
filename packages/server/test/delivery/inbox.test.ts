@@ -11,6 +11,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
+import { Delivery } from "../../src/delivery/delivery.js";
 import {
   DedupRecords,
   dedupRecordSpec,
@@ -18,7 +19,6 @@ import {
   inboxRecordSpec,
 } from "../../src/delivery/inbox-records.js";
 import {
-  Delivery,
   Inbox,
   InboxMessageError,
   InboxStorage,

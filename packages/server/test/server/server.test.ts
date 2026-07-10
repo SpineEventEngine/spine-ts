@@ -21,7 +21,8 @@ import type {
 import { createTransportSubscription, createTransportTopic } from "@spine-ts/transport";
 import { describe, expect, it } from "vitest";
 
-import { BoundedContext, Server, ServerEnvironment, type Delivery } from "../../src/index.js";
+import type { Delivery } from "../../src/delivery/delivery.js";
+import { BoundedContext, Server, ServerEnvironment } from "../../src/index.js";
 
 describe("Server", () => {
   it("starts on 127.0.0.1 by default and exposes its local base URL", async () => {

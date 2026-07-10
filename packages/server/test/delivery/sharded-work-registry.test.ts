@@ -12,7 +12,8 @@ import { describe, expect, it } from "vitest";
 
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
 import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
-import { Delivery, ShardIndex, ShardSession } from "../../src/index.js";
+import { Delivery } from "../../src/delivery/delivery.js";
+import { ShardIndex, ShardSession } from "../../src/index.js";
 
 describe("ShardedWorkRegistry", () => {
   it("picks up one shard once across shared storage and releases it for the next worker", async () => {

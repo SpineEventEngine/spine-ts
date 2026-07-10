@@ -1,16 +1,15 @@
 import { InMemoryStorageFactory } from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
-import { deliveryAccess, type DeliveryDrainOutcome } from "../../src/delivery/delivery.js";
-import { DeliveryWorker, deliveryWorkerAccess } from "../../src/delivery/delivery-worker.js";
 import {
   Delivery,
-  type DeliveryLoopRun,
-  ShardIndex,
+  deliveryAccess,
+  type DeliveryDrainOutcome,
   type DeliveryRun,
-  type InboxId,
-  type InboxMessage,
-} from "../../src/index.js";
+} from "../../src/delivery/delivery.js";
+import { DeliveryWorker, deliveryWorkerAccess } from "../../src/delivery/delivery-worker.js";
+import type { DeliveryLoopRun } from "../../src/delivery/delivery-loop.js";
+import { ShardIndex, type InboxId, type InboxMessage } from "../../src/index.js";
 
 describe("DeliveryWorker", () => {
   it("starts configured shard loops and reports their run results", async () => {

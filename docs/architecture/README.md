@@ -456,8 +456,8 @@ The following runtime pieces remain outside the verified local/example slice:
 - process-wide transport-backed delivery workers, production catch-up
   orchestration, durable production storage adapters, entity storage/cache
   catch-up, and production tenant-index policy. Durable inbox records, dedup
-  guards, shard leases, the direct local shard drain, the local one-shard
-  `DeliveryLoop`, and the internal tenant index are present;
+  guards, shard leases, bounded internal shard replay, and the internal tenant
+  index are present;
 - richer query filtering, retained subscription update replay, and
   cross-process subscription stream ownership;
 - full system-context runtime, command-log repositories, system event taxonomy,
@@ -588,16 +588,15 @@ Aggregate latest-state and traceability event-journal storage is available
 through the current `AggregateStorage` seam. Its history-read API remains
 legacy/internal compatibility support; ordinary generated-registry aggregate
 loading uses the latest persisted state rather than snapshot-plus-replay
-loading. Delivery now persists durable inbox rows through `RecordStorage`,
+loading. The framework now persists durable inbox rows through `RecordStorage`,
 keeps live deduplication guards beside those rows, coordinates shard ownership
-with durable shard leases, and exposes `Delivery.drain()` plus `DeliveryLoop`
-for local framework-owned shard draining. A drain picks up, renews, and
-releases its shard session with compare-and-set fencing. Rows unavailable to the
-active worker are skipped before endpoint invocation, and bounded drains can
-scan past unavailable head rows to reach later available rows. In
-`Delivery.drain()`, `limit` caps endpoint callbacks that actually run, and the
-storage read cap plus `limit` bounds total scanning for that drain. Endpoint
-callbacks receive independent `DeliveryEndpointMessage` snapshots only for
+with durable shard leases, and uses bounded internal replay for local
+framework-owned shard draining. A replay run picks up, renews, and releases its
+shard session with compare-and-set fencing. Rows unavailable to the active
+worker are skipped before endpoint invocation, and bounded replay can scan past
+unavailable head rows to reach later available rows. Its callback limit caps
+endpoint callbacks that actually run, and the storage read cap plus that limit
+bounds total scanning. Endpoint callbacks receive independent message snapshots only for
 `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; their `Date`
 values and `Any.value` bytes are copied. `CATCH_UP` stays pending and never
 reaches callbacks or returned failures. Successful callbacks mark rows
@@ -607,16 +606,13 @@ delivery-status failures are reported without an immediate retry or recovery
 guarantee in this slice. Worker-unsupported rows such as `CATCH_UP` do not
 consume accepted work or loop failure budget. Pre-callback claim, validation,
 lease, cleanup, and delivery-status failures do not increment accepted work,
-but they do increment failed work and count toward `DeliveryLoop.maxFailures`.
+but they do increment failed work and count toward the framework failure bound.
 A later claim attempt does not reclaim existing per-message ownership in this
 slice; expired and live ownership both block competing delivery until future
-explicit recovery policy exists. `DeliveryLoop` repeats one-shard drains until idle,
-skipped, stopped, paused after a bounded skipped-only scan streak, or a
-configured failure bound. A later `run()` resumes from a saved internal cursor
-and safely resets that cursor if earlier pending rows disappeared before the
-next run. `stop()` prevents future drain starts and does not interrupt an
-in-flight `Delivery.drain()`; `close()` calls `stop()` and waits for the
-current drain, if any, to finish. Lease renewal uses same-event-loop timers
+explicit recovery policy exists. The framework repeats one-shard replay until
+idle, skipped, stopped, paused after a bounded skipped-only scan streak, or a
+configured failure bound. A later internal run resumes from a saved cursor and
+safely resets it if earlier pending rows disappeared. Lease renewal uses same-event-loop timers
 around in-process callbacks, so CPU-bound synchronous callbacks can still
 starve renewal; this slice treats that as an in-process trust-boundary
 limitation rather than timer-protected preemption. The package does not expose

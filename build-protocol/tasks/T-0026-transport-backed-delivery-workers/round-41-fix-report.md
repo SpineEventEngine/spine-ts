@@ -83,10 +83,9 @@ stale-head rescan paged'`. It failed only at the intended assertion:
 - Passed `pnpm --config.verify-deps-before-run=false lint`.
 - Passed `pnpm --config.verify-deps-before-run=false format:check`.
 - Passed working-tree `git diff --check`.
-- `git diff --check ca8fb2b3..HEAD` still fails on the two Round 40 spaces
-  because they are in current committed `HEAD`; the uncommitted Round 41 repair
-  cannot change that range. Coordinator commit `2a673e42` recorded this
-  repair; rerun the required range check against the new `HEAD`.
+- `git diff --check ca8fb2b3..HEAD` was rerun after coordinator commits
+  `2a673e42` and `d7c9b35e` and now passes. The Round 41 range-check follow-up
+  is resolved.
 
 ## Commit
 

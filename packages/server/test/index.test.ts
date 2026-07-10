@@ -13,6 +13,11 @@ import {
 
 import * as serverRoot from "../src/index.js";
 import {
+  Delivery,
+  type DeliveryDrainOptions,
+  type OnDeliveryMessage,
+} from "../src/delivery/delivery.js";
+import {
   BoundedContext,
   CommandBus,
   type CommandDispatcher,
@@ -43,9 +48,6 @@ import {
   type StandSubscription,
   type StandUpdate,
   Aggregate,
-  Delivery,
-  type DeliveryDrainOptions,
-  type OnDeliveryMessage,
   type EntityVersionMetadata,
   Inbox,
   type InboxMessage,
@@ -218,7 +220,6 @@ describe("@spine-ts/server", () => {
         "CommandBus",
         "CommandRefusalError",
         "CommandRegistrationReadiness",
-        "Delivery",
         "DeliveryStorageCorruptionError",
         "EntityTransactionDraftStateError",
         "EntityTransaction",
@@ -228,7 +229,6 @@ describe("@spine-ts/server", () => {
         "Command",
         "EventBus",
         "EventRegistrationReadiness",
-        "DeliveryLoop",
         "FixedClock",
         "HandlerMetadataError",
         "HandlerMetadataRegistry",
