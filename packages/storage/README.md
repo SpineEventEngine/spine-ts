@@ -33,6 +33,7 @@ small structural `StorageContext` with `name`, `multitenant`, and optional
 - exact ID filters;
 - exact column filters;
 - sorting by `id`, stored columns, or simple dotted record paths;
+- non-negative offsets after sorting;
 - positive limits;
 - simple field masks applied to cloned results.
 

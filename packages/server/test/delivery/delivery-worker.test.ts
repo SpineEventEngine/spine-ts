@@ -429,6 +429,56 @@ describe("Delivery worker", () => {
     ]);
   });
 
+  it("scans past a full unavailable head page before declaring the shard idle", async () => {
+    const storageFactory = new InMemoryStorageFactory();
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      leaseMs: 60_000,
+      now: () => new Date("2026-07-08T09:00:00.000Z"),
+    });
+    const shard = ShardIndex.single();
+    const unavailable: InboxMessage[] = [];
+
+    for (let index = 0; index < 1_000; index += 1) {
+      unavailable.push(await seed(delivery, `signal-unavailable-${index}`, BigInt(index + 1)));
+    }
+    await seed(delivery, "signal-available-tail", 1_001n);
+
+    for (const message of unavailable) {
+      const claimed = await inboxStorageAccess.claim(
+        delivery.inbox.storage,
+        message,
+        new ShardSession(
+          `message-owner-${message.signalId}`,
+          shard,
+          "node-a",
+          new Date("2026-07-08T09:00:00.000Z"),
+          new Date("2026-07-08T09:01:00.000Z"),
+        ),
+      );
+      expect(claimed?.signalId).toBe(message.signalId);
+    }
+
+    const seen: string[] = [];
+    const run = await delivery.drain(shard, {
+      node: "node-b",
+      limit: 1_000,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(seen).toEqual(["signal-available-tail"]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1_001,
+      accepted: 1,
+      delivered: 1,
+      failed: 0,
+    });
+  });
+
   it("leaves a row pending when the foreground lease check observes expiry", async () => {
     vi.useFakeTimers();
     try {

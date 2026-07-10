@@ -50,6 +50,7 @@ export class InboxStorage {
   async read(shard: ShardIndex, options: InboxReadOptions = {}): Promise<readonly InboxMessage[]> {
     const nextShard = requireReadShard(shard);
     const limit = requireInboxReadLimit(options.limit ?? defaultReadLimit);
+    const offset = requireInboxReadOffset(options.offset ?? 0);
     const storage = this.#inboxStorage();
 
     try {
@@ -61,6 +62,7 @@ export class InboxStorage {
           ],
           sort: [{ field: "receivedAt" }, { field: "version" }, { field: "messageId" }],
           limit,
+          offset,
         }),
       );
 
@@ -1124,6 +1126,14 @@ function requireInboxReadLimit(value: unknown): number {
     throw new InboxMessageError(
       `Inbox read limit must be a positive safe integer at most ${String(maxReadLimit)}.`,
     );
+  }
+
+  return value as number;
+}
+
+function requireInboxReadOffset(value: unknown): number {
+  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+    throw new InboxMessageError("Inbox read offset must be a non-negative safe integer.");
   }
 
   return value as number;

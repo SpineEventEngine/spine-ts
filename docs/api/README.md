@@ -327,10 +327,13 @@ exposes a storage-backed shard pickup/renew/release seam backed by atomic
 `RecordStorage.compareAndSet()`, plus `Delivery.drain()` as the direct local
 worker boundary. `ShardedWorkRegistry.renew(session)` is framework-owned lease
 fencing for active drains, not an application retry or supervision policy.
-`Delivery.drain(shard, { node, onMessage, limit })` picks up one shard, reads
+`Delivery.drain(shard, { node, onMessage, limit })` picks up one shard, scans
 `TO_DELIVER` rows in inbox order, skips rows unavailable to this worker before
 invoking the `DeliveryEndpoint`, and passes a public `InboxMessage` snapshot to
-the endpoint. Endpoint callbacks run only for `HANDLE_COMMAND`,
+the endpoint. `limit` caps accepted endpoint work for one drain and sets the
+initial scan window; additional scan pages advance past unavailable rows until
+the drain reaches the accepted-work cap or exhausts the shard. Endpoint
+callbacks run only for `HANDLE_COMMAND`,
 `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; unsupported labels fail closed
 before the callback. Successful delivery marks the row `DELIVERED`; endpoint
 callback failures leave the row pending for a later run only when
@@ -357,9 +360,10 @@ returns `STOPPED`. `close()` calls `stop()` and waits for the current drain, if
 any, to finish. `DeliveryWorker` owns a
 configured set of shard loops for one node, starts them together, aggregates
 per-loop results, and closes by stopping future drains while waiting for active
-drains to finish. `DeliveryDrainOptions.limit`, `DeliveryLoopOptions.limit`,
-and `InboxReadOptions.limit` are positive page-size controls with a bounded
-default when omitted. `Inbox.markDelivered()` and `InboxStorage.markDelivered()` return
+drains to finish. `DeliveryDrainOptions.limit` and `DeliveryLoopOptions.limit`
+are positive accepted-work caps plus initial scan windows with a bounded default
+when omitted; `InboxReadOptions.limit` remains the positive page-size control
+for a single ordered inbox read. `Inbox.markDelivered()` and `InboxStorage.markDelivered()` return
 `undefined` for missing rows, non-pending rows, or caller snapshots that do not
 match the stored message; already-delivered matching rows are returned
 idempotently. Built contexts use this storage boundary internally for
@@ -612,8 +616,8 @@ Storage exports include `Storage`, `StorageContext`, `StorageFactory`,
 `OnEventAccepted`. `StorageFactory`
 owns one mandatory adapter seam, `createRecordStorage(context, spec)`.
 `RecordStorage` persists identified Protobuf records with deterministic
-ID/column/path queries, positive limits, and simple field masks over cloned
-results. The in-memory adapter is process-local, tenant-aware through
+ID/column/path queries, non-negative offsets, positive limits, and simple field
+masks over cloned results. The in-memory adapter is process-local, tenant-aware through
 `StorageContext`, shared by factory, context name, tenant mode, tenant ID, and
 `RecordSpec` instance, and non-durable. Storage adapters must make repeated
 `createRecordStorage(context, spec)` calls observe the same logical records

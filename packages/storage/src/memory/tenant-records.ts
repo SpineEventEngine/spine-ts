@@ -44,7 +44,7 @@ export class TenantRecords<I, R extends Message> {
       compareEntries(left.stored, right.stored, query.sort ?? []),
     );
 
-    return applyLimit(sorted, query.limit).map((entry) => ({
+    return applyWindow(sorted, query.offset, query.limit).map((entry) => ({
       id: entry.slotId,
       record: entry.stored.record,
     }));
@@ -86,8 +86,15 @@ function recordsEqual<I, R extends Message>(
   return StoredValues.key(left.record) === StoredValues.key(right.record);
 }
 
-function applyLimit<T>(records: readonly T[], limit: number | undefined): readonly T[] {
-  return limit === undefined ? records : records.slice(0, limit);
+function applyWindow<T>(
+  records: readonly T[],
+  offset: number | undefined,
+  limit: number | undefined,
+): readonly T[] {
+  const start = offset ?? 0;
+  const end = limit === undefined ? undefined : start + limit;
+
+  return records.slice(start, end);
 }
 
 function compareEntries<I, R extends Message>(

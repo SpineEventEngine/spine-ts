@@ -67,7 +67,7 @@ export interface DeliveryWorkerOptions {
   readonly shards: readonly ShardIndex[];
   /** Worker node name used for shard pickup. */
   readonly node: string;
-  /** Optional positive safe integer page size for each underlying drain. */
+  /** Optional positive accepted-work cap and initial scan window for each underlying drain. */
   readonly limit?: number;
   /** Maximum failed message attempts per loop before that loop stops. */
   readonly maxFailures?: number;

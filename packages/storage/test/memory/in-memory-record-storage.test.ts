@@ -76,6 +76,25 @@ describe("InMemoryRecordStorage", () => {
     expect(records.map((record) => record.id?.value)).toEqual(["event-1", "event-2"]);
   });
 
+  it("applies query offsets after sorting and before limits", async () => {
+    const storage = createStorage();
+
+    await storage.writeAll([
+      createEvent("event-3", "type.spine.io/tasks.TaskClosed", 3n),
+      createEvent("event-1", "type.spine.io/tasks.TaskCreated", 1n),
+      createEvent("event-4", "type.spine.io/tasks.TaskClosed", 4n),
+      createEvent("event-2", "type.spine.io/tasks.TaskClosed", 2n),
+    ]);
+
+    const page = await storage.query({
+      sort: [{ field: "timestamp", direction: "asc" }],
+      offset: 1,
+      limit: 2,
+    });
+
+    expect(page.map((record) => record.id?.value)).toEqual(["event-2", "event-3"]);
+  });
+
   it("sorts numeric and bigint values numerically for multi-digit values", async () => {
     const storage = createStorage();
 
@@ -269,6 +288,12 @@ describe("InMemoryRecordStorage", () => {
     await expect(storage.query({ limit: Number.NaN })).rejects.toThrow(/positive/);
     await expect(storage.query({ limit: Number.POSITIVE_INFINITY })).rejects.toThrow(/positive/);
     await expect(storage.query({ limit: 1.5 })).rejects.toThrow(/positive/);
+    await expect(storage.query({ offset: -1 })).rejects.toThrow(/non-negative/);
+    await expect(storage.query({ offset: Number.NaN })).rejects.toThrow(/non-negative/);
+    await expect(storage.query({ offset: Number.POSITIVE_INFINITY })).rejects.toThrow(
+      /non-negative/,
+    );
+    await expect(storage.query({ offset: 1.5 })).rejects.toThrow(/non-negative/);
 
     const multitenant = createStorage({ name: "Tasks", multitenant: true });
     await expect(multitenant.query()).rejects.toThrow(/tenantId/);

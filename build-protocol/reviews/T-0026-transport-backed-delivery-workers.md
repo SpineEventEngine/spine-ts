@@ -32,6 +32,40 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 Review findings fixed and verified after implementation commit `94b4c632`.
 
+### Round 19 Follow-up - `2026-07-10T08:57:33Z`
+
+- Finding: [Reliability HIGH] `Delivery.drain()` still could not scan past a
+  full `maxReadLimit` page of unavailable `TO_DELIVER` rows because record
+  storage had no paging cursor/offset and the drain treated the saturated read
+  window as exhaustion.
+- Fix: added minimal `RecordQuery.offset` support, applied it in in-memory
+  storage after deterministic sorting and before `limit`, exposed inbox read
+  offset for ordered pages, and changed delivery scanning to advance past rows
+  that remain pending/unavailable while stopping only on a short page or the
+  accepted-work cap.
+- Evidence: the new regression with 1000 claimed unavailable head rows and one
+  deliverable tail row failed before the final drain stop-condition fix with no
+  endpoint dispatch, then passed after the scan continued beyond a full
+  `maxReadLimit` page.
+- Finding: [Docs MEDIUM] delivery/loop/worker `limit` comments and curated API
+  docs still described delivery `limit` as a page-size knob.
+- Fix: delivery `limit` docs now describe the maximum accepted endpoint work per
+  drain plus the initial scan window. `InboxReadOptions.limit` remains
+  documented as the page-size control for one ordered inbox read.
+- Finding: [Style LOW] `drainMessage()`, `#deliverMessage()`, and the
+  stateful active-claim factory were still broad and closure-heavy.
+- Fix: split exact-message read/result handling and delivery claim/invoke/mark
+  helpers, and replaced the active-claim factory closure with a private
+  `ActiveClaim` class.
+- Verification: focused Vitest for storage offset plus delivery worker/loop
+  passed with 3 files and 72 tests.
+  `pnpm --config.verify-deps-before-run=false typecheck:build:generated`
+  passed (`tsc -b`), refreshing ignored package `dist` output.
+  `pnpm --config.verify-deps-before-run=false docs:check` passed with the
+  existing invalid-origin TypeDoc warning only.
+  `pnpm --config.verify-deps-before-run=false format:check` passed.
+  `git diff --check` passed.
+
 ### Round 15 Follow-up - `2026-07-10T07:40:04Z`
 
 - Finding: [Docs MEDIUM] `docs/USER_GUIDE.md` and `docs/api/README.md`

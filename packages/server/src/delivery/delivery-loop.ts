@@ -94,7 +94,7 @@ export interface DeliveryLoopOptions {
   readonly shard: ShardIndex;
   /** Worker node name used for shard pickup. */
   readonly node: string;
-  /** Optional positive safe integer page size for each underlying drain. */
+  /** Optional positive accepted-work cap and initial scan window for each underlying drain. */
   readonly limit?: number;
   /** Maximum failed message attempts before the loop stops. Defaults to one; capped at 1000. */
   readonly maxFailures?: number;

@@ -167,6 +167,8 @@ export interface InboxReadOptions {
   readonly statuses?: readonly DeliveryStatus[];
   /** Optional positive limit for one ordered page; defaults to a bounded page size. */
   readonly limit?: number;
+  /** Optional non-negative page offset in inbox order; defaults to the first row. */
+  readonly offset?: number;
 }
 
 /** Durable inbox write outcome. */

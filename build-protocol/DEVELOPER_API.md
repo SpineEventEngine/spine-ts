@@ -255,10 +255,13 @@ smaller than the later scheduler/retry stack:
 
 - `Delivery` groups `Inbox` and `ShardedWorkRegistry` for one storage context;
 - `Delivery.drain(shard, { node, onMessage, limit })` picks up one shard with
-  framework-owned lease fencing, reads `TO_DELIVER` rows in inbox order, skips
+  framework-owned lease fencing, scans `TO_DELIVER` rows in inbox order, skips
   rows unavailable to this worker before callback invocation, and passes a
   public `InboxMessage` snapshot to the supplied framework endpoint callback.
-  Callbacks run only for `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
+  `limit` caps accepted endpoint work for one drain and sets the initial scan
+  window; later scan pages advance past unavailable rows until the drain reaches
+  the accepted-work cap or exhausts the shard. Callbacks run only for
+  `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
   `REACT_UPON_EVENT`; unsupported labels fail closed before callback
   invocation. Successful rows are marked `DELIVERED`; endpoint callback
   failures leave the row `TO_DELIVER` for a later run only when

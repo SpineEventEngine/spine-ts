@@ -1,4 +1,4 @@
-/** Deterministic record query by IDs, columns, sorting, limits, and masks. */
+/** Deterministic record query by IDs, columns, sorting, offsets, limits, and masks. */
 export interface RecordQuery<I> extends RecordReadOptions {
   /** Exact identifier filter. */
   readonly ids?: readonly I[];
@@ -8,6 +8,8 @@ export interface RecordQuery<I> extends RecordReadOptions {
   readonly sort?: readonly RecordOrder[];
   /** Positive limit applied after sorting. */
   readonly limit?: number;
+  /** Non-negative row offset applied after sorting and before the limit. */
+  readonly offset?: number;
 }
 
 export const RecordQuery: Readonly<{
@@ -20,6 +22,12 @@ export const RecordQuery: Readonly<{
       (!Number.isInteger(query.limit) || !Number.isFinite(query.limit) || query.limit <= 0)
     ) {
       throw new Error("Record query limit must be positive.");
+    }
+    if (
+      query.offset !== undefined &&
+      (!Number.isInteger(query.offset) || !Number.isFinite(query.offset) || query.offset < 0)
+    ) {
+      throw new Error("Record query offset must be non-negative.");
     }
   },
 });
