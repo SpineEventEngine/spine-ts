@@ -1215,10 +1215,14 @@ endpoint code. Abandoned-row recovery remains future production policy.
 skipped, stopped, or reaches a configured failure bound. Failed rows stay
 pending as `TO_DELIVER` for later loop/drain retry when the endpoint callback
 fails and framework-owned cleanup succeeds; no retained attempt history is
-written. Cleanup, fail-closed label validation, lease/fencing, and
+written. Valid worker-unsupported labels such as `CATCH_UP` remain pending and
+are skipped before callback invocation, row acceptance, failure recording, or
+failure-budget consumption. Cleanup/replay validation, lease/fencing, and
 delivery-status update failures are reported in `DeliveryRun.failures` /
 `DeliveryFailure` without promising immediate retry, and future recovery policy
-may be needed for abandoned or unavailable rows.
+may be needed for abandoned or unavailable rows. Malformed or deprecated legacy
+label data such as stored `IMPORT_EVENT` still fails closed as storage
+corruption.
 `stop()` prevents future drain starts and does not interrupt an in-flight
 `Delivery.drain()`; `close()` calls `stop()` and waits for the current drain, if
 any, to finish. `DeliveryWorker` owns configured shard loops for one node and

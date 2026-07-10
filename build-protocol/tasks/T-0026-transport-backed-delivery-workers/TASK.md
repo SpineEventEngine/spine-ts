@@ -281,3 +281,67 @@ retry sentence includes the framework-owned cleanup qualifier, and
 delivery-loop/inbox Vitest, generated build typecheck, docs check, format
 check, and `git diff --check` passed; `docs:check` reported only the existing
 invalid-origin TypeDoc warning.
+
+Round 22 reconciliation: the external work log records a Round 22 batch after
+the Round 21 task update. This task ledger is intentionally brought forward so
+the durable task file and review trail no longer disagree.
+
+Round 23 review intake on `2026-07-10`: fix reviewer findings from the
+transport-backed delivery worker batch. Required scope is to keep claimed
+delivery snapshots private while passing deep-cloned public snapshots to
+callbacks, bound `Delivery.drain()` scanning when unsupported or unavailable
+rows dominate a shard, refresh stale docs/TypeDoc wording so valid
+worker-unsupported labels remain pending and skipped, and write a full
+round-23 fix report with focused delivery verification plus typecheck, docs,
+format, and diff whitespace checks. No commit will be created by this sub-agent.
+
+Round 23 fix summary/evidence on `2026-07-10`: `Delivery.drain()` now keeps the
+internal claimed row snapshot private and passes callbacks a cloned public
+snapshot with copied `Date` and `Any.value` data; drain scanning is bounded to
+the storage read cap plus accepted-work limit while the accepted-work limit
+remains endpoint-only; worker label docs and TypeDoc now reserve fail-closed
+wording for malformed/deprecated legacy data.
+Focused delivery Vitest, generated build typecheck, docs check, format check,
+and `git diff --check` passed; `docs:check` reported only the existing invalid
+origin/source-link TypeDoc warning.
+
+Coordinator adjustment before Round 23 verification on `2026-07-10`: align the
+`Any` public-snapshot copy with the repo's Buf v2 `clone(schema, message)`
+convention instead of schema creation from copied fields, then rerun focused
+delivery, generated build, docs, format, and whitespace checks before commit.
+
+Coordinator verification finding on `2026-07-10`: focused delivery Vitest
+failed after the first `clone(AnySchema, message)` adjustment because endpoint
+mutation of `Any.value` still changed the claimed snapshot bytes. Keep the
+schema clone, but explicitly copy the bytes field before callback exposure and
+rerun the same verification gates.
+
+Coordinator Round 23 verification on `2026-07-10`: focused delivery Vitest
+passed for `delivery-worker`, `delivery-loop`, and `inbox` tests (161 tests);
+generated build typecheck passed; docs check passed with only the existing
+invalid-origin TypeDoc source-link warning; format check passed; `git diff
+--check` passed.
+
+Coordinator scan-budget refinement on `2026-07-10`: replace the temporary
+`limit * 2` scan budget with a finite budget based on the existing storage read
+cap. The accepted-work `limit` still caps endpoint work, while skipped-row
+scanning remains finite and can reach supported rows behind more than one page
+of valid unsupported labels.
+
+Coordinator scan-budget correction on `2026-07-10`: the existing full-page
+unavailable-row regression requires scanning past one complete storage page
+before declaring a shard idle. Use the storage read cap plus the accepted-work
+limit as the finite scan budget, so one full skipped page can still be followed
+by accepted endpoint work.
+
+Coordinator verification finding on `2026-07-10`: after the scan-budget
+correction, focused delivery Vitest, generated build typecheck, docs check, and
+`git diff --check` passed, but `format:check` reported
+`packages/server/test/delivery/delivery-worker.test.ts`. Run the repo formatter
+and rerun the verification gates before committing.
+
+Coordinator final Round 23 evidence on `2026-07-10`: after formatting, focused
+delivery Vitest passed for `delivery-worker`, `delivery-loop`, and `inbox`
+tests (162 tests); generated build typecheck passed; docs check passed with
+only the existing invalid-origin TypeDoc source-link warning; format check
+passed; `git diff --check` passed.

@@ -1,4 +1,6 @@
 import type { StorageContext, StorageFactory } from "@spine-ts/storage";
+import { clone } from "@bufbuild/protobuf";
+import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 
 import { Inbox, InboxMessageError, type InboxMessage } from "./inbox.js";
 import { inboxStorageAccess, InboxStorage } from "./inbox-storage.js";
@@ -50,13 +52,15 @@ export class Delivery {
    * Drain one shard through the framework-owned direct worker boundary.
    *
    * The drain first picks up the shard with lease fencing, then scans
-   * `TO_DELIVER` rows in inbox order. `limit` bounds accepted endpoint work and
-   * the initial scan window; later scan pages advance past unavailable rows
-   * before endpoint invocation. The `onMessage` endpoint receives a public
-   * `InboxMessage` snapshot only for supported worker labels:
+   * `TO_DELIVER` rows in inbox order. `limit` bounds accepted endpoint work;
+   * the storage read cap plus `limit` bounds scanning while the drain advances
+   * past unavailable rows before endpoint invocation. The `onMessage` endpoint
+   * receives a public `InboxMessage` snapshot only for supported worker labels:
    * `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`.
    * Worker-unsupported labels remain pending and are skipped before callback
-   * invocation.
+   * invocation, row acceptance, failure recording, or failure-budget
+   * consumption. Malformed or deprecated legacy label data remains a true
+   * fail-closed storage-corruption path.
    *
    * The returned `DeliveryRun` reports whether the shard was drained or
    * skipped, how many rows were read, accepted for work, delivered, or failed,
@@ -96,10 +100,11 @@ export class Delivery {
     active: ActiveClaim,
   ): Promise<DeliveryRun> {
     const progress = drainProgress();
-    let readLimit = limit;
     let offset = 0;
+    const scanBudget = inboxStorageAccess.maxReadLimit + limit;
 
-    for (;;) {
+    while (progress.processed < scanBudget) {
+      const readLimit = Math.min(limit, scanBudget - progress.processed);
       const messages = await this.#readPendingDeliveryPage(shard, readLimit, offset);
 
       for (const message of messages) {
@@ -121,8 +126,9 @@ export class Delivery {
       if (messages.length < readLimit) {
         return progress.finish();
       }
-      readLimit = Math.min(readLimit + limit, inboxStorageAccess.maxReadLimit);
     }
+
+    return progress.finish();
   }
 
   async #readPendingDeliveryPage(
@@ -341,7 +347,7 @@ export interface DeliveryOptions {
 export interface DeliveryDrainOptions {
   /** Worker node name used for shard pickup. */
   readonly node: string;
-  /** Optional positive accepted-work cap and initial scan window for one drain run. */
+  /** Optional positive accepted-work cap for one drain run. */
   readonly limit?: number;
   /** Framework endpoint callback invoked for each available supported worker row. */
   readonly onMessage: DeliveryEndpoint;
@@ -364,11 +370,11 @@ export interface DeliveryRun {
   readonly status: "DRAINED" | "SKIPPED";
   /** Number of pending rows read for this run. */
   readonly processed: number;
-  /** Number of rows accepted for endpoint work or fail-closed validation. */
+  /** Number of rows accepted for endpoint work. */
   readonly accepted: number;
   /** Number of rows whose endpoint callback succeeded and were marked delivered. */
   readonly delivered: number;
-  /** Number of endpoint callback, validation, lease/fencing, status update, or cleanup failures. */
+  /** Number of endpoint callback, lease/fencing, status update, or cleanup failures. */
   readonly failed: number;
   /** Per-message failures kept only in the returned run result. */
   readonly failures: readonly DeliveryFailure[];
@@ -379,8 +385,8 @@ export interface DeliveryFailure {
   /** Message that failed during this run. */
   readonly message: InboxMessage;
   /**
-   * Error observed during endpoint callback, fail-closed validation,
-   * lease/fencing, delivery-status update, or framework cleanup work.
+   * Error observed during endpoint callback, lease/fencing,
+   * delivery-status update, or framework cleanup work.
    */
   readonly error: unknown;
 }
@@ -398,6 +404,7 @@ interface ShardLeaseRenewalOptions {
 
 interface DrainProgress {
   readonly accepted: number;
+  readonly processed: number;
   readonly finish: () => DeliveryRun;
   readonly observe: (message: InboxMessage) => boolean;
   readonly record: (message: InboxMessage, attempt: DeliveryMessageResult) => void;
@@ -439,6 +446,9 @@ function drainProgress(): DrainProgress {
   return Object.freeze({
     get accepted() {
       return accepted;
+    },
+    get processed() {
+      return processed;
     },
     finish() {
       return deliveryRun("DRAINED", processed, accepted, delivered, failures.length, failures);
@@ -605,7 +615,25 @@ class ActiveClaim {
 
 function endpointMessage(message: ClaimedInboxMessage): InboxMessage {
   const { claim: _claim, ...unclaimed } = message;
-  return Object.freeze(unclaimed);
+  return Object.freeze({
+    ...unclaimed,
+    id: Object.freeze({
+      value: unclaimed.id.value,
+      shard: unclaimed.id.shard,
+    }),
+    inboxId: Object.freeze({ ...unclaimed.inboxId }),
+    ...(unclaimed.signal === undefined ? {} : { signal: copySignal(unclaimed.signal) }),
+    whenReceived: new Date(unclaimed.whenReceived),
+    shard: unclaimed.shard,
+    ...(unclaimed.keepUntil === undefined ? {} : { keepUntil: new Date(unclaimed.keepUntil) }),
+  });
+}
+
+function copySignal(signal: Any): Any {
+  const copied = clone(AnySchema, signal);
+  copied.value = new Uint8Array(copied.value);
+
+  return copied;
 }
 
 function requireEndpointLabel(label: InboxMessage["label"]): void {

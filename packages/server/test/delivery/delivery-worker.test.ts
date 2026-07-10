@@ -548,6 +548,58 @@ describe("Delivery worker", () => {
     ]);
   });
 
+  it("keeps the internal claim snapshot private from endpoint mutations", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const shard = ShardIndex.single();
+    const signalBytes = new Uint8Array([1, 2, 3]);
+    const keepUntil = new Date("2026-07-08T10:00:00.000Z");
+
+    await delivery.inbox.receive({
+      inboxId: targetInbox(),
+      signalId: "signal-mutable-public-copy",
+      label: "UPDATE_SUBSCRIBER",
+      status: "TO_DELIVER",
+      shard,
+      whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+      version: 1n,
+      signal: create(AnySchema, {
+        typeUrl: "type.example.dev/tasks.Signal",
+        value: signalBytes,
+      }),
+      keepUntil,
+    });
+
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      onMessage(message) {
+        message.whenReceived.setTime(Date.parse("2026-07-08T09:30:00.000Z"));
+        message.keepUntil?.setTime(Date.parse("2026-07-08T10:30:00.000Z"));
+        message.signal?.value.fill(9);
+      },
+    });
+
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 1,
+      accepted: 1,
+      delivered: 1,
+      failed: 0,
+    });
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
+    const delivered = await delivery.inbox.read(shard, { statuses: ["DELIVERED"] });
+    expect(delivered).toMatchObject([
+      {
+        signalId: "signal-mutable-public-copy",
+        whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+        keepUntil,
+      },
+    ]);
+    expect(Array.from(delivered[0]?.signal?.value ?? [])).toEqual([1, 2, 3]);
+  });
+
   it("honors a run limit and leaves later pending rows for another drain", async () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -802,6 +854,76 @@ describe("Delivery worker", () => {
     await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
       { signalId: "signal-catch-up", status: "TO_DELIVER" },
     ]);
+  });
+
+  it("scans past unsupported rows before delivering up to the accepted-work limit", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const shard = ShardIndex.single();
+
+    await seed(delivery, "signal-catch-up-1", 1n, "CATCH_UP");
+    await seed(delivery, "signal-catch-up-2", 2n, "CATCH_UP");
+    await seed(delivery, "signal-catch-up-3", 3n, "CATCH_UP");
+    await seed(delivery, "signal-supported-tail", 4n);
+
+    const seen: string[] = [];
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      limit: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(seen).toEqual(["signal-supported-tail"]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 4,
+      accepted: 1,
+      delivered: 1,
+      failed: 0,
+    });
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-catch-up-1", status: "TO_DELIVER" },
+      { signalId: "signal-catch-up-2", status: "TO_DELIVER" },
+      { signalId: "signal-catch-up-3", status: "TO_DELIVER" },
+    ]);
+  });
+
+  it("stops unsupported-row scanning at the storage read cap", async () => {
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new InMemoryStorageFactory(),
+    });
+    const shard = ShardIndex.single();
+
+    for (let index = 1; index <= 2_001; index += 1) {
+      await seed(delivery, `signal-catch-up-${String(index)}`, BigInt(index), "CATCH_UP");
+    }
+    await seed(delivery, "signal-supported-after-budget", 2_002n);
+
+    const seen: string[] = [];
+    const run = await delivery.drain(shard, {
+      node: "node-a",
+      limit: 1_000,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(seen).toEqual([]);
+    expect(run).toMatchObject({
+      status: "DRAINED",
+      processed: 2_000,
+      accepted: 0,
+      delivered: 0,
+      failed: 0,
+    });
+    await expect(
+      delivery.inbox.read(shard, { statuses: ["TO_DELIVER"], offset: 2_001 }),
+    ).resolves.toMatchObject([{ signalId: "signal-supported-after-budget", status: "TO_DELIVER" }]);
   });
 
   it("releases the shard after endpoint failure", async () => {

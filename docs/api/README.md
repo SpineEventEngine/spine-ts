@@ -330,16 +330,17 @@ fencing for active drains, not an application retry or supervision policy.
 `Delivery.drain(shard, { node, onMessage, limit })` picks up one shard, scans
 `TO_DELIVER` rows in inbox order, skips rows unavailable to this worker before
 invoking the `DeliveryEndpoint`, and passes a public `InboxMessage` snapshot to
-the endpoint. `limit` caps accepted delivery attempts, including endpoint work
-and fail-closed validation, for one drain and sets the initial scan window;
-additional scan pages advance past unavailable rows until the drain reaches
-the accepted-attempt cap or exhausts the shard. Endpoint callbacks run only for
-`HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; unsupported
-labels fail closed before the callback. Successful delivery marks the row
-`DELIVERED`; endpoint
-callback failures leave the row pending for a later run only when
-framework-owned cleanup succeeds. Cleanup, fail-closed label validation,
-lease/fencing, and delivery-status update failures are reported in the returned
+the endpoint. `limit` caps rows accepted for endpoint work for one drain; the
+storage read cap plus `limit` bounds scanning while the drain advances past
+unavailable or worker-unsupported rows first. Endpoint callbacks run only for `HANDLE_COMMAND`,
+`UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; valid worker-unsupported labels
+such as `CATCH_UP` remain pending and are skipped before callback invocation,
+row acceptance, failure recording, or failure-budget consumption. Successful
+delivery marks the row `DELIVERED`; endpoint callback failures leave the row
+pending for a later run only when framework-owned cleanup succeeds. Malformed or
+deprecated legacy label data such as stored `IMPORT_EVENT` remains a
+fail-closed storage-corruption path. Cleanup, lease/fencing, and
+delivery-status update failures are reported in the returned
 `DeliveryRun.failures` / `DeliveryFailure` values without promising immediate
 retry; future recovery policy may be needed for abandoned or unavailable rows.
 Drains release the shard in `finally` and return
@@ -362,9 +363,10 @@ any, to finish. `DeliveryWorker` owns a
 configured set of shard loops for one node, starts them together, aggregates
 per-loop results, and closes by stopping future drains while waiting for active
 drains to finish. `DeliveryDrainOptions.limit` and `DeliveryLoopOptions.limit`
-are positive accepted-work caps plus initial scan windows with a bounded default
-when omitted; `InboxReadOptions.limit` remains the positive page-size control
-for a single ordered inbox read. `Inbox.markDelivered()` and `InboxStorage.markDelivered()` return
+are positive accepted-work caps with a bounded default when omitted; the storage
+read cap plus the accepted-work cap bounds skipped-row scanning.
+`InboxReadOptions.limit` remains the positive page-size control for a single
+ordered inbox read. `Inbox.markDelivered()` and `InboxStorage.markDelivered()` return
 `undefined` for missing rows, non-pending rows, or caller snapshots that do not
 match the stored message; already-delivered matching rows are returned
 idempotently. Built contexts use this storage boundary internally for

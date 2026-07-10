@@ -258,18 +258,20 @@ smaller than the later scheduler/retry stack:
   framework-owned lease fencing, scans `TO_DELIVER` rows in inbox order, skips
   rows unavailable to this worker before callback invocation, and passes a
   public `InboxMessage` snapshot to the supplied framework endpoint callback.
-  `limit` caps accepted delivery attempts, including endpoint work and
-  fail-closed validation, for one drain and sets the initial scan window; later
-  scan pages advance past unavailable rows until the drain reaches the
-  accepted-attempt cap or exhausts the shard. Callbacks run only for
-  `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
-  `REACT_UPON_EVENT`; unsupported labels fail closed before callback
-  invocation. Successful rows are marked `DELIVERED`; endpoint callback
-  failures leave the row `TO_DELIVER` for a later run only when
-  framework-owned cleanup succeeds. Cleanup, fail-closed validation,
-  lease/fencing, and status-update failures are returned through
-  `DeliveryRun.failures` / `DeliveryFailure` without an immediate retry or
-  recovery guarantee in this slice. The run returns simple `DeliveryRun`
+  `limit` caps rows accepted for endpoint work for one drain; the storage read
+  cap plus `limit` bounds scanning while the drain advances past unavailable or
+  worker-unsupported rows first.
+  Callbacks run only for `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and
+  `REACT_UPON_EVENT`; valid worker-unsupported labels such as `CATCH_UP` remain
+  pending and are skipped before callback invocation, row acceptance, failure
+  recording, or failure-budget consumption. Successful rows are marked
+  `DELIVERED`; endpoint callback failures leave the row `TO_DELIVER` for a
+  later run only when framework-owned cleanup succeeds. Malformed or deprecated
+  legacy label data such as stored `IMPORT_EVENT` remains a fail-closed
+  storage-corruption path. Cleanup, lease/fencing, and status-update failures
+  are returned through `DeliveryRun.failures` / `DeliveryFailure` without an
+  immediate retry or recovery guarantee in this slice. The run returns simple
+  `DeliveryRun`
   statistics (`status`, `processed`, `accepted`, `delivered`, `failed`, and
   `failures`) and releases the shard in a `finally` path. If the shard is
   already owned by another live worker lease, the run returns `SKIPPED` with

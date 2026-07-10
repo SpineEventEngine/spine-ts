@@ -106,7 +106,7 @@ export interface DeliveryLoopOptions {
   readonly shard: ShardIndex;
   /** Worker node name used for shard pickup. */
   readonly node: string;
-  /** Optional positive accepted-work cap and initial scan window for each underlying drain. */
+  /** Optional positive accepted-work cap for each drain. */
   readonly limit?: number;
   /** Maximum failed message attempts before the loop stops. Defaults to one; capped at 1000. */
   readonly maxFailures?: number;
@@ -125,11 +125,11 @@ export interface DeliveryLoopRun {
   readonly runs: number;
   /** Number of pending rows read across all drains. */
   readonly processed: number;
-  /** Number of rows accepted for endpoint work or fail-closed validation across all drains. */
+  /** Number of rows accepted for endpoint work across all drains. */
   readonly accepted: number;
-  /** Number of rows delivered across all drains. */
+  /** Number of rows delivered across all drains. Unsupported labels are skipped pending. */
   readonly delivered: number;
-  /** Number of endpoint callback, validation, lease/fencing, status update, or cleanup failures. */
+  /** Number of endpoint callback, lease/fencing, status update, or cleanup failures. */
   readonly failed: number;
   /** Per-message failures retained only in the returned run result. */
   readonly failures: readonly DeliveryFailure[];
