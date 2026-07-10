@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 50 lint fix verified
+Status: Round 51 docs/records fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer            | Status |
-| -------------------------- | ------------------- | ------ |
-| Code style/maintainability | Peirce the 2nd      | Clean  |
-| Documentation              | Goodall the 2nd     | Clean  |
-| TypeScript/API docs        | Schrodinger the 2nd | Clean  |
-| Security                   | Wegener the 2nd     | Clean  |
-| Performance/reliability    | Newton the 2nd      | Clean  |
+| Lane                       | Reviewer            | Status                            |
+| -------------------------- | ------------------- | --------------------------------- |
+| Code style/maintainability | Ohm the 2nd         | Findings fixed; re-review pending |
+| Documentation              | Nash the 2nd        | Findings fixed; re-review pending |
+| TypeScript/API docs        | Singer the 2nd      | Clean                             |
+| Security                   | Kierkegaard the 2nd | Clean                             |
+| Performance/reliability    | Erdos the 2nd       | Clean                             |
 
 ## Review Criteria
 
@@ -165,6 +165,52 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   `format:check` passed; `git diff --check` passed.
 - Coordinator verification reran the same lint, focused Vitest, format, and
   diff checks successfully.
+
+### Round 50 Follow-up - `2026-07-10`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..0928c056.diff` from task baseline
+  `ca8fb2b3` to current HEAD `0928c056`.
+- Code style/maintainability (Ohm the 2nd): [P2] the required review-lanes
+  table still marked all lanes clean for the older Round 49 package even though
+  Round 50 changed HEAD afterward; [P3] the work log recorded Round 50
+  coordinator verification at impossible timestamp `2026-07-10T19:52:00Z`
+  after `20:03` and `20:10` Round 50 entries.
+- Documentation (Nash the 2nd): [P2] the same impossible Round 50 coordinator
+  timestamp made the audit trail claim verification reran before the fix
+  existed; [P2] `build-protocol/RUNTIME_ARCHITECTURE.md` still omitted
+  row-label validation from the process-manager and projection replay bullets,
+  even though implementation and `docs/architecture/README.md` name the guard.
+- TypeScript/API docs (Singer the 2nd): clean. Root `@spine-ts/server` still
+  omits raw delivery APIs, `ServerEnvironment` exposes only the closeable
+  delivery owner boundary, API-doc guards preserve the allowed root delivery
+  exports, and no generated output appears in the diff.
+- Security (Kierkegaard the 2nd): clean. Fail-closed delivery gates, replay
+  label/status validation, legacy `IMPORT_EVENT` fail-closed decode, and public
+  export-map constraints remain intact.
+- Performance/reliability (Erdos the 2nd): clean. The lint fix is test-only,
+  fake timers remain contained, bounded scan and live-vs-expired claim behavior
+  is unchanged, and focused delivery-worker/runtime plus registry Vitest,
+  generated lint, and `git diff --check` passed in the read-only review.
+- Action: fix the durable record drift and runtime architecture wording, then
+  verify and rerun all five reviewer lanes.
+
+### Round 51 Docs/Records Fix Implementation - `2026-07-10`
+
+- Fix: updated task, work-log, and review-log status records to describe the
+  Round 51 docs/records fix state.
+- Fix: corrected the Round 50 coordinator verification timestamp from
+  `2026-07-10T19:52:00Z` to `2026-07-10T20:12:00Z`, keeping the audit trail
+  monotonic after the `20:03` fix start and `20:10` verification entries.
+- Fix: refreshed the required review-lane table to name the Round 50 reviewers,
+  their clean lanes, and the fixed style/documentation findings.
+- Fix: updated `build-protocol/RUNTIME_ARCHITECTURE.md` so process-manager and
+  projection replay bullets state that replay validates the row label and
+  pending `TO_DELIVER` status before handler code.
+- Verification: `docs:check` passed with only the existing invalid-`origin`
+  TypeDoc warning; `format:check` passed after repository formatting normalized
+  this review-log table; `git diff --check` passed.
+- Action: regenerate the review package and rerun all five reviewer lanes.
 
 ### Round 45 Follow-up - `2026-07-10T19:15:00Z`
 

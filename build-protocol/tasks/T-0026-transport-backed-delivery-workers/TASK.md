@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 50 lint fix verified
+Status: Round 51 docs/records fix verified; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -952,3 +952,23 @@ and verification evidence. Required Round 50 verification passed: lint,
 focused Vitest for both edited test files with 63 tests, format check, and
 `git diff --check`. Coordinator verification reran the same checks
 successfully.
+
+Round 50 re-review on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..0928c056.diff` produced clean TypeScript/API
+docs, security, and performance/reliability lanes. Code style/maintainability
+found the review-log lane table still recorded the older Round 49 clean package
+after the Round 50 lint commit, and the work log had an impossible coordinator
+verification timestamp. Documentation found the same timestamp issue and
+`build-protocol/RUNTIME_ARCHITECTURE.md` still omitted row-label validation in
+the process-manager and projection replay bullets. The next fix updates the
+durable records and architecture wording, then repeats verification and
+five-lane review.
+
+Round 51 docs/records fix on `2026-07-10`: corrected the Round 50 coordinator
+verification timestamp, updated the review log so the latest lane table
+reflects the Round 50 reviewers and findings, and aligned runtime architecture
+replay wording with the implementation by naming row-label plus pending
+`TO_DELIVER` validation before handler code. Docs check passed with only the
+existing invalid-`origin` TypeDoc warning, format check passed after normalizing
+the review-log table, and `git diff --check` passed. Five-lane re-review
+remains pending.
