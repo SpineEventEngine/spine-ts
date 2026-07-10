@@ -1,7 +1,6 @@
 # Round 57 Fix Report: T-0026 Resume Cursor Starvation
 
-Reported: `2026-07-10T21:20:00Z` (the verified fix was committed earlier as
-`7d1b09ad` at `2026-07-10T19:55:11Z`)
+Committed: `2026-07-10T19:55:11Z` (`7d1b09ad`)
 
 ## Scope
 

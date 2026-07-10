@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 58 fix verified; re-review pending
+Status: Round 60 documentation fix verified; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1033,11 +1033,10 @@ again without reconsidering the head row. The next fix records and addresses
 the documentation/style findings and adds a failing regression before changing
 delivery scan behavior.
 
-Round 57 fix reporting record on `2026-07-10`: the `21:20Z` record summarizes
-the verified fix already committed as `7d1b09ad` at `19:55:11Z`; it is not a
-worker-start timestamp. It incorrectly moved the work-log Round 46 clean
-re-review timestamp from `2026-07-10T17:57:08Z` to `2026-07-10T19:57:08Z`.
-Rewrapped the two
+Round 57 fix on `2026-07-10`: commit `7d1b09ad` at `19:55:11Z` addressed the
+Round 56 findings. A later reporting draft incorrectly moved the work-log
+Round 46 clean re-review timestamp from `2026-07-10T17:57:08Z` to
+`2026-07-10T19:57:08Z`. Rewrapped the two
 review-log `git diff --check ca8fb2b3...HEAD` references so continuation lines
 stay readable inside their list items. Added a focused delivery-loop
 regression first; it failed red with `delivered: 0` after a cleared head claim
@@ -1076,3 +1075,20 @@ starts. The Round 57 red/green commands are wrapped within the ledger limit;
 `round-59-fix-report.md` records the batch. The focused regression, both
 required delivery files, generated TypeScript build typecheck, docs check,
 format check, and `git diff --check` passed; five-lane re-review is pending.
+
+Round 59 re-review on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..745a6a20.diff` produced clean code
+style/maintainability, TypeScript/API docs, security, and
+performance/reliability lanes. Documentation found the Round 57 records still
+used impossible/out-of-order `21:20Z` timestamps before the Round 58 `20:00Z`
+review, and the lane dashboard understated that all lanes needed current-HEAD
+re-review after `745a6a20`. The next fix is records-only: re-anchor Round 57
+records to commit-backed time, update the dashboard, verify formatting and
+diff hygiene, and rerun all five lanes.
+
+Round 60 records-only fix on `2026-07-10`: re-anchored Round 57 records to fix
+commit `7d1b09ad` at `19:55:11Z`, before the Round 58 re-review, instead of
+retaining the out-of-order `21:20Z` reporting timestamp. Updated the
+required-lanes dashboard so all lanes explicitly require fresh current-HEAD
+re-review after this docs commit. `round-60-fix-report.md` records the fix;
+`format:check` and `git diff --check` passed.

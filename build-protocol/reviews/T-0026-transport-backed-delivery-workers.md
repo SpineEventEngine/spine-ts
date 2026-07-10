@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 58 fix verified; re-review pending
+Status: Round 60 documentation fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer         | Status                           |
-| -------------------------- | ---------------- | -------------------------------- |
-| Code style/maintainability | Gibbs the 2nd    | Finding fixed; re-review pending |
-| Documentation              | Popper the 2nd   | Finding fixed; re-review pending |
-| TypeScript/API docs        | Herschel the 2nd | Clean (Round 58)                 |
-| Security                   | Euler the 2nd    | Clean (Round 58)                 |
-| Performance/reliability    | Volta the 2nd    | Clean (Round 58)                 |
+| Lane                       | Reviewer           | Status                              |
+| -------------------------- | ------------------ | ----------------------------------- |
+| Code style/maintainability | Dalton the 2nd     | Clean (Round 59); re-review pending |
+| Documentation              | Copernicus the 2nd | Finding fixed; re-review pending    |
+| TypeScript/API docs        | Sartre the 2nd     | Clean (Round 59); re-review pending |
+| Security                   | Boole the 2nd      | Clean (Round 59); re-review pending |
+| Performance/reliability    | Hegel the 2nd      | Clean (Round 59); re-review pending |
 
 ## Review Criteria
 
@@ -2106,15 +2106,13 @@ red/green delivery regressions before the next review pass.
 - Action: fix the durable record formatting/timestamp issues and add a failing
   delivery regression before changing resumed scan behavior.
 
-### Round 57 Fix Record - `2026-07-10T21:20:00Z`
+### Round 57 Fix Implementation - `2026-07-10T19:55:11Z`
 
-- This later reporting record summarizes the verified fix already committed as
-  `7d1b09ad` at `2026-07-10T19:55:11Z`; it does not describe a worker start.
-
-- Reporting record: it described the Round 46 timestamp as `19:57:08Z`.
-  Subsequent commit evidence reconciles the durable sequence as Round 45 at
-  `17:45`, Round 46 at `17:57:08Z`, final verification at `18:05`, and Round
-  47 work at `18:14`.
+- Commit evidence reconciles the durable sequence as Round 45 at `17:45`,
+  Round 46 at `17:57:08Z`, final verification at `18:05`, and Round 47 work at
+  `18:14`. The earlier Round 57 reporting draft described the Round 46
+  timestamp as `19:57:08Z`; this record is anchored to fix commit `7d1b09ad`
+  at `2026-07-10T19:55:11Z`.
 - Fix: rewrapped the two `git diff --check ca8fb2b3...HEAD` review-log
   references so continuation lines stay inside their list items.
 - Red: added a delivery-loop regression for dropping stale skipped-only resume
@@ -2186,3 +2184,48 @@ red/green delivery regressions before the next review pass.
   `format:check`, and `git diff --check` also passed.
 - Action: rerun all five required reviewer lanes from the verified Round 58
   fix state.
+
+### Round 59 Re-review - `2026-07-10T20:15:11Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..745a6a20.diff` from task baseline
+  `ca8fb2b3` to current HEAD `745a6a20`.
+- Code style/maintainability (Dalton the 2nd): clean. `DeliveryScanState`
+  resolves the Round 58 maintainability finding by centralizing cursor, reset,
+  and rescan transitions without absorbing worker policy, callbacks, claiming,
+  or loop behavior.
+- Documentation (Copernicus the 2nd): [P2] Round 57 and Round 58 timestamps
+  remain out of order because the `21:20Z` Round 57 reporting entries sit
+  immediately before Round 58 at `20:00:08Z`, even though fix commit
+  `7d1b09ad` was at `19:55:11Z` and repair commit `745a6a20` was at
+  `20:10:28Z`. Re-anchor Round 57 records to evidence-backed times before
+  Round 58 or move genuinely later reporting entries after Round 58.
+- Documentation (Copernicus the 2nd): [P2] the required-lanes dashboard
+  understated the current re-review obligation after `745a6a20`; Round 58
+  clean TypeScript/API, security, and performance/reliability results were not
+  current-HEAD clean. This Round 59 record updates the dashboard to the current
+  reviewers and marks all current-HEAD re-review obligations explicitly.
+- TypeScript/API docs (Sartre the 2nd): clean. Public exports keep raw delivery
+  callbacks internal, replay target types narrow labels/status, callback
+  snapshots copy mutable state, and `DeliveryScanState` is private and
+  type-safe.
+- Security (Boole the 2nd): clean. `DeliveryScanState` preserves bounded
+  cursor/rescan behavior and does not widen callback exposure or affect tenant,
+  claim, lease, label, or snapshot checks.
+- Performance/reliability (Hegel the 2nd): clean. No regressions found in scan
+  budgets, cursor reset/resume, claim/lease expiry, callback accounting,
+  fake-timer containment, or `DeliveryScanState` transitions.
+- Action: fix the records-only documentation issues, verify formatting and
+  diff hygiene, commit, and rerun all five reviewer lanes.
+
+### Round 60 Fix Implementation - `2026-07-10T20:15:11Z`
+
+- Documentation: re-anchored Round 57 records to fix commit `7d1b09ad` at
+  `2026-07-10T19:55:11Z`, before the Round 58 re-review, instead of retaining
+  an out-of-order `21:20Z` reporting record.
+- Documentation: updated the required-lanes dashboard so every lane is
+  explicitly pending fresh current-HEAD re-review after this records-only
+  commit.
+- Verification: `format:check` and `git diff --check` passed.
+- Action: generate a fresh review package and rerun all five required reviewer
+  lanes.
