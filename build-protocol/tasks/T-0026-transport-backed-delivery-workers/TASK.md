@@ -683,8 +683,9 @@ and revalidates the pending boundary after each offset-page read before
 processing its rows. A moved boundary discards the stale page and resets to the
 head once inside the existing scan budget. The requested focused delivery
 tests, generated build typecheck, docs, lint, format, and diff checks passed;
-no worker commit was created. A fresh five-lane re-review and coordinator
-commit remain pending.
+no worker commit was created. Coordinator commit `9c51b77a` (`Fix delivery
+stale offset page rescan`) recorded the verified fix. A fresh five-lane
+re-review remains pending.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker
