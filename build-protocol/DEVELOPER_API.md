@@ -370,7 +370,7 @@ plus routed entity ID as `inboxId`, `TO_DELIVER` status, `ShardIndex.single()`,
 and the local 30-second dedup retention window. The context drains the local
 shard immediately and replays only the exact row target before running the
 process-manager or projection transaction and `Stand` update. Before handler
-code runs, replay validates pending `TO_DELIVER` status, tenant,
+code runs, replay validates the row label, pending `TO_DELIVER` status, tenant,
 payload/schema, target type URL, and routed target ID.
 `InboxStorage` remains the durable dedup authority.
 

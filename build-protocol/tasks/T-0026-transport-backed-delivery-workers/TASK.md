@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 52 documentation findings recorded; fix pending
+Status: Round 53 documentation fix verified; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -983,3 +983,12 @@ runtime architecture docs now state replay validates the row label plus pending
 lane table still too ambiguous for the just-completed Round 52 state. The next
 fix updates those docs and records, then repeats verification and five-lane
 review.
+
+Round 53 documentation fix on `2026-07-10`: updated API/user-facing docs so
+replay-validation wording consistently names row-label plus pending
+`TO_DELIVER` validation before handler/projection/process-manager code. The
+review-lane table now distinguishes Round 52 clean lanes from the documentation
+lane fixed in Round 53 and still awaiting re-review. Docs check passed with
+only the existing invalid TypeDoc `origin` warning, format check passed after
+normalizing the review log, and `git diff --check` passed. Five-lane re-review
+remains pending.

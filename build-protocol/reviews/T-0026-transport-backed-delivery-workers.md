@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 52 documentation findings recorded; fix pending
+Status: Round 53 documentation fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer         | Status           |
-| -------------------------- | ---------------- | ---------------- |
-| Code style/maintainability | Feynman the 2nd  | Clean            |
-| Documentation              | Leibniz the 2nd  | Findings pending |
-| TypeScript/API docs        | Lagrange the 2nd | Clean            |
-| Security                   | Kuhn the 2nd     | Clean            |
-| Performance/reliability    | Linnaeus the 2nd | Clean            |
+| Lane                       | Reviewer         | Current Round 52 State                                 |
+| -------------------------- | ---------------- | ------------------------------------------------------ |
+| Code style/maintainability | Feynman the 2nd  | Clean in Round 52                                      |
+| Documentation              | Leibniz the 2nd  | Round 52 findings fixed in Round 53; re-review pending |
+| TypeScript/API docs        | Lagrange the 2nd | Clean in Round 52                                      |
+| Security                   | Kuhn the 2nd     | Clean in Round 52                                      |
+| Performance/reliability    | Linnaeus the 2nd | Clean in Round 52                                      |
 
 ## Review Criteria
 
@@ -244,6 +244,24 @@ Review findings fixed and verified after implementation commit `94b4c632`.
 ca8fb2b3...HEAD`, which passed.
 - Action: update the stale docs and current review-lane table, verify, and
   rerun all five reviewer lanes.
+
+### Round 53 Documentation Fix Implementation - `2026-07-10T20:42:00Z`
+
+- Fix: updated stale API/user-facing replay-validation wording in
+  `docs/api/README.md`, `build-protocol/DEVELOPER_API.md`,
+  `packages/server/README.md`, and `docs/USER_GUIDE.md` so each states that
+  replay validates the row label plus pending `TO_DELIVER` status before
+  handler/projection/process-manager code.
+- Fix: refreshed task, work-log, and review-log status records for the active
+  Round 53 documentation-fix state.
+- Fix: clarified the required review-lane table so the Round 52 clean lanes are
+  distinguished from the documentation lane fixed in Round 53 and still
+  awaiting re-review.
+- Verification: `pnpm --config.verify-deps-before-run=false docs:check` passed
+  with only the existing invalid TypeDoc `origin` warning;
+  `pnpm --config.verify-deps-before-run=false format:check` passed after
+  repository formatting normalized this review log; `git diff --check` passed.
+- Action: rerun all five reviewer lanes from the Round 53 HEAD.
 
 ### Round 45 Follow-up - `2026-07-10T19:15:00Z`
 

@@ -251,8 +251,9 @@ or multi-host transport example.
   Process-manager event rows use `REACT_UPON_EVENT`, projection subscriber rows
   use `UPDATE_SUBSCRIBER`, both store the original `Event` envelope, and both
   replay only the routed row target before the transaction and `Stand` update.
-  Before handler code runs, replay validates pending `TO_DELIVER` status,
-  tenant, payload/schema, target type URL, and routed target ID.
+  Before handler code runs, replay validates the row label, pending
+  `TO_DELIVER` status, tenant, payload/schema, target type URL, and routed
+  target ID.
   The remaining repository event paths still use the direct local runtime in this
   slice. Broader cross-process subscriber/reactor delivery semantics,
   transport-backed/background delivery worker orchestration, retained update

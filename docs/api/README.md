@@ -103,8 +103,8 @@ received row is marked delivered. Process-manager event rows use
 `REACT_UPON_EVENT`, projection subscriber rows use `UPDATE_SUBSCRIBER`, both
 store the original `Event` envelope, and both replay only the routed row target
 before the transaction and `Stand` update. Before handler code runs, replay
-validates pending `TO_DELIVER` status, tenant, payload/schema, target type URL,
-and routed target ID.
+validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
+target type URL, and routed target ID.
 Broader inbox lifecycle management,
 schedulers, retries, and transport topology remain open production gaps.
 Process-manager
@@ -188,8 +188,8 @@ target replay during the 30-second local retention window. Live
 process-manager event reactors and event-commanding handlers use the same
 durable inbox handoff with `REACT_UPON_EVENT` rows, original `Event`
 envelopes, and exact-row target replay. Before handler code runs, replay
-validates pending `TO_DELIVER` status, tenant, payload/schema, target type URL,
-and routed target ID.
+validates the row label, pending `TO_DELIVER` status, tenant, payload/schema,
+target type URL, and routed target ID.
 State is stored in tenant-scoped `Stand` records with numeric
 versions, returned commands are wrapped and posted after state storage, and
 returned event messages are wrapped with process-manager-emitted event schemas
