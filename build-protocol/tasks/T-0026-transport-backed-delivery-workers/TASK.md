@@ -747,8 +747,9 @@ inbox/storage surface and describe replay as framework-owned. The Round 41
 range-check records now state that `git diff --check ca8fb2b3..HEAD` passes, and
 the work-log continuation is formatted. The focused delivery suite, generated
 typecheck, docs/API check, lint, format, baseline range diff, and working-tree
-diff checks passed. No worker commit was created; five-lane re-review remains
-pending.
+diff checks passed. No worker commit was created. Coordinator commit `be299a5d`
+(`Close delivery raw callback exports`) recorded the fix; five-lane re-review
+remains pending.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker

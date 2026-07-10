@@ -70,8 +70,9 @@ Review findings fixed and verified after implementation commit `94b4c632`.
 - Verification passed: prescribed five-file delivery Vitest command with 194
   tests; generated typecheck; docs/API check; lint; format; baseline range diff;
   and working-tree diff. `docs:check` retained only the existing invalid-origin
-  TypeDoc source-link warning. No worker commit was created; five-lane re-review
-  remains pending.
+  TypeDoc source-link warning. No worker commit was created. Coordinator commit
+  `be299a5d` (`Close delivery raw callback exports`) recorded the fix;
+  five-lane re-review remains pending.
 
 ### Round 41 Follow-up - `2026-07-10T17:05:00Z`
 

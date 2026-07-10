@@ -4,26 +4,27 @@ Status: fixes verified; re-review pending
 
 Branch: `task/T-0026-transport-backed-delivery-workers`
 Worktree: `.worktrees/T-0026-transport-backed-delivery-workers`
-Worker commit: none
+Worker commit: none; coordinator commit `be299a5d`
+(`Close delivery raw callback exports`) recorded the verified fix.
 
 ## Skill Applicability
 
 Canonical checklist source: `build-protocol/BUILD_PROTOCOL.md#skills-and-tooling`.
 
-| Checklist item | Evidence | Result |
-| --- | --- | --- |
-| Session inventory | The Codex session exposed workflow, testing, TypeScript, backend, security, review, and verification skills. | Task-relevant subset triaged. |
-| Task-provided skills | User required `/Users/armiol/.agents/skills/test-driven-development/SKILL.md`. | Fully read before test or production edits. |
-| Expected-skill manifest | Read `build-protocol/skills/EXPECTED_SKILLS.md`. | Expected workflow/backend skills are locally installed. |
-| Installed entrypoints | `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print` succeeded over the full user skill directory. | Metadata triaged without reading unrelated skill bodies. |
-| Installed-skill manifest | Read `/Users/armiol/.agents/.skill-lock.json`. | Readable; confirms expected source repositories and local paths. |
+| Checklist item           | Evidence                                                                                                                    | Result                                                           |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Session inventory        | The Codex session exposed workflow, testing, TypeScript, backend, security, review, and verification skills.                | Task-relevant subset triaged.                                    |
+| Task-provided skills     | User required `/Users/armiol/.agents/skills/test-driven-development/SKILL.md`.                                              | Fully read before test or production edits.                      |
+| Expected-skill manifest  | Read `build-protocol/skills/EXPECTED_SKILLS.md`.                                                                            | Expected workflow/backend skills are locally installed.          |
+| Installed entrypoints    | `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print` succeeded over the full user skill directory. | Metadata triaged without reading unrelated skill bodies.         |
+| Installed-skill manifest | Read `/Users/armiol/.agents/.skill-lock.json`.                                                                              | Readable; confirms expected source repositories and local paths. |
 
 Selected skills:
 
-| Skill | Source | Why selected | Applied instruction |
-| --- | --- | --- | --- |
-| `test-driven-development` | User-provided path | Required for the public API behavior change. | Add a focused export-boundary test, observe its expected failure, then apply the minimal export change. |
-| `verification-before-completion` | Session inventory; `/Users/armiol/.agents/skills/verification-before-completion/SKILL.md` | User prescribed final verification commands. | Use fresh command evidence before reporting success. |
+| Skill                            | Source                                                                                    | Why selected                                 | Applied instruction                                                                                     |
+| -------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `test-driven-development`        | User-provided path                                                                        | Required for the public API behavior change. | Add a focused export-boundary test, observe its expected failure, then apply the minimal export change. |
+| `verification-before-completion` | Session inventory; `/Users/armiol/.agents/skills/verification-before-completion/SKILL.md` | User prescribed final verification commands. | Use fresh command evidence before reporting success.                                                    |
 
 Skipped relevant-looking skills: `javascript-testing-patterns` (the user-provided
 TDD workflow governs the test-first change); `nodejs-backend-patterns` (no Node
@@ -55,7 +56,7 @@ design is needed for removing exports).
 - RED: removed `Delivery` and `DeliveryLoop` from the root export expectation,
   moved the test's internal behavior imports to delivery source modules, and
   ran `pnpm --config.verify-deps-before-run=false exec vitest run
-  packages/server/test/index.test.ts`. The test failed only because the barrel
+packages/server/test/index.test.ts`. The test failed only because the barrel
   still returned `Delivery` and `DeliveryLoop`.
 - GREEN: removed the direct delivery exports from `packages/server/src/index.ts`.
   The same focused test then passed with `10` tests.
@@ -91,4 +92,5 @@ design is needed for removing exports).
 
 ## Commit
 
-No worker commit will be created.
+No worker commit was created. Coordinator commit: `be299a5d` (`Close delivery
+raw callback exports`).
