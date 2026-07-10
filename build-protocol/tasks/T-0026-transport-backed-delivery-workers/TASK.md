@@ -453,7 +453,9 @@ increment accepted work, but they do increment failed work and count toward
 fail-closed `DeliveryStorageCorruptionError` aborts before any `DeliveryRun` is
 returned. This round also records the same-event-loop limitation: renewal uses
 timers around in-process callbacks, so CPU-bound synchronous callbacks can
-still starve renewal because JavaScript cannot preempt them.
+still starve renewal because JavaScript cannot preempt them. The fix commit is
+`0c622787` (`Fix delivery loop resume and worker status`). A fresh five-lane
+re-review is still required.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker

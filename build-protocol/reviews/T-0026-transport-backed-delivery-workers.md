@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 28 fixes implemented; verification complete
+Status: Round 28 fix committed; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -152,6 +152,7 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   CPU-bound synchronous callback can still starve renewal because JavaScript
   cannot preempt it. The docs now say this plainly instead of implying timer
   renewal protects blocked in-process callbacks.
+- Fix commit: `0c622787` (`Fix delivery loop resume and worker status`).
 
 ### Round 26 Follow-up - `2026-07-10T11:29:35Z`
 

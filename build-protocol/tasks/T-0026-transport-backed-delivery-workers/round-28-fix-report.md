@@ -11,22 +11,22 @@ Checklist source: `build-protocol/BUILD_PROTOCOL.md#skills-and-tooling`.
 
 Evidence gathered before edits:
 
-| Source                                     | Scope                          | Evidence                                                                                                      |
-| ------------------------------------------ | ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| Session skill inventory                    | Task-relevant subset           | Delivery/runtime, testing, verification, TypeScript, and review skills were available in-session.           |
-| Task-provided requirements                 | Full Round 28 batch            | The assignment explicitly required red evidence, doc/log updates, verification, and no commit.              |
-| `build-protocol/skills/EXPECTED_SKILLS.md` | Full file                      | Expected workflow/testing/type skills remain installed locally.                                              |
-| Installed skill manifest                   | Existing local manifest        | Earlier T-0026 rounds already verified the readable installed-skill manifest and user skill directories.     |
+| Source                                     | Scope                   | Evidence                                                                                                 |
+| ------------------------------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------- |
+| Session skill inventory                    | Task-relevant subset    | Delivery/runtime, testing, verification, TypeScript, and review skills were available in-session.        |
+| Task-provided requirements                 | Full Round 28 batch     | The assignment explicitly required red evidence, doc/log updates, verification, and no commit.           |
+| `build-protocol/skills/EXPECTED_SKILLS.md` | Full file               | Expected workflow/testing/type skills remain installed locally.                                          |
+| Installed skill manifest                   | Existing local manifest | Earlier T-0026 rounds already verified the readable installed-skill manifest and user skill directories. |
 
 Selected skills applied for this round:
 
-| Skill                            | Round 28 use                                                                                   |
-| -------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Skill                            | Round 28 use                                                                                                                         |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `test-driven-development`        | Added focused failing regressions for worker status precedence, paused resume drift, and access fallthrough before production edits. |
-| `implement`                      | Applied the narrowest delivery/runtime/doc/test changes needed for the full Round 28 batch.    |
-| `javascript-testing-patterns`    | Kept delivery coverage behavior-focused with real delivery instances and dedicated fixtures.    |
-| `typescript-advanced-types`      | Added package-root type coverage for `DeliveryWorkerRun.status` / `DeliveryLoopStatus`.        |
-| `verification-before-completion` | Reran focused Vitest, generated build typecheck, docs check, format check, and `git diff --check`. |
+| `implement`                      | Applied the narrowest delivery/runtime/doc/test changes needed for the full Round 28 batch.                                          |
+| `javascript-testing-patterns`    | Kept delivery coverage behavior-focused with real delivery instances and dedicated fixtures.                                         |
+| `typescript-advanced-types`      | Added package-root type coverage for `DeliveryWorkerRun.status` / `DeliveryLoopStatus`.                                              |
+| `verification-before-completion` | Reran focused Vitest, generated build typecheck, docs check, format check, and `git diff --check`.                                   |
 
 Relevant-looking but skipped: `nodejs-backend-patterns`, `projection-patterns`, `cqrs-implementation`, `event-store-design`, and `saga-orchestration` because this round did not change those runtime seams.
 
