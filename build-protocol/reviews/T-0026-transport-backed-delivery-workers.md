@@ -32,6 +32,28 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 Review findings fixed and verified after implementation commit `94b4c632`.
 
+### Round 13 Follow-up - `2026-07-10T07:21:10Z`
+
+- Finding: [Reliability HIGH] `ShardedWorkRegistry.pickUp()` captured `now`
+  before the awaited shard read and reused that stale value when deciding
+  whether a stored session was still live and when timestamping the replacement
+  session. A delayed storage read could therefore miss a lease expiry that
+  happened during the read and incorrectly reject the next eligible worker.
+- Fix: `pickUp()` still validates the caller clock before opening shard storage,
+  then refreshes `now` immediately after `readShardRecord()`/`readSession()` on
+  each attempt. The fresh post-read clock now drives both the live-session check
+  and `new ShardSession(...)`, matching the existing `renew()` and `release()`
+  pattern.
+- Evidence: added a delayed-read/clock-advance regression that seeds a live
+  stored session, advances the pickup clock across that lease expiry during the
+  awaited shard read, and verifies the next worker receives a replacement
+  session stamped with the post-read clock. The focused regression failed before
+  the fix with `undefined`, then passed after refreshing the pickup clock.
+- Verification: requested sharded-registry and delivery-worker Vitest passed
+  with 2 files and 78 tests; `typecheck:build:generated`, `docs:check`,
+  `format:check`, and `git diff --check` passed. `docs:check` reported only
+  the existing TypeDoc invalid-origin warning.
+
 ### Round 12 Follow-up - `2026-07-10T07:09:12Z`
 
 - Finding: [Reliability HIGH] after an inbox row was accepted, `Delivery.drain()`

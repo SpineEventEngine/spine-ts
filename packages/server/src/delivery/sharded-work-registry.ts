@@ -56,6 +56,7 @@ export class ShardedWorkRegistry {
         const currentRecord = await readShardRecord(storage, nextShard.key());
         const current =
           currentRecord === undefined ? undefined : readSession(currentRecord, nextShard.key());
+        now = requireInputTime(this.#now(), "Shard pickup time");
         if (current !== undefined && current.expiresAt.getTime() > now) {
           return undefined;
         }
@@ -73,7 +74,6 @@ export class ShardedWorkRegistry {
         if (claimed) {
           return next;
         }
-        now = requireInputTime(this.#now(), "Shard pickup time");
       }
 
       throw casRetriesExhausted("Shard pickup");

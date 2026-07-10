@@ -75,6 +75,34 @@ describe("ShardedWorkRegistry", () => {
     });
   });
 
+  it("replaces a shard session when storage read delay crosses expiry during pickup", async () => {
+    const storageFactory = new DelayedReadStorageFactory();
+    const now = { value: new Date("2026-07-02T09:11:00.000Z") };
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory,
+      leaseMs: 500,
+      now: () => now.value,
+    });
+    const shard = new ShardIndex(0, 2);
+
+    const firstSession = await delivery.shards.pickUp(shard, "node-a");
+    if (firstSession === undefined) {
+      throw new Error("Expected first shard pickup to create a session.");
+    }
+    now.value = new Date("2026-07-02T09:11:00.499Z");
+    storageFactory.onShardRead = () => {
+      now.value = new Date("2026-07-02T09:11:00.501Z");
+    };
+
+    await expect(delivery.shards.pickUp(shard, "node-b")).resolves.toMatchObject({
+      node: "node-b",
+      shard,
+      pickedUpAt: new Date("2026-07-02T09:11:00.501Z"),
+      expiresAt: new Date("2026-07-02T09:11:01.001Z"),
+    });
+  });
+
   it("does not renew a delayed shard session after expiry", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const firstNow = { value: new Date("2026-07-02T09:12:00.000Z") };
