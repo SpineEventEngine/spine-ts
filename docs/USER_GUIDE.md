@@ -1225,20 +1225,24 @@ that drain, while the storage read cap plus `limit` bounds total scanning.
 Valid worker-unsupported labels such as `CATCH_UP` remain pending and are
 skipped before callback invocation, row acceptance, failure recording, or
 failure-budget consumption. Pre-callback claim, replay-validation, lease,
-cleanup, and delivery-status failures stay visible in `DeliveryRun.failures`
-without consuming accepted work or loop failure budget.
+cleanup, and delivery-status failures stay visible in `DeliveryRun.failures`,
+do not increment accepted work, but they do increment failed work and count
+toward `DeliveryLoop.maxFailures`.
 `DeliveryLoop` repeats that direct drain for one shard until the shard is idle,
 skipped, stopped, paused after a bounded skipped-only scan streak, or reaches a
-configured failure bound. A later `run()` resumes from the saved scan offset
-after that paused result. Failed rows stay pending as `TO_DELIVER` for later
-loop/drain retry when the endpoint callback fails and framework-owned cleanup
-succeeds; no retained attempt history is written. Cleanup/replay validation,
-lease/fencing, and delivery-status update failures are reported in
-`DeliveryRun.failures` /
+configured failure bound. A later `run()` resumes from a saved internal cursor
+and resets that cursor safely if earlier pending rows disappeared before the
+next run. Failed rows stay pending as `TO_DELIVER` for later loop/drain retry
+when the endpoint callback fails and framework-owned cleanup succeeds; no
+retained attempt history is written. Cleanup/replay validation, lease/fencing,
+and delivery-status update failures are reported in `DeliveryRun.failures` /
 `DeliveryFailure` without promising immediate retry, and future recovery policy
 may be needed for abandoned or unavailable rows. Malformed or deprecated legacy
-label data such as stored `IMPORT_EVENT` still fails closed as storage
-corruption.
+label data such as stored `IMPORT_EVENT` still fails closed as
+`DeliveryStorageCorruptionError` before a `DeliveryRun` is returned. Lease
+renewal uses same-event-loop timers around in-process callbacks, so CPU-bound
+synchronous callbacks can still starve renewal; this slice treats that as an
+in-process trust-boundary limitation rather than timer-protected preemption.
 `stop()` prevents future drain starts and does not interrupt an in-flight
 `Delivery.drain()`; `close()` calls `stop()` and waits for the current drain, if
 any, to finish. `DeliveryWorker` owns configured shard loops for one node and

@@ -1,6 +1,7 @@
 import { inboxStorageAccess } from "./inbox-storage.js";
 import {
   deliveryAccess,
+  type DeliveryAccess,
   type Delivery,
   type DeliveryFailure,
   type DeliveryRun,
@@ -16,7 +17,7 @@ export class DeliveryLoop {
   readonly #limit: number | undefined;
   readonly #maxFailures: number;
   readonly #onMessage: OnDeliveryMessage;
-  #scanOffset = 0;
+  #resume: DeliveryResumeCursor | undefined;
   readonly #state = { stopped: false };
   #running: Promise<DeliveryLoopRun> | undefined;
 
@@ -72,33 +73,38 @@ export class DeliveryLoop {
     let resumableScanRuns = 0;
     for (;;) {
       if (this.#state.stopped) {
+        this.#resume = undefined;
         return summary.result("STOPPED");
       }
       const remainingFailures = this.#maxFailures - summary.failed;
       const limit = this.#drainLimit();
       const run = await this.#drain(limit, remainingFailures);
+      this.#resume = deliveryAccess.resume(run);
       summary.add(run);
       if (run.status === "SKIPPED") {
+        this.#resume = undefined;
         return summary.result("SKIPPED");
       }
       if (summary.failed >= this.#maxFailures && run.failed > 0) {
+        this.#resume = undefined;
         return summary.result("FAILED");
       }
       if (run.accepted === 0 && run.delivered === 0 && run.failed === 0) {
         if (run.processed === this.#scanBudget(limit)) {
           resumableScanRuns += 1;
-          this.#scanOffset += run.processed;
           if (resumableScanRuns >= maxResumableScanRuns) {
             return summary.result("PAUSED");
           }
           continue;
         }
         resumableScanRuns = 0;
-        this.#scanOffset = 0;
+        this.#resume = undefined;
         return summary.result("IDLE");
       }
       resumableScanRuns = 0;
-      this.#scanOffset = run.delivered > 0 ? this.#scanOffset + run.processed - run.delivered : 0;
+      if (run.failed > 0 && run.delivered === 0) {
+        this.#resume = undefined;
+      }
     }
   }
 
@@ -113,7 +119,7 @@ export class DeliveryLoop {
       },
       {
         maxFailures: remainingFailures,
-        scanOffset: this.#scanOffset,
+        ...(this.#resume === undefined ? {} : { resume: this.#resume }),
       },
     );
   }
@@ -123,9 +129,9 @@ export class DeliveryLoop {
   }
 
   #requireStorageBoundedLimit(): void {
-    if (this.#limit !== undefined && this.#limit > maxDeliveryLoopLimit) {
+    if (this.#limit !== undefined && this.#limit > inboxStorageAccess.maxReadLimit) {
       throw new Error(
-        `Inbox read limit must be a positive safe integer at most ${String(maxDeliveryLoopLimit)}.`,
+        `Inbox read limit must be a positive safe integer at most ${String(inboxStorageAccess.maxReadLimit)}.`,
       );
     }
   }
@@ -135,9 +141,9 @@ export class DeliveryLoop {
   }
 }
 
-const maxDeliveryLoopLimit = 1_000;
 const maxDeliveryLoopFailures = 1_000;
 const maxResumableScanRuns = 2;
+type DeliveryResumeCursor = ReturnType<DeliveryAccess["resume"]>;
 
 /** Delivery loop construction options. */
 export interface DeliveryLoopOptions {

@@ -1,9 +1,12 @@
 import { InMemoryStorageFactory } from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
+import { deliveryAccess } from "../../src/delivery/delivery.js";
+import { deliveryWorkerAccess } from "../../src/delivery/delivery-worker.js";
 import {
   Delivery,
   DeliveryWorker,
+  type DeliveryLoopRun,
   ShardIndex,
   type DeliveryRun,
   type InboxId,
@@ -71,15 +74,14 @@ describe("DeliveryWorker", () => {
   it("close waits for active shard drains after another shard rejects", async () => {
     const failure = new Error("storage failed");
     const activeDrain = deferred<DeliveryRun>();
-    const delivery = {
-      drain(shard: ShardIndex) {
-        if (shard.index === 0) {
-          return Promise.reject(failure);
-        }
+    const delivery = createDelivery();
+    const restore = deliveryAccess.replace(delivery, (shard: ShardIndex) => {
+      if (shard.index === 0) {
+        return Promise.reject(failure);
+      }
 
-        return activeDrain.promise;
-      },
-    } as unknown as Delivery;
+      return activeDrain.promise;
+    });
     const worker = new DeliveryWorker({
       delivery,
       shards: [new ShardIndex(0, 2), new ShardIndex(1, 2)],
@@ -103,16 +105,16 @@ describe("DeliveryWorker", () => {
     await expect(closing).rejects.toBe(failure);
     await expect(startFailure).resolves.toBe(failure);
     expect(closed).toBe(true);
+    restore();
   });
 
   it("reports all shard drain rejections when multiple loops fail", async () => {
     const first = new Error("first shard failed");
     const second = new Error("second shard failed");
-    const delivery = {
-      drain(shard: ShardIndex) {
-        return Promise.reject(shard.index === 0 ? first : second);
-      },
-    } as unknown as Delivery;
+    const delivery = createDelivery();
+    const restore = deliveryAccess.replace(delivery, (shard: ShardIndex) => {
+      return Promise.reject(shard.index === 0 ? first : second);
+    });
     const worker = new DeliveryWorker({
       delivery,
       shards: [new ShardIndex(0, 2), new ShardIndex(1, 2)],
@@ -124,6 +126,17 @@ describe("DeliveryWorker", () => {
 
     expect(thrown).toBeInstanceOf(AggregateError);
     expect((thrown as AggregateError).errors).toEqual([first, second]);
+    restore();
+  });
+
+  it("preserves PAUSED over SKIPPED when aggregating mixed loop outcomes", () => {
+    const loops = [
+      loopRun("SKIPPED"),
+      loopRun("PAUSED"),
+      loopRun("IDLE"),
+    ] satisfies readonly DeliveryLoopRun[];
+
+    expect(deliveryWorkerAccess.status(loops)).toBe("PAUSED");
   });
 });
 
@@ -134,13 +147,19 @@ function createDelivery(): Delivery {
   });
 }
 
-async function seed(delivery: Delivery, signalId: string, version: bigint): Promise<InboxMessage> {
+async function seed(
+  delivery: Delivery,
+  signalId: string,
+  version: bigint,
+  shard = ShardIndex.single(),
+  label: InboxMessage["label"] = "UPDATE_SUBSCRIBER",
+): Promise<InboxMessage> {
   const result = await delivery.inbox.receive({
     inboxId: targetInbox(),
     signalId,
-    label: "UPDATE_SUBSCRIBER",
+    label,
     status: "TO_DELIVER",
-    shard: ShardIndex.single(),
+    shard,
     whenReceived: new Date("2026-07-08T09:00:00.000Z"),
     version,
   });
@@ -173,6 +192,18 @@ function deferred<T>(): {
 function deliveryRun(): DeliveryRun {
   return Object.freeze({
     status: "DRAINED",
+    processed: 0,
+    accepted: 0,
+    delivered: 0,
+    failed: 0,
+    failures: Object.freeze([]),
+  });
+}
+
+function loopRun(status: DeliveryLoopRun["status"]): DeliveryLoopRun {
+  return Object.freeze({
+    status,
+    runs: 0,
     processed: 0,
     accepted: 0,
     delivered: 0,

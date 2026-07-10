@@ -138,16 +138,23 @@ Current slice exposes:
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; worker-unsupported labels remain
   pending and are skipped before callback invocation, row acceptance, failure
   recording, or failure-budget consumption. Pre-callback claim, lease, cleanup,
-  and validation failures stay visible in `DeliveryRun.failures` without
-  consuming accepted endpoint work or loop failure budget. Expired per-message
-  ownership is reclaimable by a later claim attempt while live ownership still
-  blocks; proactive sweeping and broader production recovery policy remain
+  validation, and status-update failures stay visible in
+  `DeliveryRun.failures`, do not increment accepted endpoint work, but they do
+  increment failed work and count toward `DeliveryLoop.maxFailures`. Expired
+  per-message ownership is reclaimable by a later claim attempt while live
+  ownership still blocks; proactive sweeping and broader production recovery policy remain
   future work. Supported public delivery labels are `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`;
   `IMPORT_EVENT` is rejected for new inbox writes before durable storage opens.
   Stored/wire legacy `IMPORT_EVENT` rows remain recognizable only as deprecated
-  compatibility data and fail closed on read or drain rather than being
-  delivered.
+  compatibility data and fail closed on read or drain with
+  `DeliveryStorageCorruptionError` rather than being returned through
+  `DeliveryRun.failures` or delivered.
+  A paused loop resumes from a saved internal cursor and safely resets that
+  cursor if earlier pending rows disappeared before the next run. Lease renewal
+  uses same-event-loop timers around in-process callbacks, so CPU-bound
+  synchronous callbacks can still starve renewal; this slice treats that as an
+  in-process trust-boundary limitation rather than timer-protected preemption.
   `stop()` prevents future drain starts and does not interrupt an in-flight
   `Delivery.drain()`; `close()` calls `stop()` and waits for the current drain,
   if any, to finish. Built bounded contexts use the storage layer internally

@@ -75,7 +75,7 @@ export class Delivery {
   ): Promise<DeliveryRun> {
     const scope = this.#drainScope();
     const limit = inboxStorageAccess.readLimit(options.limit);
-    const scanOffset = requireScanOffset(controls.scanOffset);
+    const cursor = await this.#resolveDrainCursor(scope.inbox, shard, controls.resume);
     const maxFailures = requireFailureLimit(controls.maxFailures);
     const session = await scope.shards.pickUp(shard, options.node);
     if (session === undefined) {
@@ -100,7 +100,7 @@ export class Delivery {
         options.onMessage,
         lease,
         active,
-        scanOffset,
+        cursor,
         maxFailures,
       );
     } finally {
@@ -116,11 +116,13 @@ export class Delivery {
     onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
     active: ActiveClaim,
-    offset: number,
+    cursor: DeliveryDrainCursor,
     maxFailures: number | undefined,
   ): Promise<DeliveryRun> {
     const progress = drainProgress();
     const scanBudget = inboxStorageAccess.maxReadLimit + limit;
+    let offset = cursor.offset;
+    let pendingBoundaryId = cursor.pendingBoundaryId;
 
     while (progress.processed < scanBudget) {
       const readLimit = Math.min(inboxStorageAccess.maxReadLimit, scanBudget - progress.processed);
@@ -137,21 +139,22 @@ export class Delivery {
         );
         if (remainsPending) {
           offset += 1;
+          pendingBoundaryId = message.id.value;
         }
         if (progress.accepted >= limit) {
-          return progress.finish();
+          return progress.finish(drainCursor(offset, pendingBoundaryId));
         }
         if (maxFailures !== undefined && progress.failed >= maxFailures) {
-          return progress.finish();
+          return progress.finish(drainCursor(offset, pendingBoundaryId));
         }
       }
 
       if (messages.length < readLimit) {
-        return progress.finish();
+        return progress.finish(drainCursor(offset, pendingBoundaryId));
       }
     }
 
-    return progress.finish();
+    return progress.finish(drainCursor(offset, pendingBoundaryId));
   }
 
   async #readPendingDeliveryPage(
@@ -389,6 +392,28 @@ export class Delivery {
 
     return Object.freeze({ inbox, shards });
   }
+
+  async #resolveDrainCursor(
+    inbox: Inbox,
+    shard: ShardIndex,
+    value: DeliveryDrainCursor | undefined,
+  ): Promise<DeliveryDrainCursor> {
+    const cursor = requireDrainCursor(value);
+    if (cursor.offset === 0) {
+      return cursor;
+    }
+
+    const [boundary] = await inbox.read(shard, {
+      statuses: ["TO_DELIVER"],
+      limit: 1,
+      offset: cursor.offset - 1,
+    });
+    if (boundary?.id.value !== cursor.pendingBoundaryId) {
+      return drainCursor(0);
+    }
+
+    return cursor;
+  }
 }
 
 /** Delivery construction options. */
@@ -414,7 +439,7 @@ export interface DeliveryDrainOptions {
 }
 
 interface DeliveryDrainControls {
-  readonly scanOffset?: number;
+  readonly resume?: DeliveryDrainCursor;
   readonly maxFailures?: number;
 }
 
@@ -426,6 +451,8 @@ export interface DeliveryAccess {
     options: DeliveryDrainOptions,
     controls: DeliveryDrainControls,
   ): Promise<DeliveryRun>;
+  resume(run: DeliveryRun): DeliveryDrainCursor | undefined;
+  replace(delivery: Delivery, drainer: DeliveryDrainer): () => void;
 }
 
 type DeliveryDrainer = (
@@ -444,12 +471,18 @@ export const deliveryAccess: DeliveryAccess = Object.freeze({
     options: DeliveryDrainOptions,
     controls: DeliveryDrainControls,
   ) {
-    const drainer = deliveryDrainers.get(delivery);
-    if (drainer === undefined) {
-      return delivery.drain(shard, options);
-    }
+    return requireDeliveryDrainer(delivery)(shard, options, controls);
+  },
+  resume(run: DeliveryRun) {
+    return deliveryRunMetadata.get(run)?.cursor;
+  },
+  replace(delivery: Delivery, drainer: DeliveryDrainer) {
+    const previous = requireDeliveryDrainer(delivery);
+    deliveryDrainers.set(delivery, drainer);
 
-    return drainer(shard, options, controls);
+    return () => {
+      deliveryDrainers.set(delivery, previous);
+    };
   },
 });
 
@@ -524,11 +557,16 @@ interface DeliveryScope {
   readonly shards: ShardedWorkRegistry;
 }
 
+interface DeliveryDrainCursor {
+  readonly offset: number;
+  readonly pendingBoundaryId?: string;
+}
+
 interface DrainProgress {
   readonly accepted: number;
   readonly failed: number;
   readonly processed: number;
-  readonly finish: () => DeliveryRun;
+  readonly finish: (cursor: DeliveryDrainCursor) => DeliveryRun;
   readonly observe: (message: InboxMessage) => boolean;
   readonly record: (message: DeliveryEndpointMessage, attempt: DeliveryMessageResult) => void;
 }
@@ -538,7 +576,12 @@ type DeliveryMessageResult =
   | { readonly kind: "DELIVERED" }
   | { readonly kind: "FAILED"; readonly accepted: boolean; readonly error: unknown };
 
+interface DeliveryRunMetadata {
+  readonly cursor: DeliveryDrainCursor;
+}
+
 const defaultShardLeaseMs = 30_000;
+const deliveryRunMetadata = new WeakMap<DeliveryRun, DeliveryRunMetadata>();
 
 function deliveryRun(
   status: DeliveryRun["status"],
@@ -547,8 +590,9 @@ function deliveryRun(
   delivered: number,
   failed: number,
   failures: readonly DeliveryFailure[],
+  cursor = drainCursor(0),
 ): DeliveryRun {
-  return Object.freeze({
+  const run = Object.freeze({
     status,
     processed,
     accepted,
@@ -556,6 +600,9 @@ function deliveryRun(
     failed,
     failures: Object.freeze([...failures]),
   });
+  deliveryRunMetadata.set(run, Object.freeze({ cursor }));
+
+  return run;
 }
 
 function drainProgress(): DrainProgress {
@@ -575,8 +622,16 @@ function drainProgress(): DrainProgress {
     get failed() {
       return failures.length;
     },
-    finish() {
-      return deliveryRun("DRAINED", processed, accepted, delivered, failures.length, failures);
+    finish(cursor: DeliveryDrainCursor) {
+      return deliveryRun(
+        "DRAINED",
+        processed,
+        accepted,
+        delivered,
+        failures.length,
+        failures,
+        cursor,
+      );
     },
     observe(message: InboxMessage) {
       if (seen.has(message.id.value)) {
@@ -790,6 +845,29 @@ function requireFailureLimit(value: unknown): number | undefined {
   return value === undefined ? undefined : inboxStorageAccess.readLimit(value);
 }
 
+function requireDrainCursor(value: unknown): DeliveryDrainCursor {
+  if (value === undefined) {
+    return drainCursor(0);
+  }
+  if (typeof value !== "object" || value === null) {
+    throw new Error("Delivery resume cursor must be an object.");
+  }
+
+  const { offset, pendingBoundaryId } = value as {
+    readonly offset?: unknown;
+    readonly pendingBoundaryId?: unknown;
+  };
+  const safeOffset = requireScanOffset(offset);
+  if (safeOffset === 0) {
+    return drainCursor(0);
+  }
+  if (typeof pendingBoundaryId !== "string" || pendingBoundaryId.length === 0) {
+    throw new Error("Delivery resume cursor requires a pending boundary message ID.");
+  }
+
+  return drainCursor(safeOffset, pendingBoundaryId);
+}
+
 function requireScanOffset(value: unknown): number {
   if (value === undefined) {
     return 0;
@@ -799,6 +877,17 @@ function requireScanOffset(value: unknown): number {
   }
 
   return value as number;
+}
+
+function drainCursor(offset: number, pendingBoundaryId?: string): DeliveryDrainCursor {
+  if (offset === 0) {
+    return Object.freeze({ offset: 0 });
+  }
+  if (pendingBoundaryId === undefined || pendingBoundaryId.length === 0) {
+    throw new Error("Delivery resume cursor requires a pending boundary message ID.");
+  }
+
+  return Object.freeze({ offset, pendingBoundaryId });
 }
 
 function requireEndpointMessage(message: InboxMessage): DeliveryEndpointMessage {
@@ -835,6 +924,15 @@ function claimClearFailure(deliveryError: unknown, clearError: unknown): Aggrega
     [deliveryError, clearError],
     "Delivery failed and framework cleanup failed.",
   );
+}
+
+function requireDeliveryDrainer(delivery: Delivery): DeliveryDrainer {
+  const drainer = deliveryDrainers.get(delivery);
+  if (drainer === undefined) {
+    throw new TypeError("Loop drain access requires a Delivery instance.");
+  }
+
+  return drainer;
 }
 
 function requireMessageShard(message: InboxMessage): ShardIndex {

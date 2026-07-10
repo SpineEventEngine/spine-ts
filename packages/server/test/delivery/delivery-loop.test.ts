@@ -1,6 +1,7 @@
 import { InMemoryStorageFactory } from "@spine-ts/storage";
 import { describe, expect, it } from "vitest";
 
+import { deliveryAccess } from "../../src/delivery/delivery.js";
 import {
   Delivery,
   DeliveryLoop,
@@ -196,31 +197,17 @@ describe("DeliveryLoop", () => {
   });
 
   it("returns a resumable status instead of scanning skipped-only drains forever", async () => {
-    const limit = 3;
-    const scanBudget = inboxStorageAccess.maxReadLimit + limit;
-    let drains = 0;
-    const delivery = {
-      async drain(_shard: ShardIndex, options: { readonly limit?: number }) {
-        drains += 1;
-        expect(options.limit).toBe(limit);
-        if (drains > 2) {
-          throw new Error("DeliveryLoop kept starting skipped-only drains without stopping.");
-        }
+    const delivery = createDelivery();
+    const shard = ShardIndex.single();
+    const limit = 1;
 
-        return {
-          status: "DRAINED" as const,
-          processed: scanBudget,
-          accepted: 0,
-          delivered: 0,
-          failed: 0,
-          failures: [],
-        };
-      },
-    } as unknown as Delivery;
+    for (let index = 1; index <= 2_002; index += 1) {
+      await seed(delivery, `signal-paused-${String(index)}`, BigInt(index), "CATCH_UP");
+    }
 
     const run = await new DeliveryLoop({
       delivery,
-      shard: ShardIndex.single(),
+      shard,
       node: "node-a",
       limit,
       onMessage: () => undefined,
@@ -229,11 +216,76 @@ describe("DeliveryLoop", () => {
     expect(run).toMatchObject({
       status: "PAUSED",
       runs: 2,
-      processed: scanBudget * 2,
+      processed: (inboxStorageAccess.maxReadLimit + limit) * 2,
       accepted: 0,
       delivered: 0,
       failed: 0,
     });
+  });
+
+  it("resets a paused scan cursor when earlier pending rows disappear before resume", async () => {
+    const delivery = createDelivery();
+    const shard = ShardIndex.single();
+    const seen: string[] = [];
+    const loop = new DeliveryLoop({
+      delivery,
+      shard,
+      node: "node-a",
+      limit: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    for (let index = 1; index <= 2_003; index += 1) {
+      await seed(delivery, `signal-shifted-${String(index)}`, BigInt(index), "CATCH_UP");
+    }
+    await seed(delivery, "signal-supported-tail", 2_004n);
+
+    const paused = await loop.run();
+    const pending = await delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] });
+
+    expect(paused).toMatchObject({
+      status: "PAUSED",
+      runs: 2,
+      processed: 2_002,
+      delivered: 0,
+      failed: 0,
+    });
+    expect(seen).toEqual([]);
+
+    for (const message of pending.slice(0, 1_503)) {
+      await expect(delivery.inbox.markDelivered(message)).resolves.toMatchObject({
+        id: message.id,
+        status: "DELIVERED",
+      });
+    }
+
+    const resumed = await loop.run();
+
+    expect(resumed).toMatchObject({
+      status: "IDLE",
+      delivered: 1,
+      failed: 0,
+    });
+    expect(seen).toEqual(["signal-supported-tail"]);
+  });
+
+  it("rejects loop-private drain access for non-owned delivery instances", async () => {
+    const fake = {
+      drain() {
+        throw new Error("public drain should not run");
+      },
+    } as unknown as Delivery;
+
+    expect(() =>
+      deliveryAccess.drain(
+        fake,
+        ShardIndex.single(),
+        { node: "node-a", onMessage: () => undefined },
+        {},
+      ),
+    ).toThrow("Loop drain access requires a Delivery instance.");
   });
 
   it("stop prevents starting a new drain", async () => {
@@ -328,12 +380,11 @@ describe("DeliveryLoop", () => {
   it("propagates current drain rejection through close without starting another drain", async () => {
     const failure = new Error("storage failed");
     const barrier = deferred<DeliveryRun>();
-    const delivery = {
-      drain() {
-        drains += 1;
-        return barrier.promise;
-      },
-    } as unknown as Delivery;
+    const delivery = createDelivery();
+    const restore = deliveryAccess.replace(delivery, () => {
+      drains += 1;
+      return barrier.promise;
+    });
     let drains = 0;
     const loop = new DeliveryLoop({
       delivery,
@@ -343,18 +394,21 @@ describe("DeliveryLoop", () => {
     });
 
     const running = loop.run();
+    const runFailure = running.catch((error: unknown) => error);
     const closing = loop.close();
+    const closeFailure = closing.catch((error: unknown) => error);
     await Promise.resolve();
 
     barrier.reject(failure);
 
-    await expect(closing).rejects.toBe(failure);
-    await expect(running).rejects.toBe(failure);
+    await expect(closeFailure).resolves.toBe(failure);
+    await expect(runFailure).resolves.toBe(failure);
     await expect(loop.run()).resolves.toMatchObject({
       status: "STOPPED",
       runs: 0,
     });
     expect(drains).toBe(1);
+    restore();
   });
 
   it("stops at the configured failure bound", async () => {
@@ -475,11 +529,16 @@ function createDelivery(storageFactory = new InMemoryStorageFactory()): Delivery
   });
 }
 
-async function seed(delivery: Delivery, signalId: string, version: bigint): Promise<InboxMessage> {
+async function seed(
+  delivery: Delivery,
+  signalId: string,
+  version: bigint,
+  label: InboxMessage["label"] = "UPDATE_SUBSCRIBER",
+): Promise<InboxMessage> {
   const result = await delivery.inbox.receive({
     inboxId: targetInbox(),
     signalId,
-    label: "UPDATE_SUBSCRIBER",
+    label,
     status: "TO_DELIVER",
     shard: ShardIndex.single(),
     whenReceived: new Date("2026-07-08T09:00:00.000Z"),

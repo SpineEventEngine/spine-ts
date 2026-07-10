@@ -83,6 +83,11 @@ export interface DeliveryWorkerRun {
   readonly loops: readonly DeliveryLoopRun[];
 }
 
+/** @internal Worker-result helpers for package-local tests and runtime code. */
+export interface DeliveryWorkerAccess {
+  status(loops: readonly DeliveryLoopRun[]): DeliveryLoopStatus;
+}
+
 function requireShards(shards: readonly ShardIndex[]): readonly ShardIndex[] {
   if (!Array.isArray(shards) || shards.length === 0) {
     throw new Error("DeliveryWorker shards must be a non-empty array.");
@@ -97,6 +102,13 @@ function workerRun(loops: readonly DeliveryLoopRun[]): DeliveryWorkerRun {
     loops: Object.freeze([...loops]),
   });
 }
+
+/** @internal Worker-result helpers for package-local tests and runtime code. */
+export const deliveryWorkerAccess: DeliveryWorkerAccess = Object.freeze({
+  status(loops: readonly DeliveryLoopRun[]) {
+    return workerStatus(loops);
+  },
+});
 
 async function settleWorkerRun(
   loopRuns: readonly Promise<DeliveryLoopRun>[],
@@ -130,11 +142,11 @@ function workerStatus(loops: readonly DeliveryLoopRun[]): DeliveryLoopStatus {
   if (loops.some(({ status }) => status === "STOPPED")) {
     return "STOPPED";
   }
-  if (loops.some(({ status }) => status === "SKIPPED")) {
-    return "SKIPPED";
-  }
   if (loops.some(({ status }) => status === "PAUSED")) {
     return "PAUSED";
+  }
+  if (loops.some(({ status }) => status === "SKIPPED")) {
+    return "SKIPPED";
   }
 
   return "IDLE";

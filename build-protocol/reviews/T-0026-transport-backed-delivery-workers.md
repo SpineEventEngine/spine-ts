@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 27 fix committed; re-review pending
+Status: Round 28 fixes implemented; verification complete
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer   | Status     |
-| -------------------------- | ---------- | ---------- |
-| Code style/maintainability | Einstein   | Clean      |
-| Documentation              | Euclid     | Findings   |
-| TypeScript/API docs        | Hubble     | Minor only |
-| Security                   | Cicero     | Findings   |
-| Performance/reliability    | Heisenberg | Clean      |
+| Lane                       | Reviewer      | Status   |
+| -------------------------- | ------------- | -------- |
+| Code style/maintainability | Helmholtz     | Findings |
+| Documentation              | Chandrasekhar | Findings |
+| TypeScript/API docs        | Meitner       | Findings |
+| Security                   | Noether       | Findings |
+| Performance/reliability    | Archimedes    | Findings |
 
 ## Review Criteria
 
@@ -84,6 +84,74 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   `format:check`, and `git diff --check` passed. `docs:check` reported only the
   existing invalid-origin TypeDoc source-link warning.
 - Fix commit: `770981ea` (`Fix delivery drain tenant scope and loop bounds`).
+
+### Round 28 Follow-up - `2026-07-10T12:22:12Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..0dd1bfdf.diff` from task baseline
+  `ca8fb2b3` to current HEAD `0dd1bfdf`.
+- TypeScript/API docs (Meitner): [Important] `DeliveryWorkerRun.status` hides a
+  paused shard when another shard is skipped because `workerStatus()` checks
+  `SKIPPED` before `PAUSED`; preserve the resumable `PAUSED` signal in worker
+  aggregation and add type/runtime coverage.
+- Code style/maintainability (Helmholtz): [Important] `deliveryAccess.drain()`
+  silently falls back to public `Delivery.drain()` for non-owned instances,
+  unlike the repo's other access helpers, and the paused-loop test uses such a
+  fake so it does not exercise loop-only controls. [Important] the
+  delivery-worker fault-injection harness has grown into one broad mutable test
+  fixture and should be split by concern or moved to a dedicated fixture module.
+  [Minor] `maxDeliveryLoopLimit` duplicates `inboxStorageAccess.maxReadLimit`.
+- Documentation (Chandrasekhar): [Important] Round 27 docs incorrectly say
+  pre-callback failures do not consume loop failure budget; they do not
+  increment `accepted`, but they do increment `failed` and count toward
+  `DeliveryLoop.maxFailures`. [Important] docs blur fail-closed legacy
+  corruption into returned `DeliveryRun.failures`; malformed/deprecated stored
+  rows such as legacy `IMPORT_EVENT` fail read/drain outright with
+  `DeliveryStorageCorruptionError`.
+- Security (Noether): [Important] same-event-loop shard/claim renewal can be
+  starved by CPU-bound or synchronous endpoint callbacks; this may require
+  explicit trust-boundary adjudication because JavaScript cannot preempt a
+  blocking callback in the same process. [Important] `workerStatus()` hides
+  `PAUSED` behind `SKIPPED`, overlapping Meitner's finding.
+- Performance/reliability (Archimedes): [Important] the `PAUSED` resume path
+  persists a raw absolute `scanOffset`; if earlier skipped rows disappear
+  between runs, a resumed run can skip a now-reachable supported row. Use a
+  stable cursor or reset when the cursor no longer matches the pending set, and
+  add a regression.
+- Action: dispatch one fix worker for the complete Round 28 batch. The worker
+  must update durable logs, use focused red evidence for behavior fixes, and
+  either implement or explicitly adjudicate the same-event-loop callback renewal
+  finding with code/docs evidence.
+
+### Round 28 Fix Implementation - `2026-07-10`
+
+- Added focused red regressions before production edits: the paused-loop resume
+  regression idled with `delivered: 0` after earlier skipped rows disappeared,
+  the internal access regression called the fake public `drain()` instead of
+  failing fast, and mixed loop outcomes hid `PAUSED` behind `SKIPPED`.
+- Replaced raw paused-loop offset reuse with an internal pending-boundary
+  resume cursor recorded on `DeliveryRun` metadata and validated against the
+  current pending set before reuse. When the boundary no longer matches, the
+  loop safely resets and rescans from the head instead of skipping shifted
+  supported rows.
+- `DeliveryWorker` aggregation now preserves `PAUSED` over `SKIPPED`.
+  `deliveryAccess.drain()` now throws for non-owned instances and exposes
+  package-local owned-instance helpers used by runtime/loop tests.
+- Split the delivery-worker storage fault fixture into dedicated
+  `delivery-storage-fault-fixture.ts` helpers and removed the duplicate
+  loop read-cap constant in favor of `inboxStorageAccess.maxReadLimit`.
+- Broader docs now state the correct accounting contract: skipped unsupported
+  rows do not consume failure budget; pre-callback claim/validation/lease/
+  cleanup/status-update failures do count toward `failed` /
+  `DeliveryLoop.maxFailures` while leaving `accepted` unchanged. Legacy stored
+  `IMPORT_EVENT` rows are documented as `DeliveryStorageCorruptionError`
+  aborts before any `DeliveryRun` is returned.
+- Adjudication: same-event-loop renewal remains a trust-boundary limitation.
+  Code evidence is unchanged: renewal is timer-driven (`keepShardLease()`), and
+  callbacks run inline in `#invokeEndpoint()` on the same event loop, so a
+  CPU-bound synchronous callback can still starve renewal because JavaScript
+  cannot preempt it. The docs now say this plainly instead of implying timer
+  renewal protects blocked in-process callbacks.
 
 ### Round 26 Follow-up - `2026-07-10T11:29:35Z`
 

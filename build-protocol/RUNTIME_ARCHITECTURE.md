@@ -267,18 +267,28 @@ delivery worker boundary:
   successful delivery marks the row `DELIVERED`, endpoint callback failures
   leave the row pending only after framework cleanup succeeds, and endpoint
   callback cleanup failures, lease/fencing failures, and delivery-status update
-  failures are reported without an immediate retry guarantee. A later claim
-  attempt can reclaim expired per-message ownership, while live ownership still
-  blocks; proactive sweeping and broader production recovery policy remain
-  future work. The run returns simple counts plus
+  failures are reported without an immediate retry guarantee. Pre-callback
+  claim, validation, lease, cleanup, and delivery-status failures do not
+  increment accepted work, but they do increment failed work and count toward a
+  loop's `maxFailures` bound. A later claim attempt can reclaim expired
+  per-message ownership, while live ownership still blocks; proactive sweeping
+  and broader production recovery policy remain future work. The run returns
+  simple counts plus
   per-message failures and releases the shard in a `finally` path;
 - `DeliveryLoop` repeats those direct drains for one shard, and `DeliveryWorker`
   is the closeable owner for one node's configured shard loops. Renewal is
   framework-owned lease fencing for active drains. These are lifecycle wrappers
   over the direct primitive, not production retry policy, production
-  supervision, or transport topology; and
+  supervision, or transport topology. A paused loop resumes from a saved
+  internal cursor and safely resets that cursor if earlier pending rows
+  disappeared. Renewal runs on the same JavaScript event loop as the endpoint
+  callback, so a CPU-bound synchronous callback can still starve timer-driven
+  renewal; this slice treats that as an in-process trust-boundary limitation;
+  and
 - malformed, oversized, or key-mismatched inbox, dedup, and shard-session
-  records fail closed as storage corruption.
+  records fail closed as storage corruption. Deprecated legacy stored
+  `IMPORT_EVENT` rows are one such corruption path and abort read/drain with
+  `DeliveryStorageCorruptionError` before any `DeliveryRun` is returned.
 
 This slice stops at durable storage, ordered readback, narrow built-context
 process-manager command, process-manager event, and live projection subscriber

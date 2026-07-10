@@ -415,7 +415,8 @@ status after a bounded skipped-only scan streak instead of letting one
 invocation continue scanning unsupported rows indefinitely. Broader guides now
 state that `limit` caps endpoint callbacks actually invoked, scanning is
 bounded by `maxReadLimit + limit`, and skipped/unsupported rows plus
-pre-callback failures do not consume accepted work or loop failure budget. The
+pre-callback failures do not consume accepted work; those failures still count
+toward `failed` / `DeliveryLoop.maxFailures`. The
 public `DeliveryEndpointMessage.label` property now inlines its supported-label
 union, and the historical Round 24 notes mention the later
 `OnDeliveryMessage` rename. Coordinator verification passed with focused
@@ -424,6 +425,35 @@ check, format check, and `git diff --check`; `docs:check` reported only the
 existing invalid-origin TypeDoc source-link warning. The fix commit is
 `770981ea` (`Fix delivery drain tenant scope and loop bounds`). A fresh
 five-lane re-review is still required.
+
+Round 28 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..0dd1bfdf.diff` produced blocking findings in
+all five lanes. The next fix must preserve `PAUSED` over `SKIPPED` in
+`DeliveryWorkerRun.status`, make internal delivery access fail fast and update
+the paused-loop tests to exercise the real loop-only controls, split or move
+the overgrown delivery-worker fault fixture, remove/read through the duplicated
+delivery-loop read cap, correct docs about pre-callback failures counting
+toward `maxFailures`, separate legacy `IMPORT_EVENT` corruption exceptions from
+returned `DeliveryRun.failures`, make paused resume safe when skipped rows
+shift between runs, and either implement or explicitly adjudicate the
+same-event-loop callback renewal risk.
+
+Round 28 fix implementation on `2026-07-10`: `DeliveryLoop` now resumes from a
+saved internal pending-boundary cursor rather than a raw absolute scan offset,
+resetting safely when earlier pending rows disappear between runs so supported
+rows are not skipped. `DeliveryWorker` status aggregation now preserves
+`PAUSED` over `SKIPPED`, `deliveryAccess.drain()` fails fast for non-owned
+instances, the delivery-worker storage fault harness moved into a dedicated
+fixture module, and the loop read-cap check now reads through
+`inboxStorageAccess.maxReadLimit`. Documentation now states that only skipped
+worker-unsupported rows such as `CATCH_UP` avoid failure-budget consumption;
+pre-callback claim/validation/lease/cleanup/status-update failures do not
+increment accepted work, but they do increment failed work and count toward
+`DeliveryLoop.maxFailures`. Legacy stored `IMPORT_EVENT` rows are documented as
+fail-closed `DeliveryStorageCorruptionError` aborts before any `DeliveryRun` is
+returned. This round also records the same-event-loop limitation: renewal uses
+timers around in-process callbacks, so CPU-bound synchronous callbacks can
+still starve renewal because JavaScript cannot preempt them.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker

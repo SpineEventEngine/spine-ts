@@ -604,16 +604,22 @@ reaches callbacks or returned failures. Successful callbacks mark rows
 `DELIVERED`; endpoint failures remain pending for later runs only when
 framework-owned cleanup succeeds. Cleanup, validation, lease/fencing, and
 delivery-status failures are reported without an immediate retry or recovery
-guarantee in this slice. Worker-unsupported rows plus pre-callback failures do
-not consume accepted work or loop failure budget. A later claim attempt can
-reclaim expired per-message
+guarantee in this slice. Worker-unsupported rows such as `CATCH_UP` do not
+consume accepted work or loop failure budget. Pre-callback claim, validation,
+lease, cleanup, and delivery-status failures do not increment accepted work,
+but they do increment failed work and count toward `DeliveryLoop.maxFailures`.
+A later claim attempt can reclaim expired per-message
 ownership, while live ownership still blocks; proactive sweeping and broader
 production recovery policy remain future work. `DeliveryLoop` repeats one-shard drains until idle,
 skipped, stopped, paused after a bounded skipped-only scan streak, or a
-configured failure bound. A later `run()` resumes from the saved scan offset
-after that paused result. `stop()` prevents future drain starts and does not
-interrupt an in-flight `Delivery.drain()`; `close()` calls `stop()` and waits
-for the current drain, if any, to finish. `DeliveryWorker`
+configured failure bound. A later `run()` resumes from a saved internal cursor
+and safely resets that cursor if earlier pending rows disappeared before the
+next run. `stop()` prevents future drain starts and does not interrupt an
+in-flight `Delivery.drain()`; `close()` calls `stop()` and waits for the
+current drain, if any, to finish. Lease renewal uses same-event-loop timers
+around in-process callbacks, so CPU-bound synchronous callbacks can still
+starve renewal; this slice treats that as an in-process trust-boundary
+limitation rather than timer-protected preemption. `DeliveryWorker`
 owns configured shard loops for one node and closes through the same
 stop-and-wait behavior. Local posting handoffs now cover command rows,
 projection subscriber rows, and process-manager event rows. Command

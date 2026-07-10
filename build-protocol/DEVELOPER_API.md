@@ -270,11 +270,15 @@ smaller than the later scheduler/retry stack:
   `DELIVERED`; endpoint callback failures leave the row `TO_DELIVER` for a
   later run only when framework-owned cleanup succeeds. Malformed or deprecated
   legacy label data such as stored `IMPORT_EVENT` remains a fail-closed
-  storage-corruption path. Cleanup, lease/fencing, and status-update failures
+  `DeliveryStorageCorruptionError` path that aborts the read/drain before a
+  `DeliveryRun` is returned. Cleanup, lease/fencing, and status-update failures
   are returned through `DeliveryRun.failures` / `DeliveryFailure` without an
-  immediate retry or recovery guarantee in this slice. A later claim attempt
-  can reclaim expired per-message ownership, while live ownership still blocks;
-  proactive sweeping and broader production recovery policy remain future work.
+  immediate retry or recovery guarantee in this slice. Pre-callback claim,
+  validation, lease, cleanup, and status-update failures do not increment
+  `accepted`, but they do increment `failed` and count toward
+  `DeliveryLoop.maxFailures`. A later claim attempt can reclaim expired
+  per-message ownership, while live ownership still blocks; proactive sweeping
+  and broader production recovery policy remain future work.
   The run returns simple
   `DeliveryRun`
   statistics (`status`, `processed`, `accepted`, `delivered`, `failed`, and
@@ -291,7 +295,12 @@ smaller than the later scheduler/retry stack:
   for active drains to finish. `DeliveryLoopRun` aggregates `DeliveryRun` counts
   across loop drains: `status` is the loop stop reason, `runs` is the number of
   started drains, and `processed`, `accepted`, `delivered`, `failed`, and
-  `failures` are accumulated from the underlying drain results;
+  `failures` are accumulated from the underlying drain results. A paused loop
+  resumes from a saved internal cursor and resets that cursor safely if earlier
+  pending rows disappeared before the next run. Lease renewal uses same-event-
+  loop timers around in-process callbacks, so CPU-bound synchronous callbacks
+  can still starve renewal; this slice treats that as a trust-boundary
+  limitation rather than timer-protected preemption;
 - `Inbox` is the low-level durable delivery storage primitive in this slice: it
   accepts `InboxMessageInput` with `receive()` and lets framework delivery code
   read durable inbox rows by `ShardIndex`. `markDelivered()` is the narrow

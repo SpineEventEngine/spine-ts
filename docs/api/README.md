@@ -343,12 +343,14 @@ failure-budget consumption. Successful
 delivery marks the row `DELIVERED`; endpoint callback failures leave the row
 pending for a later run only when framework-owned cleanup succeeds. Malformed or
 deprecated legacy label data such as stored `IMPORT_EVENT` remains a
-fail-closed storage-corruption path. Cleanup, lease/fencing, and
+fail-closed `DeliveryStorageCorruptionError` path that aborts read/drain before
+any `DeliveryRun` is returned. Cleanup, lease/fencing, and
 delivery-status update failures are reported in the returned
 `DeliveryRun.failures` / `DeliveryFailure` values without promising immediate
 retry. Pre-callback claim, validation, lease, cleanup, and delivery-status
-failures stay visible there without consuming accepted work or loop failure
-budget. A later claim attempt can reclaim expired per-message ownership, while
+failures stay visible there, do not increment accepted work, but do increment
+failed work and count toward `DeliveryLoop.maxFailures`. A later claim attempt
+can reclaim expired per-message ownership, while
 live ownership still blocks; proactive sweeping and broader production recovery
 policy remain future work.
 Drains release the shard in `finally` and return
@@ -360,8 +362,12 @@ picks up the message shard only when `message.id.shard` matches
 limit. `DeliveryLoop` repeats the shard-level `Delivery.drain()` boundary for
 one shard until a drain is idle, skipped, stopped, paused after a bounded
 skipped-only scan streak, or reaches `maxFailures`; a later `run()` resumes
-from the saved scan offset after that paused result. Endpoint callback retry is
-simply a later loop/drain seeing rows that remained `TO_DELIVER`.
+from a saved internal cursor and safely resets that cursor if earlier pending
+rows disappeared before the next run. Endpoint callback retry is simply a later
+loop/drain seeing rows that remained `TO_DELIVER`. Lease renewal uses
+same-event-loop timers around in-process callbacks, so CPU-bound synchronous
+callbacks can still starve renewal; this slice treats that as an in-process
+trust-boundary limitation rather than timer-protected preemption.
 `DeliveryLoopRun` aggregates `DeliveryRun` counts across loop drains: `status`
 is the loop stop reason, `runs` is the number of started drains, and
 `processed`, `accepted`, `delivered`, `failed`, and `failures` are accumulated
