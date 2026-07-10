@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 41 fixes verified; coordinator commit and re-review pending
+Status: Round 41 fixes verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -71,8 +71,9 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   lint; format; and working-tree `git diff --check`. `docs:check` retained only
   the existing invalid-origin TypeDoc source-link warning.
 - `git diff --check ca8fb2b3..HEAD` remains red because the repaired whitespace
-  is in current committed HEAD. This worker made no commit; coordinator commit
-  and a fresh range check are required before re-review.
+  is in current committed HEAD. This worker made no commit. Coordinator commit
+  `2a673e42` (`Fix delivery worker API and rescan paging`) recorded the fix;
+  a fresh range check is required before re-review.
 
 ### Round 40 Follow-up - `2026-07-10T16:48:00Z`
 

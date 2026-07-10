@@ -721,8 +721,9 @@ typechecking, API/docs checks, lint, formatting, and working-tree
 `git diff --check`. `docs:check` retained only the existing invalid-origin
 TypeDoc source-link warning. The direct range command
 `git diff --check ca8fb2b3..HEAD` still reports the two spaces in committed
-Round 40 history: this no-commit worker cannot change `HEAD`; coordinator must
-commit the repair and rerun the range check before accepting Round 41.
+Round 40 history: this no-commit worker cannot change `HEAD`. Coordinator
+commit `2a673e42` (`Fix delivery worker API and rescan paging`) recorded the
+repair; the range check must be rerun before accepting Round 41.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker

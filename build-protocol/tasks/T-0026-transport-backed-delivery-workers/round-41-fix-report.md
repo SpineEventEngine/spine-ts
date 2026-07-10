@@ -1,38 +1,39 @@
 # T-0026 Round 41 Fix Report
 
-Status: fixes verified; coordinator commit and re-review pending
+Status: fixes verified; re-review pending
 
 Branch: `task/T-0026-transport-backed-delivery-workers`
 Worktree: `.worktrees/T-0026-transport-backed-delivery-workers`
-Worker commit: none; final coordinator commit pending.
+Worker commit: none; coordinator commit `2a673e42`
+(`Fix delivery worker API and rescan paging`) recorded the verified fix.
 
 ## Skill Applicability
 
 Canonical checklist source: `build-protocol/BUILD_PROTOCOL.md#skills-and-tooling`.
 
-| Checklist item | Evidence | Result |
-| --- | --- | --- |
-| Session inventory | The Codex session exposed workflow, testing, TypeScript, backend, security, review, and verification skills. | Task-relevant subset triaged. |
-| Task-provided skills | User required `/Users/armiol/.agents/skills/test-driven-development/SKILL.md`. | Fully read before test or production edits. |
-| Expected-skill manifest | Read `build-protocol/skills/EXPECTED_SKILLS.md`. | Expected workflow/backend skills are locally installed. |
-| Installed entrypoints | `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print` succeeded over the full user skill directory. | Metadata triaged without reading unrelated skill bodies. |
-| Installed-skill manifest | Read `/Users/armiol/.agents/.skill-lock.json`. | Readable; confirms expected source repositories and local paths. |
+| Checklist item           | Evidence                                                                                                                    | Result                                                           |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Session inventory        | The Codex session exposed workflow, testing, TypeScript, backend, security, review, and verification skills.                | Task-relevant subset triaged.                                    |
+| Task-provided skills     | User required `/Users/armiol/.agents/skills/test-driven-development/SKILL.md`.                                              | Fully read before test or production edits.                      |
+| Expected-skill manifest  | Read `build-protocol/skills/EXPECTED_SKILLS.md`.                                                                            | Expected workflow/backend skills are locally installed.          |
+| Installed entrypoints    | `find /Users/armiol/.agents/skills -maxdepth 2 -type f -name SKILL.md -print` succeeded over the full user skill directory. | Metadata triaged without reading unrelated skill bodies.         |
+| Installed-skill manifest | Read `/Users/armiol/.agents/.skill-lock.json`.                                                                              | Readable; confirms expected source repositories and local paths. |
 
 Selected skills:
 
-| Skill | Source | Why selected | Applied instruction |
-| --- | --- | --- | --- |
-| `test-driven-development` | User-provided path | Required reliability behavior change and regression. | Add a focused regression, watch it fail before production changes, then make it pass. |
-| `verification-before-completion` | Session inventory / `/Users/armiol/.agents/skills/verification-before-completion/SKILL.md` | User prescribed final verification commands. | Read before completion; report only fresh command evidence. |
+| Skill                            | Source                                                                                     | Why selected                                         | Applied instruction                                                                   |
+| -------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `test-driven-development`        | User-provided path                                                                         | Required reliability behavior change and regression. | Add a focused regression, watch it fail before production changes, then make it pass. |
+| `verification-before-completion` | Session inventory / `/Users/armiol/.agents/skills/verification-before-completion/SKILL.md` | User prescribed final verification commands.         | Read before completion; report only fresh command evidence.                           |
 
 Skipped relevant-looking skills:
 
-| Skill | Metadata/path evidence | Reason |
-| --- | --- | --- |
-| `javascript-testing-patterns` | Session inventory and `/Users/armiol/.agents/skills/javascript-testing-patterns/SKILL.md`. | The supplied TDD instructions govern the required test-first workflow; existing local Vitest patterns will be followed. |
-| `nodejs-backend-patterns` | Expected manifest and `/Users/armiol/.agents/skills/nodejs-backend-patterns/SKILL.md`. | The smallest fix removes an unnecessary public API and adjusts an existing bounded scan, without adding Node service/lifecycle behavior. |
-| `security-best-practices` | Session inventory lists the JS/TS security skill. | The finding is resolved by reducing a public export; repository and task boundary rules are more specific. |
-| `typescript-advanced-types` | Expected manifest and `/Users/armiol/.agents/skills/typescript-advanced-types/SKILL.md`. | No advanced type design is expected; the existing API-export test will guard the surface. |
+| Skill                         | Metadata/path evidence                                                                     | Reason                                                                                                                                   |
+| ----------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `javascript-testing-patterns` | Session inventory and `/Users/armiol/.agents/skills/javascript-testing-patterns/SKILL.md`. | The supplied TDD instructions govern the required test-first workflow; existing local Vitest patterns will be followed.                  |
+| `nodejs-backend-patterns`     | Expected manifest and `/Users/armiol/.agents/skills/nodejs-backend-patterns/SKILL.md`.     | The smallest fix removes an unnecessary public API and adjusts an existing bounded scan, without adding Node service/lifecycle behavior. |
+| `security-best-practices`     | Session inventory lists the JS/TS security skill.                                          | The finding is resolved by reducing a public export; repository and task boundary rules are more specific.                               |
+| `typescript-advanced-types`   | Expected manifest and `/Users/armiol/.agents/skills/typescript-advanced-types/SKILL.md`.   | No advanced type design is expected; the existing API-export test will guard the surface.                                                |
 
 ## Scope And Initial Evidence
 
@@ -52,8 +53,8 @@ Skipped relevant-looking skills:
 
 - RED: after importing the existing numbered inbox-query probe, ran
   `pnpm --config.verify-deps-before-run=false exec vitest run
-  packages/server/test/delivery/delivery-worker.test.ts -t 'keeps a partial
-  stale-head rescan paged'`. It failed only at the intended assertion:
+packages/server/test/delivery/delivery-worker.test.ts -t 'keeps a partial
+stale-head rescan paged'`. It failed only at the intended assertion:
   `faults.inboxQueries` was `1004`, not `5`, while the supported row delivered.
 - GREEN: the same focused command passed after production changes: one test
   passed with 50 skipped. The partial stale-head scenario now delivers the
@@ -84,9 +85,10 @@ Skipped relevant-looking skills:
 - Passed working-tree `git diff --check`.
 - `git diff --check ca8fb2b3..HEAD` still fails on the two Round 40 spaces
   because they are in current committed `HEAD`; the uncommitted Round 41 repair
-  cannot change that range. The coordinator must commit this repair, then rerun
-  the required range check against the new `HEAD`.
+  cannot change that range. Coordinator commit `2a673e42` recorded this
+  repair; rerun the required range check against the new `HEAD`.
 
 ## Commit
 
-No worker commit was created. Final coordinator commit remains pending.
+No worker commit was created. Coordinator commit: `2a673e42` (`Fix delivery
+worker API and rescan paging`).
