@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 80 records-only fix verified; current-HEAD re-review pending
+Status: Round 82 records-only fix verified; current-HEAD re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -2771,3 +2771,43 @@ status`).
 - Coordinator verification passed at `2026-07-10T22:56:00Z`: the targeted
   flush-left continuation search returned no matches, `format:check` passed,
   and `git diff --check` passed.
+
+### Round 81 Re-review - `2026-07-10T23:01:58Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..12ab9e47.diff` from task baseline
+  `ca8fb2b3` to current HEAD `12ab9e47`.
+- Code style/maintainability (Galileo the 3rd): [P2] the work-log Round 43
+  `Fix delivery expired claim reclaim` commit title still wraps with a
+  flush-left continuation, contradicting the Round 80 verification claim. No
+  runtime maintainability findings were found.
+- Documentation (Tesla the 3rd): [P2] the same work-log Round 43 wrapped title
+  remains unresolved. [P2] the task summary now records Round 79 and Round 80
+  before Round 77 and Round 78, making the task narrative non-monotonic even
+  though the work and review logs are ordered correctly.
+- TypeScript/API docs (Nietzsche the 3rd): clean. Root exports, public
+  delivery docs, `DeliveryEndpointMessage` label/status narrowing, claim
+  metadata visibility, `CATCH_UP`, `IMPORT_EVENT`, and TypeDoc allowlist remain
+  aligned.
+- Security (Boole the 3rd): clean. Tenant isolation, callback exposure, copied
+  snapshots, label/status fail-closed behavior, claim/lease fencing, and public
+  API boundaries remain acceptable.
+- Performance/reliability (Arendt the 3rd): clean. Remaining production
+  storage-index/keyset continuation and full worker supervision/retry policy
+  are outside T-0026.
+- Action: record this records-only findings batch, repair the remaining
+  work-log commit-title wrap, reorder the task summary tail, verify, commit,
+  and rerun all five reviewer lanes from the fixed HEAD.
+
+### Round 82 Records-only Fix - `2026-07-10T23:03:17Z`
+
+- Documentation/style: rephrased the work-log Round 43 `9477830c` commit
+  breadcrumb so `Fix delivery expired claim reclaim` no longer wraps as a
+  flush-left parenthetical continuation.
+- Documentation: moved the task summary Round 77/78 entries before Round 79/80
+  so the task narrative is monotonic at the current tail.
+- Dashboard: reset all required review lanes to current-HEAD re-review pending
+  after this records-only fix.
+- Verification: the targeted flush-left continuation search returned no
+  matches, `format:check` passed, and `git diff --check` passed at
+  `2026-07-10T23:04:10Z`.

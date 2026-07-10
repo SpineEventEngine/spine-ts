@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 80 records-only fix verified; current-HEAD re-review pending
+Status: Round 82 records-only fix verified; current-HEAD re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1288,33 +1288,6 @@ and `git diff --check`. Coordinator verification passed at
 typecheck, docs check with only the existing invalid TypeDoc `origin` warning,
 format check, and `git diff --check`.
 
-Round 79 re-review on `2026-07-10T22:42:51Z`: the fresh review package
-`.superpowers/sdd/review-ca8fb2b3..24498ddf.diff` produced clean
-TypeScript/API docs, security, and performance/reliability lanes. Code
-style/maintainability found wrapped commit-title continuations still
-flush-left in Round 43-45 durable records. Documentation found the Round 43
-records still use local-looking `Z` timestamps that make the Round 43 to Round
-44 boundary go backward after Round 78 normalized Round 44-46. The next
-records-only fix will normalize that boundary with
-`59c44c44`/`9477830c`/`f7f56f54` UTC anchors, repair the wrapped commit-title
-continuations, verify, commit, and rerun all five lanes.
-
-Round 80 records-only fix on `2026-07-10T22:44:58Z`: the Round 43 to Round 44
-boundary is normalized to commit-backed UTC: `59c44c44` at
-`2026-07-10T16:40:12Z` for Round 43 re-review intake, `9477830c` at
-`2026-07-10T17:06:42Z` for Round 43 fix/verification evidence, and `f7f56f54`
-at `2026-07-10T17:08:13Z` for Round 44 re-review intake. Wrapped durable
-commit-title continuations for `Fix projection replay status guard`, `Close
-server environment delivery type leak`, and `Fix delivery expired claim
-reclaim` are indented inside their list items. The task/review dashboard is
-reset so all five lanes require fresh current-HEAD re-review. The first
-`format:check` found Markdown wrapping in the review and work logs; the repo
-formatter normalized those records. The final
-`pnpm --config.verify-deps-before-run=false format:check` and `git diff
---check` passed at `2026-07-10T22:49:09Z`. Coordinator verification passed at
-`2026-07-10T22:56:00Z`: the targeted flush-left continuation search returned
-no matches, `format:check` passed, and `git diff --check` passed.
-
 Round 77 re-review on `2026-07-10T22:19:30Z`: the fresh review package
 `.superpowers/sdd/review-ca8fb2b3..5101cc1e.diff` produced clean
 TypeScript/API docs, security, and performance/reliability lanes. Code
@@ -1346,3 +1319,48 @@ re-review remains pending. Coordinator verification passed at
 `2026-07-10T22:37:21Z` with focused delivery-worker Vitest, generated build
 typecheck, docs check with only the existing invalid TypeDoc `origin` warning,
 format check, and `git diff --check`.
+
+Round 79 re-review on `2026-07-10T22:42:51Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..24498ddf.diff` produced clean
+TypeScript/API docs, security, and performance/reliability lanes. Code
+style/maintainability found wrapped commit-title continuations still
+flush-left in Round 43-45 durable records. Documentation found the Round 43
+records still use local-looking `Z` timestamps that make the Round 43 to Round
+44 boundary go backward after Round 78 normalized Round 44-46. The next
+records-only fix will normalize that boundary with
+`59c44c44`/`9477830c`/`f7f56f54` UTC anchors, repair the wrapped commit-title
+continuations, verify, commit, and rerun all five lanes.
+
+Round 80 records-only fix on `2026-07-10T22:44:58Z`: the Round 43 to Round 44
+boundary is normalized to commit-backed UTC: `59c44c44` at
+`2026-07-10T16:40:12Z` for Round 43 re-review intake, `9477830c` at
+`2026-07-10T17:06:42Z` for Round 43 fix/verification evidence, and `f7f56f54`
+at `2026-07-10T17:08:13Z` for Round 44 re-review intake. Wrapped durable
+commit-title continuations for `Fix projection replay status guard`, `Close
+server environment delivery type leak`, and `Fix delivery expired claim
+reclaim` are indented inside their list items. The task/review dashboard is
+reset so all five lanes require fresh current-HEAD re-review. The first
+`format:check` found Markdown wrapping in the review and work logs; the repo
+formatter normalized those records. The final
+`pnpm --config.verify-deps-before-run=false format:check` and `git diff
+--check` passed at `2026-07-10T22:49:09Z`. Coordinator verification passed at
+`2026-07-10T22:56:00Z`: the targeted flush-left continuation search returned
+no matches, `format:check` passed, and `git diff --check` passed.
+
+Round 81 re-review on `2026-07-10T23:01:58Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..12ab9e47.diff` produced clean
+TypeScript/API docs, security, and performance/reliability lanes. Code
+style/maintainability and documentation found the work-log Round 43
+`Fix delivery expired claim reclaim` title still wrapped as a flush-left
+continuation, contradicting the Round 80 verification claim. Documentation
+also found the task summary tail recorded Round 79 and Round 80 before Round 77
+and Round 78. The next records-only fix will repair the remaining work-log wrap,
+restore task-summary chronology, verify, commit, and rerun all five lanes.
+
+Round 82 records-only fix on `2026-07-10T23:03:17Z`: rephrased the work-log
+Round 43 `9477830c` commit breadcrumb so `Fix delivery expired claim reclaim`
+no longer wraps as a flush-left parenthetical continuation, and moved the task
+summary Round 77/78 entries before Round 79/80. The task/review dashboard is
+reset so all five lanes require fresh current-HEAD re-review. Verification
+passed at `2026-07-10T23:04:10Z`: the targeted flush-left continuation search
+returned no matches, `format:check` passed, and `git diff --check` passed.
