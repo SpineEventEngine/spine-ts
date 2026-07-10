@@ -149,6 +149,21 @@ export class Delivery {
       const readLimit = Math.min(inboxStorageAccess.maxReadLimit, scanBudget - progress.processed);
       const messages = await this.#readPendingDeliveryPage(inbox, shard, readLimit, offset);
 
+      if (
+        offset > 0 &&
+        pendingBoundaryId !== undefined &&
+        !offsetRescan &&
+        !(await this.#pendingBoundaryMatches(inbox, shard, offset, pendingBoundaryId))
+      ) {
+        // The offset page may have been read from a changed `TO_DELIVER` set.
+        // Discard it before processing so work that moved to the head is not skipped.
+        offset = 0;
+        pendingBoundaryId = undefined;
+        offsetRescan = true;
+        resumedHeadRescan = false;
+        continue;
+      }
+
       if (messages.length === 0 && progress.processed === 0 && resumedHeadRescan) {
         offset = 0;
         pendingBoundaryId = undefined;
@@ -178,21 +193,6 @@ export class Delivery {
       }
 
       if (messages.length < readLimit) {
-        if (
-          offset > 0 &&
-          pendingBoundaryId !== undefined &&
-          !offsetRescan &&
-          progress.accepted === 0 &&
-          progress.failed === 0 &&
-          !(await this.#pendingBoundaryMatches(inbox, shard, offset, pendingBoundaryId))
-        ) {
-          offset = 0;
-          pendingBoundaryId = undefined;
-          offsetRescan = true;
-          resumedHeadRescan = false;
-          continue;
-        }
-
         if (resumedHeadRescan && progress.accepted === 0 && progress.failed === 0) {
           offset = 0;
           pendingBoundaryId = undefined;

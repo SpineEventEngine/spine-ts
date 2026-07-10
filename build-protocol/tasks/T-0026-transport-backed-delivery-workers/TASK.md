@@ -668,7 +668,23 @@ Round 39 re-review intake on `2026-07-10`: the fresh review package
 TypeScript/API docs, security, and performance/reliability lanes. Style and
 documentation found only durable status cleanup: the review log and work log
 still described the Round 38 fix as pending, and the Round 37 report should
-name coordinator commit `1403505e`. The fix updates those records only.
+name coordinator commit `1403505e`. Coordinator commit `faa2d814` (`Record
+delivery round 39 review status`) recorded that records-only fix.
+
+Round 40 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..faa2d814.diff` produced clean
+TypeScript/API docs and security lanes. Style and documentation found Round 39
+status records still described the `faa2d814` cleanup as future/pending.
+Performance/reliability found offset pagination can still skip a deliverable
+row if the skipped head set disappears after boundary validation and the stale
+offset page remains full. Round 40 fix implementation updated those durable
+status records, added focused red/green coverage for the full stale-page race,
+and revalidates the pending boundary after each offset-page read before
+processing its rows. A moved boundary discards the stale page and resets to the
+head once inside the existing scan budget. The requested focused delivery
+tests, generated build typecheck, docs, lint, format, and diff checks passed;
+no worker commit was created. A fresh five-lane re-review and coordinator
+commit remain pending.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker

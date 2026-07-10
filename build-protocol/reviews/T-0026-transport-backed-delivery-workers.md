@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 38 fix verified; re-review pending
+Status: Round 40 fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer   | Status |
-| -------------------------- | ---------- | ------ |
-| Code style/maintainability | Planck     | Fixed  |
-| Documentation              | Ohm        | Fixed  |
-| TypeScript/API docs        | Copernicus | Clean  |
-| Security                   | Popper     | Clean  |
-| Performance/reliability    | Jason      | Clean  |
+| Lane                       | Reviewer  | Status |
+| -------------------------- | --------- | ------ |
+| Code style/maintainability | Anscombe  | Fixed  |
+| Documentation              | Carver    | Fixed  |
+| TypeScript/API docs        | Hooke     | Clean  |
+| Security                   | Halley    | Clean  |
+| Performance/reliability    | Bernoulli | Fixed  |
 
 ## Review Criteria
 
@@ -32,6 +32,44 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 Review findings fixed and verified after implementation commit `94b4c632`.
 
+### Round 40 Follow-up - `2026-07-10T16:48:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..faa2d814.diff` from task baseline
+  `ca8fb2b3` to current HEAD `faa2d814`.
+- TypeScript/API docs (Hooke): clean.
+- Security (Halley): clean.
+- Code style/maintainability (Anscombe): [P2] review/work logs still describe
+  the Round 39 records-only fix as future/pending after commit `faa2d814`.
+- Documentation (Carver): [P2] same stale Round 39 status.
+- Performance/reliability (Bernoulli): [P1] offset pagination can still skip
+  deliverable rows when only part of the skipped head set disappears after
+  boundary validation and the stale offset page remains full/non-empty.
+- Action: update Round 39 status records and fix the partial-disappearance
+  offset race with focused regression coverage before another five-lane
+  re-review.
+
+### Round 40 Fix Implementation - `2026-07-10`
+
+- Updated stale Round 39 status records to state that the records-only cleanup
+  was verified and committed as `faa2d814` (`Record delivery round 39 review
+status`).
+- Added a focused full stale-offset-page regression. It removes a complete
+  skipped head page after the pre-read boundary validation, leaves a full stale
+  offset page of unsupported filler, and proves the shifted supported row is
+  delivered in the same `DeliveryLoop.run()`.
+- `Delivery.#drainAvailableMessages()` now revalidates an offset boundary after
+  reading the page and, on movement, discards the page and performs its one
+  bounded head rescan before any page rows are processed.
+- Updated the intentional inbox-query count in the bounded-paging test from
+  three to four for the post-read boundary validation.
+- Verification passed: focused regression red then green; focused delivery
+  worker/loop/inbox Vitest with 3 files and 178 tests;
+  `typecheck:build:generated`, `docs:check`, `lint`, and `format:check`.
+  `docs:check` retained only the existing invalid-origin TypeDoc source-link
+  warning.
+- No commit was created by this worker. Coordinator commit: pending.
+
 ### Round 39 Follow-up - `2026-07-10T16:40:00Z`
 
 - Review package:
@@ -47,6 +85,15 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   report's coordinator breadcrumb should name `1403505e`.
 - Action: update status/breadcrumb records and rerun format/diff checks before
   another five-lane re-review.
+
+### Round 39 Fix Implementation - `2026-07-10`
+
+- Updated the review-log status/table and work-log summary so Round 38's
+  records-only cleanup is no longer marked pending.
+- Updated the Round 37 report's coordinator breadcrumb to name `1403505e`
+  (`Fix delivery offset boundary race`).
+- Verification passed: `format:check` and `git diff --check`.
+- Coordinator commit: `faa2d814` (`Record delivery round 39 review status`).
 
 ### Round 38 Follow-up - `2026-07-10T16:31:00Z`
 

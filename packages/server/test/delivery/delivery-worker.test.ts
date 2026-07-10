@@ -1145,7 +1145,7 @@ describe("Delivery worker", () => {
       delivered: 1,
       failed: 0,
     });
-    expect(faults.inboxQueries).toBe(3);
+    expect(faults.inboxQueries).toBe(4);
   });
 
   it("does not skip a supported row when skipped head rows disappear between page reads", async () => {

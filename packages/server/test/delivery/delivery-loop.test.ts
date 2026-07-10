@@ -411,6 +411,56 @@ describe("DeliveryLoop", () => {
     expect(seen).toEqual(["signal-supported-tail"]);
   });
 
+  it("rescans after a full stale offset page when a skipped head page disappears", async () => {
+    const race = {
+      clearSkippedRows: () => undefined as Promise<void> | void,
+    };
+    const faults = deliveryStorageFaults(
+      onInboxQueryNumber(4, async () => {
+        await race.clearSkippedRows();
+      }),
+    );
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: faults.storageFactory,
+    });
+    const shard = ShardIndex.single();
+    const seen: string[] = [];
+    const loop = new DeliveryLoop({
+      delivery,
+      shard,
+      node: "node-a",
+      limit: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    for (let index = 1; index <= 1_000; index += 1) {
+      await seed(delivery, `signal-disappearing-${String(index)}`, BigInt(index), "CATCH_UP");
+    }
+    await seed(delivery, "signal-supported-head", 1_001n);
+    for (let index = 1_002; index <= 2_001; index += 1) {
+      await seed(delivery, `signal-stale-filler-${String(index)}`, BigInt(index), "CATCH_UP");
+    }
+    const pending = await delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] });
+
+    race.clearSkippedRows = async () => {
+      for (const message of pending.slice(0, 1_000)) {
+        await delivery.inbox.markDelivered(message);
+      }
+    };
+
+    const run = await loop.run();
+
+    expect(run).toMatchObject({
+      status: "PAUSED",
+      delivered: 1,
+      failed: 0,
+    });
+    expect(seen).toEqual(["signal-supported-head"]);
+  });
+
   it("rejects loop-private drain access for non-owned delivery instances", () => {
     const fake = {
       drain() {
