@@ -32,6 +32,35 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 Review findings fixed and verified after implementation commit `94b4c632`.
 
+### Round 12 Follow-up - `2026-07-10T07:09:12Z`
+
+- Finding: [Reliability HIGH] after an inbox row was accepted, `Delivery.drain()`
+  and `drainMessage()` could invoke the endpoint without first observing an
+  in-flight shard renewal or re-checking the shard lease. A slow row acceptance
+  could therefore cross lease expiry before endpoint side effects.
+- Fix: `Delivery.#deliverMessage()` now awaits any in-flight shard renewal and
+  calls `lease.requireActive()` after row acceptance and before endpoint label
+  validation or callback invocation. When the re-check fails before the callback,
+  the existing cleanup clears the row acceptance and leaves the row pending.
+- Evidence: added a focused delayed-acceptance regression that pauses inbox row
+  acceptance, advances the delivery clock past shard expiry, and verifies the
+  endpoint callback is not invoked and the row remains `TO_DELIVER`.
+- Finding: [Docs MEDIUM] the developer API example manually picked up the single
+  shard and then called `Delivery.drain()` for the same shard while the manual
+  session was still live.
+- Fix: updated the example so the low-level pickup/read section releases the
+  manual session before the higher-level `Delivery.drain()` and `DeliveryWorker`
+  examples.
+- Finding: [Docs LOW] public TypeDoc callback comments said `onMessage` was
+  invoked once per pending inbox row.
+- Fix: reworded callback comments in `delivery.ts`, `delivery-loop.ts`, and
+  `delivery-worker.ts` to say the callback is invoked for each available
+  supported worker row.
+- Verification: requested delivery Vitest passed with 3 files and 152 tests;
+  `typecheck:build:generated`, `docs:check`, `format:check`, and
+  `git diff --check` passed. `docs:check` reported only the existing TypeDoc
+  invalid-origin warning.
+
 ### Round 11 Follow-up - `2026-07-10T06:55:21Z`
 
 - Finding: [Security MEDIUM] `Delivery.drain()` picked up and released shard

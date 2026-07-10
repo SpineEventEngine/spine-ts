@@ -174,6 +174,8 @@ export class Delivery {
       }
 
       active.set(claimed);
+      await lease.awaitRenewal();
+      lease.requireActive();
       requireEndpointLabel(claimed.label);
       await onMessage(endpointMessage(claimed));
       active.markCallbackSucceeded();
@@ -218,7 +220,7 @@ export interface DeliveryDrainOptions {
   readonly node: string;
   /** Optional positive page size for one drain run. */
   readonly limit?: number;
-  /** Framework endpoint callback invoked once per pending inbox row. */
+  /** Framework endpoint callback invoked for each available supported worker row. */
   readonly onMessage: DeliveryEndpoint;
 }
 
@@ -226,7 +228,7 @@ export interface DeliveryDrainOptions {
 export interface DeliveryMessageDrainOptions {
   /** Worker node name used for shard pickup. */
   readonly node: string;
-  /** Framework endpoint callback invoked for the pending inbox row. */
+  /** Framework endpoint callback invoked for each available supported worker row. */
   readonly onMessage: DeliveryEndpoint;
 }
 

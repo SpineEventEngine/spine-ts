@@ -246,6 +246,58 @@ describe("Delivery worker", () => {
     }
   });
 
+  it("clears row acceptance without dispatch when claim completion crosses shard expiry", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-07-08T09:00:00.000Z"));
+      const faultPlan: DeliveryFaultPlan = {
+        blockInboxClaimOnce: true,
+        inboxClaimBlocked: deferred<undefined>(),
+        resumeInboxClaim: deferred<undefined>(),
+      };
+      const storageFactory = new FaultyDeliveryStorageFactory(faultPlan);
+      const delivery = new Delivery({
+        context: { name: "Tasks", multitenant: false },
+        storageFactory,
+        leaseMs: 20,
+        now: () => new Date(Date.now()),
+      });
+      const shard = ShardIndex.single();
+
+      await seed(delivery, "signal-claim-expired", 1n);
+      const seen: string[] = [];
+      const runPromise = delivery.drain(shard, {
+        node: "node-a",
+        onMessage(message) {
+          seen.push(message.signalId);
+        },
+      });
+
+      await faultPlan.inboxClaimBlocked.promise;
+      vi.setSystemTime(new Date("2026-07-08T09:00:00.021Z"));
+      faultPlan.resumeInboxClaim.resolve(undefined);
+
+      const run = await runPromise;
+
+      expect(faultPlan.blockedInboxClaims).toBe(1);
+      expect(seen).toEqual([]);
+      expect(run).toMatchObject({
+        status: "DRAINED",
+        processed: 1,
+        accepted: 1,
+        delivered: 0,
+        failed: 1,
+      });
+      expect(run.failures).toHaveLength(1);
+      await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject(
+        [{ signalId: "signal-claim-expired", status: "TO_DELIVER" }],
+      );
+      await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("skips a row already claimed by another drain before invoking the endpoint", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
@@ -1526,6 +1578,22 @@ function deliveryDedupRecords(storageFactory: StorageFactory) {
   );
 }
 
+function isInboxClaimCreation<I, R extends Message>(id: I, expected: R, next: R): boolean {
+  if (typeof id !== "string") {
+    return false;
+  }
+
+  const current = InboxRecords.read(expected as Any, id);
+  const claimed = InboxRecords.read(next as Any, id);
+
+  return (
+    current.status === "TO_DELIVER" &&
+    claimed.status === "TO_DELIVER" &&
+    current.claim === undefined &&
+    claimed.claim !== undefined
+  );
+}
+
 function isInboxClaimRenewal<I, R extends Message>(id: I, expected: R, next: R): boolean {
   if (typeof id !== "string") {
     return false;
@@ -1546,12 +1614,16 @@ function isInboxClaimRenewal<I, R extends Message>(id: I, expected: R, next: R):
 }
 
 interface DeliveryFaultPlan {
+  blockInboxClaimOnce?: boolean;
   blockInboxRenewalOnce?: boolean;
   skipDedupFinalizeOnce?: boolean;
   skipInboxRepairOnce?: boolean;
   throwDedupFinalizeOnce?: boolean;
+  inboxClaimBlocked?: ReturnType<typeof deferred<undefined>>;
+  resumeInboxClaim?: ReturnType<typeof deferred<undefined>>;
   inboxRenewalBlocked?: ReturnType<typeof deferred<undefined>>;
   resumeInboxRenewal?: ReturnType<typeof deferred<undefined>>;
+  blockedInboxClaims?: number;
   blockedInboxRenewals?: number;
   skippedDedupFinalizations?: number;
   skippedInboxRepairs?: number;
@@ -1605,6 +1677,19 @@ class FaultyDeliveryRecordStorage<I, R extends Message> extends RecordStorage<I,
     next: ReturnType<RecordSpec<I, R>["materialize"]> | undefined,
   ): Promise<boolean> {
     this.#plan.compareAndSets = (this.#plan.compareAndSets ?? 0) + 1;
+    if (
+      this.context.name.endsWith(".delivery.inbox") &&
+      expected !== undefined &&
+      next !== undefined &&
+      this.#plan.blockInboxClaimOnce === true &&
+      isInboxClaimCreation(id, expected.record, next.record)
+    ) {
+      this.#plan.blockInboxClaimOnce = false;
+      this.#plan.blockedInboxClaims = (this.#plan.blockedInboxClaims ?? 0) + 1;
+      this.#plan.inboxClaimBlocked?.resolve(undefined);
+      await this.#plan.resumeInboxClaim?.promise;
+    }
+
     if (
       this.context.name.endsWith(".delivery.inbox") &&
       expected !== undefined &&

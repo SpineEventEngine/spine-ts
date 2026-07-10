@@ -71,7 +71,7 @@ export interface DeliveryWorkerOptions {
   readonly limit?: number;
   /** Maximum failed message attempts per loop before that loop stops. */
   readonly maxFailures?: number;
-  /** Framework endpoint callback invoked once per pending inbox row. */
+  /** Framework endpoint callback invoked for each available supported worker row. */
   readonly onMessage: DeliveryEndpoint;
 }
 

@@ -336,10 +336,14 @@ await delivery.inbox.receive({
 });
 
 const session = await delivery.shards.pickUp(ShardIndex.single(), "node-a");
-const pending = await delivery.inbox.read(ShardIndex.single(), {
-  statuses: ["TO_DELIVER"],
-  limit: 100,
-});
+if (session !== undefined) {
+  const pending = await delivery.inbox.read(session.shard, {
+    statuses: ["TO_DELIVER"],
+    limit: 100,
+  });
+  await inspectPendingRows(pending);
+  await delivery.shards.release(session);
+}
 
 const run = await delivery.drain(ShardIndex.single(), {
   node: "worker-a",
