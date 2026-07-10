@@ -19,7 +19,8 @@ import {
 import { inboxStorageAccess } from "../../src/delivery/inbox-storage.js";
 import {
   Delivery,
-  type DeliveryEndpoint,
+  DeliveryLoop,
+  type OnDeliveryMessage,
   type DeliveryEndpointMessage,
   InboxMessageError,
   ShardIndex,
@@ -74,13 +75,13 @@ describe("Delivery worker", () => {
       const first = new Delivery({
         context: { name: "Tasks", multitenant: false },
         storageFactory,
-        leaseMs: 20,
+        leaseMs: 1_000,
         now: () => new Date(Date.now()),
       });
       const second = new Delivery({
         context: { name: "Tasks", multitenant: false },
         storageFactory,
-        leaseMs: 20,
+        leaseMs: 1_000,
         now: () => new Date(Date.now()),
       });
       const shard = ShardIndex.single();
@@ -100,7 +101,7 @@ describe("Delivery worker", () => {
       });
 
       await started.promise;
-      await vi.advanceTimersByTimeAsync(20);
+      await vi.advanceTimersByTimeAsync(1_000);
       const secondRun = await second.drain(shard, {
         node: "node-b",
         onMessage(message) {
@@ -131,13 +132,13 @@ describe("Delivery worker", () => {
       const first = new Delivery({
         context: { name: "Tasks", multitenant: false },
         storageFactory,
-        leaseMs: 20,
+        leaseMs: 1_000,
         now: () => new Date(Date.now()),
       });
       const second = new Delivery({
         context: { name: "Tasks", multitenant: false },
         storageFactory,
-        leaseMs: 20,
+        leaseMs: 1_000,
         now: () => new Date(Date.now()),
       });
       const shard = ShardIndex.single();
@@ -157,7 +158,7 @@ describe("Delivery worker", () => {
       });
 
       await started.promise;
-      await vi.advanceTimersByTimeAsync(25);
+      await vi.advanceTimersByTimeAsync(500);
 
       const competingClaim = await inboxStorageAccess.claim(
         second.inbox.storage,
@@ -167,7 +168,7 @@ describe("Delivery worker", () => {
           shard,
           "node-b",
           new Date(Date.now()),
-          new Date(Date.now() + 20),
+          new Date(Date.now() + 1_000),
         ),
       );
 
@@ -200,7 +201,7 @@ describe("Delivery worker", () => {
       const delivery = new Delivery({
         context: { name: "Tasks", multitenant: false },
         storageFactory,
-        leaseMs: 20,
+        leaseMs: 1_000,
         now: () => new Date(Date.now()),
       });
       const shard = ShardIndex.single();
@@ -221,7 +222,7 @@ describe("Delivery worker", () => {
       });
 
       await started.promise;
-      vi.advanceTimersByTime(15);
+      vi.advanceTimersByTime(500);
       await faultPlan.inboxRenewalBlocked.promise;
 
       barrier.resolve(undefined);
@@ -261,7 +262,7 @@ describe("Delivery worker", () => {
       const delivery = new Delivery({
         context: { name: "Tasks", multitenant: false },
         storageFactory,
-        leaseMs: 20,
+        leaseMs: 1_000,
         now: () => new Date(Date.now()),
       });
       const shard = ShardIndex.single();
@@ -276,7 +277,7 @@ describe("Delivery worker", () => {
       });
 
       await faultPlan.inboxClaimBlocked.promise;
-      vi.setSystemTime(new Date("2026-07-08T09:00:00.021Z"));
+      vi.setSystemTime(new Date("2026-07-08T09:00:01.001Z"));
       faultPlan.resumeInboxClaim.resolve(undefined);
 
       const run = await runPromise;
@@ -486,7 +487,7 @@ describe("Delivery worker", () => {
       const delivery = new Delivery({
         context: { name: "Tasks", multitenant: false },
         storageFactory: new InMemoryStorageFactory(),
-        leaseMs: 20,
+        leaseMs: 1_000,
         now: () => new Date(Date.now()),
       });
       const shard = ShardIndex.single();
@@ -495,7 +496,7 @@ describe("Delivery worker", () => {
       const run = await delivery.drain(shard, {
         node: "node-a",
         onMessage() {
-          vi.setSystemTime(new Date("2026-07-08T09:00:00.021Z"));
+          vi.setSystemTime(new Date("2026-07-08T09:00:01.001Z"));
         },
       });
 
@@ -674,7 +675,7 @@ describe("Delivery worker", () => {
   });
 
   it("narrows endpoint callbacks and delivery failures to supported worker labels", () => {
-    expectTypeOf<Parameters<DeliveryEndpoint>[0]>().toEqualTypeOf<DeliveryEndpointMessage>();
+    expectTypeOf<Parameters<OnDeliveryMessage>[0]>().toEqualTypeOf<DeliveryEndpointMessage>();
     expectTypeOf<DeliveryEndpointMessage["label"]>().toEqualTypeOf<
       "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT"
     >();
@@ -939,6 +940,82 @@ describe("Delivery worker", () => {
     ]);
     await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
       { signalId: "signal-pre-callback-tail", status: "DELIVERED" },
+    ]);
+  });
+
+  it("reclaims a claim that expires while the claim-row read is pending", async () => {
+    const now = { value: new Date("2026-07-08T09:00:00.999Z") };
+    const faultPlan: DeliveryFaultPlan = {};
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FaultyDeliveryStorageFactory(faultPlan),
+      leaseMs: 60_000,
+      now: () => now.value,
+    });
+    const shard = ShardIndex.single();
+    const message = await seed(delivery, "signal-expiry-during-read", 1n);
+    const claimed = await inboxStorageAccess.claim(
+      delivery.inbox.storage,
+      message,
+      new ShardSession(
+        "message-owner",
+        shard,
+        "node-a",
+        new Date("2026-07-08T09:00:00.000Z"),
+        new Date("2026-07-08T09:00:01.000Z"),
+      ),
+    );
+    faultPlan.onInboxReadOnce = () => {
+      now.value = new Date("2026-07-08T09:00:01.001Z");
+    };
+
+    const seen: string[] = [];
+    const run = await delivery.drain(shard, {
+      node: "node-b",
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    });
+
+    expect(claimed?.signalId).toBe("signal-expiry-during-read");
+    expect(seen).toEqual(["signal-expiry-during-read"]);
+    expect(run).toMatchObject({ accepted: 1, delivered: 1, failed: 0 });
+  });
+
+  it("does not exceed the loop failure budget before a callback is accepted", async () => {
+    const faultPlan: DeliveryFaultPlan = { throwInboxClaimOnce: true };
+    const delivery = new Delivery({
+      context: { name: "Tasks", multitenant: false },
+      storageFactory: new FaultyDeliveryStorageFactory(faultPlan),
+      leaseMs: 60_000,
+      now: () => new Date("2026-07-08T09:00:00.000Z"),
+    });
+    const shard = ShardIndex.single();
+    await seed(delivery, "signal-pre-callback-failure", 1n);
+    await seed(delivery, "signal-after-failure", 2n);
+    const seen: string[] = [];
+
+    const run = await new DeliveryLoop({
+      delivery,
+      shard,
+      node: "node-a",
+      maxFailures: 1,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    }).run();
+
+    expect(seen).toEqual([]);
+    expect(run).toMatchObject({
+      status: "FAILED",
+      processed: 1,
+      accepted: 0,
+      delivered: 0,
+      failed: 1,
+    });
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
+      { signalId: "signal-pre-callback-failure" },
+      { signalId: "signal-after-failure" },
     ]);
   });
 
@@ -2056,6 +2133,7 @@ interface DeliveryFaultPlan {
   skipDedupFinalizeOnce?: boolean;
   skipInboxRepairOnce?: boolean;
   throwDedupFinalizeOnce?: boolean;
+  onInboxReadOnce?: () => void;
   inboxClaimBlocked?: ReturnType<typeof deferred<undefined>>;
   resumeInboxClaim?: ReturnType<typeof deferred<undefined>>;
   inboxRenewalBlocked?: ReturnType<typeof deferred<undefined>>;
@@ -2238,8 +2316,14 @@ class FaultyDeliveryRecordStorage<I, R extends Message> extends RecordStorage<I,
     return this.#delegate.queryEntries(query);
   }
 
-  protected readRecord(id: I): Promise<R | undefined> {
-    return this.#delegate.read(id);
+  protected async readRecord(id: I): Promise<R | undefined> {
+    const record = await this.#delegate.read(id);
+    if (this.context.name.endsWith(".delivery.inbox") && this.#plan.onInboxReadOnce !== undefined) {
+      const onInboxRead = this.#plan.onInboxReadOnce;
+      this.#plan.onInboxReadOnce = undefined;
+      onInboxRead();
+    }
+    return record;
   }
 
   protected writeAllRecords(

@@ -47,7 +47,7 @@ export type { EventDispatcher } from "./bus/event-dispatcher.js";
 export {
   Delivery,
   type DeliveryDrainOptions,
-  type DeliveryEndpoint,
+  type OnDeliveryMessage,
   type DeliveryEndpointMessage,
   type DeliveryFailure,
   type DeliveryMessageDrainOptions,

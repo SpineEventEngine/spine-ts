@@ -1,4 +1,5 @@
-import type { Delivery, DeliveryEndpoint, DeliveryFailure, DeliveryRun } from "./delivery.js";
+import { inboxStorageAccess } from "./inbox-storage.js";
+import type { Delivery, DeliveryFailure, DeliveryRun, OnDeliveryMessage } from "./delivery.js";
 import type { ShardIndex } from "./shard-index.js";
 
 /** Small local repeat loop around the direct `Delivery.drain()` worker boundary. */
@@ -8,7 +9,8 @@ export class DeliveryLoop {
   readonly #node: string;
   readonly #limit: number | undefined;
   readonly #maxFailures: number;
-  readonly #onMessage: DeliveryEndpoint;
+  readonly #onMessage: OnDeliveryMessage;
+  #scanOffset = 0;
   readonly #state = { stopped: false };
   #running: Promise<DeliveryLoopRun> | undefined;
 
@@ -62,7 +64,9 @@ export class DeliveryLoop {
       if (this.#state.stopped) {
         return summary.result("STOPPED");
       }
-      const run = await this.#drain(this.#maxFailures - summary.failed);
+      const remainingFailures = this.#maxFailures - summary.failed;
+      const limit = this.#drainLimit(remainingFailures);
+      const run = await this.#drain(limit, remainingFailures);
       summary.add(run);
       if (run.status === "SKIPPED") {
         return summary.result("SKIPPED");
@@ -71,19 +75,29 @@ export class DeliveryLoop {
         return summary.result("FAILED");
       }
       if (run.accepted === 0 && run.delivered === 0 && run.failed === 0) {
+        if (run.processed === this.#scanBudget(limit)) {
+          this.#scanOffset += run.processed;
+          continue;
+        }
+        this.#scanOffset = 0;
         return summary.result("IDLE");
       }
+      this.#scanOffset = run.delivered > 0 ? this.#scanOffset + run.processed - run.delivered : 0;
     }
   }
 
-  #drain(remainingFailures: number): Promise<DeliveryRun> {
-    const limit =
-      this.#limit === undefined ? remainingFailures : Math.min(this.#limit, remainingFailures);
+  #drain(limit: number, remainingFailures: number): Promise<DeliveryRun> {
     return this.#delivery.drain(this.#shard, {
       node: this.#node,
       onMessage: this.#onMessage,
       limit,
+      maxFailures: remainingFailures,
+      scanOffset: this.#scanOffset,
     });
+  }
+
+  #drainLimit(remainingFailures: number): number {
+    return this.#limit === undefined ? remainingFailures : Math.min(this.#limit, remainingFailures);
   }
 
   #requireStorageBoundedLimit(): void {
@@ -92,6 +106,10 @@ export class DeliveryLoop {
         `Inbox read limit must be a positive safe integer at most ${String(maxDeliveryLoopLimit)}.`,
       );
     }
+  }
+
+  #scanBudget(limit: number): number {
+    return inboxStorageAccess.maxReadLimit + limit;
   }
 }
 
@@ -111,7 +129,7 @@ export interface DeliveryLoopOptions {
   /** Maximum failed message attempts before the loop stops. Defaults to one; capped at 1000. */
   readonly maxFailures?: number;
   /** Framework endpoint callback invoked for each available supported worker row. */
-  readonly onMessage: DeliveryEndpoint;
+  readonly onMessage: OnDeliveryMessage;
 }
 
 /** Delivery loop stop reason. */

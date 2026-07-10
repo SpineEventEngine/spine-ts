@@ -163,6 +163,38 @@ describe("DeliveryLoop", () => {
     });
   });
 
+  it("continues after a finite skipped-row scan to reach a supported tail row", async () => {
+    const delivery = createDelivery();
+    const shard = ShardIndex.single();
+
+    for (let index = 1; index <= 1_002; index += 1) {
+      await delivery.inbox.receive({
+        inboxId: targetInbox(),
+        signalId: `signal-catch-up-${String(index)}`,
+        label: "CATCH_UP",
+        status: "TO_DELIVER",
+        shard,
+        whenReceived: new Date("2026-07-08T09:00:00.000Z"),
+        version: BigInt(index),
+      });
+    }
+    await seed(delivery, "signal-supported-tail", 1_003n);
+    const seen: string[] = [];
+
+    const run = await new DeliveryLoop({
+      delivery,
+      shard,
+      node: "node-a",
+      limit: 1_000,
+      onMessage(message) {
+        seen.push(message.signalId);
+      },
+    }).run();
+
+    expect(seen).toEqual(["signal-supported-tail"]);
+    expect(run).toMatchObject({ status: "IDLE", runs: 3, accepted: 1, delivered: 1, failed: 0 });
+  });
+
   it("stop prevents starting a new drain", async () => {
     const delivery = createDelivery();
     const shard = ShardIndex.single();

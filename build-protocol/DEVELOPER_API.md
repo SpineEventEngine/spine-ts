@@ -256,8 +256,10 @@ smaller than the later scheduler/retry stack:
 - `Delivery` groups `Inbox` and `ShardedWorkRegistry` for one storage context;
 - `Delivery.drain(shard, { node, onMessage, limit })` picks up one shard with
   framework-owned lease fencing, scans `TO_DELIVER` rows in inbox order, skips
-  rows unavailable to this worker before callback invocation, and passes a
-  public `InboxMessage` snapshot to the supplied framework endpoint callback.
+  rows unavailable to this worker before callback invocation, and passes an
+  independent `DeliveryEndpointMessage` snapshot to the supplied
+  `OnDeliveryMessage` callback. Its `Date` values and `Any.value` bytes are
+  copied from the claimed row.
   `limit` caps rows accepted for endpoint work for one drain; the storage read
   cap plus `limit` bounds scanning while the drain advances past unavailable or
   worker-unsupported rows first.
@@ -270,7 +272,10 @@ smaller than the later scheduler/retry stack:
   legacy label data such as stored `IMPORT_EVENT` remains a fail-closed
   storage-corruption path. Cleanup, lease/fencing, and status-update failures
   are returned through `DeliveryRun.failures` / `DeliveryFailure` without an
-  immediate retry or recovery guarantee in this slice. The run returns simple
+  immediate retry or recovery guarantee in this slice. A later claim attempt
+  can reclaim expired per-message ownership, while live ownership still blocks;
+  proactive sweeping and broader production recovery policy remain future work.
+  The run returns simple
   `DeliveryRun`
   statistics (`status`, `processed`, `accepted`, `delivered`, `failed`, and
   `failures`) and releases the shard in a `finally` path. If the shard is
@@ -305,7 +310,7 @@ smaller than the later scheduler/retry stack:
   pickup/renew/release across processes. `renew(session)` is framework-owned
   lease fencing for active drains, not an application retry or supervision
   policy; and
-- `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`, `DeliveryEndpoint`,
+- `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`, `OnDeliveryMessage`,
   `DeliveryEndpointMessage`, `DeliveryFailure`, `DeliveryLabel`,
   `DeliveryLoopOptions`, `DeliveryLoopRun`, `DeliveryLoopStatus`,
   `DeliveryRun`, `DeliveryStatus`, `DeliveryWorkerOptions`,
@@ -321,7 +326,8 @@ expect `InboxMessageError` for invalid inbox message input and
 out of contract. `ShardedWorkRegistry.pickUp()` caller validation for blank or
 oversized `node` values, or invalid clock values supplied through `now`,
 currently throws plain `Error` before any storage read/write begins.
-Supported delivery labels are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`,
+`DeliveryOptions.leaseMs` and `ShardedWorkRegistryOptions.leaseMs` must be safe
+integers from `1000` through `2147483647` milliseconds. Supported delivery labels are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`,
 `REACT_UPON_EVENT`, and `CATCH_UP`. New `IMPORT_EVENT` inbox writes are invalid
 and rejected before durable storage opens; legacy stored/wire `IMPORT_EVENT`
 rows remain recognizable only as deprecated compatibility data and fail closed

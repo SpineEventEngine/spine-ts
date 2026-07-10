@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: implementation complete; review fixes verified
+Status: Round 25 fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer                    | Status       |
-| -------------------------- | --------------------------- | ------------ |
-| Code style/maintainability | Review round                | Fixed MEDIUM |
-| Documentation              | Documentation fix sub-agent | Fixed MEDIUM |
-| TypeScript/API docs        | Review round                | Fixed MEDIUM |
-| Security                   | Review round                | Fixed MEDIUM |
-| Performance/reliability    | Reliability fix sub-agent   | Fixed P1     |
+| Lane                       | Reviewer | Status                   |
+| -------------------------- | -------- | ------------------------ |
+| Code style/maintainability | Hypatia  | Fixed; re-review pending |
+| Documentation              | Kuhn     | Fixed; re-review pending |
+| TypeScript/API docs        | Arendt   | Fixed; re-review pending |
+| Security                   | Pauli    | Fixed; re-review pending |
+| Performance/reliability    | Erdos    | Fixed; re-review pending |
 
 ## Review Criteria
 
@@ -31,6 +31,54 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 ## Rounds
 
 Review findings fixed and verified after implementation commit `94b4c632`.
+
+### Round 25 Follow-up - `2026-07-10T10:58:57Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..71ba68e0.diff` from task baseline
+  `ca8fb2b3` to handoff HEAD `71ba68e0`.
+- Code style/maintainability (Hypatia): [Important] callback names violate the
+  binding `on`/`On` convention. Rename exported `DeliveryEndpoint` and internal
+  `renewClaim` / `action` callback names. [Minor] the storage fault-injection
+  test override is too large and should be split when touching that area.
+- Documentation (Kuhn): [Important] public docs still say endpoint callbacks
+  receive `InboxMessage` snapshots rather than narrowed
+  `DeliveryEndpointMessage` snapshots, and stale recovery wording implies
+  expired per-message ownership is wholly future work instead of reclaimable by
+  later claim attempts.
+- TypeScript/API docs (Arendt): [Important] public documentation does not match
+  the narrowed callback/failure API and should consistently name
+  `DeliveryEndpointMessage` plus its three-label supported endpoint union.
+- Security (Pauli): [Important] `leaseMs: 1` creates an unsafe renewal cadence.
+  Add a shared lower lease-duration bound across delivery and sharded registry
+  validation and cover rejected lower values.
+- Performance/reliability (Erdos): [Important] scan-budget exhaustion is
+  reported as idle and can starve a supported tail row across loop drains;
+  claim expiry can be missed when it occurs during the storage read; and
+  pre-callback failures can exceed the loop failure budget because they do not
+  consume accepted callback budget.
+- Action: dispatch one fix worker with the complete findings list. Required
+  verification includes focused delivery worker/loop/inbox/sharded-registry
+  tests, typecheck, docs check, format check, and `git diff --check`, followed
+  by a fresh five-lane re-review.
+
+### Round 25 Fix Worker Start - `2026-07-10`
+
+The fix worker opened `round-25-fix-report.md` with the canonical skill
+applicability check and will address every Round 25 finding through focused
+red/green delivery regressions before the next review pass.
+
+### Round 25 Fix Implementation - `2026-07-10`
+
+- Added focused red/green coverage for the shared lease floor, delayed claim
+  expiry, finite scan continuation, and pre-callback loop failure budget.
+- Implemented the `OnDeliveryMessage` rename, independent public snapshot docs,
+  shared `1000ms` lease validation, post-read expiry check, and loop-only
+  continuation/failure controls.
+- Coordinator verification passed after the fix worker returned: focused
+  delivery Vitest passed with 4 files and 210 tests; generated build typecheck,
+  docs check, format check, and `git diff --check` passed. `docs:check`
+  reported only the existing invalid-origin TypeDoc source-link warning.
 
 ### Round 19 Follow-up - `2026-07-10T08:57:33Z`
 

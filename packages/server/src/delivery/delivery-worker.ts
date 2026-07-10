@@ -1,5 +1,5 @@
 import { DeliveryLoop, type DeliveryLoopRun, type DeliveryLoopStatus } from "./delivery-loop.js";
-import type { Delivery, DeliveryEndpoint } from "./delivery.js";
+import type { Delivery, OnDeliveryMessage } from "./delivery.js";
 import type { ShardIndex } from "./shard-index.js";
 
 /**
@@ -72,7 +72,7 @@ export interface DeliveryWorkerOptions {
   /** Maximum failed message attempts per loop before that loop stops. */
   readonly maxFailures?: number;
   /** Framework endpoint callback invoked for each available supported worker row. */
-  readonly onMessage: DeliveryEndpoint;
+  readonly onMessage: OnDeliveryMessage;
 }
 
 /** Aggregate result from one delivery worker run. */

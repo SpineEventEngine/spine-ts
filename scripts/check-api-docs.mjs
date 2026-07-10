@@ -214,7 +214,7 @@ const expectedServerExports = [
   "ReadCatchUpResult",
   "Delivery",
   "DeliveryDrainOptions",
-  "DeliveryEndpoint",
+  "OnDeliveryMessage",
   "DeliveryEndpointMessage",
   "DeliveryFailure",
   "DeliveryLabel",

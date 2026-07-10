@@ -10,6 +10,7 @@ import {
 } from "@spine-ts/storage";
 
 import { DeliveryStorageCorruptionError } from "./delivery-storage-error.js";
+import { requireDeliveryLeaseMs } from "./delivery-lease.js";
 import { ShardIndex } from "./shard-index.js";
 
 const casRetryLimit = 8;
@@ -32,19 +33,12 @@ export class ShardedWorkRegistry {
   constructor(options: ShardedWorkRegistryOptions) {
     this.#context = options.context;
     this.#storageFactory = options.storageFactory;
-    this.#leaseMs = ShardedWorkRegistry.#requireLeaseMs(options.leaseMs);
+    this.#leaseMs = requireDeliveryLeaseMs(
+      "ShardedWorkRegistry",
+      options.leaseMs ?? defaultShardLeaseMs,
+    );
     this.#now = options.now ?? (() => new Date());
     Object.freeze(this);
-  }
-
-  static #requireLeaseMs(value: unknown = defaultShardLeaseMs): number {
-    if (!Number.isSafeInteger(value) || (value as number) <= 0 || (value as number) > maxLeaseMs) {
-      throw new Error(
-        `ShardedWorkRegistry leaseMs must be a positive safe integer at most ${String(maxLeaseMs)}.`,
-      );
-    }
-
-    return value as number;
   }
 
   /**
@@ -195,7 +189,7 @@ export interface ShardedWorkRegistryOptions {
   readonly context: StorageContext;
   /** Storage factory used for durable session records. */
   readonly storageFactory: StorageFactory;
-  /** Session lease duration in milliseconds. */
+  /** Session lease duration in milliseconds, at least 1000. */
   readonly leaseMs?: number;
   /** Optional clock used for lease expiry decisions. */
   readonly now?: () => Date;
@@ -219,7 +213,6 @@ interface SessionClaim {
 
 const utf8Decoder = new TextDecoder("utf-8", { fatal: true });
 const defaultShardLeaseMs = 30_000;
-const maxLeaseMs = 2_147_483_647;
 
 const shardSessionRecordSpec = new RecordSpec<string, Any>({
   schema: AnySchema,

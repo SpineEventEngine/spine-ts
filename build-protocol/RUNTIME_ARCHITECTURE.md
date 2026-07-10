@@ -258,14 +258,19 @@ delivery worker boundary:
 - one direct drain run holds a shard through `ShardedWorkRegistry`, reads
   `TO_DELIVER` rows in inbox order, and keeps the storage lease renewed while
   the drain is active. Rows unavailable to the active worker are skipped before
-  endpoint invocation, including rows owned by another active worker,
-  worker-unsupported labels such as `CATCH_UP`, and rows deferred for stale-row
-  recovery. Endpoint callbacks receive public `InboxMessage` snapshots;
+  endpoint invocation, including rows owned by another active worker and
+  worker-unsupported labels such as `CATCH_UP`. Endpoint callbacks and returned
+  failures receive independent `DeliveryEndpointMessage` snapshots only for
+  `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; their `Date`
+  values and `Any.value` bytes are copied. `CATCH_UP` remains pending and never
+  reaches those callbacks or failures;
   successful delivery marks the row `DELIVERED`, endpoint callback failures
   leave the row pending only after framework cleanup succeeds, and endpoint
   callback cleanup failures, lease/fencing failures, and delivery-status update
-  failures are reported without an immediate retry guarantee. Stale-row
-  recovery is future production policy. The run returns simple counts plus
+  failures are reported without an immediate retry guarantee. A later claim
+  attempt can reclaim expired per-message ownership, while live ownership still
+  blocks; proactive sweeping and broader production recovery policy remain
+  future work. The run returns simple counts plus
   per-message failures and releases the shard in a `finally` path;
 - `DeliveryLoop` repeats those direct drains for one shard, and `DeliveryWorker`
   is the closeable owner for one node's configured shard loops. Renewal is

@@ -224,9 +224,13 @@ or multi-host transport example.
   application code. Durable inbox/shard delivery storage, the direct local shard
   drain, and the local one-shard `DeliveryLoop` already exist for
   framework-owned delivery work. Lease-fenced local drains skip rows
-  unavailable to the active worker and pass public `InboxMessage` snapshots to
-  endpoint code; abandoned-row recovery remains future production policy rather
-  than automatic local recovery.
+  unavailable to the active worker and pass independent
+  `DeliveryEndpointMessage` snapshots only for `HANDLE_COMMAND`,
+  `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; copied `Date` values and
+  `Any.value` bytes are safe to mutate in endpoint code. Expired per-message
+  ownership is reclaimable by a later claim attempt while live ownership still
+  blocks. Proactive sweeping and broader production recovery policy remain
+  future work.
   Transport-backed/background scheduler workers, production catch-up
   orchestration, and retained attempt history remain open production gaps.
   Event import and `ImportBus` are removed from the plan under ADR 0001 D1,
@@ -1209,8 +1213,13 @@ loading. Durable inbox records, dedup guards, shard leases, and the direct
 local shard drain are available through the delivery APIs. Built contexts use
 them internally for process-manager command rows, process-manager event reaction
 rows, and live projection subscriber rows. Lease-fenced local drains skip rows
-unavailable to the active worker and pass public `InboxMessage` snapshots to
-endpoint code. Abandoned-row recovery remains future production policy.
+unavailable to the active worker and pass independent
+`DeliveryEndpointMessage` snapshots only for `HANDLE_COMMAND`,
+`UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; copied `Date` values and
+`Any.value` bytes are safe to mutate in endpoint code. Expired per-message
+ownership is reclaimable by a later claim attempt while live ownership still
+blocks. Proactive sweeping and broader production recovery policy remain future
+work.
 `DeliveryLoop` repeats that direct drain for one shard until the shard is idle,
 skipped, stopped, or reaches a configured failure bound. Failed rows stay
 pending as `TO_DELIVER` for later loop/drain retry when the endpoint callback

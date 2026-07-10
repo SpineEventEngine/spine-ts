@@ -357,3 +357,32 @@ consuming the accepted endpoint-work limit, and decouple direct-drain page size
 from the accepted-work cap so skipped rows do not force one query per row. The
 required verification for this round remains focused delivery Vitest,
 generated-build typecheck, docs check, format check, and `git diff --check`.
+
+Round 25 review intake on `2026-07-10`: after the handoff-only commit, the
+mandatory five-lane review against
+`.superpowers/sdd/review-ca8fb2b3..71ba68e0.diff` found blocking issues.
+Required fixes: align public docs with the narrowed `DeliveryEndpointMessage`
+callback/failure API and expired-ownership reclaim behavior; rename callback
+types/parameters to satisfy the `on`/`On` convention; add a safe lower bound
+for shard lease duration; prevent loop starvation when a scan budget is
+exhausted ahead of a supported row; refresh claim-expiry checks after claim-row
+reads; and enforce loop failure budget for pre-callback failures. One fix
+worker will address this complete batch before re-review.
+
+Round 25 fix verification on `2026-07-10`: the fix worker updated runtime code,
+tests, docs, API docs, and durable logs for the full Round 25 findings batch.
+Coordinator verification passed with focused delivery Vitest (4 files, 210
+tests), generated build typecheck, docs check, format check, and
+`git diff --check`; docs check reported only the existing invalid-origin
+TypeDoc source-link warning. A fresh five-lane re-review is still required.
+
+Round 25 fix work started on `2026-07-10`. The canonical skill applicability
+check and selected-skill record are in `round-25-fix-report.md`. This worker
+will add red/green regressions before changing delivery code, preserve direct
+`Delivery.drain()` accounting, and create no commit.
+
+Round 25 implementation now has focused red/green coverage for lease floors,
+expiry during claim reads, scan-cap continuation, and pre-callback loop failure
+budgeting. The durable report records the callback API rename, snapshot and
+label contract, recovery wording, and final verification plan; no commit is
+created by this worker.

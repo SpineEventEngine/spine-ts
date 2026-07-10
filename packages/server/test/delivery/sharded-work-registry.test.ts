@@ -11,6 +11,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
+import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
 import { Delivery, ShardIndex, ShardSession } from "../../src/index.js";
 
 describe("ShardedWorkRegistry", () => {
@@ -53,13 +54,13 @@ describe("ShardedWorkRegistry", () => {
     const first = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory,
-      leaseMs: 500,
+      leaseMs: 1_000,
       now: () => firstNow.value,
     });
     const second = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory,
-      leaseMs: 500,
+      leaseMs: 1_000,
       now: () => secondNow.value,
     });
     const shard = new ShardIndex(0, 2);
@@ -81,7 +82,7 @@ describe("ShardedWorkRegistry", () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory,
-      leaseMs: 500,
+      leaseMs: 1_000,
       now: () => now.value,
     });
     const shard = new ShardIndex(0, 2);
@@ -90,33 +91,33 @@ describe("ShardedWorkRegistry", () => {
     if (firstSession === undefined) {
       throw new Error("Expected first shard pickup to create a session.");
     }
-    now.value = new Date("2026-07-02T09:11:00.499Z");
+    now.value = new Date("2026-07-02T09:11:00.999Z");
     storageFactory.onShardRead = () => {
-      now.value = new Date("2026-07-02T09:11:00.501Z");
+      now.value = new Date("2026-07-02T09:11:01.001Z");
     };
 
     await expect(delivery.shards.pickUp(shard, "node-b")).resolves.toMatchObject({
       node: "node-b",
       shard,
-      pickedUpAt: new Date("2026-07-02T09:11:00.501Z"),
-      expiresAt: new Date("2026-07-02T09:11:01.001Z"),
+      pickedUpAt: new Date("2026-07-02T09:11:01.001Z"),
+      expiresAt: new Date("2026-07-02T09:11:02.001Z"),
     });
   });
 
   it("does not renew a delayed shard session after expiry", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const firstNow = { value: new Date("2026-07-02T09:12:00.000Z") };
-    const secondNow = { value: new Date("2026-07-02T09:12:00.501Z") };
+    const secondNow = { value: new Date("2026-07-02T09:12:01.001Z") };
     const first = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory,
-      leaseMs: 500,
+      leaseMs: 1_000,
       now: () => firstNow.value,
     });
     const second = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory,
-      leaseMs: 500,
+      leaseMs: 1_000,
       now: () => secondNow.value,
     });
     const shard = new ShardIndex(0, 2);
@@ -125,7 +126,7 @@ describe("ShardedWorkRegistry", () => {
     if (session === undefined) {
       throw new Error("Expected shard pickup to create a session.");
     }
-    firstNow.value = new Date("2026-07-02T09:12:00.501Z");
+    firstNow.value = new Date("2026-07-02T09:12:01.001Z");
 
     await expect(first.shards.renew(session)).resolves.toBeUndefined();
     await expect(second.shards.pickUp(shard, "node-b")).resolves.toMatchObject({
@@ -140,7 +141,7 @@ describe("ShardedWorkRegistry", () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory,
-      leaseMs: 500,
+      leaseMs: 1_000,
       now: () => now.value,
     });
     const shard = new ShardIndex(0, 2);
@@ -150,7 +151,7 @@ describe("ShardedWorkRegistry", () => {
       throw new Error("Expected shard pickup to create a session.");
     }
     storageFactory.onShardRead = () => {
-      now.value = new Date("2026-07-02T09:13:00.501Z");
+      now.value = new Date("2026-07-02T09:13:01.001Z");
     };
 
     await expect(delivery.shards.renew(session)).resolves.toBeUndefined();
@@ -162,7 +163,7 @@ describe("ShardedWorkRegistry", () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory,
-      leaseMs: 500,
+      leaseMs: 1_000,
       now: () => now.value,
     });
     const shard = new ShardIndex(0, 2);
@@ -171,7 +172,7 @@ describe("ShardedWorkRegistry", () => {
     if (session === undefined) {
       throw new Error("Expected shard pickup to create a session.");
     }
-    now.value = new Date("2026-07-02T09:14:00.501Z");
+    now.value = new Date("2026-07-02T09:14:01.001Z");
 
     await expect(delivery.shards.release(session)).resolves.toBe(false);
     await expect(delivery.shards.pickUp(shard, "node-b")).resolves.toMatchObject({
@@ -186,7 +187,7 @@ describe("ShardedWorkRegistry", () => {
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory,
-      leaseMs: 500,
+      leaseMs: 1_000,
       now: () => now.value,
     });
     const shard = new ShardIndex(0, 2);
@@ -196,7 +197,7 @@ describe("ShardedWorkRegistry", () => {
       throw new Error("Expected shard pickup to create a session.");
     }
     storageFactory.onShardRead = () => {
-      now.value = new Date("2026-07-02T09:15:00.501Z");
+      now.value = new Date("2026-07-02T09:15:01.001Z");
     };
 
     await expect(delivery.shards.release(session)).resolves.toBe(false);
@@ -207,6 +208,22 @@ describe("ShardedWorkRegistry", () => {
   });
 
   it("rejects invalid lease durations", () => {
+    expect(
+      () =>
+        new Delivery({
+          context: { name: "Tasks", multitenant: false },
+          storageFactory: new InMemoryStorageFactory(),
+          leaseMs: 1,
+        }),
+    ).toThrow(/at least 1000/);
+    expect(
+      () =>
+        new ShardedWorkRegistry({
+          context: { name: "Tasks", multitenant: false },
+          storageFactory: new InMemoryStorageFactory(),
+          leaseMs: 1,
+        }),
+    ).toThrow(/at least 1000/);
     expect(
       () =>
         new Delivery({

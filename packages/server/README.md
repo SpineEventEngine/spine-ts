@@ -105,7 +105,7 @@ Current slice exposes:
   `PrimitiveId` and `MessageId` expose the accepted public ID shapes;
   and
 - `Delivery`, `DeliveryDrainOptions`, `DeliveryMessageDrainOptions`,
-  `DeliveryEndpoint`, `DeliveryEndpointMessage`, `DeliveryFailure`,
+  `OnDeliveryMessage`, `DeliveryEndpointMessage`, `DeliveryFailure`,
   `DeliveryLoop`, `DeliveryLoopOptions`, `DeliveryLoopRun`,
   `DeliveryLoopStatus`, `DeliveryRun`, `DeliveryWorker`,
   `DeliveryWorkerOptions`, `DeliveryWorkerRun`, `Inbox`, `InboxStorage`,
@@ -122,8 +122,10 @@ Current slice exposes:
   `onMessage`, a small `DeliveryLoop` that repeats those drains until idle,
   stopped, skipped, or a configured failure bound, and a closeable
   `DeliveryWorker` that owns configured shard loops for one worker node.
-  Delivery skips rows unavailable to the active worker, passes public
-  `InboxMessage` snapshots to endpoints, and marks successful rows delivered.
+  Delivery skips rows unavailable to the active worker, passes independent
+  `DeliveryEndpointMessage` snapshots only for `HANDLE_COMMAND`,
+  `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`, and marks successful rows
+  delivered. Those snapshots copy `Date` values and `Any.value` bytes.
   Endpoint callback failures leave rows pending for a later run through the
   same durable `TO_DELIVER` state only after framework-owned cleanup succeeds.
   Cleanup, fail-closed validation, lease/fencing, and status-update failures
@@ -131,7 +133,10 @@ Current slice exposes:
   `DeliveryFailure` without an immediate retry or recovery guarantee in this
   slice. Endpoint callbacks run only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; worker-unsupported labels remain
-  pending and are skipped before callback invocation. Supported public delivery
+  pending and are skipped before callback invocation, failure recording, or
+  failure-budget consumption. Expired per-message ownership is reclaimable by a
+  later claim attempt while live ownership still blocks; proactive sweeping and
+  broader production recovery policy remain future work. Supported public delivery
   labels are `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and
   `CATCH_UP`;
   `IMPORT_EVENT` is rejected for new inbox writes before durable storage opens.

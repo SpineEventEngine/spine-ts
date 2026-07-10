@@ -5,6 +5,7 @@ import { AnySchema, type Any } from "@bufbuild/protobuf/wkt";
 import { Inbox, InboxMessageError, type InboxMessage } from "./inbox.js";
 import { inboxStorageAccess, InboxStorage } from "./inbox-storage.js";
 import type { ClaimedInboxMessage } from "./inbox-claim.js";
+import { requireDeliveryLeaseMs } from "./delivery-lease.js";
 import { ShardIndex } from "./shard-index.js";
 import { ShardedWorkRegistry, type ShardSession } from "./sharded-work-registry.js";
 
@@ -20,7 +21,7 @@ export class Delivery {
 
   /** Open delivery from one storage context and factory. */
   constructor(options: DeliveryOptions) {
-    this.#leaseMs = Delivery.#requireLeaseMs(options.leaseMs);
+    this.#leaseMs = requireDeliveryLeaseMs("Delivery", options.leaseMs ?? defaultShardLeaseMs);
     this.#now = options.now ?? (() => new Date());
     this.inbox = new Inbox(
       new InboxStorage({
@@ -36,16 +37,6 @@ export class Delivery {
       now: this.#now,
     });
     Object.freeze(this);
-  }
-
-  static #requireLeaseMs(value: unknown = defaultShardLeaseMs): number {
-    if (!Number.isSafeInteger(value) || (value as number) <= 0 || (value as number) > maxLeaseMs) {
-      throw new Error(
-        `ShardedWorkRegistry leaseMs must be a positive safe integer at most ${String(maxLeaseMs)}.`,
-      );
-    }
-
-    return value as number;
   }
 
   /**
@@ -70,13 +61,15 @@ export class Delivery {
    */
   async drain(shard: ShardIndex, options: DeliveryDrainOptions): Promise<DeliveryRun> {
     const limit = inboxStorageAccess.readLimit(options.limit);
+    const scanOffset = requireScanOffset(options.scanOffset);
+    const maxFailures = requireFailureLimit(options.maxFailures);
     const session = await this.shards.pickUp(shard, options.node);
     if (session === undefined) {
       return deliveryRun("SKIPPED", 0, 0, 0, 0, []);
     }
     const active = new ActiveClaim();
     const lease = keepShardLease(this.shards, session, this.#leaseMs, () => this.#now().getTime(), {
-      renewClaim: (next) => active.renew(this.inbox.storage, next),
+      onRenewClaim: (next) => active.renew(this.inbox.storage, next),
     });
 
     try {
@@ -86,6 +79,8 @@ export class Delivery {
         options.onMessage,
         lease,
         active,
+        scanOffset,
+        maxFailures,
       );
     } finally {
       await lease.close();
@@ -96,12 +91,13 @@ export class Delivery {
   async #drainAvailableMessages(
     shard: ShardIndex,
     limit: number,
-    onMessage: DeliveryEndpoint,
+    onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
     active: ActiveClaim,
+    offset: number,
+    maxFailures: number | undefined,
   ): Promise<DeliveryRun> {
     const progress = drainProgress();
-    let offset = 0;
     const scanBudget = inboxStorageAccess.maxReadLimit + limit;
 
     while (progress.processed < scanBudget) {
@@ -120,6 +116,9 @@ export class Delivery {
           offset += 1;
         }
         if (progress.accepted >= limit) {
+          return progress.finish();
+        }
+        if (maxFailures !== undefined && progress.failed >= maxFailures) {
           return progress.finish();
         }
       }
@@ -172,7 +171,7 @@ export class Delivery {
     }
     const active = new ActiveClaim();
     const lease = keepShardLease(this.shards, session, this.#leaseMs, () => this.#now().getTime(), {
-      renewClaim: (next) => active.renew(this.inbox.storage, next),
+      onRenewClaim: (next) => active.renew(this.inbox.storage, next),
     });
 
     try {
@@ -210,7 +209,7 @@ export class Delivery {
 
   async #drainExactMessage(
     message: InboxMessage,
-    onMessage: DeliveryEndpoint,
+    onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
     active: ActiveClaim,
   ): Promise<DeliveryRun> {
@@ -234,7 +233,7 @@ export class Delivery {
 
   async #deliverMessage(
     message: DeliveryEndpointMessage,
-    onMessage: DeliveryEndpoint,
+    onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
     active: ActiveClaim,
   ): Promise<DeliveryMessageResult> {
@@ -271,7 +270,7 @@ export class Delivery {
 
   async #invokeEndpoint(
     message: ClaimedInboxMessage,
-    onMessage: DeliveryEndpoint,
+    onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
     active: ActiveClaim,
   ): Promise<void> {
@@ -316,7 +315,7 @@ export class Delivery {
   async #tryDrainMessage(
     progress: DrainProgress,
     message: InboxMessage,
-    onMessage: DeliveryEndpoint,
+    onMessage: OnDeliveryMessage,
     lease: ShardLeaseKeeper,
     active: ActiveClaim,
   ): Promise<boolean> {
@@ -342,7 +341,7 @@ export interface DeliveryOptions {
   readonly context: StorageContext;
   /** Storage factory used for durable delivery records. */
   readonly storageFactory: StorageFactory;
-  /** Optional shard lease duration in milliseconds. */
+  /** Optional shard lease duration in milliseconds, at least 1000. */
   readonly leaseMs?: number;
   /** Optional clock used for delivery timing decisions such as lease and dedup expiry. */
   readonly now?: () => Date;
@@ -354,8 +353,12 @@ export interface DeliveryDrainOptions {
   readonly node: string;
   /** Optional positive accepted-work cap for one drain run. */
   readonly limit?: number;
+  /** @internal Loop continuation offset over still-pending rows. */
+  readonly scanOffset?: number;
+  /** @internal Maximum failures allowed in this drain. Direct drains omit it. */
+  readonly maxFailures?: number;
   /** Framework endpoint callback invoked for each available supported worker row. */
-  readonly onMessage: DeliveryEndpoint;
+  readonly onMessage: OnDeliveryMessage;
 }
 
 /** Options for one exact-message delivery drain. */
@@ -366,20 +369,25 @@ export interface DeliveryMessageDrainOptions {
    * Framework endpoint callback invoked for the exact pending row when it is
    * still available and supported by this worker, at most once.
    */
-  readonly onMessage: DeliveryEndpoint;
+  readonly onMessage: OnDeliveryMessage;
 }
 
 /** One durable inbox row accepted by framework-owned direct worker endpoints. */
 type DeliveryEndpointLabel = "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT";
 
-/** One durable inbox row accepted by framework-owned direct worker endpoints. */
+/**
+ * Independent callback/failure snapshot for one supported durable inbox row.
+ *
+ * `Date` values and `Any.value` payload bytes are copied, so callback mutation
+ * cannot alter the claimed internal row.
+ */
 export interface DeliveryEndpointMessage extends Omit<InboxMessage, "label"> {
   /** Delivery label supported by the direct worker endpoint callback surface. */
   readonly label: DeliveryEndpointLabel;
 }
 
-/** Framework endpoint callback for one supported durable inbox row. */
-export type DeliveryEndpoint = (message: DeliveryEndpointMessage) => Promise<void> | void;
+/** Framework callback for one supported durable inbox row. */
+export type OnDeliveryMessage = (message: DeliveryEndpointMessage) => Promise<void> | void;
 
 /** Simple delivery worker run statistics. */
 export interface DeliveryRun {
@@ -399,7 +407,7 @@ export interface DeliveryRun {
 
 /** Failure from one message in a direct delivery run. */
 export interface DeliveryFailure {
-  /** Supported worker row that failed during this run. */
+  /** Independent supported-row snapshot that failed during this run. */
   readonly message: DeliveryEndpointMessage;
   /**
    * Error observed during endpoint callback, lease/fencing,
@@ -416,11 +424,12 @@ interface ShardLeaseKeeper {
 }
 
 interface ShardLeaseRenewalOptions {
-  readonly renewClaim: (session: ShardSession) => Promise<void>;
+  readonly onRenewClaim: (session: ShardSession) => Promise<void>;
 }
 
 interface DrainProgress {
   readonly accepted: number;
+  readonly failed: number;
   readonly processed: number;
   readonly finish: () => DeliveryRun;
   readonly observe: (message: InboxMessage) => boolean;
@@ -433,7 +442,6 @@ type DeliveryMessageResult =
   | { readonly kind: "FAILED"; readonly accepted: boolean; readonly error: unknown };
 
 const defaultShardLeaseMs = 30_000;
-const maxLeaseMs = 2_147_483_647;
 
 function deliveryRun(
   status: DeliveryRun["status"],
@@ -466,6 +474,9 @@ function drainProgress(): DrainProgress {
     },
     get processed() {
       return processed;
+    },
+    get failed() {
+      return failures.length;
     },
     finish() {
       return deliveryRun("DRAINED", processed, accepted, delivered, failures.length, failures);
@@ -521,7 +532,7 @@ function keepShardLease(
 
             return;
           }
-          await options.renewClaim(next);
+          await options.onRenewClaim(next);
           current = next;
         })
         .catch((error: unknown) => {
@@ -589,7 +600,7 @@ class ActiveClaim {
     });
   }
 
-  async finalize<T>(action: (message: ClaimedInboxMessage) => Promise<T>): Promise<T> {
+  async finalize<T>(callback: (message: ClaimedInboxMessage) => Promise<T>): Promise<T> {
     return this.#locked(async () => {
       const current = this.#claimed;
       this.#claimed = undefined;
@@ -597,7 +608,7 @@ class ActiveClaim {
         throw new Error("Inbox claim was lost.");
       }
 
-      return action(current);
+      return callback(current);
     });
   }
 
@@ -629,7 +640,7 @@ class ActiveClaim {
     this.#deliveredCallback = false;
   }
 
-  async #locked<T>(action: () => Promise<T>): Promise<T> {
+  async #locked<T>(callback: () => Promise<T>): Promise<T> {
     const previous = this.#lock;
     let release: () => void = () => undefined;
     this.#lock = new Promise<void>((resolve) => {
@@ -638,7 +649,7 @@ class ActiveClaim {
 
     await previous;
     try {
-      return await action();
+      return await callback();
     } finally {
       release();
     }
@@ -676,6 +687,21 @@ function requireEndpointLabel(label: InboxMessage["label"]): DeliveryEndpointLab
   }
 
   throw new Error(`Delivery worker does not support "${label}" messages.`);
+}
+
+function requireFailureLimit(value: unknown): number | undefined {
+  return value === undefined ? undefined : inboxStorageAccess.readLimit(value);
+}
+
+function requireScanOffset(value: unknown): number {
+  if (value === undefined) {
+    return 0;
+  }
+  if (!Number.isSafeInteger(value) || (value as number) < 0) {
+    throw new Error("Delivery scanOffset must be a non-negative safe integer.");
+  }
+
+  return value as number;
 }
 
 function requireEndpointMessage(message: InboxMessage): DeliveryEndpointMessage {

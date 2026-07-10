@@ -306,7 +306,7 @@ consistency, and aggregate version order before storage. It does not implement
 handler invocation, delivery, catch-up, read-side indexing, subscriptions,
 system events, or aggregate repository caching.
 Delivery exports include `Delivery`, `DeliveryOptions`,
-`DeliveryDrainOptions`, `DeliveryMessageDrainOptions`, `DeliveryEndpoint`,
+`DeliveryDrainOptions`, `DeliveryMessageDrainOptions`, `OnDeliveryMessage`,
 `DeliveryEndpointMessage`, `DeliveryFailure`, `DeliveryRun`, `DeliveryLoop`,
 `DeliveryLoopOptions`, `DeliveryLoopRun`, `DeliveryLoopStatus`,
 `DeliveryWorker`, `DeliveryWorkerOptions`, `DeliveryWorkerRun`,
@@ -330,8 +330,9 @@ worker boundary. `ShardedWorkRegistry.renew(session)` is framework-owned lease
 fencing for active drains, not an application retry or supervision policy.
 `Delivery.drain(shard, { node, onMessage, limit })` picks up one shard, scans
 `TO_DELIVER` rows in inbox order, skips rows unavailable to this worker before
-invoking the `DeliveryEndpoint`, and passes a public
-`DeliveryEndpointMessage` snapshot to the endpoint. `limit` caps rows whose
+invoking the `OnDeliveryMessage` callback, and passes an independent
+`DeliveryEndpointMessage` snapshot to it. `Date` values and `Any.value` bytes
+are copied. `limit` caps rows whose
 endpoint callback actually runs for one drain; the storage read cap plus
 `limit` bounds scanning while the drain advances past unavailable or
 worker-unsupported rows first. Endpoint callbacks run only for
@@ -345,7 +346,9 @@ deprecated legacy label data such as stored `IMPORT_EVENT` remains a
 fail-closed storage-corruption path. Cleanup, lease/fencing, and
 delivery-status update failures are reported in the returned
 `DeliveryRun.failures` / `DeliveryFailure` values without promising immediate
-retry; future recovery policy may be needed for abandoned or unavailable rows.
+retry. A later claim attempt can reclaim expired per-message ownership, while
+live ownership still blocks; proactive sweeping and broader production recovery
+policy remain future work.
 Drains release the shard in `finally` and return
 a `DeliveryRun` with `status`, `processed`, `accepted`, `delivered`, `failed`,
 and per-message failures retained only in that result.
