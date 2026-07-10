@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 64 documentation fix verified; re-review pending
+Status: Round 65 review findings recorded; fix pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer              | Status                              |
-| -------------------------- | --------------------- | ----------------------------------- |
-| Code style/maintainability | Beauvoir the 2nd      | Clean (Round 63); re-review pending |
-| Documentation              | Franklin the 2nd      | Finding fixed; re-review pending    |
-| TypeScript/API docs        | Chandrasekhar the 2nd | Clean (Round 63); re-review pending |
-| Security                   | Kepler the 2nd        | Clean (Round 63); re-review pending |
-| Performance/reliability    | Confucius the 2nd     | Clean (Round 63); re-review pending |
+| Lane                       | Reviewer        | Status           |
+| -------------------------- | --------------- | ---------------- |
+| Code style/maintainability | Hooke the 2nd   | Clean            |
+| Documentation              | Turing the 2nd  | Findings pending |
+| TypeScript/API docs        | Mill the 2nd    | Findings pending |
+| Security                   | Lorentz the 2nd | Clean            |
+| Performance/reliability    | Meitner the 2nd | Findings pending |
 
 ## Review Criteria
 
@@ -2283,7 +2283,7 @@ red/green delivery regressions before the next review pass.
   `git diff --check` passed.
 - Action: rerun all five reviewer lanes from the verified Round 62 state.
 
-### Round 63 Re-review - `2026-07-10T20:40:00Z`
+### Round 63 Re-review - `2026-07-10T20:35:00Z`
 
 - Review package:
   `.superpowers/sdd/review-ca8fb2b3..110c94b0.diff` from task baseline
@@ -2313,7 +2313,7 @@ red/green delivery regressions before the next review pass.
 - Action: fix the records-only dashboard and Round 62 timestamp issues, verify,
   commit, and rerun all five reviewer lanes.
 
-### Round 64 Fix Implementation - `2026-07-10T20:40:00Z`
+### Round 64 Fix Implementation - `2026-07-10T20:37:21Z`
 
 - Documentation: anchored Round 62 completion to fix commit `110c94b0` at
   `2026-07-10T20:31:46Z`.
@@ -2322,3 +2322,33 @@ red/green delivery regressions before the next review pass.
 - Verification: `format:check` and `git diff --check` passed.
 - Action: generate a fresh review package and rerun all five required reviewer
   lanes.
+
+### Round 65 Re-review - `2026-07-10T20:41:43Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..944190f3.diff` from task baseline
+  `ca8fb2b3` to current HEAD `944190f3`.
+- Code style/maintainability (Hooke the 2nd): clean. `DeliveryScanState` is
+  private and cohesive, helper and callback naming are consistent under the
+  style lens, and durable claim records remain structured and validated.
+- Documentation (Turing the 2nd): [P2] Round 63 and Round 64 were recorded at
+  `20:40:00Z`, after commit `944190f3` at `20:37:21Z` first added those
+  records. Re-anchor those records to evidence-backed times before or matching
+  their commit.
+- TypeScript/API docs (Mill the 2nd): [P3] injected callbacks in
+  `local-inbox-handoff.ts` are named `handoff` and `replay`, contrary to
+  T-0026's `on*` callback convention. Rename them to `onHandoff` and
+  `onReplay` and update process-manager/projection call sites.
+- Security (Lorentz the 2nd): clean. Tenant-scoped storage, replay-time
+  validation, CAS claims and lease fencing, fail-closed decoding/legacy-label
+  handling, and copied callback snapshots remain acceptable.
+- Performance/reliability (Meitner the 2nd): [P2] a resumed scan that accepts
+  post-cursor supported work preserves the old offset. If a pre-cursor live
+  claim is later cleared while supported tail backlog stays sustained, each
+  delivered tail row shifts the next tail row into the same offset and can
+  starve the available head row indefinitely. Reset the next resume cursor to
+  the head once a resumed scan accepts post-cursor work, and add a regression
+  with a cleared pre-cursor claim and multiple or replenished supported tail
+  rows.
+- Action: record the complete findings batch, dispatch one fix worker, verify,
+  commit, and rerun all five reviewer lanes.

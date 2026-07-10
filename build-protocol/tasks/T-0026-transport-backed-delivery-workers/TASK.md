@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 64 documentation fix verified; re-review pending
+Status: Round 65 review findings recorded; fix pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1117,7 +1117,7 @@ records concise evidence. The focused regression, full `delivery-loop.test.ts`,
 `delivery-worker.test.ts`, generated TypeScript build typecheck, `format:check`,
 and `git diff --check` passed; five-lane re-review is pending.
 
-Round 63 re-review on `2026-07-10`: the fresh review package
+Round 63 re-review on `2026-07-10T20:35:00Z`: the fresh review package
 `.superpowers/sdd/review-ca8fb2b3..110c94b0.diff` produced clean code
 style/maintainability, TypeScript/API docs, security, and
 performance/reliability lanes. Documentation found the dashboard still showed
@@ -1126,3 +1126,16 @@ Round 62 completion anchored to a pre-commit `20:20:01Z` timestamp instead of
 fix commit `110c94b0` at `20:31:46Z`. Round 64 records-only fix updates the
 dashboard and anchors Round 62 completion to `110c94b0`; `format:check` and
 `git diff --check` passed.
+
+Round 65 re-review on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..944190f3.diff` produced clean code
+style/maintainability and security lanes. Documentation found Round 63 and
+Round 64 recorded as `20:40:00Z`, after commit `944190f3` at `20:37:21Z`
+first added those records. TypeScript/API docs found `local-inbox-handoff.ts`
+uses callback option names `handoff` and `replay` instead of the required
+`on*` convention. Performance/reliability found a supported-tail starvation
+risk when a resumed scan accepts post-cursor work while a pre-cursor claim is
+later cleared. The next fix will re-anchor the Round 63/64 record timestamps,
+rename the local handoff callbacks, add a supported-tail liveness regression,
+reset the next cursor to the head after resumed accepted work, verify, and
+rerun all five lanes.
