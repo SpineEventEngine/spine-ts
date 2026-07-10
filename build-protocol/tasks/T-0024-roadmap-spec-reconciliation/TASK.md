@@ -64,9 +64,8 @@ and dropped event import.
 
 ## Verification Plan
 
-- Run scoped `rg` scans over active docs to confirm stale
-  `aggregate event reactors/importers` and aggregate import deferral wording is
-  gone.
+- Run scoped `rg` scans over active docs to confirm stale aggregate
+  reactor/importer pairings and aggregate import postponement wording are gone.
 - Run `pnpm --config.verify-deps-before-run=false format:check`.
 - Run `git diff --check`.
 - Review the final diff to confirm only docs/spec/log files changed.

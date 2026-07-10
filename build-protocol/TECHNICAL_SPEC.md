@@ -27,8 +27,9 @@ implemented in this order:
    annotations/decorators for command handlers, event subscribers, event
    reactors, command-producing methods, and related dispatch endpoints.
 3. `BoundedContext`, assembly, and registration.
-4. Entity kinds, repositories, signal routing, and aggregate storage. Aggregate
-   storage must account for snapshots plus events.
+4. Entity kinds, repositories, signal routing, and aggregate storage. Aggregates
+   load latest persisted state and mutate inside transactions; events are a
+   traceability journal, not aggregate replay input.
 5. Delivery, `Inbox`, signal endpoints, and transactions during event
    dispatch.
 6. `Stand` and entity-updated system events.
@@ -277,7 +278,10 @@ The generated Protobuf-ES output for each package belongs in that package's
 
 - Main service process: owns gRPC endpoints, server assembly, process supervision, and public API routing.
 - Command worker: subscribes to command types and executes command assignees/receptors.
-- Event worker: subscribes to event types and executes subscribers/reactors/importers.
+- Event worker: subscribes to event types, executes supported subscribers and
+  reactors, and delivers supported event inbox rows. Event import/importer work
+  is removed from the active plan under ADR 0001 D1; `IMPORT_EVENT` label cleanup
+  is a later compatibility contract task.
 - Projection worker: maintains read-side projections from delivered events.
 - Query worker: serves read-side queries when query workload is moved out of the main process.
 - Subscription worker: maintains subscription streams and fan-out state.
