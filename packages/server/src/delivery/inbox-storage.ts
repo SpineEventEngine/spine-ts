@@ -192,10 +192,7 @@ export class InboxStorage {
       if (!this.#sameMessageExceptClaim(current, message)) {
         return undefined;
       }
-      // Any existing claim is treated as unavailable in this slice. Expired
-      // or abandoned-claim recovery needs an explicit future policy because
-      // the previous owner may still be inside its endpoint callback.
-      if (current.claim !== undefined) {
+      if (this.#hasLiveClaim(current)) {
         return undefined;
       }
 
@@ -217,6 +214,12 @@ export class InboxStorage {
     }
 
     throw casRetriesExhausted("Inbox claim");
+  }
+
+  #hasLiveClaim(message: InboxRecordMessage): boolean {
+    const claim = message.claim;
+
+    return claim !== undefined && claim.expiresAt.getTime() > this.#now().getTime();
   }
 
   async #renewClaim(

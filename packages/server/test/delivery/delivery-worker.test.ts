@@ -7,6 +7,7 @@ import { DedupRecords, dedupRecordSpec, InboxRecords } from "../../src/delivery/
 import { inboxStorageAccess } from "../../src/delivery/inbox-storage.js";
 import {
   Delivery,
+  type DeliveryDrainOptions,
   type DeliveryEndpointMessage,
   type DeliveryMessageDrainOptions,
   type OnDeliveryMessage,
@@ -410,7 +411,7 @@ describe("Delivery worker", () => {
     });
   });
 
-  it("treats an expired row claim as unavailable until explicit recovery exists", async () => {
+  it("reclaims an expired row claim during delivery CAS", async () => {
     const storageFactory = new InMemoryStorageFactory();
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
@@ -441,16 +442,17 @@ describe("Delivery worker", () => {
     });
 
     expect(claimed?.signalId).toBe("signal-expired-claim");
-    expect(seen).toEqual([]);
+    expect(seen).toEqual(["signal-expired-claim"]);
     expect(run).toMatchObject({
       status: "DRAINED",
       processed: 1,
-      accepted: 0,
-      delivered: 0,
+      accepted: 1,
+      delivered: 1,
       failed: 0,
     });
-    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
-      { signalId: "signal-expired-claim", status: "TO_DELIVER" },
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
+      { signalId: "signal-expired-claim", status: "DELIVERED" },
     ]);
   });
 
@@ -742,12 +744,28 @@ describe("Delivery worker", () => {
   it("uses exact-message options without a drain limit for drainMessage", () => {
     type DrainMessageOptions = Parameters<Delivery["drainMessage"]>[1];
 
+    expectTypeOf<DeliveryDrainOptions>().toEqualTypeOf<Parameters<Delivery["drain"]>[1]>();
+    expectTypeOf<DeliveryDrainOptions>().not.toHaveProperty("scanOffset");
+    expectTypeOf<DeliveryDrainOptions>().not.toHaveProperty("maxFailures");
     expectTypeOf<DrainMessageOptions>().toEqualTypeOf<DeliveryMessageDrainOptions>();
     expectTypeOf<DrainMessageOptions>().not.toHaveProperty("limit");
+    void ({
+      node: "node-a",
+      onMessage: () => undefined,
+      // @ts-expect-error Loop scan continuation is not part of the internal direct-drain API.
+      scanOffset: 1,
+    } satisfies DeliveryDrainOptions);
+    void ({
+      node: "node-a",
+      onMessage: () => undefined,
+      // @ts-expect-error Loop failure controls are not part of the internal direct-drain API.
+      maxFailures: 1,
+    } satisfies DeliveryDrainOptions);
   });
 
   it("narrows endpoint callbacks and delivery failures to supported worker labels", () => {
     expectTypeOf<Parameters<OnDeliveryMessage>[0]>().toEqualTypeOf<DeliveryEndpointMessage>();
+    expectTypeOf<Parameters<OnDeliveryMessage>[0]>().not.toHaveProperty("claim");
     expectTypeOf<DeliveryEndpointMessage["label"]>().toEqualTypeOf<
       "HANDLE_COMMAND" | "UPDATE_SUBSCRIBER" | "REACT_UPON_EVENT"
     >();
@@ -1012,7 +1030,7 @@ describe("Delivery worker", () => {
     ]);
   });
 
-  it("does not reclaim a claim that expires while the claim-row read is pending", async () => {
+  it("reclaims a claim that expires while the claim-row read is pending", async () => {
     const now = { value: new Date("2026-07-08T09:00:00.999Z") };
     const readProbe = onInboxReadOnce(() => {
       now.value = new Date("2026-07-08T09:00:01.001Z");
@@ -1047,10 +1065,11 @@ describe("Delivery worker", () => {
     });
 
     expect(claimed?.signalId).toBe("signal-expiry-during-read");
-    expect(seen).toEqual([]);
-    expect(run).toMatchObject({ accepted: 0, delivered: 0, failed: 0 });
-    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toMatchObject([
-      { signalId: "signal-expiry-during-read", status: "TO_DELIVER" },
+    expect(seen).toEqual(["signal-expiry-during-read"]);
+    expect(run).toMatchObject({ accepted: 1, delivered: 1, failed: 0 });
+    await expect(delivery.inbox.read(shard, { statuses: ["TO_DELIVER"] })).resolves.toEqual([]);
+    await expect(delivery.inbox.read(shard, { statuses: ["DELIVERED"] })).resolves.toMatchObject([
+      { signalId: "signal-expiry-during-read", status: "DELIVERED" },
     ]);
   });
 

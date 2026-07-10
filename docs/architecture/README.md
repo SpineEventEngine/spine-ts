@@ -607,9 +607,10 @@ guarantee in this slice. Worker-unsupported rows such as `CATCH_UP` do not
 consume accepted work or loop failure budget. Pre-callback claim, validation,
 lease, cleanup, and delivery-status failures do not increment accepted work,
 but they do increment failed work and count toward the framework failure bound.
-A later claim attempt does not reclaim existing per-message ownership in this
-slice; expired and live ownership both block competing delivery until future
-explicit recovery policy exists. The framework repeats one-shard replay until
+Live per-message ownership blocks competing delivery; expired per-message
+ownership may be replaced during claim compare-and-set using the storage clock.
+Broader production recovery policy remains future work. The framework repeats
+one-shard replay until
 idle, skipped, stopped, paused after a bounded skipped-only scan streak, or a
 configured failure bound. A later internal run resumes from a saved cursor and
 safely resets it if earlier pending rows disappeared. Lease renewal uses same-event-loop timers

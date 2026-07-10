@@ -13,11 +13,6 @@ import {
 
 import * as serverRoot from "../src/index.js";
 import {
-  Delivery,
-  type DeliveryDrainOptions,
-  type OnDeliveryMessage,
-} from "../src/delivery/delivery.js";
-import {
   BoundedContext,
   CommandBus,
   type CommandDispatcher,
@@ -307,22 +302,6 @@ describe("@spine-ts/server", () => {
     expectTypeOf<StandSubscription>().toExtend<{ readonly closed: boolean }>();
     expectTypeOf<StandUpdate>().toExtend<{ readonly typeUrl: string; readonly id: unknown }>();
     expectTypeOf<InboxMessage>().not.toHaveProperty("claim");
-    expectTypeOf<Parameters<OnDeliveryMessage>[0]>().not.toHaveProperty("claim");
-    expectTypeOf<DeliveryDrainOptions>().toEqualTypeOf<Parameters<Delivery["drain"]>[1]>();
-    expectTypeOf<DeliveryDrainOptions>().not.toHaveProperty("scanOffset");
-    expectTypeOf<DeliveryDrainOptions>().not.toHaveProperty("maxFailures");
-    void ({
-      node: "node-a",
-      onMessage: () => undefined,
-      // @ts-expect-error Loop scan continuation is not part of the public API.
-      scanOffset: 1,
-    } satisfies DeliveryDrainOptions);
-    void ({
-      node: "node-a",
-      onMessage: () => undefined,
-      // @ts-expect-error Loop failure controls are not part of the public API.
-      maxFailures: 1,
-    } satisfies DeliveryDrainOptions);
     expectTypeOf<Inbox>().not.toHaveProperty("claim");
     expectTypeOf<Inbox>().not.toHaveProperty("unclaim");
     expect(BoundedContext.singleTenant("Exports").build().name.value).toBe("Exports");
@@ -373,12 +352,6 @@ describe("@spine-ts/server", () => {
     expect(acceptSignalIntake("command").acceptedFor).toBe("async-work");
     expect(failSignalIntake("event", "MALFORMED_ENVELOPE").failure.code).toBe("MALFORMED_ENVELOPE");
     expect(new CommandBus()).toBeInstanceOf(CommandBus);
-    expect(
-      new Delivery({
-        context: { name: "Exports", multitenant: false },
-        storageFactory: new InMemoryStorageFactory(),
-      }),
-    ).toBeInstanceOf(Delivery);
     expect(
       new InboxStorage({
         context: { name: "Exports", multitenant: false },

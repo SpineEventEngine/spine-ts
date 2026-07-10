@@ -334,9 +334,10 @@ fails closed as `DeliveryStorageCorruptionError` before replay begins.
 Endpoint failures leave rows pending for a later framework run only when
 cleanup succeeds. Pre-callback claim, validation, lease, cleanup, and
 delivery-status failures do not increment accepted work, but they increment
-failed work and count toward the framework failure bound. Any existing
-per-message ownership, expired or live, blocks competing delivery in this slice;
-proactive sweeping and broader production recovery policy remain future work.
+failed work and count toward the framework failure bound. Live per-message
+ownership blocks competing delivery; expired per-message ownership may be
+replaced during claim compare-and-set using the storage clock. Broader
+production recovery policy remains future work.
 The package does not expose a raw worker callback API; framework-owned replay
 stays behind validated endpoints. Lease renewal uses same-event-loop timers
 around in-process callbacks, so CPU-bound synchronous callbacks can still starve

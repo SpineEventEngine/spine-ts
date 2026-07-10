@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: review fixes verified
+Status: Round 43 fixes verified; coordinator commit pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -354,8 +354,9 @@ only `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT` rows are
 admitted. Historical note: Round 24 attempted to allow durable row-claim CAS to
 reclaim expired claims using the storage clock; that behavior was superseded by
 Round 35 commit `5c3705e2` (`Fix delivery claim blocking and offset rescan`).
-The current contract is that expired and live row claims both block competing
-delivery until a future explicit recovery policy exists. Round 24 also ensured
+Round 43 superseded that no-reclaim rule: live row claims block competing
+delivery, while expired row claims may be replaced during claim CAS using the
+storage clock. Round 24 also ensured
 pre-callback claim/lease failures are reported without consuming the accepted
 endpoint-work limit, and decoupled direct-drain page size from the accepted-work
 cap so skipped rows do not force one query per row. The required verification
@@ -645,7 +646,10 @@ Round 37 fix implementation on `2026-07-10`: the fix worker updated durable
 breadcrumbs for Round 35 commit `5c3705e2` and Round 36 commit `e4388fb5`, and
 marked Round 24/25 expired-claim reclaim records as historical because Round
 35 superseded them with no competing delivery for expired or live row claims
-until future explicit recovery policy exists. Runtime reliability fix: direct
+until future explicit recovery policy existed. Round 43 later superseded that
+no-reclaim rule: live row claims block, while expired row claims may be
+replaced during claim CAS using the storage clock. Runtime reliability fix:
+direct
 drains now revalidate the pending boundary when an offset-page read returns
 short with no accepted or failed work, then perform one bounded head rescan if
 the boundary moved after the earlier validation. The focused regression removes
@@ -750,6 +754,39 @@ typecheck, docs/API check, lint, format, baseline range diff, and working-tree
 diff checks passed. No worker commit was created. Coordinator commit `be299a5d`
 (`Close delivery raw callback exports`) recorded the fix; five-lane re-review
 remains pending.
+
+Round 43 re-review intake on `2026-07-10`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..59c44c44.diff` found that the active handoff
+and review contract expects expired per-message claims to be reclaimable during
+claim CAS while live claims block, but current code, tests, and docs still
+treat every existing row claim as unavailable. Style, documentation, and
+TypeScript/API docs also found `build-protocol/DEVELOPER_API.md` still
+describes raw callback delivery classes and `onMessage` examples as current
+public API after Round 42 removed them from the root barrel. TypeScript/API docs
+also found the root export-surface test still imports and type-checks internal
+raw callback delivery types. The next fix restores expired-claim CAS reclaim,
+keeps live claims blocking, updates opposite tests/docs, moves raw callback
+type checks out of the root public export test, corrects `DEVELOPER_API.md`,
+verifies, and repeats five-lane re-review.
+
+Round 43 fix summary/evidence on `2026-07-10`: expired per-message claims are
+again reclaimable during inbox claim compare-and-set using the storage clock,
+while live per-message claims still block competing delivery. Focused red tests
+first failed for the previous no-reclaim behavior, including a claim expiring
+while the claim-row read was pending; the same focused command passed after the
+storage change. The root public export-surface test no longer imports or
+type-checks package-internal raw callback delivery APIs; the internal callback
+type checks remain in delivery-internal tests. Delivery API docs now describe
+root-public durable inbox/storage primitives and framework-owned validated
+replay, with raw callback delivery remaining package-internal. Focused
+delivery/index Vitest, generated build typecheck, docs check, and lint passed.
+`format:check` initially found durable-log wrapping; the formatter was run and
+final format/diff checks are recorded in the Round 43 report and work log. No
+worker commit was created; coordinator commit remains pending.
+Coordinator verification after the worker returned passed focused
+delivery/index Vitest with 4 files and 189 tests, generated build typecheck,
+docs check with only the existing invalid-`origin` warning, lint, format check,
+working-tree diff check, and baseline range diff check.
 
 Round 25 fix work started on `2026-07-10`. The canonical skill applicability
 check and selected-skill record are in `round-25-fix-report.md`. This worker

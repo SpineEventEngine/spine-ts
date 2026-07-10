@@ -227,10 +227,10 @@ or multi-host transport example.
   unavailable to the active worker and pass independent
   message snapshots only for `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; copied `Date` values and
-  `Any.value` bytes are safe to mutate in endpoint code. Any existing
-  per-message ownership, expired or live, blocks competing delivery in this
-  slice. Proactive sweeping and broader production recovery policy remain
-  future work.
+  `Any.value` bytes are safe to mutate in endpoint code. Live per-message
+  ownership blocks competing delivery; expired per-message ownership may be
+  replaced during claim compare-and-set using the storage clock. Broader
+  production recovery policy remains future work.
   Transport-backed/background scheduler workers, production catch-up
   orchestration, and retained attempt history remain open production gaps.
   Event import and `ImportBus` are removed from the plan under ADR 0001 D1,
@@ -1215,10 +1215,10 @@ process-manager command rows, process-manager event reaction rows, and live
 projection subscriber rows. Lease-fenced framework replay skips rows unavailable
 to the active worker and passes independent message snapshots only for `HANDLE_COMMAND`,
 `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; copied `Date` values and
-`Any.value` bytes are safe to mutate in endpoint code. Any existing
-per-message ownership, expired or live, blocks competing delivery in this
-slice. Proactive sweeping and broader production recovery policy remain future
-work.
+`Any.value` bytes are safe to mutate in endpoint code. Live per-message
+ownership blocks competing delivery; expired per-message ownership may be
+replaced during claim compare-and-set using the storage clock. Broader
+production recovery policy remains future work.
 For framework-owned replay, the callback limit caps endpoint callbacks that
 actually run, while the storage read cap plus that limit bounds total scanning.
 Valid worker-unsupported labels such as `CATCH_UP` remain pending and are

@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 42 fixes verified; re-review pending
+Status: Round 43 fixes verified; coordinator commit pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer          | Status   |
-| -------------------------- | ----------------- | -------- |
-| Code style/maintainability | Bernoulli the 2nd | Findings |
-| Documentation              | Faraday the 2nd   | Findings |
-| TypeScript/API docs        | Hume the 2nd      | Findings |
-| Security                   | Averroes the 2nd  | Findings |
-| Performance/reliability    | Epicurus the 2nd  | Clean    |
+| Lane                       | Reviewer         | Status                       |
+| -------------------------- | ---------------- | ---------------------------- |
+| Code style/maintainability | Anscombe the 2nd | Addressed; re-review pending |
+| Documentation              | Dewey the 2nd    | Addressed; re-review pending |
+| TypeScript/API docs        | Socrates the 2nd | Addressed; re-review pending |
+| Security                   | Halley the 2nd   | Addressed; re-review pending |
+| Performance/reliability    | James the 2nd    | Addressed; re-review pending |
 
 ## Review Criteria
 
@@ -31,6 +31,65 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 ## Rounds
 
 Review findings fixed and verified after implementation commit `94b4c632`.
+
+### Round 43 Follow-up - `2026-07-10T17:45:00Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..59c44c44.diff` from task baseline
+  `ca8fb2b3` to current HEAD `59c44c44`.
+- Code style/maintainability (Anscombe the 2nd): [P1] the expired-claim
+  contract is inconsistent with the active handoff/review assignment because
+  current code and comments treat every existing row claim as unavailable, even
+  when expired; [P2] `build-protocol/DEVELOPER_API.md` still presents raw
+  callback delivery APIs as current public surface.
+- Documentation (Dewey the 2nd): [P1] docs currently say expired and live row
+  claims both block competing delivery, which conflicts with the active review
+  contract that expired per-message claims are reclaimable during claim CAS;
+  [P1] `build-protocol/DEVELOPER_API.md` still describes raw callback delivery
+  APIs as stable public surface after Round 42 removed them from the root
+  barrel.
+- TypeScript/API docs (Socrates the 2nd): [P1] implementation, tests, and docs
+  still reverse the requested expired-claim semantics; [P2]
+  `build-protocol/DEVELOPER_API.md` still documents raw callback delivery as
+  stable public API; [P3] the root export test still type-checks internal raw
+  callback delivery types inside the package export-surface test.
+- Security (Halley the 2nd): [P1] expired row claims are never reclaimable,
+  allowing an abandoned pending row to remain unavailable indefinitely.
+- Performance/reliability (James the 2nd): [P1] same expired row-claim
+  reclaim gap and opposite tests/docs.
+- Action: restore expired per-message claim reclaim during claim CAS while live
+  claims still block; update tests and docs that encode the superseded
+  no-reclaim behavior; remove internal raw callback type assertions from the
+  root export-surface test; correct `DEVELOPER_API.md`; verify; and repeat
+  five-lane re-review.
+
+### Round 43 Fix Implementation - `2026-07-10`
+
+- `InboxStorage` now treats only live per-message claims as unavailable during
+  claim compare-and-set. Expired per-message claims may be replaced with the
+  active worker claim using the storage clock; live claims still block.
+- Focused regressions were updated test-first. The red run showed endpoint
+  callbacks were not invoked for an expired claim and for a claim expiring
+  while the claim-row read was pending. The green run passed after the storage
+  change.
+- `packages/server/test/index.test.ts` no longer imports or type-checks
+  internal raw callback delivery types. The direct-drain option/callback type
+  assertions now live in `packages/server/test/delivery/delivery-worker.test.ts`.
+- Delivery docs now state that root-public delivery API is durable
+  inbox/storage primitives and framework-owned replay remains
+  package-internal behind validated endpoints. Expired/live ownership wording
+  was corrected in package, API, user-guide, architecture, and build-protocol
+  docs.
+- Verification passed: focused reclaim red/green, focused delivery/index Vitest
+  with 4 files and 189 tests, `typecheck:build:generated`, `docs:check`,
+  `lint`, formatter repair for durable logs, and final format/diff checks
+  recorded in the Round 43 report/work log. No worker commit was created;
+  coordinator commit remains pending.
+- Coordinator verification after the worker returned passed focused
+  delivery/index Vitest with 4 files and 189 tests, generated build typecheck,
+  docs check with only the existing invalid-`origin` warning, lint, format
+  check, working-tree diff check, and baseline range diff check. Coordinator
+  commit remains pending.
 
 ### Round 42 Follow-up - `2026-07-10T17:25:00Z`
 
@@ -233,8 +292,9 @@ rescan`), and Round 36 report/task/work/review records now name coordinator
   commit `e4388fb5` (`Fix delivery review gate cleanup`).
 - Historical reclaim cleanup: Round 24/25 task, work, review, and fix-report
   reclaim statements are marked as historical and superseded by Round 35 /
-  `5c3705e2`. Current contract: expired and live row claims both block
-  competing delivery until future explicit recovery policy exists.
+  `5c3705e2`. Round 43 later superseded that no-reclaim contract: live row
+  claims block competing delivery, while expired row claims may be replaced
+  during claim CAS using the storage clock.
 - Reliability fix: added a regression for a skipped head page disappearing
   after pending-boundary validation but before offset-page read. The red run
   returned `IDLE` with `delivered: 0`; after the fix,
@@ -320,7 +380,9 @@ rescan`), and Round 36 report/task/work/review records now name coordinator
   fault fixture for moving pending-set regressions.
 - Coordinator refinement moved the pending-boundary check before all offset
   page reads and refreshed public docs plus the `InboxClaim` comment to state
-  that expired and live ownership both block competing delivery in this slice.
+  that expired and live ownership both blocked competing delivery in that
+  slice. Round 43 later restored expired-claim reclaim during claim CAS while
+  live claims still block.
 - Round 34 durable trace now names fix commit `7a5378eb`
   (`Fix delivery tooling typecheck`), and `round-34-fix-report.md` is
   Prettier-formatted.
@@ -805,9 +867,9 @@ evidence`) in the task, work, review, and Round 33 fix records. The current
   `DeliveryEndpointMessage` snapshots, and stale recovery wording implies
   expired per-message ownership is wholly future work instead of the
   then-current reclaim-by-later-claim-attempt behavior. Historical correction:
-  Round 35 commit `5c3705e2` superseded expired-claim reclaim; expired and live
-  row claims both now block competing delivery until future explicit recovery
-  policy exists.
+  Round 35 commit `5c3705e2` superseded expired-claim reclaim; Round 43 later
+  restored expired-claim reclaim during claim CAS while live row claims still
+  block.
 - TypeScript/API docs (Arendt): [Important] public documentation does not match
   the narrowed callback/failure API and should consistently name
   `DeliveryEndpointMessage` plus its three-label supported endpoint union.
@@ -1009,9 +1071,8 @@ red/green delivery regressions before the next review pass.
 - Finding: [Reliability MEDIUM] `InboxStorage` claim CAS rejected any existing
   claim, so expired per-message claims stayed pending forever until some other
   cleanup path ran. Historical correction: this finding's reclaim expectation
-  was superseded by Round 35 commit `5c3705e2`; the current contract keeps
-  expired and live row claims unavailable to competing workers until a future
-  explicit recovery policy exists.
+  was superseded by Round 35 commit `5c3705e2`; Round 43 later restored
+  expired-claim reclaim during claim CAS while live row claims still block.
 - Finding: [Reliability MEDIUM] pre-callback claim/lease failures were still
   counted as accepted endpoint work, letting them consume the accepted-work
   limit before any callback ran.

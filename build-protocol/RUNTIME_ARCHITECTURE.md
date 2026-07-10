@@ -224,8 +224,9 @@ The current TS runtime preserves the first durable inbox slice and a small local
 delivery worker boundary:
 
 - standalone delivery writes can be recorded before the asynchronous worker
-  handoff point where durability is configured, and a framework-owned
-  `Delivery.drain()` run can drain one shard by callback. Built bounded
+  handoff point where durability is configured, and package-internal
+  framework-owned replay can drain one shard through validated endpoints. Built
+  bounded
   contexts integrate `CommandBus` intake for process-manager command assignees
   and live `EventBus` intake for process-manager event reactions and projection
   subscribers with durable local inbox handoff. Other inbox-routed event
@@ -259,25 +260,26 @@ delivery worker boundary:
   `TO_DELIVER` rows in inbox order, and keeps the storage lease renewed while
   the drain is active. Rows unavailable to the active worker are skipped before
   endpoint invocation, including rows owned by another active worker and
-  worker-unsupported labels such as `CATCH_UP`. Endpoint callbacks and returned
-  failures receive independent `DeliveryEndpointMessage` snapshots only for
+  worker-unsupported labels such as `CATCH_UP`. Validated endpoints and
+  returned failures receive independent message snapshots only for
   `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; their `Date`
   values and `Any.value` bytes are copied. `CATCH_UP` remains pending and never
-  reaches those callbacks or failures;
+  reaches those endpoints or failures;
   successful delivery marks the row `DELIVERED`, endpoint callback failures
   leave the row pending only after framework cleanup succeeds, and endpoint
   callback cleanup failures, lease/fencing failures, and delivery-status update
   failures are reported without an immediate retry guarantee. Pre-callback
   claim, validation, lease, cleanup, and delivery-status failures do not
   increment accepted work, but they do increment failed work and count toward a
-  loop's `maxFailures` bound. Any existing per-message ownership, expired or
-  live, blocks competing delivery in this slice; proactive sweeping and broader
-  production recovery policy remain future work. The run returns
+  loop's `maxFailures` bound. Live per-message ownership blocks competing
+  delivery; expired per-message ownership may be replaced during claim
+  compare-and-set using the storage clock. Broader production recovery policy
+  remains future work. The run returns
   simple counts plus
   per-message failures and releases the shard in a `finally` path;
-- `DeliveryLoop` repeats those direct drains for one shard. Renewal is
-  framework-owned lease fencing for active drains. The package does not expose
-  a raw worker callback API; normal replay stays behind validated framework
+- Package-internal loop code repeats those direct drains for one shard. Renewal
+  is framework-owned lease fencing for active drains. The package does not
+  expose a raw worker callback API; normal replay stays behind validated framework
   endpoints. This is a lifecycle wrapper over the direct primitive, not
   production retry policy, production supervision, or transport topology. A
   paused loop resumes from a saved

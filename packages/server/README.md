@@ -129,10 +129,10 @@ Current slice exposes:
   recording, or failure-budget consumption. Pre-callback claim, lease, cleanup,
   validation, and status-update failures do not increment accepted endpoint
   work, but they increment failed work and count toward the framework failure
-  bound. Any
-  existing per-message ownership, expired or live, blocks competing delivery
-  in this slice; proactive sweeping and broader production recovery policy
-  remain future work. Supported public delivery labels are `HANDLE_COMMAND`,
+  bound. Live per-message ownership blocks competing delivery; expired
+  per-message ownership may be replaced during claim compare-and-set using the
+  storage clock. Broader production recovery policy remains future work.
+  Supported public delivery labels are `HANDLE_COMMAND`,
   `UPDATE_SUBSCRIBER`, `REACT_UPON_EVENT`, and `CATCH_UP`;
   `IMPORT_EVENT` is rejected for new inbox writes before durable storage opens.
   Stored/wire legacy `IMPORT_EVENT` rows remain recognizable only as deprecated
