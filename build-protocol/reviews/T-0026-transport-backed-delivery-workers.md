@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 86 fix verified; current-HEAD re-review pending
+Status: Round 88 fix verified; current-HEAD re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -2870,7 +2870,7 @@ red/green delivery regressions before the next review pass.
   round-report formatting fixes, keep `.codex-review-packages/` untouched per
   handoff constraint, verify, commit, and rerun all five reviewer lanes.
 
-### Round 86 Fix - `2026-07-10T23:17:03Z`
+### Round 86 Fix - `2026-07-10T23:33:21Z`
 
 - Documentation/API docs: fixed the `docs/USER_GUIDE.md` grammar slip and
   narrowed `docs/api/README.md` plus `packages/server/README.md` accepted-work
@@ -2884,3 +2884,43 @@ red/green delivery regressions before the next review pass.
   `origin` warning, the targeted command-continuation search returned no
   matches, `format:check` passed, `git diff --check` passed, and generated/API
   reference diff checks returned no changed files at `2026-07-10T23:33:21Z`.
+
+### Round 87 Re-review - `2026-07-10T23:33:21Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..bf5e1aee.diff` from task baseline
+  `ca8fb2b3` to current HEAD `bf5e1aee`.
+- Code style/maintainability (Hubble the 3rd): [P3] Round 40 fix report still
+  has fenced shell commands with flush-left command starts and trailing
+  backslash continuations at the red and green verification snippets.
+- Documentation (Descartes the 3rd): [P2] `docs/architecture/README.md` still
+  collapses pre-callback and post-callback failure accounting by saying cleanup
+  failures do not increment accepted work. [P3] Round 86 report and review-log
+  header use the Round 85/Round 86 planning time rather than the actual Round
+  86 fix verification time.
+- TypeScript/API docs (Archimedes the 3rd): [P2]
+  `build-protocol/DEVELOPER_API.md` and
+  `build-protocol/RUNTIME_ARCHITECTURE.md` document the pre-callback side but
+  omit the post-callback accepted-work rule.
+- Security (Pascal the 3rd): clean. Tenant isolation, callback exposure,
+  mutable snapshot safety, label/status fail-closed behavior, claim/lease
+  fencing, retry accounting, and public API boundaries remain sound.
+- Performance/reliability (Socrates the 3rd): clean. The five-file delivery
+  Vitest batch passed with 246 tests; production storage adapter behavior under
+  real distributed clock skew/CAS contention remains future residual risk.
+- Action: record this findings batch, fix the remaining docs and Round 40/Round
+  86 records issues, verify, commit, and rerun all five reviewer lanes.
+
+### Round 88 Fix - `2026-07-10T23:33:21Z`
+
+- Documentation/API docs: aligned `docs/architecture/README.md`,
+  `build-protocol/DEVELOPER_API.md`, and
+  `build-protocol/RUNTIME_ARCHITECTURE.md` with the post-callback
+  accepted-work rule.
+- Records/style: removed the Round 40 shell-continuation formatting, clarified
+  the Round 86 fix timestamp, and collapsed adjacent Round 43, Round 45, and
+  Round 57 shell-continuation snippets found during coordinator verification.
+- Verification: `docs:check` passed with only the existing invalid TypeDoc
+  `origin` warning, the targeted command-continuation search returned no
+  matches, `format:check` passed, `git diff --check` passed, and generated/API
+  reference diff checks returned no changed files at `2026-07-10T23:45:33Z`.

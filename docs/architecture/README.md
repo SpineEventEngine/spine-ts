@@ -596,17 +596,20 @@ shard session with compare-and-set fencing. Rows unavailable to the active
 worker are skipped before endpoint invocation, and bounded replay can scan past
 unavailable head rows to reach later available rows. Its callback limit caps
 endpoint callbacks that actually run, and the storage read cap plus that limit
-bounds total scanning. Endpoint callbacks receive independent message snapshots only for
-`HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; their `Date`
-values and `Any.value` bytes are copied. `CATCH_UP` stays pending and never
-reaches callbacks or returned failures. Successful callbacks mark rows
+bounds total scanning. Endpoint callbacks receive independent message snapshots
+only for `HANDLE_COMMAND`, `UPDATE_SUBSCRIBER`, and `REACT_UPON_EVENT`; their
+`Date` values and `Any.value` bytes are copied. `CATCH_UP` stays pending and
+never reaches callbacks or returned failures. Successful callbacks mark rows
 `DELIVERED`; endpoint failures remain pending for later runs only when
 framework-owned cleanup succeeds. Cleanup, validation, lease/fencing, and
 delivery-status failures are reported without an immediate retry or recovery
 guarantee in this slice. Worker-unsupported rows such as `CATCH_UP` do not
 consume accepted work or loop failure budget. Pre-callback claim, validation,
-lease, cleanup, and delivery-status failures do not increment accepted work,
-but they do increment failed work and count toward the framework failure bound.
+lease, and delivery-status failures do not increment accepted work, but they do
+increment failed work and count toward the framework failure bound. Once the
+endpoint callback or `onMessage` path has been invoked, endpoint failures and
+later framework cleanup/status-update failures are accepted work and may appear
+in failed work.
 Live per-message ownership blocks competing delivery; expired per-message
 ownership may be replaced during claim compare-and-set using the storage clock.
 Broader production recovery policy remains future work. The framework repeats

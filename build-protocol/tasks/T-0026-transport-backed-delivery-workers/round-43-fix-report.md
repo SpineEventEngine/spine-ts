@@ -52,15 +52,8 @@ lifecycle boundary changed).
   claims as unavailable and allowed expired claim replacement using the storage
   clock.
 - Focused delivery/index regression batch passed after the export-surface test
-  cleanup:
-  ```text
-  pnpm --config.verify-deps-before-run=false exec vitest run \
-    packages/server/test/delivery/delivery-worker.test.ts \
-    packages/server/test/delivery/delivery-loop.test.ts \
-    packages/server/test/delivery/inbox.test.ts \
-    packages/server/test/index.test.ts
-  ```
-  Result: 4 files, 189 tests.
+  cleanup: the focused delivery-worker, delivery-loop, inbox, and index Vitest
+  batch passed with 4 files and 189 tests.
 
 ## Files Changed
 

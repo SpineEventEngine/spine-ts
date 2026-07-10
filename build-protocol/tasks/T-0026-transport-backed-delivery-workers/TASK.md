@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 86 fix verified; current-HEAD re-review pending
+Status: Round 88 fix verified; current-HEAD re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1392,3 +1392,26 @@ existing invalid TypeDoc `origin` warning, the targeted command-continuation
 search returned no matches, `format:check` passed, `git diff --check` passed,
 and generated/API reference diff checks returned no changed files. A fresh
 five-lane current-HEAD re-review is required.
+
+Round 87 re-review on `2026-07-10T23:33:21Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..bf5e1aee.diff` produced clean security and
+performance/reliability lanes; performance/reliability also passed the
+five-file delivery Vitest batch with 246 tests. Style found Round 40 fix-report
+shell continuations still formatted as flush-left fenced commands.
+Documentation found `docs/architecture/README.md` still overstates accepted
+accounting for cleanup failures and that Round 86 timestamps use the planning
+time. TypeScript/API docs found `build-protocol/DEVELOPER_API.md` and
+`build-protocol/RUNTIME_ARCHITECTURE.md` still omit the post-callback
+accepted-work rule. The next fix batch will address these docs and records
+findings, verify, commit, and rerun all five lanes.
+
+Round 88 fix on `2026-07-10T23:45:33Z`: aligned the remaining architecture and
+protocol docs with the post-callback accepted-work rule; collapsed the Round 40
+shell-continuation snippets plus adjacent Round 43, Round 45, and Round 57
+continuation snippets found during coordinator verification; and clarified the
+Round 86 fix timestamp to the actual verification time. Verification passed:
+`docs:check` passed with only the existing invalid TypeDoc `origin` warning,
+the targeted command-continuation search returned no matches, `format:check`
+passed, `git diff --check` passed, and generated/API reference diff checks
+returned no changed files. A fresh five-lane current-HEAD re-review is
+required.

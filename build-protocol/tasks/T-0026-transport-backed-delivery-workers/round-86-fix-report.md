@@ -1,6 +1,6 @@
 # Round 86 Fix Report
 
-Timestamp: `2026-07-10T23:17:03Z`
+Timestamp: `2026-07-10T23:33:21Z`
 
 ## Findings
 
@@ -32,12 +32,11 @@ Timestamp: `2026-07-10T23:17:03Z`
 
 ## Verification
 
-- `2026-07-10T23:33:21Z`: `pnpm --config.verify-deps-before-run=false
-  docs:check` passed with only the existing invalid TypeDoc `origin` warning.
+- `2026-07-10T23:33:21Z`: `docs:check` passed with only the existing invalid
+  TypeDoc `origin` warning.
 - `2026-07-10T23:33:21Z`: the targeted command-continuation search returned no
   matches.
-- `2026-07-10T23:33:21Z`: `pnpm --config.verify-deps-before-run=false
-  format:check` passed.
+- `2026-07-10T23:33:21Z`: `format:check` passed.
 - `2026-07-10T23:33:21Z`: `git diff --check` passed.
 - `2026-07-10T23:33:21Z`: generated/API reference diff checks returned no
   changed files.

@@ -54,11 +54,8 @@ TypeScript worker's moving-offset rescan.
 Red, before production edits:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run -t \
-  "rescans after a full stale offset page" \
-  packages/server/test/delivery/delivery-loop.test.ts
-
-1 failed: expected `IDLE` with one delivery; received `PAUSED` with zero deliveries.
+Focused delivery-loop regression: 1 failed; expected IDLE with one delivery,
+received PAUSED with zero deliveries.
 ```
 
 The final regression expects `PAUSED` because its retained unsupported filler
@@ -68,11 +65,7 @@ supported delivery in that same loop invocation.
 Green, after production edits:
 
 ```text
-pnpm --config.verify-deps-before-run=false exec vitest run -t \
-  "rescans after a full stale offset page" \
-  packages/server/test/delivery/delivery-loop.test.ts
-
-1 passed | 26 skipped
+Focused delivery-loop regression: 1 passed | 26 skipped.
 ```
 
 The regression clears 1,000 skipped head rows after the pre-read boundary

@@ -22,12 +22,8 @@ Round 57 addresses the complete Round 56 findings:
 - Added the focused regression
   `DeliveryLoop > drops a stale skipped-only resume cursor so a cleared head
 claim is reconsidered`.
-- Red command:
-  ```sh
-  pnpm --config.verify-deps-before-run=false exec vitest run \
-    packages/server/test/delivery/delivery-loop.test.ts \
-    -t "drops a stale skipped-only resume cursor"
-  ```
+- Red command: focused delivery-loop Vitest for
+  `drops a stale skipped-only resume cursor`.
 - Red result: failed as expected because the resumed loop returned
   `delivered: 0` instead of `delivered: 1`.
 
@@ -45,12 +41,8 @@ claim is reconsidered`.
 
 ## Green
 
-- Green command:
-  ```sh
-  pnpm --config.verify-deps-before-run=false exec vitest run \
-    packages/server/test/delivery/delivery-loop.test.ts \
-    -t "drops a stale skipped-only resume cursor"
-  ```
+- Green command: focused delivery-loop Vitest for
+  `drops a stale skipped-only resume cursor`.
 - Green result: passed with 1 test run and 27 skipped in
   `delivery-loop.test.ts`.
 

@@ -66,15 +66,9 @@ advice.
   projection target type and replacing the public environment delivery type
   with `ServerEnvironmentCloseable`.
 - Focused runtime/API batch passed after local-listener approval:
-  ```text
-  pnpm --config.verify-deps-before-run=false exec vitest run \
-    packages/server/test/index.test.ts \
-    packages/server/test/server/server.test.ts \
-    packages/server/test/context/projection-handoff.test.ts \
-    packages/server/test/context/process-manager-handoff.test.ts \
-    packages/server/test/repository/repository-routing.test.ts
-  ```
-  Result: 5 files, 179 tests. The sandboxed first attempt failed only on `listen EPERM`
+  the focused index, server, projection-handoff, process-manager-handoff, and
+  repository-routing Vitest batch passed with 5 files and 179 tests. The
+  sandboxed first attempt failed only on `listen EPERM`
   for `127.0.0.1`.
 
 ## Files Changed
