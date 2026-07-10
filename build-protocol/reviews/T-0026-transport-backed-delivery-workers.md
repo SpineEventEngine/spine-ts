@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 70 fix verified; re-review pending
+Status: Round 71 findings recorded; fix pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer | Status                       |
-| -------------------------- | -------- | ---------------------------- |
-| Code style/maintainability | TBD      | Needs current-HEAD re-review |
-| Documentation              | TBD      | Needs current-HEAD re-review |
-| TypeScript/API docs        | TBD      | Needs current-HEAD re-review |
-| Security                   | TBD      | Needs current-HEAD re-review |
-| Performance/reliability    | TBD      | Needs current-HEAD re-review |
+| Lane                       | Reviewer         | Status           |
+| -------------------------- | ---------------- | ---------------- |
+| Code style/maintainability | Zeno the 3rd     | Clean            |
+| Documentation              | Beauvoir the 3rd | Findings pending |
+| TypeScript/API docs        | Averroes the 3rd | Clean            |
+| Security                   | Noether the 3rd  | Clean            |
+| Performance/reliability    | Ohm the 3rd      | Clean            |
 
 ## Review Criteria
 
@@ -2490,3 +2490,38 @@ red/green delivery regressions before the next review pass.
   review-log Markdown wrapping only; the repo formatter normalized it, and the
   rerun passed. `git diff --check` passed before and after formatting.
 - Action: rerun all five reviewer lanes from the fixed HEAD.
+
+### Round 71 Re-review - `2026-07-10T21:33:17Z`
+
+- Review package:
+  `.superpowers/sdd/review-ca8fb2b3..70cf4dcd.diff` from task baseline
+  `ca8fb2b3` to current HEAD `70cf4dcd`.
+- Code style/maintainability (Zeno the 3rd): clean. `pnpm lint`,
+  `format:check`, focused delivery-loop tests, and `git diff --check
+ca8fb2b3..70cf4dcd` passed. The rejected `resetResumedCursorToHead()` method
+  is gone from active code; `rewindToHead()` is within the semantic-name limit.
+- Documentation (Beauvoir the 3rd): [P2] the Round 54/55/56 chronology itself
+  is now monotonic, and the public scan-budget wording is explicit, but the
+  immediately preceding work-log Round 52/53 entries still use local-looking
+  `20:xxZ` timestamps before the corrected `2026-07-10T19:18:10Z` commit
+  anchor. Anchor those work-log entries to commit-backed UTC so the surrounding
+  durable chronology stays monotonic.
+- TypeScript/API docs (Averroes the 3rd): clean. Root exports do not expose raw
+  callback delivery APIs, `DeliveryEndpointMessage` remains narrowed to
+  supported callback labels, unsupported `CATCH_UP` rows are skipped before
+  endpoint invocation/failure recording, local callback options use `on*`, API
+  docs distinguish durable row labels from callback labels, and
+  `typecheck:build:generated`, `docs:check`, focused API/context/delivery
+  tests, and `git diff --check ca8fb2b3..70cf4dcd` passed.
+- Security (Noether the 3rd): clean. Replay validation, tenant/target checks,
+  claim/lease fencing, fail-closed malformed/deprecated label handling,
+  snapshot copying, and root public API exposure remain acceptable. Focused
+  security-relevant delivery/context tests passed with 267 tests.
+- Performance/reliability (Ohm the 3rd): clean. Bounded scan/cursor behavior,
+  callback/failure accounting, lease renewal and active claim fencing,
+  expired/live claim behavior, loop pause/resume liveness, and worker
+  all-loop settlement remain acceptable. Focused performance/reliability tests
+  passed with 261 tests; `lint` and `docs:check` also passed.
+- Action: record the complete findings batch, dispatch one records-only fix
+  worker, verify, commit, and rerun all five reviewer lanes from the fixed
+  HEAD.

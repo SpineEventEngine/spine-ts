@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 70 fix verified; re-review pending
+Status: Round 71 findings recorded; fix pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -1209,3 +1209,13 @@ existing invalid TypeDoc `origin` warning. The post-record format check
 initially found review-log Markdown wrapping only; the repo formatter normalized
 it, and the rerun passed. `git diff --check` passed before and after
 formatting.
+
+Round 71 re-review on `2026-07-10T21:33:17Z`: the fresh review package
+`.superpowers/sdd/review-ca8fb2b3..70cf4dcd.diff` produced clean code
+style/maintainability, TypeScript/API docs, security, and
+performance/reliability lanes. Documentation confirmed Round 70 fixed the
+public scan-budget wording and Round 54/55/56 block, but found the immediately
+preceding work-log Round 52/53 entries still use local-looking `20:xxZ`
+timestamps before the corrected `19:18:10Z` commit anchor. The next fix will
+anchor the Round 52/53 work-log entries to commit-backed UTC and rerun all five
+lanes.
