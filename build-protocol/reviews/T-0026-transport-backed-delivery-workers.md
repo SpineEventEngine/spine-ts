@@ -1,6 +1,6 @@
 # T-0026 Review Log
 
-Status: Round 48 findings recorded; fix pending
+Status: Round 48 fix verified; re-review pending
 
 Task: `T-0026 Transport-Backed Delivery Workers`
 
@@ -8,13 +8,13 @@ Branch: `task/T-0026-transport-backed-delivery-workers`
 
 ## Required Review Lanes
 
-| Lane                       | Reviewer          | Status             |
-| -------------------------- | ----------------- | ------------------ |
-| Code style/maintainability | Hilbert the 2nd   | Clean              |
-| Documentation              | Gauss the 2nd     | Findings; fix next |
-| TypeScript/API docs        | Helmholtz the 2nd | Clean              |
-| Security                   | Zeno the 2nd      | Clean              |
-| Performance/reliability    | Euclid the 2nd    | Finding; fix next  |
+| Lane                       | Reviewer          | Status                   |
+| -------------------------- | ----------------- | ------------------------ |
+| Code style/maintainability | Hilbert the 2nd   | Clean                    |
+| Documentation              | Gauss the 2nd     | Fixed; re-review pending |
+| TypeScript/API docs        | Helmholtz the 2nd | Clean                    |
+| Security                   | Zeno the 2nd      | Clean                    |
+| Performance/reliability    | Euclid the 2nd    | Fixed; re-review pending |
 
 ## Review Criteria
 
@@ -107,6 +107,24 @@ Review findings fixed and verified after implementation commit `94b4c632`.
   the async call. The same older pattern exists in the registry CAS retry test.
 - Action: update durable/docs wording and make the default-clock tests
   deterministic, then rerun focused verification and review.
+
+### Round 48 Fix Implementation - `2026-07-10`
+
+- Documentation/status: task, work-log, and review-log status records now name
+  the active Round 48 fix state instead of the earlier coverage-fix state.
+- Architecture docs: exact-row replay wording now says framework-owned replay
+  validates the row label and pending `TO_DELIVER` status before projection,
+  process-manager, or user handler code.
+- Reliability tests: the two sharded-registry default-clock tests now use fixed
+  Vitest system time and exact timestamp assertions for `pickedUpAt` and
+  `expiresAt`, preserving default-clock coverage without live `Date.now()`
+  bracketing.
+- Verification passed: focused `sharded-work-registry.test.ts` Vitest (1 file,
+  52 tests), `docs:check` with only the existing invalid-`origin` TypeDoc
+  warning, `format:check`, and `git diff --check`.
+- Coordinator verification reran the same focused registry Vitest, docs check,
+  format check, and diff check successfully.
+- Action: rerun the required review lanes.
 
 ### Round 45 Follow-up - `2026-07-10T19:15:00Z`
 

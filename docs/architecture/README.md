@@ -620,13 +620,16 @@ limitation rather than timer-protected preemption. The package does not expose
 a raw worker callback API; framework-owned replay stays behind validated
 endpoints. Local posting handoffs now cover command rows,
 projection subscriber rows, and process-manager event rows. Command
-handlers and projection subscribers wait for the exact received row to replay
-and reach `DELIVERED` before their posting path resolves. Live
+handlers and projection subscribers wait for the exact received row to replay;
+framework-owned replay validates the row label and pending `TO_DELIVER` status
+before projection or user handler code runs, and the posting path resolves only
+after that row reaches `DELIVERED`. Live
 process-manager event routing writes `REACT_UPON_EVENT` rows carrying the
 original `Event` payload, original event ID as `signalId`, the
 process-manager state type URL, and the routed process-manager ID target, then
-replays that exact row. Process-manager replay validates tenant context,
-payload/schema, target type URL, and routed target ID before handler code.
+replays that exact row. Process-manager replay validates the row label, pending
+`TO_DELIVER` status, tenant context, payload/schema, target type URL, and routed
+target ID before handler code.
 Bounded contexts now create internal system-pairing metadata and a
 tenant index. Single-tenant indexes are constant and reject tenant recording;
 multitenant indexes persist tenant IDs through the configured storage factory.

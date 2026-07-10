@@ -1,6 +1,6 @@
 # T-0026: Transport-Backed Delivery Workers
 
-Status: Round 48 findings recorded; fix pending
+Status: Round 48 fix verified; re-review pending
 Started: `2026-07-10T03:44:01Z`
 Baseline commit: `ca8fb2b3`
 Branch: `task/T-0026-transport-backed-delivery-workers`
@@ -912,3 +912,15 @@ pattern in the registry CAS retry test; both should use deterministic time to
 avoid flaking under system-clock adjustments. The next fix updates the records,
 architecture docs, and deterministic tests, then repeats verification and
 five-lane review.
+
+Round 48 fix worker on `2026-07-10`: updated the architecture wording so
+exact-row replay and process-manager replay explicitly include framework-owned
+label and pending `TO_DELIVER` status validation before projection,
+process-manager, or user handler code. The sharded-registry default-clock tests
+now freeze Vitest system time and assert exact `pickedUpAt`/`expiresAt`
+timestamps, preserving coverage of the default `now: () => new Date()` path
+without live `Date.now()` bounds that can flake under system-clock changes.
+Durable records and the Round 48 fix report are updated in the same fix pass;
+focused sharded-registry Vitest, docs check, format check, and the diff
+whitespace check passed. Coordinator verification reran the same commands
+successfully. Re-review remains pending.

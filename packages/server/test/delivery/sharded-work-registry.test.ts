@@ -8,7 +8,7 @@ import {
   type StorageContext,
   StorageFactory,
 } from "@spine-ts/storage";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { DeliveryStorageCorruptionError } from "../../src/delivery/delivery-storage-error.js";
 import { ShardedWorkRegistry } from "../../src/delivery/sharded-work-registry.js";
@@ -268,21 +268,29 @@ describe("ShardedWorkRegistry", () => {
   });
 
   it("uses default registry lease and clock when options are omitted", async () => {
+    const fixedTime = new Date("2026-07-02T09:19:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(fixedTime);
     const registry = new ShardedWorkRegistry({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new InMemoryStorageFactory(),
     });
-    const before = Date.now();
-    const session = await registry.pickUp(new ShardIndex(0, 1), "node-a");
-    const after = Date.now();
 
-    expect(session).toMatchObject({
-      node: "node-a",
-      shard: new ShardIndex(0, 1),
-    });
-    expect(session?.pickedUpAt.getTime()).toBeGreaterThanOrEqual(before);
-    expect(session?.pickedUpAt.getTime()).toBeLessThanOrEqual(after);
-    expect((session?.expiresAt.getTime() ?? 0) - (session?.pickedUpAt.getTime() ?? 0)).toBe(30_000);
+    try {
+      const session = await registry.pickUp(new ShardIndex(0, 1), "node-a");
+
+      expect(session).toMatchObject({
+        node: "node-a",
+        shard: new ShardIndex(0, 1),
+        pickedUpAt: fixedTime,
+        expiresAt: new Date("2026-07-02T09:19:30.000Z"),
+      });
+      expect((session?.expiresAt.getTime() ?? 0) - (session?.pickedUpAt.getTime() ?? 0)).toBe(
+        30_000,
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("returns false when releasing a missing or mismatched shard session", async () => {
@@ -1042,20 +1050,26 @@ describe("ShardedWorkRegistry", () => {
   });
 
   it("uses the default clock and retries a failed claim compare-and-set", async () => {
+    const fixedTime = new Date("2026-07-02T09:49:00.000Z");
+    vi.useFakeTimers();
+    vi.setSystemTime(fixedTime);
     const delivery = new Delivery({
       context: { name: "Tasks", multitenant: false },
       storageFactory: new RetryingStorageFactory({ failCreateOnce: true }),
     });
-    const before = Date.now();
-    const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
-    const after = Date.now();
 
-    expect(session).toMatchObject({
-      node: "node-a",
-      shard: new ShardIndex(0, 1),
-    });
-    expect(session?.pickedUpAt.getTime()).toBeGreaterThanOrEqual(before);
-    expect(session?.pickedUpAt.getTime()).toBeLessThanOrEqual(after);
+    try {
+      const session = await delivery.shards.pickUp(new ShardIndex(0, 1), "node-a");
+
+      expect(session).toMatchObject({
+        node: "node-a",
+        shard: new ShardIndex(0, 1),
+        pickedUpAt: fixedTime,
+        expiresAt: new Date("2026-07-02T09:49:30.000Z"),
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("retries shard release when compare-and-set loses one race", async () => {
